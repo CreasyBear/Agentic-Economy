@@ -95,6 +95,17 @@ describe('labelled sandbox V2 capability supply', () => {
     ])
   })
 
+  it('registers and admits the three-business journey-management workflow through generic supply commands', async () => {
+    const backend = convexTest(schema, modules)
+    const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+
+    expect(result.sandboxWorkflowBindings).toEqual(expect.arrayContaining([
+      'binding:sandbox-journey-case:http-json:v2',
+      'binding:sandbox-milestone-plan:http-json:v2',
+      'binding:sandbox-progress-synthesis:http-json:v2',
+    ]))
+  })
+
   afterEach(() => vi.unstubAllEnvs())
 
   it('registers a new immutable route generation at the configured provider origin', async () => {
@@ -146,6 +157,8 @@ describe('labelled sandbox V2 capability supply', () => {
         'sandbox-procurement-recommendation',
         'sandbox-trip-constraints', 'sandbox-itinerary-builder',
         'sandbox-itinerary-readiness',
+        'sandbox-journey-case', 'sandbox-milestone-plan',
+        'sandbox-progress-synthesis',
       ],
       sandboxV2Bindings: [
         'binding:sandbox-option-one:http-json:v4',
@@ -176,6 +189,9 @@ describe('labelled sandbox V2 capability supply', () => {
       'env:AE_SANDBOX_PROVIDER_KEY',
       'env:AE_SANDBOX_PROVIDER_KEY',
       'env:AE_SANDBOX_PROVIDER_KEY',
+      'env:AE_SANDBOX_PROVIDER_KEY',
+      'env:AE_SANDBOX_PROVIDER_KEY',
+      'env:AE_SANDBOX_PROVIDER_KEY',
     ])
     expect(bindings.filter(({ bindingId }) => bindingId.startsWith('binding:sandbox-route-')).map((binding) => ({
       bindingId: binding.bindingId, endpointUrl: binding.endpointUrl,
@@ -193,10 +209,13 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(businesses.map((business) => business.slug).sort()).toEqual([
       'sandbox-itinerary-builder',
       'sandbox-itinerary-readiness',
+      'sandbox-journey-case',
+      'sandbox-milestone-plan',
       'sandbox-option-one',
       'sandbox-option-two',
       'sandbox-procurement-brief',
       'sandbox-procurement-recommendation',
+      'sandbox-progress-synthesis',
       'sandbox-route-quoter',
       'sandbox-route-resolver',
       'sandbox-supplier-options',
@@ -254,6 +273,21 @@ describe('labelled sandbox V2 capability supply', () => {
         bindingId: 'binding:sandbox-itinerary-readiness:http-json:v2',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
+      {
+        publicationRef: 'offering:sandbox-journey-case:v2',
+        bindingId: 'binding:sandbox-journey-case:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-milestone-plan:v2',
+        bindingId: 'binding:sandbox-milestone-plan:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-progress-synthesis:v2',
+        bindingId: 'binding:sandbox-progress-synthesis:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
     ])
   })
 
@@ -275,8 +309,11 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.supplies.map(({ binding }) => binding.bindingId)).toEqual([
       'binding:sandbox-itinerary-builder:http-json:v2',
       'binding:sandbox-itinerary-readiness:http-json:v2',
+      'binding:sandbox-journey-case:http-json:v2',
+      'binding:sandbox-milestone-plan:http-json:v2',
       'binding:sandbox-procurement-brief:http-json:v2',
       'binding:sandbox-procurement-recommendation:http-json:v2',
+      'binding:sandbox-progress-synthesis:http-json:v2',
       'binding:sandbox-route-quoter:http-json:v5',
       'binding:sandbox-route-resolver:http-json:v5',
       'binding:sandbox-supplier-options:http-json:v2',
@@ -296,7 +333,7 @@ describe('labelled sandbox V2 capability supply', () => {
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
 
     expect(result.businessIdsBySlug).toMatchObject(existing.businessIdsBySlug)
-    expect(Object.keys(result.businessIdsBySlug)).toHaveLength(10)
+    expect(Object.keys(result.businessIdsBySlug)).toHaveLength(13)
     expect(result.sandboxV2Bindings).toHaveLength(2)
   })
 
@@ -323,7 +360,7 @@ describe('labelled sandbox V2 capability supply', () => {
     ])
   })
 
-  it('publishes ten inert businesses through the normal production command planes', async () => {
+  it('publishes thirteen inert businesses through the normal production command planes', async () => {
     const backend = convexTest(schema, modules)
     const first = await backend.mutation(internal.devSeed.seedDevCatalog, {})
     const ownerBeforeReplay = await backend.run((ctx) => (
@@ -415,9 +452,9 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(JSON.stringify({ offerings: state.offerings, bindings: state.bindings })).not.toContain('"operation"')
     expect(state.supplyOperations).toHaveLength(12)
     expect(state.supplyOperations.every((operation) => operation.actorKind === 'system' && operation.status === 'succeeded')).toBe(true)
-    expect(state.catalogOperations).toHaveLength(10)
+    expect(state.catalogOperations).toHaveLength(13)
     expect(state.catalogOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
-    expect(state.claimOperations).toHaveLength(10)
+    expect(state.claimOperations).toHaveLength(13)
     expect(state.claimOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
     expect(state.audits.filter((audit) => (
       audit.eventType.startsWith('capability_')
@@ -433,7 +470,7 @@ describe('labelled sandbox V2 capability supply', () => {
     )
     expect(state.audits.filter((audit) => (
       audit.eventType === 'claim.published' && audit.slug?.startsWith('sandbox-')
-    ))).toHaveLength(10)
+    ))).toHaveLength(13)
 
     const eligible = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
     expect(eligible).toMatchObject({

@@ -51,7 +51,7 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
   Object.freeze({
     cohortId: 'journey-management',
     label: 'Service journey management',
-    customerRequest: 'Coordinate the steps for moving a small office, show what is blocked, and keep a resumable record of who owes the next update.',
+    customerRequest: 'Coordinate a small office move, build a milestone plan, show what is blocked, and give me a resumable progress summary naming who owes the next update.',
     completionBoundary: 'A current milestone plan and status synthesis; no hidden operator coordination.',
     prohibitedClaim: 'Do not claim that a physical move, dispatch, or third-party task occurred.',
     steps: Object.freeze([

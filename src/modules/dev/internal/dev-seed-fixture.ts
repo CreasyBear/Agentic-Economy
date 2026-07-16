@@ -181,6 +181,27 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     publicDisclosure: 'Sandbox only. No availability, booking, ticketing, or payment is provided.',
     noContactReason: '',
   })),
+  ...[
+    ['journey-case', 'Journey Case Intake', 'Structure a service case'],
+    ['milestone-plan', 'Milestone Planning Service', 'Build a milestone plan'],
+    ['progress-synthesis', 'Progress Synthesis Service', 'Synthesize journey progress'],
+  ].map(([providerKey, businessName, serviceName]) => ({
+    requestedSlug: `sandbox-${providerKey}`,
+    businessName: businessName!,
+    category: 'Sandbox workflow provider',
+    suburb: 'Perth',
+    stateTerritory: 'WA',
+    ownerMessage: 'Clearly labelled non-production business for service journey workflow verification.',
+    sourceLabel: 'AE sandbox workflow registration fixture',
+    serviceName: serviceName!,
+    serviceCategory: 'Sandbox workflow provider',
+    serviceSummary: 'Returns deterministic typed evidence through the generic capability path.',
+    serviceArea: 'Online',
+    hoursOrUnknown: 'Always available for verification',
+    firstRequestMode: 'inquiry_available' as const,
+    publicDisclosure: 'Sandbox only. No physical move, dispatch, or third-party task is performed.',
+    noContactReason: '',
+  })),
 ] as const
 
 const DEV_SEED_LOCALES: readonly DevSeedLocale[] = [

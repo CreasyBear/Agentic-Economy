@@ -207,6 +207,25 @@ describe('sandbox capability provider', () => {
     expect(readinessChecklist).toContain('No reservation, ticket, or payment')
   })
 
+  it('executes journey management and preserves overdue work, ownership changes, and resume state', async () => {
+    const intake = await workflowCall('journey-case', {
+      request: 'Coordinate a small office move. One milestone is overdue, ownership changed, and I am resuming after an interruption.',
+    })
+    const { serviceCase } = await intake.json() as { serviceCase: string }
+    expect(serviceCase).toContain('overdue')
+    expect(serviceCase).toContain('ownership')
+
+    const planned = await workflowCall('milestone-plan', { serviceCase })
+    const { milestonePlan } = await planned.json() as { milestonePlan: string }
+    expect(milestonePlan).toContain('blocked')
+    expect(milestonePlan).toContain('next update')
+
+    const synthesized = await workflowCall('progress-synthesis', { milestonePlan })
+    const { progressSummary } = await synthesized.json() as { progressSummary: string }
+    expect(progressSummary).toContain('Resumable')
+    expect(progressSummary).toContain('No physical move, dispatch, or third-party task')
+  })
+
   it('publishes exact procurement discovery and refuses cross-step input', async () => {
     const endpoint = 'https://ae.test/api/sandbox/providers/workflow?provider=supplier-options'
     const discovery = await readSandboxWorkflowProviderDiscovery(

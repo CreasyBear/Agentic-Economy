@@ -532,7 +532,11 @@ export async function registerSandboxWorkflowSupplyRegistrations(
   registeredAt: number,
 ): Promise<SandboxV2SupplyRegistration[]> {
   const workflowProfiles = Object.entries(SANDBOX_WORKFLOW_PROVIDER_PROFILES)
-    .filter(([, profile]) => profile.cohortId === 'procurement' || profile.cohortId === 'itinerary')
+    .filter(([, profile]) => (
+      profile.cohortId === 'procurement'
+      || profile.cohortId === 'itinerary'
+      || profile.cohortId === 'journey-management'
+    ))
   const siteUrl = process.env.AE_SANDBOX_WORKFLOW_ORIGIN?.trim()
     || process.env.AE_SANDBOX_ROUTE_RESOLVER_ORIGIN?.trim()
     || process.env.AE_SITE_URL?.trim()

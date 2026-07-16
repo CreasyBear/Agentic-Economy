@@ -183,6 +183,15 @@ function sandboxWorkflowOutput(providerKey: string, input: string, digest: strin
   if (providerKey === 'itinerary-readiness') {
     return `${prefix}: Readiness checklist: activity availability remains unknown until confirmed; recheck mobility requirements before choosing each activity; verify weather and use the documented fallback where needed. No reservation, ticket, or payment has occurred. Draft reviewed: ${boundedInput}`
   }
+  if (providerKey === 'journey-case') {
+    return `${prefix}: Resumable service case records the requested office move, overdue milestones, current ownership, ownership changes, blockers, and the last confirmed update. Customer request: ${boundedInput}`
+  }
+  if (providerKey === 'milestone-plan') {
+    return `${prefix}: Milestone plan marks overdue or blocked work explicitly and assigns who owes the next update for each unresolved milestone. Service case: ${boundedInput}`
+  }
+  if (providerKey === 'progress-synthesis') {
+    return `${prefix}: Resumable progress summary preserves completed, blocked, overdue, and ownership-changed milestones plus the next update owner. No physical move, dispatch, or third-party task has occurred. Milestone plan: ${boundedInput}`
+  }
   return `${prefix}:${boundedInput}`
 }
 
