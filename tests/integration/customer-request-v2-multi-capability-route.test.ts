@@ -435,7 +435,14 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })).resolves.toEqual(confirmed)
     await expect(admin.action(api.customerRequestApplication.resume, {
       requestRef: compared.requestRef,
-    })).resolves.toEqual(confirmed)
+    })).resolves.toMatchObject({
+      ...confirmed,
+      recovery: {
+        state: 'restored',
+        restoredAt: expect.any(Number),
+        workRestarted: false,
+      },
+    })
     await expect(admin.action(api.customerRequestApplication.confirmRoute, {
       requestRef: compared.requestRef,
       revision: compared.revision,
@@ -1963,15 +1970,30 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const resumeAuth = await createCustomerRequestServiceAssertion({
       key, operation: 'resume', command: resumeCommand, principal, issuedAt: Date.now(),
     })
-    await expect(backend.action(api.customerRequestApplication.resume, {
+    const agentResumed = await backend.action(api.customerRequestApplication.resume, {
       ...resumeCommand, serviceAuth: { ...resumeAuth, scopes: [...resumeAuth.scopes] },
-    })).resolves.toEqual(confirmed)
+    })
+    expect(agentResumed).toMatchObject({
+      ...confirmed,
+      recovery: {
+        state: 'restored',
+        restoredAt: expect.any(Number),
+        workRestarted: false,
+      },
+    })
     const owner = backend.withIdentity({
       subject: principal.ownerId,
       issuer: 'https://identity.example',
       tokenIdentifier: `https://identity.example|${principal.ownerId}`,
     })
-    await expect(owner.action(api.customerRequestApplication.resume, resumeCommand)).resolves.toEqual(confirmed)
+    await expect(owner.action(api.customerRequestApplication.resume, resumeCommand)).resolves.toMatchObject({
+      ...confirmed,
+      recovery: {
+        state: 'restored',
+        restoredAt: expect.any(Number),
+        workRestarted: false,
+      },
+    })
     const runCommand = {
       requestRef: compared.requestRef,
       idempotencyKey: 'run:two-step-agent',

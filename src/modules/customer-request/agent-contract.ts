@@ -620,6 +620,11 @@ export const customerRequestViewSchema = z.strictObject({
     ]),
     safeNextAction: z.enum(['check_progress', 'wait_for_evidence', 'review_result', 'revise_request', 'none']),
   }).optional(),
+  recovery: z.strictObject({
+    state: z.literal('restored'),
+    restoredAt: safeNonnegativeInteger,
+    workRestarted: z.literal(false),
+  }).optional(),
   navigation: customerRequestAgentNavigationSchema.optional(),
   decision: customerRoutePlanDecisionSchema.optional(),
   confirmation: customerRouteConfirmationSchema.optional(),

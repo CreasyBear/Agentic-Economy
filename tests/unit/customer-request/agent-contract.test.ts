@@ -54,6 +54,30 @@ describe('Customer Request agent contract', () => {
     })
   })
 
+  it('accepts a truthful durable-state restoration receipt on a resumed Request', () => {
+    const resumed = customerRequestViewSchema.parse({
+      kind: 'request',
+      requestRef: 'request:restored',
+      revision: 3,
+      state: 'ready_to_compare',
+      summary: 'Compare suitable options',
+      nextAction: 'prepare_options',
+      missingFields: [],
+      options: [],
+      recovery: {
+        state: 'restored',
+        restoredAt: 4_000,
+        workRestarted: false,
+      },
+    })
+
+    expect(resumed.recovery).toEqual({
+      state: 'restored',
+      restoredAt: 4_000,
+      workRestarted: false,
+    })
+  })
+
   it('validates the customer-semantic prepared decision and every terminal recovery state', () => {
     const prepared = {
       kind: 'request', requestRef: 'request:sandbox', revision: 2,

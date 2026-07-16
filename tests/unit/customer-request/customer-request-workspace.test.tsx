@@ -42,9 +42,13 @@ describe('customer Request workspace', () => {
       kind: 'request', requestRef: 'request:resume-1', revision: 3, state: 'ready_to_compare',
       summary: 'Find lunch in Fremantle', nextAction: 'prepare_options', missingFields: [], options: [],
     } as const
+    const restoredProjection = {
+      ...projection,
+      recovery: { state: 'restored', restoredAt: 4_000, workRestarted: false },
+    } as const
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(Response.json(projection))
-      .mockResolvedValueOnce(Response.json(projection))
+      .mockResolvedValueOnce(Response.json(restoredProjection))
     vi.stubGlobal('fetch', fetchMock)
 
     const firstView = render(<AeCustomerRequestWorkspace />)
@@ -60,6 +64,7 @@ describe('customer Request workspace', () => {
 
     render(<AeCustomerRequestWorkspace />)
     expect(await screen.findByRole('button', { name: 'Show available options' })).toBeTruthy()
+    expect(screen.getByText('AE restored the latest saved state for this Request. Checking it did not restart the work.')).toBeTruthy()
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Aresume-1', expect.objectContaining({
       method: 'GET',
     }))

@@ -480,6 +480,11 @@ const customerView = v.object({
       v.literal('revise_request'), v.literal('none'),
     ),
   })),
+  recovery: v.optional(v.object({
+    state: v.literal('restored'),
+    restoredAt: v.number(),
+    workRestarted: v.literal(false),
+  })),
   decision: v.optional(customerRouteDecision),
   confirmation: v.optional(customerRouteConfirmation),
 })
@@ -678,7 +683,15 @@ export const provideFacts = action({
 export const resume = action({
   args: { requestRef: v.string(), serviceAuth: v.optional(serviceAssertion) },
   returns: actionResult,
-  handler: async (ctx, args): Promise<ActionResult> => {
+  handler: async (ctx, args): Promise<ActionResult> => (
+    withRestoredRequest(await resumeRequest(ctx, args), Date.now())
+  ),
+})
+
+async function resumeRequest(
+  ctx: ActionCtx,
+  args: Readonly<{ requestRef: string; serviceAuth?: Infer<typeof serviceAssertion> }>,
+): Promise<ActionResult> {
     const caller = await resolveRequestCaller(ctx, 'resume', { requestRef: args.requestRef }, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
     const current = await loadCurrent(ctx, args.requestRef)
@@ -781,8 +794,7 @@ export const resume = action({
     return current.routeGenerationRef === undefined
       ? projectStoredAggregate(current.aggregate, undefined)
       : await projectCurrentRoutePlans(ctx, current.aggregate)
-  },
-})
+}
 
 export const compare = action({
   args: {
@@ -3008,7 +3020,7 @@ function isPartialRouteResult(result: JsonValue | undefined): result is JsonValu
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
   const {
     disclosureReview, dataHandling, optionSet, clarification, preparedAction,
-    businesses, action, progress, activity, decision, confirmation,
+    businesses, action, progress, activity, recovery, decision, confirmation,
   } = view
   return {
     kind: view.kind, requestRef: view.requestRef, revision: view.revision,
@@ -3064,6 +3076,7 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
       safeNextAction: activity.safeNextAction,
       ...(activity.nextCheckAt === undefined ? {} : { nextCheckAt: activity.nextCheckAt }),
     } }),
+    ...(recovery === undefined ? {} : { recovery: { ...recovery } }),
     ...(decision === undefined ? {} : {
       decision: writableClone(decision),
     }),
@@ -3082,6 +3095,18 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
       },
       options: optionSet.options.map(writableOption),
     } }),
+  }
+}
+
+function withRestoredRequest(result: ActionResult, restoredAt: number): ActionResult {
+  if (result.kind !== 'request') return result
+  return {
+    ...result,
+    recovery: {
+      state: 'restored',
+      restoredAt,
+      workRestarted: false,
+    },
   }
 }
 

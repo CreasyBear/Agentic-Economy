@@ -323,6 +323,12 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
         <Text type="large" color="secondary">Enter a place, a type of business, or describe the situation. We’ll ask what matters and help you compare your options.</Text>
       </header> : null}
 
+      {state.kind === 'request' && state.projection.recovery?.state === 'restored'
+        ? <Card padding={3} className="mx-auto w-full max-w-4xl" aria-live="polite">
+            <Text color="secondary">AE restored the latest saved state for this Request. Checking it did not restart the work.</Text>
+          </Card>
+        : null}
+
       {state.kind === 'idle' || state.kind === 'error' ? <section className="mx-auto grid w-full max-w-3xl gap-3" aria-label="Start a request">
         <form onSubmit={(event) => { event.preventDefault(); void submit() }} className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-low sm:flex-row">
           <label className="sr-only" htmlFor="customer-need">What are you looking for?</label>

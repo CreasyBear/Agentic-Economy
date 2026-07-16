@@ -79,7 +79,14 @@ describe('current V2 Customer Request application path', () => {
     })
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: 'request:v2:privacy-disposition',
-    })).resolves.toEqual(submitted)
+    })).resolves.toMatchObject({
+      ...submitted,
+      recovery: {
+        state: 'restored',
+        restoredAt: expect.any(Number),
+        workRestarted: false,
+      },
+    })
   })
 
   it('uses eligible V2 supply, opaque interpretation and one durable exact aggregate', async () => {

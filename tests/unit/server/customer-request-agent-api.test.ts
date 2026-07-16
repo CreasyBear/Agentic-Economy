@@ -67,11 +67,18 @@ describe('agent-native customer Request API', () => {
       return {
         kind: 'request' as const, requestRef: 'request:agent:1', revision: 1, state: 'ready_to_compare' as const,
         summary: 'Ready', nextAction: 'prepare_options' as const, missingFields: [], options: [],
+        recovery: name.endsWith(':resume')
+          ? { state: 'restored' as const, restoredAt: 1_000, workRestarted: false as const }
+          : undefined,
       }
     }
-    expect((await handleAgentCustomerRequestGet('request:agent:1', {
+    const resumedResponse = await handleAgentCustomerRequestGet('request:agent:1', {
       authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
-    })).status).toBe(200)
+    })
+    expect(resumedResponse.status).toBe(200)
+    await expect(resumedResponse.json()).resolves.toMatchObject({
+      recovery: { state: 'restored', restoredAt: 1_000, workRestarted: false },
+    })
     expect((await handleAgentCustomerOptionsPost(request('/options', {
       revision: 1, idempotencyKey: 'prepare:1',
     }), 'request:agent:1', {

@@ -619,6 +619,7 @@ function requestView(input: Readonly<{
   action?: CustomerRequestView['action']
   progress?: CustomerRequestView['progress']
   activity?: CustomerRequestView['activity']
+  recovery?: CustomerRequestView['recovery']
   decision?: CustomerRoutePlanDecision
   confirmation?: CustomerRouteConfirmation
 }>): CustomerRequestView {
@@ -659,6 +660,7 @@ function requestView(input: Readonly<{
       }),
     }) }),
     ...(input.activity === undefined ? {} : { activity: Object.freeze({ ...input.activity }) }),
+    ...(input.recovery === undefined ? {} : { recovery: Object.freeze({ ...input.recovery }) }),
     ...(input.decision === undefined ? {} : { decision: input.decision }),
     ...(input.confirmation === undefined ? {} : { confirmation: input.confirmation }),
     options: Object.freeze((input.options ?? []).map((option) => Object.freeze({ ...option }))),
