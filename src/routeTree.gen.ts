@@ -16,6 +16,7 @@ import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as HelpRouteImport } from './routes/help'
+import { Route as ForAgentsRouteImport } from './routes/for-agents'
 import { Route as EngineRouteImport } from './routes/engine'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as AboutRouteImport } from './routes/about'
@@ -132,6 +133,11 @@ const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
 const HelpRoute = HelpRouteImport.update({
   id: '/help',
   path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForAgentsRoute = ForAgentsRouteImport.update({
+  id: '/for-agents',
+  path: '/for-agents',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EngineRoute = EngineRouteImport.update({
@@ -601,6 +607,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
   '/engine': typeof EngineRoute
+  '/for-agents': typeof ForAgentsRoute
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/privacy': typeof PrivacyRouteWithChildren
@@ -691,6 +698,7 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
   '/engine': typeof EngineRoute
+  '/for-agents': typeof ForAgentsRoute
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/privacy': typeof PrivacyRouteWithChildren
@@ -783,6 +791,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
   '/engine': typeof EngineRoute
+  '/for-agents': typeof ForAgentsRoute
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/privacy': typeof PrivacyRouteWithChildren
@@ -875,6 +884,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/claim'
     | '/engine'
+    | '/for-agents'
     | '/help'
     | '/llms.txt'
     | '/privacy'
@@ -965,6 +975,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/claim'
     | '/engine'
+    | '/for-agents'
     | '/help'
     | '/llms.txt'
     | '/privacy'
@@ -1056,6 +1067,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/claim'
     | '/engine'
+    | '/for-agents'
     | '/help'
     | '/llms.txt'
     | '/privacy'
@@ -1148,6 +1160,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   ClaimRoute: typeof ClaimRouteWithChildren
   EngineRoute: typeof EngineRoute
+  ForAgentsRoute: typeof ForAgentsRoute
   HelpRoute: typeof HelpRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   PrivacyRoute: typeof PrivacyRouteWithChildren
@@ -1232,6 +1245,13 @@ declare module '@tanstack/react-router' {
       path: '/help'
       fullPath: '/help'
       preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/for-agents': {
+      id: '/for-agents'
+      path: '/for-agents'
+      fullPath: '/for-agents'
+      preLoaderRoute: typeof ForAgentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/engine': {
@@ -2125,6 +2145,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   ClaimRoute: ClaimRouteWithChildren,
   EngineRoute: EngineRoute,
+  ForAgentsRoute: ForAgentsRoute,
   HelpRoute: HelpRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   PrivacyRoute: PrivacyRouteWithChildren,

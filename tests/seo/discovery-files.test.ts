@@ -56,6 +56,7 @@ describe('discovery files', () => {
     expect(result.body).toContain('Start with the outcome in the customer’s own words.')
     expect(result.body).toContain('Nothing is confirmed, shared, or started until the customer explicitly decides.')
     expect(result.body).toContain('Human entry=https://ae.example/')
+    expect(result.body).toContain('https://ae.example/for-agents')
     expect(result.body).toContain('needs_information | ready_to_compare | routes_ready | route_confirmed | in_progress')
     expect(result.body).toContain('navigation.actions')
     expect(result.body).toContain('change_request')
@@ -86,6 +87,7 @@ describe('discovery files', () => {
 
     expect(result.body).toContain('<loc>https://ae.example/</loc>')
     expect(result.body).toContain('<loc>https://ae.example/registry</loc>')
+    expect(result.body).toContain('<loc>https://ae.example/for-agents</loc>')
     expect(result.body).toContain('<loc>https://ae.example/parramatta-emergency-plumbing</loc>')
     expect(result.body).not.toContain('/admin/')
     expect(result.body).not.toContain('/claim/success')

@@ -107,8 +107,7 @@ function PublicNavItems() {
         <TopNavItem label="Ask AE" href="/" />
         <TopNavItem label="Businesses" href={defaultRegistryHref} />
         <TopNavItem label="Claim your business page" href="/claim" />
-        <TopNavItem label="For agents" href="/SKILL.md" />
-        <TopNavItem label="Activity" href="/admin/runs" />
+        <TopNavItem label="For agents" href="/for-agents" />
       </>
     )
   }
@@ -118,8 +117,7 @@ function PublicNavItems() {
       <Button label="Ask AE" variant="ghost" size="sm" href="/" />
       <Button label="Businesses" variant="ghost" size="sm" href={defaultRegistryHref} />
       <Button label="Claim your business page" variant="ghost" size="sm" href="/claim" />
-      <Button label="For agents" variant="ghost" size="sm" href="/SKILL.md" />
-      <Button label="Activity" variant="ghost" size="sm" href="/admin/runs" />
+      <Button label="For agents" variant="ghost" size="sm" href="/for-agents" />
     </div>
   )
 }

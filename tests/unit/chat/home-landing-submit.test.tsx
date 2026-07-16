@@ -66,7 +66,8 @@ describe('Request-first home', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'What do you need to make happen?' })).toBeTruthy()
     expect(screen.getByText(/Start with the outcome in your own words/)).toBeTruthy()
     expect(screen.getByText(/Nothing is confirmed, shared, or started until you decide/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Use AE with your AI' }).getAttribute('href')).toBe('/SKILL.md')
+    expect(screen.queryByText('Your agent knows who to call.')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Use AE with your AI' }).getAttribute('href')).toBe('/for-agents')
   })
 
   it('adopts a valid q as an editable Request draft without submitting it', () => {

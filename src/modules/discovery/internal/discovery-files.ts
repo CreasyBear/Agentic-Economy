@@ -4,11 +4,12 @@ import type { BuildDiscoveryFileOptions, DiscoveryFileBuildResult, DiscoverySour
 import { readCatalogHealth } from '@/modules/registry/public'
 import { readDiscoveryHealth } from './manifest-attempts'
 
-const staticSitemapPaths = ['/', '/claim', '/registry', '/privacy/remove-business'] as const
+const staticSitemapPaths = ['/', '/claim', '/registry', '/for-agents', '/privacy/remove-business'] as const
 const publicSurfacePaths = [
   '/',
   '/claim',
   '/registry',
+  '/for-agents',
   '/privacy/remove-business',
   '/api/businesses',
   '/api/businesses/search?q=',

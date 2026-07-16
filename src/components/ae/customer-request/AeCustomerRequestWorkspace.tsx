@@ -320,11 +320,11 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
   return (
     <main className="mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14">
       {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-3 text-center">
-        <Text className="text-sm font-semibold text-accent">Your agent knows who to call.</Text>
+        <Text className="text-sm font-semibold text-accent">Ask AE</Text>
         <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">What do you need to make happen?</Heading>
         <Text type="large" color="secondary">Start with the outcome in your own words. AE asks only for details that change the decision, then shows the available ways forward.</Text>
         <Text type="supporting" color="secondary">Nothing is confirmed, shared, or started until you decide.</Text>
-        <Link href="/SKILL.md" className="mx-auto min-h-11 py-2 font-semibold">Use AE with your AI</Link>
+        <Link href="/for-agents" className="mx-auto min-h-11 py-2 font-semibold">Use AE with your AI</Link>
       </header> : null}
 
       {state.kind === 'request' && state.projection.recovery?.state === 'restored'
