@@ -7,6 +7,7 @@ import {
   handleAgentCustomerRequestRepeatPermissionWithdrawPost,
 } from '@/lib/server/customer-request-agent-api'
 import {
+  handleCustomerRequestConnectedAssistantsGet,
   handleCustomerRequestRepeatPermissionAllowPost,
   handleCustomerRequestRepeatPermissionGet,
   handleCustomerRequestRepeatPermissionUsePost,
@@ -29,6 +30,32 @@ const principal = {
 }
 
 describe('Customer Request repeat-permission HTTP surface', () => {
+  it('returns customer-safe connected assistant choices without credential language', async () => {
+    const response = await handleCustomerRequestConnectedAssistantsGet(
+      get({}),
+      requestRef,
+      {
+        list: async () => ({
+          kind: 'connected_assistants',
+          requestRef,
+          assistants: [{
+            assistantRef: 'credential:repeat',
+            label: 'Connected assistant 1',
+            lastUsedAt: 1_000,
+          }],
+        }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      kind: 'connected_assistants',
+      assistants: [{ label: 'Connected assistant 1' }],
+    })
+    expect(JSON.stringify(body)).not.toMatch(/credentialId|scope|principal|policy|mandate/u)
+  })
+
   it('refuses an external credential without standing-authority scope before the application call', async () => {
     const callAction = vi.fn()
     const response = await handleAgentCustomerRequestRepeatPermissionAllowPost(

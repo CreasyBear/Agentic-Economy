@@ -2,6 +2,7 @@ import { callSourceAction, sourceAction } from '@/lib/server/convex-source'
 
 import type {
   CustomerRequestAgentResult,
+  CustomerRequestConnectedAssistantsResult,
   CustomerRequestEvidenceResult,
   CustomerRequestProblemInput,
   CustomerRequestProblemReplyInput,
@@ -22,6 +23,7 @@ export type ReplyCustomerRequestProblemInput = CustomerRequestProblemReplyInput 
   reportRef: string
 }>
 export type InspectCustomerRequestEvidenceInput = Readonly<{ requestRef: string }>
+export type ListCustomerRequestAssistantsInput = Readonly<{ requestRef: string }>
 export type AllowCustomerRequestRepeatPermissionInput = Readonly<{
   requestRef: string
   revision: number
@@ -52,6 +54,10 @@ export type WithdrawCustomerRequestRepeatPermissionInput = InspectCustomerReques
 const confirmRouteSourceAction = sourceAction<ConfirmCustomerRequestInput, CustomerRequestAgentResult>(
   'customerRequestApplication:confirmRoute',
 )
+const listRepeatPermissionAssistantsSourceAction = sourceAction<
+  ListCustomerRequestAssistantsInput,
+  CustomerRequestConnectedAssistantsResult
+>('customerRequestApplication:listRepeatPermissionAssistants')
 const runRouteSourceAction = sourceAction<ActOnCustomerRequestRouteInput, CustomerRequestAgentResult>(
   'customerRequestApplication:runRoute',
 )
@@ -88,6 +94,12 @@ export async function confirmCustomerRequestThroughSource(
   input: ConfirmCustomerRequestInput,
 ): Promise<CustomerRequestAgentResult> {
   return callSourceAction(confirmRouteSourceAction, input)
+}
+
+export async function listCustomerRequestAssistantsThroughSource(
+  input: ListCustomerRequestAssistantsInput,
+): Promise<CustomerRequestConnectedAssistantsResult> {
+  return callSourceAction(listRepeatPermissionAssistantsSourceAction, input)
 }
 
 export async function runCustomerRequestThroughSource(

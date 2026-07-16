@@ -773,6 +773,19 @@ export const customerRequestRepeatPermissionResultSchema = z.union([
   }),
 ])
 
+export const customerRequestConnectedAssistantsResultSchema = z.union([
+  z.strictObject({
+    kind: z.literal('connected_assistants'),
+    requestRef: boundedText(200),
+    assistants: z.array(z.strictObject({
+      assistantRef: boundedText(300),
+      label: boundedText(200),
+      lastUsedAt: safeNonnegativeInteger,
+    })).max(64),
+  }),
+  customerRequestRefusalSchema,
+])
+
 export const customerRequestAgentResultSchema = z.union([
   customerRequestViewSchema, customerRequestConflictSchema, customerRequestRefusalSchema,
 ])
@@ -794,6 +807,7 @@ export const customerRequestInspectResultSchema = z.union([
 
 export type CustomerRequestRepeatPermission = z.infer<typeof customerRequestRepeatPermissionSchema>
 export type CustomerRequestRepeatPermissionResult = z.infer<typeof customerRequestRepeatPermissionResultSchema>
+export type CustomerRequestConnectedAssistantsResult = z.infer<typeof customerRequestConnectedAssistantsResultSchema>
 
 type DeepReadonly<Value> = Value extends (...args: never[]) => unknown
   ? Value

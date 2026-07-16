@@ -4,6 +4,7 @@ import { defineAction, type ActionParameter } from '@/modules/common/action'
 
 import {
   customerRequestAgentResultSchema,
+  customerRequestConnectedAssistantsResultSchema,
   customerRequestEvidenceResultSchema,
   customerRequestProblemInputSchema,
   customerRequestProblemReplyInputSchema,
@@ -22,6 +23,7 @@ import {
   confirmCustomerRequestThroughSource,
   runCustomerRequestThroughSource,
   inspectCustomerRequestEvidenceThroughSource,
+  listCustomerRequestAssistantsThroughSource,
   reportCustomerRequestProblemThroughSource,
   replyCustomerRequestProblemThroughSource,
   allowCustomerRequestRepeatPermissionThroughSource,
@@ -183,6 +185,25 @@ export const customerRequestInspectEvidenceAction = defineAction({
 const repeatPermissionAllowActionInputSchema = customerRequestRepeatPermissionAllowInputSchema.extend({
   requestRef: z.string().trim().min(1).max(200),
 }).strict()
+
+export const customerRequestListConnectedAssistantsAction = defineAction({
+  id: 'customerRequest.listConnectedAssistants',
+  name: 'List connected assistants',
+  summary: 'List the customer-safe assistant choices eligible for repeat permission on this Request.',
+  boundaries: [
+    'Returns only assistants already connected to the authenticated Request owner.',
+    'Does not reveal credential material or grant any permission.',
+    'An empty list means the customer must connect an eligible assistant before delegating.',
+  ],
+  schema: z.strictObject({ requestRef: z.string().trim().min(1).max(200) }),
+  outputSchema: customerRequestConnectedAssistantsResultSchema,
+  parameters: [
+    { name: 'requestRef', type: 'string', description: 'The existing Customer Request.', required: true },
+  ],
+  readOnly: true,
+  surfaces: ['ui', 'http', 'agentJson'],
+  run: async ({ data }) => listCustomerRequestAssistantsThroughSource(data),
+})
 
 export const customerRequestAllowRepeatPermissionAction = defineAction({
   id: 'customerRequest.allowRepeatPermission',

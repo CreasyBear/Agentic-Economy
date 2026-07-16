@@ -3,22 +3,28 @@ import { ConvexSourceError } from '@/lib/server/convex-source'
 import {
   customerRequestAllowRepeatPermissionAction,
   customerRequestInspectRepeatPermissionAction,
+  customerRequestListConnectedAssistantsAction,
   customerRequestUseRepeatPermissionAction,
   customerRequestWithdrawRepeatPermissionAction,
 } from '@/modules/customer-request/customer-request.actions'
 import {
   customerRequestAgentResultSchema,
+  customerRequestConnectedAssistantsResultSchema,
   customerRequestRepeatPermissionAllowInputSchema,
   customerRequestRepeatPermissionInspectInputSchema,
   customerRequestRepeatPermissionResultSchema,
   customerRequestRepeatPermissionUseInputSchema,
   customerRequestRepeatPermissionWithdrawInputSchema,
   type CustomerRequestAgentResult,
+  type CustomerRequestConnectedAssistantsResult,
   type CustomerRequestRepeatPermissionResult,
 } from '@/modules/customer-request/agent-contract'
 
 type AllowOptions = Readonly<{
   allow?: (args: Record<string, unknown>) => Promise<CustomerRequestRepeatPermissionResult>
+}>
+type ListOptions = Readonly<{
+  list?: (args: Record<string, unknown>) => Promise<CustomerRequestConnectedAssistantsResult>
 }>
 type UseOptions = Readonly<{
   use?: (args: Record<string, unknown>) => Promise<CustomerRequestAgentResult>
@@ -48,6 +54,26 @@ export async function handleCustomerRequestRepeatPermissionAllowPost(
     return resultResponse(result)
   } catch (error) {
     return unavailable(error, 'repeat_permission_unavailable')
+  }
+}
+
+export async function handleCustomerRequestConnectedAssistantsGet(
+  request: Request,
+  requestRef: string,
+  options: ListOptions = {},
+): Promise<Response> {
+  if (!validRef(requestRef, 200)) return response({ error: 'invalid_request_ref' }, 400)
+  try {
+    const command = { requestRef }
+    const result = customerRequestConnectedAssistantsResultSchema.parse(await (options.list === undefined
+      ? customerRequestListConnectedAssistantsAction.run({
+          data: customerRequestListConnectedAssistantsAction.schema.parse(command),
+          context: { request },
+        })
+      : options.list(command)))
+    return resultResponse(result)
+  } catch (error) {
+    return unavailable(error, 'connected_assistants_unavailable')
   }
 }
 
