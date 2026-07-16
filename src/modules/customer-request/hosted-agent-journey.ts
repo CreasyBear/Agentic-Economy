@@ -7,6 +7,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   CUSTOMER_REQUEST_AGENT_SCOPE,
   customerRequestAgentResultSchema,
+  customerRequestConnectedAssistantsResultSchema,
   customerRequestEvidenceResultSchema,
   customerRequestJsonValueSchema,
   customerRequestProblemResultSchema,
@@ -1378,6 +1379,12 @@ async function confirmThroughRepeatPermission(
   if (JSON.stringify(permission) !== JSON.stringify(inspected)) {
     throw new Error('hosted_journey_repeat_permission_inspection_changed')
   }
+  const rediscovered = await callRepeatPermissionCollection(input, path)
+  if (JSON.stringify(permission) !== JSON.stringify(
+    rediscovered.find(({ permissionRef }) => permissionRef === permission.permissionRef),
+  )) {
+    throw new Error('hosted_journey_repeat_permission_collection_readback_changed')
+  }
   const useCommand = {
     revision: view.revision,
     routeRef: route.routeRef,
@@ -1440,6 +1447,13 @@ async function withdrawRepeatPermission(
   if (JSON.stringify(withdrawn) !== JSON.stringify(inspected)) {
     throw new Error('hosted_journey_repeat_permission_withdrawn_inspection_changed')
   }
+  const collectionPath = `/api/v1/requests/${encodeURIComponent(view.requestRef)}/repeat-permissions`
+  const rediscovered = await callRepeatPermissionCollection(input, collectionPath)
+  if (JSON.stringify(withdrawn) !== JSON.stringify(
+    rediscovered.find(({ permissionRef }) => withdrawn.permissionRef === permissionRef),
+  )) {
+    throw new Error('hosted_journey_repeat_permission_withdrawn_collection_readback_changed')
+  }
   const refusedUse = await callAgent(input, `${basePath}/use`, 'POST', {
     revision: view.revision,
     routeRef: observed.routeRef,
@@ -1455,6 +1469,24 @@ async function withdrawRepeatPermission(
     withdrawn: true,
     withdrawnUseRefused: true,
   }
+}
+
+async function callRepeatPermissionCollection(
+  input: HostedCustomerRequestJourneyRuntimeInput,
+  path: string,
+): Promise<readonly CustomerRequestRepeatPermission[]> {
+  input.metrics.requestCalls += 1
+  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
+    method: 'GET',
+    headers: headers(input, input.agentApiKey),
+  })
+  const value: unknown = await response.json()
+  if (response.status !== 200) throw responseError('GET', path, response.status, value)
+  const result = customerRequestConnectedAssistantsResultSchema.parse(value)
+  if (result.kind !== 'connected_assistants') {
+    throw new Error(`hosted_journey_repeat_permission_collection_result:${result.kind}`)
+  }
+  return result.permissions
 }
 
 async function callRepeatPermission(

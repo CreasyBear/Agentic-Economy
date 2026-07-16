@@ -92,6 +92,12 @@ describe('hosted Customer Request journey', () => {
       activePermission,
       activePermission,
       activePermission,
+      {
+        kind: 'connected_assistants',
+        requestRef: routeView.requestRef,
+        assistants: [],
+        permissions: [activePermission],
+      },
       confirmed,
       confirmed,
       inProgress,
@@ -108,6 +114,12 @@ describe('hosted Customer Request journey', () => {
       withdrawnPermission,
       withdrawnPermission,
       withdrawnPermission,
+      {
+        kind: 'connected_assistants',
+        requestRef: routeView.requestRef,
+        assistants: [],
+        permissions: [withdrawnPermission],
+      },
       requestView('needs_attention', routeView.revision, {
         routeGenerationRef: routeView.routeGenerationRef,
         summary: 'Repeat permission was withdrawn. Ask for confirmation before continuing.',
