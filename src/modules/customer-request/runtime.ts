@@ -26,4 +26,6 @@ export {
   routeMandateIssueEvidenceValue,
   routeMandateValue,
   routeStepGrantValue,
+  standingRouteAuthorityUseValue,
+  standingRoutePolicyValue,
 } from './internal/route-mandate-convex-schema'

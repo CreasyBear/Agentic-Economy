@@ -531,6 +531,38 @@ const refusedReason = v.union(
 )
 const actionResult = v.union(customerView, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
 type ActionResult = Infer<typeof actionResult>
+const repeatPermissionResult = v.union(
+  v.object({
+    kind: v.literal('repeat_permission'),
+    status: v.literal('active'),
+    requestRef: v.string(),
+    revision: v.number(),
+    routeRef: v.string(),
+    delegatedCredentialId: v.string(),
+    limits: v.object({
+      perUseSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+      cumulativeSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+      perUseDataAllocations: v.number(),
+      cumulativeDataAllocations: v.number(),
+      occurrences: v.number(),
+    }),
+    fallback: v.literal('ask_for_confirmation'),
+    validFrom: v.number(),
+    validUntil: v.number(),
+  }),
+  conflict,
+  v.object({ kind: v.literal('refused'), reason: refusedReason }),
+  v.object({
+    kind: v.literal('unavailable'),
+    reason: v.union(
+      v.literal('choice_not_current'),
+      v.literal('credential_not_authorized'),
+      v.literal('repeat_permission_not_available'),
+    ),
+    summary: v.string(),
+  }),
+)
+type RepeatPermissionResult = Infer<typeof repeatPermissionResult>
 export const submit = action({
   args: {
     compilationKey: v.string(), requestId: v.string(), expectedRevision: v.optional(v.number()),
@@ -909,6 +941,130 @@ export const confirmRoute = action({
         ? 'Sign in again before confirming this choice.'
         : 'This choice can no longer be confirmed. Review the current options.',
     }))
+  },
+})
+
+export const allowRepeatRoute = action({
+  args: {
+    requestRef: v.string(),
+    revision: v.number(),
+    routeRef: v.string(),
+    delegatedCredentialId: v.string(),
+    occurrences: v.number(),
+    cumulativeSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+    validUntil: v.number(),
+    idempotencyKey: v.string(),
+  },
+  returns: repeatPermissionResult,
+  handler: async (ctx, args): Promise<RepeatPermissionResult> => {
+    const command = {
+      requestRef: args.requestRef,
+      revision: args.revision,
+      routeRef: args.routeRef,
+      delegatedCredentialId: args.delegatedCredentialId,
+      occurrences: args.occurrences,
+      cumulativeSpend: args.cumulativeSpend,
+      validUntil: args.validUntil,
+      idempotencyKey: args.idempotencyKey,
+    }
+    const caller = await resolveRequestCaller(ctx, 'allow_repeat', command, undefined)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    if (current.aggregate.snapshot.revision !== args.revision) {
+      return { kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed' }
+    }
+    const preview = await projectCurrentRoutePlans(ctx, current.aggregate)
+    if (preview.kind !== 'request' || preview.decision?.outcome.kind !== 'routes_available') {
+      return {
+        kind: 'unavailable',
+        reason: 'choice_not_current',
+        summary: 'Review the current choices before allowing repeats.',
+      }
+    }
+    const displayedRoute = preview.decision.routes.find(({ routeRef }) => routeRef === args.routeRef)
+    if (displayedRoute?.availability !== 'current' || displayedRoute.maximumTotalCost.kind !== 'known') {
+      return {
+        kind: 'unavailable',
+        reason: 'choice_not_current',
+        summary: 'This choice is no longer current. Review the available choices.',
+      }
+    }
+    const routeReadback: Readonly<
+      | { kind: 'found'; routeGeneration: StoredRouteGeneration }
+      | { kind: 'not_found' }
+    > = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanGeneration, {
+      requestId: args.requestRef,
+    })
+    const selectedRoute = routeReadback.kind === 'found'
+      ? routeReadback.routeGeneration.routes.find(({ routePlanId }) => (
+          customerRouteRef(preview.decision?.generationRef ?? '', routePlanId) === args.routeRef
+        ))
+      : undefined
+    if (selectedRoute === undefined) {
+      return {
+        kind: 'unavailable',
+        reason: 'choice_not_current',
+        summary: 'This choice is no longer current. Review the available choices.',
+      }
+    }
+    const perUseDataAllocations = selectedRoute.steps.reduce(
+      (total, step) => total + step.dataUse.length,
+      0,
+    )
+    const result = await ctx.runMutation(internal.customerRequestStandingRoutePolicy.issue, {
+      requestId: args.requestRef,
+      expectedRequestRevision: args.revision,
+      expectedGenerationRef: preview.decision.generationRef,
+      selectedRoutePlanId: selectedRoute.routePlanId,
+      delegatedCredentialId: args.delegatedCredentialId,
+      perUseSpend: {
+        currency: displayedRoute.maximumTotalCost.currency,
+        amountMinor: displayedRoute.maximumTotalCost.amountMinor,
+      },
+      cumulativeSpend: args.cumulativeSpend,
+      perUseDataAllocations,
+      cumulativeDataAllocations: perUseDataAllocations * args.occurrences,
+      occurrences: args.occurrences,
+      validUntil: args.validUntil,
+      idempotencyKey: args.idempotencyKey,
+    })
+    if (result.kind === 'issued' || result.kind === 'replayed') {
+      return {
+        kind: 'repeat_permission',
+        status: 'active',
+        requestRef: args.requestRef,
+        revision: args.revision,
+        routeRef: args.routeRef,
+        delegatedCredentialId: args.delegatedCredentialId,
+        limits: {
+          perUseSpend: { ...result.policy.limits.perUseSpend },
+          cumulativeSpend: { ...result.policy.limits.cumulativeSpend },
+          perUseDataAllocations: result.policy.limits.perUseDataAllocations,
+          cumulativeDataAllocations: result.policy.limits.cumulativeDataAllocations,
+          occurrences: result.policy.limits.occurrences,
+        },
+        fallback: 'ask_for_confirmation',
+        validFrom: result.policy.validFrom,
+        validUntil: result.policy.validUntil,
+      }
+    }
+    if (result.kind === 'conflict') {
+      return result.reason === 'command_changed'
+        ? { kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused' }
+        : { kind: 'conflict', requestRef: args.requestRef, reason: 'options_changed' }
+    }
+    return {
+      kind: 'unavailable',
+      reason: result.reason === 'credential_not_authorized'
+        ? 'credential_not_authorized'
+        : 'repeat_permission_not_available',
+      summary: result.reason === 'credential_not_authorized'
+        ? 'That assistant is not authorized for repeat permission.'
+        : 'Repeat permission is not available for this choice.',
+    }
   },
 })
 
@@ -3289,7 +3445,7 @@ type RequestCaller = Readonly<{
 
 async function resolveRequestCaller(
   ctx: ActionCtx,
-  operation: 'submit' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence' | 'authorize' | 'resume' | 'facts' | 'refine',
+  operation: 'submit' | 'compare' | 'confirm' | 'allow_repeat' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence' | 'authorize' | 'resume' | 'facts' | 'refine',
   command: Record<string, unknown>,
   assertion: ServiceAssertion | undefined,
   delegatedAgentId?: string,

@@ -9,10 +9,10 @@ import {
   type StandingRoutePolicy,
 } from '@/modules/customer-request/standing-route-authority'
 import {
+  routeMandateValue,
   standingRouteAuthorityUseValue,
   standingRoutePolicyValue,
-} from '@/modules/customer-request/internal/route-mandate-convex-schema'
-import { routeMandateValue } from '@/modules/customer-request/runtime'
+} from '@/modules/customer-request/runtime'
 
 import { internalMutation, internalQuery } from './_generated/server'
 import {

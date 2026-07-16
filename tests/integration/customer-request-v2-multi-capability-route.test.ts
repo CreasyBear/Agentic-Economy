@@ -460,6 +460,86 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
+  it('lets the customer create bounded repeat permission for the displayed low-risk option', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const current = await committedTwoStepAdmissionRoute(backend, admin)
+    const compared = await admin.action(api.customerRequestApplication.compare, {
+      requestRef: current.aggregate.snapshot.requestId,
+      revision: current.aggregate.snapshot.revision,
+      idempotencyKey: 'compare:repeat-permission',
+    })
+    if (compared.kind !== 'request' || compared.decision?.routes[0] === undefined) {
+      throw new Error(`customer route missing: ${JSON.stringify(compared)}`)
+    }
+    const displayedRoute = compared.decision.routes[0]
+    await admin.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+      principalId: 'agent:repeat-permission',
+      ownerId: 'user_route_admin',
+      ownerTokenIdentifier: 'token_route_admin',
+      credentialId: 'credential:repeat-permission',
+      scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+      seenAt: 900,
+    })
+
+    const permission = await admin.action(api.customerRequestApplication.allowRepeatRoute, {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: displayedRoute.routeRef,
+      delegatedCredentialId: 'credential:repeat-permission',
+      occurrences: 2,
+      cumulativeSpend: {
+        currency: displayedRoute.maximumTotalCost.kind === 'known'
+          ? displayedRoute.maximumTotalCost.currency
+          : 'AUD',
+        amountMinor: displayedRoute.maximumTotalCost.kind === 'known'
+          ? displayedRoute.maximumTotalCost.amountMinor * 2
+          : 0,
+      },
+      validUntil: displayedRoute.validUntil,
+      idempotencyKey: 'allow-repeat:customer',
+    })
+
+    expect(permission, JSON.stringify(permission)).toMatchObject({
+      kind: 'repeat_permission',
+      status: 'active',
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: displayedRoute.routeRef,
+      delegatedCredentialId: 'credential:repeat-permission',
+      limits: {
+        perUseSpend: {
+          currency: displayedRoute.maximumTotalCost.kind === 'known'
+            ? displayedRoute.maximumTotalCost.currency
+            : 'AUD',
+          amountMinor: displayedRoute.maximumTotalCost.kind === 'known'
+            ? displayedRoute.maximumTotalCost.amountMinor
+            : 0,
+        },
+        occurrences: 2,
+      },
+      fallback: 'ask_for_confirmation',
+      validUntil: displayedRoute.validUntil,
+    })
+    expect(JSON.stringify(permission)).not.toMatch(
+      /policyRef|policyDigest|mandate|capabilityId|bindingId|offeringId|graph/u,
+    )
+    if (permission.kind !== 'repeat_permission') {
+      throw new Error(`repeat permission failed: ${JSON.stringify(permission)}`)
+    }
+    await expect(admin.action(api.customerRequestApplication.allowRepeatRoute, {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: displayedRoute.routeRef,
+      delegatedCredentialId: 'credential:repeat-permission',
+      occurrences: 2,
+      cumulativeSpend: permission.limits.cumulativeSpend,
+      validUntil: displayedRoute.validUntil,
+      idempotencyKey: 'allow-repeat:customer',
+    })).resolves.toEqual(permission)
+  })
+
   it('starts the confirmed choice through one customer command and replays one durable run', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)
