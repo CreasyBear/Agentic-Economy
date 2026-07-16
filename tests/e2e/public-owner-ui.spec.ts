@@ -35,7 +35,8 @@ test.describe('public owner routes', () => {
     await agentSetup.click()
     await expect(page).toHaveURL('/for-agents')
     await expect(page.getByRole('heading', { name: 'Use AE with your AI' })).toBeVisible()
-    await expect(page.getByText('Public self-service API keys are not available yet.')).toBeVisible()
+    await expect(page.getByText('Sign in to create a seven-day key for one assistant.')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Create an API key' })).toHaveAttribute('href', '/agent-access')
     await page.goto('/')
 
     if (testInfo.project.name.includes('compact')) {
@@ -112,6 +113,15 @@ test.describe('public owner routes', () => {
       await expect(page.getByText('Service category is required.')).toBeVisible()
       await expect(page.getByLabel('Service category')).toBeFocused()
     }).toPass({ timeout: 15_000 })
+  })
+
+  test('agent access explains the bounded key before creation', async ({ page }) => {
+    await page.goto('/agent-access', { waitUntil: 'networkidle' })
+    await expect(page.getByRole('heading', { name: 'Set up your AI' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Create a seven-day key' })).toBeVisible()
+    await expect(page.getByText('It cannot change its own access or act outside the choices and limits AE shows you.')).toBeVisible()
+    await expect(page.getByLabel('Assistant name')).toHaveValue('My assistant')
+    await expect(page.getByRole('button', { name: 'Create key' })).toBeEnabled()
   })
 
   test('claim form remains usable when first request state changes', async ({ page }) => {

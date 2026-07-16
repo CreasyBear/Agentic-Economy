@@ -34,6 +34,7 @@ import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
 import { Route as ClaimFormRouteImport } from './routes/claim.form'
 import { Route as ApiRequestsRouteImport } from './routes/api.requests'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
+import { Route as OperatorAgentAccessRouteImport } from './routes/_operator/agent-access'
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
@@ -224,6 +225,11 @@ const ApiBusinessesRoute = ApiBusinessesRouteImport.update({
   id: '/api/businesses',
   path: '/api/businesses',
   getParentRoute: () => rootRouteImport,
+} as any)
+const OperatorAgentAccessRoute = OperatorAgentAccessRouteImport.update({
+  id: '/agent-access',
+  path: '/agent-access',
+  getParentRoute: () => OperatorRoute,
 } as any)
 const DotwellKnownHttpMessageSignaturesDirectoryRoute =
   DotwellKnownHttpMessageSignaturesDirectoryRouteImport.update({
@@ -624,6 +630,7 @@ export interface FileRoutesByFullPath {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
+  '/agent-access': typeof OperatorAgentAccessRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/form': typeof ClaimFormRoute
@@ -716,6 +723,7 @@ export interface FileRoutesByTo {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
+  '/agent-access': typeof OperatorAgentAccessRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/form': typeof ClaimFormRoute
@@ -810,6 +818,7 @@ export interface FileRoutesById {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
+  '/_operator/agent-access': typeof OperatorAgentAccessRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/form': typeof ClaimFormRoute
@@ -904,6 +913,7 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
+    | '/agent-access'
     | '/api/businesses'
     | '/api/requests'
     | '/claim/form'
@@ -996,6 +1006,7 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
+    | '/agent-access'
     | '/api/businesses'
     | '/api/requests'
     | '/claim/form'
@@ -1089,6 +1100,7 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
+    | '/_operator/agent-access'
     | '/api/businesses'
     | '/api/requests'
     | '/claim/form'
@@ -1384,6 +1396,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/businesses'
       preLoaderRoute: typeof ApiBusinessesRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_operator/agent-access': {
+      id: '/_operator/agent-access'
+      path: '/agent-access'
+      fullPath: '/agent-access'
+      preLoaderRoute: typeof OperatorAgentAccessRouteImport
+      parentRoute: typeof OperatorRoute
     }
     '/.well-known/http-message-signatures-directory': {
       id: '/.well-known/http-message-signatures-directory'
@@ -1888,6 +1907,7 @@ const OperatorOwnerInquiriesRouteWithChildren =
   )
 
 interface OperatorRouteChildren {
+  OperatorAgentAccessRoute: typeof OperatorAgentAccessRoute
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
   OperatorAdminClaimsRoute: typeof OperatorAdminClaimsRoute
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
@@ -1902,6 +1922,7 @@ interface OperatorRouteChildren {
 }
 
 const OperatorRouteChildren: OperatorRouteChildren = {
+  OperatorAgentAccessRoute: OperatorAgentAccessRoute,
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
   OperatorAdminClaimsRoute: OperatorAdminClaimsRoute,
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,

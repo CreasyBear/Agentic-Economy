@@ -31,7 +31,8 @@ function ForAgentsRoute() {
               <li>An AE API key with Customer Request access.</li>
               <li>Your request in ordinary language and your answers when AE asks a decision-changing question.</li>
             </ol>
-            <Text weight="semibold">Public self-service API keys are not available yet.</Text>
+            <Text weight="semibold">Sign in to create a seven-day key for one assistant.</Text>
+            <Button label="Create an API key" variant="primary" href="/agent-access" />
           </div>
         </Card>
 
