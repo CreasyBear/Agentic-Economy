@@ -10,6 +10,8 @@ import {
 
 const MAX_BODY_BYTES = 64 * 1024
 const SANDBOX_OFFER_EXPIRES_AT = Date.UTC(2035, 0, 1)
+const UNKNOWN_ROUTE_REQUEST_PHRASE = 'leave the quote outcome unknown'
+const UNKNOWN_ROUTE_REFERENCE_PREFIX = 'sandbox-service:unknown:'
 const scenarioValue = z.enum(['success', 'refusal', 'timeout', 'expired', 'duplicate'])
 const preparationEgressBody = z.strictObject({
   protocol: z.literal('ae.preparation-egress:v1'),
@@ -75,7 +77,7 @@ export async function handleSandboxRouteProviderRequest(
   if (!body.ok) return json({ kind: 'refused', reason: 'request_too_large' }, 413)
   let parsedJson: unknown
   try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
-  return routeProviderResponse(routeKey, SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey], parsedJson)
+  return await routeProviderResponse(routeKey, SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey], parsedJson, request, options)
 }
 
 export async function handleSandboxCapabilityRequest(request: Request, options: HandlerOptions = {}): Promise<Response> {
@@ -151,11 +153,13 @@ function authenticateSandboxProvider(request: Request, options: HandlerOptions):
   return undefined
 }
 
-function routeProviderResponse(
+async function routeProviderResponse(
   routeKey: SandboxRouteProviderProfileKey,
   profile: (typeof SANDBOX_ROUTE_PROVIDER_PROFILES)[SandboxRouteProviderProfileKey],
   input: unknown,
-): Response {
+  request?: Request,
+  options: HandlerOptions = {},
+): Promise<Response> {
   const probe = requestBody.safeParse(input)
   if (probe.success && probe.data.operation === 'quote') return json({
     kind: 'quoted', expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor),
@@ -165,11 +169,17 @@ function routeProviderResponse(
   if (routeKey === 'resolver') {
     const parsed = z.strictObject({ request: z.string().min(1) }).safeParse(input)
     if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
-    const serviceReference = `sandbox-service:${canonicalDigest(parsed.data).slice(7, 31)}`
+    const prefix = parsed.data.request.toLowerCase().includes(UNKNOWN_ROUTE_REQUEST_PHRASE)
+      ? UNKNOWN_ROUTE_REFERENCE_PREFIX
+      : 'sandbox-service:'
+    const serviceReference = `${prefix}${canonicalDigest(parsed.data).slice(7, 31)}`
     return json({ serviceReference }, 200, { 'Provider-Receipt': `sandbox-resolver:${serviceReference}` })
   }
   const parsed = z.strictObject({ serviceReference: z.string().min(1) }).safeParse(input)
   if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+  if (parsed.data.serviceReference.startsWith(UNKNOWN_ROUTE_REFERENCE_PREFIX)) {
+    await (options.wait ?? waitForDelay)(10_100, request?.signal ?? new AbortController().signal)
+  }
   const quoteReference = `sandbox-quote:${canonicalDigest(parsed.data).slice(7, 31)}`
   return json({ quoteReference }, 200, { 'Provider-Receipt': `sandbox-quoter:${quoteReference}` })
 }

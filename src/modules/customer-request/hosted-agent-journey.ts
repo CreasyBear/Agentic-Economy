@@ -27,7 +27,7 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
     request: string
     facts: Readonly<Record<string, unknown>>
     messages: readonly string[]
-    finish?: 'cancel' | 'complete'
+    finish?: 'cancel' | 'complete' | 'outcome_unknown'
     expectedRoute?: Readonly<{ stepCount: number; businesses: readonly string[] }>
   }>
   sandbox: true
@@ -79,12 +79,14 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
   ])),
   authorityStops: z.array(z.literal('route_confirmation')),
   final: z.object({
-    requestRef: z.string(), state: z.enum(['cancelled', 'completed']), selectedBusiness: z.string(),
+    requestRef: z.string(), state: z.enum(['cancelled', 'completed', 'outcome_unknown']), selectedBusiness: z.string(),
     selectedBusinesses: z.array(z.string()).min(1), stepCount: z.number().int().positive(),
-    runState: z.enum(['in_progress', 'completed', 'cancelled']),
-    evidenceState: z.enum(['queued', 'running', 'completed', 'cancelled']),
+    runState: z.enum(['in_progress', 'completed', 'cancelled', 'outcome_unknown']),
+    evidenceState: z.enum(['queued', 'running', 'completed', 'cancelled', 'outcome_unknown']),
     problemState: z.enum(['received', 'not_reported']),
-    resumedState: z.enum(['cancelled', 'completed']),
+    resumedState: z.enum(['cancelled', 'completed', 'outcome_unknown']),
+    completedSteps: z.number().int().nonnegative().optional(),
+    automaticRetry: z.boolean().optional(),
     resultDigest: z.string().optional(),
   }).strict(),
   measurements: z.strictObject({
@@ -219,6 +221,13 @@ export async function runHostedCustomerRequestJourney(
       }
       const problemAction = observedNavigationAction(input, view, 'report_problem')
       if (problemAction.method !== 'POST') throw new Error('hosted_journey_navigation_method:report_problem')
+      if (input.scenario.finish === 'outcome_unknown') {
+        return await outcomeUnknownHostedJourney({
+          input: runtimeInput, release, requestRef, route, selectedBusiness, selectedBusinesses,
+          states, authorityStops, consumedFacts, consumedMessages, progressPath, evidencePath,
+          problemAction, started: view, nonce,
+        })
+      }
       const cancelled = await callObservedAgent(
         runtimeInput, view, 'cancel',
         { '<unique string>': `acceptance:cancel:${nonce}` },
@@ -272,6 +281,75 @@ export async function runHostedCustomerRequestJourney(
     }
   }
   throw new Error('hosted_journey_transition_limit_exceeded')
+}
+
+async function outcomeUnknownHostedJourney(input: Readonly<{
+  input: HostedCustomerRequestJourneyRuntimeInput
+  release: ReleaseVerification
+  requestRef: string
+  route: NonNullable<NonNullable<CustomerRequestView['decision']>['routes']>[number]
+  selectedBusiness: string
+  selectedBusinesses: readonly string[]
+  states: CustomerRequestView['state'][]
+  authorityStops: Array<'route_confirmation'>
+  consumedFacts: Array<{ requirementKey: string; valueDigest: string }>
+  consumedMessages: Array<{ index: number; valueDigest: string }>
+  progressPath: string
+  evidencePath: string
+  problemAction: ObservedNavigationAction
+  started: CustomerRequestView
+  nonce: string
+}>): Promise<HostedCustomerRequestJourneyProof> {
+  let uncertain: CustomerRequestView | undefined
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    uncertain = await callAgent(input.input, input.progressPath, 'GET', undefined, [200, 202])
+    observe(input.states, uncertain)
+    if (uncertain.state === 'outcome_unknown') break
+    if (uncertain.state !== 'in_progress') throw new Error(`hosted_journey_unknown_stopped:${uncertain.state}`)
+    await (input.input.sleep ?? defaultSleep)(1_000)
+  }
+  if (uncertain?.state !== 'outcome_unknown' || uncertain.action?.state !== 'unknown'
+    || uncertain.action.automaticRetry !== false || uncertain.progress?.completed !== input.route.stepCount - 1) {
+    throw new Error('hosted_journey_unknown_timeout')
+  }
+  if (uncertain.navigation?.actions.some(({ relation }) => relation === 'start_confirmed_option')) {
+    throw new Error('hosted_journey_unknown_replay_available')
+  }
+  const evidence = await callAgentEvidence(input.input, input.evidencePath)
+  if (evidence.state !== 'outcome_unknown' || evidence.steps.length !== input.route.stepCount
+    || evidence.steps.filter(({ state }) => state === 'completed').length !== input.route.stepCount - 1
+    || evidence.steps.at(-1)?.state !== 'outcome_unknown') {
+    throw new Error('hosted_journey_unknown_evidence_missing')
+  }
+  const problem = await callAgentProblem(input.input, input.problemAction.path, materializeObservedInput(
+    input.started, input.problemAction, {
+      '<unique string>': `acceptance:problem:${input.nonce}`,
+      '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
+      '<problem summary>': 'The labelled sandbox provider outcome is unknown after release.',
+    },
+  ))
+  const resumed = await callAgent(input.input, input.progressPath, 'GET')
+  observe(input.states, resumed)
+  if (resumed.state !== 'outcome_unknown' || resumed.action?.automaticRetry !== false
+    || resumed.progress?.completed !== uncertain.progress.completed) {
+    throw new Error(`hosted_journey_unknown_resume_failed:${resumed.state}`)
+  }
+  return hostedCustomerRequestJourneyProofSchema.parse({
+    kind: 'cold_external_agent_journey', agent: input.input.agent,
+    release: journeyReleaseProjection(input.input, input.release),
+    observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
+    input: { request: input.input.scenario.request, facts: input.consumedFacts, messages: input.consumedMessages },
+    observedStates: input.states, authorityStops: input.authorityStops,
+    final: {
+      requestRef: input.requestRef, state: resumed.state, selectedBusiness: input.selectedBusiness,
+      selectedBusinesses: input.selectedBusinesses, stepCount: input.route.stepCount,
+      runState: 'outcome_unknown', evidenceState: evidence.state, problemState: problem.state,
+      resumedState: resumed.state, completedSteps: resumed.progress.completed, automaticRetry: false,
+    },
+    measurements: journeyMeasurements(input.input, input.route, false, true),
+    sandbox: true,
+    claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
+  })
 }
 
 async function completeHostedJourney(input: Readonly<{

@@ -172,6 +172,54 @@ describe('hosted Customer Request journey', () => {
     })
   })
 
+  it('preserves partial progress and refuses replay when the final provider outcome is unknown', async () => {
+    const unknown = requestView('outcome_unknown', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'wait',
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+      action: { state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false, observedAt: 9_100 },
+    })
+    const responses = [
+      compositeRoutesReadyView(), compositeRoutesReadyView(),
+      requestView('route_confirmed', 2, { routeGenerationRef: 'generation:one', confirmation: confirmation() }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      }),
+      unknown,
+      {
+        kind: 'evidence', requestRef: 'request:cold', state: 'outcome_unknown', generatedAt: 9_100,
+        steps: [
+          { step: 1, state: 'completed', observedAt: 9_050, evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }] },
+          { step: 2, state: 'outcome_unknown', observedAt: 9_100, evidence: [] },
+        ],
+      },
+      { kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:unknown', state: 'received', reportedAt: 9_101 },
+      unknown,
+    ]
+    const proof = await runHostedCustomerRequestJourney({
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
+      agent: { name: 'cold-external-agent', version: '1.0.0' },
+      scenario: {
+        request: 'Resolve a labelled sandbox service and leave the quote outcome unknown',
+        facts: {}, messages: [], finish: 'outcome_unknown',
+        expectedRoute: { stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'] },
+      },
+      sandbox: true,
+      fetch: vi.fn(async () => Response.json(responses.shift() ?? { error: 'unexpected' })),
+      verifyRelease: async () => ({ kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'dpl_exact' }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+      sleep: async () => undefined,
+    })
+
+    expect(proof.final).toMatchObject({
+      state: 'outcome_unknown', runState: 'outcome_unknown', evidenceState: 'outcome_unknown',
+      problemState: 'received', resumedState: 'outcome_unknown', completedSteps: 1,
+      automaticRetry: false,
+    })
+  })
+
   it('discovers every post-submit transition from the observed agent navigation', async () => {
     const routes = withNavigation(compositeRoutesReadyView(), [
       navigationAction('confirm_option', 'POST', '/api/v1/requests/request%3Acold/observed-confirm', {

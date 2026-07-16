@@ -28,7 +28,7 @@ export type CustomerRequestProductionSmokeConfig = Readonly<{
   expectedRoute?: Readonly<{ stepCount: number; businesses: readonly string[] }>
   facts: Readonly<Record<string, unknown>>
   fetch: typeof globalThis.fetch
-  finish?: 'cancel' | 'complete'
+  finish?: 'cancel' | 'complete' | 'outcome_unknown'
   messages: readonly string[]
   preflightOnly: boolean
   requestText: string
@@ -122,7 +122,7 @@ export async function runCustomerRequestProductionSmoke(
 
 function parseDirectBaseline(
   env: Record<string, string | undefined>,
-  finish: 'cancel' | 'complete',
+  finish: 'cancel' | 'complete' | 'outcome_unknown',
 ): DirectBaselineConfig | undefined {
   const raw = {
     origins: optionalText(env.AE_DIRECT_PROVIDER_ORIGINS_JSON),
@@ -181,10 +181,10 @@ function isMoney(value: unknown): value is Readonly<{ currency: string; amountMi
     && candidate.amountMinor >= 0
 }
 
-function parseFinish(value: string | undefined): 'cancel' | 'complete' {
+function parseFinish(value: string | undefined): 'cancel' | 'complete' | 'outcome_unknown' {
   const finish = optionalText(value) ?? 'cancel'
-  if (finish !== 'cancel' && finish !== 'complete') {
-    throw new Error('AE_CUSTOMER_REQUEST_FINISH must be cancel or complete')
+  if (finish !== 'cancel' && finish !== 'complete' && finish !== 'outcome_unknown') {
+    throw new Error('AE_CUSTOMER_REQUEST_FINISH must be cancel, complete, or outcome_unknown')
   }
   return finish
 }

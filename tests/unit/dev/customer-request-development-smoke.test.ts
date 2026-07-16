@@ -48,4 +48,14 @@ describe('customer Request development smoke configuration', () => {
       AE_CUSTOMER_REQUEST_FINISH: 'cancel',
     }, 'a'.repeat(40))).toMatchObject({ finish: 'cancel' })
   })
+
+  it('selects the partial-progress unknown-outcome journey explicitly', () => {
+    expect(customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_FINISH: 'outcome_unknown',
+    }, 'a'.repeat(40))).toMatchObject({ finish: 'outcome_unknown' })
+  })
 })

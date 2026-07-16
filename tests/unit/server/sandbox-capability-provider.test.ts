@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   handleSandboxCapabilityRequest,
@@ -134,6 +134,23 @@ describe('sandbox capability provider', () => {
       body: JSON.stringify({ serviceReference: resolvedBody.serviceReference }),
     }), { providerKey: 'secret' })
     expect(wrongProvider.status).toBe(400)
+  })
+
+  it('lets registered sandbox providers exercise an uncertain second-step outcome', async () => {
+    const resolverUrl = 'https://ae.test/api/sandbox/providers/route-resolver'
+    const quoterUrl = 'https://ae.test/api/sandbox/providers/route-quoter'
+    const resolved = await handleSandboxRouteProviderRequest('resolver', new Request(resolverUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({ request: 'Resolve a labelled sandbox service and leave the quote outcome unknown' }),
+    }), { providerKey: 'secret' })
+    const resolvedBody = await resolved.json() as { serviceReference: string }
+    const wait = vi.fn(async () => { throw new DOMException('Timed out', 'TimeoutError') })
+
+    await expect(handleSandboxRouteProviderRequest('quoter', new Request(quoterUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({ serviceReference: resolvedBody.serviceReference }),
+    }), { providerKey: 'secret', wait })).rejects.toMatchObject({ name: 'TimeoutError' })
+    expect(wait).toHaveBeenCalledOnce()
   })
 
   it('refuses missing credentials and never commits a real-world effect', async () => {

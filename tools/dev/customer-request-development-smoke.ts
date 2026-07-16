@@ -22,7 +22,7 @@ export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
   request: string
   facts: Readonly<Record<string, unknown>>
   messages: readonly string[]
-  finish: 'complete' | 'cancel'
+  finish: 'complete' | 'cancel' | 'outcome_unknown'
   expectedRoute: Readonly<{ stepCount: number; businesses: readonly string[] }>
   fetch: typeof globalThis.fetch
 }>
