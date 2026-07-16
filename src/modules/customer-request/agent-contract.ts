@@ -60,9 +60,23 @@ export const customerRequestProblemInputSchema = z.strictObject({
   summary: boundedText(1_000),
 })
 
+const customerRequestProblemProjectionSchema = z.strictObject({
+  category: z.enum(['incorrect_result', 'unexpected_cost', 'privacy_concern', 'could_not_stop', 'other']),
+  claimSource: z.literal('customer'),
+  causality: z.literal('unknown'),
+  resolution: z.literal('not_adjudicated'),
+  nextAction: z.literal('await_review'),
+  affected: z.strictObject({
+    step: safePositiveInteger,
+    attemptRef: z.string().optional(),
+    business: z.string().optional(),
+  }),
+})
+
 export const customerRequestProblemReceiptSchema = z.strictObject({
   kind: z.literal('problem_reported'), requestRef: z.string(), reportRef: z.string(),
   state: z.literal('received'), reportedAt: safeNonnegativeInteger,
+  problem: customerRequestProblemProjectionSchema.optional(),
 })
 
 export const customerRequestEvidenceExportSchema = z.strictObject({
@@ -75,6 +89,12 @@ export const customerRequestEvidenceExportSchema = z.strictObject({
     observedAt: safeNonnegativeInteger,
     evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
   })),
+  problems: z.array(customerRequestProblemProjectionSchema.extend({
+    reportRef: z.string(),
+    state: z.literal('received'),
+    summary: boundedText(1_000),
+    reportedAt: safeNonnegativeInteger,
+  }).strict()).default([]),
   result: customerRequestJsonValueSchema.optional(),
 })
 

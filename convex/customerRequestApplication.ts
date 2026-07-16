@@ -906,6 +906,17 @@ export const cancelRoute = action({
 const problemReceipt = v.object({
   kind: v.literal('problem_reported'), requestRef: v.string(), reportRef: v.string(),
   state: v.literal('received'), reportedAt: v.number(),
+  problem: v.object({
+    category: v.union(
+      v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
+      v.literal('could_not_stop'), v.literal('other'),
+    ),
+    claimSource: v.literal('customer'), causality: v.literal('unknown'),
+    resolution: v.literal('not_adjudicated'), nextAction: v.literal('await_review'),
+    affected: v.object({
+      step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
+    }),
+  }),
 })
 const problemActionResult = v.union(problemReceipt, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
 type ProblemActionResult = Infer<typeof problemActionResult>
@@ -932,8 +943,14 @@ export const reportRouteProblem = action({
       return { kind: 'refused' as const, reason: 'request_not_found' as const }
     }
     const result: Readonly<
-      | { kind: 'reported'; reportRef: string; reportedAt: number }
-      | { kind: 'replayed'; reportRef: string; reportedAt: number }
+      | {
+          kind: 'reported'; reportRef: string; reportedAt: number
+          affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
+        }
+      | {
+          kind: 'replayed'; reportRef: string; reportedAt: number
+          affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
+        }
       | { kind: 'conflict' }
       | { kind: 'refused' }
     > = await ctx.runMutation(internal.customerRequestRouteExecution.reportProblem, {
@@ -947,6 +964,11 @@ export const reportRouteProblem = action({
     return {
       kind: 'problem_reported' as const, requestRef: args.requestRef,
       reportRef: result.reportRef, state: 'received' as const, reportedAt: result.reportedAt,
+      problem: {
+        category: args.category, claimSource: 'customer' as const, causality: 'unknown' as const,
+        resolution: 'not_adjudicated' as const, nextAction: 'await_review' as const,
+        affected: { ...result.affected },
+      },
     }
   },
 })
@@ -965,6 +987,19 @@ const evidenceExport = v.object({
       v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
     ),
     observedAt: v.number(), evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+  })),
+  problems: v.array(v.object({
+    reportRef: v.string(), state: v.literal('received'),
+    category: v.union(
+      v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
+      v.literal('could_not_stop'), v.literal('other'),
+    ),
+    summary: v.string(), claimSource: v.literal('customer'), causality: v.literal('unknown'),
+    resolution: v.literal('not_adjudicated'), nextAction: v.literal('await_review'),
+    reportedAt: v.number(),
+    affected: v.object({
+      step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
+    }),
   })),
   result: v.optional(v.any()), // runtime-validated JsonValue boundary
 })
@@ -995,6 +1030,18 @@ export const exportRouteEvidence = action({
             observedAt: number
             evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
           }>[]
+          problems: readonly Readonly<{
+            reportRef: string
+            state: 'received'
+            category: 'incorrect_result' | 'unexpected_cost' | 'privacy_concern' | 'could_not_stop' | 'other'
+            summary: string
+            claimSource: 'customer'
+            causality: 'unknown'
+            resolution: 'not_adjudicated'
+            nextAction: 'await_review'
+            reportedAt: number
+            affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
+          }>[]
         }
     > = await ctx.runQuery(internal.customerRequestRouteExecution.exportCustomerEvidence, {
       requestId: args.requestRef, principalId: caller.principalId,
@@ -1005,6 +1052,9 @@ export const exportRouteEvidence = action({
       kind: 'evidence' as const, requestRef: args.requestRef, state: exported.state,
       generatedAt: exported.generatedAt, steps: exported.steps.map((step) => ({
         ...step, evidence: step.evidence.map((item) => ({ ...item })),
+      })),
+      problems: exported.problems.map((problem) => ({
+        ...problem, affected: { ...problem.affected },
       })),
       ...(result === undefined ? {} : { result }),
     }

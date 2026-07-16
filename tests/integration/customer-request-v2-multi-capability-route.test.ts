@@ -1193,6 +1193,14 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const reported = await admin.action(api.customerRequestApplication.reportRouteProblem, command)
     expect(reported).toMatchObject({
       kind: 'problem_reported', requestRef: confirmed.requestRef, state: 'received', reportedAt: 4_000,
+      problem: {
+        category: 'incorrect_result',
+        claimSource: 'customer',
+        causality: 'unknown',
+        resolution: 'not_adjudicated',
+        nextAction: 'await_review',
+        affected: { step: 1 },
+      },
     })
     await expect(admin.action(api.customerRequestApplication.reportRouteProblem, command)).resolves.toEqual(reported)
     await expect(admin.action(api.customerRequestApplication.reportRouteProblem, {
@@ -1207,6 +1215,18 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(exported).toMatchObject({
       kind: 'evidence', requestRef: confirmed.requestRef, state: 'queued', generatedAt: 4_000,
       steps: [{ step: 1, state: 'queued', evidence: [] }],
+      problems: [{
+        reportRef: reported.kind === 'problem_reported' ? reported.reportRef : '',
+        state: 'received',
+        category: 'incorrect_result',
+        summary: 'The returned result does not match the confirmed choice.',
+        claimSource: 'customer',
+        causality: 'unknown',
+        resolution: 'not_adjudicated',
+        nextAction: 'await_review',
+        reportedAt: 4_000,
+        affected: { step: 1 },
+      }],
     })
     expect(JSON.stringify(exported)).not.toMatch(/transport|mandate|capability|binding|operationKey|inputJson/u)
     await backend.run(async (ctx) => {

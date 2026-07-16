@@ -410,6 +410,10 @@ export const customerRequestRouteMandateTables = {
     principalId: v.string(),
     requestId: v.string(),
     runRef: v.string(),
+    mandateRef: v.optional(v.string()),
+    attemptRef: v.optional(v.string()),
+    step: v.optional(v.number()),
+    businessName: v.optional(v.string()),
     category: v.union(
       v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
       v.literal('could_not_stop'), v.literal('other'),

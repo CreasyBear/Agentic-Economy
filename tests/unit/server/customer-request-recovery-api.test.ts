@@ -23,6 +23,14 @@ describe('Customer Request recovery surface', () => {
     const receipt = {
       kind: 'problem_reported' as const, requestRef, reportRef: 'problem:opaque',
       state: 'received' as const, reportedAt: 1_000,
+      problem: {
+        category: 'incorrect_result' as const,
+        claimSource: 'customer' as const,
+        causality: 'unknown' as const,
+        resolution: 'not_adjudicated' as const,
+        nextAction: 'await_review' as const,
+        affected: { step: 1, attemptRef: 'attempt:opaque', business: 'Example business' },
+      },
     }
     let humanCommand: Record<string, unknown> | undefined
     const human = await handleCustomerRequestProblemPost(problemRequest(), requestRef, {
@@ -47,6 +55,13 @@ describe('Customer Request recovery surface', () => {
       steps: [{
         step: 1, state: 'outcome_unknown' as const, observedAt: 900,
         evidence: [{ receiptRef: 'evidence:opaque', label: 'Result evidence 1' }],
+      }],
+      problems: [{
+        reportRef: 'problem:opaque', state: 'received' as const,
+        category: 'incorrect_result' as const, summary: 'The result is wrong.',
+        claimSource: 'customer' as const, causality: 'unknown' as const,
+        resolution: 'not_adjudicated' as const, nextAction: 'await_review' as const,
+        reportedAt: 950, affected: { step: 1, attemptRef: 'attempt:opaque', business: 'Example business' },
       }],
     }
     const human = await handleCustomerRequestEvidenceGet(new Request('https://ae.test/evidence'), requestRef, {

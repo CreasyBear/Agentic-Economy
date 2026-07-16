@@ -1117,6 +1117,21 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
           This evidence does not confirm completion.
         </Text> : null}
       </div>}
+      {evidence.problems.length === 0 ? null : <div className="grid gap-2">
+        <Text weight="semibold">Reported problems</Text>
+        <ol className="grid gap-3">
+          {evidence.problems.map((problem) => <li key={problem.reportRef} className="grid gap-1 border-l-2 border-border pl-3">
+            <Text weight="semibold">Step {problem.affected.step}: report received</Text>
+            <Text color="secondary">{problem.summary}</Text>
+            {problem.affected.business === undefined ? null
+              : <Text type="supporting" color="secondary">This report is attached to the step involving {problem.affected.business}.</Text>}
+            <Text type="supporting" color="secondary">
+              This is your report. AE has not decided what caused the problem, who is responsible, or whether a remedy is due.
+            </Text>
+            <Text type="supporting" color="secondary">Next: wait for review. Reported {new Date(problem.reportedAt).toLocaleString()}.</Text>
+          </li>)}
+        </ol>
+      </div>}
       <Text type="supporting" color="secondary">Generated {new Date(evidence.generatedAt).toLocaleString()}.</Text>
     </section>}
     {evidenceError === undefined ? null : <Text type="supporting" color="secondary">{evidenceError}</Text>}

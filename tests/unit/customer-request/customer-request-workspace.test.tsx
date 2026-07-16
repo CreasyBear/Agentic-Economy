@@ -428,6 +428,15 @@ describe('customer Request workspace', () => {
             evidence: [{ receiptRef: 'receipt:quoter', label: 'Quote reference accepted' }],
           },
         ],
+        problems: [{
+          reportRef: 'problem:opaque', state: 'received',
+          category: 'incorrect_result',
+          summary: 'The quote is over the confirmed maximum.',
+          claimSource: 'customer', causality: 'unknown',
+          resolution: 'not_adjudicated', nextAction: 'await_review',
+          reportedAt: 10,
+          affected: { step: 2, attemptRef: 'attempt:opaque', business: 'Quote preparation service' },
+        }],
         result: { quoteReference: 'sandbox-quote:usable' },
       }))
     vi.stubGlobal('fetch', fetchMock)
@@ -445,6 +454,11 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('Step 2 completed')).toBeTruthy()
     expect(screen.getByText('Quote reference accepted')).toBeTruthy()
     expect(screen.getAllByText('sandbox-quote:usable')).toHaveLength(2)
+    expect(screen.getByText('Reported problems')).toBeTruthy()
+    expect(screen.getByText('Step 2: report received')).toBeTruthy()
+    expect(screen.getByText('The quote is over the confirmed maximum.')).toBeTruthy()
+    expect(screen.getByText(/AE has not decided what caused the problem/u)).toBeTruthy()
+    expect(screen.queryByText(/problem:opaque|attempt:opaque/u)).toBeNull()
     expect(screen.queryByText(/receipt:resolver|receipt:quoter/u)).toBeNull()
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,

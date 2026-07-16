@@ -861,8 +861,18 @@ export const reportProblem = internalMutation({
     category: problemCategory, summary: v.string(),
   },
   returns: v.union(
-    v.object({ kind: v.literal('reported'), reportRef: v.string(), reportedAt: v.number() }),
-    v.object({ kind: v.literal('replayed'), reportRef: v.string(), reportedAt: v.number() }),
+    v.object({
+      kind: v.literal('reported'), reportRef: v.string(), reportedAt: v.number(),
+      affected: v.object({
+        step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
+      }),
+    }),
+    v.object({
+      kind: v.literal('replayed'), reportRef: v.string(), reportedAt: v.number(),
+      affected: v.object({
+        step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
+      }),
+    }),
     v.object({ kind: v.literal('conflict') }),
     v.object({ kind: v.literal('refused') }),
   ),
@@ -880,16 +890,40 @@ export const reportProblem = internalMutation({
     const prior = await ctx.db.query('customerRequestRouteProblemReports')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
     if (prior !== null) return prior.commandDigest === commandDigest
-      ? { kind: 'replayed' as const, reportRef: prior.reportRef, reportedAt: prior.createdAt }
+      ? {
+          kind: 'replayed' as const, reportRef: prior.reportRef, reportedAt: prior.createdAt,
+          affected: {
+            step: prior.step ?? 1,
+            ...(prior.attemptRef === undefined ? {} : { attemptRef: prior.attemptRef }),
+            ...(prior.businessName === undefined ? {} : { business: prior.businessName }),
+          },
+        }
       : { kind: 'conflict' as const }
     const reportedAt = Date.now()
     const reportRef = `problem:${canonicalDigest({ commandKey, commandDigest, runRef: head.currentRunRef })}`
+    const run = await ctx.db.query('customerRequestRouteRuns')
+      .withIndex('by_runRef', (query) => query.eq('runRef', head.currentRunRef)).unique()
+    if (run === null || run.principalId !== args.principalId) return { kind: 'refused' as const }
+    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
+      .withIndex('by_runRef_and_position', (query) => (
+        query.eq('runRef', run.runRef).eq('position', run.currentPosition)
+      )).unique()
+    if (attempt === null || !routeAttemptIntegrityValid(attempt)) return { kind: 'refused' as const }
+    const businessName = run.businesses?.[attempt.position - 1]?.name
     await ctx.db.insert('customerRequestRouteProblemReports', {
       reportRef, commandKey, commandDigest, principalId: args.principalId,
-      requestId: args.requestId, runRef: head.currentRunRef,
+      requestId: args.requestId, runRef: head.currentRunRef, mandateRef: run.mandateRef,
+      attemptRef: attempt.attemptRef, step: attempt.position,
+      ...(businessName === undefined ? {} : { businessName }),
       category: args.category, summary: args.summary.trim(), createdAt: reportedAt,
     })
-    return { kind: 'reported' as const, reportRef, reportedAt }
+    return {
+      kind: 'reported' as const, reportRef, reportedAt,
+      affected: {
+        step: attempt.position, attemptRef: attempt.attemptRef,
+        ...(businessName === undefined ? {} : { business: businessName }),
+      },
+    }
   },
 })
 
@@ -913,6 +947,15 @@ export const exportCustomerEvidence = internalQuery({
         step: v.number(), state: exportedStepState, observedAt: v.number(),
         evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
       })),
+      problems: v.array(v.object({
+        reportRef: v.string(), state: v.literal('received'),
+        category: problemCategory, summary: v.string(), claimSource: v.literal('customer'),
+        causality: v.literal('unknown'), resolution: v.literal('not_adjudicated'),
+        nextAction: v.literal('await_review'), reportedAt: v.number(),
+        affected: v.object({
+          step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
+        }),
+      })),
     }),
   ),
   handler: async (ctx, args) => {
@@ -928,6 +971,11 @@ export const exportCustomerEvidence = internalQuery({
       || attempts.some((attempt) => !routeAttemptIntegrityValid(attempt))) {
       throw new Error('customer_request_route_run_attempt_integrity_failure')
     }
+    const problems = await ctx.db.query('customerRequestRouteProblemReports')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).take(101)
+    if (problems.length > 100 || problems.some((problem) => problem.principalId !== args.principalId)) {
+      throw new Error('customer_request_route_problem_integrity_failure')
+    }
     return {
       kind: 'found' as const, state: run.state, generatedAt: Date.now(),
       ...(run.resultJson === undefined ? {} : { resultJson: run.resultJson }),
@@ -937,6 +985,18 @@ export const exportCustomerEvidence = internalQuery({
           receiptRef: `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
           label: `Result evidence ${index + 1}`,
         })),
+      })),
+      problems: problems.map((problem) => ({
+        reportRef: problem.reportRef, state: 'received' as const,
+        category: problem.category, summary: problem.summary,
+        claimSource: 'customer' as const, causality: 'unknown' as const,
+        resolution: 'not_adjudicated' as const, nextAction: 'await_review' as const,
+        reportedAt: problem.createdAt,
+        affected: {
+          step: problem.step ?? 1,
+          ...(problem.attemptRef === undefined ? {} : { attemptRef: problem.attemptRef }),
+          ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
+        },
       })),
     }
   },
