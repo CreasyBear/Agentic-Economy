@@ -619,32 +619,19 @@ function groundRegisteredRequestInputs(
     interpretationEvidence: CustomerRequestInterpretationEvidence
   }>,
 ): ResolvedCapabilitySelection {
-  const supplied = new Set(selection.facts.map((fact) => fact.inputKey))
   const grounded = descriptor.inputs.flatMap((candidate): RequestFact[] => {
-    if (supplied.has(candidate.inputKey) || !candidate.required || candidate.semanticIdentity !== undefined
+    if (!candidate.required || candidate.semanticIdentity !== undefined
       || candidate.role !== 'request'
       || !plainStringSchemaAccepts(candidate.valueSchema, context.customerJob)) return []
     const binding = descriptor.inputBindings.find(({ inputKey }) => inputKey === candidate.inputKey)
     if (binding === undefined) throw new Error('customer_request_descriptor_authority_missing')
-    const source = candidate.inference === 'customer_required'
-      ? {
-          kind: 'customer' as const,
-          assertionRef: `assertion:customer-request-literal:${canonicalDigest({
-            kind: 'customer_request_literal', customerJob: context.customerJob,
-            selectionKey: descriptor.selectionKey, inputKey: candidate.inputKey,
-          })}`,
-        }
-      : {
-          kind: 'agent_inference' as const,
-          inferenceRef: `inference:${canonicalDigest({
-            kind: 'registered_request_input',
-            interpreterId: context.interpreterId,
-            customerJob: context.customerJob,
-            selectionKey: descriptor.selectionKey,
-            inputKey: candidate.inputKey,
-            interpretationEvidence: context.interpretationEvidence,
-          })}`,
-        }
+    const source = {
+      kind: 'customer' as const,
+      assertionRef: `assertion:customer-request-literal:${canonicalDigest({
+        kind: 'customer_request_literal', customerJob: context.customerJob,
+        selectionKey: descriptor.selectionKey, inputKey: candidate.inputKey,
+      })}`,
+    }
     return [{
       contractRef: descriptor.contractRef,
       selectionKey: descriptor.selectionKey,
@@ -656,7 +643,16 @@ function groundRegisteredRequestInputs(
     }]
   })
   if (grounded.length === 0) return selection
-  return Object.freeze({ ...selection, facts: Object.freeze([...selection.facts, ...grounded]) })
+  const groundedByInput = new Map(grounded.map((fact) => [fact.inputKey, fact]))
+  const facts = [
+    ...selection.facts.filter((fact) => !groundedByInput.has(fact.inputKey)),
+    ...grounded,
+  ]
+  if (facts.length === selection.facts.length && facts.every((fact, index) => {
+    const previous = selection.facts[index]
+    return previous !== undefined && canonicalDigest(fact) === canonicalDigest(previous)
+  })) return selection
+  return Object.freeze({ ...selection, facts: Object.freeze(facts) })
 }
 
 function plainStringSchemaAccepts(schema: Readonly<Record<string, JsonValue>>, value: string): boolean {

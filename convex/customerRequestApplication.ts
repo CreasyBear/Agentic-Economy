@@ -521,12 +521,19 @@ export const refine = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
-    const caller = await resolveRequestCaller(ctx, 'refine', {
+    const command = {
       requestRef: args.requestRef, expectedRevision: args.expectedRevision,
       idempotencyKey: args.idempotencyKey, message: args.message,
       ...(args.mode === undefined ? {} : { mode: args.mode }),
-    }, args.serviceAuth)
+    }
+    const caller = await resolveRequestCaller(ctx, 'refine', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const commandKey = namespacedKey(caller.principalId, 'refine', args.requestRef, args.idempotencyKey)
+    const commandDigest = canonicalDigest(command)
+    const replay = await replayCommittedCommand(ctx, {
+      commandKey, commandDigest, requestId: args.requestRef, principalId: caller.principalId,
+    })
+    if (replay !== undefined) return replay
     const current = await loadCurrent(ctx, args.requestRef)
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
@@ -546,12 +553,8 @@ export const refine = action({
       summary: 'AE could not verify the current options. Try this request again.',
     }))
     return await interpretCompileCommit(ctx, {
-      commandKey: namespacedKey(caller.principalId, 'refine', args.requestRef, args.idempotencyKey),
-      commandDigest: canonicalDigest({
-        requestRef: args.requestRef, expectedRevision: args.expectedRevision,
-        idempotencyKey: args.idempotencyKey, message: args.message,
-        ...(args.mode === undefined ? {} : { mode }),
-      }),
+      commandKey,
+      commandDigest,
       requestId: args.requestRef,
       expectedRevision: args.expectedRevision,
       expectedRouteGeneration,
@@ -573,11 +576,18 @@ export const provideFacts = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
-    const caller = await resolveRequestCaller(ctx, 'facts', {
+    const command = {
       requestRef: args.requestRef, expectedRevision: args.expectedRevision,
       idempotencyKey: args.idempotencyKey, requirementKey: args.requirementKey, value: args.value,
-    }, args.serviceAuth)
+    }
+    const caller = await resolveRequestCaller(ctx, 'facts', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const commandKey = namespacedKey(caller.principalId, 'facts', args.requestRef, args.idempotencyKey)
+    const commandDigest = canonicalDigest(command)
+    const replay = await replayCommittedCommand(ctx, {
+      commandKey, commandDigest, requestId: args.requestRef, principalId: caller.principalId,
+    })
+    if (replay !== undefined) return replay
     const current = await loadCurrent(ctx, args.requestRef)
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
@@ -624,11 +634,8 @@ export const provideFacts = action({
       summary: 'AE could not verify the current options. Try this request again.',
     }))
     return await compileCommit(ctx, {
-      commandKey: namespacedKey(caller.principalId, 'facts', args.requestRef, args.idempotencyKey),
-      commandDigest: canonicalDigest({
-        requestRef: args.requestRef, expectedRevision: args.expectedRevision,
-        idempotencyKey: args.idempotencyKey, requirementKey: args.requirementKey, value: args.value,
-      }),
+      commandKey,
+      commandDigest,
       requestId: args.requestRef,
       expectedRevision: args.expectedRevision,
       expectedRouteGeneration,
@@ -1504,21 +1511,22 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
 }>): Promise<ActionResult> {
   const replay = await replayCommittedCommand(ctx, input)
   if (replay !== undefined) return replay
-  const graph = await loadRequestGraph(ctx, input.networkId)
-  if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
   const interpreter = createConfiguredRequestInterpreter()
   if (interpreter === undefined) return { kind: 'refused', reason: 'interpreter_unavailable' }
-  const priorFacts = rebindStoredFacts(input.priorFacts, graph.models).filter((fact) => (
-    input.replaceCustomerRequestLiteral !== true
-    || fact.source.kind !== 'customer'
-    || !fact.source.assertionRef.startsWith('assertion:customer-request-literal:')
-  ))
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const graph = await loadRequestGraph(ctx, input.networkId)
+    if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
+    const priorFacts = rebindStoredFacts(input.priorFacts, graph.models).filter((fact) => (
+      input.replaceCustomerRequestLiteral !== true
+      || fact.source.kind !== 'customer'
+      || !fact.source.assertionRef.startsWith('assertion:customer-request-literal:')
+    ))
     let proposal: CustomerRequestSemanticProposal
     try {
       proposal = await interpreter.propose({ customerJob: input.intent, capabilities: graph.descriptors })
     } catch (error) {
       console.error('customer_request_semantic_interpretation_failed', interpreterFailureCode(error))
+      if (attempt === 0) continue
       return { kind: 'refused', reason: 'interpreter_unavailable' }
     }
     const compilationInput: CompileCommitInput = {
@@ -1526,7 +1534,9 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
     }
     const preview = compileProposal(compilationInput)
     if (preview.kind === 'compiled') {
-      return await compileCommit(ctx, { ...compilationInput, compiledResult: preview })
+      const committed = await compileCommit(ctx, { ...compilationInput, compiledResult: preview })
+      if (attempt === 0 && retryableCompileAdmissionFailure(committed, input.expectedRevision)) continue
+      return committed
     }
     if (preview.reason === 'capability_graph_invalid') break
   }
@@ -1534,6 +1544,13 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
     requestRef: input.requestId, revision: input.expectedRevision,
     summary: 'The request could not be interpreted safely.',
   }))
+}
+
+function retryableCompileAdmissionFailure(result: ActionResult, expectedRevision: number): boolean {
+  return result.kind === 'request'
+    && result.revision === expectedRevision
+    && result.state === 'needs_attention'
+    && result.nextAction === 'retry'
 }
 
 type CompileCommitInput = Readonly<{
@@ -2129,6 +2146,8 @@ function createConfiguredRequestInterpreter() {
     transport: createOpenRouterCustomerRequestSemanticTransport({
       apiKey, model: modelName,
       ...(env.AE_SITE_URL?.trim() ? { siteUrl: env.AE_SITE_URL.trim() } : {}),
+      reasoningEffort: 'low',
+      maximumCompletionTokens: 1_024,
     }),
     timeoutMs: 45_000,
     maximumPayloadBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,

@@ -799,6 +799,44 @@ describe('current V2 Customer Request application path', () => {
     ]))
   })
 
+  it('retries the complete semantic proposal after bounded transient provider exhaustion', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (input === undefined) throw new Error('sandbox request input missing')
+    const generate = vi.fn()
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({
+          kind: 'capability_candidates',
+          selections: [{
+            selectionKey: model.selectionKey,
+            facts: [{ inputKey: input.key, value: 'Compare labelled sandbox options' }],
+          }],
+        }) } }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', generate)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+
+    await expect(backend.withIdentity(identity).action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:transient-recovery',
+      requestId: 'request:v2:transient-recovery',
+      delegatedAgentId: 'agent:external:v2',
+      customerJob: 'Compare labelled sandbox options',
+      routing: { networkId: 'ae:public' },
+    })).resolves.toMatchObject({
+      kind: 'request',
+      requestRef: 'request:v2:transient-recovery',
+      revision: 1,
+      state: 'ready_to_compare',
+      nextAction: 'prepare_options',
+    })
+    expect(generate).toHaveBeenCalledTimes(3)
+  })
+
   it('preserves prepared option readback without creating legacy approval authority', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
@@ -966,6 +1004,67 @@ describe('current V2 Customer Request application path', () => {
     expect(replaced.criteria).not.toContainEqual(expect.objectContaining({
       value: expect.stringContaining('Find an option'),
     }))
+  })
+
+  it('replays an exact committed refinement before rejecting its stale expected revision', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (requestInput === undefined) throw new Error('sandbox request input missing')
+    const generate = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({
+          kind: 'capability_candidates',
+          selections: [{
+            selectionKey: model.selectionKey,
+            facts: [{ inputKey: requestInput.key, value: 'Find an option' }],
+          }],
+        }) } }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({
+          kind: 'unsupported_request',
+          reason: 'requested_result_not_available',
+        }) } }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', generate)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:refine-retry',
+      requestId: 'request:v2:refine-retry',
+      delegatedAgentId: 'agent:refine-retry',
+      customerJob: 'Find an option',
+      routing: { networkId: 'ae:public' },
+    })
+    if (submitted.kind !== 'request') throw new Error('submitted request missing')
+    const command = {
+      requestRef: submitted.requestRef,
+      expectedRevision: submitted.revision,
+      idempotencyKey: 'refine:v2:bounded-retry',
+      message: 'Tighten the hard total budget to AUD 1.',
+    }
+
+    const refined = await customer.action(api.customerRequestApplication.refine, command)
+
+    expect(refined).toMatchObject({
+      kind: 'request',
+      requestRef: submitted.requestRef,
+      revision: 2,
+      state: 'unsupported',
+    })
+    await expect(customer.action(api.customerRequestApplication.refine, command)).resolves.toEqual(refined)
+    await expect(customer.action(api.customerRequestApplication.refine, {
+      ...command,
+      message: 'Use the same key for a different change.',
+    })).resolves.toEqual({
+      kind: 'conflict',
+      requestRef: submitted.requestRef,
+      reason: 'idempotency_key_reused',
+    })
+    expect(generate).toHaveBeenCalledTimes(2)
   })
 })
 

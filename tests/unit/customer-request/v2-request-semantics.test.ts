@@ -204,10 +204,59 @@ describe('V2 Request semantics', () => {
         expect.objectContaining({
           selectionKey: lookup.selectionKey,
           facts: [expect.objectContaining({
-            value: customerJob, source: expect.objectContaining({ kind: 'agent_inference' }),
+            value: customerJob, source: expect.objectContaining({ kind: 'customer' }),
           })],
         }),
       ]),
+    })
+  })
+
+  it('preserves the exact customer request when the model paraphrases a registered request input', async () => {
+    const lookup = compositionLookupModel('catalog.source-first')
+    const requestInput = lookup.inputs.find((input) => input.role === 'request')
+    if (requestInput === undefined) throw new Error('request input missing')
+    const generateJson = vi.fn().mockResolvedValue({
+      content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: lookup.selectionKey,
+          facts: [{ inputKey: requestInput.key, valueJson: JSON.stringify('A shorter model paraphrase.') }],
+        }],
+      }),
+    })
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:source-first', transport: { generateJson }, timeoutMs: 1_000,
+      maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+    const customerJob = 'Resolve the service reference. Only a partial result is available.'
+
+    const proposal = await interpreter.propose({
+      customerJob,
+      capabilities: [bindCustomerCapabilityDescriptor({
+        contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+        name: 'Resolve service reference', description: 'Returns a registered service reference.',
+        inputs: lookup.inputs,
+        valueSchemas: lookup.inputs.map((input) => ({
+          inputKey: input.key,
+          valueSchema: projectCapabilityInputValueSchema({
+            $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+            properties: { request: { type: 'string' } }, required: ['request'], additionalProperties: false,
+          }, input),
+        })),
+        evidence: lookup.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
+      })],
+    })
+
+    expect(proposal).toMatchObject({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: lookup.selectionKey,
+        facts: [{
+          inputKey: requestInput.key,
+          value: customerJob,
+          source: { kind: 'customer', assertionRef: expect.stringMatching(/^assertion:customer-request-literal:/u) },
+        }],
+      }],
     })
   })
 

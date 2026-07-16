@@ -2007,15 +2007,31 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         ] },
       ] }) } }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-    const unsafeRefresh = await customer.action(api.customerRequestApplication.compare, {
+    const sourceOwnedRefresh = await customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef, revision: submitted.revision,
       idempotencyKey: 'compare:multi-capability:unsafe-refresh',
     })
-    expect(unsafeRefresh).toMatchObject({ kind: 'request', state: 'needs_attention', nextAction: 'retry' })
+    expect(sourceOwnedRefresh).toMatchObject({
+      kind: 'request', state: 'routes_ready', nextAction: 'inspect_routes',
+    })
     await expect(customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef, revision: submitted.revision,
       idempotencyKey: 'compare:multi-capability:unsafe-refresh',
-    })).resolves.toEqual(unsafeRefresh)
+    })).resolves.toEqual(sourceOwnedRefresh)
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: submitted.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'current',
+      aggregate: {
+        snapshot: {
+          intent: 'Resolve this service and prepare its quote',
+          facts: expect.arrayContaining([expect.objectContaining({
+            value: 'Resolve this service and prepare its quote',
+            source: expect.objectContaining({ kind: 'customer' }),
+          })]),
+        },
+      },
+    })
     unsafeClock.mockRestore()
 
     const upstreamV3Document = { ...upstreamDocument, version: 3 }
@@ -2051,7 +2067,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestId: submitted.requestRef, generationRef: contractRefresh.routeGenerationRef,
     })
     if (contractGeneration.kind !== 'found') throw new Error('contract refresh generation readback missing')
-    expect(contractGeneration.routeGeneration).toMatchObject({ generation: 4, requestRevision: 1 })
+    expect(contractGeneration.routeGeneration).toMatchObject({ generation: 5, requestRevision: 1 })
     expect(contractGeneration.routeGeneration.routes[0]).toMatchObject({
       maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_050 },
       steps: [
@@ -2095,7 +2111,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestId: submitted.requestRef, generationRef: routeShapeRefresh.routeGenerationRef,
     })
     if (shapeGeneration.kind !== 'found') throw new Error('route-shape generation readback missing')
-    expect(shapeGeneration.routeGeneration).toMatchObject({ generation: 5, requestRevision: 1 })
+    expect(shapeGeneration.routeGeneration).toMatchObject({ generation: 6, requestRevision: 1 })
     if (shapeGeneration.routeGeneration.decisionSnapshot === undefined) {
       throw new Error('route-shape decision snapshot missing')
     }
@@ -2198,7 +2214,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(currentAfterRefreshes).toMatchObject({
       kind: 'current', aggregate: { snapshot: { revision: 1 } },
-      routeGenerationNumber: 5, routeGenerationRef: routeShapeRefresh.routeGenerationRef,
+      routeGenerationNumber: 6, routeGenerationRef: routeShapeRefresh.routeGenerationRef,
     })
     const completeHistory = await backend.run(async (ctx) => (
       await ctx.db.query('customerRequestV2RoutePlanGenerations').collect()
@@ -2210,6 +2226,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         { generation: 3, requestRevision: 1 },
         { generation: 4, requestRevision: 1 },
         { generation: 5, requestRevision: 1 },
+        { generation: 6, requestRevision: 1 },
       ])
   })
 })

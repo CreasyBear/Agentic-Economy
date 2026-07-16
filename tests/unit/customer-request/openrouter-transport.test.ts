@@ -47,6 +47,30 @@ describe('OpenRouter customer request transport', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).not.toHaveProperty('provider')
   })
 
+  it('bounds reasoning and output for latency-sensitive semantic interpretation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: '{"kind":"needs_intent_direction","prompt":"What next?","selections":[]}' } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const transport = createOpenRouterCustomerRequestSemanticTransport({
+      apiKey: 'secret',
+      model: 'openai/gpt-5.6-luna',
+      reasoningEffort: 'low',
+      maximumCompletionTokens: 1_024,
+    })
+
+    await transport.generateJson({
+      systemInstruction: 'system',
+      payload: { customerJob: 'Find an option', capabilities: [] },
+      signal: new AbortController().signal,
+    })
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      reasoning: { effort: 'low', exclude: true },
+      max_completion_tokens: 1_024,
+    })
+  })
+
   it('fails closed on provider errors and malformed responses', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response('payment required', { status: 402 }))

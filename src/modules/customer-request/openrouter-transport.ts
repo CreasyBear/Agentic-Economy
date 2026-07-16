@@ -6,6 +6,8 @@ type OpenRouterConfiguration = Readonly<{
   model: string
   siteUrl?: string
   attemptTimeoutMs?: number
+  reasoningEffort?: 'low' | 'medium' | 'high'
+  maximumCompletionTokens?: number
 }>
 
 const MAX_OPENROUTER_REQUEST_BYTES = 1_000_000
@@ -34,6 +36,10 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
     && (!Number.isSafeInteger(config.attemptTimeoutMs) || config.attemptTimeoutMs <= 0)) {
     throw new Error('customer_request_interpreter_configuration_invalid')
   }
+  if (config.maximumCompletionTokens !== undefined
+    && (!Number.isSafeInteger(config.maximumCompletionTokens) || config.maximumCompletionTokens <= 0)) {
+    throw new Error('customer_request_interpreter_configuration_invalid')
+  }
   const attemptTimeoutMs = config.attemptTimeoutMs ?? DEFAULT_PROVIDER_ATTEMPT_TIMEOUT_MS
   return Object.freeze({
     generateJson: async ({ systemInstruction, payload, signal, responseSchema }) => {
@@ -46,7 +52,12 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
         response_format: responseSchema === undefined
           ? { type: 'json_object' }
           : { type: 'json_schema', json_schema: responseSchema },
-        temperature: 0,
+        ...(config.reasoningEffort === undefined
+          ? { temperature: 0 }
+          : { reasoning: { effort: config.reasoningEffort, exclude: true } }),
+        ...(config.maximumCompletionTokens === undefined
+          ? {}
+          : { max_completion_tokens: config.maximumCompletionTokens }),
       })
       if (new TextEncoder().encode(requestBody).byteLength > MAX_OPENROUTER_REQUEST_BYTES) {
         throw new Error('customer_request_interpretation_request_too_large')
