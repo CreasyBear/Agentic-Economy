@@ -58,7 +58,7 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   await waitForCompletedResult(page)
 
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible()
-  await expect(page.getByText(/sandbox-quote:/u)).toBeVisible()
+  await expect(page.getByText('Business result', { exact: true })).toBeVisible()
   await proveInlineActivityRecord(page, 'completed')
   const requestRef = await page.evaluate(() => {
     const stored: unknown = JSON.parse(localStorage.getItem('ae.customer-request.active:v1') ?? 'null')
@@ -70,7 +70,7 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
 
   await page.reload({ waitUntil: 'networkidle' })
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByText(/sandbox-quote:/u)).toBeVisible()
+  await expect(page.getByText('Business result', { exact: true })).toBeVisible()
   for (const business of expectedBusinesses) {
     await expect(page.locator('main')).toContainText(business)
   }
@@ -198,12 +198,14 @@ async function proveInlineActivityRecord(
 ): Promise<void> {
   await page.getByRole('button', { name: 'View activity record' }).click()
   await expect(page.getByRole('heading', { name: 'Activity record' })).toBeVisible()
-  await expect(page.getByText('Step 1 completed')).toBeVisible()
   if (expected === 'completed') {
-    await expect(page.getByText('Step 2 completed')).toBeVisible()
+    for (let step = 1; step <= expectedBusinesses.length; step += 1) {
+      await expect(page.getByText(`Step ${step} completed`)).toBeVisible()
+    }
     await expect(page.getByText('AE recorded a completed result and the supporting step receipts.')).toBeVisible()
-    await expect(page.getByText(/sandbox-quote:/u).last()).toBeVisible()
+    await expect(page.getByText('Recorded result', { exact: true })).toBeVisible()
   } else {
+    await expect(page.getByText('Step 1 completed')).toBeVisible()
     await expect(page.getByText('Step 2 still being confirmed')).toBeVisible()
     await expect(page.getByText(
       'Some work is recorded, but AE is still confirming a later result and will not repeat it automatically.',
