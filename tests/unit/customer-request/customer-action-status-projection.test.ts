@@ -18,7 +18,9 @@ describe('customer action status projection', () => {
 
     expect(progress('queued').activity).toMatchObject({ actor: 'ae' })
     expect(progress('queued').activity).toMatchObject({
-      cancellation: { state: 'available', until: 'before_next_step_release' },
+      cancellation: {
+        state: 'available', until: 'before_next_step_release', releaseMayStartAt: 10,
+      },
     })
     expect(progress('contacting').activity).toMatchObject({ actor: 'ae' })
     expect(progress('awaiting_result').activity).toMatchObject({ actor: 'business' })

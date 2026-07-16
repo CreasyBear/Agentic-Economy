@@ -2860,8 +2860,9 @@ async function finishImmediateReadinessProbe(backend: ReturnType<typeof convexTe
 
 async function finishScheduledRouteWorkers(backend: ReturnType<typeof convexTest>, passes: number) {
   for (let pass = 0; pass < passes; pass += 1) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    await backend.finishInProgressScheduledFunctions()
+    await backend.action(internal.customerRequestRouteTransportWorker.runNext, {
+      workerId: `worker:integration:${pass}`,
+    })
   }
 }
 

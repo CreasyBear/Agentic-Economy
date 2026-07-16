@@ -740,6 +740,11 @@ function cancellationAvailable(
 function cancellationMessage(
   cancellation: NonNullable<CustomerRequestView['activity']>['cancellation'] | undefined,
 ) {
+  if (typeof cancellation === 'object' && cancellation.state === 'available') {
+    return <Text type="supporting" color="secondary">
+      AE will not release the next business step before {new Date(cancellation.releaseMayStartAt).toISOString()}.
+    </Text>
+  }
   if (typeof cancellation !== 'object' || cancellation.state !== 'not_available'
     || cancellation.reason !== 'business_step_released') return null
   return <div className="grid gap-1">

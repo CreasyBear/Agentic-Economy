@@ -390,6 +390,7 @@ export function projectRouteProgress(input: Readonly<{
   }>
   updatedAt: number
   cancellationAvailable: boolean
+  cancellationReleaseMayStartAt?: number
   cancellationUnavailableSince?: number
   cancellationRequestedAt?: number
   businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
@@ -415,7 +416,10 @@ export function projectRouteProgress(input: Readonly<{
       actor: progressActor(input.current.state), certainty: 'pending', updatedAt: input.updatedAt,
       nextCheckAt: input.updatedAt + 30_000, retry: 'not_needed',
       cancellation: input.cancellationAvailable
-        ? { state: 'available', until: 'before_next_step_release' }
+        ? {
+            state: 'available', until: 'before_next_step_release',
+            releaseMayStartAt: input.cancellationReleaseMayStartAt ?? input.updatedAt,
+          }
         : {
             state: 'not_available', reason: 'business_step_released',
             changedAt: input.cancellationUnavailableSince ?? input.updatedAt,

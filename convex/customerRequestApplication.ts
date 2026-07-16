@@ -462,6 +462,7 @@ const customerView = v.object({
       v.object({
         state: v.literal('available'),
         until: v.literal('before_next_step_release'),
+        releaseMayStartAt: v.number(),
       }),
       v.object({
         state: v.literal('not_available'),
@@ -2901,6 +2902,7 @@ function projectStoredRouteRun(
     currentState: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
     businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
     resultJson?: string
+    cancellationReleaseMayStartAt?: number
     cancellationUnavailableSince?: number
     cancellationRequestedAt?: number
     updatedAt: number
@@ -2979,6 +2981,9 @@ function projectStoredRouteRun(
     current: { step: run.currentPosition, state: customerProgressState(run.currentState) },
     updatedAt: run.updatedAt,
     cancellationAvailable: run.currentState === 'queued' || run.currentState === 'leased',
+    ...(run.cancellationReleaseMayStartAt === undefined
+      ? {}
+      : { cancellationReleaseMayStartAt: run.cancellationReleaseMayStartAt }),
     ...(run.cancellationUnavailableSince === undefined
       ? {}
       : { cancellationUnavailableSince: run.cancellationUnavailableSince }),
@@ -3106,7 +3111,11 @@ function writableActivityCancellation(
     }
   }
   if (cancellation === 'available_before_next_step') {
-    return { state: 'available' as const, until: 'before_next_step_release' as const }
+    return {
+      state: 'available' as const,
+      until: 'before_next_step_release' as const,
+      releaseMayStartAt: updatedAt,
+    }
   }
   return {
     state: 'not_available' as const,

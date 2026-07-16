@@ -756,7 +756,9 @@ describe('hosted Customer Request journey', () => {
       activity: {
         actor: 'ae', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
         retry: 'not_needed',
-        cancellation: { state: 'available', until: 'before_next_step_release' },
+        cancellation: {
+          state: 'available', until: 'before_next_step_release', releaseMayStartAt: 10_000,
+        },
         safeNextAction: 'check_progress',
       },
     }) as unknown as CustomerRequestView)

@@ -27,6 +27,7 @@ import {
 import { runtimeDb } from './source_state'
 
 const MAX_PENDING_DISPATCH_SCAN = 64
+const PRE_RELEASE_CANCELLATION_WINDOW_MS = 1_000
 
 const startCommand = v.object({
   requestId: v.string(),
@@ -65,6 +66,7 @@ const runProjection = v.object({
     v.literal('cancelled'),
   ),
   resultJson: v.optional(v.string()),
+  cancellationReleaseMayStartAt: v.optional(v.number()),
   cancellationUnavailableSince: v.optional(v.number()),
   cancellationRequestedAt: v.optional(v.number()),
   updatedAt: v.number(),
@@ -322,9 +324,13 @@ export const startOrResume = internalMutation({
       runRef,
       committedAt: now,
     })
-    await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
+    await ctx.scheduler.runAfter(
+      PRE_RELEASE_CANCELLATION_WINDOW_MS,
+      internal.customerRequestRouteTransportWorker.runNext,
+      {
       workerId: `route-worker:${dispatchRef}`,
-    })
+      },
+    )
     const run = await readRunProjection(ctx, runRef)
     if (run === null) throw new Error('customer_request_route_run_write_integrity_failure')
     return { kind: 'started', run }
@@ -1927,6 +1933,9 @@ async function readRunProjection(
     currentPosition: projection.currentPosition,
     currentState: current.state,
     ...(projection.resultJson === undefined ? {} : { resultJson: projection.resultJson }),
+    ...((current.state === 'queued' || current.state === 'leased')
+      ? { cancellationReleaseMayStartAt: current.createdAt + PRE_RELEASE_CANCELLATION_WINDOW_MS }
+      : {}),
     ...(cancellation?.result === 'too_late'
       ? {
           cancellationUnavailableSince: cancellation.boundaryChangedAt ?? cancellation.committedAt,
@@ -2155,9 +2164,11 @@ async function queueNextStep(
     createdAt: now,
     updatedAt: now,
   })
-  await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
-    workerId: `route-worker:${run.runRef}:${position}`,
-  })
+  await ctx.scheduler.runAfter(
+    PRE_RELEASE_CANCELLATION_WINDOW_MS,
+    internal.customerRequestRouteTransportWorker.runNext,
+    { workerId: `route-worker:${run.runRef}:${position}` },
+  )
   await ctx.db.patch(run._id, {
     state: 'running', completedSteps: position - 1, currentPosition: position, updatedAt: now,
   })

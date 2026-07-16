@@ -604,6 +604,7 @@ export const customerRequestViewSchema = z.strictObject({
       z.strictObject({
         state: z.literal('available'),
         until: z.literal('before_next_step_release'),
+        releaseMayStartAt: safeNonnegativeInteger,
       }),
       z.strictObject({
         state: z.literal('not_available'),
