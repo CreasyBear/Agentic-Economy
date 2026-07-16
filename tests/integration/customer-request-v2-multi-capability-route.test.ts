@@ -1189,6 +1189,9 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const command = {
       requestRef: confirmed.requestRef, idempotencyKey: 'problem:recovery-contract',
       category: 'incorrect_result' as const, summary: 'The returned result does not match the confirmed choice.',
+      affectedStep: 1,
+      evidenceReceiptRefs: [] as string[],
+      visibility: 'customer_and_ae_only' as const,
     }
     const reported = await admin.action(api.customerRequestApplication.reportRouteProblem, command)
     expect(reported).toMatchObject({
@@ -1199,6 +1202,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         causality: 'unknown',
         resolution: 'not_adjudicated',
         nextAction: 'await_review',
+        visibility: 'customer_and_ae_only',
+        evidence: [],
         affected: { step: 1 },
       },
     })
@@ -1224,6 +1229,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         causality: 'unknown',
         resolution: 'not_adjudicated',
         nextAction: 'await_review',
+        visibility: 'customer_and_ae_only',
+        evidence: [],
         reportedAt: 4_000,
         affected: { step: 1 },
       }],
@@ -1231,6 +1238,66 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(JSON.stringify(exported)).not.toMatch(/transport|mandate|capability|binding|operationKey|inputJson/u)
     await backend.run(async (ctx) => {
       expect(await ctx.db.query('customerRequestRouteProblemReports').collect()).toHaveLength(1)
+    })
+  })
+
+  it('refuses a problem report that names another step evidence receipt', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(4_100)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'problem-evidence-scope')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:problem-evidence-scope',
+    })
+
+    await expect(admin.action(api.customerRequestApplication.reportRouteProblem, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'problem:evidence-scope',
+      category: 'incorrect_result',
+      summary: 'The first step appears wrong.',
+      affectedStep: 1,
+      evidenceReceiptRefs: ['evidence:receipt-from-another-step'],
+      visibility: 'customer_and_ae_only',
+    })).resolves.toMatchObject({
+      kind: 'refused',
+      reason: 'evidence_not_found',
+    })
+  })
+
+  it('replays an unchanged historical problem command after privacy fields are introduced', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(4_200)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'legacy-problem-replay')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:legacy-problem-replay',
+    })
+    const idempotencyKey = 'problem:legacy-replay'
+    const category = 'incorrect_result' as const
+    const summary = 'The result is wrong.'
+    await backend.run(async (ctx) => {
+      const head = await ctx.db.query('customerRequestRouteRunHeads')
+        .withIndex('by_requestId', (query) => query.eq('requestId', confirmed.requestRef)).unique()
+      if (head === null) throw new Error('missing run head')
+      const commandKey = `route-problem:v1:${canonicalDigest({
+        principalId: head.principalId, requestId: confirmed.requestRef, idempotencyKey,
+      })}`
+      await ctx.db.insert('customerRequestRouteProblemReports', {
+        reportRef: 'problem:legacy', commandKey,
+        commandDigest: canonicalDigest({
+          requestId: confirmed.requestRef, principalId: head.principalId,
+          idempotencyKey, category, summary,
+        }),
+        principalId: head.principalId, requestId: confirmed.requestRef,
+        runRef: head.currentRunRef, category, summary, createdAt: 4_100,
+      })
+    })
+
+    await expect(admin.action(api.customerRequestApplication.reportRouteProblem, {
+      requestRef: confirmed.requestRef, idempotencyKey, category, summary,
+    })).resolves.toMatchObject({
+      kind: 'problem_reported', reportRef: 'problem:legacy', reportedAt: 4_100,
+      problem: { visibility: 'customer_and_ae_only', evidence: [] },
     })
   })
 

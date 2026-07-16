@@ -859,6 +859,11 @@ export const reportProblem = internalMutation({
   args: {
     requestId: v.string(), principalId: v.string(), idempotencyKey: v.string(),
     category: problemCategory, summary: v.string(),
+    affectedStep: v.optional(v.number()),
+    evidenceReceiptRefs: v.array(v.string()),
+    visibility: v.union(
+      v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
+    ),
   },
   returns: v.union(
     v.object({
@@ -866,30 +871,49 @@ export const reportProblem = internalMutation({
       affected: v.object({
         step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
       }),
+      visibility: v.union(
+        v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
+      ),
+      evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
     }),
     v.object({
       kind: v.literal('replayed'), reportRef: v.string(), reportedAt: v.number(),
       affected: v.object({
         step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
       }),
+      visibility: v.union(
+        v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
+      ),
+      evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
     }),
     v.object({ kind: v.literal('conflict') }),
-    v.object({ kind: v.literal('refused') }),
+    v.object({
+      kind: v.literal('refused'),
+      reason: v.union(v.literal('request_not_found'), v.literal('evidence_not_found')),
+    }),
   ),
   handler: async (ctx, args) => {
     const head = await ctx.db.query('customerRequestRouteRunHeads')
       .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
     if (head === null || head.principalId !== args.principalId
       || args.idempotencyKey.trim().length === 0 || args.summary.trim().length === 0 || args.summary.length > 1_000) {
-      return { kind: 'refused' as const }
+      return { kind: 'refused' as const, reason: 'request_not_found' as const }
     }
     const commandKey = `route-problem:v1:${canonicalDigest({
       principalId: args.principalId, requestId: args.requestId, idempotencyKey: args.idempotencyKey,
     })}`
     const commandDigest = canonicalDigest(args)
+    const legacyCommandDigest = canonicalDigest({
+      requestId: args.requestId, principalId: args.principalId, idempotencyKey: args.idempotencyKey,
+      category: args.category, summary: args.summary,
+    })
     const prior = await ctx.db.query('customerRequestRouteProblemReports')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    if (prior !== null) return prior.commandDigest === commandDigest
+    if (prior !== null) return (
+      prior.commandDigest === commandDigest
+      || (prior.evidenceReceiptRefs === undefined && prior.visibility === undefined
+        && prior.commandDigest === legacyCommandDigest)
+    )
       ? {
           kind: 'replayed' as const, reportRef: prior.reportRef, reportedAt: prior.createdAt,
           affected: {
@@ -897,24 +921,49 @@ export const reportProblem = internalMutation({
             ...(prior.attemptRef === undefined ? {} : { attemptRef: prior.attemptRef }),
             ...(prior.businessName === undefined ? {} : { business: prior.businessName }),
           },
+          visibility: prior.visibility ?? 'customer_and_ae_only',
+          evidence: (prior.evidenceReceiptRefs ?? []).map((receiptRef, index) => ({
+            receiptRef, label: `Attached evidence ${index + 1}`,
+          })),
         }
       : { kind: 'conflict' as const }
     const reportedAt = Date.now()
     const reportRef = `problem:${canonicalDigest({ commandKey, commandDigest, runRef: head.currentRunRef })}`
     const run = await ctx.db.query('customerRequestRouteRuns')
       .withIndex('by_runRef', (query) => query.eq('runRef', head.currentRunRef)).unique()
-    if (run === null || run.principalId !== args.principalId) return { kind: 'refused' as const }
+    if (run === null || run.principalId !== args.principalId) {
+      return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    }
+    const affectedStep = args.affectedStep ?? run.currentPosition
+    if (!Number.isSafeInteger(affectedStep) || affectedStep < 1 || affectedStep > run.totalSteps
+      || args.evidenceReceiptRefs.length > 20 || new Set(args.evidenceReceiptRefs).size !== args.evidenceReceiptRefs.length) {
+      return { kind: 'refused' as const, reason: 'evidence_not_found' as const }
+    }
     const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
       .withIndex('by_runRef_and_position', (query) => (
-        query.eq('runRef', run.runRef).eq('position', run.currentPosition)
+        query.eq('runRef', run.runRef).eq('position', affectedStep)
       )).unique()
-    if (attempt === null || !routeAttemptIntegrityValid(attempt)) return { kind: 'refused' as const }
+    if (attempt === null || !routeAttemptIntegrityValid(attempt)) {
+      return { kind: 'refused' as const, reason: 'evidence_not_found' as const }
+    }
+    const availableEvidence = (attempt.evidence ?? []).map((item, index) => ({
+      receiptRef: `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
+      label: `Result evidence ${index + 1}`,
+    }))
+    const selectedEvidence = args.evidenceReceiptRefs.map((receiptRef) => (
+      availableEvidence.find((item) => item.receiptRef === receiptRef)
+    ))
+    if (selectedEvidence.some((item) => item === undefined)) {
+      return { kind: 'refused' as const, reason: 'evidence_not_found' as const }
+    }
     const businessName = run.businesses?.[attempt.position - 1]?.name
     await ctx.db.insert('customerRequestRouteProblemReports', {
       reportRef, commandKey, commandDigest, principalId: args.principalId,
       requestId: args.requestId, runRef: head.currentRunRef, mandateRef: run.mandateRef,
       attemptRef: attempt.attemptRef, step: attempt.position,
       ...(businessName === undefined ? {} : { businessName }),
+      evidenceReceiptRefs: args.evidenceReceiptRefs,
+      visibility: args.visibility,
       category: args.category, summary: args.summary.trim(), createdAt: reportedAt,
     })
     return {
@@ -923,6 +972,8 @@ export const reportProblem = internalMutation({
         step: attempt.position, attemptRef: attempt.attemptRef,
         ...(businessName === undefined ? {} : { business: businessName }),
       },
+      visibility: args.visibility,
+      evidence: selectedEvidence.filter((item) => item !== undefined),
     }
   },
 })
@@ -952,6 +1003,10 @@ export const exportCustomerEvidence = internalQuery({
         category: problemCategory, summary: v.string(), claimSource: v.literal('customer'),
         causality: v.literal('unknown'), resolution: v.literal('not_adjudicated'),
         nextAction: v.literal('await_review'), reportedAt: v.number(),
+        visibility: v.union(
+          v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
+        ),
+        evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
         affected: v.object({
           step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
         }),
@@ -986,18 +1041,34 @@ export const exportCustomerEvidence = internalQuery({
           label: `Result evidence ${index + 1}`,
         })),
       })),
-      problems: problems.map((problem) => ({
-        reportRef: problem.reportRef, state: 'received' as const,
-        category: problem.category, summary: problem.summary,
-        claimSource: 'customer' as const, causality: 'unknown' as const,
-        resolution: 'not_adjudicated' as const, nextAction: 'await_review' as const,
-        reportedAt: problem.createdAt,
-        affected: {
-          step: problem.step ?? 1,
-          ...(problem.attemptRef === undefined ? {} : { attemptRef: problem.attemptRef }),
-          ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
-        },
-      })),
+      problems: problems.map((problem) => {
+        const attempt = attempts.find((candidate) => candidate.attemptRef === problem.attemptRef)
+        const evidenceByReceipt = new Map<string, string>()
+        if (attempt !== undefined) {
+          for (const [index, item] of (attempt.evidence ?? []).entries()) {
+            evidenceByReceipt.set(
+              `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
+              `Result evidence ${index + 1}`,
+            )
+          }
+        }
+        return {
+          reportRef: problem.reportRef, state: 'received' as const,
+          category: problem.category, summary: problem.summary,
+          claimSource: 'customer' as const, causality: 'unknown' as const,
+          resolution: 'not_adjudicated' as const, nextAction: 'await_review' as const,
+          visibility: problem.visibility ?? 'customer_and_ae_only',
+          evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
+            receiptRef, label: evidenceByReceipt.get(receiptRef) ?? 'Recorded evidence',
+          })),
+          reportedAt: problem.createdAt,
+          affected: {
+            step: problem.step ?? 1,
+            ...(problem.attemptRef === undefined ? {} : { attemptRef: problem.attemptRef }),
+            ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
+          },
+        }
+      }),
     }
   },
 })

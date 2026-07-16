@@ -88,7 +88,13 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
       actions.push({
         relation: 'report_problem', method: 'POST', href: `${current}/problems`,
         summary: 'Report a problem against this Request for review.',
-        input: { idempotencyKey, category: '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>', summary: '<problem summary>' },
+        input: {
+          idempotencyKey,
+          category: '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>',
+          summary: '<problem summary>', affectedStep: '<step number from evidence>',
+          evidenceReceiptRefs: [],
+          visibility: 'customer_and_ae_only',
+        },
       })
       if (view.activity?.cancellation === 'available_before_next_step') {
         actions.push({
@@ -127,7 +133,13 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
       {
         relation: 'report_problem', method: 'POST', href: `${current}/problems`,
         summary: 'Report a problem against this Request for review.',
-        input: { idempotencyKey, category: '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>', summary: '<problem summary>' },
+        input: {
+          idempotencyKey,
+          category: '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>',
+          summary: '<problem summary>', affectedStep: '<step number from evidence>',
+          evidenceReceiptRefs: [],
+          visibility: 'customer_and_ae_only',
+        },
       },
     )
   }

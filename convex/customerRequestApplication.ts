@@ -468,6 +468,7 @@ const conflict = v.object({
 const refusedReason = v.union(
   v.literal('authentication_required'), v.literal('request_not_found'),
   v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable'),
+  v.literal('evidence_not_found'),
 )
 const actionResult = v.union(customerView, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
 type ActionResult = Infer<typeof actionResult>
@@ -913,6 +914,10 @@ const problemReceipt = v.object({
     ),
     claimSource: v.literal('customer'), causality: v.literal('unknown'),
     resolution: v.literal('not_adjudicated'), nextAction: v.literal('await_review'),
+    visibility: v.union(
+      v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
+    ),
+    evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
     affected: v.object({
       step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
     }),
@@ -928,13 +933,21 @@ export const reportRouteProblem = action({
       v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
       v.literal('could_not_stop'), v.literal('other'),
     ),
-    summary: v.string(), serviceAuth: v.optional(serviceAssertion),
+    summary: v.string(), affectedStep: v.optional(v.number()),
+    evidenceReceiptRefs: v.optional(v.array(v.string())),
+    visibility: v.optional(v.union(
+      v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
+    )),
+    serviceAuth: v.optional(serviceAssertion),
   },
   returns: problemActionResult,
   handler: async (ctx, args): Promise<ProblemActionResult> => {
     const command = {
       requestRef: args.requestRef, idempotencyKey: args.idempotencyKey,
       category: args.category, summary: args.summary,
+      ...(args.affectedStep === undefined ? {} : { affectedStep: args.affectedStep }),
+      evidenceReceiptRefs: args.evidenceReceiptRefs ?? [],
+      visibility: args.visibility ?? 'customer_and_ae_only',
     }
     const caller = await resolveRequestCaller(ctx, 'report', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
@@ -946,27 +959,38 @@ export const reportRouteProblem = action({
       | {
           kind: 'reported'; reportRef: string; reportedAt: number
           affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
+          visibility: 'customer_and_ae_only' | 'share_with_affected_business'
+          evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
         }
       | {
           kind: 'replayed'; reportRef: string; reportedAt: number
           affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
+          visibility: 'customer_and_ae_only' | 'share_with_affected_business'
+          evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
         }
       | { kind: 'conflict' }
-      | { kind: 'refused' }
+      | { kind: 'refused'; reason: 'request_not_found' | 'evidence_not_found' }
     > = await ctx.runMutation(internal.customerRequestRouteExecution.reportProblem, {
       requestId: args.requestRef, idempotencyKey: args.idempotencyKey,
       category: args.category, summary: args.summary, principalId: caller.principalId,
+      ...(args.affectedStep === undefined ? {} : { affectedStep: args.affectedStep }),
+      evidenceReceiptRefs: args.evidenceReceiptRefs ?? [],
+      visibility: args.visibility ?? 'customer_and_ae_only',
     })
     if (result.kind === 'conflict') return {
       kind: 'conflict' as const, requestRef: args.requestRef, reason: 'idempotency_key_reused' as const,
     }
-    if (result.kind === 'refused') return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    if (result.kind === 'refused') return {
+      kind: 'refused' as const,
+      reason: result.reason === 'evidence_not_found' ? 'evidence_not_found' as const : 'request_not_found' as const,
+    }
     return {
       kind: 'problem_reported' as const, requestRef: args.requestRef,
       reportRef: result.reportRef, state: 'received' as const, reportedAt: result.reportedAt,
       problem: {
         category: args.category, claimSource: 'customer' as const, causality: 'unknown' as const,
         resolution: 'not_adjudicated' as const, nextAction: 'await_review' as const,
+        visibility: result.visibility, evidence: result.evidence.map((item) => ({ ...item })),
         affected: { ...result.affected },
       },
     }
@@ -996,6 +1020,10 @@ const evidenceExport = v.object({
     ),
     summary: v.string(), claimSource: v.literal('customer'), causality: v.literal('unknown'),
     resolution: v.literal('not_adjudicated'), nextAction: v.literal('await_review'),
+    visibility: v.union(
+      v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
+    ),
+    evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
     reportedAt: v.number(),
     affected: v.object({
       step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
@@ -1039,6 +1067,8 @@ export const exportRouteEvidence = action({
             causality: 'unknown'
             resolution: 'not_adjudicated'
             nextAction: 'await_review'
+            visibility: 'customer_and_ae_only' | 'share_with_affected_business'
+            evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
             reportedAt: number
             affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
           }>[]
@@ -1055,6 +1085,7 @@ export const exportRouteEvidence = action({
       })),
       problems: exported.problems.map((problem) => ({
         ...problem, affected: { ...problem.affected },
+        evidence: problem.evidence.map((item) => ({ ...item })),
       })),
       ...(result === undefined ? {} : { result }),
     }

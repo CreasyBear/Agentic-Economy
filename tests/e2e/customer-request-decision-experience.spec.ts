@@ -110,6 +110,47 @@ test('partial progress remains legible when a later business result is unknown',
   await expect(page.getByRole('button', { name: 'Start a new Request' })).not.toBeVisible()
 })
 
+test('problem reporting binds selected step evidence and keeps sharing private by default', async ({ page }) => {
+  let problemBody: unknown
+  await page.route('**/api/requests', async (route) => await route.fulfill({ json: unknownOutcomeView() }))
+  await page.route('**/api/requests/*/evidence', async (route) => await route.fulfill({ json: {
+    kind: 'evidence', requestRef: 'request:unknown', state: 'outcome_unknown', generatedAt: 20,
+    steps: [
+      { step: 1, state: 'completed', observedAt: 10, evidence: [{ receiptRef: 'evidence:first', label: 'First result evidence' }] },
+      { step: 2, state: 'outcome_unknown', observedAt: 20, evidence: [{ receiptRef: 'evidence:second', label: 'Second result evidence' }] },
+    ],
+    problems: [],
+  } }))
+  await page.route('**/api/requests/*/problems', async (route) => {
+    problemBody = route.request().postDataJSON()
+    await route.fulfill({ json: {
+      kind: 'problem_reported', requestRef: 'request:unknown', reportRef: 'problem:one',
+      state: 'received', reportedAt: 21,
+    } })
+  })
+
+  await page.goto('/engine')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('What are you looking for?').fill('Recover an uncertain result')
+  await page.getByRole('button', { name: 'Explore' }).click()
+  await page.getByRole('button', { name: 'Report a problem' }).click()
+  await expect(page.getByLabel('Which step is this about?')).toBeVisible()
+  await page.getByLabel('Which step is this about?').selectOption('1')
+  await page.getByLabel('First result evidence').check()
+  await page.getByLabel('What kind of problem is this?').selectOption('incorrect_result')
+  await page.getByLabel('What went wrong?').fill('The first result contradicts the confirmed constraint.')
+  await expect(page.getByLabel('Who can see this report?')).toHaveValue('customer_and_ae_only')
+  await page.getByRole('button', { name: 'Send problem report' }).click()
+
+  await expect(page.getByText(/Problem recorded/)).toBeVisible()
+  expect(problemBody).toMatchObject({
+    category: 'incorrect_result',
+    affectedStep: 1,
+    evidenceReceiptRefs: ['evidence:first'],
+    visibility: 'customer_and_ae_only',
+  })
+})
+
 function clarificationView(): CustomerRequestView {
   return {
     kind: 'request', requestRef: 'request:clarification', revision: 1,

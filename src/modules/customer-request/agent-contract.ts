@@ -58,6 +58,9 @@ export const customerRequestProblemInputSchema = z.strictObject({
   idempotencyKey: boundedText(200),
   category: z.enum(['incorrect_result', 'unexpected_cost', 'privacy_concern', 'could_not_stop', 'other']),
   summary: boundedText(1_000),
+  affectedStep: safePositiveInteger.optional(),
+  evidenceReceiptRefs: z.array(boundedText(300)).max(20).default([]),
+  visibility: z.enum(['customer_and_ae_only', 'share_with_affected_business']).default('customer_and_ae_only'),
 })
 
 const customerRequestProblemProjectionSchema = z.strictObject({
@@ -66,6 +69,8 @@ const customerRequestProblemProjectionSchema = z.strictObject({
   causality: z.literal('unknown'),
   resolution: z.literal('not_adjudicated'),
   nextAction: z.literal('await_review'),
+  visibility: z.enum(['customer_and_ae_only', 'share_with_affected_business']),
+  evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
   affected: z.strictObject({
     step: safePositiveInteger,
     attemptRef: z.string().optional(),
@@ -439,7 +444,9 @@ export const customerPreparedActionSchema = z.object({
   }).strict()),
 }).strict()
 
-const customerRequestAgentNavigationInputValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()])
+const customerRequestAgentNavigationInputValueSchema = z.union([
+  z.string(), z.number(), z.boolean(), z.null(), z.array(z.string()),
+])
 
 export const customerRequestAgentNavigationSchema = z.strictObject({
   current: z.string(),
@@ -560,6 +567,7 @@ export const customerRequestRefusalSchema = z.object({
   kind: z.literal('refused'),
   reason: z.enum([
     'authentication_required', 'request_not_found', 'interpreter_unavailable', 'capabilities_unavailable',
+    'evidence_not_found',
   ]),
 }).strict()
 

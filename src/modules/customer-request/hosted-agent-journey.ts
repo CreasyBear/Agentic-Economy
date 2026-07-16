@@ -400,6 +400,7 @@ export async function runHostedCustomerRequestJourney(
         '<unique string>': `acceptance:problem:${nonce}`,
         '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
         '<problem summary>': 'Labelled sandbox recovery verification.',
+        '<step number from evidence>': 1,
       }))
       const resumed = await callAgent(runtimeInput, progressPath, 'GET')
       observe(states, resumed)
@@ -527,6 +528,7 @@ async function partialResultHostedJourney(input: Parameters<typeof outcomeUnknow
       '<unique string>': `acceptance:problem:${input.nonce}`,
       '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
       '<problem summary>': 'The labelled sandbox provider returned only a partial result.',
+      '<step number from evidence>': input.route.stepCount,
     },
   ))
   const resumed = await callAgent(input.input, input.progressPath, 'GET')
@@ -604,6 +606,7 @@ async function providerDeniedHostedJourney(input: Readonly<{
       '<unique string>': `acceptance:problem:${input.nonce}`,
       '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
       '<problem summary>': 'The labelled sandbox provider declined the second step.',
+      '<step number from evidence>': input.route.stepCount,
     },
   ))
   const resumed = await callAgent(input.input, input.progressPath, 'GET')
@@ -675,6 +678,7 @@ async function outcomeUnknownHostedJourney(input: Readonly<{
       '<unique string>': `acceptance:problem:${input.nonce}`,
       '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
       '<problem summary>': 'The labelled sandbox provider outcome is unknown after release.',
+      '<step number from evidence>': input.route.stepCount,
     },
   ))
   const resumed = await callAgent(input.input, input.progressPath, 'GET')

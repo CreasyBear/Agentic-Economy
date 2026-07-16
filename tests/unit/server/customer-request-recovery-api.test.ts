@@ -29,6 +29,8 @@ describe('Customer Request recovery surface', () => {
         causality: 'unknown' as const,
         resolution: 'not_adjudicated' as const,
         nextAction: 'await_review' as const,
+        visibility: 'customer_and_ae_only' as const,
+        evidence: [],
         affected: { step: 1, attemptRef: 'attempt:opaque', business: 'Example business' },
       },
     }
@@ -61,6 +63,7 @@ describe('Customer Request recovery surface', () => {
         category: 'incorrect_result' as const, summary: 'The result is wrong.',
         claimSource: 'customer' as const, causality: 'unknown' as const,
         resolution: 'not_adjudicated' as const, nextAction: 'await_review' as const,
+        visibility: 'customer_and_ae_only' as const, evidence: [],
         reportedAt: 950, affected: { step: 1, attemptRef: 'attempt:opaque', business: 'Example business' },
       }],
     }
@@ -93,12 +96,23 @@ describe('Customer Request recovery surface', () => {
     expect(response.status).toBe(400)
     expect(report).not.toHaveBeenCalled()
   })
+
+  it('returns invalid evidence selection as a customer-correctable request error', async () => {
+    const response = await handleCustomerRequestProblemPost(problemRequest(), requestRef, {
+      report: async () => ({ kind: 'refused', reason: 'evidence_not_found' }),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ kind: 'refused', reason: 'evidence_not_found' })
+  })
 })
 
 function problemRequest(): Request {
   return new Request('https://ae.test/problems', {
     method: 'POST', headers: { Authorization: 'Bearer ak_secret', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idempotencyKey: 'report:one', category: 'incorrect_result', summary: 'The result is wrong.' }),
+    body: JSON.stringify({
+      idempotencyKey: 'report:one', category: 'incorrect_result', summary: 'The result is wrong.',
+      affectedStep: 1, evidenceReceiptRefs: [], visibility: 'customer_and_ae_only',
+    }),
   })
 }
 

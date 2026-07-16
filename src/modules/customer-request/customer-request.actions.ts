@@ -108,10 +108,15 @@ export const customerRequestReportProblemAction = defineAction({
     ...routeActionParameters,
     { name: 'category', type: 'enum', description: 'The customer-visible problem category.', required: true, enum: ['incorrect_result', 'unexpected_cost', 'privacy_concern', 'could_not_stop', 'other'] },
     { name: 'summary', type: 'string', description: 'A short description of what went wrong.', required: true },
+    { name: 'affectedStep', type: 'number', description: 'The customer-selected step this report is about.', required: false },
+    { name: 'evidenceReceiptRefs', type: 'string', description: 'JSON array of existing AE evidence receipt references selected from that step.', required: false },
+    { name: 'visibility', type: 'enum', description: 'Whether the report stays with the customer and AE or may be shared with the affected business.', required: false, enum: ['customer_and_ae_only', 'share_with_affected_business'] },
   ],
   readOnly: false,
   surfaces: ['ui', 'http', 'agentJson'],
-  run: async ({ data }) => reportCustomerRequestProblemThroughSource(data),
+  run: async ({ data }) => customerRequestProblemResultSchema.parse(
+    await reportCustomerRequestProblemThroughSource(data),
+  ),
 })
 
 const evidenceInputSchema = z.strictObject({ requestRef: z.string().trim().min(1).max(200) })

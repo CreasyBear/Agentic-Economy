@@ -1035,6 +1035,10 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
 function RequestRecordLinks({ requestRef }: { requestRef: string }) {
   const [reporting, setReporting] = useState(false)
   const [summary, setSummary] = useState('')
+  const [problemCategory, setProblemCategory] = useState<'incorrect_result' | 'unexpected_cost' | 'privacy_concern' | 'could_not_stop' | 'other'>('other')
+  const [affectedStep, setAffectedStep] = useState<number | undefined>()
+  const [selectedEvidence, setSelectedEvidence] = useState<string[]>([])
+  const [visibility, setVisibility] = useState<'customer_and_ae_only' | 'share_with_affected_business'>('customer_and_ae_only')
   const [receipt, setReceipt] = useState<string | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [evidence, setEvidence] = useState<CustomerRequestEvidenceExport | undefined>()
@@ -1058,7 +1062,9 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
         setEvidenceError('AE could not open the activity record. Your Request is unchanged.')
         return
       }
-      setEvidence(parsed.data)
+      const exported = parsed.data
+      setEvidence(exported)
+      setAffectedStep((current) => current ?? exported.steps.at(-1)?.step)
     } catch {
       setEvidenceError('AE could not be reached. Your Request is unchanged.')
     } finally {
@@ -1074,7 +1080,10 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           idempotencyKey: `problem:${requestRef}:${crypto.randomUUID()}`,
-          category: 'other', summary: summary.trim(),
+          category: problemCategory, summary: summary.trim(),
+          ...(affectedStep === undefined ? {} : { affectedStep }),
+          evidenceReceiptRefs: selectedEvidence,
+          visibility,
         }),
       })
       const result: unknown = await response.json()
@@ -1087,6 +1096,7 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
       setReceipt(result.reportRef)
       setReporting(false)
       setSummary('')
+      setSelectedEvidence([])
     } catch {
       setError('AE could not be reached. Your Request is unchanged.')
     }
@@ -1097,7 +1107,10 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
       <button type="button" className="min-h-11 text-sm font-semibold underline underline-offset-4" onClick={() => void inspectEvidence()}>
         {evidenceLoading ? 'Opening activity record…' : evidence === undefined ? 'View activity record' : 'Hide activity record'}
       </button>
-      <button type="button" className="min-h-11 text-sm font-semibold underline underline-offset-4" onClick={() => setReporting((current) => !current)}>Report a problem</button>
+      <button type="button" className="min-h-11 text-sm font-semibold underline underline-offset-4" onClick={() => {
+        setReporting((current) => !current)
+        if (evidence === undefined) void inspectEvidence()
+      }}>Report a problem</button>
     </div>
     {evidence === undefined ? null : <section className="grid gap-3 rounded-md border border-border bg-surface p-4" aria-live="polite">
       <Heading level={3}>Activity record</Heading>
@@ -1128,6 +1141,13 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
             <Text type="supporting" color="secondary">
               This is your report. AE has not decided what caused the problem, who is responsible, or whether a remedy is due.
             </Text>
+            <Text type="supporting" color="secondary">
+              {problem.visibility === 'customer_and_ae_only'
+                ? 'Visible only to you and AE.'
+                : 'AE may share this report with the business for this step.'}
+            </Text>
+            {problem.evidence.length === 0 ? null
+              : <Text type="supporting" color="secondary">{problem.evidence.length} recorded evidence item{problem.evidence.length === 1 ? '' : 's'} attached.</Text>}
             <Text type="supporting" color="secondary">Next: wait for review. Reported {new Date(problem.reportedAt).toLocaleString()}.</Text>
           </li>)}
         </ol>
@@ -1136,9 +1156,40 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
     </section>}
     {evidenceError === undefined ? null : <Text type="supporting" color="secondary">{evidenceError}</Text>}
     {reporting ? <form className="grid gap-2" onSubmit={(event) => { event.preventDefault(); void reportProblem() }}>
+      <label htmlFor={`problem-category-${requestRef}`} className="text-sm font-semibold">What kind of problem is this?</label>
+      <select id={`problem-category-${requestRef}`} value={problemCategory} onChange={(event) => setProblemCategory(event.target.value as typeof problemCategory)} className="min-h-11 rounded-md border border-border bg-card px-3">
+        <option value="incorrect_result">The result looks wrong</option>
+        <option value="unexpected_cost">The cost was unexpected</option>
+        <option value="privacy_concern">Information may have been shared incorrectly</option>
+        <option value="could_not_stop">The work could not be stopped</option>
+        <option value="other">Something else happened</option>
+      </select>
+      {evidence === undefined ? <Text type="supporting" color="secondary">Opening the activity record so you can attach this report to the right step.</Text> : <>
+        <label htmlFor={`problem-step-${requestRef}`} className="text-sm font-semibold">Which step is this about?</label>
+        <select id={`problem-step-${requestRef}`} value={affectedStep ?? ''} onChange={(event) => {
+          setAffectedStep(Number(event.target.value))
+          setSelectedEvidence([])
+        }} className="min-h-11 rounded-md border border-border bg-card px-3">
+          {evidence.steps.map((step) => <option key={step.step} value={step.step}>Step {step.step}: {activityStepState(step.state)}</option>)}
+        </select>
+        {(evidence.steps.find((step) => step.step === affectedStep)?.evidence ?? []).length === 0 ? null : <fieldset className="grid gap-2">
+          <legend className="text-sm font-semibold">Attach recorded evidence</legend>
+          {(evidence.steps.find((step) => step.step === affectedStep)?.evidence ?? []).map((item) => <label key={item.receiptRef} className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="checkbox" checked={selectedEvidence.includes(item.receiptRef)} onChange={(event) => setSelectedEvidence((current) => (
+              event.target.checked ? [...current, item.receiptRef] : current.filter((value) => value !== item.receiptRef)
+            ))} />
+            {item.label}
+          </label>)}
+        </fieldset>}
+      </>}
       <label htmlFor={`problem-${requestRef}`} className="text-sm font-semibold">What went wrong?</label>
       <textarea id={`problem-${requestRef}`} value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={1_000} required className="min-h-24 rounded-md border border-border bg-card p-3 outline-none focus:ring-2 focus:ring-accent" />
-      <Button label="Send problem report" variant="secondary" type="submit" />
+      <label htmlFor={`problem-visibility-${requestRef}`} className="text-sm font-semibold">Who can see this report?</label>
+      <select id={`problem-visibility-${requestRef}`} value={visibility} onChange={(event) => setVisibility(event.target.value as typeof visibility)} className="min-h-11 rounded-md border border-border bg-card px-3">
+        <option value="customer_and_ae_only">Only me and AE</option>
+        <option value="share_with_affected_business">AE may share it with the business for this step</option>
+      </select>
+      <Button label="Send problem report" variant="secondary" type="submit" isDisabled={evidence === undefined || affectedStep === undefined} />
     </form> : null}
     {receipt === undefined ? null : <Text type="supporting" color="secondary">Problem recorded. Report reference {receipt}</Text>}
     {error === undefined ? null : <Text type="supporting" color="secondary">{error}</Text>}

@@ -434,6 +434,8 @@ describe('customer Request workspace', () => {
           summary: 'The quote is over the confirmed maximum.',
           claimSource: 'customer', causality: 'unknown',
           resolution: 'not_adjudicated', nextAction: 'await_review',
+          visibility: 'customer_and_ae_only',
+          evidence: [{ receiptRef: 'receipt:quoter', label: 'Quote reference accepted' }],
           reportedAt: 10,
           affected: { step: 2, attemptRef: 'attempt:opaque', business: 'Quote preparation service' },
         }],
@@ -458,6 +460,8 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('Step 2: report received')).toBeTruthy()
     expect(screen.getByText('The quote is over the confirmed maximum.')).toBeTruthy()
     expect(screen.getByText(/AE has not decided what caused the problem/u)).toBeTruthy()
+    expect(screen.getByText('Visible only to you and AE.')).toBeTruthy()
+    expect(screen.getByText('1 recorded evidence item attached.')).toBeTruthy()
     expect(screen.queryByText(/problem:opaque|attempt:opaque/u)).toBeNull()
     expect(screen.queryByText(/receipt:resolver|receipt:quoter/u)).toBeNull()
     expect(fetchMock).toHaveBeenNthCalledWith(

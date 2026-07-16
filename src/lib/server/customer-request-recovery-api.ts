@@ -30,7 +30,10 @@ export async function handleCustomerRequestProblemPost(
           data: customerRequestReportProblemAction.schema.parse(command), context: { request },
         })
       : await options.report(command))
-    if (result.kind === 'refused') return response(result, result.reason === 'authentication_required' ? 401 : 404)
+    if (result.kind === 'refused') return response(
+      result,
+      result.reason === 'authentication_required' ? 401 : result.reason === 'evidence_not_found' ? 400 : 404,
+    )
     if (result.kind === 'conflict') return response(result, 409)
     return response(result, 200)
   } catch (error) {
