@@ -40,6 +40,12 @@ type AeJourney = Readonly<{
     hardConstraintAccuracy: Readonly<{ state: 'satisfied' }>
     totalCostAccuracy: Readonly<{ state: 'exact'; total: Money } | { state: 'unavailable' }>
     recovery: Readonly<{ state: 'durable'; resumed: boolean; postures: readonly ('retry_safe' | 'reconcile_required')[] }>
+    interruptionRecovery?: Readonly<{
+      state: 'verified'
+      requestRef: string
+      revision: number
+      completedSteps: number
+    }> | undefined
     resultUsability: Readonly<{ state: 'usable' | 'unusable' }>
     replaySafety: Readonly<{ executionStart: 'not_proven' | 'same_request_monotonic_progress' }>
     disclosureIntegrity: Readonly<{
@@ -71,6 +77,7 @@ type ComparisonFailure =
   | 'direct_total_cost_not_exact' | 'ae_total_cost_not_exact' | 'total_cost_mismatch'
   | 'direct_result_unusable' | 'ae_result_unusable'
   | 'ae_recovery_not_durable' | 'ae_recovery_not_resumed'
+  | 'ae_interruption_recovery_not_proven'
   | 'ae_execution_start_replay_not_proven'
   | 'ae_disclosure_integrity_not_proven'
   | 'ae_result_integrity_not_proven'
@@ -99,6 +106,9 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
   if (ae.measurements.resultUsability.state !== 'usable') failures.push('ae_result_unusable')
   if (ae.measurements.recovery.state !== 'durable') failures.push('ae_recovery_not_durable')
   if (!ae.measurements.recovery.resumed) failures.push('ae_recovery_not_resumed')
+  if (ae.measurements.interruptionRecovery?.state !== 'verified') {
+    failures.push('ae_interruption_recovery_not_proven')
+  }
   if (ae.measurements.replaySafety.executionStart !== 'same_request_monotonic_progress') {
     failures.push('ae_execution_start_replay_not_proven')
   }
@@ -135,6 +145,7 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
         direct: direct.recovery.state, ae: ae.measurements.recovery.state,
         aeResumed: ae.measurements.recovery.resumed,
       },
+      interruptionRecovery: ae.measurements.interruptionRecovery,
       resultUsability: {
         direct: direct.resultUsability.state, ae: ae.measurements.resultUsability.state,
       },

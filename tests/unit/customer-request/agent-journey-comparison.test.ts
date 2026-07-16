@@ -31,6 +31,12 @@ const ae = {
     hardConstraintAccuracy: { state: 'satisfied' as const },
     totalCostAccuracy: { state: 'exact' as const, total: { currency: 'AUD', amountMinor: 1_000 } },
     recovery: { state: 'durable' as const, resumed: true, postures: ['retry_safe' as const] },
+    interruptionRecovery: {
+      state: 'verified' as const,
+      requestRef: 'request:cold',
+      revision: 1,
+      completedSteps: 1,
+    },
     resultUsability: { state: 'usable' as const },
     replaySafety: { executionStart: 'same_request_monotonic_progress' as const },
     disclosureIntegrity: {
@@ -60,6 +66,12 @@ describe('agent journey comparison', () => {
         completion: { direct: 'completed', ae: 'completed' },
         totalCostAccuracy: { direct: 'exact', ae: 'exact', totalsMatch: true },
         recovery: { direct: 'unsupported', ae: 'durable', aeResumed: true },
+        interruptionRecovery: {
+          state: 'verified',
+          requestRef: 'request:cold',
+          revision: 1,
+          completedSteps: 1,
+        },
         replaySafety: { aeExecutionStart: 'same_request_monotonic_progress' },
         disclosureIntegrity: {
           state: 'verified',
@@ -111,6 +123,18 @@ describe('agent journey comparison', () => {
     })
     expect(proof.verdict).toBe('fail_for_declared_class')
     expect(proof.failures).toContain('ae_execution_start_replay_not_proven')
+  })
+
+  it('fails the zero-tolerance gate when post-start interruption recovery is not proven', () => {
+    const proof = compareAgentJourneys({
+      direct,
+      ae: {
+        ...ae,
+        measurements: { ...ae.measurements, interruptionRecovery: undefined },
+      },
+    })
+    expect(proof.verdict).toBe('fail_for_declared_class')
+    expect(proof.failures).toContain('ae_interruption_recovery_not_proven')
   })
 
   it('fails the zero-tolerance gate when recipient disclosure integrity was not proven', () => {

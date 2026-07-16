@@ -51,6 +51,12 @@ type JourneyMetrics = {
   requestCalls: number
   clarifications: number
   executionStartReplay: 'not_proven' | 'same_request_monotonic_progress'
+  interruptionRecovery?: Readonly<{
+    state: 'verified'
+    requestRef: string
+    revision: number
+    completedSteps: number
+  }>
   mutations: Array<Readonly<{ path: string; source: MutationSource }>>
   staleOptionRecovery?: Readonly<{
     state: 'verified'
@@ -131,6 +137,12 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
       state: z.literal('durable'), resumed: z.boolean(),
       postures: z.array(z.enum(['retry_safe', 'reconcile_required'])),
     }),
+    interruptionRecovery: z.strictObject({
+      state: z.literal('verified'),
+      requestRef: z.string(),
+      revision: z.number().int().nonnegative(),
+      completedSteps: z.number().int().nonnegative(),
+    }).optional(),
     resultUsability: z.strictObject({ state: z.enum(['usable', 'unusable']) }),
     replaySafety: z.strictObject({
       executionStart: z.enum(['not_proven', 'same_request_monotonic_progress']),
@@ -348,6 +360,7 @@ export async function runHostedCustomerRequestJourney(
         return await completeHostedJourney({
           input: runtimeInput, release, requestRef, route, selectedBusiness, selectedBusinesses,
           states, authorityStops, consumedFacts, consumedMessages, progressPath, evidencePath,
+          started: startReplay,
         })
       }
       const problemAction = observedNavigationAction(input, view, 'report_problem')
@@ -702,11 +715,27 @@ async function completeHostedJourney(input: Readonly<{
   consumedMessages: Array<{ index: number; valueDigest: string }>
   progressPath: string
   evidencePath: string
+  started: CustomerRequestView
 }>): Promise<HostedCustomerRequestJourneyProof> {
   let resumed: CustomerRequestView | undefined
   for (let attempt = 0; attempt < 24; attempt += 1) {
     resumed = await callAgent(input.input, input.progressPath, 'GET', undefined, [200, 202])
     observe(input.states, resumed)
+    if (attempt === 0) {
+      const completedSteps = resumed.progress?.completed
+        ?? (resumed.state === 'completed' ? input.route.stepCount : 0)
+      if (resumed.requestRef !== input.started.requestRef
+        || resumed.revision !== input.started.revision
+        || completedSteps < (input.started.progress?.completed ?? 0)) {
+        throw new Error('hosted_journey_interruption_recovery_changed')
+      }
+      input.input.metrics.interruptionRecovery = {
+        state: 'verified',
+        requestRef: resumed.requestRef,
+        revision: resumed.revision,
+        completedSteps,
+      }
+    }
     if (resumed.state === 'completed') break
     if (resumed.state !== 'in_progress') {
       throw new Error(`hosted_journey_completion_stopped:${resumed.state}`)
@@ -1135,6 +1164,9 @@ function journeyMeasurements(
       state: 'durable' as const, resumed,
       postures: [...new Set(route.recovery.map(({ posture }) => posture))],
     },
+    ...(input.metrics.interruptionRecovery === undefined
+      ? {}
+      : { interruptionRecovery: input.metrics.interruptionRecovery }),
     resultUsability: { state: resultUsable ? 'usable' as const : 'unusable' as const },
     replaySafety: { executionStart: input.metrics.executionStartReplay },
     ...(input.metrics.staleOptionRecovery === undefined

@@ -185,6 +185,12 @@ describe('hosted Customer Request journey', () => {
       hardConstraintAccuracy: { state: 'satisfied' },
       totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', amountMinor: 900 } },
       recovery: { state: 'durable', resumed: true, postures: ['retry_safe'] },
+      interruptionRecovery: {
+        state: 'verified',
+        requestRef: 'request:cold',
+        revision: 2,
+        completedSteps: 2,
+      },
       resultUsability: { state: 'usable' },
       replaySafety: { executionStart: 'same_request_monotonic_progress' },
       disclosureIntegrity: {
