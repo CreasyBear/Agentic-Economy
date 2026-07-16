@@ -88,6 +88,21 @@ export type RouteTransportObservation = Readonly<{
   failureCode?: string
 }>
 
+export type RouteTransportCancellationInvocation = Readonly<{
+  binding: RouteTransportInvocation['binding']
+  authority: RouteTransportInvocation['authority']
+  cancellationRequestRef: string
+}>
+
+export type RouteTransportCancellationObservation = Readonly<{
+  disposition: 'accepted' | 'rejected' | 'unknown' | 'unsupported'
+  requestDigest: string
+  responseDigest?: string
+  providerReference?: string
+  reason?: string
+  failureCode?: string
+}>
+
 export function parseRouteTransportObservationJson(value: string): RouteTransportObservation | undefined {
   if (new TextEncoder().encode(value).byteLength > MAX_RESPONSE_BYTES) return undefined
   const parsed = parseJson(value)
@@ -109,7 +124,13 @@ export function parseRouteTransportObservationJson(value: string): RouteTranspor
   return parsed as RouteTransportObservation
 }
 
-type HttpConfiguration = Readonly<{ method: 'POST'; requestTimeoutMs: number }>
+type AuxiliaryExchange = Readonly<{ path: string; requestTimeoutMs: number }>
+type HttpConfiguration = Readonly<{
+  method: 'POST'
+  requestTimeoutMs: number
+  reconciliation?: AuxiliaryExchange
+  cancellation?: AuxiliaryExchange
+}>
 type McpConfiguration = Readonly<{
   protocolVersion: string
   toolName: string
@@ -149,6 +170,73 @@ export async function invokeRegisteredRouteTransport(
   return preparation.kind === 'refused'
     ? preparation.observation
     : await invokePreparedRouteTransport(preparation.prepared, runtime)
+}
+
+export async function invokeRegisteredRouteCancellation(
+  invocation: RouteTransportCancellationInvocation,
+  runtime: RouteTransportRuntime,
+): Promise<RouteTransportCancellationObservation> {
+  const request = {
+    cancellationRequestRef: invocation.cancellationRequestRef,
+    attemptRef: invocation.authority.attemptRef,
+    operationKeyDigest: invocation.authority.operationKeyDigest,
+  }
+  const requestDigest = canonicalDigest(request)
+  const endpoint = validPublicHttpsEndpoint(invocation.binding.endpointUrl)
+  const configuration = parseConfiguration(invocation.binding.configJson)
+  if (endpoint === undefined || configuration === undefined
+    || canonicalDigest(configuration as StableHashValue) !== invocation.binding.configDigest
+    || invocation.binding.adapterId !== 'http-json:v1'
+    || !isHttpConfiguration(configuration)
+    || configuration.cancellation === undefined) {
+    return { disposition: 'unsupported', requestDigest, failureCode: 'cancellation_not_registered' }
+  }
+  const credential = runtime.resolveCredential(invocation.binding.credentialRef)
+  if (credential === undefined || credential.length === 0) {
+    return { disposition: 'unknown', requestDigest, failureCode: 'credential_unavailable' }
+  }
+  const cancellationEndpoint = new URL(configuration.cancellation.path, endpoint.origin)
+  try {
+    const response = await runtime.send(cancellationEndpoint, {
+      method: 'POST', redirect: 'manual',
+      signal: AbortSignal.timeout(configuration.cancellation.requestTimeoutMs),
+      body: JSON.stringify(request),
+      headers: callHeaders(
+        { ...invocation, inputJson: JSON.stringify(request) },
+        credential,
+        invocation.cancellationRequestRef,
+      ),
+    })
+    if (response.status < 200 || response.status >= 300) {
+      return { disposition: 'unknown', requestDigest, failureCode: `provider_http_${response.status}` }
+    }
+    const text = await readBoundedText(response)
+    const parsed = text === undefined ? undefined : parseJson(text)
+    const responseDigest = text === undefined ? undefined : canonicalDigest(text)
+    if (!isJsonObject(parsed)
+      || !['cancellation_accepted', 'cancellation_rejected', 'cancellation_unknown'].includes(String(parsed.kind))
+      || (parsed.providerReference !== undefined && !boundedString(parsed.providerReference, 500))
+      || (parsed.reason !== undefined && !boundedString(parsed.reason, 500))
+      || Object.keys(parsed).some((key) => !['kind', 'providerReference', 'reason'].includes(key))) {
+      return {
+        disposition: 'unknown', requestDigest,
+        ...(responseDigest === undefined ? {} : { responseDigest }),
+        failureCode: 'cancellation_response_invalid',
+      }
+    }
+    const common = {
+      requestDigest,
+      responseDigest: responseDigest!,
+      ...(parsed.providerReference === undefined ? {} : { providerReference: parsed.providerReference as string }),
+    }
+    if (parsed.kind === 'cancellation_accepted') return { ...common, disposition: 'accepted' }
+    if (parsed.kind === 'cancellation_rejected' && boundedString(parsed.reason, 500)) {
+      return { ...common, disposition: 'rejected', reason: parsed.reason }
+    }
+    return { ...common, disposition: 'unknown' }
+  } catch (error) {
+    return { disposition: 'unknown', requestDigest, failureCode: `network_${errorName(error)}` }
+  }
 }
 
 export function prepareRegisteredRouteTransportInvocation(
@@ -423,11 +511,15 @@ async function normalizeJsonResponse(
     : { ...common, disposition: 'partial' as const, continuationToken: continuation }
 }
 
-function callHeaders(invocation: RouteTransportInvocation, bearer: string | undefined): Record<string, string> {
+function callHeaders(
+  invocation: RouteTransportInvocation,
+  bearer: string | undefined,
+  idempotencyKey = invocation.authority.operationKeyDigest,
+): Record<string, string> {
   return {
     'Content-Type': 'application/json',
     Accept: 'application/json',
-    'Idempotency-Key': invocation.authority.operationKeyDigest,
+    'Idempotency-Key': idempotencyKey,
     'AE-Call-Key-Id': invocation.authority.callIdentity.keyId,
     'AE-Call-Signature': invocation.authority.callIdentity.signature,
     'AE-Mandate-Digest': invocation.authority.mandateDigest,
@@ -444,8 +536,15 @@ function parseConfiguration(value: string): Readonly<Record<string, unknown>> | 
 }
 
 function isHttpConfiguration(value: Readonly<Record<string, unknown>>): value is HttpConfiguration {
-  return exactKeys(value, ['method', 'requestTimeoutMs'])
-    && value.method === 'POST' && validTimeout(value.requestTimeoutMs)
+  if (!optionalExactKeys(value, ['method', 'requestTimeoutMs'], ['reconciliation', 'cancellation'])
+    || value.method !== 'POST' || !validTimeout(value.requestTimeoutMs)) return false
+  return ['reconciliation', 'cancellation'].every((key) => {
+    const exchange = value[key]
+    return exchange === undefined || (isJsonObject(exchange)
+      && exactKeys(exchange, ['path', 'requestTimeoutMs'])
+      && typeof exchange.path === 'string' && validAuxiliaryPath(exchange.path)
+      && validTimeout(exchange.requestTimeoutMs))
+  })
 }
 
 function isMcpConfiguration(value: Readonly<Record<string, unknown>>): value is McpConfiguration {
@@ -538,6 +637,20 @@ function isJsonObject(value: unknown): value is Readonly<Record<string, unknown>
 
 function exactKeys(value: Readonly<Record<string, unknown>>, keys: readonly string[]): boolean {
   return Object.keys(value).sort().join(',') === [...keys].sort().join(',')
+}
+
+function optionalExactKeys(
+  value: Readonly<Record<string, unknown>>,
+  required: readonly string[],
+  optional: readonly string[],
+): boolean {
+  const keys = Object.keys(value)
+  return required.every((key) => keys.includes(key))
+    && keys.every((key) => required.includes(key) || optional.includes(key))
+}
+
+function validAuxiliaryPath(value: string): boolean {
+  return /^\/(?!\/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/.test(value)
 }
 
 function boundedString(value: unknown, max: number): value is string {

@@ -47,6 +47,54 @@ describe('capability supply transport adapter registry', () => {
     })).toMatchObject({ kind: 'admitted', transport: { adapterId: 'http-json:v1' } })
   })
 
+  it('admits adapter-managed cancellation only with a bounded same-origin cancellation exchange', () => {
+    expect(admitRegisteredTransport({
+      adapterId: 'http-json:v1',
+      endpointUrl: 'https://example.test/capability',
+      credentialRef: 'env:CAPABILITY_KEY',
+      continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
+      cancellation: { kind: 'adapter_managed', evidenceRefs: ['evidence:cancellation'] },
+      config: {
+        method: 'POST', requestTimeoutMs: 5_000,
+        cancellation: { path: '/ae/cancel', requestTimeoutMs: 3_000 },
+      },
+    })).toMatchObject({
+      kind: 'admitted',
+      transport: {
+        adapterId: 'http-json:v1',
+        configJson: '{"cancellation":{"path":"/ae/cancel","requestTimeoutMs":3000},"method":"POST","requestTimeoutMs":5000}',
+      },
+    })
+  })
+
+  it('rejects adapter-managed cancellation without an exact cancellation exchange', () => {
+    const base = {
+      adapterId: 'http-json:v1',
+      endpointUrl: 'https://example.test/capability',
+      credentialRef: 'env:CAPABILITY_KEY',
+      continuation: { kind: 'single_response' as const, evidenceRefs: ['evidence:response'] },
+      cancellation: { kind: 'adapter_managed' as const, evidenceRefs: ['evidence:cancellation'] },
+    }
+    expect(admitRegisteredTransport({
+      ...base,
+      config: { method: 'POST', requestTimeoutMs: 5_000 },
+    })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
+    expect(admitRegisteredTransport({
+      ...base,
+      config: {
+        method: 'POST', requestTimeoutMs: 5_000,
+        cancellation: { path: 'https://other.example/cancel', requestTimeoutMs: 3_000 },
+      },
+    })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
+    expect(admitRegisteredTransport({
+      ...base,
+      config: {
+        method: 'POST', requestTimeoutMs: 5_000,
+        cancellation: { path: '//other.example/cancel', requestTimeoutMs: 3_000 },
+      },
+    })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
+  })
+
   it('rejects undeclared nested adapter configuration fields', () => {
     expect(admitRegisteredTransport({
       adapterId: 'http-json:v1',
@@ -81,10 +129,6 @@ describe('capability supply transport adapter registry', () => {
     expect(admitRegisteredTransport({
       ...base,
       continuation: { kind: 'adapter_managed', evidenceRefs: ['evidence:continuation'] },
-    })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
-    expect(admitRegisteredTransport({
-      ...base,
-      cancellation: { kind: 'adapter_managed', evidenceRefs: ['evidence:cancellation'] },
     })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
   })
 

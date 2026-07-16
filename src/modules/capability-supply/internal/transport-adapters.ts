@@ -11,7 +11,11 @@ const httpJsonConfiguration = z.strictObject({
   method: z.literal('POST'),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
   reconciliation: z.strictObject({
-    path: z.string().regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/),
+    path: z.string().regex(/^\/(?!\/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/),
+    requestTimeoutMs: z.number().int().min(100).max(120_000),
+  }).optional(),
+  cancellation: z.strictObject({
+    path: z.string().regex(/^\/(?!\/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/),
     requestTimeoutMs: z.number().int().min(100).max(120_000),
   }).optional(),
 })
@@ -85,7 +89,8 @@ function admitHttpJsonTransport(input: TransportAdmissionInput): TransportAdmiss
     endpoint === undefined
     || !/^env:[A-Z][A-Z0-9_]{1,199}$/.test(input.credentialRef)
     || input.continuation.kind !== 'single_response'
-    || input.cancellation.kind !== 'unsupported'
+    || (input.cancellation.kind === 'adapter_managed') !== (configuration.success
+      && configuration.data.cancellation !== undefined)
     || !configuration.success
   ) {
     return { kind: 'refused', reason: 'adapter_config_invalid' }

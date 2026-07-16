@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  invokeRegisteredRouteCancellation,
   invokeRegisteredRouteTransport,
+  type RouteTransportCancellationInvocation,
   type RouteTransportFetch,
   type RouteTransportInvocation,
 } from '@/modules/capability-supply/route-transport-runtime'
@@ -51,6 +53,144 @@ function registeredBinding(
 }
 
 describe('registered route transport runtime', () => {
+  it('sends one generic idempotent cancellation request to the registered same-origin exchange', async () => {
+    const fetch: RouteTransportFetch = vi.fn(async (url, init) => {
+      expect(url.href).toBe('https://provider.example/ae/cancel')
+      expect(init?.headers).toMatchObject({
+        Authorization: 'Bearer provider-secret',
+        'Idempotency-Key': 'route-cancellation:v1:attempt',
+        'AE-Call-Key-Id': authority.callIdentity.keyId,
+        'AE-Call-Signature': authority.callIdentity.signature,
+      })
+      expect(JSON.parse(String(init?.body))).toEqual({
+        cancellationRequestRef: 'route-cancellation:v1:attempt',
+        attemptRef: authority.attemptRef,
+        operationKeyDigest: authority.operationKeyDigest,
+      })
+      return Response.json({
+        kind: 'cancellation_accepted',
+        providerReference: 'provider-cancel:123',
+      })
+    })
+    const config = {
+      method: 'POST' as const,
+      requestTimeoutMs: 5_000,
+      cancellation: { path: '/ae/cancel', requestTimeoutMs: 3_000 },
+    }
+    const cancellation: RouteTransportCancellationInvocation = {
+      binding: registeredBinding(
+        'http-json:v1', 'https://provider.example/run', 'env:PROVIDER_KEY', config,
+      ),
+      authority,
+      cancellationRequestRef: 'route-cancellation:v1:attempt',
+    }
+
+    await expect(invokeRegisteredRouteCancellation(cancellation, {
+      send: fetch,
+      resolveCredential: () => 'provider-secret',
+      createX402PaymentSignature: async () => undefined,
+    })).resolves.toEqual({
+      disposition: 'accepted',
+      providerReference: 'provider-cancel:123',
+      requestDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      responseDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps an ambiguous cancellation response unknown and never calls an unregistered exchange', async () => {
+    const fetch = vi.fn<RouteTransportFetch>()
+    const unsupported = invocation()
+    await expect(invokeRegisteredRouteCancellation({
+      binding: unsupported.binding,
+      authority,
+      cancellationRequestRef: 'route-cancellation:v1:attempt',
+    }, {
+      send: fetch,
+      resolveCredential: () => 'provider-secret',
+      createX402PaymentSignature: async () => undefined,
+    })).resolves.toMatchObject({
+      disposition: 'unsupported',
+      failureCode: 'cancellation_not_registered',
+    })
+    expect(fetch).not.toHaveBeenCalled()
+
+    const config = {
+      method: 'POST' as const,
+      requestTimeoutMs: 5_000,
+      cancellation: { path: '/ae/cancel', requestTimeoutMs: 3_000 },
+    }
+    fetch.mockResolvedValueOnce(Response.json({ kind: 'maybe_cancelled' }))
+    await expect(invokeRegisteredRouteCancellation({
+      binding: registeredBinding(
+        'http-json:v1', 'https://provider.example/run', 'env:PROVIDER_KEY', config,
+      ),
+      authority,
+      cancellationRequestRef: 'route-cancellation:v1:attempt',
+    }, {
+      send: fetch,
+      resolveCredential: () => 'provider-secret',
+      createX402PaymentSignature: async () => undefined,
+    })).resolves.toMatchObject({
+      disposition: 'unknown',
+      failureCode: 'cancellation_response_invalid',
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves a provider cancellation rejection without claiming the step stopped', async () => {
+    const config = {
+      method: 'POST' as const,
+      requestTimeoutMs: 5_000,
+      cancellation: { path: '/ae/cancel', requestTimeoutMs: 3_000 },
+    }
+    const fetch = vi.fn<RouteTransportFetch>().mockResolvedValueOnce(Response.json({
+      kind: 'cancellation_rejected',
+      reason: 'work_already_completed',
+      providerReference: 'provider-cancel:rejected',
+    }))
+
+    await expect(invokeRegisteredRouteCancellation({
+      binding: registeredBinding(
+        'http-json:v1', 'https://provider.example/run', 'env:PROVIDER_KEY', config,
+      ),
+      authority,
+      cancellationRequestRef: 'route-cancellation:v1:attempt',
+    }, {
+      send: fetch,
+      resolveCredential: () => 'provider-secret',
+      createX402PaymentSignature: async () => undefined,
+    })).resolves.toMatchObject({
+      disposition: 'rejected',
+      reason: 'work_already_completed',
+      providerReference: 'provider-cancel:rejected',
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats an HTTP cancellation error as unknown because the provider may have received it', async () => {
+    const config = {
+      method: 'POST' as const,
+      requestTimeoutMs: 5_000,
+      cancellation: { path: '/ae/cancel', requestTimeoutMs: 3_000 },
+    }
+    const fetch = vi.fn<RouteTransportFetch>().mockResolvedValueOnce(new Response(null, { status: 503 }))
+    await expect(invokeRegisteredRouteCancellation({
+      binding: registeredBinding(
+        'http-json:v1', 'https://provider.example/run', 'env:PROVIDER_KEY', config,
+      ),
+      authority,
+      cancellationRequestRef: 'route-cancellation:v1:attempt',
+    }, {
+      send: fetch,
+      resolveCredential: () => 'provider-secret',
+      createX402PaymentSignature: async () => undefined,
+    })).resolves.toMatchObject({
+      disposition: 'unknown',
+      failureCode: 'provider_http_503',
+    })
+  })
+
   it('carries one signed and idempotent call through a generic HTTP binding', async () => {
     const fetch: RouteTransportFetch = vi.fn(async (_url, init) => {
       expect(init?.redirect).toBe('manual')
