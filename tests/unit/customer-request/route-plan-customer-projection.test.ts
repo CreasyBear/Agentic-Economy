@@ -91,6 +91,16 @@ describe('RoutePlan customer projection', () => {
         kind: 'ranked', objective: 'lowest_maximum_price', position: 2,
         evidenceRef: 'preference:lowest-price',
       }
+      value.steps[0]!.evidence.push({
+        ...structuredClone(value.steps[0]!.evidence[0]!),
+        evidenceId: 'audit_copy',
+        annotationId: 'audit_copy',
+        outputPointer: '/auditCopy',
+        label: 'Audit copy',
+        role: 'comparison',
+        purpose: 'comparison',
+        guaranteed: false,
+      })
     })
     const decision = projectCustomerRoutePlanDecision({
       current: generation(1, [lower, higher]),
@@ -106,6 +116,7 @@ describe('RoutePlan customer projection', () => {
       evidenceRef: 'preference:lowest-price',
       commercialInfluence: 'none',
       reasons: ['Lowest maximum cost: AUD 9.00.', 'AUD 3.00 below the next current way forward.'],
+      tradeoffs: ['1 evidence requirement versus 2.'],
     })
     expect(decision.routes[0]?.comparison).toMatchObject({
       outcomeFit: 'same_promised_result', hardConstraints: 'satisfied', completeness: 'complete',
@@ -141,6 +152,55 @@ describe('RoutePlan customer projection', () => {
     })
 
     expect(decision.comparison).toMatchObject({ kind: 'unranked', reason })
+  })
+
+  it('refuses contradictory ranking evidence instead of accepting a self-serving first place claim', () => {
+    const routes = [
+      route({ amountMinor: 900, routePlanId: 'route:lower' }),
+      changed(route({ amountMinor: 1_200, routePlanId: 'route:higher' }), (value) => {
+        value.comparison.ordering = {
+          kind: 'ranked', objective: 'lowest_maximum_price', position: 1,
+          evidenceRef: 'preference:lowest-price',
+        }
+      }),
+    ]
+
+    const decision = projectCustomerRoutePlanDecision({
+      current: generation(1, routes),
+      businessNames: { 'business:one': 'North Star Services' },
+      capabilitySemantics,
+      now: 10_000,
+    })
+
+    expect(decision.comparison).toMatchObject({
+      kind: 'unranked',
+      reason: 'ranking_evidence_invalid',
+      summary: 'The ranking evidence is inconsistent, so AE has not recommended a way forward.',
+    })
+  })
+
+  it('fails closed when persisted route dependencies contain a cycle', () => {
+    const cyclic = changed(route({ amountMinor: 900 }), (value) => {
+      const first = value.steps[0]!
+      value.steps.push({
+        ...structuredClone(first),
+        actionId: 'action:two',
+        offeringId: 'offering:two',
+        bindingId: 'binding:two',
+        publicationRef: 'publication:two',
+      })
+      value.edges = [
+        { fromStep: first.actionId, toStep: 'action:two' },
+        { fromStep: 'action:two', toStep: first.actionId },
+      ] as typeof value.edges
+    })
+
+    expect(() => projectCustomerRoutePlanDecision({
+      current: generation(1, [cyclic]),
+      businessNames: { 'business:one': 'North Star Services' },
+      capabilitySemantics,
+      now: 10_000,
+    })).toThrowError('customer_route_plan_graph_invalid')
   })
 
   it('separates routes that do not promise the same result instead of ranking them', () => {

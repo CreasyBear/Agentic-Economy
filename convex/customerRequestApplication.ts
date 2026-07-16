@@ -334,6 +334,7 @@ const customerRouteDecision = v.object({
       reason: v.union(
         v.literal('customer_preference_absent'), v.literal('tie'), v.literal('commercial_influence'),
         v.literal('stale_evidence'), v.literal('comparison_evidence_missing'),
+        v.literal('ranking_evidence_invalid'),
       ),
       summary: v.string(),
     }),

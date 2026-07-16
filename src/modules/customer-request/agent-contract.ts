@@ -345,7 +345,7 @@ export const customerRoutePlanDecisionSchema = z.strictObject({
       kind: z.literal('unranked'),
       reason: z.enum([
         'customer_preference_absent', 'tie', 'commercial_influence',
-        'stale_evidence', 'comparison_evidence_missing',
+        'stale_evidence', 'comparison_evidence_missing', 'ranking_evidence_invalid',
       ]),
       summary: z.string(),
     }).strict(),

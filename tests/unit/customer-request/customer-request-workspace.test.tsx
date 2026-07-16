@@ -617,6 +617,58 @@ describe('customer Request workspace', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps disclosed commercial relationships visible without letting them explain the recommendation', async () => {
+    const baseLower = routeChoice('route:lower', 'current')
+    const lower = {
+      ...baseLower,
+      maximumTotalCost: { ...baseLower.maximumTotalCost, amountMinor: 900 },
+      comparison: {
+        ...baseLower.comparison,
+        maximumCost: { ...baseLower.comparison.maximumCost, amountMinor: 900 },
+        commercialInfluence: {
+          status: 'disclosed' as const,
+          summaries: ['AE may receive a fixed referral fee.'],
+          evidenceRefs: ['commercial:referral'],
+          affectsDecision: false,
+        },
+      },
+    }
+    const higher = routeChoice('route:higher', 'current')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({
+      kind: 'request', requestRef: 'request:recommended', revision: 2,
+      routeGenerationRef: 'generation:recommended', state: 'routes_ready',
+      summary: 'Two ways forward are available.', nextAction: 'inspect_routes',
+      missingFields: [], criteria: [], options: [],
+      decision: {
+        generationRef: 'generation:recommended', requestRevision: 2,
+        outcome: { kind: 'routes_available', routeCount: 2, summary: 'Two ways forward are available.' },
+        routes: [lower, higher],
+        comparison: {
+          kind: 'recommended', summary: 'One way forward best matches the price priority in this Request.',
+          routeRef: 'route:lower', objective: 'lowest_maximum_price',
+          evidenceRef: 'preference:lowest-price', commercialInfluence: 'disclosed',
+          reasons: ['Lowest maximum cost: AUD 9.00.', 'AUD 3.00 below the next current way forward.'],
+          tradeoffs: ['No other declared comparison dimension separates the two leading ways forward.'],
+        },
+        actions: routeDecisionActions(),
+        changes: { kind: 'initial' },
+        nextBoundary: { kind: 'confirmation', authorityCreated: false },
+      },
+    })))
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Choose the lowest maximum cost' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+
+    expect(await screen.findByText('AUD 3.00 below the next current way forward.')).toBeTruthy()
+    expect(screen.getByText(
+      'Commercial relationships did not change eligibility, inclusion, or order.',
+    )).toBeTruthy()
+    expect(screen.getAllByText('AE may receive a fixed referral fee.')).toHaveLength(2)
+  })
+
   it('confirms the displayed choice, then starts and follows it without exposing kernel choreography', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-confirm' })
     const route = routeChoice('route:confirm', 'current')
@@ -952,5 +1004,32 @@ function routeComparison(
       validUntil: freshness === 'current' ? Date.now() + 60_000 : Date.now() - 60_000,
     },
     commercialInfluence: { status: 'none' as const, evidenceRefs: ['commercial:none'] },
+  }
+}
+
+function routeDecisionActions() {
+  return {
+    review: {
+      kind: 'inspect_current_option' as const, createsAuthority: false as const, startsWork: false as const,
+      summary: 'Reviewing shows every important limit. It does not confirm or start anything.',
+    },
+    confirm: {
+      kind: 'confirm_current_option' as const, createsAuthority: true as const, startsWork: false as const,
+      summary: 'Confirming creates permission for this exact choice. It does not contact a business or start work.',
+    },
+    start: {
+      kind: 'start_confirmed_option' as const, availableAfter: 'confirmation' as const, startsWork: true as const,
+      summary: 'Starting uses that confirmation to contact the listed businesses and begin the work.',
+    },
+    change: {
+      kind: 'revise_request' as const, createsAuthority: false as const, startsWork: false as const,
+      preservesRequest: true as const,
+      summary: 'Changing preserves the Request and returns to its details. The current choice remains unconfirmed.',
+    },
+    decline: {
+      kind: 'leave_unconfirmed' as const, createsAuthority: false as const, startsWork: false as const,
+      preservesRequest: true as const,
+      summary: 'Declining leaves this choice unconfirmed and starts nothing.',
+    },
   }
 }

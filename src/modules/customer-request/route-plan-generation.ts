@@ -66,7 +66,8 @@ type RoutePlanGenerationMaterial = Readonly<{
 export function createCustomerRequestRoutePlanGeneration(
   input: CreateCustomerRequestRoutePlanGenerationInput,
 ): CustomerRequestRoutePlanGeneration {
-  if (!Number.isSafeInteger(input.generation) || input.generation < 1 || input.routes.length === 0) {
+  if (!Number.isSafeInteger(input.generation) || input.generation < 1 || input.routes.length === 0
+    || !input.routes.every(routePlanGraphIsValid)) {
     throw new Error('customer_request_route_plan_generation_invalid')
   }
   const material = routePlanGenerationDigestMaterial({
@@ -242,7 +243,7 @@ function routesAreInternallyConsistent(generation: CustomerRequestRoutePlanGener
       && Number.isSafeInteger(route.maximumTotalCost.amountMinor)
       && route.maximumTotalCost.amountMinor >= 0
       && actionRefs.size === route.steps.length
-      && route.edges.every(({ fromStep, toStep }) => actionRefs.has(fromStep) && actionRefs.has(toStep))
+      && routePlanGraphIsValid(route)
       && Number.isSafeInteger(route.expiresAt)
       && route.expiresAt > generation.createdAt
       && routePlanId === `route:${canonicalDigest(routeCore as StableHashValue)}`
@@ -251,6 +252,41 @@ function routesAreInternallyConsistent(generation: CustomerRequestRoutePlanGener
         alternativeRouteRef !== routePlanId && routeRefs.has(alternativeRouteRef)
       ))
   })
+}
+
+export function routePlanGraphIsValid(
+  route: Readonly<{
+    steps: readonly Readonly<{ actionId: string }>[]
+    edges: readonly Readonly<{ fromStep: string; toStep: string }>[]
+  }>,
+): boolean {
+  const actionIds = new Set(route.steps.map(({ actionId }) => actionId))
+  if (actionIds.size !== route.steps.length) return false
+  const outgoing = new Map<string, string[]>()
+  const indegree = new Map([...actionIds].map((actionId) => [actionId, 0]))
+  for (const { fromStep, toStep } of route.edges) {
+    if (!actionIds.has(fromStep) || !actionIds.has(toStep) || fromStep === toStep) return false
+    const successors = outgoing.get(fromStep) ?? []
+    successors.push(toStep)
+    outgoing.set(fromStep, successors)
+    indegree.set(toStep, (indegree.get(toStep) ?? 0) + 1)
+  }
+  const ready: string[] = []
+  for (const [actionId, degree] of indegree) {
+    if (degree === 0) ready.push(actionId)
+  }
+  let visited = 0
+  while (ready.length > 0) {
+    const actionId = ready.pop()
+    if (actionId === undefined) break
+    visited += 1
+    for (const successor of outgoing.get(actionId) ?? []) {
+      const degree = (indegree.get(successor) ?? 0) - 1
+      indegree.set(successor, degree)
+      if (degree === 0) ready.push(successor)
+    }
+  }
+  return visited === actionIds.size
 }
 
 export function writableCustomerRequestRoutePlanGeneration(

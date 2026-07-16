@@ -5,6 +5,7 @@ import type {
   CustomerRoutePlan,
   CustomerRoutePlanDecision,
 } from './agent-contract'
+import { routePlanGraphIsValid } from './route-plan-generation'
 
 type BusinessNames = Readonly<Record<string, string>>
 export type CustomerRouteCapabilitySemantics = Readonly<Record<string, Readonly<{
@@ -87,6 +88,10 @@ export function projectCustomerRoutePlanDecision(input: Readonly<{
 }>): CustomerRoutePlanDecision {
   if (!customerRoutePlanProjectionInputsAreBounded(input)) {
     throw new Error('customer_route_plan_projection_limit_exceeded')
+  }
+  if (!input.current.routes.every(routePlanGraphIsValid)
+    || (input.previous !== undefined && !input.previous.routes.every(routePlanGraphIsValid))) {
+    throw new Error('customer_route_plan_graph_invalid')
   }
   const routes = input.current.routes.map((route) => projectRoute(
     route, input.current.generationRef, input.current.routes,
@@ -311,6 +316,15 @@ function projectDecisionComparison(
   const evidenceRefs = new Set(ranked.flatMap((ordering) => ordering.kind === 'ranked' && ordering.evidenceRef !== undefined
     ? [ordering.evidenceRef]
     : []))
+  const positions = ranked.flatMap((ordering) => ordering.kind === 'ranked' ? [ordering.position] : [])
+  const expectedPositions = routes.map((_, index) => index + 1)
+  if (positions.length !== routes.length
+    || [...positions].sort((left, right) => left - right).some((position, index) => position !== expectedPositions[index])) {
+    return unrankedComparison(
+      'ranking_evidence_invalid',
+      'The ranking evidence is inconsistent, so AE has not recommended a way forward.',
+    )
+  }
   const selectedIndex = ranked.findIndex((ordering) => ordering.kind === 'ranked' && ordering.position === 1)
   const selected = routes[selectedIndex]
   const orderedByCost = [...routes].sort((left, right) => {
@@ -318,6 +332,13 @@ function projectDecisionComparison(
     const rightAmount = right.maximumTotalCost.kind === 'known' ? right.maximumTotalCost.amountMinor : Number.MAX_SAFE_INTEGER
     return leftAmount - rightAmount || left.routeRef.localeCompare(right.routeRef)
   })
+  const rankedPositionByRouteRef = new Map(routes.map((route, index) => [route.routeRef, positions[index]]))
+  if (orderedByCost.some((route, index) => rankedPositionByRouteRef.get(route.routeRef) !== index + 1)) {
+    return unrankedComparison(
+      'ranking_evidence_invalid',
+      'The ranking evidence is inconsistent, so AE has not recommended a way forward.',
+    )
+  }
   const next = orderedByCost[1]
   const evidenceRef = [...evidenceRefs][0]
   if (evidenceRefs.size !== 1 || selected === undefined || next === undefined || evidenceRef === undefined
@@ -360,6 +381,12 @@ function comparisonTradeoffs(selected: CustomerRoutePlan, next: CustomerRoutePla
   }
   if (selected.comparison.irreversibleEffectCount !== next.comparison.irreversibleEffectCount) {
     tradeoffs.push(`${selected.comparison.irreversibleEffectCount} irreversible effect${selected.comparison.irreversibleEffectCount === 1 ? '' : 's'} versus ${next.comparison.irreversibleEffectCount}.`)
+  }
+  if (selected.comparison.uncertaintyCount !== next.comparison.uncertaintyCount) {
+    tradeoffs.push(`${selected.comparison.uncertaintyCount} declared uncertaint${selected.comparison.uncertaintyCount === 1 ? 'y' : 'ies'} versus ${next.comparison.uncertaintyCount}.`)
+  }
+  if (selected.comparison.evidenceCount !== next.comparison.evidenceCount) {
+    tradeoffs.push(`${selected.comparison.evidenceCount} evidence requirement${selected.comparison.evidenceCount === 1 ? '' : 's'} versus ${next.comparison.evidenceCount}.`)
   }
   if (selected.comparison.recovery !== next.comparison.recovery) {
     tradeoffs.push(`Recovery is ${comparisonRecoveryLabel(selected.comparison.recovery)} versus ${comparisonRecoveryLabel(next.comparison.recovery)}.`)

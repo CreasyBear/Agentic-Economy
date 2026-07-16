@@ -389,6 +389,9 @@ function RouteDecisionCard({ projection, turns, review, check, edit, restart }: 
   const decision = projection.decision
   if (decision === undefined) return null
   const recommendation = decision.comparison.kind === 'recommended' ? decision.comparison : undefined
+  const recommendedRoute = recommendation === undefined
+    ? undefined
+    : decision.routes.find(({ routeRef }) => routeRef === recommendation.routeRef)
   return <section className="mx-auto grid w-full max-w-4xl gap-6" aria-live="polite">
     <Conversation turns={turns} />
     <WorkingUnderstanding projection={projection} correct={edit} />
@@ -409,6 +412,18 @@ function RouteDecisionCard({ projection, turns, review, check, edit, restart }: 
       <ul className="mt-1 grid gap-1 text-sm text-secondary">
         {recommendation.tradeoffs.map((tradeoff) => <li key={tradeoff}>{tradeoff}</li>)}
       </ul>
+      {recommendation.commercialInfluence === 'disclosed'
+        ? <div className="mt-3 grid gap-1">
+          <Text color="secondary">
+            Commercial relationships did not change eligibility, inclusion, or order.
+          </Text>
+          {recommendedRoute?.comparison.commercialInfluence.status === 'disclosed'
+            ? recommendedRoute.comparison.commercialInfluence.summaries.map((summary) => (
+              <Text key={summary} type="supporting" color="secondary">{summary}</Text>
+            ))
+            : null}
+        </div>
+        : null}
     </Card>}
     {decision.changes.kind === 'changed'
       ? <DecisionChanges changes={decision.changes.items} routes={decision.routes} />

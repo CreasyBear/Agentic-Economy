@@ -46,6 +46,24 @@ test('choice review is legible and authority-free until explicit confirmation', 
   expect(confirmations).toBe(1)
 })
 
+test('recommendation explains price evidence and keeps non-ranking commercial influence visible', async ({ page }) => {
+  await page.route('**/api/requests', async (route) => await route.fulfill({ json: recommendedDecisionView() }))
+
+  await page.goto('/engine')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('What are you looking for?').fill('Choose the lowest maximum cost')
+  await page.getByRole('button', { name: 'Explore' }).click()
+
+  await expect(page.getByText('One way forward best matches the price priority in this Request.')).toBeVisible()
+  await expect(page.getByText('Lowest maximum cost: AUD 14.00.')).toBeVisible()
+  await expect(page.getByText('AUD 3.00 below the next current way forward.')).toBeVisible()
+  await expect(page.getByText(
+    'Commercial relationships did not change eligibility, inclusion, or order.',
+  )).toBeVisible()
+  await expect(page.getByText('AE may receive a fixed referral fee.').first()).toBeVisible()
+  await expect(page.getByText('Recommended for your stated priority')).toBeVisible()
+})
+
 test('exact clarification stays conversational and explains its decision impact', async ({ page }) => {
   let refinementBody: unknown
   await page.route('**/api/requests', async (route) => await route.fulfill({ json: clarificationView() }))
@@ -204,6 +222,54 @@ function decisionView(): CustomerRequestView {
       },
       changes: { kind: 'initial' },
       nextBoundary: { kind: 'confirmation', authorityCreated: false },
+    },
+  }
+}
+
+function recommendedDecisionView(): CustomerRequestView {
+  const base = decisionView()
+  const first = base.decision?.routes[0]
+  if (first === undefined) throw new Error('recommendation fixture route missing')
+  const recommended = {
+    ...first,
+    comparison: {
+      ...first.comparison,
+      commercialInfluence: {
+        status: 'disclosed' as const,
+        summaries: ['AE may receive a fixed referral fee.'],
+        evidenceRefs: ['commercial:referral'],
+        affectsDecision: false,
+      },
+    },
+  }
+  const other = {
+    ...first,
+    routeRef: 'route:other',
+    quoteDigest: 'quote:other',
+    businesses: [{ businessRef: 'business:other', name: 'Other Services' }],
+    maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_700 },
+    comparison: {
+      ...first.comparison,
+      maximumCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_700 },
+    },
+  }
+  return {
+    ...base,
+    summary: 'Two ways forward are available.',
+    decision: {
+      ...base.decision!,
+      outcome: { kind: 'routes_available', routeCount: 2, summary: 'Two ways forward are available.' },
+      routes: [recommended, other],
+      comparison: {
+        kind: 'recommended',
+        summary: 'One way forward best matches the price priority in this Request.',
+        routeRef: recommended.routeRef,
+        objective: 'lowest_maximum_price',
+        evidenceRef: 'preference:lowest-price',
+        commercialInfluence: 'disclosed',
+        reasons: ['Lowest maximum cost: AUD 14.00.', 'AUD 3.00 below the next current way forward.'],
+        tradeoffs: ['No other declared comparison dimension separates the two leading ways forward.'],
+      },
     },
   }
 }
