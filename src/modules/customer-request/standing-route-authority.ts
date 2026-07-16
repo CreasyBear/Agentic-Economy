@@ -150,7 +150,7 @@ export function evaluateStandingRouteAuthority(input: Readonly<{
     || dataAllocations > policy.limits.perUseDataAllocations) {
     return { kind: 'refused', reason: 'data_limit_exceeded' }
   }
-  if (!input.priorUses.every((use) => validPriorUse(use, policy))) {
+  if (!validPriorUseSequence(input.priorUses, policy)) {
     return { kind: 'refused', reason: 'prior_use_invalid' }
   }
   if (input.priorUses.length >= policy.limits.occurrences) {
@@ -232,6 +232,20 @@ function validPriorUse(use: StandingRouteAuthorityUse, policy: StandingRoutePoli
     && sameCurrency(use.maximumSpend, policy.limits.cumulativeSpend)
     && validCount(use.dataAllocations)
     && validCount(use.occurrence)
+}
+
+function validPriorUseSequence(
+  uses: readonly StandingRouteAuthorityUse[],
+  policy: StandingRoutePolicy,
+): boolean {
+  const refs = new Set<string>()
+  return uses.every((use, index) => {
+    if (!validPriorUse(use, policy)
+      || use.occurrence !== index + 1
+      || refs.has(use.authorityUseRef)) return false
+    refs.add(use.authorityUseRef)
+    return true
+  })
 }
 
 function contractKey(contract: CapabilityContractRef): string {

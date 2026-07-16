@@ -126,6 +126,26 @@ describe('RouteMandate', () => {
       now: 2_000,
       mandateExpiresAt: 8_000,
     })).toEqual({ kind: 'refused', reason: 'policy_revoked' })
+    expect(evaluateStandingRouteAuthority({
+      policy,
+      generation,
+      selectedRoutePlanId: selected.routePlanId,
+      authenticatedPrincipalId: 'principal:customer',
+      delegatedCredentialId: 'credential:assistant:one',
+      priorUses: [{ ...authorized.use, occurrence: 2 }],
+      now: 3_000,
+      mandateExpiresAt: 8_000,
+    })).toEqual({ kind: 'refused', reason: 'prior_use_invalid' })
+    expect(evaluateStandingRouteAuthority({
+      policy,
+      generation,
+      selectedRoutePlanId: selected.routePlanId,
+      authenticatedPrincipalId: 'principal:customer',
+      delegatedCredentialId: 'credential:assistant:one',
+      priorUses: [authorized.use, authorized.use],
+      now: 3_000,
+      mandateExpiresAt: 8_000,
+    })).toEqual({ kind: 'refused', reason: 'prior_use_invalid' })
   })
 
   it('binds explicit customer authority to one exact multi-step RoutePlan', () => {
