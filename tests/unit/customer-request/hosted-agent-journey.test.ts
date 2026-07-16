@@ -71,6 +71,14 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
         },
       }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+        activity: {
+          actor: 'ae_for_customer', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
+          retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
+        },
+      }),
       requestView('cancelled', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
@@ -120,6 +128,10 @@ describe('hosted Customer Request journey', () => {
         routeGenerationRef: 'generation:one', nextAction: 'wait',
         progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
       }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      }),
       requestView('completed', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'none',
         action: {
@@ -163,12 +175,13 @@ describe('hosted Customer Request journey', () => {
       problemState: 'not_reported', resumedState: 'completed', resultDigest: expect.stringMatching(/^sha256:/),
     })
     expect(proof.measurements).toEqual({
-      integrationBurden: { requestCalls: 6, clarifications: 0 },
-      turns: { total: 6 }, elapsedMs: 0,
+      integrationBurden: { requestCalls: 7, clarifications: 0 },
+      turns: { total: 7 }, elapsedMs: 0,
       hardConstraintAccuracy: { state: 'satisfied' },
       totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', amountMinor: 900 } },
       recovery: { state: 'durable', resumed: true, postures: ['retry_safe'] },
       resultUsability: { state: 'usable' },
+      replaySafety: { executionStart: 'byte_equivalent' },
     })
   })
 
@@ -181,6 +194,10 @@ describe('hosted Customer Request journey', () => {
     const responses = [
       compositeRoutesReadyView(), compositeRoutesReadyView(),
       requestView('route_confirmed', 2, { routeGenerationRef: 'generation:one', confirmation: confirmation() }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      }),
       requestView('in_progress', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'wait',
         progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
@@ -250,10 +267,11 @@ describe('hosted Customer Request journey', () => {
       '/api/v1/requests', '/api/v1/requests',
       '/api/v1/requests/request%3Acold/observed-confirm',
       '/api/v1/requests/request%3Acold/observed-start',
+      '/api/v1/requests/request%3Acold/observed-start',
       '/api/v1/requests/request%3Acold/observed-progress',
       '/api/v1/requests/request%3Acold/observed-evidence',
     ]
-    const responses = [routes, routes, confirmed, progress, completed, {
+    const responses = [routes, routes, confirmed, progress, progress, completed, {
       kind: 'evidence', requestRef: 'request:cold', state: 'completed', generatedAt: 9_100,
       steps: [
         { step: 1, state: 'completed', observedAt: 9_050, evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }] },
@@ -372,6 +390,14 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
         },
       })),
+      Response.json(requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+        activity: {
+          actor: 'ae_for_customer', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
+          retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
+        },
+      })),
       Response.json(requestView('cancelled', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
@@ -471,6 +497,14 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
         },
       }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+        activity: {
+          actor: 'ae_for_customer', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
+          retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
+        },
+      }),
       requestView('cancelled', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
@@ -531,13 +565,14 @@ describe('hosted Customer Request journey', () => {
     expect(calls[2]?.body).toMatchObject({
       requirementKey: 'sandbox.request_context', value: 'Find the cheapest labelled sandbox option',
     })
-    expect(calls.filter((call) => call.authorization === 'Bearer ak_agent')).toHaveLength(10)
+    expect(calls.filter((call) => call.authorization === 'Bearer ak_agent')).toHaveLength(11)
     expect(calls[3]?.url).toContain('/options')
     expect(calls[4]?.url).toContain('/confirmation')
     expect(calls[5]?.url).toContain('/run')
-    expect(calls[6]?.url).toContain('/cancellation')
-    expect(calls[7]?.url).toContain('/evidence')
-    expect(calls[8]?.url).toContain('/problems')
+    expect(calls[6]).toMatchObject({ url: calls[5]?.url, body: calls[5]?.body })
+    expect(calls[7]?.url).toContain('/cancellation')
+    expect(calls[8]?.url).toContain('/evidence')
+    expect(calls[9]?.url).toContain('/problems')
     expect(calls.some((call) => call.url.includes('/approval'))).toBe(false)
   })
 })
@@ -645,6 +680,10 @@ function completeJourneyResponses(): unknown[] {
     compositeRoutesReadyView(),
     compositeRoutesReadyView(),
     requestView('route_confirmed', 2, { routeGenerationRef: 'generation:one', confirmation: confirmation() }),
+    requestView('in_progress', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'wait',
+      progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+    }),
     requestView('in_progress', 2, {
       routeGenerationRef: 'generation:one', nextAction: 'wait',
       progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },

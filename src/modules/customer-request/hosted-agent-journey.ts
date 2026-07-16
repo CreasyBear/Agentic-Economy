@@ -44,6 +44,7 @@ type JourneyMetrics = {
   startedAt: number
   requestCalls: number
   clarifications: number
+  executionStartReplay: 'not_proven' | 'byte_equivalent'
 }
 
 type HostedCustomerRequestJourneyRuntimeInput = HostedCustomerRequestJourneyInput & Readonly<{
@@ -105,6 +106,9 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
       postures: z.array(z.enum(['retry_safe', 'reconcile_required'])),
     }),
     resultUsability: z.strictObject({ state: z.enum(['usable', 'unusable']) }),
+    replaySafety: z.strictObject({
+      executionStart: z.enum(['not_proven', 'byte_equivalent']),
+    }),
   }),
   sandbox: z.literal(true),
   claimBoundary: z.literal('contract_and_hosted_journey_only_not_real_supply_or_customer_value'),
@@ -118,6 +122,7 @@ export async function runHostedCustomerRequestJourney(
   assertJourneyBaseUrl(input.baseUrl, journeyEnvironment(input))
   const metrics: JourneyMetrics = {
     startedAt: (input.now ?? Date.now)(), requestCalls: 0, clarifications: 0,
+    executionStartReplay: 'not_proven',
   }
   const runtimeInput: HostedCustomerRequestJourneyRuntimeInput = { ...input, metrics }
   const release = await input.verifyRelease()
@@ -205,12 +210,19 @@ export async function runHostedCustomerRequestJourney(
       )
       observe(states, view)
       if (view.state !== 'route_confirmed') throw new Error(`hosted_journey_confirmation_failed:${view.state}`)
-      view = await callObservedAgent(
-        runtimeInput, view, 'start_confirmed_option',
-        { '<unique string>': `acceptance:run:${nonce}` },
-      )
+      const startAction = observedNavigationAction(runtimeInput, view, 'start_confirmed_option')
+      if (startAction.method !== 'POST') throw new Error('hosted_journey_navigation_method:start_confirmed_option')
+      const startCommand = materializeObservedInput(view, startAction, {
+        '<unique string>': `acceptance:run:${nonce}`,
+      })
+      view = await callAgent(runtimeInput, startAction.path, startAction.method, startCommand)
       observe(states, view)
       if (view.state !== 'in_progress') throw new Error(`hosted_journey_run_failed:${view.state}`)
+      const startReplay = await callAgent(runtimeInput, startAction.path, startAction.method, startCommand)
+      if (JSON.stringify(view) !== JSON.stringify(startReplay)) {
+        throw new Error('hosted_journey_execution_start_replay_changed')
+      }
+      runtimeInput.metrics.executionStartReplay = 'byte_equivalent'
       const progressPath = observedNavigationPath(input, view, 'inspect_progress', 'GET')
       const evidencePath = observedNavigationPath(input, view, 'inspect_evidence', 'GET')
       if (input.scenario.finish === 'complete') {
@@ -737,6 +749,7 @@ function journeyMeasurements(
       postures: [...new Set(route.recovery.map(({ posture }) => posture))],
     },
     resultUsability: { state: resultUsable ? 'usable' as const : 'unusable' as const },
+    replaySafety: { executionStart: input.metrics.executionStartReplay },
   }
 }
 

@@ -31,6 +31,7 @@ const ae = {
     totalCostAccuracy: { state: 'exact' as const, total: { currency: 'AUD', amountMinor: 1_000 } },
     recovery: { state: 'durable' as const, resumed: true, postures: ['retry_safe' as const] },
     resultUsability: { state: 'usable' as const },
+    replaySafety: { executionStart: 'byte_equivalent' as const },
   },
   claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value' as const,
 }
@@ -43,6 +44,7 @@ describe('agent journey comparison', () => {
         completion: { direct: 'completed', ae: 'completed' },
         totalCostAccuracy: { direct: 'exact', ae: 'exact', totalsMatch: true },
         recovery: { direct: 'unsupported', ae: 'durable', aeResumed: true },
+        replaySafety: { aeExecutionStart: 'byte_equivalent' },
       }),
       claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value',
     }))
@@ -63,6 +65,21 @@ describe('agent journey comparison', () => {
     })
     expect(proof.verdict).toBe('fail_for_declared_class')
     expect(proof.failures).toEqual(expect.arrayContaining(['direct_result_unusable', 'ae_total_cost_not_exact']))
+  })
+
+  it('fails the zero-tolerance gate when the effect-start command was not replay-proven', () => {
+    const proof = compareAgentJourneys({
+      direct,
+      ae: {
+        ...ae,
+        measurements: {
+          ...ae.measurements,
+          replaySafety: { executionStart: 'not_proven' as const },
+        },
+      },
+    })
+    expect(proof.verdict).toBe('fail_for_declared_class')
+    expect(proof.failures).toContain('ae_execution_start_replay_not_proven')
   })
 
   it('fails closed for an unrecognized predeclared gain', () => {

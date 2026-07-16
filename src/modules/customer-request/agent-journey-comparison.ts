@@ -40,6 +40,7 @@ type AeJourney = Readonly<{
     totalCostAccuracy: Readonly<{ state: 'exact'; total: Money } | { state: 'unavailable' }>
     recovery: Readonly<{ state: 'durable'; resumed: boolean; postures: readonly ('retry_safe' | 'reconcile_required')[] }>
     resultUsability: Readonly<{ state: 'usable' | 'unusable' }>
+    replaySafety: Readonly<{ executionStart: 'not_proven' | 'byte_equivalent' }>
   }>
   claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value'
 }>
@@ -52,6 +53,7 @@ type ComparisonFailure =
   | 'direct_total_cost_not_exact' | 'ae_total_cost_not_exact' | 'total_cost_mismatch'
   | 'direct_result_unusable' | 'ae_result_unusable'
   | 'ae_recovery_not_durable' | 'ae_recovery_not_resumed'
+  | 'ae_execution_start_replay_not_proven'
 
 export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae: AeJourney }>) {
   const { direct, ae } = input
@@ -76,6 +78,9 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
   if (ae.measurements.resultUsability.state !== 'usable') failures.push('ae_result_unusable')
   if (ae.measurements.recovery.state !== 'durable') failures.push('ae_recovery_not_durable')
   if (!ae.measurements.recovery.resumed) failures.push('ae_recovery_not_resumed')
+  if (ae.measurements.replaySafety.executionStart !== 'byte_equivalent') {
+    failures.push('ae_execution_start_replay_not_proven')
+  }
 
   return {
     kind: 'agent_journey_comparison' as const,
@@ -100,6 +105,7 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
       resultUsability: {
         direct: direct.resultUsability.state, ae: ae.measurements.resultUsability.state,
       },
+      replaySafety: { aeExecutionStart: ae.measurements.replaySafety.executionStart },
     },
     claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value' as const,
   }
