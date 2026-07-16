@@ -45,11 +45,21 @@ describe('customer Request production smoke entrypoint', () => {
       AE_CUSTOMER_REQUEST_FINISH: 'complete',
       AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT: '2',
       AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON: '["Resolver","Quoter"]',
+      AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON:
+        '[{"name":"Resolver","purposes":["resolve_request"]},{"name":"Quoter","purposes":["prepare_quote"]}]',
     })).toMatchObject({
       baseUrl: 'https://ae.example', agentApiKey: 'ak_agent',
       expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
       facts: { 'sandbox.request_context': 'Find a sandbox option' }, messages: ['A short answer'],
-      finish: 'complete', expectedRoute: { stepCount: 2, businesses: ['Resolver', 'Quoter'] },
+      finish: 'complete',
+      expectedRoute: {
+        stepCount: 2,
+        businesses: ['Resolver', 'Quoter'],
+        recipients: [
+          { name: 'Resolver', purposes: ['resolve_request'] },
+          { name: 'Quoter', purposes: ['prepare_quote'] },
+        ],
+      },
     })
   })
 

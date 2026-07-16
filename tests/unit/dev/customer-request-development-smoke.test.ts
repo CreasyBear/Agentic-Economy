@@ -16,6 +16,10 @@ describe('customer Request development smoke configuration', () => {
       expectedRoute: {
         stepCount: 2,
         businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+        recipients: [
+          { name: 'Sandbox Route Resolver', purposes: ['resolve_sandbox_service_reference'] },
+          { name: 'Sandbox Route Quoter', purposes: ['prepare_sandbox_service_quote'] },
+        ],
       },
     })
   })

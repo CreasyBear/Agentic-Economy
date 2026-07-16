@@ -162,6 +162,10 @@ describe('hosted Customer Request journey', () => {
         finish: 'complete',
         expectedRoute: {
           stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+          recipients: [
+            { name: 'Sandbox Route Resolver', purposes: ['resolve_sandbox_service_reference'] },
+            { name: 'Sandbox Route Quoter', purposes: ['prepare_sandbox_service_quote'] },
+          ],
         },
       },
       sandbox: true, fetch, now: () => 10_000,
@@ -182,7 +186,46 @@ describe('hosted Customer Request journey', () => {
       recovery: { state: 'durable', resumed: true, postures: ['retry_safe'] },
       resultUsability: { state: 'usable' },
       replaySafety: { executionStart: 'same_request_monotonic_progress' },
+      disclosureIntegrity: {
+        state: 'verified',
+        recipients: ['Sandbox Route Quoter', 'Sandbox Route Resolver'],
+        purposes: ['prepare_sandbox_service_quote', 'resolve_sandbox_service_reference'],
+      },
     })
+  })
+
+  it('refuses confirmation when the recipient count does not match the disclosed ledger', async () => {
+    const invalid = compositeRoutesReadyView()
+    const route = invalid.decision.routes[0]
+    if (route === undefined) throw new Error('route fixture missing')
+    const invalidDisclosure = {
+      ...invalid,
+      decision: {
+        ...invalid.decision,
+        routes: [{ ...route, dataUse: { ...route.dataUse, recipientCount: 3 } }],
+      },
+    }
+    const responses = [invalidDisclosure, invalidDisclosure]
+    await expect(runHostedCustomerRequestJourney({
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
+      agent: { name: 'cold-external-agent', version: 'disclosure-v1' },
+      scenario: {
+        request: 'Resolve and quote', facts: {}, messages: [], finish: 'complete',
+        expectedRoute: {
+          stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+          recipients: [
+            { name: 'Sandbox Route Resolver', purposes: ['resolve_sandbox_service_reference'] },
+            { name: 'Sandbox Route Quoter', purposes: ['prepare_sandbox_service_quote'] },
+          ],
+        },
+      },
+      sandbox: true,
+      fetch: vi.fn(async () => Response.json(responses.shift() ?? { error: 'unexpected' })),
+      verifyRelease: async () => ({ kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'dpl_exact' }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+    })).rejects.toThrow('hosted_journey_disclosure_recipient_count')
   })
 
   it('preserves partial progress and refuses replay when the final provider outcome is unknown', async () => {
@@ -637,6 +680,22 @@ function compositeRoutesReadyView() {
           { businessRef: 'business:resolver', name: 'Sandbox Route Resolver' },
           { businessRef: 'business:quoter', name: 'Sandbox Route Quoter' },
         ],
+        dataUse: {
+          recipientCount: 2,
+          recipients: [
+            {
+              recipientRef: 'recipient:resolver', name: 'Sandbox Route Resolver',
+              purposes: ['resolve_sandbox_service_reference'],
+              fields: [{ fieldRef: 'field:request', label: 'Request', classification: 'public' },
+            ] },
+            {
+              recipientRef: 'recipient:quoter', name: 'Sandbox Route Quoter',
+              purposes: ['prepare_sandbox_service_quote'],
+              fields: [{ fieldRef: 'field:service-reference', label: 'Service reference', classification: 'public' }],
+            },
+          ],
+          purposes: ['prepare_sandbox_service_quote', 'resolve_sandbox_service_reference'],
+        },
       }],
     },
   }
@@ -649,7 +708,15 @@ function routePlan() {
     availability: 'current', stepCount: 1,
     businesses: [{ businessRef: 'business:two', name: 'Sandbox Option Two' }],
     maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 900 },
-    dataUse: { recipientCount: 1, recipients: [], purposes: ['return_sandbox_result'] },
+    dataUse: {
+      recipientCount: 1,
+      recipients: [{
+        recipientRef: 'recipient:option-two', name: 'Sandbox Option Two',
+        purposes: ['return_sandbox_result'],
+        fields: [{ fieldRef: 'field:request', label: 'Request', classification: 'public' }],
+      }],
+      purposes: ['return_sandbox_result'],
+    },
     effects: [{ kind: 'information_shared', reversibility: 'irreversible' }],
     evidence: [{ label: 'Option', purpose: 'completion' }],
     recovery: [{ step: 1, businessName: 'Sandbox Option Two', posture: 'retry_safe' }],

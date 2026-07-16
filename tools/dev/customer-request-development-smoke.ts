@@ -16,6 +16,10 @@ import {
 const DEFAULT_BASE_URL = 'http://127.0.0.1:3002'
 const DEFAULT_REQUEST = 'Resolve a labelled sandbox service, then prepare its quote. Keep the total under AUD 15.'
 const DEFAULT_BUSINESSES = ['Sandbox Route Resolver', 'Sandbox Route Quoter'] as const
+const DEFAULT_RECIPIENTS = [
+  { name: 'Sandbox Route Resolver', purposes: ['resolve_sandbox_service_reference'] },
+  { name: 'Sandbox Route Quoter', purposes: ['prepare_sandbox_service_quote'] },
+] as const
 
 export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
   baseUrl: string
@@ -28,7 +32,11 @@ export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
   facts: Readonly<Record<string, unknown>>
   messages: readonly string[]
   finish: 'complete' | 'cancel' | 'outcome_unknown'
-  expectedRoute: Readonly<{ stepCount: number; businesses: readonly string[] }>
+  expectedRoute: Readonly<{
+    stepCount: number
+    businesses: readonly string[]
+    recipients?: readonly Readonly<{ name: string; purposes: readonly string[] }>[]
+  }>
   directBaseline?: NonNullable<CustomerRequestProductionSmokeConfig['directBaseline']>
   fetch: typeof globalThis.fetch
 }>
@@ -47,6 +55,8 @@ export function customerRequestDevelopmentSmokeConfig(
     AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT: env.AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT ?? '2',
     AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON:
       env.AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON ?? JSON.stringify(DEFAULT_BUSINESSES),
+    AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON:
+      env.AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON ?? JSON.stringify(DEFAULT_RECIPIENTS),
     AE_DIRECT_PROVIDER_ORIGINS_JSON: env.AE_DIRECT_PROVIDER_ORIGINS_JSON,
     AE_DIRECT_PROVIDER_CREDENTIAL: env.AE_DIRECT_PROVIDER_CREDENTIAL,
     AE_DIRECT_PREDECLARED_GAIN: env.AE_DIRECT_PREDECLARED_GAIN,
@@ -63,7 +73,9 @@ export function customerRequestDevelopmentSmokeConfig(
     facts: shared.facts,
     messages: shared.messages,
     finish: shared.finish ?? 'complete',
-    expectedRoute: shared.expectedRoute ?? { stepCount: 2, businesses: DEFAULT_BUSINESSES },
+    expectedRoute: shared.expectedRoute ?? {
+      stepCount: 2, businesses: DEFAULT_BUSINESSES, recipients: DEFAULT_RECIPIENTS,
+    },
     ...(shared.directBaseline === undefined ? {} : { directBaseline: shared.directBaseline }),
     fetch: globalThis.fetch,
   }

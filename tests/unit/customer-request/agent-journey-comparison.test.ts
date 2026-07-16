@@ -32,6 +32,11 @@ const ae = {
     recovery: { state: 'durable' as const, resumed: true, postures: ['retry_safe' as const] },
     resultUsability: { state: 'usable' as const },
     replaySafety: { executionStart: 'same_request_monotonic_progress' as const },
+    disclosureIntegrity: {
+      state: 'verified' as const,
+      recipients: ['Sandbox Quoter', 'Sandbox Resolver'],
+      purposes: ['prepare_quote', 'resolve_request'],
+    },
   },
   claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value' as const,
 }
@@ -45,6 +50,11 @@ describe('agent journey comparison', () => {
         totalCostAccuracy: { direct: 'exact', ae: 'exact', totalsMatch: true },
         recovery: { direct: 'unsupported', ae: 'durable', aeResumed: true },
         replaySafety: { aeExecutionStart: 'same_request_monotonic_progress' },
+        disclosureIntegrity: {
+          state: 'verified',
+          recipients: ['Sandbox Quoter', 'Sandbox Resolver'],
+          purposes: ['prepare_quote', 'resolve_request'],
+        },
       }),
       claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value',
     }))
@@ -80,6 +90,25 @@ describe('agent journey comparison', () => {
     })
     expect(proof.verdict).toBe('fail_for_declared_class')
     expect(proof.failures).toContain('ae_execution_start_replay_not_proven')
+  })
+
+  it('fails the zero-tolerance gate when recipient disclosure integrity was not proven', () => {
+    const proof = compareAgentJourneys({
+      direct,
+      ae: {
+        ...ae,
+        measurements: {
+          ...ae.measurements,
+          disclosureIntegrity: {
+            state: 'not_proven' as const,
+            recipients: [],
+            purposes: [],
+          },
+        },
+      },
+    })
+    expect(proof.verdict).toBe('fail_for_declared_class')
+    expect(proof.failures).toContain('ae_disclosure_integrity_not_proven')
   })
 
   it('fails closed for an unrecognized predeclared gain', () => {

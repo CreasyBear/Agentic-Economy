@@ -41,6 +41,11 @@ type AeJourney = Readonly<{
     recovery: Readonly<{ state: 'durable'; resumed: boolean; postures: readonly ('retry_safe' | 'reconcile_required')[] }>
     resultUsability: Readonly<{ state: 'usable' | 'unusable' }>
     replaySafety: Readonly<{ executionStart: 'not_proven' | 'same_request_monotonic_progress' }>
+    disclosureIntegrity: Readonly<{
+      state: 'verified' | 'not_proven'
+      recipients: readonly string[]
+      purposes: readonly string[]
+    }>
   }>
   claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value'
 }>
@@ -54,6 +59,7 @@ type ComparisonFailure =
   | 'direct_result_unusable' | 'ae_result_unusable'
   | 'ae_recovery_not_durable' | 'ae_recovery_not_resumed'
   | 'ae_execution_start_replay_not_proven'
+  | 'ae_disclosure_integrity_not_proven'
 
 export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae: AeJourney }>) {
   const { direct, ae } = input
@@ -81,6 +87,9 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
   if (ae.measurements.replaySafety.executionStart !== 'same_request_monotonic_progress') {
     failures.push('ae_execution_start_replay_not_proven')
   }
+  if (ae.measurements.disclosureIntegrity.state !== 'verified') {
+    failures.push('ae_disclosure_integrity_not_proven')
+  }
 
   return {
     kind: 'agent_journey_comparison' as const,
@@ -106,6 +115,7 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
         direct: direct.resultUsability.state, ae: ae.measurements.resultUsability.state,
       },
       replaySafety: { aeExecutionStart: ae.measurements.replaySafety.executionStart },
+      disclosureIntegrity: ae.measurements.disclosureIntegrity,
     },
     claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value' as const,
   }

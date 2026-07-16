@@ -28,7 +28,11 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
     facts: Readonly<Record<string, unknown>>
     messages: readonly string[]
     finish?: 'cancel' | 'complete' | 'outcome_unknown'
-    expectedRoute?: Readonly<{ stepCount: number; businesses: readonly string[] }>
+    expectedRoute?: Readonly<{
+      stepCount: number
+      businesses: readonly string[]
+      recipients?: readonly Readonly<{ name: string; purposes: readonly string[] }>[]
+    }>
   }>
   sandbox: true
   deploymentProtectionBypass?: string
@@ -108,6 +112,11 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
     resultUsability: z.strictObject({ state: z.enum(['usable', 'unusable']) }),
     replaySafety: z.strictObject({
       executionStart: z.enum(['not_proven', 'same_request_monotonic_progress']),
+    }),
+    disclosureIntegrity: z.strictObject({
+      state: z.literal('verified'),
+      recipients: z.array(z.string()),
+      purposes: z.array(z.string()),
     }),
   }),
   sandbox: z.literal(true),
@@ -199,7 +208,7 @@ export async function runHostedCustomerRequestJourney(
       const selectedBusinesses = route?.businesses.map(({ name }) => name) ?? []
       const selectedBusiness = selectedBusinesses[0]
       if (route === undefined || selectedBusiness === undefined) throw new Error('hosted_journey_route_missing')
-      assertExpectedRoute(input.scenario.expectedRoute, route.stepCount, selectedBusinesses)
+      assertExpectedRoute(input.scenario.expectedRoute, route)
       authorityStops.push('route_confirmation')
       view = await callObservedAgent(
         runtimeInput, view, 'confirm_option',
@@ -419,13 +428,57 @@ async function completeHostedJourney(input: Readonly<{
 
 function assertExpectedRoute(
   expected: HostedCustomerRequestJourneyInput['scenario']['expectedRoute'],
-  stepCount: number,
-  businesses: readonly string[],
+  route: NonNullable<NonNullable<CustomerRequestView['decision']>['routes']>[number],
 ): void {
+  assertRouteDisclosureIntegrity(route)
   if (expected === undefined) return
-  if (stepCount !== expected.stepCount) throw new Error(`hosted_journey_step_count:${stepCount}`)
+  const businesses = route.businesses.map(({ name }) => name)
+  if (route.stepCount !== expected.stepCount) throw new Error(`hosted_journey_step_count:${route.stepCount}`)
   if (JSON.stringify(businesses) !== JSON.stringify(expected.businesses)) {
     throw new Error(`hosted_journey_businesses:${businesses.join('|')}`)
+  }
+  if (expected.recipients !== undefined) {
+    const actual = route.dataUse.recipients
+      .map(({ name, purposes }) => ({ name, purposes: [...purposes].sort() }))
+      .sort((left, right) => left.name.localeCompare(right.name))
+    const declared = expected.recipients
+      .map(({ name, purposes }) => ({ name, purposes: [...purposes].sort() }))
+      .sort((left, right) => left.name.localeCompare(right.name))
+    if (JSON.stringify(actual) !== JSON.stringify(declared)) {
+      throw new Error('hosted_journey_disclosure_recipients_changed')
+    }
+  }
+}
+
+function assertRouteDisclosureIntegrity(
+  route: NonNullable<NonNullable<CustomerRequestView['decision']>['routes']>[number],
+): void {
+  const recipients = route.dataUse.recipients
+  if (route.dataUse.recipientCount !== recipients.length) {
+    throw new Error('hosted_journey_disclosure_recipient_count')
+  }
+  const recipientRefs = new Set<string>()
+  const recipientNames = new Set<string>()
+  const purposes = new Set<string>()
+  for (const recipient of recipients) {
+    if (recipientRefs.has(recipient.recipientRef) || recipientNames.has(recipient.name)) {
+      throw new Error('hosted_journey_disclosure_recipient_duplicate')
+    }
+    if (recipient.recipientRef.trim().length === 0 || recipient.name.trim().length === 0
+      || recipient.purposes.length === 0 || recipient.fields.length === 0
+      || recipient.purposes.some((purpose) => purpose.trim().length === 0)
+      || recipient.fields.some(({ fieldRef, label }) => (
+        fieldRef.trim().length === 0 || label.trim().length === 0
+      ))) {
+      throw new Error('hosted_journey_disclosure_recipient_incomplete')
+    }
+    recipientRefs.add(recipient.recipientRef)
+    recipientNames.add(recipient.name)
+    recipient.purposes.forEach((purpose) => purposes.add(purpose))
+  }
+  const aggregate = [...route.dataUse.purposes].sort()
+  if (JSON.stringify(aggregate) !== JSON.stringify([...purposes].sort())) {
+    throw new Error('hosted_journey_disclosure_purpose_mismatch')
   }
 }
 
@@ -748,6 +801,11 @@ function journeyMeasurements(
     },
     resultUsability: { state: resultUsable ? 'usable' as const : 'unusable' as const },
     replaySafety: { executionStart: input.metrics.executionStartReplay },
+    disclosureIntegrity: {
+      state: 'verified' as const,
+      recipients: route.dataUse.recipients.map(({ name }) => name).sort(),
+      purposes: [...route.dataUse.purposes].sort(),
+    },
   }
 }
 

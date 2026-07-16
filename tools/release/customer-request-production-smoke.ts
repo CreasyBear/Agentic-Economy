@@ -25,7 +25,11 @@ export type CustomerRequestProductionSmokeConfig = Readonly<{
   deploymentProtectionBypass?: string
   expectedRevision?: string
   expectedDeploymentId?: string
-  expectedRoute?: Readonly<{ stepCount: number; businesses: readonly string[] }>
+  expectedRoute?: Readonly<{
+    stepCount: number
+    businesses: readonly string[]
+    recipients?: readonly Readonly<{ name: string; purposes: readonly string[] }>[]
+  }>
   facts: Readonly<Record<string, unknown>>
   fetch: typeof globalThis.fetch
   finish?: 'cancel' | 'complete' | 'outcome_unknown'
@@ -191,19 +195,46 @@ function parseFinish(value: string | undefined): 'cancel' | 'complete' | 'outcom
 
 function parseExpectedRoute(
   env: Record<string, string | undefined>,
-): Readonly<{ expectedRoute?: Readonly<{ stepCount: number; businesses: readonly string[] }> }> {
+): Readonly<{
+  expectedRoute?: Readonly<{
+    stepCount: number
+    businesses: readonly string[]
+    recipients?: readonly Readonly<{ name: string; purposes: readonly string[] }>[]
+  }>
+}> {
   const countText = optionalText(env.AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT)
   const businessesText = optionalText(env.AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON)
-  if (countText === undefined && businessesText === undefined) return {}
+  const recipientsText = optionalText(env.AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON)
+  if (countText === undefined && businessesText === undefined && recipientsText === undefined) return {}
   const stepCount = Number(countText)
   const businesses: unknown = businessesText === undefined ? undefined : JSON.parse(businessesText)
+  const recipients: unknown = recipientsText === undefined ? undefined : JSON.parse(recipientsText)
   if (!Number.isInteger(stepCount) || stepCount < 1
     || !Array.isArray(businesses)
     || businesses.length < 1
     || !businesses.every((value) => typeof value === 'string' && value.length > 0)) {
     throw new Error('Expected route requires a positive step count and a JSON array of business names')
   }
-  return { expectedRoute: { stepCount, businesses } }
+  if (recipients !== undefined && (!Array.isArray(recipients) || !recipients.every(isExpectedRecipient))) {
+    throw new Error('AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON must list names and non-empty purposes')
+  }
+  return {
+    expectedRoute: {
+      stepCount,
+      businesses,
+      ...(recipients === undefined ? {} : { recipients }),
+    },
+  }
+}
+
+function isExpectedRecipient(
+  value: unknown,
+): value is Readonly<{ name: string; purposes: readonly string[] }> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const recipient = value as Record<string, unknown>
+  return typeof recipient.name === 'string' && recipient.name.length > 0
+    && Array.isArray(recipient.purposes) && recipient.purposes.length > 0
+    && recipient.purposes.every((purpose) => typeof purpose === 'string' && purpose.length > 0)
 }
 
 function parseFacts(value: string | undefined): Readonly<Record<string, unknown>> {

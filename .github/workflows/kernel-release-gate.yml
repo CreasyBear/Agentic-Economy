@@ -121,5 +121,6 @@ jobs:
           AE_CUSTOMER_REQUEST_FINISH: complete
           AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT: '2'
           AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON: '["Sandbox Route Resolver","Sandbox Route Quoter"]'
+          AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON: '[{"name":"Sandbox Route Resolver","purposes":["resolve_sandbox_service_reference"]},{"name":"Sandbox Route Quoter","purposes":["prepare_sandbox_service_quote"]}]'
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run test:release:hosted
