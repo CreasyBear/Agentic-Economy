@@ -7,7 +7,10 @@ import { loadEnv } from 'vite'
 import { z } from 'zod'
 
 import { compareCustomerRequestSurfaces } from '../../src/modules/customer-request/cross-surface-parity'
-import { runHostedCustomerRequestJourney } from '../../src/modules/customer-request/hosted-agent-journey'
+import {
+  runSignedHostedCustomerRequestJourney,
+  verifyCustomerRequestJourneyProof,
+} from '../../src/modules/customer-request/journey-proof-attestation'
 import { withTemporaryClerkAcceptanceCredentials } from '../release/customer-request-production-credential'
 import { customerRequestDevelopmentSmokeConfig } from './customer-request-development-smoke'
 
@@ -34,6 +37,11 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
 ) {
   const sourceRevision = required(env.AE_RELEASE_SOURCE_REVISION, 'AE_RELEASE_SOURCE_REVISION')
   const config = customerRequestDevelopmentSmokeConfig(env, sourceRevision)
+  const journeySigningKey = config.journeySigningKey
+  const journeyTrustedKeys = config.journeyTrustedKeys
+  if (journeySigningKey === undefined || journeyTrustedKeys === undefined) {
+    throw new Error('AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY is required')
+  }
   const baseUrl = config.baseUrl
   let result: ReturnType<typeof compareCustomerRequestSurfaces> | undefined
   await withTemporaryClerkAcceptanceCredentials({
@@ -44,7 +52,7 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
     keyNamePrefix: 'AE development cross-surface parity',
     revocationReason: 'Temporary development cross-surface parity completed',
     run: async ({ agentApiKey, customerSessionToken }) => {
-      const agent = await runHostedCustomerRequestJourney({
+      const signedAgent = await runSignedHostedCustomerRequestJourney({
         environment: 'development',
         baseUrl,
         agentApiKey,
@@ -63,7 +71,10 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
         },
         sandbox: true,
         fetch: config.fetch,
-      })
+      }, journeySigningKey)
+      const verification = verifyCustomerRequestJourneyProof(signedAgent, journeyTrustedKeys)
+      if (verification.kind !== 'verified') throw new Error(`customer_request_journey_attestation_${verification.reason}`)
+      const agent = verification.proof
       let playwright: Readonly<{ stdout: string }>
       try {
         playwright = await execFileAsync(
@@ -117,6 +128,7 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
     baseUrl,
     sourceRevision,
     deploymentId: config.convexDeployment,
+    journeyAttestation: 'verified' as const,
     claimBoundary: 'same_subject_same_request_sandbox_surface_parity_not_real_supply_fulfilment_or_customer_value' as const,
   }
   process.stdout.write(`${JSON.stringify(proof)}\n`)

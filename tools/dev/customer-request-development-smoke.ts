@@ -6,7 +6,11 @@ import { loadEnv } from 'vite'
 
 import { compareAgentJourneys } from '../../src/modules/customer-request/agent-journey-comparison'
 import { runFrozenDirectAgentBaseline } from '../../src/modules/customer-request/direct-agent-baseline'
-import { runHostedCustomerRequestJourney } from '../../src/modules/customer-request/hosted-agent-journey'
+import {
+  resolveCustomerRequestJourneyKeyring,
+  runSignedHostedCustomerRequestJourney,
+  verifyCustomerRequestJourneyProof,
+} from '../../src/modules/customer-request/journey-proof-attestation'
 import { withTemporaryClerkApiKey } from '../release/customer-request-production-credential'
 import {
   customerRequestProductionSmokeConfigFromEnvironment,
@@ -37,6 +41,8 @@ export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
     businesses: readonly string[]
     recipients?: readonly Readonly<{ name: string; purposes: readonly string[] }>[]
   }>
+  journeySigningKey?: Readonly<{ keyId: string; privateKey: string }>
+  journeyTrustedKeys?: readonly Readonly<{ keyId: string; publicKey: string }>[]
   directBaseline?: NonNullable<CustomerRequestProductionSmokeConfig['directBaseline']>
   fetch: typeof globalThis.fetch
 }>
@@ -62,6 +68,9 @@ export function customerRequestDevelopmentSmokeConfig(
     AE_DIRECT_PREDECLARED_GAIN: env.AE_DIRECT_PREDECLARED_GAIN,
     AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: env.AE_DIRECT_MAXIMUM_TOTAL_COST_JSON,
   })
+  const journeyKeyring = env.AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY === undefined
+    ? undefined
+    : resolveCustomerRequestJourneyKeyring(env)
   return {
     baseUrl,
     clerkSecretKey: required(env.CLERK_SECRET_KEY, 'CLERK_SECRET_KEY'),
@@ -76,6 +85,10 @@ export function customerRequestDevelopmentSmokeConfig(
     expectedRoute: shared.expectedRoute ?? {
       stepCount: 2, businesses: DEFAULT_BUSINESSES, recipients: DEFAULT_RECIPIENTS,
     },
+    ...(journeyKeyring === undefined ? {} : {
+      journeySigningKey: journeyKeyring.active,
+      journeyTrustedKeys: journeyKeyring.trusted,
+    }),
     ...(shared.directBaseline === undefined ? {} : { directBaseline: shared.directBaseline }),
     fetch: globalThis.fetch,
   }
@@ -84,7 +97,12 @@ export function customerRequestDevelopmentSmokeConfig(
 export async function runCustomerRequestDevelopmentSmoke(
   config: CustomerRequestDevelopmentSmokeConfig,
 ) {
-  let proof: Awaited<ReturnType<typeof runHostedCustomerRequestJourney>> | undefined
+  const journeySigningKey = config.journeySigningKey
+  const journeyTrustedKeys = config.journeyTrustedKeys
+  if (journeySigningKey === undefined || journeyTrustedKeys === undefined) {
+    throw new Error('AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY is required')
+  }
+  let signed: Awaited<ReturnType<typeof runSignedHostedCustomerRequestJourney>> | undefined
   await withTemporaryClerkApiKey({
     clerkSecretKey: config.clerkSecretKey,
     expectedInstanceId: config.clerkInstanceId,
@@ -93,7 +111,7 @@ export async function runCustomerRequestDevelopmentSmoke(
     keyNamePrefix: 'AE development cold-agent acceptance',
     revocationReason: 'Temporary development acceptance completed',
     run: async (agentApiKey) => {
-      proof = await runHostedCustomerRequestJourney({
+      signed = await runSignedHostedCustomerRequestJourney({
         environment: 'development',
         baseUrl: config.baseUrl,
         agentApiKey,
@@ -112,13 +130,18 @@ export async function runCustomerRequestDevelopmentSmoke(
         },
         sandbox: true,
         fetch: config.fetch,
-      })
+      }, journeySigningKey)
     },
   })
-  if (proof === undefined) throw new Error('customer_request_development_proof_missing')
+  if (signed === undefined) throw new Error('customer_request_development_proof_missing')
+  const verification = verifyCustomerRequestJourneyProof(signed, journeyTrustedKeys)
+  if (verification.kind !== 'verified') {
+    throw new Error(`customer_request_journey_attestation_${verification.reason}`)
+  }
+  const proof = verification.proof
   if (config.directBaseline === undefined) {
-    process.stdout.write(`${JSON.stringify(proof)}\n`)
-    return proof
+    process.stdout.write(`${JSON.stringify(signed)}\n`)
+    return signed
   }
   const direct = await runFrozenDirectAgentBaseline({
     job: config.request,
@@ -133,7 +156,7 @@ export async function runCustomerRequestDevelopmentSmoke(
   const combined = {
     kind: 'development_customer_request_comparison' as const,
     release: { revision: config.sourceRevision, deploymentId: config.convexDeployment },
-    direct, ae: proof, comparison,
+    direct, ae: proof, attestation: signed.attestation, comparison,
     claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value' as const,
   }
   process.stdout.write(`${JSON.stringify(combined)}\n`)
