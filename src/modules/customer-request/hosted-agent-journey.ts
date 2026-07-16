@@ -358,13 +358,61 @@ export async function runHostedCustomerRequestJourney(
       )
       observe(states, view)
       if (view.state !== 'in_progress') throw new Error(`hosted_journey_run_failed:${view.state}`)
+      const progressPath = observedNavigationPath(input, view, 'inspect_progress', 'GET')
+      const evidencePath = observedNavigationPath(input, view, 'inspect_evidence', 'GET')
+      if ((input.scenario.finish ?? 'cancel') === 'cancel') {
+        const problemAction = observedNavigationAction(input, view, 'report_problem')
+        if (problemAction.method !== 'POST') throw new Error('hosted_journey_navigation_method:report_problem')
+        const cancelled = await callObservedAgent(
+          runtimeInput, view, 'cancel',
+          { '<unique string>': `acceptance:cancel:${nonce}` },
+        )
+        observe(states, cancelled)
+        if (cancelled.state !== 'cancelled') throw new Error(`hosted_journey_cancellation_failed:${cancelled.state}`)
+        const startReplay = await callAgent(
+          runtimeInput, startAction.path, startAction.method, startCommand, [200], 'automatic_replay',
+        )
+        assertCancelledExecutionStartReplay(view, cancelled, startReplay)
+        runtimeInput.metrics.executionStartReplay = 'same_request_monotonic_progress'
+        const evidence = await callAgentEvidence(runtimeInput, evidencePath)
+        if (evidence.state !== 'queued' && evidence.state !== 'running' && evidence.state !== 'cancelled') {
+          throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
+        }
+        const problem = await callAgentProblem(runtimeInput, problemAction.path, materializeObservedInput(view, problemAction, {
+          '<unique string>': `acceptance:problem:${nonce}`,
+          '<incorrect_result | unexpected_cost | duplicate_charge_or_effect | privacy_concern | could_not_stop | other>': 'other',
+          '<problem summary>': 'Labelled sandbox recovery verification.',
+          '<step number from evidence>': 1,
+        }))
+        const resumed = await callAgent(runtimeInput, progressPath, 'GET')
+        observe(states, resumed)
+        if (resumed.state !== 'cancelled') throw new Error(`hosted_journey_cancel_resume_failed:${resumed.state}`)
+        const cancellation = resumed.activity?.cancellation
+        if (typeof cancellation !== 'object' || cancellation.state !== 'stopped') {
+          throw new Error('hosted_journey_cancel_timing_missing')
+        }
+        return hostedCustomerRequestJourneyProofSchema.parse({
+          kind: 'cold_external_agent_journey', agent: input.agent,
+          release: journeyReleaseProjection(input, release),
+          observedAt: new Date((input.now ?? Date.now)()).toISOString(),
+          input: { request: input.scenario.request, facts: consumedFacts, messages: consumedMessages },
+          observedStates: states, authorityStops,
+          final: {
+            requestRef, revision: resumed.revision, state: resumed.state, selectedBusiness, selectedBusinesses,
+            stepCount: route.stepCount, runState: 'cancelled',
+            evidenceState: evidence.state, problemState: problem.state, resumedState: resumed.state,
+            cancellation: { state: cancellation.state, stoppedAt: cancellation.stoppedAt },
+          },
+          measurements: journeyMeasurements(runtimeInput, route, false, true),
+          sandbox: true,
+          claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
+        })
+      }
       const startReplay = await callAgent(
         runtimeInput, startAction.path, startAction.method, startCommand, [200], 'automatic_replay',
       )
       assertExecutionStartReplay(view, startReplay)
       runtimeInput.metrics.executionStartReplay = 'same_request_monotonic_progress'
-      const progressPath = observedNavigationPath(input, view, 'inspect_progress', 'GET')
-      const evidencePath = observedNavigationPath(input, view, 'inspect_evidence', 'GET')
       if (input.scenario.finish === 'complete') {
         return await completeHostedJourney({
           input: runtimeInput, release, requestRef, route, selectedBusiness, selectedBusinesses,
@@ -408,45 +456,7 @@ export async function runHostedCustomerRequestJourney(
           problemAction, started: view, nonce,
         })
       }
-      const cancelled = await callObservedAgent(
-        runtimeInput, view, 'cancel',
-        { '<unique string>': `acceptance:cancel:${nonce}` },
-      )
-      observe(states, cancelled)
-      if (cancelled.state !== 'cancelled') throw new Error(`hosted_journey_cancellation_failed:${cancelled.state}`)
-      const evidence = await callAgentEvidence(runtimeInput, evidencePath)
-      if (evidence.state !== 'queued' && evidence.state !== 'running' && evidence.state !== 'cancelled') {
-        throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
-      }
-      const problem = await callAgentProblem(runtimeInput, problemAction.path, materializeObservedInput(view, problemAction, {
-        '<unique string>': `acceptance:problem:${nonce}`,
-        '<incorrect_result | unexpected_cost | duplicate_charge_or_effect | privacy_concern | could_not_stop | other>': 'other',
-        '<problem summary>': 'Labelled sandbox recovery verification.',
-        '<step number from evidence>': 1,
-      }))
-      const resumed = await callAgent(runtimeInput, progressPath, 'GET')
-      observe(states, resumed)
-      if (resumed.state !== 'cancelled') throw new Error(`hosted_journey_cancel_resume_failed:${resumed.state}`)
-      const cancellation = resumed.activity?.cancellation
-      if (typeof cancellation !== 'object' || cancellation.state !== 'stopped') {
-        throw new Error('hosted_journey_cancel_timing_missing')
-      }
-      return hostedCustomerRequestJourneyProofSchema.parse({
-        kind: 'cold_external_agent_journey', agent: input.agent,
-        release: journeyReleaseProjection(input, release),
-        observedAt: new Date((input.now ?? Date.now)()).toISOString(),
-        input: { request: input.scenario.request, facts: consumedFacts, messages: consumedMessages },
-        observedStates: states, authorityStops,
-        final: {
-          requestRef, revision: resumed.revision, state: resumed.state, selectedBusiness, selectedBusinesses,
-          stepCount: route.stepCount, runState: 'cancelled',
-          evidenceState: evidence.state, problemState: problem.state, resumedState: resumed.state,
-          cancellation: { state: cancellation.state, stoppedAt: cancellation.stoppedAt },
-        },
-        measurements: journeyMeasurements(runtimeInput, route, false, true),
-        sandbox: true,
-        claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
-      })
+      throw new Error(`hosted_journey_finish_unhandled:${input.scenario.finish}`)
     }
 
     if (view.state === 'preparing_options') {
@@ -1271,6 +1281,27 @@ function assertExecutionStartReplay(started: CustomerRequestView, replayed: Cust
   if (!sameExecutionAuthority || !monotonicProgress || replayableAgain
     || (replayed.state !== 'in_progress' && replayed.state !== 'completed')) {
     throw new Error('hosted_journey_execution_start_replay_changed')
+  }
+}
+
+function assertCancelledExecutionStartReplay(
+  started: CustomerRequestView,
+  cancelled: CustomerRequestView,
+  replayed: CustomerRequestView,
+): void {
+  const cancellation = cancelled.activity?.cancellation
+  const replayedCancellation = replayed.activity?.cancellation
+  const sameExecutionAuthority = replayed.requestRef === started.requestRef
+    && replayed.revision === started.revision
+    && replayed.routeGenerationRef === started.routeGenerationRef
+  const sameStoppedRecord = typeof cancellation === 'object' && cancellation.state === 'stopped'
+    && typeof replayedCancellation === 'object' && replayedCancellation.state === 'stopped'
+    && replayedCancellation.stoppedAt === cancellation.stoppedAt
+  const replayableAgain = replayed.navigation?.actions.some(
+    ({ relation }) => relation === 'start_confirmed_option',
+  ) ?? false
+  if (!sameExecutionAuthority || !sameStoppedRecord || replayableAgain || replayed.state !== 'cancelled') {
+    throw new Error('hosted_journey_cancelled_start_replay_changed')
   }
 }
 

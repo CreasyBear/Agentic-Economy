@@ -71,12 +71,13 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
         },
       }),
-      requestView('in_progress', 2, {
-        routeGenerationRef: 'generation:one', nextAction: 'wait',
-        progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+      requestView('cancelled', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
-          actor: 'ae_for_customer', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
-          retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
+          actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
+          retry: 'not_needed',
+          cancellation: { state: 'stopped', stoppedAt: 9_000 },
+          safeNextAction: 'revise_request',
         },
       }),
       requestView('cancelled', 2, {
@@ -927,12 +928,13 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
         },
       })),
-      Response.json(requestView('in_progress', 2, {
-        routeGenerationRef: 'generation:one', nextAction: 'wait',
-        progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+      Response.json(requestView('cancelled', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
-          actor: 'ae_for_customer', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
-          retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
+          actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
+          retry: 'not_needed',
+          cancellation: { state: 'stopped', stoppedAt: 9_002 },
+          safeNextAction: 'revise_request',
         },
       })),
       Response.json(requestView('cancelled', 2, {
@@ -1038,12 +1040,13 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
         },
       }),
-      requestView('in_progress', 2, {
-        routeGenerationRef: 'generation:one', nextAction: 'wait',
-        progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+      requestView('cancelled', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
-          actor: 'ae_for_customer', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
-          retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
+          actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
+          retry: 'not_needed',
+          cancellation: { state: 'stopped', stoppedAt: 9_002 },
+          safeNextAction: 'revise_request',
         },
       }),
       requestView('cancelled', 2, {
@@ -1114,8 +1117,8 @@ describe('hosted Customer Request journey', () => {
     expect(calls[3]?.url).toContain('/options')
     expect(calls[4]?.url).toContain('/confirmation')
     expect(calls[5]?.url).toContain('/run')
-    expect(calls[6]).toMatchObject({ url: calls[5]?.url, body: calls[5]?.body })
-    expect(calls[7]?.url).toContain('/cancellation')
+    expect(calls[6]?.url).toContain('/cancellation')
+    expect(calls[7]).toMatchObject({ url: calls[5]?.url, body: calls[5]?.body })
     expect(calls[8]?.url).toContain('/evidence')
     expect(calls[9]?.url).toContain('/problems')
     expect(calls.some((call) => call.url.includes('/approval'))).toBe(false)
