@@ -1294,6 +1294,43 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         nextActor: 'ae',
       }],
     })
+    await expect(backend.action(api.customerRequestApplication.exportRouteProblemForSupport, {
+      reportRef: reported.reportRef,
+    })).resolves.toEqual({
+      kind: 'denied',
+      reason: 'missing_membership',
+    })
+    const supportExport = await support.action(
+      api.customerRequestApplication.exportRouteProblemForSupport,
+      { reportRef: reported.reportRef },
+    )
+    expect(supportExport).toMatchObject({
+      kind: 'problem_export',
+      reportRef: reported.reportRef,
+      requestRef: confirmed.requestRef,
+      version: 0,
+      state: 'received',
+      category: 'incorrect_result',
+      summary: 'The first result does not match the confirmed constraint.',
+      claimSource: 'customer',
+      causality: 'unknown',
+      resolution: 'not_adjudicated',
+      nextActor: 'ae',
+      decisionAuthority: 'not_assigned',
+      visibility: 'customer_and_ae_only',
+      affected: { step: 1 },
+      evidence: [],
+      history: [{
+        version: 0,
+        state: 'received',
+        source: 'customer',
+        message: 'The first result does not match the confirmed constraint.',
+        recordedAt: 5_000,
+      }],
+    })
+    expect(JSON.stringify(supportExport)).not.toMatch(
+      /principalId|runRef|mandateRef|attemptRef|commandKey|commandDigest|binding|transport|credential/u,
+    )
     await expect(reviewer.action(api.customerRequestApplication.updateRouteProblemStatus, {
       reportRef: reported.reportRef,
       expectedVersion: 0,

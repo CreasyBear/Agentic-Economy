@@ -1220,6 +1220,154 @@ export const listProblemsForSupport = internalQuery({
   },
 })
 
+const supportProblemExport = v.object({
+  kind: v.literal('problem_export'),
+  reportRef: v.string(),
+  requestRef: v.string(),
+  version: v.number(),
+  state: v.union(
+    v.literal('received'),
+    v.literal('update_due'),
+    v.literal('investigating'),
+    v.literal('waiting_for_customer'),
+    v.literal('closed'),
+  ),
+  category: problemCategory,
+  summary: v.string(),
+  claimSource: v.literal('customer'),
+  causality: v.literal('unknown'),
+  resolution: v.literal('not_adjudicated'),
+  nextAction: v.union(
+    v.literal('await_status_update'),
+    v.literal('check_status'),
+    v.literal('provide_information'),
+    v.literal('none'),
+  ),
+  nextActor: v.union(v.literal('ae'), v.literal('customer'), v.literal('none')),
+  nextUpdateDueAt: v.optional(v.number()),
+  decisionAuthority: v.literal('not_assigned'),
+  visibility: v.union(
+    v.literal('customer_and_ae_only'),
+    v.literal('share_with_affected_business'),
+  ),
+  evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+  reportedAt: v.number(),
+  affected: v.object({ step: v.number(), business: v.optional(v.string()) }),
+  history: v.array(v.object({
+    version: v.number(),
+    state: v.union(
+      v.literal('received'),
+      v.literal('investigating'),
+      v.literal('waiting_for_customer'),
+      v.literal('closed'),
+    ),
+    source: v.union(v.literal('customer'), v.literal('ae_support')),
+    message: v.string(),
+    recordedAt: v.number(),
+  })),
+})
+
+export const exportProblemForSupport = internalQuery({
+  args: { reportRef: v.string() },
+  returns: v.union(
+    supportProblemExport,
+    v.object({ kind: v.literal('not_found') }),
+    v.object({
+      kind: v.literal('denied'),
+      reason: v.union(
+        v.literal('missing_membership'),
+        v.literal('inactive_membership'),
+        v.literal('action_not_allowed'),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const authority = await resolveAdminAuthority(
+      { db: runtimeDb(ctx.db), auth: ctx.auth },
+      'read_admin_readbacks',
+    )
+    if (authority.kind === 'denied') {
+      return { kind: 'denied' as const, reason: authority.reason }
+    }
+    const problem = await ctx.db.query('customerRequestRouteProblemReports')
+      .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
+    if (problem === null) return { kind: 'not_found' as const }
+    const [updates, attempt] = await Promise.all([
+      readProblemUpdates(ctx, problem.reportRef),
+      problem.attemptRef === undefined
+        ? null
+        : ctx.db.query('customerRequestRouteStepAttempts')
+          .withIndex('by_attemptRef', (query) => query.eq('attemptRef', problem.attemptRef!)).unique(),
+    ])
+    if (problem.attemptRef !== undefined && attempt === null) {
+      throw new Error('customer_request_route_problem_attempt_integrity_failure')
+    }
+    if (attempt !== null && (attempt.requestId !== problem.requestId || attempt.position !== problem.step)) {
+      throw new Error('customer_request_route_problem_attempt_integrity_failure')
+    }
+    const latest = updates.at(-1)
+    const tracking = projectCustomerRequestProblemTracking(
+      problem.createdAt,
+      Date.now(),
+      latest === undefined ? undefined : { state: latest.state, recordedAt: latest.createdAt },
+    )
+    const evidenceByReceipt = new Map<string, string>()
+    if (attempt !== null) {
+      for (const [index, item] of (attempt.evidence ?? []).entries()) {
+        evidenceByReceipt.set(
+          `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
+          `Result evidence ${index + 1}`,
+        )
+      }
+    }
+    if ((problem.evidenceReceiptRefs ?? []).some((receiptRef) => !evidenceByReceipt.has(receiptRef))) {
+      throw new Error('customer_request_route_problem_evidence_integrity_failure')
+    }
+    return {
+      kind: 'problem_export' as const,
+      reportRef: problem.reportRef,
+      requestRef: problem.requestId,
+      version: updates.length,
+      state: tracking.state,
+      category: problem.category,
+      summary: problem.summary,
+      claimSource: 'customer' as const,
+      causality: 'unknown' as const,
+      resolution: 'not_adjudicated' as const,
+      nextAction: tracking.nextAction,
+      nextActor: tracking.nextActor,
+      ...(tracking.nextUpdateDueAt === undefined ? {} : { nextUpdateDueAt: tracking.nextUpdateDueAt }),
+      decisionAuthority: tracking.decisionAuthority,
+      visibility: problem.visibility ?? 'customer_and_ae_only',
+      evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
+        receiptRef,
+        label: evidenceByReceipt.get(receiptRef)!,
+      })),
+      reportedAt: problem.createdAt,
+      affected: {
+        step: problem.step ?? 1,
+        ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
+      },
+      history: [
+        {
+          version: 0,
+          state: 'received' as const,
+          source: 'customer' as const,
+          message: problem.summary,
+          recordedAt: problem.createdAt,
+        },
+        ...updates.map((update) => ({
+          version: update.version,
+          state: update.state,
+          source: update.source,
+          message: update.message,
+          recordedAt: update.createdAt,
+        })),
+      ],
+    }
+  },
+})
+
 const exportedStepState = v.union(
   v.literal('queued'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
   v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),

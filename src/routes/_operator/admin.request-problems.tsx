@@ -7,8 +7,10 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
+  exportSupportProblemServer,
   readSupportProblemsServer,
   updateSupportProblemServer,
+  type SupportProblemExport,
   type SupportProblemRow,
 } from '@/modules/customer-request/problem-support.functions'
 
@@ -49,6 +51,8 @@ function SupportProblemCard({ problem }: { problem: SupportProblemRow }) {
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | undefined>()
+  const [record, setRecord] = useState<Extract<SupportProblemExport, { kind: 'problem_export' }> | undefined>()
+  const [loadingRecord, setLoadingRecord] = useState(false)
 
   async function update() {
     if (message.trim().length === 0 || submitting) return
@@ -74,6 +78,28 @@ function SupportProblemCard({ problem }: { problem: SupportProblemRow }) {
       setError('AE could not record the status update.')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function inspectRecord() {
+    if (loadingRecord) return
+    if (record !== undefined) {
+      setRecord(undefined)
+      return
+    }
+    setLoadingRecord(true)
+    setError(undefined)
+    try {
+      const result = await exportSupportProblemServer({ data: { reportRef: problem.reportRef } })
+      if (result.kind !== 'problem_export') {
+        setError('The current report record is not available.')
+        return
+      }
+      setRecord(result)
+    } catch {
+      setError('AE could not load the report record.')
+    } finally {
+      setLoadingRecord(false)
     }
   }
 
@@ -112,6 +138,44 @@ function SupportProblemCard({ problem }: { problem: SupportProblemRow }) {
       <Text type="supporting" color="secondary">
         This records progress only. It does not assign fault, approve compensation, or authorize another business action.
       </Text>
+      <Button
+        label={loadingRecord ? 'Loading record…' : record === undefined ? 'Inspect report record' : 'Hide report record'}
+        variant="secondary"
+        clickAction={() => void inspectRecord()}
+        isDisabled={loadingRecord}
+      />
+      {record === undefined ? null : <div className="grid gap-3 rounded-md border border-border bg-surface p-4">
+        <div className="grid gap-1">
+          <Text weight="semibold">Customer report record</Text>
+          <Text type="supporting" color="secondary">
+            Step {record.affected.step}
+            {record.affected.business === undefined ? '' : ` · ${record.affected.business}`}
+            {' · '}
+            {record.visibility === 'customer_and_ae_only'
+              ? 'Customer and AE only'
+              : 'Customer allowed sharing with the affected business'}
+          </Text>
+        </div>
+        <div>
+          <Text type="supporting" weight="semibold">Recorded evidence</Text>
+          {record.evidence.length === 0
+            ? <Text type="supporting" color="secondary">No result evidence was attached.</Text>
+            : <ul className="mt-1 grid gap-1 text-sm text-secondary">
+              {record.evidence.map((item) => <li key={item.receiptRef}>{item.label}</li>)}
+            </ul>}
+        </div>
+        <div>
+          <Text type="supporting" weight="semibold">Customer-visible history</Text>
+          <ol className="mt-1 grid gap-2 text-sm text-secondary">
+            {record.history.map((item) => <li key={item.version}>
+              {item.source === 'customer' ? 'Customer' : 'AE support'} · {item.state.replaceAll('_', ' ')} · {item.message}
+            </li>)}
+          </ol>
+        </div>
+        <Text type="supporting" color="secondary">
+          Cause remains unknown and the report is not adjudicated. No decision authority is assigned.
+        </Text>
+      </div>}
       <Button
         label={submitting ? 'Recording update…' : 'Record status update'}
         variant="primary"

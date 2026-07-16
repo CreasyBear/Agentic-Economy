@@ -1209,6 +1209,82 @@ export const listRouteProblemsForSupport = action({
   },
 })
 
+const supportProblemExportResult = v.union(
+  v.object({
+    kind: v.literal('problem_export'),
+    reportRef: v.string(),
+    requestRef: v.string(),
+    version: v.number(),
+    state: v.union(
+      v.literal('received'),
+      v.literal('update_due'),
+      v.literal('investigating'),
+      v.literal('waiting_for_customer'),
+      v.literal('closed'),
+    ),
+    category: v.union(
+      v.literal('incorrect_result'),
+      v.literal('unexpected_cost'),
+      v.literal('privacy_concern'),
+      v.literal('could_not_stop'),
+      v.literal('other'),
+    ),
+    summary: v.string(),
+    claimSource: v.literal('customer'),
+    causality: v.literal('unknown'),
+    resolution: v.literal('not_adjudicated'),
+    nextAction: v.union(
+      v.literal('await_status_update'),
+      v.literal('check_status'),
+      v.literal('provide_information'),
+      v.literal('none'),
+    ),
+    nextActor: v.union(v.literal('ae'), v.literal('customer'), v.literal('none')),
+    nextUpdateDueAt: v.optional(v.number()),
+    decisionAuthority: v.literal('not_assigned'),
+    visibility: v.union(
+      v.literal('customer_and_ae_only'),
+      v.literal('share_with_affected_business'),
+    ),
+    evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+    reportedAt: v.number(),
+    affected: v.object({ step: v.number(), business: v.optional(v.string()) }),
+    history: v.array(v.object({
+      version: v.number(),
+      state: v.union(
+        v.literal('received'),
+        v.literal('investigating'),
+        v.literal('waiting_for_customer'),
+        v.literal('closed'),
+      ),
+      source: v.union(v.literal('customer'), v.literal('ae_support')),
+      message: v.string(),
+      recordedAt: v.number(),
+    })),
+  }),
+  v.object({ kind: v.literal('not_found') }),
+  v.object({
+    kind: v.literal('denied'),
+    reason: v.union(
+      v.literal('missing_membership'),
+      v.literal('inactive_membership'),
+      v.literal('action_not_allowed'),
+    ),
+  }),
+)
+type SupportProblemExportResult = Infer<typeof supportProblemExportResult>
+
+export const exportRouteProblemForSupport = action({
+  args: { reportRef: v.string() },
+  returns: supportProblemExportResult,
+  handler: async (ctx, args): Promise<SupportProblemExportResult> => {
+    return await ctx.runQuery(
+      internal.customerRequestRouteExecution.exportProblemForSupport,
+      args,
+    )
+  },
+})
+
 const evidenceExport = v.object({
   kind: v.literal('evidence'), requestRef: v.string(),
   state: v.union(
