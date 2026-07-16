@@ -10,8 +10,10 @@ import {
   customerRequestProblemResultSchema,
   customerRequestProblemStatusChangeSchema,
   customerRequestRepeatPermissionAllowInputSchema,
+  customerRequestRepeatPermissionInspectInputSchema,
   customerRequestRepeatPermissionResultSchema,
   customerRequestRepeatPermissionUseInputSchema,
+  customerRequestRepeatPermissionWithdrawInputSchema,
   customerRequestRouteActionInputSchema,
   customerRequestRouteConfirmationInputSchema,
 } from './agent-contract'
@@ -24,6 +26,8 @@ import {
   replyCustomerRequestProblemThroughSource,
   allowCustomerRequestRepeatPermissionThroughSource,
   executeCustomerRequestRepeatPermissionThroughSource,
+  inspectCustomerRequestRepeatPermissionThroughSource,
+  withdrawCustomerRequestRepeatPermissionThroughSource,
 } from './customer-request.functions'
 
 const confirmationActionInputSchema = customerRequestRouteConfirmationInputSchema.extend({
@@ -235,4 +239,57 @@ export const customerRequestUseRepeatPermissionAction = defineAction({
   run: async ({ data }) => customerRequestAgentResultSchema.parse(
     await executeCustomerRequestRepeatPermissionThroughSource(data),
   ),
+})
+
+const repeatPermissionInspectActionInputSchema = customerRequestRepeatPermissionInspectInputSchema.extend({
+  requestRef: z.string().trim().min(1).max(200),
+  permissionRef: z.string().trim().min(1).max(300),
+}).strict()
+
+export const customerRequestInspectRepeatPermissionAction = defineAction({
+  id: 'customerRequest.inspectRepeatPermission',
+  name: 'Inspect repeat permission',
+  summary: 'Read the current limits and status of one repeat permission.',
+  boundaries: [
+    'Does not use, renew, widen, or withdraw the permission.',
+    'Returns an opaque customer receipt rather than routing or mandate internals.',
+    'A missing or unrelated permission is not disclosed.',
+  ],
+  schema: repeatPermissionInspectActionInputSchema,
+  outputSchema: customerRequestRepeatPermissionResultSchema,
+  parameters: [
+    { name: 'requestRef', type: 'string', description: 'The Customer Request that owns the permission.', required: true },
+    { name: 'permissionRef', type: 'string', description: 'The opaque repeat-permission reference.', required: true },
+    { name: 'routeRef', type: 'string', description: 'The displayed option bound to the permission.', required: true },
+  ],
+  readOnly: true,
+  surfaces: ['ui', 'http', 'agentJson'],
+  run: async ({ data }) => inspectCustomerRequestRepeatPermissionThroughSource(data),
+})
+
+const repeatPermissionWithdrawActionInputSchema = customerRequestRepeatPermissionWithdrawInputSchema.extend({
+  requestRef: z.string().trim().min(1).max(200),
+  permissionRef: z.string().trim().min(1).max(300),
+}).strict()
+
+export const customerRequestWithdrawRepeatPermissionAction = defineAction({
+  id: 'customerRequest.withdrawRepeatPermission',
+  name: 'Withdraw repeat permission',
+  summary: 'Prevent any future use of one repeat permission.',
+  boundaries: [
+    'Withdrawal is durable and does not renew or replace the permission.',
+    'It prevents future uses but does not reverse work already authorized by an exact confirmation.',
+    'Repeating the same withdrawal key returns the same receipt.',
+  ],
+  schema: repeatPermissionWithdrawActionInputSchema,
+  outputSchema: customerRequestRepeatPermissionResultSchema,
+  parameters: [
+    { name: 'requestRef', type: 'string', description: 'The Customer Request that owns the permission.', required: true },
+    { name: 'permissionRef', type: 'string', description: 'The opaque repeat-permission reference.', required: true },
+    { name: 'routeRef', type: 'string', description: 'The displayed option bound to the permission.', required: true },
+    { name: 'idempotencyKey', type: 'string', description: 'A stable retry key for withdrawal.', required: true },
+  ],
+  readOnly: false,
+  surfaces: ['ui', 'http', 'agentJson'],
+  run: async ({ data }) => withdrawCustomerRequestRepeatPermissionThroughSource(data),
 })

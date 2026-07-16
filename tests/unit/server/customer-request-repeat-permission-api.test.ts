@@ -2,11 +2,15 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   handleAgentCustomerRequestRepeatPermissionAllowPost,
+  handleAgentCustomerRequestRepeatPermissionGet,
   handleAgentCustomerRequestRepeatPermissionUsePost,
+  handleAgentCustomerRequestRepeatPermissionWithdrawPost,
 } from '@/lib/server/customer-request-agent-api'
 import {
   handleCustomerRequestRepeatPermissionAllowPost,
+  handleCustomerRequestRepeatPermissionGet,
   handleCustomerRequestRepeatPermissionUsePost,
+  handleCustomerRequestRepeatPermissionWithdrawPost,
 } from '@/lib/server/customer-request-repeat-permission-api'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
@@ -134,6 +138,79 @@ describe('Customer Request repeat-permission HTTP surface', () => {
     expect(await agent.json()).toEqual(await human.json())
     expect(callAction).toHaveBeenCalledWith('customerRequestApplication:useRepeatRoute', expect.any(Object))
   })
+
+  it('binds inspection to the opaque permission and returns the same receipt', async () => {
+    const receipt = repeatPermissionReceipt()
+    let humanCommand: Record<string, unknown> | undefined
+    const request = get({ routeRef })
+    const human = await handleCustomerRequestRepeatPermissionGet(request, requestRef, permissionRef, {
+      inspect: async (command) => {
+        humanCommand = command
+        return receipt
+      },
+    })
+    const callAction = vi.fn(async (_name: string, args: Record<string, unknown>) => {
+      expect(await verifyCustomerRequestServiceAssertion({
+        key,
+        operation: 'inspect_repeat',
+        command: humanCommand as never,
+        assertion: args.serviceAuth as never,
+        now: 1_001,
+      })).toBe(true)
+      const { serviceAuth: _serviceAuth, ...command } = args
+      expect(command).toEqual(humanCommand)
+      return receipt
+    })
+    const agent = await handleAgentCustomerRequestRepeatPermissionGet(
+      request,
+      requestRef,
+      permissionRef,
+      agentOptions(callAction),
+    )
+
+    expect(agent.status).toBe(200)
+    expect(await agent.json()).toEqual(await human.json())
+    expect(callAction).toHaveBeenCalledWith('customerRequestApplication:inspectRepeatRoute', expect.any(Object))
+  })
+
+  it('binds withdrawal and preserves the customer receipt', async () => {
+    const body = { routeRef, idempotencyKey: 'withdraw-repeat:http' }
+    const receipt = { ...repeatPermissionReceipt(), status: 'withdrawn' as const, withdrawnAt: 1_000 }
+    let humanCommand: Record<string, unknown> | undefined
+    const human = await handleCustomerRequestRepeatPermissionWithdrawPost(
+      post(body),
+      requestRef,
+      permissionRef,
+      {
+        withdraw: async (command) => {
+          humanCommand = command
+          return receipt
+        },
+      },
+    )
+    const callAction = vi.fn(async (_name: string, args: Record<string, unknown>) => {
+      expect(await verifyCustomerRequestServiceAssertion({
+        key,
+        operation: 'revoke_repeat',
+        command: humanCommand as never,
+        assertion: args.serviceAuth as never,
+        now: 1_001,
+      })).toBe(true)
+      const { serviceAuth: _serviceAuth, ...command } = args
+      expect(command).toEqual(humanCommand)
+      return receipt
+    })
+    const agent = await handleAgentCustomerRequestRepeatPermissionWithdrawPost(
+      post(body),
+      requestRef,
+      permissionRef,
+      agentOptions(callAction),
+    )
+
+    expect(agent.status).toBe(200)
+    expect(await agent.json()).toEqual(await human.json())
+    expect(callAction).toHaveBeenCalledWith('customerRequestApplication:revokeRepeatRoute', expect.any(Object))
+  })
 })
 
 function repeatPermissionReceipt() {
@@ -166,7 +243,16 @@ function post(body: unknown): Request {
   })
 }
 
-type TestAgentResult = ReturnType<typeof repeatPermissionReceipt> | Readonly<{
+function get(query: Record<string, string>): Request {
+  const url = new URL('https://ae.example.test')
+  for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value)
+  return new Request(url)
+}
+
+type TestAgentResult = ReturnType<typeof repeatPermissionReceipt> | (Omit<
+  ReturnType<typeof repeatPermissionReceipt>,
+  'status'
+> & Readonly<{ status: 'withdrawn'; withdrawnAt: number }>) | Readonly<{
   kind: 'refused'
   reason: 'request_not_found'
 }>

@@ -24,7 +24,9 @@ import {
 } from '@/lib/server/customer-request-route-action-api'
 import {
   handleCustomerRequestRepeatPermissionAllowPost,
+  handleCustomerRequestRepeatPermissionGet,
   handleCustomerRequestRepeatPermissionUsePost,
+  handleCustomerRequestRepeatPermissionWithdrawPost,
 } from '@/lib/server/customer-request-repeat-permission-api'
 import {
   handleCustomerRequestEvidenceGet,
@@ -165,6 +167,54 @@ export async function handleAgentCustomerRequestRepeatPermissionUsePost(
   )
 }
 
+export async function handleAgentCustomerRequestRepeatPermissionGet(
+  request: Request,
+  requestRef: string,
+  permissionRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({
+    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+  })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  if (!admitted.principal.scopes.includes(CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE)) {
+    return refusal('scope_required', 403)
+  }
+  return await handleCustomerRequestRepeatPermissionGet(request, requestRef, permissionRef, {
+    inspect: async (args) => await callAsAgent<CustomerRequestRepeatPermissionResult>(
+      'customerRequestApplication:inspectRepeatRoute',
+      'inspect_repeat',
+      args,
+      admitted.principal,
+      options,
+    ),
+  })
+}
+
+export async function handleAgentCustomerRequestRepeatPermissionWithdrawPost(
+  request: Request,
+  requestRef: string,
+  permissionRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({
+    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+  })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  if (!admitted.principal.scopes.includes(CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE)) {
+    return refusal('scope_required', 403)
+  }
+  return await handleCustomerRequestRepeatPermissionWithdrawPost(request, requestRef, permissionRef, {
+    withdraw: async (args) => await callAsAgent<CustomerRequestRepeatPermissionResult>(
+      'customerRequestApplication:revokeRepeatRoute',
+      'revoke_repeat',
+      args,
+      admitted.principal,
+      options,
+    ),
+  })
+}
+
 export async function handleAgentCustomerRequestCancelPost(
   request: Request,
   requestRef: string,
@@ -233,7 +283,7 @@ export async function handleAgentCustomerRequestGet(requestRef: string, options:
 async function callAsAgent<Result = SubmitResult>(
   name: string,
   operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'reply'
-    | 'evidence' | 'resume' | 'allow_repeat' | 'use_repeat',
+    | 'evidence' | 'resume' | 'allow_repeat' | 'use_repeat' | 'inspect_repeat' | 'revoke_repeat',
   command: Record<string, unknown>,
   principal: CustomerRequestAgentPrincipal,
   options: HandlerOptions,

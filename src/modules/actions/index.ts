@@ -16,11 +16,13 @@ import {
   customerRequestCancelAction,
   customerRequestConfirmAction,
   customerRequestInspectEvidenceAction,
+  customerRequestInspectRepeatPermissionAction,
   customerRequestAllowRepeatPermissionAction,
   customerRequestReportProblemAction,
   customerRequestReplyProblemAction,
   customerRequestRunAction,
   customerRequestUseRepeatPermissionAction,
+  customerRequestWithdrawRepeatPermissionAction,
 } from '@/modules/customer-request/customer-request.actions'
 import { demandCaptureAction } from '@/modules/demand/demand.actions'
 import { readCustomerRecordAction, submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
@@ -41,6 +43,8 @@ const actions: readonly AnyAction[] = [
   customerRequestInspectEvidenceAction,
   customerRequestAllowRepeatPermissionAction,
   customerRequestUseRepeatPermissionAction,
+  customerRequestInspectRepeatPermissionAction,
+  customerRequestWithdrawRepeatPermissionAction,
   submitInquiryAction,
   readCustomerRecordAction,
   registryListAction,

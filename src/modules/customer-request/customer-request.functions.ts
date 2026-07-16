@@ -40,6 +40,14 @@ export type UseCustomerRequestRepeatPermissionInput = Readonly<{
   delegatedCredentialId: string
   idempotencyKey: string
 }>
+export type InspectCustomerRequestRepeatPermissionInput = Readonly<{
+  requestRef: string
+  permissionRef: string
+  routeRef: string
+}>
+export type WithdrawCustomerRequestRepeatPermissionInput = InspectCustomerRequestRepeatPermissionInput & Readonly<{
+  idempotencyKey: string
+}>
 
 const confirmRouteSourceAction = sourceAction<ConfirmCustomerRequestInput, CustomerRequestAgentResult>(
   'customerRequestApplication:confirmRoute',
@@ -67,6 +75,14 @@ const useRepeatRouteSourceAction = sourceAction<
   UseCustomerRequestRepeatPermissionInput,
   CustomerRequestAgentResult
 >('customerRequestApplication:useRepeatRoute')
+const inspectRepeatRouteSourceAction = sourceAction<
+  InspectCustomerRequestRepeatPermissionInput,
+  CustomerRequestRepeatPermissionResult
+>('customerRequestApplication:inspectRepeatRoute')
+const withdrawRepeatRouteSourceAction = sourceAction<
+  WithdrawCustomerRequestRepeatPermissionInput,
+  CustomerRequestRepeatPermissionResult
+>('customerRequestApplication:revokeRepeatRoute')
 
 export async function confirmCustomerRequestThroughSource(
   input: ConfirmCustomerRequestInput,
@@ -114,4 +130,16 @@ export async function executeCustomerRequestRepeatPermissionThroughSource(
   input: UseCustomerRequestRepeatPermissionInput,
 ): Promise<CustomerRequestAgentResult> {
   return callSourceAction(useRepeatRouteSourceAction, input)
+}
+
+export async function inspectCustomerRequestRepeatPermissionThroughSource(
+  input: InspectCustomerRequestRepeatPermissionInput,
+): Promise<CustomerRequestRepeatPermissionResult> {
+  return callSourceAction(inspectRepeatRouteSourceAction, input)
+}
+
+export async function withdrawCustomerRequestRepeatPermissionThroughSource(
+  input: WithdrawCustomerRequestRepeatPermissionInput,
+): Promise<CustomerRequestRepeatPermissionResult> {
+  return callSourceAction(withdrawRepeatRouteSourceAction, input)
 }

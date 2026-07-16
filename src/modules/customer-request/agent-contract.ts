@@ -77,6 +77,10 @@ export const customerRequestRepeatPermissionUseInputSchema = z.strictObject({
   idempotencyKey: boundedText(200),
 })
 
+export const customerRequestRepeatPermissionInspectInputSchema = z.strictObject({
+  routeRef: boundedText(300),
+})
+
 export const customerRequestRepeatPermissionWithdrawInputSchema = z.strictObject({
   routeRef: boundedText(300),
   idempotencyKey: boundedText(200),

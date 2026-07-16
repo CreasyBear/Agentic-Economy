@@ -90,8 +90,12 @@ import { Route as ApiV1RequestsRequestRefFactsRouteImport } from './routes/api.v
 import { Route as ApiV1RequestsRequestRefEvidenceRouteImport } from './routes/api.v1.requests.$requestRef.evidence'
 import { Route as ApiV1RequestsRequestRefConfirmationRouteImport } from './routes/api.v1.requests.$requestRef.confirmation'
 import { Route as ApiV1RequestsRequestRefCancellationRouteImport } from './routes/api.v1.requests.$requestRef.cancellation'
+import { Route as ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteImport } from './routes/api.requests.$requestRef.repeat-permissions.$permissionRef'
+import { Route as ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteImport } from './routes/api.v1.requests.$requestRef.repeat-permissions.$permissionRef'
+import { Route as ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport } from './routes/api.requests.$requestRef.repeat-permissions.$permissionRef.withdrawal'
 import { Route as ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport } from './routes/api.requests.$requestRef.repeat-permissions.$permissionRef.use'
 import { Route as ApiRequestsRequestRefProblemsReportRefRepliesRouteImport } from './routes/api.requests.$requestRef.problems.$reportRef.replies'
+import { Route as ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport } from './routes/api.v1.requests.$requestRef.repeat-permissions.$permissionRef.withdrawal'
 import { Route as ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport } from './routes/api.v1.requests.$requestRef.repeat-permissions.$permissionRef.use'
 import { Route as ApiV1RequestsRequestRefProblemsReportRefRepliesRouteImport } from './routes/api.v1.requests.$requestRef.problems.$reportRef.replies'
 
@@ -533,11 +537,33 @@ const ApiV1RequestsRequestRefCancellationRoute =
     path: '/cancellation',
     getParentRoute: () => ApiV1RequestsRequestRefRoute,
   } as any)
+const ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute =
+  ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteImport.update({
+    id: '/$permissionRef',
+    path: '/$permissionRef',
+    getParentRoute: () => ApiRequestsRequestRefRepeatPermissionsRoute,
+  } as any)
+const ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute =
+  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteImport.update({
+    id: '/$permissionRef',
+    path: '/$permissionRef',
+    getParentRoute: () => ApiV1RequestsRequestRefRepeatPermissionsRoute,
+  } as any)
+const ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute =
+  ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport.update(
+    {
+      id: '/withdrawal',
+      path: '/withdrawal',
+      getParentRoute: () =>
+        ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute,
+    } as any,
+  )
 const ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute =
   ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport.update({
-    id: '/$permissionRef/use',
-    path: '/$permissionRef/use',
-    getParentRoute: () => ApiRequestsRequestRefRepeatPermissionsRoute,
+    id: '/use',
+    path: '/use',
+    getParentRoute: () =>
+      ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute,
   } as any)
 const ApiRequestsRequestRefProblemsReportRefRepliesRoute =
   ApiRequestsRequestRefProblemsReportRefRepliesRouteImport.update({
@@ -545,11 +571,21 @@ const ApiRequestsRequestRefProblemsReportRefRepliesRoute =
     path: '/$reportRef/replies',
     getParentRoute: () => ApiRequestsRequestRefProblemsRoute,
   } as any)
+const ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute =
+  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport.update(
+    {
+      id: '/withdrawal',
+      path: '/withdrawal',
+      getParentRoute: () =>
+        ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute,
+    } as any,
+  )
 const ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute =
   ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport.update({
-    id: '/$permissionRef/use',
-    path: '/$permissionRef/use',
-    getParentRoute: () => ApiV1RequestsRequestRefRepeatPermissionsRoute,
+    id: '/use',
+    path: '/use',
+    getParentRoute: () =>
+      ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute,
   } as any)
 const ApiV1RequestsRequestRefProblemsReportRefRepliesRoute =
   ApiV1RequestsRequestRefProblemsReportRefRepliesRouteImport.update({
@@ -630,6 +666,7 @@ export interface FileRoutesByFullPath {
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
+  '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
@@ -641,8 +678,11 @@ export interface FileRoutesByFullPath {
   '/api/v1/requests/$requestRef/run': typeof ApiV1RequestsRequestRefRunRoute
   '/api/requests/$requestRef/problems/$reportRef/replies': typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute
+  '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
+  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/problems/$reportRef/replies': typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
   '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute
+  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -716,6 +756,7 @@ export interface FileRoutesByTo {
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
+  '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
@@ -727,8 +768,11 @@ export interface FileRoutesByTo {
   '/api/v1/requests/$requestRef/run': typeof ApiV1RequestsRequestRefRunRoute
   '/api/requests/$requestRef/problems/$reportRef/replies': typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute
+  '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
+  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/problems/$reportRef/replies': typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
   '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute
+  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -804,6 +848,7 @@ export interface FileRoutesById {
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
+  '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
@@ -815,8 +860,11 @@ export interface FileRoutesById {
   '/api/v1/requests/$requestRef/run': typeof ApiV1RequestsRequestRefRunRoute
   '/api/requests/$requestRef/problems/$reportRef/replies': typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute
+  '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
+  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/problems/$reportRef/replies': typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
   '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute
+  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -892,6 +940,7 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
     | '/api/v1/requests/$requestRef'
+    | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/evidence'
@@ -903,8 +952,11 @@ export interface FileRouteTypes {
     | '/api/v1/requests/$requestRef/run'
     | '/api/requests/$requestRef/problems/$reportRef/replies'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef/use'
+    | '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
+    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/problems/$reportRef/replies'
     | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use'
+    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -978,6 +1030,7 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
     | '/api/v1/requests/$requestRef'
+    | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/evidence'
@@ -989,8 +1042,11 @@ export interface FileRouteTypes {
     | '/api/v1/requests/$requestRef/run'
     | '/api/requests/$requestRef/problems/$reportRef/replies'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef/use'
+    | '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
+    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/problems/$reportRef/replies'
     | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use'
+    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
   id:
     | '__root__'
     | '/'
@@ -1065,6 +1121,7 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
     | '/api/v1/requests/$requestRef'
+    | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/evidence'
@@ -1076,8 +1133,11 @@ export interface FileRouteTypes {
     | '/api/v1/requests/$requestRef/run'
     | '/api/requests/$requestRef/problems/$reportRef/replies'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef/use'
+    | '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
+    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/problems/$reportRef/replies'
     | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use'
+    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1692,12 +1752,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1RequestsRequestRefCancellationRouteImport
       parentRoute: typeof ApiV1RequestsRequestRefRoute
     }
+    '/api/requests/$requestRef/repeat-permissions/$permissionRef': {
+      id: '/api/requests/$requestRef/repeat-permissions/$permissionRef'
+      path: '/$permissionRef'
+      fullPath: '/api/requests/$requestRef/repeat-permissions/$permissionRef'
+      preLoaderRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteImport
+      parentRoute: typeof ApiRequestsRequestRefRepeatPermissionsRoute
+    }
+    '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef': {
+      id: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef'
+      path: '/$permissionRef'
+      fullPath: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef'
+      preLoaderRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteImport
+      parentRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsRoute
+    }
+    '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': {
+      id: '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
+      path: '/withdrawal'
+      fullPath: '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
+      preLoaderRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport
+      parentRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute
+    }
     '/api/requests/$requestRef/repeat-permissions/$permissionRef/use': {
       id: '/api/requests/$requestRef/repeat-permissions/$permissionRef/use'
-      path: '/$permissionRef/use'
+      path: '/use'
       fullPath: '/api/requests/$requestRef/repeat-permissions/$permissionRef/use'
       preLoaderRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRepeatPermissionsRoute
+      parentRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute
     }
     '/api/requests/$requestRef/problems/$reportRef/replies': {
       id: '/api/requests/$requestRef/problems/$reportRef/replies'
@@ -1706,12 +1787,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRequestsRequestRefProblemsReportRefRepliesRouteImport
       parentRoute: typeof ApiRequestsRequestRefProblemsRoute
     }
+    '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': {
+      id: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
+      path: '/withdrawal'
+      fullPath: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
+      preLoaderRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport
+      parentRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute
+    }
     '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use': {
       id: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use'
-      path: '/$permissionRef/use'
+      path: '/use'
       fullPath: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use'
       preLoaderRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsRoute
+      parentRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute
     }
     '/api/v1/requests/$requestRef/problems/$reportRef/replies': {
       id: '/api/v1/requests/$requestRef/problems/$reportRef/replies'
@@ -1843,14 +1931,32 @@ const ApiRequestsRequestRefProblemsRouteWithChildren =
     ApiRequestsRequestRefProblemsRouteChildren,
   )
 
-interface ApiRequestsRequestRefRepeatPermissionsRouteChildren {
+interface ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteChildren {
   ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute
+  ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
+}
+
+const ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteChildren: ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteChildren =
+  {
+    ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute:
+      ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute,
+    ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute:
+      ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute,
+  }
+
+const ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren =
+  ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute._addFileChildren(
+    ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteChildren,
+  )
+
+interface ApiRequestsRequestRefRepeatPermissionsRouteChildren {
+  ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
 }
 
 const ApiRequestsRequestRefRepeatPermissionsRouteChildren: ApiRequestsRequestRefRepeatPermissionsRouteChildren =
   {
-    ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute:
-      ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute,
+    ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute:
+      ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren,
   }
 
 const ApiRequestsRequestRefRepeatPermissionsRouteWithChildren =
@@ -1932,14 +2038,32 @@ const ApiV1RequestsRequestRefProblemsRouteWithChildren =
     ApiV1RequestsRequestRefProblemsRouteChildren,
   )
 
-interface ApiV1RequestsRequestRefRepeatPermissionsRouteChildren {
+interface ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteChildren {
   ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute
+  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
+}
+
+const ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteChildren: ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteChildren =
+  {
+    ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute:
+      ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute,
+    ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute:
+      ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute,
+  }
+
+const ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren =
+  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute._addFileChildren(
+    ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteChildren,
+  )
+
+interface ApiV1RequestsRequestRefRepeatPermissionsRouteChildren {
+  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
 }
 
 const ApiV1RequestsRequestRefRepeatPermissionsRouteChildren: ApiV1RequestsRequestRefRepeatPermissionsRouteChildren =
   {
-    ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute:
-      ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute,
+    ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute:
+      ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren,
   }
 
 const ApiV1RequestsRequestRefRepeatPermissionsRouteWithChildren =
