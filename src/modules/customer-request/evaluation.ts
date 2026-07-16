@@ -213,8 +213,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
   ))
   const admittedInputs = providerDataSharingProhibited
     ? input.candidates.filter(({ model }) => !model.dataUse.some((use) => (
-        use.classification !== 'public'
-        && (use.recipient.kind === 'candidate_binding' || use.recipient.kind === 'selected_binding')
+        use.recipient.kind === 'candidate_binding' || use.recipient.kind === 'selected_binding'
       )))
     : input.candidates
   const candidates = admittedInputs.map((candidate): RequestEvaluationCandidate => {

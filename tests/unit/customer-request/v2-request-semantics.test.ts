@@ -924,7 +924,7 @@ describe('V2 Request semantics', () => {
     )).toMatchObject({
       label: 'Share data with businesses', value: false, basis: 'extracted_from_request',
     })
-    const lookup = compositionLookupModel()
+    const lookup = compositionLookupModel('catalog.public-lookup', 'allowed', 'public')
     const request = requiredInput(lookup, 'request')
     const result = compileCustomerRequest({
       requestId: 'request:no-provider-sharing', expectedRevision: 0,
@@ -1178,6 +1178,7 @@ function decisionModelWithCommitment() {
 function compositionLookupModel(
   capabilityId = 'catalog.lookup',
   inference: 'allowed' | 'customer_required' = 'allowed',
+  classification: 'public' | 'personal' = 'personal',
 ) {
   return openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
     capabilityId, version: 2,
@@ -1188,7 +1189,7 @@ function compositionLookupModel(
       { annotationId: 'option_id', semanticIdentity: 'ae.option_id:v1', document: 'output', pointer: '/optionId', label: 'Option identifier', role: 'comparison' },
       { annotationId: 'result', document: 'output', pointer: '/result', label: 'Lookup result', role: 'completion_evidence' },
     ],
-    dataUse: [dataUse('request_release', '/request')], effects: [dataEffect('request_release')],
+    dataUse: [dataUse('request_release', '/request', classification)], effects: [dataEffect('request_release')],
     evidence: [
       { evidenceId: 'selected_option', outputPointer: '/optionId', purpose: 'comparison' },
       { evidenceId: 'lookup_complete', outputPointer: '/result', purpose: 'completion' },
@@ -1267,9 +1268,9 @@ function structuredEffects() {
   return [dataEffect('request_release'), dataEffect('approval_release')]
 }
 
-function dataUse(effectId: string, inputPointer: string) {
+function dataUse(effectId: string, inputPointer: string, classification: 'public' | 'personal' = 'personal') {
   return {
-    effectId, inputPointer, classification: 'personal', phase: 'execution',
+    effectId, inputPointer, classification, phase: 'execution',
     recipient: { kind: 'selected_binding' }, purposes: ['return_requested_result'],
   }
 }
