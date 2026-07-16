@@ -54,6 +54,7 @@ describe('discovery files', () => {
     expect(result.body).toContain('https://ae.example/api/v1/requests')
     expect(result.body).toContain('needs_information | ready_to_compare | routes_ready | route_confirmed | in_progress')
     expect(result.body).toContain('navigation.actions')
+    expect(result.body).toContain('change_request')
     expect(result.body).toContain('confirm_option')
     expect(result.body).toContain('start_confirmed_option')
     expect(result.body).not.toMatch(/\/messages|\/facts|\/options|\/confirmation|\/run|\/evidence|\/problems|\/cancellation/u)
