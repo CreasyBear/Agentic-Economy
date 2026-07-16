@@ -37,16 +37,16 @@ describe('labelled sandbox V2 capability supply', () => {
     const backend = convexTest(schema, modules)
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
 
-    expect(result.sandboxWorkflowBindings).toEqual([
+    expect(result.sandboxWorkflowBindings).toEqual(expect.arrayContaining([
       'binding:sandbox-procurement-brief:http-json:v2',
       'binding:sandbox-supplier-options:http-json:v2',
       'binding:sandbox-procurement-recommendation:http-json:v2',
-    ])
-    expect(result.sandboxWorkflowPublicationRefs).toEqual([
+    ]))
+    expect(result.sandboxWorkflowPublicationRefs).toEqual(expect.arrayContaining([
       'offering:sandbox-procurement-brief:v2',
       'offering:sandbox-supplier-options:v2',
       'offering:sandbox-procurement-recommendation:v2',
-    ])
+    ]))
 
     const eligible = await backend.query(internal.capabilitySupply.listEligible, {
       networkId: 'ae:public',
@@ -61,6 +61,37 @@ describe('labelled sandbox V2 capability supply', () => {
       'binding:sandbox-procurement-brief:http-json:v2',
       'binding:sandbox-procurement-recommendation:http-json:v2',
       'binding:sandbox-supplier-options:http-json:v2',
+    ])
+  })
+
+  it('registers and admits the three-business itinerary workflow through generic supply commands', async () => {
+    const backend = convexTest(schema, modules)
+    const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+
+    expect(result.sandboxWorkflowBindings).toEqual(expect.arrayContaining([
+      'binding:sandbox-trip-constraints:http-json:v2',
+      'binding:sandbox-itinerary-builder:http-json:v2',
+      'binding:sandbox-itinerary-readiness:http-json:v2',
+    ]))
+    expect(result.sandboxWorkflowPublicationRefs).toEqual(expect.arrayContaining([
+      'offering:sandbox-trip-constraints:v2',
+      'offering:sandbox-itinerary-builder:v2',
+      'offering:sandbox-itinerary-readiness:v2',
+    ]))
+
+    const eligible = await backend.query(internal.capabilitySupply.listEligible, {
+      networkId: 'ae:public',
+      limit: 32,
+    })
+    if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
+    expect(eligible.supplies
+      .filter(({ binding }) => binding.bindingId.includes('sandbox-trip-constraints')
+        || binding.bindingId.includes('sandbox-itinerary-'))
+      .map(({ binding }) => binding.bindingId)
+      .sort()).toEqual([
+      'binding:sandbox-itinerary-builder:http-json:v2',
+      'binding:sandbox-itinerary-readiness:http-json:v2',
+      'binding:sandbox-trip-constraints:http-json:v2',
     ])
   })
 
@@ -113,6 +144,8 @@ describe('labelled sandbox V2 capability supply', () => {
         'sandbox-route-resolver', 'sandbox-route-quoter',
         'sandbox-procurement-brief', 'sandbox-supplier-options',
         'sandbox-procurement-recommendation',
+        'sandbox-trip-constraints', 'sandbox-itinerary-builder',
+        'sandbox-itinerary-readiness',
       ],
       sandboxV2Bindings: [
         'binding:sandbox-option-one:http-json:v4',
@@ -140,6 +173,9 @@ describe('labelled sandbox V2 capability supply', () => {
       'env:AE_SANDBOX_PROVIDER_KEY',
       'env:AE_SANDBOX_PROVIDER_KEY',
       'env:AE_SANDBOX_PROVIDER_KEY',
+      'env:AE_SANDBOX_PROVIDER_KEY',
+      'env:AE_SANDBOX_PROVIDER_KEY',
+      'env:AE_SANDBOX_PROVIDER_KEY',
     ])
     expect(bindings.filter(({ bindingId }) => bindingId.startsWith('binding:sandbox-route-')).map((binding) => ({
       bindingId: binding.bindingId, endpointUrl: binding.endpointUrl,
@@ -155,6 +191,8 @@ describe('labelled sandbox V2 capability supply', () => {
     ])
     const businesses = await backend.run((ctx) => ctx.db.query('businesses').collect())
     expect(businesses.map((business) => business.slug).sort()).toEqual([
+      'sandbox-itinerary-builder',
+      'sandbox-itinerary-readiness',
       'sandbox-option-one',
       'sandbox-option-two',
       'sandbox-procurement-brief',
@@ -162,6 +200,7 @@ describe('labelled sandbox V2 capability supply', () => {
       'sandbox-route-quoter',
       'sandbox-route-resolver',
       'sandbox-supplier-options',
+      'sandbox-trip-constraints',
     ])
     const publications = await backend.run((ctx) => ctx.db.query('capabilityPublications').collect())
     expect(publications).toMatchObject([
@@ -200,6 +239,21 @@ describe('labelled sandbox V2 capability supply', () => {
         bindingId: 'binding:sandbox-procurement-recommendation:http-json:v2',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
+      {
+        publicationRef: 'offering:sandbox-trip-constraints:v2',
+        bindingId: 'binding:sandbox-trip-constraints:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-itinerary-builder:v2',
+        bindingId: 'binding:sandbox-itinerary-builder:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-itinerary-readiness:v2',
+        bindingId: 'binding:sandbox-itinerary-readiness:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
     ])
   })
 
@@ -219,11 +273,14 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map(({ binding }) => binding.bindingId)).toEqual([
+      'binding:sandbox-itinerary-builder:http-json:v2',
+      'binding:sandbox-itinerary-readiness:http-json:v2',
       'binding:sandbox-procurement-brief:http-json:v2',
       'binding:sandbox-procurement-recommendation:http-json:v2',
       'binding:sandbox-route-quoter:http-json:v5',
       'binding:sandbox-route-resolver:http-json:v5',
       'binding:sandbox-supplier-options:http-json:v2',
+      'binding:sandbox-trip-constraints:http-json:v2',
     ])
   })
 
@@ -239,7 +296,7 @@ describe('labelled sandbox V2 capability supply', () => {
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
 
     expect(result.businessIdsBySlug).toMatchObject(existing.businessIdsBySlug)
-    expect(Object.keys(result.businessIdsBySlug)).toHaveLength(7)
+    expect(Object.keys(result.businessIdsBySlug)).toHaveLength(10)
     expect(result.sandboxV2Bindings).toHaveLength(2)
   })
 
@@ -266,7 +323,7 @@ describe('labelled sandbox V2 capability supply', () => {
     ])
   })
 
-  it('publishes and admits seven inert businesses through the normal production command planes', async () => {
+  it('publishes ten inert businesses through the normal production command planes', async () => {
     const backend = convexTest(schema, modules)
     const first = await backend.mutation(internal.devSeed.seedDevCatalog, {})
     const ownerBeforeReplay = await backend.run((ctx) => (
@@ -358,9 +415,9 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(JSON.stringify({ offerings: state.offerings, bindings: state.bindings })).not.toContain('"operation"')
     expect(state.supplyOperations).toHaveLength(12)
     expect(state.supplyOperations.every((operation) => operation.actorKind === 'system' && operation.status === 'succeeded')).toBe(true)
-    expect(state.catalogOperations).toHaveLength(7)
+    expect(state.catalogOperations).toHaveLength(10)
     expect(state.catalogOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
-    expect(state.claimOperations).toHaveLength(7)
+    expect(state.claimOperations).toHaveLength(10)
     expect(state.claimOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
     expect(state.audits.filter((audit) => (
       audit.eventType.startsWith('capability_')
@@ -376,7 +433,7 @@ describe('labelled sandbox V2 capability supply', () => {
     )
     expect(state.audits.filter((audit) => (
       audit.eventType === 'claim.published' && audit.slug?.startsWith('sandbox-')
-    ))).toHaveLength(7)
+    ))).toHaveLength(10)
 
     const eligible = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
     expect(eligible).toMatchObject({

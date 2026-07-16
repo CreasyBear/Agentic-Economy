@@ -6,7 +6,7 @@ import {
   admitSandboxV2Supply,
   registerSandboxBusinesses,
   registerSandboxRouteSupplyRegistrations,
-  registerSandboxProcurementSupplyRegistrations,
+  registerSandboxWorkflowSupplyRegistrations,
   registerSandboxV2SupplyRegistrations,
   retireSandboxV2AcceptanceSupply,
   retireSupersededSandboxProcurementSupply,
@@ -64,7 +64,7 @@ export const seedLabelledSandboxSupply = internalMutation({
     const [registrations, routeRegistrations, workflowRegistrations] = await Promise.all([
       registerSandboxV2SupplyRegistrations(ctx.db, registeredAt + 2_000),
       registerSandboxRouteSupplyRegistrations(ctx.db, registeredAt + 2_100),
-      registerSandboxProcurementSupplyRegistrations(ctx.db, registeredAt + 2_200),
+      registerSandboxWorkflowSupplyRegistrations(ctx.db, registeredAt + 2_200),
     ])
     const [
       sandboxV2Bindings,

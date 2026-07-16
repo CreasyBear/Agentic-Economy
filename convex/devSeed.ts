@@ -527,18 +527,18 @@ function sandboxRouteProviderOrigin(
     || 'https://agentic-economy-phi.vercel.app'
 }
 
-export async function registerSandboxProcurementSupplyRegistrations(
+export async function registerSandboxWorkflowSupplyRegistrations(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
   registeredAt: number,
 ): Promise<SandboxV2SupplyRegistration[]> {
-  const procurementProfiles = Object.entries(SANDBOX_WORKFLOW_PROVIDER_PROFILES)
-    .filter(([, profile]) => profile.cohortId === 'procurement')
+  const workflowProfiles = Object.entries(SANDBOX_WORKFLOW_PROVIDER_PROFILES)
+    .filter(([, profile]) => profile.cohortId === 'procurement' || profile.cohortId === 'itinerary')
   const siteUrl = process.env.AE_SANDBOX_WORKFLOW_ORIGIN?.trim()
     || process.env.AE_SANDBOX_ROUTE_RESOLVER_ORIGIN?.trim()
     || process.env.AE_SITE_URL?.trim()
     || 'https://agentic-economy-phi.vercel.app'
   const registered: SandboxV2SupplyRegistration[] = []
-  for (const [providerKey, profile] of procurementProfiles) {
+  for (const [providerKey, profile] of workflowProfiles) {
     const document = sandboxWorkflowCapabilityContractDocument(providerKey as SandboxWorkflowProviderKey)
     const encoded = encodeCapabilityContractDocument(document)
     const [contract, business] = await Promise.all([

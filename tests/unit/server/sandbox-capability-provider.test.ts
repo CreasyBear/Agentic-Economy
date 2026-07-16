@@ -163,6 +163,50 @@ describe('sandbox capability provider', () => {
       .toMatch(/^sandbox-workflow:procurement-recommendation:/u)
   })
 
+  it('executes the itinerary workflow through three typed business endpoints', async () => {
+    const requestText = 'Build a four-day accessible Perth itinerary for two adults.'
+    const constraints = await workflowCall('trip-constraints', { request: requestText })
+    expect(constraints.status).toBe(200)
+    const constraintsBody = await constraints.json()
+    expect(constraintsBody.tripBrief).toMatch(/^sandbox-trip-constraints:/u)
+
+    const itinerary = await workflowCall('itinerary-builder', {
+      tripBrief: constraintsBody.tripBrief,
+    })
+    expect(itinerary.status).toBe(200)
+    const itineraryBody = await itinerary.json()
+    expect(itineraryBody.itineraryDraft).toMatch(/^sandbox-itinerary-builder:/u)
+
+    const readiness = await workflowCall('itinerary-readiness', {
+      itineraryDraft: itineraryBody.itineraryDraft,
+    })
+    expect(readiness.status).toBe(200)
+    await expect(readiness.json()).resolves.toEqual({
+      readinessChecklist: expect.stringMatching(/^sandbox-itinerary-readiness:/u),
+    })
+    expect(readiness.headers.get('Provider-Receipt'))
+      .toMatch(/^sandbox-workflow:itinerary-readiness:/u)
+  })
+
+  it('keeps itinerary weather, mobility, and unknown availability visible in the final checklist', async () => {
+    const constraints = await workflowCall('trip-constraints', {
+      request: 'Plan four Perth days. Rain may invalidate one day, mobility needs may change, and activity availability is unknown.',
+    })
+    const { tripBrief } = await constraints.json() as { tripBrief: string }
+    expect(tripBrief).toContain('mobility')
+
+    const itinerary = await workflowCall('itinerary-builder', { tripBrief })
+    const { itineraryDraft } = await itinerary.json() as { itineraryDraft: string }
+    expect(itineraryDraft).toContain('weather fallback')
+    expect(itineraryDraft).toContain('accessible activity')
+
+    const readiness = await workflowCall('itinerary-readiness', { itineraryDraft })
+    const { readinessChecklist } = await readiness.json() as { readinessChecklist: string }
+    expect(readinessChecklist).toContain('availability remains unknown')
+    expect(readinessChecklist).toContain('recheck mobility requirements')
+    expect(readinessChecklist).toContain('No reservation, ticket, or payment')
+  })
+
   it('publishes exact procurement discovery and refuses cross-step input', async () => {
     const endpoint = 'https://ae.test/api/sandbox/providers/workflow?provider=supplier-options'
     const discovery = await readSandboxWorkflowProviderDiscovery(

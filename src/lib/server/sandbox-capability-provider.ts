@@ -165,10 +165,25 @@ export async function handleSandboxWorkflowProviderRequest(
     input,
   }).slice(7, 31)
   return json(
-    { [profile.outputField]: `sandbox-${providerKey}:${digest}` },
+    { [profile.outputField]: sandboxWorkflowOutput(providerKey, input, digest) },
     200,
     { 'Provider-Receipt': `sandbox-workflow:${providerKey}:${digest}` },
   )
+}
+
+function sandboxWorkflowOutput(providerKey: string, input: string, digest: string): string {
+  const prefix = `sandbox-${providerKey}:${digest}`
+  const boundedInput = input.replace(/\s+/gu, ' ').trim().slice(0, 600)
+  if (providerKey === 'trip-constraints') {
+    return `${prefix}: Trip brief preserves the stated dates, budget, accessibility, mobility, weather, and availability constraints. Customer request: ${boundedInput}`
+  }
+  if (providerKey === 'itinerary-builder') {
+    return `${prefix}: Four-day Perth itinerary draft with one accessible activity per day and a weather fallback for every weather-sensitive day. Estimated activities remain planning estimates. Trip brief: ${boundedInput}`
+  }
+  if (providerKey === 'itinerary-readiness') {
+    return `${prefix}: Readiness checklist: activity availability remains unknown until confirmed; recheck mobility requirements before choosing each activity; verify weather and use the documented fallback where needed. No reservation, ticket, or payment has occurred. Draft reviewed: ${boundedInput}`
+  }
+  return `${prefix}:${boundedInput}`
 }
 
 export async function handleSandboxCapabilityRequest(request: Request, options: HandlerOptions = {}): Promise<Response> {

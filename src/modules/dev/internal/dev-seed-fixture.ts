@@ -160,6 +160,27 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     publicDisclosure: 'Sandbox only. No supplier order, payment, or fulfilment is provided.',
     noContactReason: '',
   })),
+  ...[
+    ['trip-constraints', 'Trip Constraint Interpreter', 'Structure trip constraints'],
+    ['itinerary-builder', 'Itinerary Assembly Service', 'Build an itinerary'],
+    ['itinerary-readiness', 'Travel Readiness Review', 'Review itinerary readiness'],
+  ].map(([providerKey, businessName, serviceName]) => ({
+    requestedSlug: `sandbox-${providerKey}`,
+    businessName: businessName!,
+    category: 'Sandbox workflow provider',
+    suburb: 'Perth',
+    stateTerritory: 'WA',
+    ownerMessage: 'Clearly labelled non-production business for itinerary workflow verification.',
+    sourceLabel: 'AE sandbox workflow registration fixture',
+    serviceName: serviceName!,
+    serviceCategory: 'Sandbox workflow provider',
+    serviceSummary: 'Returns deterministic typed evidence through the generic capability path.',
+    serviceArea: 'Online',
+    hoursOrUnknown: 'Always available for verification',
+    firstRequestMode: 'inquiry_available' as const,
+    publicDisclosure: 'Sandbox only. No availability, booking, ticketing, or payment is provided.',
+    noContactReason: '',
+  })),
 ] as const
 
 const DEV_SEED_LOCALES: readonly DevSeedLocale[] = [

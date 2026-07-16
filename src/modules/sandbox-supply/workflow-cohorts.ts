@@ -38,7 +38,7 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
   Object.freeze({
     cohortId: 'itinerary',
     label: 'Itinerary planning',
-    customerRequest: 'Build a four-day Perth itinerary for two adults with one accessible activity each day and no more than AUD 1,200 in estimated activity costs.',
+    customerRequest: 'Build a four-day Perth itinerary for two adults with one accessible activity each day, keep estimated activity costs under AUD 1,200, and give me a readiness checklist for anything that still needs confirmation.',
     completionBoundary: 'A coherent itinerary and readiness checklist; no reservation or ticketing.',
     prohibitedClaim: 'Do not claim availability, booking, ticketing, or payment.',
     steps: Object.freeze([
