@@ -386,7 +386,7 @@ export function projectRouteProgress(input: Readonly<{
   total: number
   current: Readonly<{
     step: number
-    state: 'queued' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention'
+    state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention'
   }>
   updatedAt: number
   cancellationAvailable: boolean
@@ -409,7 +409,9 @@ export function projectRouteProgress(input: Readonly<{
     ...(input.businesses === undefined ? {} : { businesses: input.businesses }),
     summary: input.current.state === 'queued'
       ? 'Your request is queued to begin.'
-      : 'Your request is in progress.',
+      : input.current.state === 'ready_to_contact'
+        ? 'AE is preparing to contact the first business.'
+        : 'Your request is in progress.',
     nextAction: 'wait',
     progress: {
       completed: input.completed,
@@ -421,7 +423,8 @@ export function projectRouteProgress(input: Readonly<{
       actor: input.cancellationAttempt?.state === 'unknown' ? 'ae' : progressActor(input.current.state),
       certainty: input.cancellationAttempt?.state === 'unknown'
         ? 'unknown'
-        : input.cancellationAttempt?.state === 'rejected' ? 'confirmed' : 'pending',
+        : input.cancellationAttempt?.state === 'rejected'
+          || input.current.state === 'ready_to_contact' ? 'confirmed' : 'pending',
       updatedAt: input.updatedAt,
       nextCheckAt: input.cancellationAttempt === undefined
         || input.cancellationAttempt.state === 'rejected'
@@ -593,7 +596,7 @@ export function projectCustomerActionStatus(input: Readonly<{
 }
 
 function progressActor(
-  state: 'queued' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention',
+  state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention',
 ): 'ae' | 'business' | 'customer' {
   if (state === 'awaiting_result') return 'business'
   if (state === 'needs_attention') return 'customer'

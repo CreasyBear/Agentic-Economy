@@ -150,7 +150,10 @@ export const customerRequestEvidenceExportSchema = z.strictObject({
   generatedAt: safeNonnegativeInteger,
   steps: z.array(z.strictObject({
     step: safePositiveInteger,
-    state: z.enum(['queued', 'contacting', 'awaiting_result', 'completed', 'failed', 'outcome_unknown', 'cancelled']),
+    state: z.enum([
+      'queued', 'ready_to_contact', 'contacting', 'awaiting_result',
+      'completed', 'failed', 'outcome_unknown', 'cancelled',
+    ]),
     observedAt: safeNonnegativeInteger,
     evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
   })),
@@ -582,7 +585,10 @@ export const customerRequestViewSchema = z.strictObject({
     total: safePositiveInteger,
     current: z.object({
       step: safePositiveInteger,
-      state: z.enum(['queued', 'contacting', 'awaiting_result', 'validating_result', 'needs_attention', 'cancelled']),
+      state: z.enum([
+        'queued', 'ready_to_contact', 'contacting', 'awaiting_result',
+        'validating_result', 'needs_attention', 'cancelled',
+      ]),
     }).strict(),
     dependencies: z.strictObject({
       completed: z.array(z.strictObject({

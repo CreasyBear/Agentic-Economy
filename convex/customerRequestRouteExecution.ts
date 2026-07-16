@@ -1797,7 +1797,7 @@ const supportProblemExport = v.object({
       steps: v.array(v.object({
         step: v.number(), business: v.string(),
         state: v.union(
-          v.literal('blocked'), v.literal('queued'), v.literal('contacting'),
+          v.literal('blocked'), v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'),
           v.literal('awaiting_result'), v.literal('completed'), v.literal('failed'),
           v.literal('outcome_unknown'), v.literal('cancelled'),
         ),
@@ -2159,7 +2159,8 @@ function supportProblemReconstruction(input: Readonly<{
 function supportAttemptState(
   state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
 ) {
-  if (state === 'leased' || state === 'dispatched') return 'contacting' as const
+  if (state === 'leased') return 'ready_to_contact' as const
+  if (state === 'dispatched') return 'contacting' as const
   if (state === 'accepted') return 'awaiting_result' as const
   if (state === 'succeeded') return 'completed' as const
   return state
@@ -2183,7 +2184,7 @@ function customerLabel(value: string): string {
 }
 
 const exportedStepState = v.union(
-  v.literal('queued'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
+  v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
   v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
 )
 
@@ -2419,7 +2420,8 @@ export const exportCustomerEvidence = internalQuery({
 })
 
 function exportState(state: Doc<'customerRequestRouteStepAttempts'>['state']): Infer<typeof exportedStepState> {
-  if (state === 'leased' || state === 'dispatched') return 'contacting'
+  if (state === 'leased') return 'ready_to_contact'
+  if (state === 'dispatched') return 'contacting'
   if (state === 'accepted') return 'awaiting_result'
   if (state === 'succeeded') return 'completed'
   return state

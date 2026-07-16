@@ -434,7 +434,7 @@ const customerView = v.object({
     current: v.object({
       step: v.number(),
       state: v.union(
-        v.literal('queued'), v.literal('contacting'), v.literal('awaiting_result'),
+        v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'),
         v.literal('validating_result'), v.literal('needs_attention'), v.literal('cancelled'),
       ),
     }),
@@ -1532,7 +1532,7 @@ const supportProblemExportResult = v.union(
           step: v.number(),
           business: v.string(),
           state: v.union(
-            v.literal('blocked'), v.literal('queued'), v.literal('contacting'),
+            v.literal('blocked'), v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'),
             v.literal('awaiting_result'), v.literal('completed'), v.literal('failed'),
             v.literal('outcome_unknown'), v.literal('cancelled'),
           ),
@@ -1584,7 +1584,7 @@ const evidenceExport = v.object({
   steps: v.array(v.object({
     step: v.number(),
     state: v.union(
-      v.literal('queued'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
+      v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
       v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
     ),
     observedAt: v.number(), evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
@@ -1673,7 +1673,7 @@ export const exportRouteEvidence = action({
           resultJson?: string
           steps: readonly Readonly<{
             step: number
-            state: 'queued' | 'contacting' | 'awaiting_result' | 'completed' | 'failed' | 'outcome_unknown' | 'cancelled'
+            state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'failed' | 'outcome_unknown' | 'cancelled'
             observedAt: number
             evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
           }>[]
@@ -3342,9 +3342,10 @@ async function resolveRequestCaller(
 
 function customerProgressState(
   state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
-): 'queued' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention' {
+): 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention' {
   if (state === 'queued') return 'queued'
-  if (state === 'leased' || state === 'dispatched') return 'contacting'
+  if (state === 'leased') return 'ready_to_contact'
+  if (state === 'dispatched') return 'contacting'
   if (state === 'accepted') return 'awaiting_result'
   if (state === 'succeeded') return 'validating_result'
   return 'needs_attention'

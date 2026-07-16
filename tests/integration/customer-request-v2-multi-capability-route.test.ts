@@ -1907,6 +1907,46 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
+  it('keeps a leased step distinct from actual business contact', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'step-ready-distinction')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:step-ready-distinction',
+    })
+    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:step-ready-distinction', leaseDurationMs: 10_000,
+    })
+    if (lease.kind !== 'leased') throw new Error('step-ready route step was not leased')
+
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      progress: { current: { step: 1, state: 'ready_to_contact' } },
+      activity: {
+        actor: 'ae',
+        certainty: 'confirmed',
+        cancellation: { state: 'available' },
+      },
+    })
+
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+      workerId: 'worker:step-ready-distinction',
+    })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      progress: { current: { step: 1, state: 'contacting' } },
+      activity: {
+        actor: 'ae',
+        certainty: 'pending',
+        cancellation: { state: 'not_available', reason: 'business_step_released' },
+      },
+    })
+  })
+
   it('stops unreleased downstream work when cancellation is requested during an in-flight step', async () => {
     vi.spyOn(Date, 'now')
       .mockReturnValueOnce(40_000)

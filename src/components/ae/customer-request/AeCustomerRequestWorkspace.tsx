@@ -694,7 +694,9 @@ function RouteProgressCard({ projection, turns, refresh, cancel, edit, restart }
   if (progress === undefined) return null
   const stateLabel = progress.current.state === 'queued'
     ? 'Waiting to begin'
-    : progress.current.state === 'contacting'
+    : progress.current.state === 'ready_to_contact'
+      ? 'Preparing business contact'
+      : progress.current.state === 'contacting'
       ? 'Contacting the business'
       : progress.current.state === 'awaiting_result'
         ? 'Waiting for the business result'
@@ -1455,6 +1457,7 @@ function activityRecordSummary(state: CustomerRequestEvidenceExport['state']): s
 function activityStepState(state: CustomerRequestEvidenceExport['steps'][number]['state']): string {
   if (state === 'outcome_unknown') return 'still being confirmed'
   if (state === 'awaiting_result') return 'waiting for a result'
+  if (state === 'ready_to_contact') return 'preparing business contact'
   if (state === 'contacting') return 'contacting the business'
   return state.replaceAll('_', ' ')
 }
