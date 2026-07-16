@@ -419,6 +419,7 @@ const customerView = v.object({
   options: v.array(customerOption),
   optionSet: v.optional(customerOptionSet),
   preparedAction: v.optional(customerPreparedAction),
+  businesses: v.optional(v.array(customerBusiness)),
   action: v.optional(v.object({
     state: v.union(v.literal('unknown'), v.literal('completed'), v.literal('failed')),
     resolution: v.union(
@@ -2253,17 +2254,28 @@ function projectStoredRouteRun(
     completedSteps: number
     currentPosition: number
     currentState: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+    businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
     resultJson?: string
     updatedAt: number
   }>,
 ): ActionResult {
   const criteria = projectCustomerCriteria(aggregate.evaluation.criteria)
   const result = run.resultJson === undefined ? undefined : parseCustomerRouteResult(run.resultJson)
+  if ((run.state === 'completed' || run.state === 'failed' || run.state === 'outcome_unknown')
+    && run.businesses === undefined) {
+    return writableView(projectNeedsAttention({
+      requestRef: run.requestId,
+      revision: run.requestRevision,
+      criteria,
+      summary: 'AE could not verify which businesses handled this earlier run. The result has not been changed.',
+    }))
+  }
   if (run.state === 'completed' && result !== undefined) {
     return writableView(projectCustomerActionStatus({
       requestRef: run.requestId,
       revision: run.requestRevision,
       criteria,
+      ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
       status: {
         kind: 'completed', resolution: 'provider_result', result,
         resolvedAt: run.updatedAt, automaticRetry: false,
@@ -2274,6 +2286,7 @@ function projectStoredRouteRun(
     requestRef: run.requestId,
     revision: run.requestRevision,
     criteria,
+    ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
     routeProgress: {
       completed: run.completedSteps, total: run.totalSteps, currentStep: run.currentPosition,
     },
@@ -2294,6 +2307,7 @@ function projectStoredRouteRun(
       requestRef: run.requestId,
       revision: run.requestRevision,
       criteria,
+      ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
       routeProgress: {
         completed: run.completedSteps, total: run.totalSteps, currentStep: run.currentPosition,
       },
@@ -2329,7 +2343,7 @@ function isProviderReportedRouteFailure(result: JsonValue): boolean {
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
   const {
     disclosureReview, dataHandling, optionSet, clarification, preparedAction,
-    action, progress, activity, decision, confirmation,
+    businesses, action, progress, activity, decision, confirmation,
   } = view
   return {
     kind: view.kind, requestRef: view.requestRef, revision: view.revision,
@@ -2361,6 +2375,9 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
         ...alternative, price: { ...alternative.price },
       })),
     } }),
+    ...(businesses === undefined ? {} : {
+      businesses: businesses.map((business) => ({ ...business })),
+    }),
     ...(action === undefined ? {} : { action: {
       state: action.state, resolution: action.resolution, automaticRetry: action.automaticRetry,
       observedAt: action.observedAt,

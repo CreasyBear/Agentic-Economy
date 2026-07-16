@@ -6,7 +6,7 @@ describe('development Customer Request surface parity', () => {
   it('parses exactly one typed human browser observation', () => {
     expect(parseHumanRequestObservation([
       'Running 1 test using 1 worker',
-      'AE_HUMAN_REQUEST_OBSERVATION {"requestRef":"request:one","revision":2,"state":"completed","evidenceState":"completed","resultDigest":"sha256:result","resumedAfterReload":true}',
+      'AE_HUMAN_REQUEST_OBSERVATION {"requestRef":"request:one","revision":2,"state":"completed","evidenceState":"completed","resultDigest":"sha256:result","businesses":["Sandbox Route Resolver","Sandbox Route Quoter"],"resumedAfterReload":true}',
       '1 passed',
     ].join('\n'))).toEqual({
       requestRef: 'request:one',
@@ -14,6 +14,7 @@ describe('development Customer Request surface parity', () => {
       state: 'completed',
       evidenceState: 'completed',
       resultDigest: 'sha256:result',
+      businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
       resumedAfterReload: true,
     })
   })

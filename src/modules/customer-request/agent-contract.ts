@@ -476,6 +476,7 @@ export const customerRequestViewSchema = z.strictObject({
   ]).optional(),
   options: z.array(customerOptionSchema), optionSet: customerOptionSetSchema.optional(),
   preparedAction: customerPreparedActionSchema.optional(),
+  businesses: z.array(customerBusinessSchema).min(1).optional(),
   action: z.strictObject({
     state: z.enum(['unknown', 'completed', 'failed']),
     resolution: z.enum(['awaiting_evidence', 'provider_result', 'reconciled', 'not_sent']),

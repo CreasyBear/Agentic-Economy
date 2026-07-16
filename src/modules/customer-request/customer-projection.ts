@@ -438,6 +438,7 @@ export function projectCustomerActionStatus(input: Readonly<{
   requestRef: string
   revision: number
   criteria?: readonly CustomerCriterion[]
+  businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   routeProgress?: Readonly<{ completed: number; total: number; currentStep: number }>
   status:
     | Readonly<{ kind: 'unknown'; reason: string; observedAt: number; automaticRetry: false }>
@@ -451,11 +452,15 @@ export function projectCustomerActionStatus(input: Readonly<{
       }>
 }>): CustomerRequestView {
   const hasCompletedRouteSteps = (input.routeProgress?.completed ?? 0) > 0
+  const multipleBusinesses = (input.businesses?.length ?? 0) > 1
   if (input.status.kind === 'unknown') return requestView({
     requestRef: input.requestRef, revision: input.revision,
     state: 'outcome_unknown', nextAction: 'wait',
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
-    summary: 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.',
+    ...(input.businesses === undefined ? {} : { businesses: input.businesses }),
+    summary: multipleBusinesses
+      ? 'The businesses may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.'
+      : 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.',
     action: {
       state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false,
       observedAt: input.status.observedAt,
@@ -471,9 +476,10 @@ export function projectCustomerActionStatus(input: Readonly<{
     requestRef: input.requestRef, revision: input.revision,
     state: 'completed', nextAction: 'none',
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
+    ...(input.businesses === undefined ? {} : { businesses: input.businesses }),
     summary: input.status.resolution === 'reconciled'
-      ? 'The business has now confirmed the result.'
-      : 'The business confirmed the result.',
+      ? multipleBusinesses ? 'The businesses have now confirmed the result.' : 'The business has now confirmed the result.'
+      : multipleBusinesses ? 'The businesses confirmed the result.' : 'The business confirmed the result.',
     action: {
       state: 'completed', resolution: input.status.resolution, automaticRetry: false,
       result: structuredClone(input.status.result), observedAt: input.status.resolvedAt,
@@ -487,11 +493,14 @@ export function projectCustomerActionStatus(input: Readonly<{
     requestRef: input.requestRef, revision: input.revision,
     state: 'failed', nextAction: 'revise_request',
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
+    ...(input.businesses === undefined ? {} : { businesses: input.businesses }),
     summary: input.status.resolution === 'not_sent'
       ? hasCompletedRouteSteps
         ? 'AE could not safely continue. The next business step was not sent.'
         : 'AE could not safely contact the business. Nothing was sent.'
-      : 'The business confirmed that it could not complete this action. AE did not try it again.',
+      : multipleBusinesses
+        ? 'The businesses confirmed that they could not complete this action. AE did not try it again.'
+        : 'The business confirmed that it could not complete this action. AE did not try it again.',
     action: {
       state: 'failed', resolution: input.status.resolution, automaticRetry: false,
       result: structuredClone(input.status.result), observedAt: input.status.resolvedAt,
@@ -528,6 +537,7 @@ function requestView(input: Readonly<{
   options?: readonly CustomerOption[]
   optionSet?: CustomerOptionSet
   preparedAction?: CustomerPreparedAction
+  businesses?: CustomerRequestView['businesses']
   action?: CustomerRequestView['action']
   progress?: CustomerRequestView['progress']
   activity?: CustomerRequestView['activity']
@@ -553,6 +563,9 @@ function requestView(input: Readonly<{
     ...(input.clarification === undefined ? {} : { clarification: Object.freeze({ ...input.clarification }) }),
     ...(input.optionSet === undefined ? {} : { optionSet: input.optionSet }),
     ...(input.preparedAction === undefined ? {} : { preparedAction: Object.freeze({ ...input.preparedAction }) }),
+    ...(input.businesses === undefined ? {} : {
+      businesses: Object.freeze(input.businesses.map((business) => Object.freeze({ ...business }))),
+    }),
     ...(input.action === undefined ? {} : { action: Object.freeze({
       ...input.action,
       ...(input.action.result === undefined ? {} : { result: structuredClone(input.action.result) }),

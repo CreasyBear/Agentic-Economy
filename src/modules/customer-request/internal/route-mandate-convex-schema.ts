@@ -351,6 +351,10 @@ export const customerRequestRouteMandateTables = {
     generationRef: v.string(),
     routePlanId: v.string(),
     routeDigest: v.string(),
+    businesses: v.optional(v.array(v.object({
+      businessRef: v.string(),
+      name: v.string(),
+    }))),
     state: v.union(
       v.literal('queued'),
       v.literal('running'),

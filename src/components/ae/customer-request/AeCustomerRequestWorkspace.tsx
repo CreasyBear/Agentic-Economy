@@ -959,8 +959,11 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
   const unknown = action.state === 'unknown'
   const failed = action.state === 'failed'
   const notSent = failed && action.resolution === 'not_sent'
+  const multipleBusinesses = (projection.businesses?.length ?? 0) > 1
   const explanation = unknown
-    ? 'The Request is preserved while AE checks evidence from the business. There will be no automatic retry.'
+    ? multipleBusinesses
+      ? 'The Request is preserved while AE checks evidence from the businesses. There will be no automatic retry.'
+      : 'The Request is preserved while AE checks evidence from the business. There will be no automatic retry.'
     : notSent
       ? (projection.progress?.completed ?? 0) > 0
         ? 'No further business action occurred. Review the completed work before deciding what to do next.'
@@ -968,8 +971,12 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
     : failed
       ? 'The failure is final for this action. AE did not send it again.'
       : action.resolution === 'reconciled'
-        ? 'AE confirmed this from later evidence supplied by the same business connection.'
-        : 'AE validated the result returned by the business.'
+        ? multipleBusinesses
+          ? 'AE confirmed this from later evidence supplied by the same business connections.'
+          : 'AE confirmed this from later evidence supplied by the same business connection.'
+        : multipleBusinesses
+          ? 'AE validated the result returned by the businesses.'
+          : 'AE validated the result returned by the business.'
   return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite">
     <Conversation turns={turns} />
     <WorkingUnderstanding projection={projection} correct={edit} />
@@ -980,6 +987,9 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
         </Text>
         <Heading level={2}>{projection.summary}</Heading>
         <Text color="secondary">{explanation}</Text>
+        {projection.businesses === undefined ? null : <Text color="secondary">
+          Through {businessList(projection.businesses.map(({ name }) => name))}
+        </Text>}
         {projection.progress === undefined || projection.progress.completed === 0 ? null : <div className="rounded-md border border-border bg-surface p-4">
           <Text weight="semibold">{projection.progress.completed} of {projection.progress.total} business steps completed.</Text>
           <Text type="supporting" color="secondary" className="mt-1">{unknown

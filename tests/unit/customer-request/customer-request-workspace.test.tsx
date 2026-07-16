@@ -779,6 +779,33 @@ describe('customer Request workspace', () => {
     expect(screen.queryByText('missing_auth')).toBeNull()
   })
 
+  it('shows the businesses that completed a resumed Request', async () => {
+    localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
+      requestRef: 'request:completed-businesses',
+    }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:completed-businesses', revision: 1,
+      state: 'completed', summary: 'The business confirmed the result.', nextAction: 'none',
+      missingFields: [], criteria: [], options: [],
+      businesses: [
+        { businessRef: 'business:resolver', name: 'Sandbox Route Resolver' },
+        { businessRef: 'business:quoter', name: 'Sandbox Route Quoter' },
+      ],
+      action: {
+        state: 'completed', resolution: 'provider_result', automaticRetry: false,
+        result: { quoteReference: 'sandbox-quote:one' }, observedAt: 10_000,
+      },
+      activity: {
+        actor: 'ae_for_customer', certainty: 'confirmed', updatedAt: 10_000,
+        retry: 'not_needed', cancellation: 'complete', safeNextAction: 'review_result',
+      },
+    })))
+
+    render(<AeCustomerRequestWorkspace />)
+
+    expect(await screen.findByText('Through Sandbox Route Resolver and Sandbox Route Quoter')).toBeTruthy()
+  })
+
   it('does not present an expired route as a current choice in a mixed generation', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-mixed-expiry' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({

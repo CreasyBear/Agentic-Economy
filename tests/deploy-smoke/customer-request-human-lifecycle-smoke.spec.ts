@@ -69,6 +69,9 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   await page.reload({ waitUntil: 'networkidle' })
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/sandbox-quote:/u)).toBeVisible()
+  for (const business of expectedBusinesses) {
+    await expect(page.locator('main')).toContainText(business)
+  }
   expect(await page.locator('main').innerText()).not.toMatch(
     /capabilityId|bindingId|offeringId|RoutePlan|RouteMandate|transport|MCP|x402|graph node/u,
   )
@@ -96,6 +99,7 @@ async function emitHumanObservation(
     state: view.state,
     evidenceState: evidence.state,
     resultDigest: canonicalDigest(evidence.result as StableHashValue),
+    businesses: view.businesses?.map(({ name }) => name) ?? [],
     resumedAfterReload: true,
   })}\n`)
 }

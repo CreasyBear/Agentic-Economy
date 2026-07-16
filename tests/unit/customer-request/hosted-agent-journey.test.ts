@@ -134,6 +134,7 @@ describe('hosted Customer Request journey', () => {
       }),
       requestView('completed', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'none',
+        businesses: compositeBusinesses(),
         action: {
           state: 'completed', resolution: 'provider_result', automaticRetry: false,
           result: { quoteReference: 'sandbox-quote:complete' }, observedAt: 9_100,
@@ -349,6 +350,7 @@ describe('hosted Customer Request journey', () => {
     ])
     const completed = requestView('completed', 2, {
       routeGenerationRef: 'generation:one', nextAction: 'none',
+      businesses: compositeBusinesses(),
       action: {
         state: 'completed', resolution: 'provider_result', automaticRetry: false,
         result: { quoteReference: 'sandbox-quote:complete' }, observedAt: 9_100,
@@ -752,6 +754,13 @@ function compositeRoutesReadyView() {
   }
 }
 
+function compositeBusinesses() {
+  return [
+    { businessRef: 'business:resolver', name: 'Sandbox Route Resolver' },
+    { businessRef: 'business:quoter', name: 'Sandbox Route Quoter' },
+  ]
+}
+
 function routePlan() {
   return {
     routeRef: 'route:one', quoteDigest: 'sha256:quote',
@@ -808,6 +817,7 @@ function completeJourneyResponses(): unknown[] {
     }),
     requestView('completed', 2, {
       routeGenerationRef: 'generation:one', nextAction: 'none',
+      businesses: compositeBusinesses(),
       action: {
         state: 'completed', resolution: 'provider_result', automaticRetry: false,
         result: { quoteReference: 'sandbox-quote:complete' }, observedAt: 9_100,

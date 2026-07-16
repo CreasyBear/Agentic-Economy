@@ -420,6 +420,10 @@ async function completeHostedJourney(input: Readonly<{
   }
   if (resumed?.state !== 'completed' || resumed.action?.state !== 'completed'
     || resumed.action.result === undefined) throw new Error('hosted_journey_completion_timeout')
+  if (JSON.stringify(resumed.businesses?.map(({ name }) => name))
+    !== JSON.stringify(input.selectedBusinesses)) {
+    throw new Error('hosted_journey_terminal_businesses_changed')
+  }
   const evidence = await callAgentEvidence(input.input, input.evidencePath)
   if (evidence.state !== 'completed' || evidence.result === undefined
     || evidence.steps.length !== input.route.stepCount

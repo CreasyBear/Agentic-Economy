@@ -18,6 +18,7 @@ const observationSchema = z.strictObject({
   state: z.literal('completed'),
   evidenceState: z.literal('completed'),
   resultDigest: z.string().startsWith('sha256:'),
+  businesses: z.array(z.string().min(1)).min(1),
   resumedAfterReload: z.literal(true),
 })
 
@@ -101,6 +102,7 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
           state: agent.final.state,
           evidenceState: agent.final.evidenceState,
           resultDigest: agent.final.resultDigest,
+          businesses: agent.final.selectedBusinesses,
         },
       })
       if (result.verdict !== 'pass') {

@@ -13,7 +13,7 @@ import { parseRouteTransportObservationJson } from '@/modules/capability-supply/
 import { routeStepGrantDigest } from '@/modules/customer-request/route-mandate-admission'
 import { routeStepGrantValue } from '@/modules/customer-request/runtime'
 
-import type { Doc } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
@@ -36,6 +36,10 @@ const runProjection = v.object({
   requestId: v.string(),
   requestRevision: v.number(),
   generationRef: v.string(),
+  businesses: v.optional(v.array(v.object({
+    businessRef: v.string(),
+    name: v.string(),
+  }))),
   state: v.union(
     v.literal('queued'),
     v.literal('running'),
@@ -177,6 +181,8 @@ export const startOrResume = internalMutation({
     const orderedSteps = [...mandate.route.steps].sort((left, right) => left.position - right.position)
     const firstStep = orderedSteps[0]
     if (firstStep === undefined) return { kind: 'refused', reason: 'route_unavailable' }
+    const businesses = await snapshotRouteBusinesses(ctx, orderedSteps)
+    if (businesses === undefined) return { kind: 'refused', reason: 'route_unavailable' }
     const firstInput = await materializeStepInput(ctx, {
       requestId: args.requestId,
       generationRef: mandate.route.generationRef,
@@ -226,6 +232,7 @@ export const startOrResume = internalMutation({
       generationRef: mandate.route.generationRef,
       routePlanId: mandate.route.routePlanId,
       routeDigest: mandate.route.routeDigest,
+      businesses,
       state: 'queued' as const,
       totalSteps: orderedSteps.length,
       completedSteps: 0,
@@ -942,6 +949,9 @@ async function readRunProjection(
     requestId: projection.requestId,
     requestRevision: projection.requestRevision,
     generationRef: projection.generationRef,
+    ...(projection.businesses === undefined ? {} : {
+      businesses: projection.businesses.map((business) => ({ ...business })),
+    }),
     state: projection.state,
     totalSteps: projection.totalSteps,
     completedSteps: projection.completedSteps,
@@ -1299,6 +1309,7 @@ function routeRunIdentityDigest(run: Readonly<{
   generationRef: string
   routePlanId: string
   routeDigest: string
+  businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   totalSteps: number
   createdAt: number
 }>): string {
@@ -1312,9 +1323,30 @@ function routeRunIdentityDigest(run: Readonly<{
     generationRef: run.generationRef,
     routePlanId: run.routePlanId,
     routeDigest: run.routeDigest,
+    ...(run.businesses === undefined ? {} : {
+      businesses: run.businesses.map((business) => ({ ...business })),
+    }),
     totalSteps: run.totalSteps,
     createdAt: run.createdAt,
   })
+}
+
+async function snapshotRouteBusinesses(
+  ctx: MutationCtx,
+  steps: readonly Readonly<{ businessId: string }>[],
+): Promise<Array<{ businessRef: string; name: string }> | undefined> {
+  const businessIds = [...new Set(steps.map(({ businessId }) => businessId))]
+  const businesses = []
+  for (const businessId of businessIds) {
+    const business = await ctx.db.get(businessId as Id<'businesses'>)
+    const name = business?.name.trim()
+    if (name === undefined || name.length === 0) return undefined
+    businesses.push({
+      businessRef: `business:${canonicalDigest({ businessId })}`,
+      name,
+    })
+  }
+  return businesses
 }
 
 function routeAttemptIntegrityValid(attempt: Doc<'customerRequestRouteStepAttempts'>): boolean {

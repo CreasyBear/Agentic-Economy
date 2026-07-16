@@ -4,7 +4,10 @@ import { projectCustomerActionStatus } from '@/modules/customer-request/customer
 
 describe('customer action status projection', () => {
   it('makes unknown, reconciled completion, provider failure, and a not-sent failure legible', () => {
-    const common = { requestRef: 'request:one', revision: 1, criteria: [] }
+    const common = {
+      requestRef: 'request:one', revision: 1, criteria: [],
+      businesses: [{ businessRef: 'business:one', name: 'Business One' }],
+    }
 
     expect(projectCustomerActionStatus({
       ...common,
@@ -12,17 +15,27 @@ describe('customer action status projection', () => {
       status: { kind: 'unknown', reason: 'provider_pending', observedAt: 10, automaticRetry: false },
     })).toMatchObject({
       state: 'outcome_unknown', nextAction: 'wait',
+      businesses: [{ name: 'Business One' }],
       action: { state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false },
       progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
     })
     expect(projectCustomerActionStatus({
       ...common,
+      businesses: [
+        { businessRef: 'business:resolver', name: 'Sandbox Route Resolver' },
+        { businessRef: 'business:quoter', name: 'Sandbox Route Quoter' },
+      ],
       status: {
         kind: 'completed', resolution: 'reconciled', result: { confirmation: 'booked' },
         resolvedAt: 11, automaticRetry: false,
       },
     })).toMatchObject({
       state: 'completed', nextAction: 'none',
+      summary: 'The businesses have now confirmed the result.',
+      businesses: [
+        { name: 'Sandbox Route Resolver' },
+        { name: 'Sandbox Route Quoter' },
+      ],
       action: { state: 'completed', resolution: 'reconciled', result: { confirmation: 'booked' } },
     })
     const failed = projectCustomerActionStatus({
@@ -34,6 +47,7 @@ describe('customer action status projection', () => {
     })
     expect(failed).toMatchObject({
       state: 'failed', nextAction: 'revise_request',
+      businesses: [{ name: 'Business One' }],
       action: { state: 'failed', resolution: 'reconciled', result: { recoveryCode: 'not_available' } },
     })
     expect(projectCustomerActionStatus({

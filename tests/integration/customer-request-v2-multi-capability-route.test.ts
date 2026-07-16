@@ -789,7 +789,38 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(completed).toMatchObject({
       kind: 'request', state: 'completed', nextAction: 'none',
+      businesses: [
+        { name: 'Sandbox Route Resolver' },
+        { name: 'Sandbox Route Quoter' },
+      ],
       action: { state: 'completed', result: { quoteReference: 'sandbox-quote:source-owned' } },
+    })
+    await backend.run(async (ctx) => {
+      const run = await ctx.db.query('customerRequestRouteRuns')
+        .withIndex('by_requestId', (query) => query.eq('requestId', compared.requestRef)).unique()
+      if (run === null) throw new Error('source-owned route run missing')
+      await ctx.db.patch(run._id, {
+        businesses: undefined,
+        runDigest: canonicalDigest({
+          runRef: run.runRef,
+          principalId: run.principalId,
+          requestId: run.requestId,
+          requestRevision: run.requestRevision,
+          mandateRef: run.mandateRef,
+          mandateDigest: run.mandateDigest,
+          generationRef: run.generationRef,
+          routePlanId: run.routePlanId,
+          routeDigest: run.routeDigest,
+          totalSteps: run.totalSteps,
+          createdAt: run.createdAt,
+        }),
+      })
+    })
+    await expect(customer.action(api.customerRequestApplication.resume, {
+      requestRef: compared.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'needs_attention', nextAction: 'retry',
+      summary: 'AE could not verify which businesses handled this earlier run. The result has not been changed.',
     })
     expect(routeProviderFetch).toHaveBeenCalledTimes(2)
   })

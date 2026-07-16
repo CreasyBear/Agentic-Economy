@@ -92,6 +92,10 @@ describe('Customer Request agent contract', () => {
       expect(customerRequestViewSchema.safeParse({
         ...prepared, state, nextAction: state === 'outcome_unknown' ? 'wait' : 'none',
         preparedAction: undefined,
+        businesses: [
+          { businessRef: 'business:resolver', name: 'Sandbox Route Resolver' },
+          { businessRef: 'business:quoter', name: 'Sandbox Route Quoter' },
+        ],
         action: { state: actionState, resolution, automaticRetry: false, observedAt: 10_000 },
       }).success).toBe(true)
     }

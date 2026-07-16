@@ -8,6 +8,7 @@ const human = {
   state: 'completed' as const,
   evidenceState: 'completed' as const,
   resultDigest: 'sha256:shared',
+  businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
   resumedAfterReload: true,
 }
 
@@ -17,6 +18,7 @@ const agent = {
   state: 'completed' as const,
   evidenceState: 'completed' as const,
   resultDigest: 'sha256:shared',
+  businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
 }
 
 describe('Customer Request cross-surface parity', () => {
@@ -30,6 +32,7 @@ describe('Customer Request cross-surface parity', () => {
       state: 'completed',
       evidenceState: 'completed',
       resultDigest: 'sha256:shared',
+      businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
       humanResumedAfterReload: true,
     })
   })
@@ -40,6 +43,7 @@ describe('Customer Request cross-surface parity', () => {
     ['state', { ...agent, state: 'outcome_unknown' as const }, 'state_mismatch'],
     ['evidence', { ...agent, evidenceState: 'outcome_unknown' as const }, 'evidence_state_mismatch'],
     ['result', { ...agent, resultDigest: 'sha256:different' }, 'result_mismatch'],
+    ['businesses', { ...agent, businesses: ['Sandbox Route Resolver'] }, 'businesses_mismatch'],
   ])('fails closed for a %s mismatch', (_label, changedAgent, failure) => {
     const proof = compareCustomerRequestSurfaces({ human, agent: changedAgent })
     expect(proof.verdict).toBe('fail')
