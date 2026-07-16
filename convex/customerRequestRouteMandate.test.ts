@@ -197,6 +197,165 @@ describe('durable RouteMandate lifecycle', () => {
     )).resolves.toEqual({ kind: 'refused', reason: 'policy_revoked' })
   })
 
+  it('linearizes competing repeat uses without exceeding cumulative authority', async () => {
+    for (const limit of [
+      { name: 'spend', spendUses: 1, dataUses: 2, occurrences: 2, reason: 'spend_limit_exceeded' },
+      { name: 'data', spendUses: 2, dataUses: 1, occurrences: 2, reason: 'data_limit_exceeded' },
+      { name: 'occurrence', spendUses: 2, dataUses: 2, occurrences: 1, reason: 'occurrence_limit_exceeded' },
+    ] as const) {
+      vi.spyOn(Date, 'now').mockReturnValue(1_000)
+      const backend = convexTest(schema, modules)
+      const current = await committedRequest(backend)
+      const route = current.routeGeneration.routes[0]
+      if (route === undefined || route.maximumTotalCost.kind !== 'known') {
+        throw new Error('exact route fixture missing')
+      }
+      const dataAllocations = route.steps.reduce((total, step) => total + step.dataUse.length, 0)
+      const credentialId = `credential:assistant:competing-${limit.name}`
+      await backend.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+        principalId: `agent:assistant:competing-${limit.name}`,
+        ownerId: identity.subject,
+        ownerTokenIdentifier: identity.tokenIdentifier,
+        credentialId,
+        scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+        seenAt: 900,
+      })
+      const customer = backend.withIdentity(identity)
+      const policy = await customer.mutation(internal.customerRequestStandingRoutePolicy.issue, {
+        requestId: current.aggregate.snapshot.requestId,
+        expectedRequestRevision: current.aggregate.snapshot.revision,
+        expectedGenerationRef: current.routeGeneration.generationRef,
+        selectedRoutePlanId: route.routePlanId,
+        delegatedCredentialId: credentialId,
+        perUseSpend: {
+          currency: route.maximumTotalCost.currency,
+          amountMinor: route.maximumTotalCost.amountMinor,
+        },
+        cumulativeSpend: {
+          currency: route.maximumTotalCost.currency,
+          amountMinor: route.maximumTotalCost.amountMinor * limit.spendUses,
+        },
+        perUseDataAllocations: dataAllocations,
+        cumulativeDataAllocations: dataAllocations * limit.dataUses,
+        occurrences: limit.occurrences,
+        validUntil: Math.min(route.expiresAt, 9_000),
+        idempotencyKey: `standing-policy:competing-${limit.name}`,
+      })
+      if (policy.kind !== 'issued') throw new Error(`standing policy issuance failed: ${JSON.stringify(policy)}`)
+      const command = {
+        requestId: current.aggregate.snapshot.requestId,
+        policyRef: policy.policy.policyRef,
+        expectedPolicyDigest: policy.policy.policyDigest,
+        expectedRequestRevision: current.aggregate.snapshot.revision,
+        expectedGenerationRef: current.routeGeneration.generationRef,
+        selectedRoutePlanId: route.routePlanId,
+        delegatedCredentialId: credentialId,
+        mandateExpiresAt: Math.min(route.expiresAt, 9_000),
+      }
+
+      const results = await Promise.all([
+        customer.mutation(internal.customerRequestStandingRoutePolicy.issueMandate, {
+          ...command,
+          idempotencyKey: `standing-use:competing-${limit.name}-a`,
+        }),
+        customer.mutation(internal.customerRequestStandingRoutePolicy.issueMandate, {
+          ...command,
+          idempotencyKey: `standing-use:competing-${limit.name}-b`,
+        }),
+      ])
+
+      expect(results.filter(({ kind }) => kind === 'issued'), limit.name).toHaveLength(1)
+      expect(results.filter(({ kind }) => kind === 'refused'), limit.name).toEqual([{
+        kind: 'refused',
+        reason: limit.reason,
+      }])
+      await backend.run(async (ctx) => {
+        expect(await ctx.db.query('customerRequestStandingRouteAuthorityUses').take(10), limit.name).toHaveLength(1)
+        expect(await ctx.db.query('customerRequestRouteMandateIssues').take(10), limit.name).toHaveLength(1)
+      })
+    }
+  })
+
+  it('linearizes repeat use against withdrawal without post-withdrawal authority', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const current = await committedRequest(backend)
+    const route = current.routeGeneration.routes[0]
+    if (route === undefined || route.maximumTotalCost.kind !== 'known') {
+      throw new Error('exact route fixture missing')
+    }
+    const dataAllocations = route.steps.reduce((total, step) => total + step.dataUse.length, 0)
+    const credentialId = 'credential:assistant:withdrawal-race'
+    await backend.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+      principalId: 'agent:assistant:withdrawal-race',
+      ownerId: identity.subject,
+      ownerTokenIdentifier: identity.tokenIdentifier,
+      credentialId,
+      scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+      seenAt: 900,
+    })
+    const customer = backend.withIdentity(identity)
+    const policy = await customer.mutation(internal.customerRequestStandingRoutePolicy.issue, {
+      requestId: current.aggregate.snapshot.requestId,
+      expectedRequestRevision: current.aggregate.snapshot.revision,
+      expectedGenerationRef: current.routeGeneration.generationRef,
+      selectedRoutePlanId: route.routePlanId,
+      delegatedCredentialId: credentialId,
+      perUseSpend: {
+        currency: route.maximumTotalCost.currency,
+        amountMinor: route.maximumTotalCost.amountMinor,
+      },
+      cumulativeSpend: {
+        currency: route.maximumTotalCost.currency,
+        amountMinor: route.maximumTotalCost.amountMinor,
+      },
+      perUseDataAllocations: dataAllocations,
+      cumulativeDataAllocations: dataAllocations,
+      occurrences: 1,
+      validUntil: Math.min(route.expiresAt, 9_000),
+      idempotencyKey: 'standing-policy:withdrawal-race',
+    })
+    if (policy.kind !== 'issued') throw new Error(`standing policy issuance failed: ${JSON.stringify(policy)}`)
+
+    const [use, withdrawal] = await Promise.all([
+      customer.mutation(internal.customerRequestStandingRoutePolicy.issueMandate, {
+        requestId: current.aggregate.snapshot.requestId,
+        policyRef: policy.policy.policyRef,
+        expectedPolicyDigest: policy.policy.policyDigest,
+        expectedRequestRevision: current.aggregate.snapshot.revision,
+        expectedGenerationRef: current.routeGeneration.generationRef,
+        selectedRoutePlanId: route.routePlanId,
+        delegatedCredentialId: credentialId,
+        mandateExpiresAt: Math.min(route.expiresAt, 9_000),
+        idempotencyKey: 'standing-use:withdrawal-race',
+      }),
+      customer.mutation(internal.customerRequestStandingRoutePolicy.revoke, {
+        requestId: current.aggregate.snapshot.requestId,
+        policyRef: policy.policy.policyRef,
+        expectedPolicyDigest: policy.policy.policyDigest,
+        idempotencyKey: 'standing-policy-withdrawal:race',
+      }),
+    ])
+
+    expect(withdrawal).toMatchObject({ kind: 'revoked', policy: { revokedAt: 1_000 } })
+    expect([
+      { kind: 'issued' },
+      { kind: 'refused', reason: 'policy_revoked' },
+    ]).toContainEqual(use.kind === 'issued'
+      ? { kind: use.kind }
+      : { kind: use.kind, reason: use.reason })
+    await expect(customer.query(internal.customerRequestStandingRoutePolicy.get, {
+      requestId: current.aggregate.snapshot.requestId,
+      policyRef: policy.policy.policyRef,
+    })).resolves.toMatchObject({ kind: 'revoked', policy: { revokedAt: 1_000 } })
+    await backend.run(async (ctx) => {
+      const uses = await ctx.db.query('customerRequestStandingRouteAuthorityUses').take(10)
+      const mandates = await ctx.db.query('customerRequestRouteMandateIssues').take(10)
+      expect(uses).toHaveLength(use.kind === 'issued' ? 1 : 0)
+      expect(mandates).toHaveLength(use.kind === 'issued' ? 1 : 0)
+    })
+  })
+
   it('issues and exactly replays one server-derived mandate only for the authenticated Request principal', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000)
     const backend = convexTest(schema, modules)
