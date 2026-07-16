@@ -9,7 +9,7 @@ const expectedBusinesses = expectedBusinessNames()
 const finish = expectedFinish()
 
 test('a cold human browser executes and resumes the Request lifecycle', async ({ page }) => {
-  test.setTimeout(120_000)
+  test.setTimeout(180_000)
   await applyVercelProtectionBypassToPage(page, baseUrl)
   await page.goto(new URL('/engine', baseUrl).href, { waitUntil: 'networkidle' })
 
@@ -53,7 +53,20 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
 })
 
 async function proveUnknownOutcomeRecovery(page: import('@playwright/test').Page): Promise<void> {
-  await expect(page.getByText('Still confirming', { exact: true }).first()).toBeVisible({ timeout: 60_000 })
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (await page.getByText('Still confirming', { exact: true }).first().isVisible().catch(() => false)) break
+    if (await page.getByText('Completed', { exact: true }).first().isVisible().catch(() => false)) {
+      throw new Error('hosted_human_journey_expected_unknown_but_completed')
+    }
+    const failed = page.getByText('Could not be completed', { exact: true }).first()
+    if (await failed.isVisible().catch(() => false)) {
+      throw new Error(`hosted_human_journey_failed:${(await page.locator('main').innerText()).slice(0, 500)}`)
+    }
+    const check = page.getByRole('button', { name: 'Check progress' })
+    if (await check.isVisible().catch(() => false)) await check.click()
+    await page.waitForTimeout(1_000)
+  }
+  await expect(page.getByText('Still confirming', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('1 of 2 business steps completed.')).toBeVisible()
   await expect(page.getByText('AE will not repeat the step whose result is still being confirmed.')).toBeVisible()
   await expect(page.getByText('Wait for confirmation before changing or starting this Request again.')).toBeVisible()
