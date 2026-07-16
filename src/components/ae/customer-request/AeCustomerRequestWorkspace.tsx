@@ -762,7 +762,8 @@ function cancellationMessage(
         AE sent one stop request to the business. The business has not confirmed the outcome yet.
       </Text>
       <Text type="supporting" color="secondary">
-        Check again after {new Date(cancellation.nextCheckAt).toISOString()}. AE will not send the stop request twice.
+        Sent at {new Date(cancellation.requestedAt).toISOString()}. Check again after {new Date(cancellation.nextCheckAt).toISOString()}.
+        {' '}AE will not send the stop request twice.
       </Text>
     </div>
   }
@@ -772,7 +773,8 @@ function cancellationMessage(
         AE cannot yet confirm whether the business received or accepted the stop request.
       </Text>
       <Text type="supporting" color="secondary">
-        AE will not repeat it while the outcome is unknown. Check again after {new Date(cancellation.nextCheckAt).toISOString()}.
+        Sent at {new Date(cancellation.requestedAt).toISOString()}; uncertainty recorded at {new Date(cancellation.observedAt).toISOString()}.
+        {' '}AE will not repeat it while the outcome is unknown. Check again after {new Date(cancellation.nextCheckAt).toISOString()}.
       </Text>
     </div>
   }
@@ -782,7 +784,10 @@ function cancellationMessage(
         The business declined the stop request. The current work may continue.
       </Text>
       <Text type="supporting" color="secondary">
-        AE recorded the response at {new Date(cancellation.observedAt).toISOString()} and will not send the stop request twice.
+        AE sent the stop request at {new Date(cancellation.requestedAt).toISOString()}.
+      </Text>
+      <Text type="supporting" color="secondary">
+        The business response was recorded at {new Date(cancellation.observedAt).toISOString()}; AE will not send the stop request twice.
       </Text>
     </div>
   }
@@ -793,6 +798,9 @@ function cancellationMessage(
       {cancellation.requestedAt === undefined
         ? 'This business step has started, so AE can no longer stop it before release.'
         : 'You asked AE to stop, but the business step had already started.'}
+    </Text>
+    <Text type="supporting" color="secondary">
+      The business step was released at {new Date(cancellation.changedAt).toISOString()}.
     </Text>
     {cancellation.requestedAt === undefined ? null : <Text type="supporting" color="secondary">
       AE recorded your stop request at {new Date(cancellation.requestedAt).toISOString()}.

@@ -1016,6 +1016,7 @@ describe('customer Request workspace', () => {
     render(<AeCustomerRequestWorkspace />)
 
     expect(await screen.findByText('You asked AE to stop, but the business step had already started.')).toBeTruthy()
+    expect(screen.getByText('The business step was released at 1970-01-01T00:00:20.100Z.')).toBeTruthy()
     expect(screen.getByText(/AE recorded your stop request at/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Stop before the next step' })).toBeNull()
   })
@@ -1043,6 +1044,8 @@ describe('customer Request workspace', () => {
     render(<AeCustomerRequestWorkspace />)
 
     expect(await screen.findByText('The business declined the stop request. The current work may continue.')).toBeTruthy()
+    expect(screen.getByText('AE sent the stop request at 1970-01-01T00:00:00.020Z.')).toBeTruthy()
+    expect(screen.getByText(/The business response was recorded at 1970-01-01T00:00:00.030Z/)).toBeTruthy()
     expect(screen.getByText(/will not send the stop request twice/)).toBeTruthy()
     expect(screen.queryByText(/cancelled the business work/i)).toBeNull()
   })
