@@ -603,11 +603,16 @@ describe('customer Request workspace', () => {
     expect(screen.getByText(/cannot be reversed automatically/)).toBeTruthy()
     expect(screen.getByText('The businesses do not publish a cancellation path for this option.')).toBeTruthy()
     expect(screen.getByText('Choice code quote:opaque')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'What confirming means' })).toBeTruthy()
+    expect(screen.getByText(
+      'Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.',
+    )).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Confirm this choice' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Not now' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Change this Request' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Decline this choice' })).toBeTruthy()
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Decline this choice' }))
     expect(await screen.findByRole('button', { name: 'Review Prepare a governed result' })).toBeTruthy()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })

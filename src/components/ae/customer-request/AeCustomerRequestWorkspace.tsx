@@ -541,20 +541,18 @@ function RouteReviewCard({ projection, routeRef, turns, confirm, decline, edit, 
         <RouteDisclosureDetails route={route} review />
         <Text type="supporting" color="secondary">Choice code {route.quoteDigest}</Text>
         <div className="grid gap-3 rounded-md border border-border bg-surface p-4">
-          <Heading level={3}>Review, confirm, then start</Heading>
-          <ol className="grid gap-2 text-sm text-secondary">
-            <li><strong>Review.</strong> {actions.review.summary}</li>
-            <li><strong>Confirm.</strong> {actions.confirm.summary}</li>
-            <li><strong>Start.</strong> {actions.start.summary}</li>
-          </ol>
+          <Heading level={3}>What confirming means</Heading>
+          <Text color="secondary">Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.</Text>
+          <Text type="supporting" color="secondary">{actions.start.summary}</Text>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button label="Confirm this choice" variant="primary" clickAction={confirm} />
-          <Button label="Not now" variant="secondary" clickAction={decline} />
+          <Button label="Change this Request" variant="secondary" clickAction={edit} />
+          <Button label="Decline this choice" variant="secondary" clickAction={decline} />
+          <Button label="Start a new Request" variant="ghost" clickAction={restart} />
         </div>
       </div>
     </Card>
-    <RecoveryActions edit={edit} restart={restart} />
   </section>
 }
 

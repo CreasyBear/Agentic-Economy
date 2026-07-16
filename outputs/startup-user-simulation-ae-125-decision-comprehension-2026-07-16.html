@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>AE #125 Simulated Decision Comprehension</title>
+  <style>
+    :root { --bg:#0b0d10; --panel:#14171c; --panel-2:#1b1f25; --ink:#f3f0e8; --muted:#a7adb7; --line:#303641; --acid:#d9ff63; --coral:#ff745d; --cyan:#62e6d2; --radius:18px; --shadow:0 22px 70px rgba(0,0,0,.34); }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; line-height:1.55; }
+    body::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:.24; background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px); background-size:32px 32px; mask-image:linear-gradient(to bottom,black,transparent 75%); }
+    a { color:inherit; } .skip { position:absolute; left:-9999px; } .skip:focus { left:16px; top:16px; z-index:20; background:var(--acid); color:#111; padding:10px 14px; }
+    .shell { width:min(1180px,calc(100% - 40px)); margin:auto; position:relative; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; padding:22px 0; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:-.02em; } .brand i { width:12px; height:12px; background:var(--acid); border-radius:50%; box-shadow:0 0 24px var(--acid); }
+    .meta { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; } .chip,.badge { border:1px solid var(--line); background:#101318; color:var(--muted); border-radius:999px; padding:7px 10px; font-size:12px; font-weight:750; text-transform:uppercase; letter-spacing:.06em; }
+    button { border:1px solid var(--line); background:var(--ink); color:#111; border-radius:999px; padding:9px 14px; font:inherit; font-weight:800; cursor:pointer; } button:hover { transform:translateY(-1px); } button:focus-visible, summary:focus-visible { outline:3px solid var(--cyan); outline-offset:3px; }
+    .hero { padding:70px 0 46px; display:grid; grid-template-columns:1.45fr .55fr; gap:38px; align-items:end; }
+    .kicker,.eyebrow { color:var(--acid); font:750 12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; text-transform:uppercase; letter-spacing:.12em; }
+    h1 { margin:12px 0 24px; max-width:900px; font-size:clamp(45px,7vw,92px); line-height:.94; letter-spacing:-.065em; }
+    .verdict { font-size:clamp(18px,2vw,25px); max-width:780px; color:#d9dde4; margin:0; }
+    .hero-score { background:var(--acid); color:#0b0d10; border-radius:var(--radius); padding:26px; box-shadow:var(--shadow); transform:rotate(1deg); } .hero-score span { font:750 11px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.1em; } .hero-score strong { display:block; font-size:72px; line-height:1; letter-spacing:-.08em; margin:16px 0 8px; } .hero-score p { margin:0; font-size:13px; font-weight:700; }
+    .summary { display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-bottom:38px; } .summary div { padding:20px; background:var(--panel); } .summary div+div { border-left:1px solid var(--line); } .summary span,.persona-grid span,.journey-grid span { display:block; color:var(--muted); font:700 11px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; } .summary strong { font-size:18px; }
+    .leak { display:grid; grid-template-columns:160px 1fr; gap:28px; padding:28px; border-radius:var(--radius); background:var(--coral); color:#160e0c; box-shadow:var(--shadow); margin:26px 0 70px; } .leak-label { font:800 12px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.1em; } .leak h2 { margin:0 0 8px; font-size:clamp(26px,4vw,46px); line-height:1; letter-spacing:-.04em; } .leak p { margin:8px 0 0; max-width:800px; }
+    .section-head { display:flex; justify-content:space-between; align-items:end; gap:24px; padding-bottom:18px; border-bottom:1px solid var(--line); margin-bottom:18px; } .section-head h2 { margin:0; font-size:clamp(32px,5vw,60px); letter-spacing:-.055em; line-height:1; } .section-head p { margin:0; color:var(--muted); max-width:470px; }
+    .persona-list { display:grid; gap:16px; margin-bottom:76px; } .persona-card { background:linear-gradient(135deg,var(--panel),#101318); border:1px solid var(--line); border-radius:var(--radius); padding:26px; box-shadow:0 12px 36px rgba(0,0,0,.15); } .persona-head { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; } .persona-head h3 { font-size:30px; letter-spacing:-.04em; margin:7px 0 4px; } .persona-head p { color:var(--muted); margin:0; }
+    .score-ring { --score:0; width:92px; height:92px; flex:0 0 92px; border-radius:50%; display:grid; place-content:center; text-align:center; background:radial-gradient(circle at center,var(--panel) 58%,transparent 60%),conic-gradient(var(--acid) calc(var(--score)*1%),var(--line) 0); } .score-ring strong { font-size:27px; line-height:1; } .score-ring span { font-size:10px; color:var(--muted); }
+    .decision { display:flex; gap:14px; align-items:center; margin:22px 0; padding:12px 14px; background:var(--panel-2); border-left:4px solid var(--acid); } .decision span { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+    .persona-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; } .persona-grid>div,.journey-grid>div { border:1px solid var(--line); border-radius:12px; padding:16px; background:rgba(255,255,255,.018); } .persona-grid .wide { grid-column:1/-1; } .persona-grid p,.journey-grid p { margin:0; }
+    details { margin-top:14px; } summary { cursor:pointer; color:var(--acid); font-weight:800; padding:12px 0 2px; } .journey-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; } .journey-grid ul { margin:0; padding-left:18px; }
+    .metrics { margin-top:16px; display:grid; gap:9px; } .metric-row { display:grid; grid-template-columns:150px 1fr 42px; align-items:center; gap:12px; font-size:13px; } .metric-track { height:8px; border-radius:8px; background:var(--line); overflow:hidden; } .metric-track i { display:block; height:100%; background:linear-gradient(90deg,var(--cyan),var(--acid)); border-radius:inherit; }
+    .fix-list { display:grid; gap:10px; margin-bottom:76px; } .fix-row { display:grid; grid-template-columns:64px 1fr auto; gap:18px; align-items:center; padding:20px; border:1px solid var(--line); background:var(--panel); border-radius:14px; } .fix-rank { font:800 26px ui-monospace,monospace; color:var(--acid); } .fix-copy h3 { margin:0; font-size:18px; } .fix-copy p { margin:3px 0 0; color:var(--muted); } .badges { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; } .badge.positive { border-color:rgba(98,230,210,.45); color:var(--cyan); } .badge.negative { border-color:rgba(255,116,93,.45); color:var(--coral); }
+    .experiment { margin-bottom:34px; padding:30px; background:var(--acid); color:#111; border-radius:var(--radius); display:grid; grid-template-columns:.8fr 1.2fr; gap:34px; } .experiment h2 { font-size:38px; line-height:1; letter-spacing:-.045em; margin:10px 0; } .experiment-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; } .experiment-grid div { padding:14px; border:1px solid rgba(0,0,0,.25); border-radius:12px; } .experiment-grid span { display:block; font:750 10px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; margin-bottom:5px; } .experiment-grid p { margin:0; }
+    .limits { padding:26px; border:1px solid var(--line); border-radius:var(--radius); color:var(--muted); margin-bottom:60px; } .limits h2 { color:var(--ink); margin-top:0; } .limits li+li { margin-top:8px; }
+    footer { display:flex; justify-content:space-between; gap:20px; border-top:1px solid var(--line); padding:22px 0 40px; color:var(--muted); font-size:12px; }
+    .reveal { animation:rise .45s ease both; } @keyframes rise { from { opacity:0; transform:translateY(12px); } }
+    @media (max-width:820px) { .shell { width:min(100% - 24px,1180px); } .hero,.experiment { grid-template-columns:1fr; } .hero { padding-top:44px; } .hero-score { transform:none; } .summary { grid-template-columns:1fr; } .summary div+div { border-left:0; border-top:1px solid var(--line); } .leak { grid-template-columns:1fr; } .fix-row { grid-template-columns:44px 1fr; } .badges { grid-column:1/-1; justify-content:flex-start; } .persona-grid,.journey-grid,.experiment-grid { grid-template-columns:1fr; } .persona-grid .wide { grid-column:auto; } .meta .chip { display:none; } }
+    @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto!important; animation:none!important; transition:none!important; } }
+    @media print { body { background:white; color:#111; } body::before,.topbar button { display:none; } .shell { width:100%; } .persona-card,.fix-row,.limits { background:white; color:#111; break-inside:avoid; } .persona-head p,.fix-copy p,.limits { color:#444; } details>summary { display:none; } details>div { display:grid; } }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to report</a>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><i></i> Startup User Simulator</div>
+      <div class="meta"><span class="chip">deep mode</span><span class="chip">5 personas</span><button type="button" onclick="window.print()">Print / Save PDF</button></div>
+    </header>
+    <main id="main">
+      <section class="hero">
+        <div><span class="kicker">Simulated customer report · 2026-07-16</span><h1>AE #125 Simulated Decision Comprehension</h1><p class="verdict">All five simulated customer types understood the bounded decision; the cohort scored 94 of 96 with zero critical misunderstandings, while two time-constrained contexts omitted a non-critical explanation of the fit tradeoff.</p></div>
+        <aside class="hero-score"><span>Average decision score</span><strong>92</strong><p>Structured simulation, not a predicted conversion rate.</p></aside>
+      </section>
+      <section class="summary" aria-label="Test summary"><div><span>Tested</span><strong>Local /engine human UI and shared Request JSON projection</strong></div><div><span>Conversion goal</span><strong>Choose, change, or decline a current route without confusing confirmation with execution</strong></div><div><span>Mode</span><strong>Deep</strong></div></section>
+      <section class="leak"><div class="leak-label">Biggest conversion leak</div><div><h2>Fit and tradeoff are easier to skim past than authority boundaries</h2><p>The revised confirmation panel makes cost, authority, data release, and start timing explicit, but the route&#x27;s fit rationale still sits above the final decision controls and can be omitted by hurried readers.</p><p><strong>Evidence:</strong> Simulated human contexts H2 and H5 answered seven of eight frozen questions and omitted question 2; all critical questions were correct. Human cohort 46/48, agent cohort 48/48.</p></div></section>
+      <section><header class="section-head"><h2>Five customers.<br>Five decisions.</h2><p>Each persona uses the same scoring framework but brings a different job, constraint, and threshold for trust.</p></header><div class="persona-list">
+    <article class="persona-card reveal" id="persona-1">
+      <header class="persona-head">
+        <div>
+          <span class="eyebrow">Persona 01 · Strongest fit</span>
+          <h3>Procurement coordinator</h3>
+          <p>Select a bounded multi-business purchasing workflow</p>
+        </div>
+        <div class="score-ring" style="--score:96" role="img" aria-label="Simulated decision score 96 out of 100">
+          <strong>96</strong><span>/100</span>
+        </div>
+      </header>
+      <div class="decision"><span>Decision</span><strong>Confirms the exact choice</strong></div>
+      <div class="persona-grid">
+        <div><span>First impression</span><p>The promised result, businesses, and maximum cost are immediately decision-relevant.</p></div>
+        <div><span>Trust break</span><p>Independent supply and fulfilment are not established by this sandbox surface.</p></div>
+        <div class="wide"><span>Biggest objection</span><p>Can the evidence be trusted outside the sandbox?</p></div>
+      </div>
+      <details>
+        <summary>Open full decision journey</summary>
+        <div class="journey-grid">
+          <div><span>Context</span><p>Needs a strict ceiling, named recipients, and an auditable recovery path before authority.</p></div>
+          <div><span>What they understand</span><p>Confirmation authorizes only the displayed choice and ceiling; start is a separate action that can share information and begin work.</p></div>
+          <div><span>Where they hesitate</span><p>Would require real supplier evidence before using this for live procurement.</p></div>
+          <div><span>Observed evidence</span><ul><li>Maximum cost and confirm-before time are visible before the decision</li><li>Named recipients, purposes, fields, effects, uncertainty, cancellation, and recovery are disclosed</li><li>What confirming means panel states that confirmation neither starts work nor shares information</li></ul></div>
+        </div>
+        <div class="metrics">
+            <div class="metric-row">
+              <span>Clarity</span>
+              <div class="metric-track" aria-label="Clarity: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Relevance</span>
+              <div class="metric-track" aria-label="Relevance: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Trust</span>
+              <div class="metric-track" aria-label="Trust: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Low friction</span>
+              <div class="metric-track" aria-label="Low friction: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Value confidence</span>
+              <div class="metric-track" aria-label="Value confidence: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>CTA fit</span>
+              <div class="metric-track" aria-label="CTA fit: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div></div>
+      </details>
+    </article>
+    <article class="persona-card reveal" id="persona-2">
+      <header class="persona-head">
+        <div>
+          <span class="eyebrow">Persona 02 · Fast decision</span>
+          <h3>Time-constrained journey manager</h3>
+          <p>Choose a coordinated itinerary or journey workflow quickly</p>
+        </div>
+        <div class="score-ring" style="--score:90" role="img" aria-label="Simulated decision score 90 out of 100">
+          <strong>90</strong><span>/100</span>
+        </div>
+      </header>
+      <div class="decision"><span>Decision</span><strong>Confirms after reviewing the ceiling</strong></div>
+      <div class="persona-grid">
+        <div><span>First impression</span><p>The outcome and maximum cost are clear enough to proceed.</p></div>
+        <div><span>Trust break</span><p>The fit rationale and tradeoff are separated from the final action area.</p></div>
+        <div class="wide"><span>Biggest objection</span><p>Why is this route better than the alternative right now?</p></div>
+      </div>
+      <details>
+        <summary>Open full decision journey</summary>
+        <div class="journey-grid">
+          <div><span>Context</span><p>Has little time and scans the final review for cost, expiry, sharing, and reversibility.</p></div>
+          <div><span>What they understand</span><p>The exact businesses, ceiling, recipients, effect, expiry, cancellation, recovery, and review-confirm-start boundary.</p></div>
+          <div><span>Where they hesitate</span><p>Omits the non-critical fit/tradeoff explanation when recounting the decision.</p></div>
+          <div><span>Observed evidence</span><ul><li>Compact viewport keeps all three explicit choices accessible</li><li>Decline this choice returns without creating authority</li><li>Fit rationale appears earlier in the route card rather than beside the confirmation controls</li></ul></div>
+        </div>
+        <div class="metrics">
+            <div class="metric-row">
+              <span>Clarity</span>
+              <div class="metric-track" aria-label="Clarity: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Relevance</span>
+              <div class="metric-track" aria-label="Relevance: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Trust</span>
+              <div class="metric-track" aria-label="Trust: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Low friction</span>
+              <div class="metric-track" aria-label="Low friction: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Value confidence</span>
+              <div class="metric-track" aria-label="Value confidence: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>CTA fit</span>
+              <div class="metric-track" aria-label="CTA fit: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div></div>
+      </details>
+    </article>
+    <article class="persona-card reveal" id="persona-3">
+      <header class="persona-head">
+        <div>
+          <span class="eyebrow">Persona 03 · Skeptical evaluator</span>
+          <h3>Privacy-sensitive operations lead</h3>
+          <p>Ensure only necessary information reaches named businesses</p>
+        </div>
+        <div class="score-ring" style="--score:94" role="img" aria-label="Simulated decision score 94 out of 100">
+          <strong>94</strong><span>/100</span>
+        </div>
+      </header>
+      <div class="decision"><span>Decision</span><strong>Changes the Request before confirming</strong></div>
+      <div class="persona-grid">
+        <div><span>First impression</span><p>Recipients, purposes, fields, and effects are inspectable before authority.</p></div>
+        <div><span>Trust break</span><p>A real deployment and independently operated businesses remain unproven in this run.</p></div>
+        <div class="wide"><span>Biggest objection</span><p>Can any undeclared recipient receive the data?</p></div>
+      </div>
+      <details>
+        <summary>Open full decision journey</summary>
+        <div class="journey-grid">
+          <div><span>Context</span><p>Will not proceed if data release is ambiguous or confirmation itself shares information.</p></div>
+          <div><span>What they understand</span><p>No information is shared at confirmation; starting uses the confirmation and may release only the displayed fields to named recipients.</p></div>
+          <div><span>Where they hesitate</span><p>Wants production evidence that enforcement matches the projection.</p></div>
+          <div><span>Observed evidence</span><ul><li>What would be shared names each recipient, purpose, field, and classification</li><li>Confirmation copy explicitly says information is not shared yet</li><li>Change this Request is a first-class action beside confirm and decline</li></ul></div>
+        </div>
+        <div class="metrics">
+            <div class="metric-row">
+              <span>Clarity</span>
+              <div class="metric-track" aria-label="Clarity: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Relevance</span>
+              <div class="metric-track" aria-label="Relevance: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Trust</span>
+              <div class="metric-track" aria-label="Trust: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Low friction</span>
+              <div class="metric-track" aria-label="Low friction: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Value confidence</span>
+              <div class="metric-track" aria-label="Value confidence: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>CTA fit</span>
+              <div class="metric-track" aria-label="CTA fit: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div></div>
+      </details>
+    </article>
+    <article class="persona-card reveal" id="persona-4">
+      <header class="persona-head">
+        <div>
+          <span class="eyebrow">Persona 04 · Budget sensitive</span>
+          <h3>Budget-controlled small business owner</h3>
+          <p>Avoid open-ended cost while delegating a multi-step task</p>
+        </div>
+        <div class="score-ring" style="--score:94" role="img" aria-label="Simulated decision score 94 out of 100">
+          <strong>94</strong><span>/100</span>
+        </div>
+      </header>
+      <div class="decision"><span>Decision</span><strong>Confirms within the displayed ceiling</strong></div>
+      <div class="persona-grid">
+        <div><span>First impression</span><p>Maximum cost reads as a strict bound rather than an estimate.</p></div>
+        <div><span>Trust break</span><p>Commercial value is simulated and no real charge or fulfilment occurs.</p></div>
+        <div class="wide"><span>Biggest objection</span><p>Could the final cost exceed the amount shown?</p></div>
+      </div>
+      <details>
+        <summary>Open full decision journey</summary>
+        <div class="journey-grid">
+          <div><span>Context</span><p>Can proceed only when the amount is a ceiling and a changed route requires a new decision.</p></div>
+          <div><span>What they understand</span><p>The maximum is the ceiling for this exact choice; expiry or material change prevents silently confirming a stale choice.</p></div>
+          <div><span>Where they hesitate</span><p>Needs real pricing and supplier performance before live use.</p></div>
+          <div><span>Observed evidence</span><ul><li>Maximum cost is repeated in the review</li><li>Confirmation copy binds permission to this exact choice and maximum cost</li><li>Changed-route diff and expiry are part of the shared projection</li></ul></div>
+        </div>
+        <div class="metrics">
+            <div class="metric-row">
+              <span>Clarity</span>
+              <div class="metric-track" aria-label="Clarity: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Relevance</span>
+              <div class="metric-track" aria-label="Relevance: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Trust</span>
+              <div class="metric-track" aria-label="Trust: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Low friction</span>
+              <div class="metric-track" aria-label="Low friction: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Value confidence</span>
+              <div class="metric-track" aria-label="Value confidence: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>CTA fit</span>
+              <div class="metric-track" aria-label="CTA fit: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div></div>
+      </details>
+    </article>
+    <article class="persona-card reveal" id="persona-5">
+      <header class="persona-head">
+        <div>
+          <span class="eyebrow">Persona 05 · Adjacent user</span>
+          <h3>Non-technical household organiser</h3>
+          <p>Coordinate a complex request without learning routing terminology</p>
+        </div>
+        <div class="score-ring" style="--score:88" role="img" aria-label="Simulated decision score 88 out of 100">
+          <strong>88</strong><span>/100</span>
+        </div>
+      </header>
+      <div class="decision"><span>Decision</span><strong>Declines and revises the Request</strong></div>
+      <div class="persona-grid">
+        <div><span>First impression</span><p>The screen asks for a customer decision using ordinary language.</p></div>
+        <div><span>Trust break</span><p>The amount of detail is high for a hurried reader.</p></div>
+        <div class="wide"><span>Biggest objection</span><p>What happens if a later step fails after something irreversible occurs?</p></div>
+      </div>
+      <details>
+        <summary>Open full decision journey</summary>
+        <div class="journey-grid">
+          <div><span>Context</span><p>Understands outcomes and consequences but does not know AE architecture or protocol.</p></div>
+          <div><span>What they understand</span><p>The result, businesses, ceiling, data release, irreversible effect, expiry, and safe or check-first recovery paths.</p></div>
+          <div><span>Where they hesitate</span><p>Skims the fit/tradeoff explanation and prefers to revise before granting authority.</p></div>
+          <div><span>Observed evidence</span><ul><li>No kernel or protocol vocabulary appears in the default decision journey</li><li>Calls and dependencies remain progressively disclosed</li><li>Explicit change and decline labels replace the ambiguous Not now action</li></ul></div>
+        </div>
+        <div class="metrics">
+            <div class="metric-row">
+              <span>Clarity</span>
+              <div class="metric-track" aria-label="Clarity: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Relevance</span>
+              <div class="metric-track" aria-label="Relevance: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Trust</span>
+              <div class="metric-track" aria-label="Trust: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Low friction</span>
+              <div class="metric-track" aria-label="Low friction: 4 of 5">
+                <i style="width:80%"></i>
+              </div>
+              <b>4/5</b>
+            </div>
+            <div class="metric-row">
+              <span>Value confidence</span>
+              <div class="metric-track" aria-label="Value confidence: 3 of 5">
+                <i style="width:60%"></i>
+              </div>
+              <b>3/5</b>
+            </div>
+            <div class="metric-row">
+              <span>CTA fit</span>
+              <div class="metric-track" aria-label="CTA fit: 5 of 5">
+                <i style="width:100%"></i>
+              </div>
+              <b>5/5</b>
+            </div></div>
+      </details>
+    </article></div></section>
+      <section><header class="section-head"><h2>What to fix first.</h2><p>Recommendations are ordered by expected impact, implementation effort, and confidence in the observed evidence.</p></header><div class="fix-list">
+    <article class="fix-row reveal">
+      <div class="fix-rank">01</div>
+      <div class="fix-copy">
+        <h3>Keep the new What confirming means panel and explicit Confirm, Change, and Decline actions.</h3>
+        <p>Helps 5 of 5</p>
+      </div>
+      <div class="badges">
+        <span class="badge positive">Impact · High</span>
+        <span class="badge">Effort · Small</span>
+        <span class="badge positive">Confidence · High</span>
+      </div>
+    </article>
+    <article class="fix-row reveal">
+      <div class="fix-rank">02</div>
+      <div class="fix-copy">
+        <h3>Repeat one sentence of fit and the primary tradeoff immediately above the decision buttons.</h3>
+        <p>Helps 2 of 5</p>
+      </div>
+      <div class="badges">
+        <span class="badge neutral">Impact · Medium</span>
+        <span class="badge">Effort · Small</span>
+        <span class="badge positive">Confidence · High</span>
+      </div>
+    </article>
+    <article class="fix-row reveal">
+      <div class="fix-rank">03</div>
+      <div class="fix-copy">
+        <h3>Retain the strict maximum cost beside the confirm-before time on compact and wide layouts.</h3>
+        <p>Helps 4 of 5</p>
+      </div>
+      <div class="badges">
+        <span class="badge positive">Impact · High</span>
+        <span class="badge">Effort · Small</span>
+        <span class="badge positive">Confidence · High</span>
+      </div>
+    </article>
+    <article class="fix-row reveal">
+      <div class="fix-rank">04</div>
+      <div class="fix-copy">
+        <h3>Keep recipient, purpose, field, effect, uncertainty, cancellation, and recovery disclosures expanded during final review.</h3>
+        <p>Helps 5 of 5</p>
+      </div>
+      <div class="badges">
+        <span class="badge positive">Impact · High</span>
+        <span class="badge">Effort · Medium</span>
+        <span class="badge positive">Confidence · High</span>
+      </div>
+    </article>
+    <article class="fix-row reveal">
+      <div class="fix-rank">05</div>
+      <div class="fix-copy">
+        <h3>Validate the same frozen questions with real unbriefed people before claiming observed customer comprehension.</h3>
+        <p>Helps 5 of 5</p>
+      </div>
+      <div class="badges">
+        <span class="badge positive">Impact · High</span>
+        <span class="badge">Effort · Medium</span>
+        <span class="badge positive">Confidence · High</span>
+      </div>
+    </article></div></section>
+      <section class="experiment"><div><span class="eyebrow" style="color:#111">Fastest measurable experiment</span><h2>Move fit and tradeoff to the last responsible moment</h2><p>Repeating the primary fit reason and tradeoff beside the confirmation controls will eliminate the two non-critical omissions without adding decision friction.</p></div><div class="experiment-grid"><div><span>Change</span><p>Add a one-sentence fit/tradeoff recap above Confirm this choice.</p></div><div><span>Measure</span><p>Correct answers to frozen question 2 in an unbriefed comprehension study</p></div><div><span>Success signal</span><p>12 of 12 answer question 2 correctly with zero regression on the seven critical questions</p></div><div><span>Strongest / weakest fit</span><p>Procurement coordinator / Non-technical household organiser</p></div></div></section>
+      <section class="limits"><h2>Read this correctly</h2><ul><li>This is a structured simulation, not observed user behavior, a real customer study, or a predicted conversion rate.</li><li>The 12-context score is simulated: human UI cohort 46/48 and external-agent projection cohort 48/48, total 94/96, with zero simulated critical misunderstandings.</li><li>The local browser run used controlled Request responses; it proves the customer projection and interaction contract, not hosted production reachability.</li><li>No confirmation or execution was performed by the simulated study beyond the controlled browser test fixture.</li><li>Sandbox and source-owned evidence do not prove independently operated supply, useful customer value, payment, dispatch, booking, or external fulfilment.</li><li>A real six-person compact and wide study is still required before describing comprehension as observed human evidence.</li></ul></section>
+    </main>
+    <footer><span>Generated by $startup-user-simulator</span><span>Local /engine human UI and shared Request JSON projection</span></footer>
+  </div>
+</body>
+</html>

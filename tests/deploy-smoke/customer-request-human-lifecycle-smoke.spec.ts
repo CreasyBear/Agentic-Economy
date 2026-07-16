@@ -111,8 +111,11 @@ async function provePreApprovalDisclosures(page: import('@playwright/test').Page
   await expect(main).toContainText('No alternative way is currently declared.')
   await expect(main).toContainText('Service reference')
   await expect(main).toContainText('Quote reference')
-  await expect(page.getByRole('heading', { name: 'Review, confirm, then start' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'What confirming means' })).toBeVisible()
+  await expect(page.getByText('Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Confirm this choice' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Change this Request' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Decline this choice' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Start now' })).not.toBeVisible()
 }
 
