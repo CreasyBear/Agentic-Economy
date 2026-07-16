@@ -151,7 +151,7 @@ describe('sandbox capability provider', () => {
 
     expect(response.status).toBe(200)
     expect(wait).toHaveBeenCalledOnce()
-    expect(wait.mock.calls[0]?.[0]).toBe(5_000)
+    expect(wait.mock.calls[0]?.[0]).toBe(2_000)
   })
 
   it('executes the procurement workflow through three typed business endpoints', async () => {

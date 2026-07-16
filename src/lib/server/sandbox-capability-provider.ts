@@ -287,7 +287,7 @@ async function routeProviderResponse(
     if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
     const normalizedRequest = parsed.data.request.toLowerCase()
     if (normalizedRequest.includes(CANCEL_AFTER_CURRENT_REQUEST_PHRASE)) {
-      await (options.wait ?? waitForDelay)(5_000, request?.signal ?? new AbortController().signal)
+      await (options.wait ?? waitForDelay)(2_000, request?.signal ?? new AbortController().signal)
     }
     const prefix = normalizedRequest.includes(UNKNOWN_ROUTE_REQUEST_PHRASE)
       ? UNKNOWN_ROUTE_REFERENCE_PREFIX
