@@ -71,6 +71,9 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   await page.reload({ waitUntil: 'networkidle' })
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('Business result', { exact: true })).toBeVisible()
+  await expect(page.getByText(
+    'AE restored the latest saved state for this Request. Checking it did not restart the work.',
+  )).toBeVisible()
   for (const business of expectedBusinesses) {
     await expect(page.locator('main')).toContainText(business)
   }
@@ -100,8 +103,8 @@ async function provePreApprovalDisclosures(page: import('@playwright/test').Page
     await expect(main).toContainText(business)
   }
   await expect(main).toContainText('$10.00')
-  await expect(main).toContainText('resolve sandbox service reference')
-  await expect(main).toContainText('prepare sandbox service quote')
+  await expect(main).toContainText(/resolve sandbox service reference/iu)
+  await expect(main).toContainText(/prepare sandbox service quote/iu)
   await expect(main).toContainText('Information would be shared')
   await expect(main).toContainText('cannot be reversed automatically')
   await expect(main).toContainText('No uncertainty is declared for this choice.')
@@ -132,6 +135,7 @@ async function emitHumanObservation(
   const evidence = customerRequestEvidenceResultSchema.parse(await evidenceResponse.json())
   const expectedState = expected === 'complete' ? 'completed' : 'outcome_unknown'
   if (!viewResponse.ok() || view.kind !== 'request' || view.state !== expectedState
+    || view.recovery?.state !== 'restored' || view.recovery.workRestarted !== false
     || !evidenceResponse.ok() || evidence.kind !== 'evidence' || evidence.state !== expectedState
     || evidence.result === undefined) {
     throw new Error('hosted_human_journey_parity_observation_incomplete')
@@ -144,6 +148,7 @@ async function emitHumanObservation(
     resultDigest: canonicalDigest(evidence.result as StableHashValue),
     businesses: view.businesses?.map(({ name }) => name) ?? [],
     resumedAfterReload: true,
+    restoration: view.recovery,
   })}\n`)
 }
 
@@ -190,6 +195,9 @@ async function proveUnknownOutcomeRecovery(
 
   await page.reload({ waitUntil: 'networkidle' })
   await expect(page.getByText('Still confirming', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(
+    'AE restored the latest saved state for this Request. Checking it did not restart the work.',
+  )).toBeVisible()
   await expect(page.getByText('1 of 2 business steps completed.')).toBeVisible()
   await expect(page.getByText('AE will not repeat the step whose result is still being confirmed.')).toBeVisible()
   expect(await activeRequestRef(page)).toBe(requestRef)
