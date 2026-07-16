@@ -459,6 +459,11 @@ export const customerRequestViewSchema = z.strictObject({
       label: z.string(), classification: z.enum(['public', 'personal', 'sensitive', 'credential']),
     }).strict()),
   }).strict().optional(),
+  dataHandling: z.object({
+    requestStorage: z.literal('saved_for_revision'),
+    businessSharing: z.literal('not_shared'),
+    explanation: z.string(),
+  }).strict().optional(),
   preparationRef: z.string().optional(),
   clarification: z.union([
     z.object({

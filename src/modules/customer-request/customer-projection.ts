@@ -101,6 +101,12 @@ type RequestEvaluationProjectionInput = Readonly<{
   }>
 }>
 
+const UNSUPPORTED_REQUEST_DATA_HANDLING = Object.freeze({
+  requestStorage: 'saved_for_revision' as const,
+  businessSharing: 'not_shared' as const,
+  explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+})
+
 export function projectCustomerRequest(result: CompileCustomerRequestResult): CustomerRequestProjection {
   if (result.kind === 'refused') return requestView({
     requestRef: 'request:uncommitted', revision: 0, state: 'needs_attention',
@@ -144,6 +150,7 @@ export function projectRequestEvaluation(input: Readonly<{
     summary: 'AE cannot perform the requested operation.',
     nextAction: 'revise_request',
     criteria,
+    dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
   })
   if (input.outcome === 'unsupported' && providerDataSharingProhibited) return requestView({
     ...routeGeneration,
@@ -153,6 +160,7 @@ export function projectRequestEvaluation(input: Readonly<{
     summary: 'Available options require sharing information with a business, which you asked AE not to do.',
     nextAction: 'revise_request',
     criteria,
+    dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
   })
   if (input.outcome === 'unsupported' && maximumResponseTimeMs !== undefined) return requestView({
     ...routeGeneration,
@@ -162,6 +170,7 @@ export function projectRequestEvaluation(input: Readonly<{
     summary: `No current option declares a response time within ${maximumResponseTimeMs} milliseconds.`,
     nextAction: 'revise_request',
     criteria,
+    dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
   })
   if (input.outcome === 'unsupported' && maximumTotalCost !== undefined) return requestView({
     ...routeGeneration,
@@ -171,6 +180,7 @@ export function projectRequestEvaluation(input: Readonly<{
     summary: `No current option stays within your ${formatCustomerMoney(maximumTotalCost.currency, maximumTotalCost.amountMinor)} maximum.`,
     nextAction: 'revise_request',
     criteria,
+    dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
   })
   if (input.evaluation.posture === 'unsupported') return requestView({
     ...routeGeneration,
@@ -180,6 +190,7 @@ export function projectRequestEvaluation(input: Readonly<{
     summary: 'No business on AE can support this request right now.',
     nextAction: 'revise_request',
     criteria,
+    dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
   })
   if (input.evaluation.nextRequirement !== undefined) return requestView({
     ...routeGeneration,
@@ -225,6 +236,7 @@ export function projectRequestEvaluation(input: Readonly<{
     summary: 'No business on AE can support this request right now.',
     nextAction: 'revise_request',
     criteria,
+    dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
   })
   return requestView({
     ...routeGeneration,
@@ -511,6 +523,7 @@ function requestView(input: Readonly<{
   clarification?: CustomerRequestView['clarification']
   criteria?: readonly CustomerCriterion[]
   disclosureReview?: CustomerRequestView['disclosureReview']
+  dataHandling?: CustomerRequestView['dataHandling']
   preparationRef?: string
   options?: readonly CustomerOption[]
   optionSet?: CustomerOptionSet
@@ -531,6 +544,7 @@ function requestView(input: Readonly<{
     nextAction: input.nextAction,
     missingFields: Object.freeze((input.missingFields ?? []).map((field) => Object.freeze({ ...field }))),
     criteria: Object.freeze((input.criteria ?? []).map((criterion) => Object.freeze({ ...criterion }))),
+    ...(input.dataHandling === undefined ? {} : { dataHandling: Object.freeze({ ...input.dataHandling }) }),
     ...(input.disclosureReview === undefined ? {} : { disclosureReview: Object.freeze({
       ...input.disclosureReview,
       categories: Object.freeze(input.disclosureReview.categories.map((category) => Object.freeze({ ...category }))),

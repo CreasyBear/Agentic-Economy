@@ -308,6 +308,34 @@ describe('customer Request workspace', () => {
     expect(screen.queryByText(/business_contact_not_started/)).toBeNull()
   })
 
+  it('explains how an unsupported Request was handled without claiming redaction or deletion', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'privacy-disposition' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({
+      kind: 'request', requestRef: 'request:privacy-disposition', revision: 1, state: 'unsupported',
+      summary: 'No business on AE can support this request right now.',
+      nextAction: 'revise_request', missingFields: [], criteria: [], options: [],
+      dataHandling: {
+        requestStorage: 'saved_for_revision',
+        businessSharing: 'not_shared',
+        explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+      },
+    })))
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find an option. My private medical context is included.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+
+    expect(await screen.findByRole('heading', {
+      name: 'No business on AE can support this request right now.',
+    })).toBeTruthy()
+    expect(screen.getByText(
+      'AE saved this Request so you can revise it. No information was sent to a business.',
+    )).toBeTruthy()
+    expect(screen.queryByText(/redact|delete/iu)).toBeNull()
+  })
+
   it('shows completed work when a later business result is still unknown', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'partial-unknown' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({

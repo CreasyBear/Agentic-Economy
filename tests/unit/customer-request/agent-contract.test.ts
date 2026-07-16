@@ -35,6 +35,25 @@ describe('Customer Request agent contract', () => {
     expect(customerRequestViewSchema.parse(view).criteria).toEqual(view.criteria)
   })
 
+  it('gives human and agent callers the same exact unsupported-request data disposition', () => {
+    const view = projectRequestEvaluation({
+      snapshot: {
+        requestId: 'request:unsupported-private-context',
+        revision: 1,
+        intent: 'Find an option using private medical context.',
+      },
+      evaluation: { posture: 'unsupported', criteria: [] },
+      outcome: 'unsupported',
+      actionCount: 0,
+    })
+
+    expect(customerRequestViewSchema.parse(view).dataHandling).toEqual({
+      requestStorage: 'saved_for_revision',
+      businessSharing: 'not_shared',
+      explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+    })
+  })
+
   it('validates the customer-semantic prepared decision and every terminal recovery state', () => {
     const prepared = {
       kind: 'request', requestRef: 'request:sandbox', revision: 2,

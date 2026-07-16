@@ -406,6 +406,11 @@ const customerView = v.object({
       ),
     })),
   })),
+  dataHandling: v.optional(v.object({
+    requestStorage: v.literal('saved_for_revision'),
+    businessSharing: v.literal('not_shared'),
+    explanation: v.string(),
+  })),
   preparationRef: v.optional(v.string()),
   clarification: v.optional(v.union(
     v.object({ kind: v.literal('intent_direction'), prompt: v.string(), answerKind: v.literal('natural_language') }),
@@ -2322,7 +2327,10 @@ function isProviderReportedRouteFailure(result: JsonValue): boolean {
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
-  const { disclosureReview, optionSet, clarification, preparedAction, action, progress, activity, decision, confirmation } = view
+  const {
+    disclosureReview, dataHandling, optionSet, clarification, preparedAction,
+    action, progress, activity, decision, confirmation,
+  } = view
   return {
     kind: view.kind, requestRef: view.requestRef, revision: view.revision,
     ...(view.routeGenerationRef === undefined ? {} : { routeGenerationRef: view.routeGenerationRef }),
@@ -2336,6 +2344,7 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
         categories: disclosureReview.categories.map((category) => ({ ...category })),
       },
     }),
+    ...(dataHandling === undefined ? {} : { dataHandling: { ...dataHandling } }),
     ...(clarification === undefined ? {} : { clarification: { ...clarification } }),
     ...(preparedAction === undefined ? {} : { preparedAction: {
       ...preparedAction,

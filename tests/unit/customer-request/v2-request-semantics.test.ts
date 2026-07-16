@@ -964,6 +964,11 @@ describe('V2 Request semantics', () => {
       state: 'unsupported',
       summary: 'Available options require sharing information with a business, which you asked AE not to do.',
       nextAction: 'revise_request',
+      dataHandling: {
+        requestStorage: 'saved_for_revision',
+        businessSharing: 'not_shared',
+        explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+      },
     })
   })
 

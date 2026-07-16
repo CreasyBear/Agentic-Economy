@@ -17,6 +17,13 @@ import {
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
+import {
+  admitSandboxV2Supply,
+  registerSandboxBusinesses,
+  registerSandboxV2SupplyRegistrations,
+} from '../../convex/devSeed'
+import { runtimeDb } from '../../convex/source_state'
+import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
 
 const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
 const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
@@ -29,6 +36,50 @@ describe('current V2 Customer Request application path', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
+  })
+
+  it('preserves the unsupported Request data disposition through the durable application projection', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+        fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+      ))
+      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      const registrations = await registerSandboxV2SupplyRegistrations(ctx.db, 2_000)
+      await admitSandboxV2Supply(ctx.db, registrations, 2_500)
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        prompt: '',
+        selections: [],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:privacy-disposition',
+      requestId: 'request:v2:privacy-disposition',
+      delegatedAgentId: 'agent:external:v2',
+      customerJob: 'Book and pay for a guaranteed appointment. Private medical context is included.',
+      routing: { networkId: 'ae:public' },
+    })
+
+    expect(submitted).toMatchObject({
+      kind: 'request',
+      state: 'unsupported',
+      nextAction: 'revise_request',
+      dataHandling: {
+        requestStorage: 'saved_for_revision',
+        businessSharing: 'not_shared',
+        explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+      },
+    })
+    await expect(customer.action(api.customerRequestApplication.resume, {
+      requestRef: 'request:v2:privacy-disposition',
+    })).resolves.toEqual(submitted)
   })
 
   it('uses eligible V2 supply, opaque interpretation and one durable exact aggregate', async () => {
