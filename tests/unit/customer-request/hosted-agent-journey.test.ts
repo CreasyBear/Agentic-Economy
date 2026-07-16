@@ -207,6 +207,108 @@ describe('hosted Customer Request journey', () => {
     })
   })
 
+  it('rejects an expired choice, discovers recovery, and starts only the refreshed generation', async () => {
+    const first = compositeRoutesReadyView()
+    const expired = requestView('needs_attention', 2, {
+      routeGenerationRef: 'generation:one',
+      nextAction: 'retry',
+      decision: {
+        ...first.decision,
+        outcome: { kind: 'routes_expired', routeCount: 1, summary: 'These options have expired.' },
+        routes: [{ ...first.decision.routes[0], availability: 'expired' }],
+      },
+    })
+    const refreshed = compositeRoutesReadyView('generation:two', 'route:two')
+    const refreshedConfirmation = {
+      ...confirmation(),
+      confirmationRef: 'confirmation:two',
+      generationRef: 'generation:two',
+      route: refreshed.decision.routes[0],
+    }
+    const responses = [
+      first,
+      first,
+      expired,
+      refreshed,
+      requestView('route_confirmed', 2, {
+        routeGenerationRef: 'generation:two',
+        confirmation: refreshedConfirmation,
+      }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:two', nextAction: 'wait',
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:two', nextAction: 'wait',
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      }),
+      requestView('completed', 2, {
+        routeGenerationRef: 'generation:two', nextAction: 'none',
+        businesses: compositeBusinesses(),
+        action: {
+          state: 'completed', resolution: 'provider_result', automaticRetry: false,
+          result: { quoteReference: 'sandbox-quote:complete' }, observedAt: 9_100,
+        },
+      }),
+      {
+        kind: 'evidence', requestRef: 'request:cold', state: 'completed', generatedAt: 9_100,
+        steps: [
+          { step: 1, state: 'completed', observedAt: 9_050, evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }] },
+          { step: 2, state: 'completed', observedAt: 9_100, evidence: [{ receiptRef: 'receipt:two', label: 'Quote reference' }] },
+        ],
+        result: { quoteReference: 'sandbox-quote:complete' },
+      },
+    ]
+    const calls: Array<{ url: string; body?: Record<string, unknown> }> = []
+    const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
+      calls.push({
+        url: String(url),
+        ...(init?.body === undefined
+          ? {}
+          : { body: JSON.parse(String(init.body)) as Record<string, unknown> }),
+      })
+      const next = responses.shift()
+      if (next === undefined) throw new Error('unexpected request')
+      return Response.json(next)
+    })
+    const sleep = vi.fn(async () => undefined)
+
+    const proof = await runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'http://127.0.0.1:4319', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'cold-external-agent', version: 'expiry-recovery-v1' },
+      scenario: {
+        request: 'Resolve a labelled sandbox service and prepare its quote',
+        facts: {}, messages: [], finish: 'complete',
+        expiryRecovery: { waitMs: 310_000 },
+        expectedRoute: {
+          stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+        },
+      },
+      sandbox: true, fetch, sleep,
+      verifyRelease: async () => ({
+        kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+    })
+
+    expect(sleep).toHaveBeenCalledWith(310_000)
+    expect(calls.filter(({ url }) => url.endsWith('/confirmation'))).toHaveLength(2)
+    expect(calls.filter(({ url }) => url.endsWith('/run'))).toHaveLength(2)
+    expect(calls.find(({ url }) => url.endsWith('/options'))).toBeDefined()
+    expect(proof.measurements.staleOptionRecovery).toEqual({
+      state: 'verified',
+      expiredGenerationRef: 'generation:one',
+      expiredRouteRef: 'route:one',
+      refreshedGenerationRef: 'generation:two',
+      refreshedRouteRef: 'route:two',
+      staleConfirmationCreated: false,
+      staleExecutionStarted: false,
+    })
+  })
+
   it('refuses completed proof when the action and evidence results diverge', async () => {
     const responses = completeJourneyResponses()
     const evidence = responses.at(-1)
@@ -718,16 +820,19 @@ function routesReadyView() {
   })
 }
 
-function compositeRoutesReadyView() {
+function compositeRoutesReadyView(generationRef = 'generation:one', routeRef = 'route:one') {
   const view = routesReadyView()
   const decision = (view as typeof view & { decision: Readonly<Record<string, unknown>> }).decision
   const route = routePlan()
   return {
     ...view,
+    routeGenerationRef: generationRef,
     decision: {
       ...decision,
+      generationRef,
       routes: [{
         ...route,
+        routeRef,
         stepCount: 2,
         businesses: [
           { businessRef: 'business:resolver', name: 'Sandbox Route Resolver' },

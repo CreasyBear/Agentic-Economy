@@ -28,6 +28,7 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
     facts: Readonly<Record<string, unknown>>
     messages: readonly string[]
     finish?: 'cancel' | 'complete' | 'outcome_unknown'
+    expiryRecovery?: Readonly<{ waitMs: number }>
     expectedRoute?: Readonly<{
       stepCount: number
       businesses: readonly string[]
@@ -50,6 +51,15 @@ type JourneyMetrics = {
   clarifications: number
   executionStartReplay: 'not_proven' | 'same_request_monotonic_progress'
   mutations: Array<Readonly<{ path: string; source: MutationSource }>>
+  staleOptionRecovery?: Readonly<{
+    state: 'verified'
+    expiredGenerationRef: string
+    expiredRouteRef: string
+    refreshedGenerationRef: string
+    refreshedRouteRef: string
+    staleConfirmationCreated: false
+    staleExecutionStarted: false
+  }>
 }
 
 type MutationSource = 'declared_request' | 'observed_navigation' | 'automatic_replay'
@@ -117,6 +127,15 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
     replaySafety: z.strictObject({
       executionStart: z.enum(['not_proven', 'same_request_monotonic_progress']),
     }),
+    staleOptionRecovery: z.strictObject({
+      state: z.literal('verified'),
+      expiredGenerationRef: z.string(),
+      expiredRouteRef: z.string(),
+      refreshedGenerationRef: z.string(),
+      refreshedRouteRef: z.string(),
+      staleConfirmationCreated: z.literal(false),
+      staleExecutionStarted: z.literal(false),
+    }).optional(),
     disclosureIntegrity: z.strictObject({
       state: z.literal('verified'),
       recipients: z.array(z.string()),
@@ -178,6 +197,7 @@ export async function runHostedCustomerRequestJourney(
 
   let messageIndex = 0
   let transitions = 0
+  let expiredChoice: Readonly<{ generationRef: string; routeRef: string }> | undefined
   while (transitions < 24) {
     transitions += 1
     if (view.state === 'needs_information') {
@@ -227,7 +247,51 @@ export async function runHostedCustomerRequestJourney(
       const selectedBusiness = selectedBusinesses[0]
       if (route === undefined || selectedBusiness === undefined) throw new Error('hosted_journey_route_missing')
       assertExpectedRoute(input.scenario.expectedRoute, route)
-      authorityStops.push('route_confirmation')
+      if (expiredChoice !== undefined) {
+        if (view.routeGenerationRef === expiredChoice.generationRef || route.routeRef === expiredChoice.routeRef) {
+          throw new Error('hosted_journey_expired_choice_not_refreshed')
+        }
+        runtimeInput.metrics.staleOptionRecovery = {
+          state: 'verified',
+          expiredGenerationRef: expiredChoice.generationRef,
+          expiredRouteRef: expiredChoice.routeRef,
+          refreshedGenerationRef: requiredRouteGenerationRef(view),
+          refreshedRouteRef: route.routeRef,
+          staleConfirmationCreated: false,
+          staleExecutionStarted: false,
+        }
+      }
+      if (!authorityStops.includes('route_confirmation')) authorityStops.push('route_confirmation')
+      if (input.scenario.expiryRecovery !== undefined && expiredChoice === undefined) {
+        if (!Number.isSafeInteger(input.scenario.expiryRecovery.waitMs)
+          || input.scenario.expiryRecovery.waitMs <= 0) {
+          throw new Error('hosted_journey_expiry_wait_invalid')
+        }
+        await (input.sleep ?? defaultSleep)(input.scenario.expiryRecovery.waitMs)
+        const expired = await callObservedAgent(
+          runtimeInput, view, 'confirm_option',
+          {
+            '<unique string>': `acceptance:confirm-expired:${nonce}:${view.revision}`,
+            '<routeRef from decision.routes>': route.routeRef,
+          },
+        )
+        observe(states, expired)
+        if (expired.state !== 'needs_attention'
+          || expired.decision?.outcome.kind !== 'routes_expired'
+          || expired.confirmation !== undefined
+          || expired.navigation?.actions.some(({ relation }) => relation === 'start_confirmed_option')) {
+          throw new Error(`hosted_journey_expired_confirmation_not_rejected:${expired.state}`)
+        }
+        expiredChoice = {
+          generationRef: requiredRouteGenerationRef(view),
+          routeRef: route.routeRef,
+        }
+        view = await callObservedAgent(runtimeInput, expired, 'prepare_options', {
+          '<unique string>': `acceptance:refresh-expired:${nonce}:${view.revision}`,
+        }, [200, 202])
+        observe(states, view)
+        continue
+      }
       view = await callObservedAgent(
         runtimeInput, view, 'confirm_option',
         {
@@ -842,6 +906,9 @@ function journeyMeasurements(
     },
     resultUsability: { state: resultUsable ? 'usable' as const : 'unusable' as const },
     replaySafety: { executionStart: input.metrics.executionStartReplay },
+    ...(input.metrics.staleOptionRecovery === undefined
+      ? {}
+      : { staleOptionRecovery: input.metrics.staleOptionRecovery }),
     disclosureIntegrity: {
       state: 'verified' as const,
       recipients: route.dataUse.recipients.map(({ name }) => name).sort(),
@@ -856,6 +923,11 @@ function journeyMeasurements(
       mutations: input.metrics.mutations,
     },
   }
+}
+
+function requiredRouteGenerationRef(view: CustomerRequestView): string {
+  if (view.routeGenerationRef === undefined) throw new Error('hosted_journey_route_generation_missing')
+  return view.routeGenerationRef
 }
 
 function recordMutation(

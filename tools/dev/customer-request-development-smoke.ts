@@ -36,6 +36,7 @@ export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
   facts: Readonly<Record<string, unknown>>
   messages: readonly string[]
   finish: 'complete' | 'cancel' | 'outcome_unknown'
+  expiryRecovery?: Readonly<{ waitMs: number }>
   expectedRoute: Readonly<{
     stepCount: number
     businesses: readonly string[]
@@ -82,6 +83,14 @@ export function customerRequestDevelopmentSmokeConfig(
     facts: shared.facts,
     messages: shared.messages,
     finish: shared.finish ?? 'complete',
+    ...(env.AE_CUSTOMER_REQUEST_EXPIRY_RECOVERY_WAIT_MS === undefined ? {} : {
+      expiryRecovery: {
+        waitMs: positiveInteger(
+          env.AE_CUSTOMER_REQUEST_EXPIRY_RECOVERY_WAIT_MS,
+          'AE_CUSTOMER_REQUEST_EXPIRY_RECOVERY_WAIT_MS',
+        ),
+      },
+    }),
     expectedRoute: shared.expectedRoute ?? {
       stepCount: 2, businesses: DEFAULT_BUSINESSES, recipients: DEFAULT_RECIPIENTS,
     },
@@ -126,6 +135,7 @@ export async function runCustomerRequestDevelopmentSmoke(
           facts: config.facts,
           messages: config.messages,
           finish: config.finish,
+          ...(config.expiryRecovery === undefined ? {} : { expiryRecovery: config.expiryRecovery }),
           expectedRoute: config.expectedRoute,
         },
         sandbox: true,
@@ -185,6 +195,12 @@ function required(value: string | undefined, name: string): string {
   const normalized = value?.trim()
   if (!normalized) throw new Error(`${name} is required`)
   return normalized
+}
+
+function positiveInteger(value: string, name: string): number {
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error(`${name} must be a positive integer`)
+  return parsed
 }
 
 async function main(): Promise<void> {
