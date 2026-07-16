@@ -411,13 +411,27 @@ export async function runHostedCustomerRequestJourney(
         throw new Error('hosted_journey_unsupported_created_authority')
       }
       unsupportedRevision = view.revision
-      view = await callObservedAgent(runtimeInput, view, 'change_request', {
+      const recoveryAction = observedNavigationAction(runtimeInput, view, 'change_request')
+      if (recoveryAction.method !== 'POST') {
+        throw new Error('hosted_journey_navigation_method:change_request')
+      }
+      const recoveryCommand = materializeObservedInput(view, recoveryAction, {
         '<unique string>': `acceptance:unsupported-recovery:${nonce}:${view.revision}`,
         '<natural-language change>': recoveryMessage,
       })
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        view = await callAgent(
+          runtimeInput, recoveryAction.path, recoveryAction.method, recoveryCommand, [200],
+          attempt === 1 ? 'observed_navigation' : 'automatic_replay',
+        )
+        observe(states, view)
+        if (view.state !== 'needs_attention' || view.nextAction !== 'retry'
+          || view.revision !== unsupportedRevision) break
+        if (attempt === 3) throw new Error('hosted_journey_unsupported_recovery_exhausted')
+        await (input.sleep ?? defaultSleep)(1_000)
+      }
       consumedMessages.push({ index: messageIndex, valueDigest: canonicalDigest(recoveryMessage) })
       messageIndex += 1
-      observe(states, view)
       continue
     }
 

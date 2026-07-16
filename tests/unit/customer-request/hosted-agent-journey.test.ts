@@ -220,6 +220,10 @@ describe('hosted Customer Request journey', () => {
     const responses = [
       unsupported,
       unsupported,
+      requestView('needs_attention', 1, {
+        summary: 'The request changed before it could be recorded. Try again.',
+        nextAction: 'retry',
+      }),
       ...completeJourneyResponses().slice(1),
     ]
     const calls: Array<{ url: string; body?: Record<string, unknown> }> = []
@@ -259,7 +263,9 @@ describe('hosted Customer Request journey', () => {
       sleep: async () => undefined,
     })
 
-    expect(calls.filter(({ url }) => url.endsWith('/messages'))).toHaveLength(1)
+    const messageCalls = calls.filter(({ url }) => url.endsWith('/messages'))
+    expect(messageCalls).toHaveLength(2)
+    expect(messageCalls[1]?.body).toEqual(messageCalls[0]?.body)
     expect(calls.filter(({ url }) => url.endsWith('/confirmation'))).toHaveLength(1)
     expect(calls.filter(({ url }) => url.endsWith('/run'))).toHaveLength(2)
     expect(proof.measurements.unsupportedRecovery).toEqual({
