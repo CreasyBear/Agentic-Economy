@@ -13,9 +13,109 @@ import {
   routeMandateDigest,
   verifyRouteMandate,
   type RouteMandate,
+  evaluateStandingRouteAuthority,
+  standingRoutePolicyDigest,
+  type StandingRoutePolicy,
 } from '@/modules/customer-request/public'
 
 describe('RouteMandate', () => {
+  it('authorizes one exact low-risk route and refuses route widening under the same standing policy', () => {
+    const generation = routeGeneration()
+    const selected = generation.routes[0]!
+    const policyMaterial = {
+      format: 'ae.standing-route-policy:v1' as const,
+      principalId: 'principal:customer',
+      delegatedCredentialId: 'credential:assistant:one',
+      generationRef: generation.generationRef,
+      generationDigest: generation.generationDigest,
+      routes: [{
+        routePlanId: selected.routePlanId,
+        routeDigest: selected.routeDigest,
+      }],
+      capabilityContracts: selected.steps.map(({ contractRef }) => ({ ...contractRef })),
+      allowedEffectClasses: ['data_release'] as const,
+      limits: {
+        perUseSpend: { currency: 'AUD', amountMinor: 1_000 },
+        cumulativeSpend: { currency: 'AUD', amountMinor: 2_000 },
+        perUseDataAllocations: 2,
+        cumulativeDataAllocations: 4,
+        occurrences: 2,
+      },
+      fallback: { kind: 'explicit_confirmation_required' as const },
+      validFrom: 1_000,
+      validUntil: 9_000,
+    }
+    const policyDigest = standingRoutePolicyDigest(policyMaterial)
+    const policy: StandingRoutePolicy = {
+      ...policyMaterial,
+      policyRef: `standing-route-policy:v1:${policyDigest}`,
+      policyDigest,
+    }
+
+    const authorized = evaluateStandingRouteAuthority({
+      policy,
+      generation,
+      selectedRoutePlanId: selected.routePlanId,
+      authenticatedPrincipalId: 'principal:customer',
+      delegatedCredentialId: 'credential:assistant:one',
+      priorUses: [],
+      now: 2_000,
+      mandateExpiresAt: 8_000,
+    })
+    expect(authorized).toMatchObject({
+      kind: 'authorized',
+      authorization: {
+        kind: 'standing_low_risk',
+        standingPolicyRef: policy.policyRef,
+        standingPolicyDigest: policy.policyDigest,
+        authorityUseRef: expect.stringMatching(/^standing-authority-use:v1:sha256:/u),
+      },
+      use: {
+        occurrence: 1,
+        maximumSpend: { currency: 'AUD', amountMinor: 1_000 },
+        dataAllocations: 2,
+      },
+    })
+    if (authorized.kind !== 'authorized') throw new Error('standing authority setup failed')
+    expect(compileRouteMandate({
+      generation,
+      selectedRoutePlanId: selected.routePlanId,
+      principal: {
+        principalId: 'principal:customer',
+        authenticationEvidenceRef: 'authentication:credential:assistant:one',
+      },
+      authorization: authorized.authorization,
+      maximumTotalSpend: authorized.use.maximumSpend,
+      expiresAt: authorized.use.mandateExpiresAt,
+      now: authorized.use.usedAt,
+    })).toMatchObject({
+      kind: 'compiled',
+      mandate: {
+        authorization: {
+          kind: 'standing_low_risk',
+          standingPolicyRef: policy.policyRef,
+          authorityUseRef: authorized.use.authorityUseRef,
+        },
+        route: {
+          generationRef: generation.generationRef,
+          routePlanId: selected.routePlanId,
+          routeDigest: selected.routeDigest,
+        },
+      },
+    })
+
+    expect(evaluateStandingRouteAuthority({
+      policy,
+      generation,
+      selectedRoutePlanId: generation.routes[1]!.routePlanId,
+      authenticatedPrincipalId: 'principal:customer',
+      delegatedCredentialId: 'credential:assistant:one',
+      priorUses: [],
+      now: 2_000,
+      mandateExpiresAt: 8_000,
+    })).toEqual({ kind: 'refused', reason: 'route_not_allowed' })
+  })
+
   it('binds explicit customer authority to one exact multi-step RoutePlan', () => {
     const generation = routeGeneration()
     const selected = generation.routes[0]!

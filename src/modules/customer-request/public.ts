@@ -71,3 +71,11 @@ export {
   type RouteMandateStep,
   type VerifyRouteMandateResult,
 } from './route-mandate'
+export {
+  evaluateStandingRouteAuthority,
+  standingRoutePolicyDigest,
+  STANDING_ROUTE_POLICY_FORMAT,
+  type EvaluateStandingRouteAuthorityResult,
+  type StandingRouteAuthorityUse,
+  type StandingRoutePolicy,
+} from './standing-route-authority'
