@@ -687,9 +687,8 @@ export const listPermissions = internalQuery({
       .order('desc')
       .take(65)
     if (rows.length > 64) throw new Error('customer_request_standing_route_policy_history_overflow')
-    const permissions = []
-    for (const row of rows) {
-      if (row.principalId !== args.principalId) continue
+    const permissions = await Promise.all(rows.map(async (row) => {
+      if (row.principalId !== args.principalId) return undefined
       const policy = domainPolicy(row.policy)
       if (!validStoredPolicy(row, policy, args.requestId)) {
         throw new Error('customer_request_standing_route_policy_integrity_failure')
@@ -699,12 +698,15 @@ export const listPermissions = internalQuery({
       if (revocation !== null && !validPolicyRevocation(revocation, policy, args.requestId)) {
         throw new Error('customer_request_standing_route_policy_revocation_integrity_failure')
       }
-      permissions.push({
+      return {
         requestRevision: row.requestRevision,
         policy: writablePolicy(revocation === null ? policy : { ...policy, revokedAt: revocation.revokedAt }),
-      })
+      }
+    }))
+    return {
+      kind: 'found' as const,
+      permissions: permissions.filter((permission) => permission !== undefined),
     }
-    return { kind: 'found' as const, permissions }
   },
 })
 

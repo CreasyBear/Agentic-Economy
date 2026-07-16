@@ -972,13 +972,15 @@ export const listRepeatPermissionAssistants = action({
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
     }
-    const credentials = await ctx.runQuery(internal.customerRequestPrincipals.listStandingCredentials, {
-      ownerId: caller.ownerId,
-    })
-    const policies = await ctx.runQuery(internal.customerRequestStandingRoutePolicy.listPermissions, {
-      requestId: args.requestRef,
-      principalId: caller.principalId,
-    })
+    const [credentials, policies] = await Promise.all([
+      ctx.runQuery(internal.customerRequestPrincipals.listStandingCredentials, {
+        ownerId: caller.ownerId,
+      }),
+      ctx.runQuery(internal.customerRequestStandingRoutePolicy.listPermissions, {
+        requestId: args.requestRef,
+        principalId: caller.principalId,
+      }),
+    ])
     return {
       kind: 'connected_assistants',
       requestRef: args.requestRef,
