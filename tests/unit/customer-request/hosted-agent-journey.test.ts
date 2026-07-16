@@ -782,6 +782,124 @@ describe('hosted Customer Request journey', () => {
     }))
   })
 
+  it('records a released stop request and proves that no downstream step begins', async () => {
+    const queued = requestView('in_progress', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'wait',
+      businesses: compositeBusinesses(),
+      progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      activity: {
+        actor: 'ae', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
+        retry: 'not_needed',
+        cancellation: {
+          state: 'available', until: 'before_next_step_release', releaseMayStartAt: 9_500,
+        },
+        safeNextAction: 'check_progress',
+      },
+    })
+    const released = requestView('in_progress', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'wait',
+      businesses: compositeBusinesses(),
+      progress: { completed: 0, total: 2, current: { step: 1, state: 'awaiting_result' } },
+      activity: {
+        actor: 'business', certainty: 'pending', updatedAt: 9_500, nextCheckAt: 10_500,
+        retry: 'not_needed',
+        cancellation: { state: 'not_available', reason: 'business_step_released', changedAt: 9_500 },
+        safeNextAction: 'check_progress',
+      },
+    })
+    const stopRequested = requestView('in_progress', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'wait',
+      businesses: compositeBusinesses(),
+      progress: { completed: 0, total: 2, current: { step: 1, state: 'awaiting_result' } },
+      activity: {
+        actor: 'business', certainty: 'pending', updatedAt: 9_600, nextCheckAt: 10_600,
+        retry: 'not_needed',
+        cancellation: {
+          state: 'not_available', reason: 'business_step_released',
+          changedAt: 9_500, requestedAt: 9_600,
+        },
+        safeNextAction: 'check_progress',
+      },
+    })
+    const cancelled = requestView('cancelled', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'revise_request',
+      businesses: compositeBusinesses(),
+      summary: 'Stopped after 1 of 2 business steps completed. No later step began.',
+      progress: {
+        completed: 1, total: 2, current: { step: 2, state: 'cancelled' },
+        dependencies: {
+          completed: [{ step: 1, business: 'Sandbox Route Resolver' }],
+          blocked: [],
+        },
+      },
+      activity: {
+        actor: 'none', certainty: 'cancelled', updatedAt: 10_000,
+        retry: 'not_needed', cancellation: { state: 'stopped', stoppedAt: 10_000 },
+        safeNextAction: 'revise_request',
+      },
+    })
+    const responses = [
+      compositeRoutesReadyView(),
+      compositeRoutesReadyView(),
+      requestView('route_confirmed', 2, {
+        routeGenerationRef: 'generation:one', confirmation: confirmation(),
+      }),
+      queued,
+      released,
+      stopRequested,
+      cancelled,
+      cancelled,
+      cancelled,
+      {
+        kind: 'evidence', requestRef: 'request:cold', state: 'cancelled', generatedAt: 10_000,
+        steps: [{
+          step: 1, state: 'completed', observedAt: 9_900,
+          evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }],
+        }],
+      },
+    ]
+    const calls: Array<{ url: string; body?: string }> = []
+    const proof = await runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'http://127.0.0.1:4319', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'cold-external-agent', version: 'cancel-after-current-v1' },
+      scenario: {
+        request: 'Resolve a labelled sandbox service, pause the first step for cancellation, then prepare its quote.',
+        facts: {}, messages: [], finish: 'cancel_after_current',
+        expectedRoute: {
+          stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+        },
+      },
+      sandbox: true,
+      fetch: vi.fn(async (url, init) => {
+        calls.push({ url: String(url), ...(init?.body === undefined ? {} : { body: String(init.body) }) })
+        const next = responses.shift()
+        if (next === undefined) throw new Error('unexpected request')
+        return Response.json(next)
+      }),
+      verifyRelease: async () => ({
+        kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+      sleep: async () => undefined,
+    })
+
+    expect(proof.final).toMatchObject({
+      state: 'cancelled', completedSteps: 1,
+      dependencies: {
+        completedBusinesses: ['Sandbox Route Resolver'],
+        blockedBusinesses: [],
+      },
+    })
+    expect(proof.measurements.downstreamCancellation).toEqual({
+      state: 'verified', releasedStep: 1, completedSteps: 1, unreleasedStep: 2,
+      downstreamStarted: false, cancellationReplaySafe: true,
+    })
+    expect(calls.filter(({ url }) => url.endsWith('/cancellation'))).toHaveLength(2)
+  })
+
   it('discovers every post-submit transition from the observed agent navigation', async () => {
     const routes = withNavigation(compositeRoutesReadyView(), [
       navigationAction('confirm_option', 'POST', '/api/v1/requests/request%3Acold/observed-confirm', {

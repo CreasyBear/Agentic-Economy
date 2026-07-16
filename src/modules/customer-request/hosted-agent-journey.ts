@@ -27,7 +27,7 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
     request: string
     facts: Readonly<Record<string, unknown>>
     messages: readonly string[]
-    finish?: 'cancel' | 'complete' | 'outcome_unknown' | 'invalid_output' | 'provider_denied' | 'partial_result'
+    finish?: 'cancel' | 'cancel_after_current' | 'complete' | 'outcome_unknown' | 'invalid_output' | 'provider_denied' | 'partial_result'
     expiryRecovery?: Readonly<{ waitMs: number }>
     unsupportedRecovery?: Readonly<{ message: string }>
     expectedRoute?: Readonly<{
@@ -75,6 +75,14 @@ type JourneyMetrics = {
     recoveredRevision: number
     authorityCreatedBeforeRecovery: false
     executionStartedBeforeRecovery: false
+  }>
+  downstreamCancellation?: Readonly<{
+    state: 'verified'
+    releasedStep: number
+    completedSteps: number
+    unreleasedStep: number
+    downstreamStarted: false
+    cancellationReplaySafe: true
   }>
 }
 
@@ -175,6 +183,14 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
       recoveredRevision: z.number().int().positive(),
       authorityCreatedBeforeRecovery: z.literal(false),
       executionStartedBeforeRecovery: z.literal(false),
+    }).optional(),
+    downstreamCancellation: z.strictObject({
+      state: z.literal('verified'),
+      releasedStep: z.number().int().positive(),
+      completedSteps: z.number().int().positive(),
+      unreleasedStep: z.number().int().positive(),
+      downstreamStarted: z.literal(false),
+      cancellationReplaySafe: z.literal(true),
     }).optional(),
     disclosureIntegrity: z.strictObject({
       state: z.literal('verified'),
@@ -377,6 +393,13 @@ export async function runHostedCustomerRequestJourney(
       if (view.state !== 'in_progress') throw new Error(`hosted_journey_run_failed:${view.state}`)
       const progressPath = observedNavigationPath(input, view, 'inspect_progress', 'GET')
       const evidencePath = observedNavigationPath(input, view, 'inspect_evidence', 'GET')
+      if (input.scenario.finish === 'cancel_after_current') {
+        return await cancelAfterCurrentHostedJourney({
+          input: runtimeInput, release, requestRef, route, selectedBusiness, selectedBusinesses,
+          states, authorityStops, consumedFacts, consumedMessages, progressPath, evidencePath,
+          started: view, startAction, startCommand, nonce,
+        })
+      }
       if ((input.scenario.finish ?? 'cancel') === 'cancel') {
         const problemAction = observedNavigationAction(input, view, 'report_problem')
         if (problemAction.method !== 'POST') throw new Error('hosted_journey_navigation_method:report_problem')
@@ -538,6 +561,147 @@ export async function runHostedCustomerRequestJourney(
     }
   }
   throw new Error('hosted_journey_transition_limit_exceeded')
+}
+
+async function cancelAfterCurrentHostedJourney(input: Readonly<{
+  input: HostedCustomerRequestJourneyRuntimeInput
+  release: ReleaseVerification
+  requestRef: string
+  route: NonNullable<CustomerRequestView['decision']>['routes'][number]
+  selectedBusiness: string
+  selectedBusinesses: readonly string[]
+  states: CustomerRequestView['state'][]
+  authorityStops: 'route_confirmation'[]
+  consumedFacts: Array<Readonly<{ requirementKey: string; valueDigest: string }>>
+  consumedMessages: Array<Readonly<{ index: number; valueDigest: string }>>
+  progressPath: string
+  evidencePath: string
+  started: CustomerRequestView
+  startAction: ObservedNavigationAction
+  startCommand: unknown
+  nonce: string
+}>): Promise<HostedCustomerRequestJourneyProof> {
+  const cancelAction = observedNavigationAction(input.input, input.started, 'cancel')
+  if (cancelAction.method !== 'POST') throw new Error('hosted_journey_navigation_method:cancel')
+  const cancelCommand = materializeObservedInput(input.started, cancelAction, {
+    '<unique string>': `acceptance:cancel-after-current:${input.nonce}`,
+  })
+  let released: CustomerRequestView | undefined
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const progress = await callAgent(input.input, input.progressPath, 'GET', undefined, [200, 202])
+    observe(input.states, progress)
+    if (progress.state !== 'in_progress') {
+      throw new Error(`hosted_journey_cancel_after_current_released_state:${progress.state}`)
+    }
+    if (progress.progress?.current.state === 'contacting'
+      || progress.progress?.current.state === 'awaiting_result') {
+      released = progress
+      break
+    }
+    await (input.input.sleep ?? defaultSleep)(250)
+  }
+  if (released?.progress?.current.step !== 1) {
+    throw new Error('hosted_journey_cancel_after_current_release_not_observed')
+  }
+  const requested = await callAgent(
+    input.input, cancelAction.path, cancelAction.method, cancelCommand, [200], 'observed_navigation',
+  )
+  observe(input.states, requested)
+  const requestedCancellation = requested.activity?.cancellation
+  if (requested.state !== 'in_progress'
+    || typeof requestedCancellation !== 'object'
+    || requestedCancellation.state !== 'not_available'
+    || requestedCancellation.reason !== 'business_step_released'
+    || requestedCancellation.requestedAt === undefined) {
+    throw new Error('hosted_journey_cancel_after_current_request_not_recorded')
+  }
+  let cancelled: CustomerRequestView | undefined
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const progress = await callAgent(input.input, input.progressPath, 'GET', undefined, [200, 202])
+    observe(input.states, progress)
+    if (progress.state === 'cancelled') {
+      cancelled = progress
+      break
+    }
+    if (progress.state !== 'in_progress') {
+      throw new Error(`hosted_journey_cancel_after_current_terminal:${progress.state}`)
+    }
+    await (input.input.sleep ?? defaultSleep)(250)
+  }
+  if (cancelled?.progress?.completed !== 1
+    || cancelled.progress.total !== input.route.stepCount
+    || cancelled.progress.current.step !== 2
+    || cancelled.progress.current.state !== 'cancelled') {
+    throw new Error('hosted_journey_cancel_after_current_downstream_not_stopped')
+  }
+  const replayed = await callAgent(
+    input.input, cancelAction.path, cancelAction.method, cancelCommand, [200], 'automatic_replay',
+  )
+  observe(input.states, replayed)
+  if (replayed.state !== 'cancelled'
+    || replayed.progress?.completed !== cancelled.progress.completed
+    || replayed.progress?.current.state !== 'cancelled') {
+    throw new Error('hosted_journey_cancel_after_current_replay_changed')
+  }
+  const startReplay = await callAgent(
+    input.input, input.startAction.path, input.startAction.method, input.startCommand, [200], 'automatic_replay',
+  )
+  assertCancelledExecutionStartReplay(input.started, cancelled, startReplay)
+  input.input.metrics.executionStartReplay = 'same_request_monotonic_progress'
+  const evidence = await callAgentEvidence(input.input, input.evidencePath)
+  if (evidence.state !== 'cancelled'
+    || evidence.steps.length !== 1
+    || evidence.steps[0]?.step !== 1
+    || evidence.steps[0].state !== 'completed') {
+    throw new Error('hosted_journey_cancel_after_current_evidence_invalid')
+  }
+  input.input.metrics.downstreamCancellation = {
+    state: 'verified',
+    releasedStep: 1,
+    completedSteps: 1,
+    unreleasedStep: 2,
+    downstreamStarted: false,
+    cancellationReplaySafe: true,
+  }
+  return hostedCustomerRequestJourneyProofSchema.parse({
+    kind: 'cold_external_agent_journey', agent: input.input.agent,
+    release: journeyReleaseProjection(input.input, input.release),
+    observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
+    input: {
+      request: input.input.scenario.request,
+      facts: input.consumedFacts,
+      messages: input.consumedMessages,
+    },
+    observedStates: input.states,
+    authorityStops: input.authorityStops,
+    final: {
+      requestRef: input.requestRef,
+      revision: cancelled.revision,
+      state: 'cancelled',
+      selectedBusiness: input.selectedBusiness,
+      selectedBusinesses: input.selectedBusinesses,
+      stepCount: input.route.stepCount,
+      runState: 'cancelled',
+      evidenceState: evidence.state,
+      problemState: 'not_reported',
+      resumedState: replayed.state,
+      completedSteps: cancelled.progress.completed,
+      dependencies: {
+        completedBusinesses: cancelled.progress.dependencies?.completed.map(({ business }) => business) ?? [],
+        blockedBusinesses: cancelled.progress.dependencies?.blocked.map(({ business }) => business) ?? [],
+      },
+      cancellation: {
+        state: 'stopped',
+        stoppedAt: typeof cancelled.activity?.cancellation === 'object'
+          && cancelled.activity.cancellation.state === 'stopped'
+          ? cancelled.activity.cancellation.stoppedAt
+          : 0,
+      },
+    },
+    measurements: journeyMeasurements(input.input, input.route, false, true),
+    sandbox: true,
+    claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
+  })
 }
 
 async function partialResultHostedJourney(
@@ -1246,6 +1410,9 @@ function journeyMeasurements(
     ...(input.metrics.unsupportedRecovery === undefined
       ? {}
       : { unsupportedRecovery: input.metrics.unsupportedRecovery }),
+    ...(input.metrics.downstreamCancellation === undefined
+      ? {}
+      : { downstreamCancellation: input.metrics.downstreamCancellation }),
     disclosureIntegrity: {
       state: 'verified' as const,
       recipients: route.dataUse.recipients.map(({ name }) => name).sort(),

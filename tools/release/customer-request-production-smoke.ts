@@ -19,6 +19,15 @@ type DirectBaselineConfig = Readonly<{
   maximumTotalCost: Readonly<{ currency: string; amountMinor: number }>
 }>
 
+type CustomerRequestJourneyFinish =
+  | 'cancel'
+  | 'cancel_after_current'
+  | 'complete'
+  | 'outcome_unknown'
+  | 'invalid_output'
+  | 'provider_denied'
+  | 'partial_result'
+
 export type CustomerRequestProductionSmokeConfig = Readonly<{
   baseUrl: string
   agentApiKey?: string
@@ -32,7 +41,7 @@ export type CustomerRequestProductionSmokeConfig = Readonly<{
   }>
   facts: Readonly<Record<string, unknown>>
   fetch: typeof globalThis.fetch
-  finish?: 'cancel' | 'complete' | 'outcome_unknown' | 'invalid_output' | 'provider_denied' | 'partial_result'
+  finish?: CustomerRequestJourneyFinish
   messages: readonly string[]
   preflightOnly: boolean
   requestText: string
@@ -126,7 +135,7 @@ export async function runCustomerRequestProductionSmoke(
 
 function parseDirectBaseline(
   env: Record<string, string | undefined>,
-  finish: 'cancel' | 'complete' | 'outcome_unknown' | 'invalid_output' | 'provider_denied' | 'partial_result',
+  finish: CustomerRequestJourneyFinish,
 ): DirectBaselineConfig | undefined {
   const raw = {
     origins: optionalText(env.AE_DIRECT_PROVIDER_ORIGINS_JSON),
@@ -187,12 +196,13 @@ function isMoney(value: unknown): value is Readonly<{ currency: string; amountMi
 
 function parseFinish(
   value: string | undefined,
-): 'cancel' | 'complete' | 'outcome_unknown' | 'invalid_output' | 'provider_denied' | 'partial_result' {
+): CustomerRequestJourneyFinish {
   const finish = optionalText(value) ?? 'cancel'
-  if (finish !== 'cancel' && finish !== 'complete' && finish !== 'outcome_unknown'
+  if (finish !== 'cancel' && finish !== 'cancel_after_current'
+    && finish !== 'complete' && finish !== 'outcome_unknown'
     && finish !== 'invalid_output' && finish !== 'provider_denied' && finish !== 'partial_result') {
     throw new Error(
-      'AE_CUSTOMER_REQUEST_FINISH must be cancel, complete, outcome_unknown, invalid_output, provider_denied, or partial_result',
+      'AE_CUSTOMER_REQUEST_FINISH must be cancel, cancel_after_current, complete, outcome_unknown, invalid_output, provider_denied, or partial_result',
     )
   }
   return finish

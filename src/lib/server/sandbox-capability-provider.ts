@@ -22,6 +22,7 @@ const PROVIDER_DENIAL_REQUEST_PHRASE = 'provider denial scenario'
 const PROVIDER_DENIAL_REFERENCE_PREFIX = 'sandbox-service:provider-denial:'
 const PARTIAL_RESULT_REQUEST_PHRASE = 'only a partial result is available'
 const PARTIAL_RESULT_REFERENCE_PREFIX = 'sandbox-service:partial-result:'
+const CANCEL_AFTER_CURRENT_REQUEST_PHRASE = 'pause the first step for cancellation'
 const scenarioValue = z.enum(['success', 'refusal', 'timeout', 'expired', 'duplicate'])
 const preparationEgressBody = z.strictObject({
   protocol: z.literal('ae.preparation-egress:v1'),
@@ -285,6 +286,9 @@ async function routeProviderResponse(
     const parsed = z.strictObject({ request: z.string().min(1) }).safeParse(input)
     if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
     const normalizedRequest = parsed.data.request.toLowerCase()
+    if (normalizedRequest.includes(CANCEL_AFTER_CURRENT_REQUEST_PHRASE)) {
+      await (options.wait ?? waitForDelay)(5_000, request?.signal ?? new AbortController().signal)
+    }
     const prefix = normalizedRequest.includes(UNKNOWN_ROUTE_REQUEST_PHRASE)
       ? UNKNOWN_ROUTE_REFERENCE_PREFIX
       : normalizedRequest.includes(MALFORMED_EVIDENCE_REQUEST_PHRASE)

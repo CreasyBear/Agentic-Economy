@@ -138,6 +138,22 @@ describe('sandbox capability provider', () => {
     expect(wrongProvider.status).toBe(400)
   })
 
+  it('delays only the labelled resolver execution used to prove released-step cancellation', async () => {
+    const wait = vi.fn(async (_milliseconds: number, _signal: AbortSignal) => undefined)
+    const response = await handleSandboxRouteProviderRequest('resolver', new Request(
+      'https://ae.test/api/sandbox/providers/route-resolver', {
+        method: 'POST', headers: { Authorization: 'Bearer secret' },
+        body: JSON.stringify({
+          request: 'Resolve a labelled sandbox service and pause the first step for cancellation.',
+        }),
+      },
+    ), { providerKey: 'secret', wait })
+
+    expect(response.status).toBe(200)
+    expect(wait).toHaveBeenCalledOnce()
+    expect(wait.mock.calls[0]?.[0]).toBe(5_000)
+  })
+
   it('executes the procurement workflow through three typed business endpoints', async () => {
     const requestText = 'Source comparable workplace catering options for 80 people next Thursday under AUD 4,000.'
     const brief = await workflowCall('procurement-brief', { request: requestText })
