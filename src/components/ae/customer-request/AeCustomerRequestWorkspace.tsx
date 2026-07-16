@@ -4,6 +4,7 @@ import { Card } from '@astryxdesign/core/Card'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 
+import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
 
 type SubmitResponse = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: string }> | Readonly<{ error: string }>
@@ -86,9 +87,10 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
     setState({ kind: 'submitting' })
     try {
       const replacing = editingRevision !== undefined
-      const response = await fetch(replacing
+      const endpoint = replacing
         ? `/api/requests/${encodeURIComponent(identity.requestRef)}/messages`
-        : '/api/requests', {
+        : '/api/requests'
+      const requestInit = {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(replacing
           ? {
@@ -99,7 +101,10 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
               idempotencyKey: `submit:${identity.requestRef}:0`, requestRef: identity.requestRef,
               agentRef: identity.agentRef, request: need.trim(), routing: { network: 'ae:public' },
             }),
-      })
+      }
+      const response = replacing
+        ? await fetch(endpoint, requestInit)
+        : await fetchBrowserRequestWithInterpreterRecovery(endpoint, requestInit)
       const result: SubmitResponse = await response.json()
       if (!response.ok || !('kind' in result) || result.kind !== 'request') {
         setState(errorState(response.status, 'AE could not start this request.'))
