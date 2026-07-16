@@ -86,6 +86,33 @@ describe('customer Request development smoke configuration', () => {
     }, 'a'.repeat(40))).toMatchObject({ finish: 'outcome_unknown' })
   })
 
+  it('selects an exact-scope repeat-permission journey explicitly', () => {
+    expect(customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_FINISH: 'complete',
+      AE_CUSTOMER_REQUEST_REPEAT_PERMISSION: 'true',
+    }, 'a'.repeat(40))).toMatchObject({
+      finish: 'complete',
+      repeatPermission: true,
+    })
+  })
+
+  it('refuses repeat-permission proof on a non-completing journey', () => {
+    expect(() => customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_FINISH: 'cancel',
+      AE_CUSTOMER_REQUEST_REPEAT_PERMISSION: 'true',
+    }, 'a'.repeat(40))).toThrow(
+      'Repeat-permission development proof requires AE_CUSTOMER_REQUEST_FINISH=complete',
+    )
+  })
+
   it('selects the invalid-output journey explicitly', () => {
     expect(customerRequestDevelopmentSmokeConfig({
       CLERK_SECRET_KEY: 'sk_test',

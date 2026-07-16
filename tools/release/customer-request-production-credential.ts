@@ -78,8 +78,9 @@ export async function withTemporaryClerkApiKey(input: Readonly<{
   clerkSecretKey: string
   expectedInstanceId: string
   subject: string
+  scopes?: readonly string[]
   fetch: typeof globalThis.fetch
-  run: (apiKey: string) => Promise<void>
+  run: (apiKey: string, identity: Readonly<{ credentialId: string }>) => Promise<void>
   keyNamePrefix?: string
   revocationReason?: string
 }>): Promise<void> {
@@ -146,14 +147,17 @@ async function clerkAcceptanceHeaders(input: Readonly<{
 
 async function withTemporaryAgentKey(input: Readonly<{
   subject: string; fetch: typeof globalThis.fetch; headers: Record<string, string>
-  keyNamePrefix?: string; revocationReason?: string; run: (apiKey: string) => Promise<void>
+  scopes?: readonly string[]
+  keyNamePrefix?: string; revocationReason?: string
+  run: (apiKey: string, identity: Readonly<{ credentialId: string }>) => Promise<void>
 }>): Promise<void> {
+  const scopes = temporaryKeyScopes(input.scopes)
   const createdValue = await readClerkJson(input.fetch, `${CLERK_API}/api_keys`, {
     method: 'POST', headers: input.headers,
     body: JSON.stringify({
       name: `${input.keyNamePrefix ?? 'AE production cold-agent acceptance'} ${randomUUID()}`,
       subject: input.subject,
-      scopes: [REQUIRED_SCOPE],
+      scopes,
       seconds_until_expiration: 3_600,
     }),
   }, 'clerk_temporary_api_key_creation_failed')
@@ -162,7 +166,7 @@ async function withTemporaryAgentKey(input: Readonly<{
   let journeyError: unknown
   try {
     const created = createdKeySchema.parse(createdValue)
-    await input.run(created.secret)
+    await input.run(created.secret, { credentialId: created.id })
   } catch (error) {
     journeyError = error
   }
@@ -183,6 +187,16 @@ async function withTemporaryAgentKey(input: Readonly<{
   }
   if (journeyError !== undefined) throw journeyError
   if (revocationFailure !== undefined) throw revocationFailure
+}
+
+function temporaryKeyScopes(scopes: readonly string[] | undefined): readonly string[] {
+  const selected = scopes ?? [REQUIRED_SCOPE]
+  if (selected.length === 0 || selected.length > 32
+    || selected.some((scope) => !/^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$/u.test(scope))
+    || !selected.includes(REQUIRED_SCOPE)) {
+    throw new Error('temporary_agent_key_scopes_invalid')
+  }
+  return [...new Set(selected)].sort()
 }
 
 async function revokeTemporarySession(

@@ -45,6 +45,7 @@ export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
     businesses: readonly string[]
     recipients?: readonly Readonly<{ name: string; purposes: readonly string[] }>[]
   }>
+  repeatPermission: boolean
   journeySigningKey?: Readonly<{ keyId: string; privateKey: string }>
   journeyTrustedKeys?: readonly Readonly<{ keyId: string; publicKey: string }>[]
   directBaseline?: NonNullable<CustomerRequestProductionSmokeConfig['directBaseline']>
@@ -75,6 +76,10 @@ export function customerRequestDevelopmentSmokeConfig(
   const journeyKeyring = env.AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY === undefined
     ? undefined
     : resolveCustomerRequestJourneyKeyring(env)
+  const repeatPermission = env.AE_CUSTOMER_REQUEST_REPEAT_PERMISSION === 'true'
+  if (repeatPermission && shared.finish !== 'complete') {
+    throw new Error('Repeat-permission development proof requires AE_CUSTOMER_REQUEST_FINISH=complete')
+  }
   return {
     baseUrl,
     clerkSecretKey: required(env.CLERK_SECRET_KEY, 'CLERK_SECRET_KEY'),
@@ -105,6 +110,7 @@ export function customerRequestDevelopmentSmokeConfig(
     expectedRoute: shared.expectedRoute ?? {
       stepCount: 2, businesses: DEFAULT_BUSINESSES, recipients: DEFAULT_RECIPIENTS,
     },
+    repeatPermission,
     ...(journeyKeyring === undefined ? {} : {
       journeySigningKey: journeyKeyring.active,
       journeyTrustedKeys: journeyKeyring.trusted,
@@ -127,10 +133,13 @@ export async function runCustomerRequestDevelopmentSmoke(
     clerkSecretKey: config.clerkSecretKey,
     expectedInstanceId: config.clerkInstanceId,
     subject: config.clerkSubject,
+    ...(config.repeatPermission
+      ? { scopes: ['customer_requests:create', 'customer_requests:standing_authority'] }
+      : {}),
     fetch: config.fetch,
     keyNamePrefix: 'AE development cold-agent acceptance',
     revocationReason: 'Temporary development acceptance completed',
-    run: async (agentApiKey) => {
+    run: async (agentApiKey, identity) => {
       signed = await runSignedHostedCustomerRequestJourney({
         environment: 'development',
         baseUrl: config.baseUrl,
@@ -151,6 +160,14 @@ export async function runCustomerRequestDevelopmentSmoke(
             ? {}
             : { unsupportedRecovery: config.unsupportedRecovery }),
           expectedRoute: config.expectedRoute,
+          ...(config.repeatPermission
+            ? {
+                repeatPermission: {
+                  delegatedCredentialId: identity.credentialId,
+                  occurrences: 2,
+                },
+              }
+            : {}),
         },
         sandbox: true,
         fetch: config.fetch,

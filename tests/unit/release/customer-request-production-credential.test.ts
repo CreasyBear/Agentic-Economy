@@ -118,13 +118,15 @@ describe('production cold-agent credential', () => {
       .mockResolvedValueOnce(Response.json(acceptanceUser()))
       .mockResolvedValueOnce(Response.json({ id: 'apikey_temporary', secret: 'ak_temporary_secret' }))
       .mockResolvedValueOnce(Response.json({ id: 'apikey_temporary', revoked: true }))
-    const run = vi.fn(async (_apiKey: string) => undefined)
+    const run = vi.fn(async (_apiKey: string, _identity: Readonly<{ credentialId: string }>) => undefined)
 
     await expect(withTemporaryClerkApiKey({
       clerkSecretKey: 'sk_test_server', expectedInstanceId: 'ins_expected', subject: 'user_acceptance', fetch, run,
     })).resolves.toBeUndefined()
 
-    expect(run).toHaveBeenCalledExactlyOnceWith('ak_temporary_secret')
+    expect(run).toHaveBeenCalledExactlyOnceWith('ak_temporary_secret', {
+      credentialId: 'apikey_temporary',
+    })
     expect(fetch.mock.calls[2]?.[1]).toMatchObject({
       method: 'POST',
       body: expect.stringContaining('customer_requests:create'),
@@ -134,6 +136,27 @@ describe('production cold-agent credential', () => {
     })
     expect(String(fetch.mock.calls[2]?.[1]?.body)).not.toContain('created_by')
     expect(fetch.mock.calls[3]?.[0]).toBe('https://api.clerk.com/v1/api_keys/apikey_temporary/revoke')
+  })
+
+  it('issues exactly the additional scopes required by a bounded acceptance journey', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json(acceptanceUser()))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_temporary', secret: 'ak_temporary_secret' }))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_temporary', revoked: true }))
+
+    await expect(withTemporaryClerkApiKey({
+      clerkSecretKey: 'sk_test_server',
+      expectedInstanceId: 'ins_expected',
+      subject: 'user_acceptance',
+      scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+      fetch,
+      run: async () => undefined,
+    })).resolves.toBeUndefined()
+
+    expect(JSON.parse(String(fetch.mock.calls[2]?.[1]?.body))).toMatchObject({
+      scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+    })
   })
 
   it('preserves the journey failure when revocation also fails', async () => {

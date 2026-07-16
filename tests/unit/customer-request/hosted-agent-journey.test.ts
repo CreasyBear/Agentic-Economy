@@ -38,6 +38,125 @@ describe('hosted Customer Request journey', () => {
     })
   })
 
+  it('creates, replays, uses, resumes, and withdraws repeat permission through the agent surface', async () => {
+    const routeView = routesReadyView() as unknown as CustomerRequestView
+    const route = routeView.decision?.routes[0]
+    if (route === undefined || route.maximumTotalCost.kind !== 'known') throw new Error('route fixture missing')
+    const activePermission = {
+      kind: 'repeat_permission' as const,
+      status: 'active' as const,
+      permissionRef: 'repeat-permission:proof',
+      requestRef: routeView.requestRef,
+      revision: routeView.revision,
+      routeRef: route.routeRef,
+      delegatedCredentialId: 'apikey_repeat',
+      limits: {
+        perUseSpend: {
+          currency: route.maximumTotalCost.currency,
+          amountMinor: route.maximumTotalCost.amountMinor,
+        },
+        cumulativeSpend: {
+          currency: route.maximumTotalCost.currency,
+          amountMinor: route.maximumTotalCost.amountMinor * 2,
+        },
+        perUseDataAllocations: route.dataUse.recipientCount,
+        cumulativeDataAllocations: route.dataUse.recipientCount * 2,
+        occurrences: 2,
+      },
+      fallback: 'ask_for_confirmation' as const,
+      validFrom: 8_000,
+      validUntil: route.validUntil,
+    }
+    const confirmed = requestView('route_confirmed', routeView.revision, {
+      routeGenerationRef: routeView.routeGenerationRef,
+      confirmation: confirmation(),
+    })
+    const inProgress = requestView('in_progress', routeView.revision, {
+      routeGenerationRef: routeView.routeGenerationRef,
+      nextAction: 'wait',
+      progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+    })
+    const completed = requestView('completed', routeView.revision, {
+      routeGenerationRef: routeView.routeGenerationRef,
+      nextAction: 'none',
+      businesses: route.businesses,
+      action: {
+        state: 'completed', resolution: 'provider_result', automaticRetry: false,
+        result: { resultRef: 'sandbox-result:repeat' }, observedAt: 9_100,
+      },
+    })
+    const withdrawnPermission = { ...activePermission, status: 'withdrawn' as const, withdrawnAt: 9_200 }
+    const responses = [
+      routeView,
+      routeView,
+      activePermission,
+      activePermission,
+      activePermission,
+      confirmed,
+      confirmed,
+      inProgress,
+      inProgress,
+      completed,
+      {
+        kind: 'evidence', requestRef: routeView.requestRef, state: 'completed', generatedAt: 9_100,
+        steps: [{
+          step: 1, state: 'completed', observedAt: 9_100,
+          evidence: [{ receiptRef: 'receipt:repeat', label: 'Result reference' }],
+        }],
+        result: { resultRef: 'sandbox-result:repeat' },
+      },
+      withdrawnPermission,
+      withdrawnPermission,
+      withdrawnPermission,
+      requestView('needs_attention', routeView.revision, {
+        routeGenerationRef: routeView.routeGenerationRef,
+        summary: 'Repeat permission was withdrawn. Ask for confirmation before continuing.',
+        nextAction: 'inspect_routes',
+      }),
+    ]
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+      const next = responses.shift()
+      if (next === undefined) throw new Error('unexpected request')
+      return Response.json(next)
+    })
+
+    const proof = await runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'http://127.0.0.1:4319',
+      agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40),
+      expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'repeat-permission-agent', version: '1' },
+      scenario: {
+        request: 'Complete sandbox request',
+        facts: {},
+        messages: [],
+        finish: 'complete',
+        repeatPermission: { delegatedCredentialId: 'apikey_repeat', occurrences: 2 },
+      },
+      sandbox: true,
+      fetch,
+      now: () => 10_000,
+      sleep: async () => undefined,
+      verifyRelease: async () => ({
+        kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+    })
+
+    expect(proof.measurements.repeatPermission).toEqual({
+      permissionRef: 'repeat-permission:proof',
+      routeRef: route.routeRef,
+      delegatedCredentialId: 'apikey_repeat',
+      allowReplaySafe: true,
+      inspectMatched: true,
+      useReplaySafe: true,
+      withdrawn: true,
+      withdrawnUseRefused: true,
+    })
+  })
+
   it('refuses any non-production origin before credentials can leave the process', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
     await expect(runHostedCustomerRequestJourney({

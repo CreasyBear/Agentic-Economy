@@ -10,7 +10,9 @@ import {
   customerRequestEvidenceResultSchema,
   customerRequestJsonValueSchema,
   customerRequestProblemResultSchema,
+  customerRequestRepeatPermissionResultSchema,
   customerRequestSubmitInputSchema,
+  type CustomerRequestRepeatPermission,
   type CustomerRequestView,
 } from './agent-contract'
 
@@ -36,6 +38,10 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
       stepCount: number
       businesses: readonly string[]
       recipients?: readonly Readonly<{ name: string; purposes: readonly string[] }>[]
+    }>
+    repeatPermission?: Readonly<{
+      delegatedCredentialId: string
+      occurrences: number
     }>
   }>
   sandbox: true
@@ -85,6 +91,16 @@ type JourneyMetrics = {
     unreleasedStep: number
     downstreamStarted: false
     cancellationReplaySafe: true
+  }>
+  repeatPermission?: Readonly<{
+    permissionRef: string
+    routeRef: string
+    delegatedCredentialId: string
+    allowReplaySafe: boolean
+    inspectMatched: boolean
+    useReplaySafe: boolean
+    withdrawn: boolean
+    withdrawnUseRefused: boolean
   }>
 }
 
@@ -200,6 +216,16 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
       unreleasedStep: z.number().int().positive(),
       downstreamStarted: z.literal(false),
       cancellationReplaySafe: z.literal(true),
+    }).optional(),
+    repeatPermission: z.strictObject({
+      permissionRef: z.string().startsWith('repeat-permission:'),
+      routeRef: z.string().min(1),
+      delegatedCredentialId: z.string().min(1),
+      allowReplaySafe: z.literal(true),
+      inspectMatched: z.literal(true),
+      useReplaySafe: z.literal(true),
+      withdrawn: z.literal(true),
+      withdrawnUseRefused: z.literal(true),
     }).optional(),
     disclosureIntegrity: z.strictObject({
       state: z.literal('verified'),
@@ -381,13 +407,21 @@ export async function runHostedCustomerRequestJourney(
         observe(states, view)
         continue
       }
-      view = await callObservedAgent(
-        runtimeInput, view, 'confirm_option',
-        {
-          '<unique string>': `acceptance:confirm:${nonce}:${view.revision}`,
-          '<routeRef from decision.routes>': route.routeRef,
-        },
-      )
+      view = input.scenario.repeatPermission === undefined
+        ? await callObservedAgent(
+            runtimeInput, view, 'confirm_option',
+            {
+              '<unique string>': `acceptance:confirm:${nonce}:${view.revision}`,
+              '<routeRef from decision.routes>': route.routeRef,
+            },
+          )
+        : await confirmThroughRepeatPermission(
+            runtimeInput,
+            view,
+            route,
+            input.scenario.repeatPermission,
+            nonce,
+          )
       observe(states, view)
       if (view.state !== 'route_confirmed') throw new Error(`hosted_journey_confirmation_failed:${view.state}`)
       const startAction = observedNavigationAction(runtimeInput, view, 'start_confirmed_option')
@@ -1187,6 +1221,9 @@ async function completeHostedJourney(input: Readonly<{
   const actionResultDigest = digestInput(resumed.action.result)
   const evidenceResultDigest = digestInput(evidence.result)
   if (actionResultDigest !== evidenceResultDigest) throw new Error('hosted_journey_result_mismatch')
+  if (input.input.scenario.repeatPermission !== undefined) {
+    await withdrawRepeatPermission(input.input, resumed, input.input.scenario.repeatPermission)
+  }
   return hostedCustomerRequestJourneyProofSchema.parse({
     kind: 'cold_external_agent_journey', agent: input.input.agent,
     release: journeyReleaseProjection(input.input, input.release),
@@ -1302,6 +1339,144 @@ async function callAgent(
   if (!acceptedStatuses.includes(response.status)) throw responseError(method, path, response.status, value)
   const result = customerRequestAgentResultSchema.parse(value)
   if (result.kind !== 'request') throw new Error(`hosted_journey_agent_result:${result.kind}`)
+  return result
+}
+
+async function confirmThroughRepeatPermission(
+  input: HostedCustomerRequestJourneyRuntimeInput,
+  view: CustomerRequestView,
+  route: NonNullable<NonNullable<CustomerRequestView['decision']>['routes']>[number],
+  repeatPermission: NonNullable<HostedCustomerRequestJourneyInput['scenario']['repeatPermission']>,
+  nonce: string,
+): Promise<CustomerRequestView> {
+  if (route.maximumTotalCost.kind !== 'known') {
+    throw new Error('hosted_journey_repeat_permission_cost_unknown')
+  }
+  if (!Number.isSafeInteger(repeatPermission.occurrences) || repeatPermission.occurrences <= 0) {
+    throw new Error('hosted_journey_repeat_permission_occurrences_invalid')
+  }
+  const allowCommand = {
+    revision: view.revision,
+    routeRef: route.routeRef,
+    delegatedCredentialId: repeatPermission.delegatedCredentialId,
+    occurrences: repeatPermission.occurrences,
+    cumulativeSpend: {
+      currency: route.maximumTotalCost.currency,
+      amountMinor: route.maximumTotalCost.amountMinor * repeatPermission.occurrences,
+    },
+    validUntil: route.validUntil,
+    idempotencyKey: `acceptance:allow-repeat:${nonce}:${view.revision}`,
+  }
+  const path = `/api/v1/requests/${encodeURIComponent(view.requestRef)}/repeat-permissions`
+  const permission = await callRepeatPermission(input, path, 'POST', allowCommand, 'observed_navigation')
+  const replay = await callRepeatPermission(input, path, 'POST', allowCommand, 'automatic_replay')
+  if (JSON.stringify(permission) !== JSON.stringify(replay)) {
+    throw new Error('hosted_journey_repeat_permission_allow_replay_changed')
+  }
+  const inspectPath = `${path}/${encodeURIComponent(permission.permissionRef)}?routeRef=${encodeURIComponent(route.routeRef)}`
+  const inspected = await callRepeatPermission(input, inspectPath, 'GET')
+  if (JSON.stringify(permission) !== JSON.stringify(inspected)) {
+    throw new Error('hosted_journey_repeat_permission_inspection_changed')
+  }
+  const useCommand = {
+    revision: view.revision,
+    routeRef: route.routeRef,
+    delegatedCredentialId: repeatPermission.delegatedCredentialId,
+    idempotencyKey: `acceptance:use-repeat:${nonce}:${view.revision}`,
+  }
+  const usePath = `${path}/${encodeURIComponent(permission.permissionRef)}/use`
+  const confirmed = await callAgent(input, usePath, 'POST', useCommand, [200], 'observed_navigation')
+  const confirmedReplay = await callAgent(input, usePath, 'POST', useCommand, [200], 'automatic_replay')
+  if (JSON.stringify(confirmed) !== JSON.stringify(confirmedReplay)) {
+    throw new Error('hosted_journey_repeat_permission_use_replay_changed')
+  }
+  input.metrics.repeatPermission = {
+    permissionRef: permission.permissionRef,
+    routeRef: route.routeRef,
+    delegatedCredentialId: repeatPermission.delegatedCredentialId,
+    allowReplaySafe: true,
+    inspectMatched: true,
+    useReplaySafe: true,
+    withdrawn: false,
+    withdrawnUseRefused: false,
+  }
+  return confirmed
+}
+
+async function withdrawRepeatPermission(
+  input: HostedCustomerRequestJourneyRuntimeInput,
+  view: CustomerRequestView,
+  repeatPermission: NonNullable<HostedCustomerRequestJourneyInput['scenario']['repeatPermission']>,
+): Promise<void> {
+  const observed = input.metrics.repeatPermission
+  if (observed === undefined) throw new Error('hosted_journey_repeat_permission_receipt_missing')
+  const basePath = `/api/v1/requests/${encodeURIComponent(view.requestRef)}/repeat-permissions/${encodeURIComponent(observed.permissionRef)}`
+  const command = {
+    routeRef: observed.routeRef,
+    idempotencyKey: `acceptance:withdraw-repeat:${view.requestRef}:${view.revision}`,
+  }
+  const withdrawn = await callRepeatPermission(
+    input,
+    `${basePath}/withdrawal`,
+    'POST',
+    command,
+    'observed_navigation',
+  )
+  const replay = await callRepeatPermission(
+    input,
+    `${basePath}/withdrawal`,
+    'POST',
+    command,
+    'automatic_replay',
+  )
+  if (withdrawn.status !== 'withdrawn' || JSON.stringify(withdrawn) !== JSON.stringify(replay)) {
+    throw new Error('hosted_journey_repeat_permission_withdrawal_changed')
+  }
+  const inspected = await callRepeatPermission(
+    input,
+    `${basePath}?routeRef=${encodeURIComponent(observed.routeRef)}`,
+    'GET',
+  )
+  if (JSON.stringify(withdrawn) !== JSON.stringify(inspected)) {
+    throw new Error('hosted_journey_repeat_permission_withdrawn_inspection_changed')
+  }
+  const refusedUse = await callAgent(input, `${basePath}/use`, 'POST', {
+    revision: view.revision,
+    routeRef: observed.routeRef,
+    delegatedCredentialId: repeatPermission.delegatedCredentialId,
+    idempotencyKey: `acceptance:use-repeat-after-withdrawal:${view.requestRef}:${view.revision}`,
+  }, [200], 'observed_navigation')
+  if (refusedUse.state !== 'needs_attention'
+    || !refusedUse.summary.toLowerCase().includes('withdrawn')) {
+    throw new Error('hosted_journey_repeat_permission_withdrawn_use_admitted')
+  }
+  input.metrics.repeatPermission = {
+    ...observed,
+    withdrawn: true,
+    withdrawnUseRefused: true,
+  }
+}
+
+async function callRepeatPermission(
+  input: HostedCustomerRequestJourneyRuntimeInput,
+  path: string,
+  method: 'GET' | 'POST',
+  body?: unknown,
+  mutationSource?: MutationSource,
+): Promise<CustomerRequestRepeatPermission> {
+  recordMutation(input, method, path, mutationSource)
+  input.metrics.requestCalls += 1
+  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
+    method,
+    headers: headers(input, input.agentApiKey),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  const value: unknown = await response.json()
+  if (response.status !== 200) throw responseError(method, path, response.status, value)
+  const result = customerRequestRepeatPermissionResultSchema.parse(value)
+  if (result.kind !== 'repeat_permission') {
+    throw new Error(`hosted_journey_repeat_permission_result:${result.kind}`)
+  }
   return result
 }
 
@@ -1608,6 +1783,9 @@ function journeyMeasurements(
     ...(input.metrics.downstreamCancellation === undefined
       ? {}
       : { downstreamCancellation: input.metrics.downstreamCancellation }),
+    ...(input.metrics.repeatPermission === undefined
+      ? {}
+      : { repeatPermission: input.metrics.repeatPermission }),
     disclosureIntegrity: {
       state: 'verified' as const,
       recipients: route.dataUse.recipients.map(({ name }) => name).sort(),
