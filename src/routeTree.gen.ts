@@ -77,6 +77,7 @@ import { Route as ApiRequestsRequestRefConfirmationRouteImport } from './routes/
 import { Route as ApiRequestsRequestRefCancellationRouteImport } from './routes/api.requests.$requestRef.cancellation'
 import { Route as ApiRequestsRequestRefAuthorizationRouteImport } from './routes/api.requests.$requestRef.authorization'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
+import { Route as OperatorOwnerRequestProblemsReportRefRouteImport } from './routes/_operator/owner.request-problems.$reportRef'
 import { Route as OperatorOwnerInquiriesThreadIdRouteImport } from './routes/_operator/owner.inquiries.$threadId'
 import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/admin.runs.$turnId'
 import { Route as ApiV1RequestsRequestRefRunRouteImport } from './routes/api.v1.requests.$requestRef.run'
@@ -451,6 +452,12 @@ const ApiAnswerThreadsThreadIdRoute =
     path: '/$threadId',
     getParentRoute: () => ApiAnswerThreadsRoute,
   } as any)
+const OperatorOwnerRequestProblemsReportRefRoute =
+  OperatorOwnerRequestProblemsReportRefRouteImport.update({
+    id: '/owner/request-problems/$reportRef',
+    path: '/owner/request-problems/$reportRef',
+    getParentRoute: () => OperatorRoute,
+  } as any)
 const OperatorOwnerInquiriesThreadIdRoute =
   OperatorOwnerInquiriesThreadIdRouteImport.update({
     id: '/$threadId',
@@ -579,6 +586,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
+  '/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
@@ -660,6 +668,7 @@ export interface FileRoutesByTo {
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
+  '/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
@@ -743,6 +752,7 @@ export interface FileRoutesById {
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
+  '/_operator/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
@@ -826,6 +836,7 @@ export interface FileRouteTypes {
     | '/api/v1/requests'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
+    | '/owner/request-problems/$reportRef'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/cancellation'
@@ -907,6 +918,7 @@ export interface FileRouteTypes {
     | '/api/v1/requests'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
+    | '/owner/request-problems/$reportRef'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/cancellation'
@@ -989,6 +1001,7 @@ export interface FileRouteTypes {
     | '/api/v1/requests'
     | '/_operator/admin/runs/$turnId'
     | '/_operator/owner/inquiries/$threadId'
+    | '/_operator/owner/request-problems/$reportRef'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/cancellation'
@@ -1536,6 +1549,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAnswerThreadsThreadIdRouteImport
       parentRoute: typeof ApiAnswerThreadsRoute
     }
+    '/_operator/owner/request-problems/$reportRef': {
+      id: '/_operator/owner/request-problems/$reportRef'
+      path: '/owner/request-problems/$reportRef'
+      fullPath: '/owner/request-problems/$reportRef'
+      preLoaderRoute: typeof OperatorOwnerRequestProblemsReportRefRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/_operator/owner/inquiries/$threadId': {
       id: '/_operator/owner/inquiries/$threadId'
       path: '/$threadId'
@@ -1671,6 +1691,7 @@ interface OperatorRouteChildren {
   OperatorOwnerInquiriesRoute: typeof OperatorOwnerInquiriesRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
   OperatorOwnerStatusRoute: typeof OperatorOwnerStatusRoute
+  OperatorOwnerRequestProblemsReportRefRoute: typeof OperatorOwnerRequestProblemsReportRefRoute
 }
 
 const OperatorRouteChildren: OperatorRouteChildren = {
@@ -1684,6 +1705,8 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorOwnerInquiriesRoute: OperatorOwnerInquiriesRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
   OperatorOwnerStatusRoute: OperatorOwnerStatusRoute,
+  OperatorOwnerRequestProblemsReportRefRoute:
+    OperatorOwnerRequestProblemsReportRefRoute,
 }
 
 const OperatorRouteWithChildren = OperatorRoute._addFileChildren(

@@ -33,6 +33,35 @@ const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
 const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
 
 describe('labelled sandbox V2 capability supply', () => {
+  it('binds labelled sandbox businesses to an explicit authenticated dev owner idempotently', async () => {
+    const backend = convexTest(schema, modules)
+    const ownerClerkUserId = 'user_dev_business_owner'
+
+    const first = await backend.mutation(
+      internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply,
+      { ownerClerkUserId },
+    )
+    const replay = await backend.mutation(
+      internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply,
+      { ownerClerkUserId },
+    )
+
+    expect(first.ownerClerkUserId).toBe(ownerClerkUserId)
+    expect(replay.ownerClerkUserId).toBe(ownerClerkUserId)
+    const businesses = await backend.run((ctx) => ctx.db.query('businesses').collect())
+    const owners = await backend.run((ctx) => ctx.db.query('owners').collect())
+    const claims = await backend.run((ctx) => ctx.db.query('claims').collect())
+    const owner = owners.find((candidate) => candidate.clerkUserId === ownerClerkUserId)
+    expect(owner).toBeDefined()
+    const labelledBusinesses = businesses.filter((business) => business.slug.startsWith('sandbox-'))
+    expect(labelledBusinesses.length).toBeGreaterThan(0)
+    expect(labelledBusinesses.every((business) => business.ownerId === owner?._id)).toBe(true)
+    expect(claims
+      .filter((claim) => claim.businessId !== undefined
+        && labelledBusinesses.some((business) => business._id === claim.businessId))
+      .every((claim) => claim.ownerId === owner?._id)).toBe(true)
+  })
+
   it('registers and admits the three-business procurement workflow through generic supply commands', async () => {
     const backend = convexTest(schema, modules)
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})

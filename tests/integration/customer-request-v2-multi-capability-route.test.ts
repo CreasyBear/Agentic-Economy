@@ -1503,6 +1503,25 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       evidenceReceiptRefs: [receiptRef],
     }
     await expect(unrelatedOwner.action(
+      api.customerRequestApplication.readRouteProblemForBusiness,
+      { reportRef: reported.reportRef },
+    )).resolves.toEqual({ kind: 'refused', reason: 'authority_denied' })
+    await expect(affectedOwner.action(
+      api.customerRequestApplication.readRouteProblemForBusiness,
+      { reportRef: reported.reportRef },
+    )).resolves.toMatchObject({
+      kind: 'business_problem',
+      reportRef: reported.reportRef,
+      category: 'incorrect_result',
+      customerStatement: 'The first business result did not satisfy the confirmed request.',
+      causality: 'unknown',
+      resolution: 'not_adjudicated',
+      decisionAuthority: 'not_assigned',
+      evidence: [{ receiptRef }],
+      availableEvidence: [{ receiptRef }],
+      businessClaims: [],
+    })
+    await expect(unrelatedOwner.action(
       api.customerRequestApplication.recordRouteProblemBusinessReport,
       command,
     )).resolves.toEqual({ kind: 'refused', reason: 'authority_denied' })
@@ -1584,6 +1603,10 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       visibility: 'customer_and_ae_only',
     })
     if (privateReport.kind !== 'problem_reported') throw new Error('private report was not accepted')
+    await expect(affectedOwner.action(
+      api.customerRequestApplication.readRouteProblemForBusiness,
+      { reportRef: privateReport.reportRef },
+    )).resolves.toEqual({ kind: 'refused', reason: 'sharing_not_authorized' })
     await expect(affectedOwner.action(
       api.customerRequestApplication.recordRouteProblemBusinessReport,
       { ...command, reportRef: privateReport.reportRef, idempotencyKey: 'business-claim:private' },

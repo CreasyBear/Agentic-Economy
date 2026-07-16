@@ -38,7 +38,7 @@ export async function withTemporaryClerkAcceptanceCredentials(input: Readonly<{
   keyNamePrefix?: string
   revocationReason?: string
 }>): Promise<void> {
-  const headers = await clerkAcceptanceHeaders(input)
+  const headers = await clerkAcceptanceHeaders({ ...input, expectedPrimaryEmail: ACCEPTANCE_PRIMARY_EMAIL })
   await withTemporaryAgentKey({ ...input, headers, run: async (agentApiKey) => {
     let sessionId: string | undefined
     let sessionToken: string | undefined
@@ -83,12 +83,51 @@ export async function withTemporaryClerkApiKey(input: Readonly<{
   keyNamePrefix?: string
   revocationReason?: string
 }>): Promise<void> {
-  const headers = await clerkAcceptanceHeaders(input)
+  const headers = await clerkAcceptanceHeaders({ ...input, expectedPrimaryEmail: ACCEPTANCE_PRIMARY_EMAIL })
   await withTemporaryAgentKey({ ...input, headers, run: input.run })
 }
 
+export async function withTemporaryClerkUserSession(input: Readonly<{
+  clerkSecretKey: string
+  expectedInstanceId: string
+  subject: string
+  expectedPrimaryEmail: string
+  fetch: typeof globalThis.fetch
+  run: (sessionToken: string) => Promise<void>
+}>): Promise<void> {
+  const headers = await clerkAcceptanceHeaders(input)
+  let sessionId: string | undefined
+  let runError: unknown
+  try {
+    const sessionValue = await readClerkJson(input.fetch, `${CLERK_API}/sessions`, {
+      method: 'POST', headers, body: JSON.stringify({ user_id: input.subject }),
+    }, 'clerk_temporary_session_creation_failed')
+    sessionId = createdSessionIdentitySchema.parse(sessionValue).id
+    const session = createdSessionSchema.parse(sessionValue)
+    const sessionToken = sessionTokenSchema.parse(await readClerkJson(
+      input.fetch, `${CLERK_API}/sessions/${encodeURIComponent(session.id)}/tokens`,
+      { method: 'POST', headers }, 'clerk_temporary_session_token_failed',
+    )).jwt
+    await input.run(sessionToken)
+  } catch (error) {
+    runError = error
+  }
+  const revocationFailure = sessionId === undefined
+    ? undefined
+    : await revokeTemporarySession(input.fetch, headers, sessionId)
+  if (runError !== undefined && revocationFailure !== undefined) {
+    throw new AggregateError([runError, revocationFailure], 'session journey and revocation both failed')
+  }
+  if (runError !== undefined) throw runError
+  if (revocationFailure !== undefined) throw revocationFailure
+}
+
 async function clerkAcceptanceHeaders(input: Readonly<{
-  clerkSecretKey: string; expectedInstanceId: string; subject: string; fetch: typeof globalThis.fetch
+  clerkSecretKey: string
+  expectedInstanceId: string
+  subject: string
+  expectedPrimaryEmail: string
+  fetch: typeof globalThis.fetch
 }>): Promise<Record<string, string>> {
   assertConfigured(input)
   const headers = { Authorization: `Bearer ${input.clerkSecretKey}`, 'Content-Type': 'application/json' }
@@ -101,7 +140,7 @@ async function clerkAcceptanceHeaders(input: Readonly<{
   const user = userSchema.parse(await readClerkJson(
     input.fetch, `${CLERK_API}/users/${encodeURIComponent(input.subject)}`, { headers }, 'clerk_acceptance_subject_unavailable',
   ))
-  assertAcceptanceUser(user, input.subject)
+  assertAcceptanceUser(user, input.subject, input.expectedPrimaryEmail)
   return headers
 }
 
@@ -184,10 +223,14 @@ function assertConfigured(input: Readonly<{
   }
 }
 
-function assertAcceptanceUser(user: z.infer<typeof userSchema>, subject: string): void {
+function assertAcceptanceUser(
+  user: z.infer<typeof userSchema>,
+  subject: string,
+  expectedPrimaryEmail: string,
+): void {
   const primary = user.email_addresses.find((email) => email.id === user.primary_email_address_id)
   if (user.id !== subject || user.banned || user.locked
-    || primary?.email_address.toLowerCase() !== ACCEPTANCE_PRIMARY_EMAIL
+    || primary?.email_address.toLowerCase() !== expectedPrimaryEmail.trim().toLowerCase()
     || primary.verification.status !== 'verified') {
     throw new Error('clerk_acceptance_subject_not_admitted')
   }

@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
 
 import { internal } from './_generated/api'
-import { internalMutation } from './_generated/server'
+import { internalMutation, type MutationCtx } from './_generated/server'
 import {
   admitSandboxV2Supply,
   registerSandboxBusinesses,
@@ -18,10 +18,14 @@ import { runtimeDb } from './source_state'
 import { DEV_SEED_BUSINESS_FIXTURES } from '../src/modules/dev/public'
 
 export const seedLabelledSandboxSupply = internalMutation({
-  args: { includeComparisonOptions: v.optional(v.boolean()) },
+  args: {
+    includeComparisonOptions: v.optional(v.boolean()),
+    ownerClerkUserId: v.optional(v.string()),
+  },
   returns: v.object({
     seededSlugs: v.array(v.string()),
     businessIdsBySlug: v.record(v.string(), v.string()),
+    ownerClerkUserId: v.string(),
     sandboxV2Bindings: v.array(v.string()),
     sandboxCapabilityPublicationRefs: v.array(v.string()),
     retiredSandboxV2Bindings: v.array(v.string()),
@@ -60,6 +64,15 @@ export const seedLabelledSandboxSupply = internalMutation({
         })),
         ...created.businessIdsBySlug,
       },
+    }
+    const ownerClerkUserId = args.ownerClerkUserId?.trim() || 'dev-seed-owner-session'
+    if (ownerClerkUserId !== 'dev-seed-owner-session') {
+      await bindLabelledSandboxBusinessesToOwner(
+        ctx.db,
+        fixtures.map((fixture) => fixture.requestedSlug),
+        ownerClerkUserId,
+        registeredAt + 1_000,
+      )
     }
     const [registrations, routeRegistrations, workflowRegistrations] = await Promise.all([
       registerSandboxV2SupplyRegistrations(ctx.db, registeredAt + 2_000),
@@ -114,9 +127,58 @@ export const seedLabelledSandboxSupply = internalMutation({
       ? await retireSandboxV2AcceptanceSupply(ctx.db, registrations, registeredAt + 3_100)
       : []
     return {
-      ...businesses, sandboxV2Bindings, sandboxCapabilityPublicationRefs,
+      ...businesses, ownerClerkUserId, sandboxV2Bindings, sandboxCapabilityPublicationRefs,
       retiredSandboxV2Bindings, sandboxRouteBindings, sandboxRoutePublicationRefs,
       sandboxWorkflowBindings, sandboxWorkflowPublicationRefs,
     }
   },
 })
+
+async function bindLabelledSandboxBusinessesToOwner(
+  db: MutationCtx['db'],
+  slugs: readonly string[],
+  ownerClerkUserId: string,
+  now: number,
+): Promise<void> {
+  if (!ownerClerkUserId.startsWith('user_') || ownerClerkUserId.length > 200) {
+    throw new Error('sandbox_acceptance_owner_identity_invalid')
+  }
+  let targetOwner = await db.query('owners')
+    .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', ownerClerkUserId))
+    .unique()
+  if (targetOwner === null) {
+    const ownerId = await db.insert('owners', {
+      clerkUserId: ownerClerkUserId,
+      displayName: 'Labelled sandbox business owner',
+      createdAt: now,
+      updatedAt: now,
+    })
+    targetOwner = await db.get(ownerId)
+  }
+  if (targetOwner === null) throw new Error('sandbox_acceptance_owner_creation_failed')
+
+  await Promise.all(slugs.map(async (slug) => {
+    const business = await db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', slug))
+      .unique()
+    if (business === null) throw new Error(`sandbox_acceptance_business_missing:${slug}`)
+    const currentOwner = await db.get(business.ownerId)
+    if (currentOwner === null
+      || (currentOwner.clerkUserId !== 'dev-seed-owner-session'
+        && currentOwner.clerkUserId !== ownerClerkUserId)) {
+      throw new Error(`sandbox_acceptance_owner_rebind_denied:${slug}`)
+    }
+    const claims = await db.query('claims')
+      .withIndex('by_business_status', (query) => query.eq('businessId', business._id))
+      .take(3)
+    if (claims.length !== 1 || claims[0]?.status !== 'published') {
+      throw new Error(`sandbox_acceptance_claim_integrity_failure:${slug}`)
+    }
+    if (business.ownerId !== targetOwner._id) {
+      await db.patch(business._id, { ownerId: targetOwner._id, updatedAt: now })
+    }
+    if (claims[0].ownerId !== targetOwner._id) {
+      await db.patch(claims[0]._id, { ownerId: targetOwner._id, updatedAt: now })
+    }
+  }))
+}

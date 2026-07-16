@@ -3,9 +3,68 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   withTemporaryClerkAcceptanceCredentials,
   withTemporaryClerkApiKey,
+  withTemporaryClerkUserSession,
 } from '../../../tools/release/customer-request-production-credential'
 
 describe('production cold-agent credential', () => {
+  it('issues and revokes a temporary session for an exact verified business test identity', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json({
+        ...acceptanceUser(),
+        id: 'user_business',
+        email_addresses: [{
+          id: 'email_primary',
+          email_address: 'business@example.com',
+          verification: { status: 'verified' },
+        }],
+      }))
+      .mockResolvedValueOnce(Response.json({ id: 'sess_business', status: 'active' }))
+      .mockResolvedValueOnce(Response.json({ jwt: 'business_session_jwt' }))
+      .mockResolvedValueOnce(Response.json({ id: 'sess_business', status: 'revoked' }))
+    const run = vi.fn(async (_sessionToken: string) => undefined)
+
+    await expect(withTemporaryClerkUserSession({
+      clerkSecretKey: 'sk_test_server',
+      expectedInstanceId: 'ins_expected',
+      subject: 'user_business',
+      expectedPrimaryEmail: 'business@example.com',
+      fetch,
+      run,
+    })).resolves.toBeUndefined()
+
+    expect(run).toHaveBeenCalledExactlyOnceWith('business_session_jwt')
+    expect(fetch.mock.calls[4]?.[0]).toBe('https://api.clerk.com/v1/sessions/sess_business/revoke')
+  })
+
+  it('revokes a created business session when token issuance fails', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json({
+        ...acceptanceUser(),
+        id: 'user_business',
+        email_addresses: [{
+          id: 'email_primary',
+          email_address: 'business@example.com',
+          verification: { status: 'verified' },
+        }],
+      }))
+      .mockResolvedValueOnce(Response.json({ id: 'sess_business', status: 'active' }))
+      .mockResolvedValueOnce(Response.json({ error: 'token unavailable' }, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ id: 'sess_business', status: 'revoked' }))
+
+    await expect(withTemporaryClerkUserSession({
+      clerkSecretKey: 'sk_test_server',
+      expectedInstanceId: 'ins_expected',
+      subject: 'user_business',
+      expectedPrimaryEmail: 'business@example.com',
+      fetch,
+      run: async () => undefined,
+    })).rejects.toThrow('clerk_temporary_session_token_failed:503')
+
+    expect(fetch.mock.calls[4]?.[0]).toBe('https://api.clerk.com/v1/sessions/sess_business/revoke')
+  })
+
   it('creates independent agent and customer credentials and revokes both after the journey', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))

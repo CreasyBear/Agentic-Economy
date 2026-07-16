@@ -1083,6 +1083,56 @@ const businessProblemReportActionResult = v.union(
 )
 type BusinessProblemReportActionResult = Infer<typeof businessProblemReportActionResult>
 
+const businessProblemViewActionResult = v.union(
+  v.object({
+    kind: v.literal('business_problem'),
+    reportRef: v.string(),
+    business: v.string(),
+    category: v.union(
+      v.literal('incorrect_result'),
+      v.literal('unexpected_cost'),
+      v.literal('privacy_concern'),
+      v.literal('could_not_stop'),
+      v.literal('other'),
+    ),
+    customerStatement: v.string(),
+    causality: v.literal('unknown'),
+    resolution: v.literal('not_adjudicated'),
+    decisionAuthority: v.literal('not_assigned'),
+    evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+    availableEvidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+    businessClaims: v.array(v.object({
+      statementRef: v.string(),
+      causalityPosition: v.union(
+        v.literal('supports'),
+        v.literal('disputes'),
+        v.literal('uncertain'),
+      ),
+      statement: v.string(),
+      evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+      recordedAt: v.number(),
+    })),
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(
+      v.literal('authentication_required'),
+      v.literal('authority_denied'),
+      v.literal('report_not_found'),
+      v.literal('sharing_not_authorized'),
+    ),
+  }),
+)
+type BusinessProblemViewActionResult = Infer<typeof businessProblemViewActionResult>
+
+export const readRouteProblemForBusiness = action({
+  args: { reportRef: v.string() },
+  returns: businessProblemViewActionResult,
+  handler: async (ctx, args): Promise<BusinessProblemViewActionResult> => (
+    await ctx.runQuery(internal.customerRequestRouteExecution.readProblemForBusiness, args)
+  ),
+})
+
 export const recordRouteProblemBusinessReport = action({
   args: {
     reportRef: v.string(),
