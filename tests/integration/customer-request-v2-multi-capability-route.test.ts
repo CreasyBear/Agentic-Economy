@@ -1912,8 +1912,13 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await backend.run(async (ctx) => {
       const attempts = await ctx.db.query('customerRequestRouteStepAttempts').collect()
       const runs = await ctx.db.query('customerRequestRouteRuns').collect()
+      const disclosures = await ctx.db.query('customerRequestRouteDataReservations').collect()
       expect(attempts).toHaveLength(1)
       expect(attempts[0]).toMatchObject({ position: 1, state: 'succeeded' })
+      expect(disclosures).toHaveLength(1)
+      expect(disclosures[0]).toMatchObject({
+        recipient: { kind: 'registered_binding', bindingId: 'binding:route:admission-resolver' },
+      })
       expect(runs).toHaveLength(1)
       expect(runs[0]).toMatchObject({
         state: 'cancelled', completedSteps: 1, currentPosition: 1,
