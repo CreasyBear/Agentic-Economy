@@ -29,6 +29,7 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
     messages: readonly string[]
     finish?: 'cancel' | 'complete' | 'outcome_unknown'
     expiryRecovery?: Readonly<{ waitMs: number }>
+    unsupportedRecovery?: Readonly<{ message: string }>
     expectedRoute?: Readonly<{
       stepCount: number
       businesses: readonly string[]
@@ -59,6 +60,13 @@ type JourneyMetrics = {
     refreshedRouteRef: string
     staleConfirmationCreated: false
     staleExecutionStarted: false
+  }>
+  unsupportedRecovery?: Readonly<{
+    state: 'verified'
+    unsupportedRevision: number
+    recoveredRevision: number
+    authorityCreatedBeforeRecovery: false
+    executionStartedBeforeRecovery: false
   }>
 }
 
@@ -136,6 +144,13 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
       staleConfirmationCreated: z.literal(false),
       staleExecutionStarted: z.literal(false),
     }).optional(),
+    unsupportedRecovery: z.strictObject({
+      state: z.literal('verified'),
+      unsupportedRevision: z.number().int().nonnegative(),
+      recoveredRevision: z.number().int().positive(),
+      authorityCreatedBeforeRecovery: z.literal(false),
+      executionStartedBeforeRecovery: z.literal(false),
+    }).optional(),
     disclosureIntegrity: z.strictObject({
       state: z.literal('verified'),
       recipients: z.array(z.string()),
@@ -198,6 +213,7 @@ export async function runHostedCustomerRequestJourney(
   let messageIndex = 0
   let transitions = 0
   let expiredChoice: Readonly<{ generationRef: string; routeRef: string }> | undefined
+  let unsupportedRevision: number | undefined
   while (transitions < 24) {
     transitions += 1
     if (view.state === 'needs_information') {
@@ -247,6 +263,16 @@ export async function runHostedCustomerRequestJourney(
       const selectedBusiness = selectedBusinesses[0]
       if (route === undefined || selectedBusiness === undefined) throw new Error('hosted_journey_route_missing')
       assertExpectedRoute(input.scenario.expectedRoute, route)
+      if (unsupportedRevision !== undefined && runtimeInput.metrics.unsupportedRecovery === undefined) {
+        if (view.revision <= unsupportedRevision) throw new Error('hosted_journey_unsupported_revision_not_advanced')
+        runtimeInput.metrics.unsupportedRecovery = {
+          state: 'verified',
+          unsupportedRevision,
+          recoveredRevision: view.revision,
+          authorityCreatedBeforeRecovery: false,
+          executionStartedBeforeRecovery: false,
+        }
+      }
       if (expiredChoice !== undefined) {
         if (view.routeGenerationRef === expiredChoice.generationRef || route.routeRef === expiredChoice.routeRef) {
           throw new Error('hosted_journey_expired_choice_not_refreshed')
@@ -371,6 +397,26 @@ export async function runHostedCustomerRequestJourney(
     if (view.state === 'preparing_options') {
       await (input.sleep ?? defaultSleep)(1_000)
       view = await callObservedAgent(runtimeInput, view, 'inspect_progress', undefined, [200, 202])
+      observe(states, view)
+      continue
+    }
+
+    if (view.state === 'unsupported' && input.scenario.unsupportedRecovery !== undefined
+      && unsupportedRevision === undefined) {
+      const recoveryMessage = input.scenario.unsupportedRecovery.message.trim()
+      if (recoveryMessage.length === 0) throw new Error('hosted_journey_unsupported_recovery_message_missing')
+      if (view.confirmation !== undefined || view.decision !== undefined
+        || view.navigation?.actions.some(({ relation }) =>
+          relation === 'confirm_option' || relation === 'start_confirmed_option')) {
+        throw new Error('hosted_journey_unsupported_created_authority')
+      }
+      unsupportedRevision = view.revision
+      view = await callObservedAgent(runtimeInput, view, 'change_request', {
+        '<unique string>': `acceptance:unsupported-recovery:${nonce}:${view.revision}`,
+        '<natural-language change>': recoveryMessage,
+      })
+      consumedMessages.push({ index: messageIndex, valueDigest: canonicalDigest(recoveryMessage) })
+      messageIndex += 1
       observe(states, view)
       continue
     }
@@ -919,6 +965,9 @@ function journeyMeasurements(
     ...(input.metrics.staleOptionRecovery === undefined
       ? {}
       : { staleOptionRecovery: input.metrics.staleOptionRecovery }),
+    ...(input.metrics.unsupportedRecovery === undefined
+      ? {}
+      : { unsupportedRecovery: input.metrics.unsupportedRecovery }),
     disclosureIntegrity: {
       state: 'verified' as const,
       recipients: route.dataUse.recipients.map(({ name }) => name).sort(),

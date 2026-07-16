@@ -37,6 +37,7 @@ export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
   messages: readonly string[]
   finish: 'complete' | 'cancel' | 'outcome_unknown'
   expiryRecovery?: Readonly<{ waitMs: number }>
+  unsupportedRecovery?: Readonly<{ message: string }>
   expectedRoute: Readonly<{
     stepCount: number
     businesses: readonly string[]
@@ -91,6 +92,14 @@ export function customerRequestDevelopmentSmokeConfig(
         ),
       },
     }),
+    ...(env.AE_CUSTOMER_REQUEST_UNSUPPORTED_RECOVERY_MESSAGE === undefined ? {} : {
+      unsupportedRecovery: {
+        message: required(
+          env.AE_CUSTOMER_REQUEST_UNSUPPORTED_RECOVERY_MESSAGE,
+          'AE_CUSTOMER_REQUEST_UNSUPPORTED_RECOVERY_MESSAGE',
+        ),
+      },
+    }),
     expectedRoute: shared.expectedRoute ?? {
       stepCount: 2, businesses: DEFAULT_BUSINESSES, recipients: DEFAULT_RECIPIENTS,
     },
@@ -136,6 +145,9 @@ export async function runCustomerRequestDevelopmentSmoke(
           messages: config.messages,
           finish: config.finish,
           ...(config.expiryRecovery === undefined ? {} : { expiryRecovery: config.expiryRecovery }),
+          ...(config.unsupportedRecovery === undefined
+            ? {}
+            : { unsupportedRecovery: config.unsupportedRecovery }),
           expectedRoute: config.expectedRoute,
         },
         sandbox: true,

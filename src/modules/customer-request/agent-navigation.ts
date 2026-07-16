@@ -67,6 +67,14 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
       relation: 'start_confirmed_option', method: 'POST', href: `${current}/run`,
       summary: 'Start the exact option already confirmed.', input: { idempotencyKey },
     })
+  } else if (view.state === 'unsupported') {
+    actions.push({
+      relation: 'change_request', method: 'POST', href: `${current}/messages`,
+      summary: 'Change the request in ordinary language and keep working from the same Request.',
+      input: {
+        idempotencyKey, expectedRevision: view.revision, message: '<natural-language change>',
+      },
+    })
   } else if (view.state === 'in_progress' || view.state === 'preparing_options') {
     actions.push({
       relation: 'inspect_progress', method: 'GET', href: current,

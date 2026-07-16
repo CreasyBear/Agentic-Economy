@@ -86,6 +86,33 @@ describe('customer Request development smoke configuration', () => {
     )
   })
 
+  it('configures an ordinary-language unsupported-operation recovery', () => {
+    expect(customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_UNSUPPORTED_RECOVERY_MESSAGE:
+        'Instead, resolve a labelled sandbox service and prepare its quote.',
+    }, 'a'.repeat(40))).toMatchObject({
+      unsupportedRecovery: {
+        message: 'Instead, resolve a labelled sandbox service and prepare its quote.',
+      },
+    })
+  })
+
+  it('rejects an empty unsupported-operation recovery message', () => {
+    expect(() => customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_UNSUPPORTED_RECOVERY_MESSAGE: ' ',
+    }, 'a'.repeat(40))).toThrow(
+      'AE_CUSTOMER_REQUEST_UNSUPPORTED_RECOVERY_MESSAGE is required',
+    )
+  })
+
   it('admits an explicit frozen direct baseline only beside a completed hosted journey', () => {
     expect(customerRequestDevelopmentSmokeConfig({
       CLERK_SECRET_KEY: 'sk_test',

@@ -207,6 +207,70 @@ describe('hosted Customer Request journey', () => {
     })
   })
 
+  it('keeps an unsupported operation unconfirmed and recovers the same Request through ordinary language', async () => {
+    const unsupported = requestView('unsupported', 1, {
+      summary: 'AE cannot perform the requested operation.',
+      nextAction: 'revise_request',
+      dataHandling: {
+        requestStorage: 'saved_for_revision',
+        businessSharing: 'not_shared',
+        explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+      },
+    })
+    const responses = [
+      unsupported,
+      unsupported,
+      ...completeJourneyResponses().slice(1),
+    ]
+    const calls: Array<{ url: string; body?: Record<string, unknown> }> = []
+    const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
+      calls.push({
+        url: String(url),
+        ...(init?.body === undefined
+          ? {}
+          : { body: JSON.parse(String(init.body)) as Record<string, unknown> }),
+      })
+      const next = responses.shift()
+      if (next === undefined) throw new Error('unexpected request')
+      return Response.json(next)
+    })
+
+    const proof = await runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'http://127.0.0.1:4319', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'cold-external-agent', version: 'unsupported-recovery-v1' },
+      scenario: {
+        request: 'Book and pay for a labelled sandbox service.',
+        facts: {}, messages: [], finish: 'complete',
+        unsupportedRecovery: {
+          message: 'Instead, resolve a labelled sandbox service and prepare its quote.',
+        },
+        expectedRoute: {
+          stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+        },
+      },
+      sandbox: true, fetch,
+      verifyRelease: async () => ({
+        kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+      sleep: async () => undefined,
+    })
+
+    expect(calls.filter(({ url }) => url.endsWith('/messages'))).toHaveLength(1)
+    expect(calls.filter(({ url }) => url.endsWith('/confirmation'))).toHaveLength(1)
+    expect(calls.filter(({ url }) => url.endsWith('/run'))).toHaveLength(2)
+    expect(proof.measurements.unsupportedRecovery).toEqual({
+      state: 'verified',
+      unsupportedRevision: 1,
+      recoveredRevision: 2,
+      authorityCreatedBeforeRecovery: false,
+      executionStartedBeforeRecovery: false,
+    })
+  })
+
   it('rejects an expired choice, discovers recovery, and starts only the refreshed generation', async () => {
     const first = compositeRoutesReadyView()
     const expired = requestView('needs_attention', 2, {
