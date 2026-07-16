@@ -15,15 +15,20 @@ describe('production cold-agent credential', () => {
       .mockResolvedValueOnce(Response.json({ jwt: 'customer_session_jwt' }))
       .mockResolvedValueOnce(Response.json({ id: 'sess_temporary', status: 'revoked' }))
       .mockResolvedValueOnce(Response.json({ id: 'apikey_temporary', revoked: true }))
-    const run = vi.fn(async (_credentials: Readonly<{ agentApiKey: string; customerSessionToken: string }>) => undefined)
+    const run = vi.fn(async (credentials: Readonly<{
+      agentApiKey: string
+      issueCustomerSessionToken: () => Promise<string>
+    }>) => {
+      expect(fetch).toHaveBeenCalledTimes(3)
+      expect(await credentials.issueCustomerSessionToken()).toBe('customer_session_jwt')
+    })
 
     await expect(withTemporaryClerkAcceptanceCredentials({
       clerkSecretKey: 'sk_test_server', expectedInstanceId: 'ins_expected', subject: 'user_acceptance', fetch, run,
     })).resolves.toBeUndefined()
 
-    expect(run).toHaveBeenCalledExactlyOnceWith({
-      agentApiKey: 'ak_temporary_secret', customerSessionToken: 'customer_session_jwt',
-    })
+    expect(run).toHaveBeenCalledOnce()
+    expect(run.mock.calls[0]?.[0].agentApiKey).toBe('ak_temporary_secret')
     expect(fetch.mock.calls[3]?.[0]).toBe('https://api.clerk.com/v1/sessions')
     expect(fetch.mock.calls[4]?.[0]).toBe('https://api.clerk.com/v1/sessions/sess_temporary/tokens')
     expect(fetch.mock.calls[5]?.[0]).toBe('https://api.clerk.com/v1/sessions/sess_temporary/revoke')
@@ -41,7 +46,7 @@ describe('production cold-agent credential', () => {
 
     await expect(withTemporaryClerkAcceptanceCredentials({
       clerkSecretKey: 'sk_test_server', expectedInstanceId: 'ins_expected', subject: 'user_acceptance', fetch,
-      run: async () => undefined,
+      run: async ({ issueCustomerSessionToken }) => { await issueCustomerSessionToken() },
     })).rejects.toThrow()
 
     expect(fetch.mock.calls[4]?.[0]).toBe('https://api.clerk.com/v1/sessions/sess_temporary/revoke')

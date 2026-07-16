@@ -58,7 +58,7 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
     fetch: globalThis.fetch,
     keyNamePrefix: 'AE development cross-surface parity',
     revocationReason: 'Temporary development cross-surface parity completed',
-    run: async ({ agentApiKey, customerSessionToken }) => {
+    run: async ({ agentApiKey, issueCustomerSessionToken }) => {
       const signedAgent = await runSignedHostedCustomerRequestJourney({
         environment: 'development',
         baseUrl,
@@ -82,6 +82,7 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
       const verification = verifyCustomerRequestJourneyProof(signedAgent, journeyTrustedKeys)
       if (verification.kind !== 'verified') throw new Error(`customer_request_journey_attestation_${verification.reason}`)
       const agent = verification.proof
+      const customerSessionToken = await issueCustomerSessionToken()
       let playwright: Readonly<{ stdout: string }>
       try {
         playwright = await execFileAsync(

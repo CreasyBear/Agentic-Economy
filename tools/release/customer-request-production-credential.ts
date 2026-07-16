@@ -31,25 +31,35 @@ export async function withTemporaryClerkAcceptanceCredentials(input: Readonly<{
   expectedInstanceId: string
   subject: string
   fetch: typeof globalThis.fetch
-  run: (credentials: Readonly<{ agentApiKey: string; customerSessionToken: string }>) => Promise<void>
+  run: (credentials: Readonly<{
+    agentApiKey: string
+    issueCustomerSessionToken: () => Promise<string>
+  }>) => Promise<void>
   keyNamePrefix?: string
   revocationReason?: string
 }>): Promise<void> {
   const headers = await clerkAcceptanceHeaders(input)
   await withTemporaryAgentKey({ ...input, headers, run: async (agentApiKey) => {
     let sessionId: string | undefined
+    let sessionToken: string | undefined
     let journeyError: unknown
     try {
-      const sessionValue = await readClerkJson(input.fetch, `${CLERK_API}/sessions`, {
-        method: 'POST', headers, body: JSON.stringify({ user_id: input.subject }),
-      }, 'clerk_temporary_session_creation_failed')
-      sessionId = createdSessionIdentitySchema.parse(sessionValue).id
-      const session = createdSessionSchema.parse(sessionValue)
-      const sessionToken = sessionTokenSchema.parse(await readClerkJson(
-        input.fetch, `${CLERK_API}/sessions/${encodeURIComponent(session.id)}/tokens`,
-        { method: 'POST', headers }, 'clerk_temporary_session_token_failed',
-      ))
-      await input.run({ agentApiKey, customerSessionToken: sessionToken.jwt })
+      await input.run({
+        agentApiKey,
+        issueCustomerSessionToken: async () => {
+          if (sessionToken !== undefined) return sessionToken
+          const sessionValue = await readClerkJson(input.fetch, `${CLERK_API}/sessions`, {
+            method: 'POST', headers, body: JSON.stringify({ user_id: input.subject }),
+          }, 'clerk_temporary_session_creation_failed')
+          sessionId = createdSessionIdentitySchema.parse(sessionValue).id
+          const session = createdSessionSchema.parse(sessionValue)
+          sessionToken = sessionTokenSchema.parse(await readClerkJson(
+            input.fetch, `${CLERK_API}/sessions/${encodeURIComponent(session.id)}/tokens`,
+            { method: 'POST', headers }, 'clerk_temporary_session_token_failed',
+          )).jwt
+          return sessionToken
+        },
+      })
     } catch (error) {
       journeyError = error
     }

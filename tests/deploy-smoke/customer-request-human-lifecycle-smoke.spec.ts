@@ -46,6 +46,7 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
     expect(decisionText).not.toContain('[object Object]')
 
     await page.getByRole('button', { name: /^Review /u }).first().click()
+    await provePreApprovalDisclosures(page)
     await page.getByRole('button', { name: 'Confirm this choice' }).click()
     await page.getByRole('button', { name: 'Start now' }).click()
   }
@@ -78,6 +79,42 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   )
   await emitHumanObservation(page, requestRef as string)
 })
+
+async function provePreApprovalDisclosures(page: import('@playwright/test').Page): Promise<void> {
+  await expect(page.getByRole('heading', { name: 'Review before you confirm' })).toBeVisible()
+  const main = page.locator('main')
+  for (const label of [
+    'Maximum cost',
+    'Confirm before',
+    'What would be shared',
+    'What starting could change',
+    'What remains uncertain',
+    'Commercial relationships',
+    'If something goes wrong',
+    'Cancellation',
+    'Evidence expected',
+  ]) {
+    await expect(main.getByText(label, { exact: true })).toBeVisible()
+  }
+  for (const business of expectedBusinesses) {
+    await expect(main).toContainText(business)
+  }
+  await expect(main).toContainText('$10.00')
+  await expect(main).toContainText('resolve sandbox service reference')
+  await expect(main).toContainText('prepare sandbox service quote')
+  await expect(main).toContainText('Information would be shared')
+  await expect(main).toContainText('cannot be reversed automatically')
+  await expect(main).toContainText('No uncertainty is declared for this choice.')
+  await expect(main).toContainText('Completion timing has not been declared.')
+  await expect(main).toContainText('AE can safely retry after a confirmed failure.')
+  await expect(main).toContainText('AE must check what happened before any retry.')
+  await expect(main).toContainText('No alternative way is currently declared.')
+  await expect(main).toContainText('Service reference')
+  await expect(main).toContainText('Quote reference')
+  await expect(page.getByRole('heading', { name: 'Review, confirm, then start' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Confirm this choice' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Start now' })).not.toBeVisible()
+}
 
 async function emitHumanObservation(
   page: import('@playwright/test').Page,
