@@ -18,8 +18,8 @@ const execFileAsync = promisify(execFile)
 const observationSchema = z.strictObject({
   requestRef: z.string().min(1),
   revision: z.number().int().nonnegative(),
-  state: z.literal('completed'),
-  evidenceState: z.literal('completed'),
+  state: z.enum(['completed', 'outcome_unknown']),
+  evidenceState: z.enum(['completed', 'outcome_unknown']),
   resultDigest: z.string().startsWith('sha256:'),
   businesses: z.array(z.string().min(1)).min(1),
   resumedAfterReload: z.literal(true),
@@ -37,6 +37,13 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
 ) {
   const sourceRevision = required(env.AE_RELEASE_SOURCE_REVISION, 'AE_RELEASE_SOURCE_REVISION')
   const config = customerRequestDevelopmentSmokeConfig(env, sourceRevision)
+  if (
+    config.finish !== 'complete'
+    && config.finish !== 'outcome_unknown'
+    && config.finish !== 'partial_result'
+  ) {
+    throw new Error('customer_request_surface_parity_finish_unsupported')
+  }
   const journeySigningKey = config.journeySigningKey
   const journeyTrustedKeys = config.journeyTrustedKeys
   if (journeySigningKey === undefined || journeyTrustedKeys === undefined) {
@@ -66,7 +73,7 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
           request: config.request,
           facts: config.facts,
           messages: config.messages,
-          finish: 'complete',
+          finish: config.finish,
           expectedRoute: config.expectedRoute,
         },
         sandbox: true,
@@ -89,7 +96,7 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
               ...process.env,
               ...env,
               AE_CUSTOMER_REQUEST_BASE_URL: baseUrl,
-              AE_CUSTOMER_REQUEST_FINISH: 'complete',
+              AE_CUSTOMER_REQUEST_FINISH: config.finish,
               AE_CUSTOMER_REQUEST_HUMAN_SESSION_TOKEN: customerSessionToken,
               AE_CUSTOMER_REQUEST_EXISTING_REF: agent.final.requestRef,
             },
@@ -103,7 +110,8 @@ export async function runCustomerRequestDevelopmentSurfaceParity(
         throw new Error(`customer_request_human_browser_failed:${diagnostic}`)
       }
       const human = parseHumanRequestObservation(playwright.stdout)
-      if (agent.final.state !== 'completed' || agent.final.evidenceState !== 'completed'
+      if ((agent.final.state !== 'completed' && agent.final.state !== 'outcome_unknown')
+        || (agent.final.evidenceState !== 'completed' && agent.final.evidenceState !== 'outcome_unknown')
         || agent.final.resultDigest === undefined) throw new Error('customer_request_agent_parity_result_missing')
       result = compareCustomerRequestSurfaces({
         human,

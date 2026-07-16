@@ -366,6 +366,44 @@ describe('customer Request workspace', () => {
     expect(screen.queryByRole('button', { name: 'Start a new Request' })).toBeNull()
   })
 
+  it('labels a preserved partial result as incomplete evidence rather than a business result', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'partial-result' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({
+      kind: 'request', requestRef: 'request:partial-result', revision: 1, state: 'outcome_unknown',
+      summary: 'A business returned a partial result. AE has preserved it as evidence and will not claim completion or send the request again.',
+      nextAction: 'wait', missingFields: [], criteria: [], options: [],
+      businesses: [
+        { businessRef: 'business:resolver', name: 'Sandbox Route Resolver' },
+        { businessRef: 'business:quoter', name: 'Sandbox Route Quoter' },
+      ],
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+      action: {
+        state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false,
+        result: {
+          kind: 'partial_result',
+          output: { quoteReference: 'sandbox-partial-quote:one' },
+        },
+        observedAt: 10,
+      },
+      activity: {
+        actor: 'ae_for_customer', certainty: 'unknown', updatedAt: 10, nextCheckAt: 40,
+        retry: 'blocked_until_reconciled', cancellation: 'too_late_or_unsupported',
+        safeNextAction: 'wait_for_evidence',
+      },
+    })))
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Resolve a service and prepare its quote, even if only a partial result is available.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+
+    expect(await screen.findByText('Partial result received')).toBeTruthy()
+    expect(screen.getByText(/sandbox-partial-quote:one/u)).toBeTruthy()
+    expect(screen.getByText('This is preserved evidence, not a completed result.')).toBeTruthy()
+    expect(screen.queryByText('Business result')).toBeNull()
+  })
+
   it('shows the canonical activity record inline instead of sending the customer to raw JSON', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'completed-evidence' })
     const fetchMock = vi.fn()

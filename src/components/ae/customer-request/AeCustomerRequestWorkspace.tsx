@@ -959,6 +959,7 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
   const unknown = action.state === 'unknown'
   const failed = action.state === 'failed'
   const notSent = failed && action.resolution === 'not_sent'
+  const partialResult = unknown && isPartialResult(action.result)
   const multipleBusinesses = (projection.businesses?.length ?? 0) > 1
   const explanation = unknown
     ? multipleBusinesses
@@ -997,8 +998,11 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
             : 'Completed steps remain recorded and will not be repeated automatically.'}</Text>
         </div>}
         {action.result === undefined || notSent ? null : <div className="rounded-md border border-border bg-surface p-4">
-          <Text type="supporting" weight="semibold">Business result</Text>
+          <Text type="supporting" weight="semibold">{partialResult ? 'Partial result received' : 'Business result'}</Text>
           <Text color="secondary" className="mt-1">{readableResult(action.result)}</Text>
+          {partialResult ? <Text type="supporting" color="secondary" className="mt-1">
+            This is preserved evidence, not a completed result.
+          </Text> : null}
         </div>}
         <Text type="supporting" color="secondary">
           Last checked {new Date(action.observedAt).toLocaleString()}
@@ -1094,8 +1098,11 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
         </li>)}
       </ol>
       {evidence.result === undefined ? null : <div className="grid gap-1">
-        <Text weight="semibold">Recorded result</Text>
+        <Text weight="semibold">{isPartialResult(evidence.result) ? 'Recorded partial result' : 'Recorded result'}</Text>
         <Text color="secondary">{readableResult(evidence.result)}</Text>
+        {isPartialResult(evidence.result) ? <Text type="supporting" color="secondary">
+          This evidence does not confirm completion.
+        </Text> : null}
       </div>}
       <Text type="supporting" color="secondary">Generated {new Date(evidence.generatedAt).toLocaleString()}.</Text>
     </section>}
@@ -1123,6 +1130,11 @@ function activityStepState(state: CustomerRequestEvidenceExport['steps'][number]
   if (state === 'awaiting_result') return 'waiting for a result'
   if (state === 'contacting') return 'contacting the business'
   return state.replaceAll('_', ' ')
+}
+
+function isPartialResult(value: unknown): boolean {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && 'kind' in value && value.kind === 'partial_result' && 'output' in value
 }
 
 function DisclosureReview({ projection, turns, authorize, edit, restart }: { projection: CustomerRequestView; turns: readonly ConversationTurn[]; authorize: () => Promise<void>; edit: () => void; restart: () => void }) { const review = projection.disclosureReview; if (review === undefined) return null; return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={projection} correct={edit} /><Card padding={5}><div className="grid gap-4"><Text className="text-sm font-semibold text-accent">Before AE contacts businesses</Text><Heading level={2}>Review what would be shared</Heading><Text color="secondary">To {review.purpose.toLocaleLowerCase()}, AE would share the following with up to {review.maximumRecipients} matching {review.maximumRecipients === 1 ? 'business' : 'businesses'}.</Text><ul className="grid gap-2">{review.categories.map((category) => <li key={`${category.label}:${category.classification}`} className="rounded-md border border-border bg-surface px-3 py-2"><strong>{category.label}</strong> <span className="text-secondary">· {category.classification}</span></li>)}</ul><Text weight="semibold">Nothing has been shared. Explicit permission is required before preparation can continue.</Text><Button label="Allow this comparison" variant="primary" clickAction={authorize} /><RecoveryActions edit={edit} restart={restart} /></div></Card></section> }
@@ -1174,6 +1186,9 @@ function statusLabel(state: CustomerRequestView['state']): string {
 function readableResult(value: unknown): string {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    if ('kind' in value && value.kind === 'partial_result' && 'output' in value) {
+      return readableResult(value.output)
+    }
     const first = Object.values(value).find((item) => typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')
     if (first !== undefined) return String(first)
   }

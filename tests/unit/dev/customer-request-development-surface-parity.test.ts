@@ -26,4 +26,14 @@ describe('development Customer Request surface parity', () => {
       'AE_HUMAN_REQUEST_OBSERVATION {}',
     ].join('\n'))).toThrow('customer_request_human_observation_missing')
   })
+
+  it('accepts a reloaded human observation for matching partial-result evidence', () => {
+    expect(parseHumanRequestObservation(
+      'AE_HUMAN_REQUEST_OBSERVATION {"requestRef":"request:partial","revision":1,"state":"outcome_unknown","evidenceState":"outcome_unknown","resultDigest":"sha256:partial","businesses":["Sandbox Route Resolver","Sandbox Route Quoter"],"resumedAfterReload":true}',
+    )).toMatchObject({
+      requestRef: 'request:partial', state: 'outcome_unknown',
+      evidenceState: 'outcome_unknown', resultDigest: 'sha256:partial',
+      resumedAfterReload: true,
+    })
+  })
 })

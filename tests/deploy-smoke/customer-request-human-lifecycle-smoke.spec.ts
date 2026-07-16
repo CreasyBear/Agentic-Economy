@@ -49,8 +49,9 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
     await page.getByRole('button', { name: 'Confirm this choice' }).click()
     await page.getByRole('button', { name: 'Start now' }).click()
   }
-  if (finish === 'outcome_unknown') {
-    await proveUnknownOutcomeRecovery(page)
+  if (finish === 'outcome_unknown' || finish === 'partial_result') {
+    await proveUnknownOutcomeRecovery(page, finish)
+    await emitHumanObservation(page, await activeRequestRef(page), finish)
     return
   }
   await waitForCompletedResult(page)
@@ -81,6 +82,7 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
 async function emitHumanObservation(
   page: import('@playwright/test').Page,
   requestRef: string,
+  expected: 'complete' | 'outcome_unknown' | 'partial_result' = 'complete',
 ): Promise<void> {
   const [viewResponse, evidenceResponse] = await Promise.all([
     page.request.get(new URL(`/api/requests/${encodeURIComponent(requestRef)}`, baseUrl).href),
@@ -88,8 +90,9 @@ async function emitHumanObservation(
   ])
   const view = customerRequestAgentResultSchema.parse(await viewResponse.json())
   const evidence = customerRequestEvidenceResultSchema.parse(await evidenceResponse.json())
-  if (!viewResponse.ok() || view.kind !== 'request' || view.state !== 'completed'
-    || !evidenceResponse.ok() || evidence.kind !== 'evidence' || evidence.state !== 'completed'
+  const expectedState = expected === 'complete' ? 'completed' : 'outcome_unknown'
+  if (!viewResponse.ok() || view.kind !== 'request' || view.state !== expectedState
+    || !evidenceResponse.ok() || evidence.kind !== 'evidence' || evidence.state !== expectedState
     || evidence.result === undefined) {
     throw new Error('hosted_human_journey_parity_observation_incomplete')
   }
@@ -104,7 +107,10 @@ async function emitHumanObservation(
   })}\n`)
 }
 
-async function proveUnknownOutcomeRecovery(page: import('@playwright/test').Page): Promise<void> {
+async function proveUnknownOutcomeRecovery(
+  page: import('@playwright/test').Page,
+  expected: 'outcome_unknown' | 'partial_result',
+): Promise<void> {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     if (await page.getByText('Still confirming', { exact: true }).first().isVisible().catch(() => false)) break
     if (await page.getByText('Completed', { exact: true }).first().isVisible().catch(() => false)) {
@@ -128,6 +134,14 @@ async function proveUnknownOutcomeRecovery(page: import('@playwright/test').Page
 
   const requestRef = await activeRequestRef(page)
   await proveInlineActivityRecord(page, 'outcome_unknown')
+  if (expected === 'partial_result') {
+    await expect(page.getByText('Partial result received')).toBeVisible()
+    await expect(page.getByText('This is preserved evidence, not a completed result.')).toBeVisible()
+    await expect(page.getByText('Recorded partial result')).toBeVisible()
+    await expect(page.getByText('This evidence does not confirm completion.')).toBeVisible()
+    await expect(page.getByText(/sandbox-partial-quote:/u).last()).toBeVisible()
+    await expect(page.getByText('Business result')).not.toBeVisible()
+  }
 
   await page.getByRole('button', { name: 'Report a problem' }).click()
   await page.getByLabel('What went wrong?').fill('The labelled sandbox quote result is still unknown.')
@@ -244,10 +258,12 @@ function expectedBusinessNames(): readonly string[] {
   return parsed
 }
 
-function expectedFinish(): 'complete' | 'outcome_unknown' {
+function expectedFinish(): 'complete' | 'outcome_unknown' | 'partial_result' {
   const configured = process.env.AE_CUSTOMER_REQUEST_FINISH?.trim() ?? 'complete'
-  if (configured !== 'complete' && configured !== 'outcome_unknown') {
-    throw new Error('AE_CUSTOMER_REQUEST_FINISH must be complete or outcome_unknown for the human smoke')
+  if (configured !== 'complete' && configured !== 'outcome_unknown' && configured !== 'partial_result') {
+    throw new Error(
+      'AE_CUSTOMER_REQUEST_FINISH must be complete, outcome_unknown, or partial_result for the human smoke',
+    )
   }
   return configured
 }
