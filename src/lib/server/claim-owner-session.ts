@@ -4,15 +4,25 @@ import { createServerFn } from '@tanstack/react-start'
 
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 
-export const requireClaimOwnerSession = createServerFn().handler(async () => {
-  if (isLocalE2EAuthBypassEnabled()) {
-    return { userId: 'local-e2e-owner' }
-  }
+const admitClaimOwnerSession = createServerFn()
+  .validator((data: { redirectTo: string }) => data)
+  .handler(async ({ data }) => {
+    if (isLocalE2EAuthBypassEnabled()) {
+      return { userId: 'local-e2e-owner' }
+    }
 
-  const { isAuthenticated, userId } = await auth()
-  if (!isAuthenticated) {
-    throw redirect({ to: '/sign-in/$', params: { _splat: '' } })
-  }
+    const { isAuthenticated, userId } = await auth()
+    if (!isAuthenticated) {
+      throw redirect({
+        to: '/sign-in/$',
+        params: { _splat: '' },
+        search: { redirect: data.redirectTo },
+      })
+    }
 
-  return { userId }
-})
+    return { userId }
+  })
+
+export function requireClaimOwnerSession({ location }: { location: { href: string } }) {
+  return admitClaimOwnerSession({ data: { redirectTo: location.href } })
+}

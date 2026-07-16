@@ -31,6 +31,7 @@ import { Route as QAnswerIdRouteImport } from './routes/q.$answerId'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as IThreadIdRouteImport } from './routes/i.$threadId'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
+import { Route as ClaimFormRouteImport } from './routes/claim.form'
 import { Route as ApiRequestsRouteImport } from './routes/api.requests'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
@@ -207,6 +208,11 @@ const IThreadIdRoute = IThreadIdRouteImport.update({
 const ClaimSuccessRoute = ClaimSuccessRouteImport.update({
   id: '/success',
   path: '/success',
+  getParentRoute: () => ClaimRoute,
+} as any)
+const ClaimFormRoute = ClaimFormRouteImport.update({
+  id: '/form',
+  path: '/form',
   getParentRoute: () => ClaimRoute,
 } as any)
 const ApiRequestsRoute = ApiRequestsRouteImport.update({
@@ -620,6 +626,7 @@ export interface FileRoutesByFullPath {
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/requests': typeof ApiRequestsRouteWithChildren
+  '/claim/form': typeof ClaimFormRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -711,6 +718,7 @@ export interface FileRoutesByTo {
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/requests': typeof ApiRequestsRouteWithChildren
+  '/claim/form': typeof ClaimFormRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -804,6 +812,7 @@ export interface FileRoutesById {
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/requests': typeof ApiRequestsRouteWithChildren
+  '/claim/form': typeof ClaimFormRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -897,6 +906,7 @@ export interface FileRouteTypes {
     | '/.well-known/http-message-signatures-directory'
     | '/api/businesses'
     | '/api/requests'
+    | '/claim/form'
     | '/claim/success'
     | '/i/$threadId'
     | '/privacy/remove-business'
@@ -988,6 +998,7 @@ export interface FileRouteTypes {
     | '/.well-known/http-message-signatures-directory'
     | '/api/businesses'
     | '/api/requests'
+    | '/claim/form'
     | '/claim/success'
     | '/i/$threadId'
     | '/privacy/remove-business'
@@ -1080,6 +1091,7 @@ export interface FileRouteTypes {
     | '/.well-known/http-message-signatures-directory'
     | '/api/businesses'
     | '/api/requests'
+    | '/claim/form'
     | '/claim/success'
     | '/i/$threadId'
     | '/privacy/remove-business'
@@ -1350,6 +1362,13 @@ declare module '@tanstack/react-router' {
       path: '/success'
       fullPath: '/claim/success'
       preLoaderRoute: typeof ClaimSuccessRouteImport
+      parentRoute: typeof ClaimRoute
+    }
+    '/claim/form': {
+      id: '/claim/form'
+      path: '/form'
+      fullPath: '/claim/form'
+      preLoaderRoute: typeof ClaimFormRouteImport
       parentRoute: typeof ClaimRoute
     }
     '/api/requests': {
@@ -1902,10 +1921,12 @@ const OperatorRouteWithChildren = OperatorRoute._addFileChildren(
 )
 
 interface ClaimRouteChildren {
+  ClaimFormRoute: typeof ClaimFormRoute
   ClaimSuccessRoute: typeof ClaimSuccessRoute
 }
 
 const ClaimRouteChildren: ClaimRouteChildren = {
+  ClaimFormRoute: ClaimFormRoute,
   ClaimSuccessRoute: ClaimSuccessRoute,
 }
 

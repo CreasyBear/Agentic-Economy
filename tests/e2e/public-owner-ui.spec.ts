@@ -52,6 +52,10 @@ test.describe('public owner routes', () => {
       await claimLink.click()
       await expect(page).toHaveURL('/claim')
     }).toPass({ timeout: 20_000 })
+    await expect(page.getByRole('heading', { name: 'Publish a page customers can understand.' })).toBeVisible()
+    await expect(page.getByText('You review every public detail before anything appears.')).toBeVisible()
+    await expect(page.getByText('AE does not book, charge, confirm availability, or accept work for your business.')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Sign in to start' })).toHaveAttribute('href', '/claim/form')
     await assertPublicLanguage(page)
   })
 
@@ -88,8 +92,9 @@ test.describe('public owner routes', () => {
   })
 
   test('claim form preserves input and focuses the first validation error', async ({ page }) => {
-    await page.goto('/claim', { waitUntil: 'networkidle' })
+    await page.goto('/claim/form', { waitUntil: 'networkidle' })
     await assertPublicLanguage(page)
+    await expect(page.getByText('a written contact path appears only when it is ready.')).toBeVisible()
 
     await page.getByLabel('Business name').fill('Northside Solar')
     await page.getByLabel('Business category').fill('Solar repairs')

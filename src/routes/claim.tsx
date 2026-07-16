@@ -28,7 +28,6 @@ import {
   type TextClaimField,
 } from '@/modules/catalog/claim-draft'
 import { importStorefrontDraftServer } from '@/modules/storefront/storefront.functions'
-import { requireClaimOwnerSession } from '@/lib/server/claim-owner-session'
 import { validatePublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 import type { PublicOwnerClaimField, PublicOwnerClaimFlowInput, PublicOwnerClaimValidationError } from '@/modules/catalog/public'
 import type { StorefrontImportDraft } from '@/modules/storefront/public'
@@ -297,12 +296,11 @@ const firstRequestModeOptions = [
 ] as const
 
 export const Route = createFileRoute('/claim')({
-  beforeLoad: async () => await requireClaimOwnerSession(),
   head: () => ({
     meta: [
       { title: 'Get your business found | Agentic Economy' },
-      { name: 'description', content: 'Claim a free service page so people and assistants can find your business and reach you in writing.' },
-      { name: 'robots', content: 'noindex' },
+      { name: 'description', content: 'Claim a free service page so people and assistants can understand and compare the public facts you supply.' },
+      { name: 'robots', content: 'index,follow' },
     ],
   }),
   component: ClaimRoute,
@@ -310,6 +308,42 @@ export const Route = createFileRoute('/claim')({
 
 function ClaimRoute() {
   const location = useLocation()
+
+  if (location.pathname !== '/claim') return <Outlet />
+
+  return (
+    <AePublicShell>
+      <AePageHeader
+        eyebrow="For businesses"
+        title="Publish a page customers can understand."
+        description="Show what your business does, where you work, and the supported next step using facts you supply."
+        actions={<Button label="Sign in to start" variant="primary" href="/claim/form" />}
+      />
+      <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)] md:px-6">
+        <section aria-labelledby="claim-before-you-start" className="grid content-start gap-4">
+          <Text id="claim-before-you-start" type="large" weight="semibold" display="block">
+            What you’ll prepare
+          </Text>
+          <ul className="grid gap-3 text-primary">
+            <li><strong>Business details:</strong> the public name, category, location, and an optional phone number.</li>
+            <li><strong>One clear service:</strong> what it covers, where it is offered, and the hours you can honestly publish.</li>
+            <li><strong>The next step:</strong> whether customers can send a written request now or should use another contact path.</li>
+            <li><strong>A source note:</strong> where the public details came from so you can review them before publishing.</li>
+          </ul>
+        </section>
+        <Card padding={5} className="grid content-start gap-3">
+          <Text type="large" weight="semibold" display="block">You stay in control</Text>
+          <Text color="secondary" display="block">You review every public detail before anything appears.</Text>
+          <Text color="secondary" display="block">You choose whether to publish a phone number or accept a written first contact.</Text>
+          <Text color="secondary" display="block">AE does not book, charge, confirm availability, or accept work for your business.</Text>
+          <Text type="supporting" color="secondary" display="block">Claiming is free. Sign-in protects changes to the business page.</Text>
+        </Card>
+      </main>
+    </AePublicShell>
+  )
+}
+
+export function ClaimFormRoute() {
   const navigate = useNavigate()
   const submitClaim = useServerFn(submitClaimServer)
   const hydrated = useClientMounted()
@@ -346,10 +380,6 @@ function ClaimRoute() {
   useEffect(() => {
     focusFirstError(errors)
   }, [errors])
-
-  if (location.pathname !== '/claim') {
-    return <Outlet />
-  }
 
   function updateTextField(field: TextClaimField, nextValue: string) {
     dispatchDraft({ type: 'edit_text', field, value: nextValue })
@@ -420,7 +450,7 @@ function ClaimRoute() {
       <AePageHeader
         eyebrow="For businesses"
         title="Get your business found."
-        description="Publish your services once. People and their assistants can find you, compare you, and reach you in writing."
+        description="Publish the service facts you choose. People and assistants can read the same page; a written contact path appears only when it is ready."
       />
       {!hydrated ? (
         <div className="mx-auto w-full max-w-6xl px-4 pb-16 text-sm text-secondary md:px-6" aria-live="polite">
