@@ -96,7 +96,9 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
           visibility: 'customer_and_ae_only',
         },
       })
-      if (view.activity?.cancellation === 'available_before_next_step') {
+      const cancellation = view.activity?.cancellation
+      if (cancellation === 'available_before_next_step'
+        || (typeof cancellation === 'object' && cancellation.state === 'available')) {
         actions.push({
           relation: 'cancel', method: 'POST', href: `${current}/cancellation`,
           summary: 'Cancel before the next external step.', input: { idempotencyKey },

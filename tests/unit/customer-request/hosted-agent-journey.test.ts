@@ -749,6 +749,25 @@ describe('hosted Customer Request journey', () => {
     ]))
   })
 
+  it('publishes the cancel command for the structured pre-release posture', () => {
+    const navigation = projectCustomerRequestAgentNavigation(requestView('in_progress', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'wait',
+      progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+      activity: {
+        actor: 'ae', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
+        retry: 'not_needed',
+        cancellation: { state: 'available', until: 'before_next_step_release' },
+        safeNextAction: 'check_progress',
+      },
+    }) as unknown as CustomerRequestView)
+
+    expect(navigation.actions).toContainEqual(expect.objectContaining({
+      relation: 'cancel',
+      method: 'POST',
+      href: '/api/v1/requests/request%3Acold/cancellation',
+    }))
+  })
+
   it('discovers every post-submit transition from the observed agent navigation', async () => {
     const routes = withNavigation(compositeRoutesReadyView(), [
       navigationAction('confirm_option', 'POST', '/api/v1/requests/request%3Acold/observed-confirm', {
