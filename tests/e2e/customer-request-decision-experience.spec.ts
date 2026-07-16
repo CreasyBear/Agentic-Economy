@@ -46,6 +46,114 @@ test('choice review is legible and authority-free until explicit confirmation', 
   expect(confirmations).toBe(1)
 })
 
+test('customer can give and withdraw bounded repeat permission without internal identifiers', async ({ page }) => {
+  const preview = decisionView()
+  const route = preview.decision?.routes[0]
+  if (route === undefined || route.maximumTotalCost.kind !== 'known') {
+    throw new Error('repeat-permission fixture route missing')
+  }
+  let allowBody: unknown
+  let withdrawalBody: unknown
+  await page.route('**/api/requests', async (requestRoute) => await requestRoute.fulfill({ json: preview }))
+  await page.route('**/api/requests/*/repeat-permissions', async (requestRoute) => {
+    if (requestRoute.request().method() === 'GET') {
+      await requestRoute.fulfill({ json: {
+        kind: 'connected_assistants',
+        assistants: [{
+          assistantRef: 'assistant:opaque-choice',
+          label: 'Connected assistant 1',
+          lastUsedAt: 10_000,
+        }],
+      } })
+      return
+    }
+    allowBody = requestRoute.request().postDataJSON()
+    await requestRoute.fulfill({ json: {
+      kind: 'repeat_permission',
+      status: 'active',
+      permissionRef: 'repeat-permission:opaque-receipt',
+      requestRef: preview.requestRef,
+      revision: preview.revision,
+      routeRef: route.routeRef,
+      delegatedCredentialId: 'assistant:opaque-choice',
+      limits: {
+        perUseSpend: route.maximumTotalCost,
+        cumulativeSpend: { currency: 'AUD', amountMinor: 4_200 },
+        perUseDataAllocations: 2,
+        cumulativeDataAllocations: 6,
+        occurrences: 3,
+      },
+      fallback: 'ask_for_confirmation',
+      validFrom: 10_000,
+      validUntil: route.validUntil,
+    } })
+  })
+  await page.route('**/api/requests/*/repeat-permissions/*/withdrawal', async (requestRoute) => {
+    withdrawalBody = requestRoute.request().postDataJSON()
+    await requestRoute.fulfill({ json: {
+      kind: 'repeat_permission',
+      status: 'withdrawn',
+      permissionRef: 'repeat-permission:opaque-receipt',
+      requestRef: preview.requestRef,
+      revision: preview.revision,
+      routeRef: route.routeRef,
+      delegatedCredentialId: 'assistant:opaque-choice',
+      limits: {
+        perUseSpend: route.maximumTotalCost,
+        cumulativeSpend: { currency: 'AUD', amountMinor: 4_200 },
+        perUseDataAllocations: 2,
+        cumulativeDataAllocations: 6,
+        occurrences: 3,
+      },
+      fallback: 'ask_for_confirmation',
+      validFrom: 10_000,
+      validUntil: route.validUntil,
+      withdrawnAt: 12_000,
+    } })
+  })
+
+  await page.goto('/engine')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('What are you looking for?').fill('Prepare a governed result')
+  await page.getByRole('button', { name: 'Explore' }).click()
+  await page.getByRole('button', { name: 'Review Prepare a governed result' }).click()
+  await page.getByRole('button', { name: 'Allow repeat use' }).focus()
+  await page.keyboard.press('Enter')
+
+  await expect(page.getByRole('heading', { name: 'Set limits for repeat use' })).toBeVisible()
+  await expect(page.getByText('Nothing starts when you create this permission.')).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Connected assistant' })).toContainText('Connected assistant 1')
+  await page.getByLabel('Maximum uses').fill('3')
+  await page.getByLabel('Total spending ceiling').fill('42.00')
+  await page.getByRole('combobox', { name: 'Permission expires' }).focus()
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('End')
+  await page.keyboard.press('Enter')
+  await page.getByRole('button', { name: 'Create repeat permission' }).focus()
+  await page.keyboard.press('Enter')
+
+  await expect(page.getByText('Repeat permission active')).toBeVisible()
+  await expect(page.getByText('Connected assistant 1 may confirm this exact choice up to 3 times.')).toBeVisible()
+  await expect(page.getByText('Total ceiling AUD 42.00')).toBeVisible()
+  await expect(page.getByText('If this choice changes or a limit is reached, AE will ask you to confirm again.')).toBeVisible()
+  await expect(page.getByText('assistant:opaque-choice')).not.toBeVisible()
+  await expect(page.getByText('repeat-permission:opaque-receipt')).not.toBeVisible()
+  expect(allowBody).toMatchObject({
+    revision: preview.revision,
+    routeRef: route.routeRef,
+    delegatedCredentialId: 'assistant:opaque-choice',
+    occurrences: 3,
+    cumulativeSpend: { currency: 'AUD', amountMinor: 4_200 },
+    validUntil: route.validUntil,
+  })
+
+  await page.getByRole('button', { name: 'Withdraw repeat permission' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('Repeat permission withdrawn')).toBeVisible()
+  await expect(page.getByText('The assistant cannot use this permission again.')).toBeVisible()
+  expect(withdrawalBody).toMatchObject({ routeRef: route.routeRef })
+})
+
 test('recommendation explains price evidence and keeps non-ranking commercial influence visible', async ({ page }) => {
   await page.route('**/api/requests', async (route) => await route.fulfill({ json: recommendedDecisionView() }))
 

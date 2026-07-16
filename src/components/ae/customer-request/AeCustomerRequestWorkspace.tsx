@@ -10,6 +10,10 @@ import {
 } from '@/modules/customer-request/agent-contract'
 import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
+import {
+  CustomerRequestRepeatPermissionControl,
+  repeatPermissionEligible,
+} from './CustomerRequestRepeatPermissionControl'
 
 type SubmitResponse = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: string }> | Readonly<{ error: string }>
 type WorkspaceState =
@@ -571,6 +575,9 @@ function RouteReviewCard({ projection, routeRef, turns, confirm, decline, edit, 
         </div>
         <div className="flex flex-wrap gap-3">
           <Button label="Confirm this choice" variant="primary" clickAction={confirm} />
+          {repeatPermissionEligible(route)
+            ? <CustomerRequestRepeatPermissionControl projection={projection} route={route} />
+            : null}
           <Button label="Change this Request" variant="secondary" clickAction={edit} />
           <Button label="Decline this choice" variant="secondary" clickAction={decline} />
           <Button label="Start a new Request" variant="ghost" clickAction={restart} />
