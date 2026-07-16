@@ -7,6 +7,7 @@ import type {
   CustomerRequestProblemReplyInput,
   CustomerRequestProblemResult,
   CustomerRequestProblemStatusChange,
+  CustomerRequestRepeatPermissionResult,
   CustomerRequestRouteActionInput,
   CustomerRequestRouteConfirmationInput,
 } from './agent-contract'
@@ -21,6 +22,24 @@ export type ReplyCustomerRequestProblemInput = CustomerRequestProblemReplyInput 
   reportRef: string
 }>
 export type InspectCustomerRequestEvidenceInput = Readonly<{ requestRef: string }>
+export type AllowCustomerRequestRepeatPermissionInput = Readonly<{
+  requestRef: string
+  revision: number
+  routeRef: string
+  delegatedCredentialId: string
+  occurrences: number
+  cumulativeSpend: Readonly<{ currency: string; amountMinor: number }>
+  validUntil: number
+  idempotencyKey: string
+}>
+export type UseCustomerRequestRepeatPermissionInput = Readonly<{
+  requestRef: string
+  revision: number
+  routeRef: string
+  permissionRef: string
+  delegatedCredentialId: string
+  idempotencyKey: string
+}>
 
 const confirmRouteSourceAction = sourceAction<ConfirmCustomerRequestInput, CustomerRequestAgentResult>(
   'customerRequestApplication:confirmRoute',
@@ -40,6 +59,14 @@ const exportRouteEvidenceSourceAction = sourceAction<InspectCustomerRequestEvide
 const replyRouteProblemSourceAction = sourceAction<ReplyCustomerRequestProblemInput, CustomerRequestProblemStatusChange>(
   'customerRequestApplication:replyRouteProblem',
 )
+const allowRepeatRouteSourceAction = sourceAction<
+  AllowCustomerRequestRepeatPermissionInput,
+  CustomerRequestRepeatPermissionResult
+>('customerRequestApplication:allowRepeatRoute')
+const useRepeatRouteSourceAction = sourceAction<
+  UseCustomerRequestRepeatPermissionInput,
+  CustomerRequestAgentResult
+>('customerRequestApplication:useRepeatRoute')
 
 export async function confirmCustomerRequestThroughSource(
   input: ConfirmCustomerRequestInput,
@@ -75,4 +102,16 @@ export async function replyCustomerRequestProblemThroughSource(
   input: ReplyCustomerRequestProblemInput,
 ): Promise<CustomerRequestProblemStatusChange> {
   return callSourceAction(replyRouteProblemSourceAction, input)
+}
+
+export async function allowCustomerRequestRepeatPermissionThroughSource(
+  input: AllowCustomerRequestRepeatPermissionInput,
+): Promise<CustomerRequestRepeatPermissionResult> {
+  return callSourceAction(allowRepeatRouteSourceAction, input)
+}
+
+export async function useCustomerRequestRepeatPermissionThroughSource(
+  input: UseCustomerRequestRepeatPermissionInput,
+): Promise<CustomerRequestAgentResult> {
+  return callSourceAction(useRepeatRouteSourceAction, input)
 }

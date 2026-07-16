@@ -1,0 +1,105 @@
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { ConvexSourceError } from '@/lib/server/convex-source'
+import {
+  customerRequestAllowRepeatPermissionAction,
+  customerRequestUseRepeatPermissionAction,
+} from '@/modules/customer-request/customer-request.actions'
+import {
+  customerRequestAgentResultSchema,
+  customerRequestRepeatPermissionAllowInputSchema,
+  customerRequestRepeatPermissionResultSchema,
+  customerRequestRepeatPermissionUseInputSchema,
+  type CustomerRequestAgentResult,
+  type CustomerRequestRepeatPermissionResult,
+} from '@/modules/customer-request/agent-contract'
+
+type AllowOptions = Readonly<{
+  allow?: (args: Record<string, unknown>) => Promise<CustomerRequestRepeatPermissionResult>
+}>
+type UseOptions = Readonly<{
+  use?: (args: Record<string, unknown>) => Promise<CustomerRequestAgentResult>
+}>
+
+export async function handleCustomerRequestRepeatPermissionAllowPost(
+  request: Request,
+  requestRef: string,
+  options: AllowOptions = {},
+): Promise<Response> {
+  const parsed = await parseBody(request, requestRef, customerRequestRepeatPermissionAllowInputSchema)
+  if (parsed instanceof Response) return parsed
+  try {
+    const command = { requestRef, ...parsed }
+    const result = customerRequestRepeatPermissionResultSchema.parse(await (options.allow === undefined
+      ? customerRequestAllowRepeatPermissionAction.run({
+          data: customerRequestAllowRepeatPermissionAction.schema.parse(command),
+          context: { request },
+        })
+      : options.allow(command)))
+    return resultResponse(result)
+  } catch (error) {
+    return unavailable(error, 'repeat_permission_unavailable')
+  }
+}
+
+export async function handleCustomerRequestRepeatPermissionUsePost(
+  request: Request,
+  requestRef: string,
+  permissionRef: string,
+  options: UseOptions = {},
+): Promise<Response> {
+  if (!validRef(permissionRef, 300)) return response({ error: 'invalid_permission_ref' }, 400)
+  const parsed = await parseBody(request, requestRef, customerRequestRepeatPermissionUseInputSchema)
+  if (parsed instanceof Response) return parsed
+  try {
+    const command = { requestRef, permissionRef, ...parsed }
+    const result = customerRequestAgentResultSchema.parse(await (options.use === undefined
+      ? customerRequestUseRepeatPermissionAction.run({
+          data: customerRequestUseRepeatPermissionAction.schema.parse(command),
+          context: { request },
+        })
+      : options.use(command)))
+    return resultResponse(result)
+  } catch (error) {
+    return unavailable(error, 'repeat_permission_use_unavailable')
+  }
+}
+
+async function parseBody<Output>(
+  request: Request,
+  requestRef: string,
+  schema: Readonly<{ safeParse: (value: unknown) => { success: true; data: Output } | { success: false } }>,
+): Promise<Output | Response> {
+  if (!validRef(requestRef, 200)) return response({ error: 'invalid_request_ref' }, 400)
+  const bounded = await readBoundedRequestText(request, 4 * 1024)
+  if (!bounded.ok) return response({ error: 'request_too_large' }, 413)
+  let body: unknown
+  try {
+    body = JSON.parse(bounded.text)
+  } catch {
+    return response({ error: 'invalid_json' }, 400)
+  }
+  const parsed = schema.safeParse(body)
+  return parsed.success ? parsed.data : response({ error: 'invalid_request' }, 400)
+}
+
+function resultResponse(result: { kind: string; reason?: string }): Response {
+  if (result.kind === 'refused') {
+    return response(result, result.reason === 'authentication_required' ? 401 : 404)
+  }
+  if (result.kind === 'conflict') return response(result, 409)
+  if (result.kind === 'unavailable') return response(result, 422)
+  return response(result, 200)
+}
+
+function unavailable(error: unknown, code: string): Response {
+  if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
+  return response({ error: code }, 503)
+}
+
+function validRef(value: string, maximum: number): boolean {
+  return value.trim().length > 0 && value.length <= maximum
+}
+
+function response(body: unknown, status: number): Response {
+  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
+}

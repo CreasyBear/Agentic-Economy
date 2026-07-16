@@ -15,11 +15,17 @@ import type {
   CustomerRequestEvidenceResult,
   CustomerRequestProblemResult,
   CustomerRequestProblemStatusChange,
+  CustomerRequestRepeatPermissionResult,
 } from '@/modules/customer-request/agent-contract'
+import { CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE } from '@/modules/customer-request/agent-contract'
 import {
   handleCustomerRequestCancelPost,
   handleCustomerRequestRunPost,
 } from '@/lib/server/customer-request-route-action-api'
+import {
+  handleCustomerRequestRepeatPermissionAllowPost,
+  handleCustomerRequestRepeatPermissionUsePost,
+} from '@/lib/server/customer-request-repeat-permission-api'
 import {
   handleCustomerRequestEvidenceGet,
   handleCustomerRequestProblemPost,
@@ -36,6 +42,7 @@ type HandlerOptions = Readonly<{
 
 type AgentActionResult = SubmitResult | FactsResult | MessageResult | CustomerOptionsProjection | InspectResult | ConfirmationResult
   | CustomerRequestProblemResult | CustomerRequestProblemStatusChange | CustomerRequestEvidenceResult
+  | CustomerRequestRepeatPermissionResult
 
 export async function handleAgentCustomerRequestPost(request: Request, options: HandlerOptions = {}): Promise<Response> {
   const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
@@ -109,6 +116,55 @@ export async function handleAgentCustomerRequestRunPost(
   }))
 }
 
+export async function handleAgentCustomerRequestRepeatPermissionAllowPost(
+  request: Request,
+  requestRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({
+    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+  })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  if (!admitted.principal.scopes.includes(CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE)) {
+    return refusal('scope_required', 403)
+  }
+  return await handleCustomerRequestRepeatPermissionAllowPost(request, requestRef, {
+    allow: async (args) => await callAsAgent<CustomerRequestRepeatPermissionResult>(
+      'customerRequestApplication:allowRepeatRoute',
+      'allow_repeat',
+      args,
+      admitted.principal,
+      options,
+    ),
+  })
+}
+
+export async function handleAgentCustomerRequestRepeatPermissionUsePost(
+  request: Request,
+  requestRef: string,
+  permissionRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({
+    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+  })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  if (!admitted.principal.scopes.includes(CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE)) {
+    return refusal('scope_required', 403)
+  }
+  return await withCustomerRequestAgentNavigation(
+    await handleCustomerRequestRepeatPermissionUsePost(request, requestRef, permissionRef, {
+      use: async (args) => await callAsAgent(
+        'customerRequestApplication:useRepeatRoute',
+        'use_repeat',
+        args,
+        admitted.principal,
+        options,
+      ),
+    }),
+  )
+}
+
 export async function handleAgentCustomerRequestCancelPost(
   request: Request,
   requestRef: string,
@@ -176,7 +232,8 @@ export async function handleAgentCustomerRequestGet(requestRef: string, options:
 
 async function callAsAgent<Result = SubmitResult>(
   name: string,
-  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence' | 'resume',
+  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'reply'
+    | 'evidence' | 'resume' | 'allow_repeat' | 'use_repeat',
   command: Record<string, unknown>,
   principal: CustomerRequestAgentPrincipal,
   options: HandlerOptions,

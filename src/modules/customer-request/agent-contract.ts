@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const CUSTOMER_REQUEST_AGENT_SCOPE = 'customer_requests:create' as const
+export const CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE = 'customer_requests:standing_authority' as const
 
 export const CUSTOMER_REQUEST_AGENT_ENTRYPOINT = Object.freeze({
   contract: 'Customer Request V2' as const,
@@ -51,6 +52,33 @@ export const customerRequestRouteConfirmationInputSchema = z.object({
 }).strict()
 
 export const customerRequestRouteActionInputSchema = z.strictObject({
+  idempotencyKey: boundedText(200),
+})
+
+const repeatPermissionMoneySchema = z.strictObject({
+  currency: z.string().regex(/^[A-Z]{3}$/u),
+  amountMinor: safeNonnegativeInteger,
+})
+
+export const customerRequestRepeatPermissionAllowInputSchema = z.strictObject({
+  revision: safePositiveInteger,
+  routeRef: boundedText(300),
+  delegatedCredentialId: boundedText(300),
+  occurrences: safePositiveInteger,
+  cumulativeSpend: repeatPermissionMoneySchema,
+  validUntil: safePositiveInteger,
+  idempotencyKey: boundedText(200),
+})
+
+export const customerRequestRepeatPermissionUseInputSchema = z.strictObject({
+  revision: safePositiveInteger,
+  routeRef: boundedText(300),
+  delegatedCredentialId: boundedText(300),
+  idempotencyKey: boundedText(200),
+})
+
+export const customerRequestRepeatPermissionWithdrawInputSchema = z.strictObject({
+  routeRef: boundedText(300),
   idempotencyKey: boundedText(200),
 })
 
@@ -705,6 +733,42 @@ export const customerRequestRefusalSchema = z.object({
   ]),
 }).strict()
 
+export const customerRequestRepeatPermissionSchema = z.strictObject({
+  kind: z.literal('repeat_permission'),
+  status: z.enum(['active', 'withdrawn']),
+  permissionRef: boundedText(300),
+  requestRef: boundedText(200),
+  revision: safePositiveInteger,
+  routeRef: boundedText(300),
+  delegatedCredentialId: boundedText(300),
+  limits: z.strictObject({
+    perUseSpend: repeatPermissionMoneySchema,
+    cumulativeSpend: repeatPermissionMoneySchema,
+    perUseDataAllocations: safeNonnegativeInteger,
+    cumulativeDataAllocations: safeNonnegativeInteger,
+    occurrences: safePositiveInteger,
+  }),
+  fallback: z.literal('ask_for_confirmation'),
+  validFrom: safeNonnegativeInteger,
+  validUntil: safePositiveInteger,
+  withdrawnAt: safeNonnegativeInteger.optional(),
+})
+
+export const customerRequestRepeatPermissionResultSchema = z.union([
+  customerRequestRepeatPermissionSchema,
+  customerRequestConflictSchema,
+  customerRequestRefusalSchema,
+  z.strictObject({
+    kind: z.literal('unavailable'),
+    reason: z.enum([
+      'choice_not_current',
+      'credential_not_authorized',
+      'repeat_permission_not_available',
+    ]),
+    summary: boundedText(1_000),
+  }),
+])
+
 export const customerRequestAgentResultSchema = z.union([
   customerRequestViewSchema, customerRequestConflictSchema, customerRequestRefusalSchema,
 ])
@@ -723,6 +787,9 @@ export const customerRequestInspectResultSchema = z.union([
     kind: z.literal('refused'), reason: z.enum(['authentication_required', 'request_not_found']),
   }).strict(),
 ])
+
+export type CustomerRequestRepeatPermission = z.infer<typeof customerRequestRepeatPermissionSchema>
+export type CustomerRequestRepeatPermissionResult = z.infer<typeof customerRequestRepeatPermissionResultSchema>
 
 type DeepReadonly<Value> = Value extends (...args: never[]) => unknown
   ? Value

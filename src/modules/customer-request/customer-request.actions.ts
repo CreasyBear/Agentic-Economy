@@ -9,6 +9,9 @@ import {
   customerRequestProblemReplyInputSchema,
   customerRequestProblemResultSchema,
   customerRequestProblemStatusChangeSchema,
+  customerRequestRepeatPermissionAllowInputSchema,
+  customerRequestRepeatPermissionResultSchema,
+  customerRequestRepeatPermissionUseInputSchema,
   customerRequestRouteActionInputSchema,
   customerRequestRouteConfirmationInputSchema,
 } from './agent-contract'
@@ -19,6 +22,8 @@ import {
   inspectCustomerRequestEvidenceThroughSource,
   reportCustomerRequestProblemThroughSource,
   replyCustomerRequestProblemThroughSource,
+  allowCustomerRequestRepeatPermissionThroughSource,
+  useCustomerRequestRepeatPermissionThroughSource,
 } from './customer-request.functions'
 
 const confirmationActionInputSchema = customerRequestRouteConfirmationInputSchema.extend({
@@ -169,4 +174,65 @@ export const customerRequestInspectEvidenceAction = defineAction({
   readOnly: true,
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => inspectCustomerRequestEvidenceThroughSource(data),
+})
+
+const repeatPermissionAllowActionInputSchema = customerRequestRepeatPermissionAllowInputSchema.extend({
+  requestRef: z.string().trim().min(1).max(200),
+}).strict()
+
+export const customerRequestAllowRepeatPermissionAction = defineAction({
+  id: 'customerRequest.allowRepeatPermission',
+  name: 'Allow bounded repeat use of a Customer Request option',
+  summary: 'Allow one named assistant credential to reuse one current low-risk option within exact limits.',
+  boundaries: [
+    'Does not start work, contact a business, book, charge, dispatch, or fulfil anything.',
+    'AE derives each per-use spend and information limit from the exact current option.',
+    'Changed options, expired permission, exhausted limits, withdrawal, or consequential effects require confirmation.',
+  ],
+  schema: repeatPermissionAllowActionInputSchema,
+  outputSchema: customerRequestRepeatPermissionResultSchema,
+  parameters: [
+    { name: 'requestRef', type: 'string', description: 'The existing Customer Request to continue.', required: true },
+    { name: 'revision', type: 'number', description: 'The exact Request revision shown with the option.', required: true },
+    { name: 'routeRef', type: 'string', description: 'The exact displayed option.', required: true },
+    { name: 'delegatedCredentialId', type: 'string', description: 'The already authorized assistant credential.', required: true },
+    { name: 'occurrences', type: 'number', description: 'The maximum number of uses.', required: true },
+    { name: 'cumulativeSpend', type: 'object', description: 'The total ISO-currency spend ceiling across all uses.', required: true },
+    { name: 'validUntil', type: 'number', description: 'When the repeat permission expires.', required: true },
+    { name: 'idempotencyKey', type: 'string', description: 'A stable retry key for this permission.', required: true },
+  ],
+  readOnly: false,
+  surfaces: ['ui', 'http', 'agentJson'],
+  run: async ({ data }) => allowCustomerRequestRepeatPermissionThroughSource(data),
+})
+
+const repeatPermissionUseActionInputSchema = customerRequestRepeatPermissionUseInputSchema.extend({
+  requestRef: z.string().trim().min(1).max(200),
+  permissionRef: z.string().trim().min(1).max(300),
+}).strict()
+
+export const customerRequestUseRepeatPermissionAction = defineAction({
+  id: 'customerRequest.useRepeatPermission',
+  name: 'Use bounded repeat permission',
+  summary: 'Use one active repeat permission for the same exact current option.',
+  boundaries: [
+    'Every use still creates one exact current confirmation receipt before work can start.',
+    'The caller cannot widen the option, spend, recipients, purposes, effects, expiry, or fallback.',
+    'Withdrawal, expiry, changed options, and exhausted limits fail closed.',
+  ],
+  schema: repeatPermissionUseActionInputSchema,
+  outputSchema: customerRequestAgentResultSchema,
+  parameters: [
+    { name: 'requestRef', type: 'string', description: 'The existing Customer Request to continue.', required: true },
+    { name: 'revision', type: 'number', description: 'The exact Request revision shown with the option.', required: true },
+    { name: 'routeRef', type: 'string', description: 'The exact displayed option.', required: true },
+    { name: 'permissionRef', type: 'string', description: 'The opaque repeat-permission reference.', required: true },
+    { name: 'delegatedCredentialId', type: 'string', description: 'The credential named by the permission.', required: true },
+    { name: 'idempotencyKey', type: 'string', description: 'A stable retry key for this use.', required: true },
+  ],
+  readOnly: false,
+  surfaces: ['ui', 'http', 'agentJson'],
+  run: async ({ data }) => customerRequestAgentResultSchema.parse(
+    await useCustomerRequestRepeatPermissionThroughSource(data),
+  ),
 })

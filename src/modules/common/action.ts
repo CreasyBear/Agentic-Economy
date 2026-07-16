@@ -69,7 +69,7 @@ export type ActionRunArgs<Input> = {
   context: ActionContext
 }
 
-export type ActionParameterType = 'string' | 'number' | 'boolean' | 'enum'
+export type ActionParameterType = 'string' | 'number' | 'boolean' | 'enum' | 'object'
 
 export type ActionParameter = {
   name: string

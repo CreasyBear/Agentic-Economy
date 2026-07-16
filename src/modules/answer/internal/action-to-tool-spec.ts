@@ -26,7 +26,7 @@ export type OpenRouterToolSpec = {
 }
 
 type OpenRouterSchemaProperty = {
-  type: 'string' | 'number' | 'boolean'
+  type: 'string' | 'number' | 'boolean' | 'object'
   description: string
   enum?: readonly string[]
 }
