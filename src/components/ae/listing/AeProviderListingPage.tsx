@@ -40,7 +40,7 @@ export function AeProviderListingPage({
   backThreadId,
 }: AeProviderListingPageProps) {
   const presentation = buildProviderPresentation(catalog)
-  const trust = buildListingTrustProjection(catalog)
+  const trust = buildListingTrustProjection(catalog, inquiryAffordance.kind === 'available')
   const officeAddress = readOfficeAddress(catalog)
   const inquiryHref = appendThreadOrigin(inquiryAffordance.kind === 'available' ? inquiryAffordance.href : '', backFrom, backThreadId)
   const [journeyIdentity, setJourneyIdentity] = useState<{ slug: string; id: PseudonymousJourneyId } | null>(null)
@@ -280,8 +280,8 @@ function CapabilityCardsSection({
         </div>
         <Grid columns={{ minWidth: 260 }} gap={4}>
           {capabilities.map((capability) => {
-            const presentation = capabilityCardPresentation(capability.kind)
             const actionable = inquiryAvailable && capability.status === 'available'
+            const presentation = capabilityCardPresentation(capability.kind, actionable)
             return (
               <Card key={capability.kind} padding={5} className="grid h-full content-start gap-2 bg-surface">
                 <HStack vAlign="center" gap={2} wrap="wrap">
@@ -325,7 +325,13 @@ function collectPublicCapabilities(catalog: PublicRouteCatalogContract): readonl
   )
 }
 
-function capabilityCardPresentation(kind: PublicRouteCapabilityContract['kind']): { label: string; body: string } {
+function capabilityCardPresentation(
+  kind: PublicRouteCapabilityContract['kind'],
+  actionable: boolean,
+): { label: string; body: string } {
+  if (!actionable) {
+    return { label: capabilityLabel(kind), body: 'This request path is not available yet.' }
+  }
   switch (kind) {
     case 'phone_inquiry':
       return { label: 'Send an inquiry', body: 'Describe the job in writing; it reaches the business for owner review.' }
@@ -335,6 +341,15 @@ function capabilityCardPresentation(kind: PublicRouteCapabilityContract['kind'])
       return { label: 'Flag an urgent callout', body: 'Register urgent interest; the business confirms if they can attend.' }
     case 'ae_hosted_discovery':
       return { label: 'First contact via AE', body: 'Start a first-contact message the business reviews before replying.' }
+  }
+}
+
+function capabilityLabel(kind: PublicRouteCapabilityContract['kind']): string {
+  switch (kind) {
+    case 'phone_inquiry': return 'Send an inquiry'
+    case 'quote_request': return 'Request a quote'
+    case 'emergency_callout_interest': return 'Flag an urgent callout'
+    case 'ae_hosted_discovery': return 'First contact via AE'
   }
 }
 

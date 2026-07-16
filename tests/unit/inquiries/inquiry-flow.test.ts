@@ -20,6 +20,7 @@ import type {
 } from '@/modules/inquiries/public'
 import {
   buildPublicInquiryAffordance,
+  projectPublicInquiryAvailability,
   selectOwnerAdmissionTarget,
   submitPublicInquiryRouteReadback,
   validatePublicInquiryFormInput,
@@ -367,6 +368,17 @@ describe('human inquiry owner inbox slice', () => {
       serviceName: 'Emergency plumbing',
     })
     const unadmittedState = sourceState({ resolvableOwnerRecipients: [] })
+    const projectedCatalog = projectPublicInquiryAvailability(
+      catalog,
+      inquiries.evaluateR1TargetAdmission(unadmittedState, target),
+    )
+    expect(projectedCatalog.services[0]).toMatchObject({
+      firstRequest: {
+        mode: 'not_available_yet',
+        publicChannel: 'not_available',
+      },
+      capabilities: [{ kind: 'phone_inquiry', status: 'unavailable' }],
+    })
     expect(buildPublicInquiryAffordance(catalog, undefined, unadmittedState)).toEqual({
       kind: 'unavailable',
       label: 'Inquiry unavailable',

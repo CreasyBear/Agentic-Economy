@@ -11,7 +11,11 @@ import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import { readPublicTargetAdmissionServer } from '@/modules/inquiries/inquiry.functions'
-import { buildPublicInquiryAffordance, selectPublicInquiryTarget } from '@/modules/inquiries/route-readbacks'
+import {
+  buildPublicInquiryAffordance,
+  projectPublicInquiryAvailability,
+  selectPublicInquiryTarget,
+} from '@/modules/inquiries/route-readbacks'
 import { serializeJsonLd } from '@/modules/seo/public'
 import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
 
@@ -232,7 +236,7 @@ function PublicBusinessRoute() {
     )
   }
 
-  const catalog = page.catalog
+  const catalog = projectPublicInquiryAvailability(page.catalog, admission)
   const inquiryAffordance = buildPublicInquiryAffordance(catalog, undefined, admission)
   const agentJsonUrl = `/api/businesses/${catalog.slug}`
 

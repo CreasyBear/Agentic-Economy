@@ -854,6 +854,43 @@ export const readPublicTargetAdmission = queryGeneric({
   },
 })
 
+const publicCatalogInquiryAvailability = v.object({
+  businessSlug: v.string(),
+  serviceSlug: v.string(),
+  capabilityKind: literalUnion(CapabilityKindValues),
+  admitted: v.boolean(),
+})
+
+export const readPublicCatalogInquiryAvailability = queryGeneric({
+  args: {
+    targets: v.array(v.object({
+      businessSlug: v.string(),
+      serviceSlug: v.string(),
+      capabilityKind: literalUnion(CapabilityKindValues),
+    })),
+  },
+  returns: v.array(publicCatalogInquiryAvailability),
+  handler: async (ctx, args) => {
+    if (args.targets.length > 100) throw new Error('public_catalog_inquiry_targets_exceeded')
+    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    return args.targets.map((target) => {
+      const business = state.businesses.find((candidate) => String(candidate.slug) === target.businessSlug)
+      const service = business === undefined
+        ? undefined
+        : state.businessServices.find((candidate) =>
+            candidate.businessId === business.businessId
+            && String(candidate.serviceSlug) === target.serviceSlug)
+      const admitted = business !== undefined && service !== undefined
+        && evaluateR1TargetAdmission(state, {
+          businessId: business.businessId,
+          serviceId: service.serviceId,
+          capabilityKind: target.capabilityKind,
+        }).admitted
+      return { ...target, admitted }
+    })
+  },
+})
+
 export const readCurrentOwnerTargetAdmission = queryGeneric({
   args: inquiryTarget,
   returns: ownerTargetAdmissionResult,

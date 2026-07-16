@@ -6,6 +6,10 @@ import {
   readPublicRegistryCatalogPage,
   readPublicRegistrySearchPage,
 } from '@/modules/registry/registry.functions'
+import {
+  projectCurrentPublicInquiryDetail,
+  projectCurrentPublicInquiryPage,
+} from '@/modules/registry/public-inquiry-projection'
 import type {
   PublicBusinessCatalogApiDto,
   PublicBusinessCatalogApiPage,
@@ -204,10 +208,10 @@ export const registryListAction = defineAction({
   readOnly: true,
   surfaces: ['http', 'agentJson'],
   run: async ({ data }) => {
-    const page = await readPublicRegistryCatalogPage({
+    const page = await projectCurrentPublicInquiryPage(await readPublicRegistryCatalogPage({
       ...(data.cursor === undefined ? {} : { cursor: data.cursor.trim() }),
       ...(data.limit === undefined ? {} : { limit: data.limit }),
-    })
+    }))
     return page as PublicBusinessCatalogApiPage
   },
 })
@@ -231,13 +235,13 @@ export const registrySearchAction = defineAction({
   readOnly: true,
   surfaces: ['http', 'agentJson', 'answerThread'],
   run: async ({ data, context }) => {
-    const page = await readPublicRegistrySearchPage({
+    const page = await projectCurrentPublicInquiryPage(await readPublicRegistrySearchPage({
       query: data.query.trim(),
       ...(data.limit === undefined ? {} : { limit: data.limit }),
       ...(data.cursor === undefined ? {} : { cursor: data.cursor.trim() }),
       ...(data.mode === undefined ? {} : { mode: data.mode }),
       ...(data.location === undefined ? {} : { location: data.location.trim() }),
-    }, context.timing === undefined ? {} : { timing: context.timing })
+    }, context.timing === undefined ? {} : { timing: context.timing }))
     return page as PublicBusinessCatalogApiPage
   },
 })
@@ -259,7 +263,9 @@ export const registryDetailAction = defineAction({
   readOnly: true,
   surfaces: ['http', 'agentJson', 'answerThread'],
   run: async ({ data }) => {
-    const result = await readPublicRegistryBusinessDetail({ slug: data.slug.trim() })
+    const result = await projectCurrentPublicInquiryDetail(
+      await readPublicRegistryBusinessDetail({ slug: data.slug.trim() }),
+    )
     return result as PublicBusinessCatalogDetailResult
   },
 })

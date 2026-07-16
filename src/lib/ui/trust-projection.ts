@@ -4,6 +4,8 @@ import { plainHoursLabel } from './status-presentation'
 
 export const AE_EXPLAINER_FULL = 'AE sends your request in writing and keeps a record — or call directly.' as const
 export const AE_EXPLAINER_NO_PHONE = 'AE sends your request in writing and keeps a record.' as const
+export const DIRECT_CONTACT_EXPLAINER = 'Use the published phone number to contact this business directly.' as const
+export const NO_CONTACT_EXPLAINER = 'Contact details and a request path are not published yet.' as const
 export const NO_REPLY_HISTORY = 'No reply history yet' as const
 
 export type TrustFact =
@@ -34,7 +36,11 @@ export type ListingTrustProjection = {
   hours: TrustFact
   serviceArea: TrustFact
   replyPosture: ReplyPosture
-  explainer: typeof AE_EXPLAINER_FULL | typeof AE_EXPLAINER_NO_PHONE
+  explainer:
+    | typeof AE_EXPLAINER_FULL
+    | typeof AE_EXPLAINER_NO_PHONE
+    | typeof DIRECT_CONTACT_EXPLAINER
+    | typeof NO_CONTACT_EXPLAINER
 }
 
 type TrustProjectionCatalogSource = {
@@ -46,9 +52,12 @@ type TrustProjectionCatalogSource = {
   }[]
 }
 
-export function buildListingTrustProjection(catalog: PublicRouteCatalogContract): ListingTrustProjection
-export function buildListingTrustProjection(catalog: TrustProjectionCatalogSource): ListingTrustProjection
-export function buildListingTrustProjection(catalog: TrustProjectionCatalogSource): ListingTrustProjection {
+export function buildListingTrustProjection(catalog: PublicRouteCatalogContract, inquiryAvailable?: boolean): ListingTrustProjection
+export function buildListingTrustProjection(catalog: TrustProjectionCatalogSource, inquiryAvailable?: boolean): ListingTrustProjection
+export function buildListingTrustProjection(
+  catalog: TrustProjectionCatalogSource,
+  inquiryAvailable = true,
+): ListingTrustProjection {
   const primaryService = catalog.services.at(0)
   const phone = publishedFact(catalog.publishedPhone, 'Phone not published here', catalog.updatedAt)
 
@@ -57,7 +66,9 @@ export function buildListingTrustProjection(catalog: TrustProjectionCatalogSourc
     hours: publishedHours(primaryService?.hoursOrUnknown, catalog.updatedAt),
     serviceArea: publishedFact(primaryService?.serviceArea, 'Service area not published here', catalog.updatedAt),
     replyPosture: { kind: 'no_history', label: NO_REPLY_HISTORY },
-    explainer: phone.kind === 'published' ? AE_EXPLAINER_FULL : AE_EXPLAINER_NO_PHONE,
+    explainer: inquiryAvailable
+      ? phone.kind === 'published' ? AE_EXPLAINER_FULL : AE_EXPLAINER_NO_PHONE
+      : phone.kind === 'published' ? DIRECT_CONTACT_EXPLAINER : NO_CONTACT_EXPLAINER,
   }
 }
 

@@ -5,7 +5,12 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { ListingFirstScreen } from '@/components/ae/listing/AeProviderListingPage'
-import { AE_EXPLAINER_FULL, AE_EXPLAINER_NO_PHONE, buildListingTrustProjection } from '@/lib/ui/trust-projection'
+import {
+  AE_EXPLAINER_FULL,
+  AE_EXPLAINER_NO_PHONE,
+  NO_CONTACT_EXPLAINER,
+  buildListingTrustProjection,
+} from '@/lib/ui/trust-projection'
 import type { PublicRouteCatalogContract, PublicRouteServiceContract } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
@@ -90,6 +95,8 @@ describe('ListingFirstScreen', () => {
 
     expect(actions?.textContent).toBe('Copy detailsThis business hasn’t joined AE yet')
     expect(markup).not.toContain('Ask this business')
+    expect(markup).toContain(NO_CONTACT_EXPLAINER)
+    expect(markup).not.toContain(AE_EXPLAINER_NO_PHONE)
     expect(peerActions(markup)).toEqual([
       { action: 'copy-details', variant: 'secondary' },
     ])
@@ -104,7 +111,7 @@ function renderFirstScreen(
   return renderToStaticMarkup(
     <ListingFirstScreen
       catalog={catalog}
-      trust={buildListingTrustProjection(catalog)}
+      trust={buildListingTrustProjection(catalog, inquiryAffordance.kind === 'available')}
       inquiryAffordance={inquiryAffordance}
       inquiryHref={inquiryAffordance.kind === 'available' ? inquiryAffordance.href : ''}
     />,

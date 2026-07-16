@@ -6,6 +6,7 @@ import type {
   PublicRouteServiceContract,
 } from '@/modules/catalog/public'
 import type { OperationKey, CorrelationId } from '@/modules/common/ids'
+import { PUBLIC_INQUIRY_UNAVAILABLE_REASON } from '@/modules/inquiries/public-copy'
 import {
   createEmptyInquirySourceState,
   evaluateR1TargetAdmission,
@@ -203,7 +204,7 @@ export function buildPublicInquiryAffordance(
     return {
       kind: 'unavailable',
       label: 'Inquiry unavailable',
-      reason: 'This business isn’t receiving inquiries through AE yet.',
+      reason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
       businessName: catalog.name,
       serviceName: match.service.name,
       ...(admission === undefined ? {} : { blockers: admission.blockers }),
@@ -449,6 +450,47 @@ export function selectPublicInquiryTarget(
         serviceId: match.service.serviceId,
         capabilityKind: match.capability.kind,
       }
+}
+
+export function projectPublicInquiryAvailability(
+  catalog: PublicRouteCatalogContract,
+  admission: R1TargetAdmission | undefined,
+): PublicRouteCatalogContract {
+  if (admission?.admitted === true) return catalog
+
+  const target = selectPublicInquiryTarget(catalog)
+  if (target === undefined) return catalog
+
+  return {
+    ...catalog,
+    services: catalog.services.map((service) => {
+      if (service.serviceId !== target.serviceId) return service
+      return {
+        ...service,
+        firstRequest: {
+          mode: 'not_available_yet',
+          publicDisclosure: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+          publicChannel: 'not_available',
+          noContactReason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+          rawContactExcluded: true,
+        },
+        capabilities: service.capabilities.map((capability) =>
+          capability.kind === target.capabilityKind
+            ? {
+                ...capability,
+                status: 'unavailable' as const,
+                firstRequest: {
+                  mode: 'not_available_yet' as const,
+                  publicDisclosure: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+                  publicChannel: 'not_available' as const,
+                  noContactReason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+                  rawContactExcluded: true as const,
+                },
+              }
+            : capability),
+      }
+    }),
+  }
 }
 
 export function selectOwnerAdmissionTarget(
