@@ -475,8 +475,8 @@ export type CustomerMaximumTotalCostCriterion = UnderstoodCriterion & Readonly<{
 export function deriveCustomerMaximumTotalCostCriterion(customerJob: string): CustomerMaximumTotalCostCriterion | undefined {
   const normalized = customerJob.normalize('NFKC')
   let latest: Readonly<{ currency: string; amountMinor: number }> | undefined
-  for (const match of normalized.matchAll(/\b(AUD|USD|CAD|NZD|EUR|GBP)\s*\$?\s*(\d+(?:\.\d{1,2})?)\b/giu)) {
-    const amount = match[2]
+  for (const match of normalized.matchAll(/\b(AUD|USD|CAD|NZD|EUR|GBP)\s*\$?\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)\b/giu)) {
+    const amount = match[2]?.replaceAll(',', '')
     if (amount === undefined) continue
     const before = normalized.slice(Math.max(0, match.index - 80), match.index).toLocaleLowerCase('en')
     if (!/\b(?:under|below|less\s+than|at\s+most|no\s+more\s+than|not\s+exceed|maximum|max|cap|budget)\b[^.!?\n]{0,56}$/u.test(before)) continue

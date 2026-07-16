@@ -33,6 +33,7 @@ function localDiscoveryPathCompatibility(): Plugin {
 export default defineConfig({
   server: {
     port: 3000,
+    allowedHosts: ['jc-mbp.tail4d4766.ts.net'],
     watch: {
       ignored: ['**/test-results/**', '**/playwright-report/**', '**/.output/**'],
     },

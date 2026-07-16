@@ -6,6 +6,7 @@ import {
   admitSandboxV2Supply,
   registerSandboxBusinesses,
   registerSandboxRouteSupplyRegistrations,
+  registerSandboxProcurementSupplyRegistrations,
   registerSandboxV2SupplyRegistrations,
   retireSandboxV2AcceptanceSupply,
   retireSupersededSandboxRouteSupply,
@@ -25,6 +26,8 @@ export const seedLabelledSandboxSupply = internalMutation({
     retiredSandboxV2Bindings: v.array(v.string()),
     sandboxRouteBindings: v.array(v.string()),
     sandboxRoutePublicationRefs: v.array(v.string()),
+    sandboxWorkflowBindings: v.array(v.string()),
+    sandboxWorkflowPublicationRefs: v.array(v.string()),
   }),
   handler: async (ctx, args) => {
     const registeredAt = Date.now()
@@ -57,15 +60,18 @@ export const seedLabelledSandboxSupply = internalMutation({
         ...created.businessIdsBySlug,
       },
     }
-    const [registrations, routeRegistrations] = await Promise.all([
+    const [registrations, routeRegistrations, workflowRegistrations] = await Promise.all([
       registerSandboxV2SupplyRegistrations(ctx.db, registeredAt + 2_000),
       registerSandboxRouteSupplyRegistrations(ctx.db, registeredAt + 2_100),
+      registerSandboxProcurementSupplyRegistrations(ctx.db, registeredAt + 2_200),
     ])
     const [
       sandboxV2Bindings,
       sandboxRouteBindings,
       sandboxCapabilityPublicationRefs,
       sandboxRoutePublicationRefs,
+      sandboxWorkflowBindings,
+      sandboxWorkflowPublicationRefs,
     ] = await Promise.all([
       admitSandboxV2Supply(ctx.db, registrations, registeredAt + 2_500),
       admitSandboxV2Supply(ctx.db, routeRegistrations, registeredAt + 2_600),
@@ -87,6 +93,16 @@ export const seedLabelledSandboxSupply = internalMutation({
         })
         return publicationRef
       })),
+      admitSandboxV2Supply(ctx.db, workflowRegistrations, registeredAt + 2_650),
+      Promise.all(workflowRegistrations.map(async (registration, index) => {
+        const publicationRef = await seedSandboxCapabilityPublication(
+          ctx.db, registration, registeredAt + 2_900 + index,
+        )
+        await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+          publicationRef, expectedRevision: 1,
+        })
+        return publicationRef
+      })),
     ])
     await retireSupersededSandboxV2Supply(ctx.db, registrations, registeredAt + 3_000)
     await retireSupersededSandboxRouteSupply(ctx.db, routeRegistrations, registeredAt + 3_050)
@@ -96,6 +112,7 @@ export const seedLabelledSandboxSupply = internalMutation({
     return {
       ...businesses, sandboxV2Bindings, sandboxCapabilityPublicationRefs,
       retiredSandboxV2Bindings, sandboxRouteBindings, sandboxRoutePublicationRefs,
+      sandboxWorkflowBindings, sandboxWorkflowPublicationRefs,
     }
   },
 })

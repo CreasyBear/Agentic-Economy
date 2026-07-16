@@ -8,6 +8,10 @@ Agentic Economy connects a customer job to registered business capabilities, pre
 The durable statement of the outcome a principal wants, including known facts, hard constraints, preferences, substitution boundaries, completion requirements, and revision history.
 _Avoid_: Prompt, household intent, job post
 
+**Workflow Cohort**:
+A labelled set of Customer Requests that exercise the same economic job and completion boundary across varied customers, businesses, capability chains, authority decisions, and recovery conditions. A cohort is an evaluation class, not a kernel or product branch.
+_Avoid_: Vertical mode, hard-coded journey, persona
+
 **Request Understanding**:
 AE's untrusted, revisable interpretation of a Customer Request. It is decision material, never authority.
 _Avoid_: Final intent, approved plan

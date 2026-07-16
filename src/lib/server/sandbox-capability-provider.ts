@@ -7,6 +7,10 @@ import {
   SANDBOX_ROUTE_PROVIDER_PROFILES,
   type SandboxRouteProviderProfileKey,
 } from '@/modules/sandbox-supply/public'
+import {
+  SANDBOX_WORKFLOW_PROVIDER_PROFILES,
+  type SandboxWorkflowProviderKey,
+} from '@/modules/sandbox-supply/workflow-cohorts'
 
 const MAX_BODY_BYTES = 64 * 1024
 const SANDBOX_OFFER_EXPIRES_AT = Date.UTC(2035, 0, 1)
@@ -84,6 +88,87 @@ export async function handleSandboxRouteProviderRequest(
   let parsedJson: unknown
   try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
   return await routeProviderResponse(routeKey, SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey], parsedJson, request, options)
+}
+
+export async function readSandboxWorkflowProviderDiscovery(
+  providerKey: string,
+  request: Request,
+): Promise<Response> {
+  const profile = workflowProfile(providerKey)
+  if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
+  const endpoint = new URL(request.url)
+  endpoint.searchParams.set('provider', providerKey)
+  endpoint.hash = ''
+  return json({
+    format: 'ae.sandbox-capability-provider:v1',
+    supplyClass: 'labelled_sandbox',
+    sandbox: true,
+    business: { slug: profile.slug, name: profile.businessName },
+    operation: {
+      method: 'POST',
+      endpoint: endpoint.href,
+      authentication: { scheme: 'bearer' },
+      maximumCost: money(profile.amountMinor),
+      inputSchema: workflowObjectSchema(profile.inputField),
+      outputSchema: workflowObjectSchema(profile.outputField),
+    },
+    boundaries: [
+      'This endpoint returns deterministic sandbox workflow evidence only.',
+      'It does not prove independent supply, booking, payment, dispatch, or fulfilment.',
+    ],
+  })
+}
+
+export async function handleSandboxWorkflowProviderRequest(
+  providerKey: string,
+  request: Request,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const authenticationFailure = authenticateSandboxProvider(request, options)
+  if (authenticationFailure !== undefined) return authenticationFailure
+  const profile = workflowProfile(providerKey)
+  if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
+  const body = await readBoundedRequestText(request, MAX_BODY_BYTES)
+  if (!body.ok) return json({ kind: 'refused', reason: 'request_too_large' }, 413)
+  let parsed: unknown
+  try { parsed = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
+  const probe = requestBody.safeParse(parsed)
+  if (probe.success && probe.data.operation === 'quote') {
+    if (
+      probe.data.bindingId !== profile.bindingId
+      || probe.data.capabilityContractId !== `sandbox.workflow.${providerKey}`
+    ) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+    const quoteDigest = canonicalDigest({
+      providerKey,
+      bindingId: probe.data.bindingId,
+      capabilityContractId: probe.data.capabilityContractId,
+    }).slice(7, 31)
+    return json({
+      kind: 'quoted',
+      expectedCost: money(profile.amountMinor),
+      maximumCost: money(profile.amountMinor),
+      expectedLatencyMs: 50,
+      dataFields: [],
+      disclosures: [],
+      providerQuoteRef: `sandbox-workflow-quote:${providerKey}:${quoteDigest}`,
+      providerQuoteExpiresAt: SANDBOX_OFFER_EXPIRES_AT,
+    })
+  }
+  const input = exactStringField(parsed, profile.inputField)
+  if (input === undefined) {
+    return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+  }
+  const digest = canonicalDigest({
+    cohortId: profile.cohortId,
+    providerKey,
+    inputField: profile.inputField,
+    input,
+  }).slice(7, 31)
+  return json(
+    { [profile.outputField]: `sandbox-${providerKey}:${digest}` },
+    200,
+    { 'Provider-Receipt': `sandbox-workflow:${providerKey}:${digest}` },
+  )
 }
 
 export async function handleSandboxCapabilityRequest(request: Request, options: HandlerOptions = {}): Promise<Response> {
@@ -281,6 +366,30 @@ async function waitForDelay(milliseconds: number, signal: AbortSignal): Promise<
 }
 
 function money(amountMinor: number) { return { currency: 'AUD', amountMinor } }
+
+function workflowProfile(providerKey: string) {
+  return SANDBOX_WORKFLOW_PROVIDER_PROFILES[providerKey as SandboxWorkflowProviderKey]
+}
+
+function workflowObjectSchema(field: string) {
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    type: 'object',
+    properties: { [field]: { type: 'string', minLength: 1 } },
+    required: [field],
+    additionalProperties: false,
+  }
+}
+
+function exactStringField(value: unknown, field: string): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const entries = Object.entries(value)
+  const entry = entries[0]
+  return entries.length === 1 && entry?.[0] === field
+    && typeof entry[1] === 'string' && entry[1].length > 0
+    ? entry[1]
+    : undefined
+}
 
 function json(body: unknown, status = 200, headers: Readonly<Record<string, string>> = {}): Response {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store', ...headers } })

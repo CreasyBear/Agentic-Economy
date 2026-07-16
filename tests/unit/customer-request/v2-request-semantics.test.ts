@@ -885,6 +885,11 @@ describe('V2 Request semantics', () => {
   })
 
   it('derives and enforces an explicit maximum total cost from customer language', () => {
+    expect(deriveCustomerMaximumTotalCostCriterion(
+      'Source workplace catering and keep the total under AUD 4,000.',
+    )).toMatchObject({
+      value: { currency: 'AUD', amountMinor: 400_000 },
+    })
     expect(deriveCustomerMaximumTotalCostCriterion('Use both providers but keep the total below AUD 5.')).toMatchObject({
       label: 'Maximum total cost', value: { currency: 'AUD', amountMinor: 500 }, basis: 'extracted_from_request',
     })

@@ -29,6 +29,11 @@ import {
   SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT,
   SANDBOX_V2_PRIOR_CAPABILITY_CONTRACT_DOCUMENT,
 } from '@/modules/sandbox-supply/public'
+import {
+  SANDBOX_WORKFLOW_PROVIDER_PROFILES,
+  sandboxWorkflowCapabilityContractDocument,
+  type SandboxWorkflowProviderKey,
+} from '@/modules/sandbox-supply/workflow-cohorts'
 
 export const seedDevCatalog = internalMutation({
   args: {},
@@ -520,6 +525,95 @@ function sandboxRouteProviderOrigin(
     || process.env.AE_SANDBOX_PROVIDER_ORIGIN?.trim()
     || process.env.AE_SITE_URL?.trim()
     || 'https://agentic-economy-phi.vercel.app'
+}
+
+export async function registerSandboxProcurementSupplyRegistrations(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  registeredAt: number,
+): Promise<SandboxV2SupplyRegistration[]> {
+  const procurementProfiles = Object.entries(SANDBOX_WORKFLOW_PROVIDER_PROFILES)
+    .filter(([, profile]) => profile.cohortId === 'procurement')
+  const siteUrl = process.env.AE_SANDBOX_WORKFLOW_ORIGIN?.trim()
+    || process.env.AE_SANDBOX_ROUTE_RESOLVER_ORIGIN?.trim()
+    || process.env.AE_SITE_URL?.trim()
+    || 'https://agentic-economy-phi.vercel.app'
+  const registered: SandboxV2SupplyRegistration[] = []
+  for (const [providerKey, profile] of procurementProfiles) {
+    const document = sandboxWorkflowCapabilityContractDocument(providerKey as SandboxWorkflowProviderKey)
+    const encoded = encodeCapabilityContractDocument(document)
+    const [contract, business] = await Promise.all([
+      registerCapabilityContractDocument(db, encoded.documentJson, registeredAt),
+      db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique(),
+    ])
+    if (contract.kind !== 'registered') throw new Error(`sandbox_workflow_contract_registration_${contract.reason}`)
+    if (business === null) throw new Error(`sandbox_workflow_business_missing_${profile.slug}`)
+    const commandContext = {
+      correlationId: `seed:capability-supply:${profile.slug}`,
+      reasonCode: 'labelled_sandbox_workflow_registration',
+      evidenceRefs: ['seed:sandbox-labelled-workflow-business'],
+    }
+    const offering = await registerCapabilityOfferingCommand(db, {
+      actor: { kind: 'system', ref: 'system:dev-seed' },
+      context: { ...commandContext, operationKey: `seed:capability-offering:${profile.offeringId}` },
+      registration: {
+        offeringId: profile.offeringId,
+        businessId: business._id,
+        networkId: 'ae:public',
+        contractRef: contract.ref,
+        presentation: {
+          label: profile.capabilityName,
+          summary: `Labelled sandbox ${profile.cohortLabel.toLowerCase()} workflow evidence only.`,
+          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          materialTerms: [{
+            termId: 'sandbox_only',
+            label: 'Environment',
+            value: 'Sandbox only; no real supplier order, payment, or fulfilment.',
+          }],
+          commercialRelationship: {
+            kind: 'none',
+            summary: 'Sandbox verification has no commercial relationship.',
+            influencesEligibility: false,
+            influencesInclusion: false,
+            influencesOrder: false,
+            evidenceRefs: ['seed:sandbox-commercial-neutrality'],
+          },
+        },
+        searchTerms: [
+          profile.cohortLabel,
+          profile.capabilityName,
+          'workplace catering supplier recommendation',
+        ],
+        registrationEvidenceRefs: ['seed:sandbox-labelled-workflow-business'],
+      },
+    }, registeredAt)
+    if (offering.kind !== 'registered') throw new Error(`sandbox_workflow_offering_registration_${offering.reason}`)
+    const binding = await registerCapabilityBindingCommand(db, {
+      actor: { kind: 'system', ref: 'system:dev-seed' },
+      context: { ...commandContext, operationKey: `seed:capability-binding:${profile.bindingId}` },
+      registration: {
+        bindingId: profile.bindingId,
+        offeringId: profile.offeringId,
+        networkId: 'ae:public',
+        contractRef: contract.ref,
+        endpointUrl: new URL(profile.endpointPath, siteUrl).href,
+        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
+        cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
+        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+        registrationEvidenceRefs: ['seed:production-v2-registration-path'],
+      },
+    }, registeredAt)
+    if (binding.kind !== 'registered') throw new Error(`sandbox_workflow_binding_registration_${binding.reason}`)
+    registered.push({
+      slug: profile.slug,
+      offeringId: profile.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: contract.ref,
+      offeringRegistrationHash: offering.registrationHash,
+      bindingRegistrationHash: binding.registrationHash,
+    })
+  }
+  return registered
 }
 
 export async function admitSandboxV2Supply(

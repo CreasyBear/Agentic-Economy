@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   handleSandboxCapabilityRequest,
   handleSandboxRouteProviderRequest,
+  handleSandboxWorkflowProviderRequest,
+  readSandboxWorkflowProviderDiscovery,
   readSandboxRouteProviderDiscovery,
 } from '@/lib/server/sandbox-capability-provider'
 import { createHttpCapabilityBinding } from '@/modules/routing-kernel/http-capability-binding'
@@ -134,6 +136,72 @@ describe('sandbox capability provider', () => {
       body: JSON.stringify({ serviceReference: resolvedBody.serviceReference }),
     }), { providerKey: 'secret' })
     expect(wrongProvider.status).toBe(400)
+  })
+
+  it('executes the procurement workflow through three typed business endpoints', async () => {
+    const requestText = 'Source comparable workplace catering options for 80 people next Thursday under AUD 4,000.'
+    const brief = await workflowCall('procurement-brief', { request: requestText })
+    expect(brief.status).toBe(200)
+    const briefBody = await brief.json() as { requirementsBrief: string }
+    expect(briefBody.requirementsBrief).toMatch(/^sandbox-procurement-brief:/u)
+
+    const options = await workflowCall('supplier-options', {
+      requirementsBrief: briefBody.requirementsBrief,
+    })
+    expect(options.status).toBe(200)
+    const optionsBody = await options.json() as { supplierOptionSet: string }
+    expect(optionsBody.supplierOptionSet).toMatch(/^sandbox-supplier-options:/u)
+
+    const recommendation = await workflowCall('procurement-recommendation', {
+      supplierOptionSet: optionsBody.supplierOptionSet,
+    })
+    expect(recommendation.status).toBe(200)
+    await expect(recommendation.json()).resolves.toEqual({
+      recommendation: expect.stringMatching(/^sandbox-procurement-recommendation:/u),
+    })
+    expect(recommendation.headers.get('Provider-Receipt'))
+      .toMatch(/^sandbox-workflow:procurement-recommendation:/u)
+  })
+
+  it('publishes exact procurement discovery and refuses cross-step input', async () => {
+    const endpoint = 'https://ae.test/api/sandbox/providers/workflow?provider=supplier-options'
+    const discovery = await readSandboxWorkflowProviderDiscovery(
+      'supplier-options',
+      new Request(endpoint),
+    )
+    await expect(discovery.json()).resolves.toMatchObject({
+      format: 'ae.sandbox-capability-provider:v1',
+      supplyClass: 'labelled_sandbox',
+      business: { name: 'Supplier Options Network' },
+      operation: {
+        endpoint,
+        inputSchema: { required: ['requirementsBrief'] },
+        outputSchema: { required: ['supplierOptionSet'] },
+      },
+    })
+
+    const refused = await workflowCall('supplier-options', {
+      request: 'This belongs to the first procurement step.',
+    })
+    expect(refused.status).toBe(400)
+    await expect(refused.json()).resolves.toEqual({ kind: 'refused', reason: 'request_invalid' })
+  })
+
+  it('answers the generic readiness quote with the exact workflow binding identity', async () => {
+    const response = await workflowCall('procurement-brief', {
+      protocolVersion: 'ae-capability:v1',
+      operation: 'quote',
+      bindingId: 'binding:sandbox-procurement-brief:http-json:v2',
+      capabilityContractId: 'sandbox.workflow.procurement-brief',
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'quoted',
+      expectedCost: { currency: 'AUD', amountMinor: 250 },
+      maximumCost: { currency: 'AUD', amountMinor: 250 },
+      providerQuoteRef: expect.stringMatching(/^sandbox-workflow-quote:procurement-brief:/u),
+    })
   })
 
   it('lets registered sandbox providers exercise an uncertain second-step outcome', async () => {
@@ -280,6 +348,17 @@ describe('sandbox capability provider', () => {
     expect(await replay.json()).toEqual(await first.json())
   })
 })
+
+async function workflowCall(providerKey: string, body: unknown): Promise<Response> {
+  return await handleSandboxWorkflowProviderRequest(providerKey, new Request(
+    `https://ae.test/api/sandbox/providers/workflow?provider=${providerKey}`,
+    {
+      method: 'POST',
+      headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify(body),
+    },
+  ), { providerKey: 'secret' })
+}
 
 function binding(
   profile: string,
