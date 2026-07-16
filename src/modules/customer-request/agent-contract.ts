@@ -782,6 +782,7 @@ export const customerRequestConnectedAssistantsResultSchema = z.union([
       label: boundedText(200),
       lastUsedAt: safeNonnegativeInteger,
     })).max(64),
+    permissions: z.array(customerRequestRepeatPermissionSchema).max(64),
   }),
   customerRequestRefusalSchema,
 ])

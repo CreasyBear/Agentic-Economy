@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   handleAgentCustomerRequestRepeatPermissionAllowPost,
   handleAgentCustomerRequestRepeatPermissionGet,
+  handleAgentCustomerRequestRepeatPermissionsGet,
   handleAgentCustomerRequestRepeatPermissionUsePost,
   handleAgentCustomerRequestRepeatPermissionWithdrawPost,
 } from '@/lib/server/customer-request-agent-api'
@@ -31,19 +32,21 @@ const principal = {
 
 describe('Customer Request repeat-permission HTTP surface', () => {
   it('returns customer-safe connected assistant choices without credential language', async () => {
+    const result = {
+      kind: 'connected_assistants' as const,
+      requestRef,
+      assistants: [{
+        assistantRef: 'credential:repeat',
+        label: 'Connected assistant 1',
+        lastUsedAt: 1_000,
+      }],
+      permissions: [repeatPermissionReceipt()],
+    }
     const response = await handleCustomerRequestConnectedAssistantsGet(
       get({}),
       requestRef,
       {
-        list: async () => ({
-          kind: 'connected_assistants',
-          requestRef,
-          assistants: [{
-            assistantRef: 'credential:repeat',
-            label: 'Connected assistant 1',
-            lastUsedAt: 1_000,
-          }],
-        }),
+        list: async () => result,
       },
     )
 
@@ -52,8 +55,30 @@ describe('Customer Request repeat-permission HTTP surface', () => {
     expect(body).toMatchObject({
       kind: 'connected_assistants',
       assistants: [{ label: 'Connected assistant 1' }],
+      permissions: [{ status: 'active' }],
     })
     expect(JSON.stringify(body)).not.toMatch(/credentialId|scope|principal|policy|mandate/u)
+    const callAction = vi.fn(async (_name: string, args: Record<string, unknown>) => {
+      expect(await verifyCustomerRequestServiceAssertion({
+        key,
+        operation: 'inspect_repeat',
+        command: { requestRef },
+        assertion: args.serviceAuth as never,
+        now: 1_001,
+      })).toBe(true)
+      return result
+    })
+    const agent = await handleAgentCustomerRequestRepeatPermissionsGet(
+      get({}),
+      requestRef,
+      agentOptions(callAction),
+    )
+    expect(agent.status).toBe(200)
+    expect(await agent.json()).toEqual(body)
+    expect(callAction).toHaveBeenCalledWith(
+      'customerRequestApplication:listRepeatPermissionAssistants',
+      expect.any(Object),
+    )
   })
 
   it('refuses an external credential without standing-authority scope before the application call', async () => {
@@ -282,6 +307,11 @@ type TestAgentResult = ReturnType<typeof repeatPermissionReceipt> | (Omit<
 > & Readonly<{ status: 'withdrawn'; withdrawnAt: number }>) | Readonly<{
   kind: 'refused'
   reason: 'request_not_found'
+}> | Readonly<{
+  kind: 'connected_assistants'
+  requestRef: string
+  assistants: { assistantRef: string; label: string; lastUsedAt: number }[]
+  permissions: ReturnType<typeof repeatPermissionReceipt>[]
 }>
 
 function agentOptions(callAction: (name: string, args: Record<string, unknown>) => Promise<TestAgentResult>) {

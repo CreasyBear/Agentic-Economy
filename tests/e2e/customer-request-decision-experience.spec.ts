@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 
+import type { CustomerRequestRepeatPermission } from '@/modules/customer-request/agent-contract'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 
 test('choice review is legible and authority-free until explicit confirmation', async ({ page }) => {
@@ -52,8 +53,13 @@ test('customer can give and withdraw bounded repeat permission without internal 
   if (route === undefined || route.maximumTotalCost.kind !== 'known') {
     throw new Error('repeat-permission fixture route missing')
   }
+  const perUseSpend = {
+    currency: route.maximumTotalCost.currency,
+    amountMinor: route.maximumTotalCost.amountMinor,
+  }
   let allowBody: unknown
   let withdrawalBody: unknown
+  let storedPermission: CustomerRequestRepeatPermission | undefined
   await page.route('**/api/requests', async (requestRoute) => await requestRoute.fulfill({ json: preview }))
   await page.route('**/api/requests/*/repeat-permissions', async (requestRoute) => {
     if (requestRoute.request().method() === 'GET') {
@@ -64,11 +70,12 @@ test('customer can give and withdraw bounded repeat permission without internal 
           label: 'Connected assistant 1',
           lastUsedAt: 10_000,
         }],
+        permissions: storedPermission === undefined ? [] : [storedPermission],
       } })
       return
     }
     allowBody = requestRoute.request().postDataJSON()
-    await requestRoute.fulfill({ json: {
+    storedPermission = {
       kind: 'repeat_permission',
       status: 'active',
       permissionRef: 'repeat-permission:opaque-receipt',
@@ -77,7 +84,7 @@ test('customer can give and withdraw bounded repeat permission without internal 
       routeRef: route.routeRef,
       delegatedCredentialId: 'assistant:opaque-choice',
       limits: {
-        perUseSpend: route.maximumTotalCost,
+        perUseSpend,
         cumulativeSpend: { currency: 'AUD', amountMinor: 4_200 },
         perUseDataAllocations: 2,
         cumulativeDataAllocations: 6,
@@ -86,11 +93,12 @@ test('customer can give and withdraw bounded repeat permission without internal 
       fallback: 'ask_for_confirmation',
       validFrom: 10_000,
       validUntil: route.validUntil,
-    } })
+    }
+    await requestRoute.fulfill({ json: storedPermission })
   })
   await page.route('**/api/requests/*/repeat-permissions/*/withdrawal', async (requestRoute) => {
     withdrawalBody = requestRoute.request().postDataJSON()
-    await requestRoute.fulfill({ json: {
+    storedPermission = {
       kind: 'repeat_permission',
       status: 'withdrawn',
       permissionRef: 'repeat-permission:opaque-receipt',
@@ -99,7 +107,7 @@ test('customer can give and withdraw bounded repeat permission without internal 
       routeRef: route.routeRef,
       delegatedCredentialId: 'assistant:opaque-choice',
       limits: {
-        perUseSpend: route.maximumTotalCost,
+        perUseSpend,
         cumulativeSpend: { currency: 'AUD', amountMinor: 4_200 },
         perUseDataAllocations: 2,
         cumulativeDataAllocations: 6,
@@ -109,7 +117,8 @@ test('customer can give and withdraw bounded repeat permission without internal 
       validFrom: 10_000,
       validUntil: route.validUntil,
       withdrawnAt: 12_000,
-    } })
+    }
+    await requestRoute.fulfill({ json: storedPermission })
   })
 
   await page.goto('/engine')
@@ -147,11 +156,29 @@ test('customer can give and withdraw bounded repeat permission without internal 
     validUntil: route.validUntil,
   })
 
+  await page.reload()
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('What are you looking for?').fill('Prepare a governed result')
+  await page.getByRole('button', { name: 'Explore' }).click()
+  await page.getByRole('button', { name: 'Review Prepare a governed result' }).click()
+  await page.getByRole('button', { name: 'Allow repeat use' }).click()
+  await expect(page.getByText('Repeat permission active')).toBeVisible()
+  await expect(page.getByText('Connected assistant 1 may confirm this exact choice up to 3 times.')).toBeVisible()
+
   await page.getByRole('button', { name: 'Withdraw repeat permission' }).focus()
   await page.keyboard.press('Enter')
   await expect(page.getByText('Repeat permission withdrawn')).toBeVisible()
   await expect(page.getByText('The assistant cannot use this permission again.')).toBeVisible()
   expect(withdrawalBody).toMatchObject({ routeRef: route.routeRef })
+
+  await page.reload()
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('What are you looking for?').fill('Prepare a governed result')
+  await page.getByRole('button', { name: 'Explore' }).click()
+  await page.getByRole('button', { name: 'Review Prepare a governed result' }).click()
+  await page.getByRole('button', { name: 'Allow repeat use' }).click()
+  await expect(page.getByText('Repeat permission withdrawn')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Withdraw repeat permission' })).not.toBeVisible()
 })
 
 test('recommendation explains price evidence and keeps non-ranking commercial influence visible', async ({ page }) => {

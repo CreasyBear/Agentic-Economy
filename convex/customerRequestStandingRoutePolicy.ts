@@ -180,6 +180,13 @@ const resolvePermissionResult = v.union(
   v.object({ kind: v.literal('found'), requestRevision: v.number(), policy: standingRoutePolicyValue }),
   v.object({ kind: v.literal('not_found') }),
 )
+const listPermissionsResult = v.object({
+  kind: v.literal('found'),
+  permissions: v.array(v.object({
+    requestRevision: v.number(),
+    policy: standingRoutePolicyValue,
+  })),
+})
 const revokeResult = v.union(
   v.object({ kind: v.literal('revoked'), policy: standingRoutePolicyValue }),
   v.object({ kind: v.literal('replayed'), policy: standingRoutePolicyValue }),
@@ -668,6 +675,36 @@ export const resolvePermission = internalQuery({
       requestRevision: row.requestRevision,
       policy: writablePolicy({ ...policy, revokedAt: revocation.revokedAt }),
     }
+  },
+})
+
+export const listPermissions = internalQuery({
+  args: { requestId: v.string(), principalId: v.string() },
+  returns: listPermissionsResult,
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query('customerRequestStandingRoutePolicyIssues')
+      .withIndex('by_requestId_and_recordedAt', (query) => query.eq('requestId', args.requestId))
+      .order('desc')
+      .take(65)
+    if (rows.length > 64) throw new Error('customer_request_standing_route_policy_history_overflow')
+    const permissions = []
+    for (const row of rows) {
+      if (row.principalId !== args.principalId) continue
+      const policy = domainPolicy(row.policy)
+      if (!validStoredPolicy(row, policy, args.requestId)) {
+        throw new Error('customer_request_standing_route_policy_integrity_failure')
+      }
+      const revocation = await ctx.db.query('customerRequestStandingRoutePolicyRevocations')
+        .withIndex('by_policyRef', (query) => query.eq('policyRef', policy.policyRef)).unique()
+      if (revocation !== null && !validPolicyRevocation(revocation, policy, args.requestId)) {
+        throw new Error('customer_request_standing_route_policy_revocation_integrity_failure')
+      }
+      permissions.push({
+        requestRevision: row.requestRevision,
+        policy: writablePolicy(revocation === null ? policy : { ...policy, revokedAt: revocation.revokedAt }),
+      })
+    }
+    return { kind: 'found' as const, permissions }
   },
 })
 

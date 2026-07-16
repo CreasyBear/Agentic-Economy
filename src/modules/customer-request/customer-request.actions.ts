@@ -188,12 +188,13 @@ const repeatPermissionAllowActionInputSchema = customerRequestRepeatPermissionAl
 
 export const customerRequestListConnectedAssistantsAction = defineAction({
   id: 'customerRequest.listConnectedAssistants',
-  name: 'List connected assistants',
-  summary: 'List the customer-safe assistant choices eligible for repeat permission on this Request.',
+  name: 'Read repeat-permission workspace',
+  summary: 'List eligible connected assistants and durable repeat-permission receipts for this Request.',
   boundaries: [
     'Returns only assistants already connected to the authenticated Request owner.',
+    'Returns bounded customer-safe active and withdrawn permission receipts so a fresh client can resume.',
     'Does not reveal credential material or grant any permission.',
-    'An empty list means the customer must connect an eligible assistant before delegating.',
+    'Empty assistant or permission lists are explicit and do not change the Request.',
   ],
   schema: z.strictObject({ requestRef: z.string().trim().min(1).max(200) }),
   outputSchema: customerRequestConnectedAssistantsResultSchema,

@@ -575,6 +575,7 @@ const repeatPermissionAssistantsResult = v.union(
       label: v.string(),
       lastUsedAt: v.number(),
     })),
+    permissions: v.array(repeatPermissionResult.members[0]),
   }),
   v.object({ kind: v.literal('refused'), reason: refusedReason }),
 )
@@ -961,19 +962,22 @@ export const confirmRoute = action({
 })
 
 export const listRepeatPermissionAssistants = action({
-  args: { requestRef: v.string() },
+  args: { requestRef: v.string(), serviceAuth: v.optional(serviceAssertion) },
   returns: repeatPermissionAssistantsResult,
   handler: async (ctx, args): Promise<RepeatPermissionAssistantsResult> => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
-    const caller = await resolveRequestCaller(ctx, 'inspect_repeat', args, undefined)
+    const command = { requestRef: args.requestRef }
+    const caller = await resolveRequestCaller(ctx, 'inspect_repeat', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
     const current = await loadCurrent(ctx, args.requestRef)
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
     }
     const credentials = await ctx.runQuery(internal.customerRequestPrincipals.listStandingCredentials, {
-      ownerId: identity.subject,
+      ownerId: caller.ownerId,
+    })
+    const policies = await ctx.runQuery(internal.customerRequestStandingRoutePolicy.listPermissions, {
+      requestId: args.requestRef,
+      principalId: caller.principalId,
     })
     return {
       kind: 'connected_assistants',
@@ -983,6 +987,15 @@ export const listRepeatPermissionAssistants = action({
         label: `Connected assistant ${index + 1}`,
         lastUsedAt: credential.lastSeenAt,
       })),
+      permissions: policies.permissions.flatMap(({ requestRevision, policy }) => {
+        const route = policy.routes[0]
+        return route === undefined ? [] : [projectRepeatPermission(
+          args.requestRef,
+          requestRevision,
+          customerRouteRef(policy.generationRef, route.routePlanId),
+          policy,
+        )]
+      }),
     }
   },
 })
@@ -3697,6 +3710,7 @@ type ServiceAssertion = Infer<typeof serviceAssertion>
 type RequestCaller = Readonly<{
   principalId: string
   delegatedAgentId: string
+  ownerId: string
 }>
 
 async function resolveRequestCaller(
@@ -3719,6 +3733,7 @@ async function resolveRequestCaller(
           return {
             principalId: agentPrincipal.principalId,
             delegatedAgentId: agentPrincipal.principalId,
+            ownerId: agentPrincipal.ownerId,
           }
         }
       }
@@ -3726,6 +3741,7 @@ async function resolveRequestCaller(
     return {
       principalId: identity.tokenIdentifier,
       delegatedAgentId: delegatedAgentId ?? identity.tokenIdentifier,
+      ownerId: identity.subject,
     }
   }
   const key = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
@@ -3753,6 +3769,7 @@ async function resolveRequestCaller(
         return {
           principalId: requestPrincipal.principalId,
           delegatedAgentId: assertion.principalId,
+          ownerId: assertion.ownerId,
         }
       }
     }
@@ -3760,6 +3777,7 @@ async function resolveRequestCaller(
   return {
     principalId: assertion.principalId,
     delegatedAgentId: assertion.principalId,
+    ownerId: assertion.ownerId,
   }
 }
 

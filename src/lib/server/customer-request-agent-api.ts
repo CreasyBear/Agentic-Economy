@@ -13,6 +13,7 @@ import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import type {
   CustomerRequestEvidenceResult,
+  CustomerRequestConnectedAssistantsResult,
   CustomerRequestProblemResult,
   CustomerRequestProblemStatusChange,
   CustomerRequestRepeatPermissionResult,
@@ -24,6 +25,7 @@ import {
 } from '@/lib/server/customer-request-route-action-api'
 import {
   handleCustomerRequestRepeatPermissionAllowPost,
+  handleCustomerRequestConnectedAssistantsGet,
   handleCustomerRequestRepeatPermissionGet,
   handleCustomerRequestRepeatPermissionUsePost,
   handleCustomerRequestRepeatPermissionWithdrawPost,
@@ -45,6 +47,7 @@ type HandlerOptions = Readonly<{
 type AgentActionResult = SubmitResult | FactsResult | MessageResult | CustomerOptionsProjection | InspectResult | ConfirmationResult
   | CustomerRequestProblemResult | CustomerRequestProblemStatusChange | CustomerRequestEvidenceResult
   | CustomerRequestRepeatPermissionResult
+  | CustomerRequestConnectedAssistantsResult
 
 export async function handleAgentCustomerRequestPost(request: Request, options: HandlerOptions = {}): Promise<Response> {
   const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
@@ -134,6 +137,29 @@ export async function handleAgentCustomerRequestRepeatPermissionAllowPost(
     allow: async (args) => await callAsAgent<CustomerRequestRepeatPermissionResult>(
       'customerRequestApplication:allowRepeatRoute',
       'allow_repeat',
+      args,
+      admitted.principal,
+      options,
+    ),
+  })
+}
+
+export async function handleAgentCustomerRequestRepeatPermissionsGet(
+  request: Request,
+  requestRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({
+    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+  })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  if (!admitted.principal.scopes.includes(CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE)) {
+    return refusal('scope_required', 403)
+  }
+  return await handleCustomerRequestConnectedAssistantsGet(request, requestRef, {
+    list: async (args) => await callAsAgent<CustomerRequestConnectedAssistantsResult>(
+      'customerRequestApplication:listRepeatPermissionAssistants',
+      'inspect_repeat',
       args,
       admitted.principal,
       options,

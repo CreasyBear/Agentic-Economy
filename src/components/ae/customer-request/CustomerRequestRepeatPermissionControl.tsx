@@ -63,6 +63,13 @@ export function CustomerRequestRepeatPermissionControl({
       }
       setAssistants(result.assistants)
       setAssistantRef((current) => current || result.assistants[0]?.assistantRef || '')
+      const currentPermission = result.permissions.find((permission) => (
+        permission.routeRef === route.routeRef
+      ))
+      if (currentPermission !== undefined) {
+        setReceipt(currentPermission)
+        setAssistantRef(currentPermission.delegatedCredentialId)
+      }
     } catch {
       setError('AE could not be reached. No repeat permission was created.')
     } finally {

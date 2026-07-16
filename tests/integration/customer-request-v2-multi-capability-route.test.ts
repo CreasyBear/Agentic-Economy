@@ -521,6 +521,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         label: 'Connected assistant 1',
         lastUsedAt: 1_000,
       }],
+      permissions: [permission],
     })
 
     expect(permission, JSON.stringify(permission)).toMatchObject({
@@ -551,6 +552,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     if (permission.kind !== 'repeat_permission') {
       throw new Error(`repeat permission failed: ${JSON.stringify(permission)}`)
     }
+    await expect(admin.action(api.customerRequestApplication.listRepeatPermissionAssistants, {
+      requestRef: compared.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'connected_assistants',
+      permissions: [permission],
+    })
     await expect(admin.action(api.customerRequestApplication.allowRepeatRoute, {
       ...permissionCommand,
       cumulativeSpend: permission.limits.cumulativeSpend,
@@ -659,6 +666,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       permissionRef: permission.permissionRef,
       routeRef: displayedRoute.routeRef,
     })).resolves.toEqual(withdrawn)
+    await expect(admin.action(api.customerRequestApplication.listRepeatPermissionAssistants, {
+      requestRef: compared.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'connected_assistants',
+      permissions: [withdrawn],
+    })
     const withdrawnUseCommand = {
       requestRef: compared.requestRef,
       revision: compared.revision,
