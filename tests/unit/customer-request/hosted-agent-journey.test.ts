@@ -83,7 +83,9 @@ describe('hosted Customer Request journey', () => {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
           actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
-          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+          retry: 'not_needed',
+          cancellation: { state: 'stopped', stoppedAt: 9_000 },
+          safeNextAction: 'revise_request',
         },
       }),
       {
@@ -95,7 +97,9 @@ describe('hosted Customer Request journey', () => {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
           actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
-          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+          retry: 'not_needed',
+          cancellation: { state: 'stopped', stoppedAt: 9_000 },
+          safeNextAction: 'revise_request',
         },
       }),
     ]
@@ -914,7 +918,9 @@ describe('hosted Customer Request journey', () => {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
           actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
-          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+          retry: 'not_needed',
+          cancellation: { state: 'stopped', stoppedAt: 9_002 },
+          safeNextAction: 'revise_request',
         },
       })),
       Response.json({
@@ -929,7 +935,9 @@ describe('hosted Customer Request journey', () => {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
           actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
-          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+          retry: 'not_needed',
+          cancellation: { state: 'stopped', stoppedAt: 9_002 },
+          safeNextAction: 'revise_request',
         },
       })),
     ]
@@ -1021,7 +1029,9 @@ describe('hosted Customer Request journey', () => {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
           actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
-          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+          retry: 'not_needed',
+          cancellation: { state: 'stopped', stoppedAt: 9_002 },
+          safeNextAction: 'revise_request',
         },
       }),
       {
@@ -1033,7 +1043,9 @@ describe('hosted Customer Request journey', () => {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
           actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
-          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+          retry: 'not_needed',
+          cancellation: { state: 'stopped', stoppedAt: 9_002 },
+          safeNextAction: 'revise_request',
         },
       }),
     ]

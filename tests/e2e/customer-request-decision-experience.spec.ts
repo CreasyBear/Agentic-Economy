@@ -110,6 +110,34 @@ test('partial progress remains legible when a later business result is unknown',
   await expect(page.getByRole('button', { name: 'Start a new Request' })).not.toBeVisible()
 })
 
+test('a too-late stop request remains legible without offering cancellation again', async ({ page }) => {
+  await page.route('**/api/requests', async (route) => await route.fulfill({ json: {
+    kind: 'request', requestRef: 'request:too-late-to-stop', revision: 1,
+    state: 'in_progress', summary: 'Your request is in progress.', nextAction: 'wait',
+    missingFields: [], criteria: [], options: [],
+    progress: { completed: 0, total: 1, current: { step: 1, state: 'contacting' } },
+    activity: {
+      actor: 'ae', certainty: 'pending', updatedAt: 20_100, nextCheckAt: 50_100,
+      retry: 'not_needed',
+      cancellation: {
+        state: 'not_available', reason: 'business_step_released',
+        changedAt: 20_100, requestedAt: 20_200,
+      },
+      safeNextAction: 'check_progress',
+    },
+  } satisfies CustomerRequestView }))
+
+  await page.goto('/engine')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('What are you looking for?').fill('Stop the current business work')
+  await page.getByRole('button', { name: 'Explore' }).click()
+
+  await expect(page.getByText('You asked AE to stop, but the business step had already started.')).toBeVisible()
+  await expect(page.getByText(/AE recorded your stop request at/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Stop before the next step' })).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Check progress' })).toBeVisible()
+})
+
 test('suspected duplicate-effect reporting binds selected step evidence and keeps sharing private by default', async ({ page }) => {
   let problemBody: unknown
   await page.route('**/api/requests', async (route) => await route.fulfill({ json: unknownOutcomeView() }))

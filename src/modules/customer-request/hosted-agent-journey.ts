@@ -126,6 +126,10 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
       completedBusinesses: z.array(z.string()),
       blockedBusinesses: z.array(z.string()),
     }).optional(),
+    cancellation: z.strictObject({
+      state: z.literal('stopped'),
+      stoppedAt: z.number().nonnegative(),
+    }).optional(),
   }).strict(),
   measurements: z.strictObject({
     integrationBurden: z.strictObject({
@@ -423,6 +427,10 @@ export async function runHostedCustomerRequestJourney(
       const resumed = await callAgent(runtimeInput, progressPath, 'GET')
       observe(states, resumed)
       if (resumed.state !== 'cancelled') throw new Error(`hosted_journey_cancel_resume_failed:${resumed.state}`)
+      const cancellation = resumed.activity?.cancellation
+      if (typeof cancellation !== 'object' || cancellation.state !== 'stopped') {
+        throw new Error('hosted_journey_cancel_timing_missing')
+      }
       return hostedCustomerRequestJourneyProofSchema.parse({
         kind: 'cold_external_agent_journey', agent: input.agent,
         release: journeyReleaseProjection(input, release),
@@ -433,6 +441,7 @@ export async function runHostedCustomerRequestJourney(
           requestRef, revision: resumed.revision, state: resumed.state, selectedBusiness, selectedBusinesses,
           stepCount: route.stepCount, runState: 'cancelled',
           evidenceState: evidence.state, problemState: problem.state, resumedState: resumed.state,
+          cancellation: { state: cancellation.state, stoppedAt: cancellation.stoppedAt },
         },
         measurements: journeyMeasurements(runtimeInput, route, false, true),
         sandbox: true,

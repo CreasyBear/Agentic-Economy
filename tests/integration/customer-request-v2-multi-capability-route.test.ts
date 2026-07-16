@@ -1173,6 +1173,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('stops a queued run idempotently before any business step is released', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(10_000)
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'cancel-before-release')
@@ -1184,6 +1185,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(cancelled).toMatchObject({
       kind: 'request', state: 'cancelled', nextAction: 'revise_request',
+      activity: { cancellation: { state: 'stopped', stoppedAt: 10_000 } },
     })
     await expect(admin.action(api.customerRequestApplication.cancelRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'cancel:before-release',
@@ -1784,6 +1786,10 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
   })
 
   it('refuses to report cancellation after a business step was released', async () => {
+    vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(20_000)
+      .mockReturnValueOnce(20_100)
+      .mockReturnValue(20_200)
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'cancel-too-late')
@@ -1805,8 +1811,28 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(result).toMatchObject({
       kind: 'request', state: 'in_progress', nextAction: 'wait',
       progress: { current: { state: 'contacting' } },
+      activity: {
+        cancellation: {
+          state: 'not_available',
+          reason: 'business_step_released',
+          changedAt: 20_200,
+          requestedAt: 20_200,
+        },
+      },
     })
     expect(result).not.toMatchObject({ state: 'cancelled' })
+    vi.mocked(Date.now).mockReturnValue(30_000)
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      activity: {
+        cancellation: {
+          state: 'not_available',
+          changedAt: 20_200,
+          requestedAt: 20_200,
+        },
+      },
+    })
   })
 
   it('uses the same run, lease, validation, and completion machinery for one step', async () => {

@@ -459,7 +459,20 @@ const customerView = v.object({
     nextCheckAt: v.optional(v.number()),
     retry: v.union(v.literal('not_needed'), v.literal('blocked_until_reconciled'), v.literal('manual_after_failure')),
     cancellation: v.union(
-      v.literal('available_before_next_step'), v.literal('too_late_or_unsupported'), v.literal('complete'),
+      v.object({
+        state: v.literal('available'),
+        until: v.literal('before_next_step_release'),
+      }),
+      v.object({
+        state: v.literal('not_available'),
+        reason: v.union(v.literal('business_step_released'), v.literal('request_finished')),
+        changedAt: v.number(),
+        requestedAt: v.optional(v.number()),
+      }),
+      v.object({
+        state: v.literal('stopped'),
+        stoppedAt: v.number(),
+      }),
     ),
     safeNextAction: v.union(
       v.literal('check_progress'), v.literal('wait_for_evidence'), v.literal('review_result'),
@@ -2888,6 +2901,8 @@ function projectStoredRouteRun(
     currentState: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
     businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
     resultJson?: string
+    cancellationUnavailableSince?: number
+    cancellationRequestedAt?: number
     updatedAt: number
   }>,
 ): ActionResult {
@@ -2964,6 +2979,12 @@ function projectStoredRouteRun(
     current: { step: run.currentPosition, state: customerProgressState(run.currentState) },
     updatedAt: run.updatedAt,
     cancellationAvailable: run.currentState === 'queued' || run.currentState === 'leased',
+    ...(run.cancellationUnavailableSince === undefined
+      ? {}
+      : { cancellationUnavailableSince: run.cancellationUnavailableSince }),
+    ...(run.cancellationRequestedAt === undefined
+      ? {}
+      : { cancellationRequestedAt: run.cancellationRequestedAt }),
     ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
     criteria,
   }))
@@ -3033,7 +3054,9 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
     } }),
     ...(activity === undefined ? {} : { activity: {
       actor: activity.actor, certainty: activity.certainty, updatedAt: activity.updatedAt,
-      retry: activity.retry, cancellation: activity.cancellation, safeNextAction: activity.safeNextAction,
+      retry: activity.retry,
+      cancellation: writableActivityCancellation(activity.cancellation, activity.updatedAt),
+      safeNextAction: activity.safeNextAction,
       ...(activity.nextCheckAt === undefined ? {} : { nextCheckAt: activity.nextCheckAt }),
     } }),
     ...(decision === undefined ? {} : {
@@ -3067,6 +3090,29 @@ type DeepWritable<Value> = Value extends string | number | boolean | bigint | nu
 
 function writableClone<Value>(value: Value): DeepWritable<Value> {
   return structuredClone(value) as DeepWritable<Value>
+}
+
+function writableActivityCancellation(
+  cancellation: NonNullable<CustomerRequestView['activity']>['cancellation'],
+  updatedAt: number,
+) {
+  if (typeof cancellation !== 'string') {
+    if (cancellation.state !== 'not_available') return { ...cancellation }
+    return {
+      state: cancellation.state,
+      reason: cancellation.reason,
+      changedAt: cancellation.changedAt,
+      ...(cancellation.requestedAt === undefined ? {} : { requestedAt: cancellation.requestedAt }),
+    }
+  }
+  if (cancellation === 'available_before_next_step') {
+    return { state: 'available' as const, until: 'before_next_step_release' as const }
+  }
+  return {
+    state: 'not_available' as const,
+    reason: cancellation === 'complete' ? 'request_finished' as const : 'business_step_released' as const,
+    changedAt: updatedAt,
+  }
 }
 
 function writableOption(option: CustomerRequestView['options'][number]) {

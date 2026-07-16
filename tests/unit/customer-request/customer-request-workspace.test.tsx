@@ -985,6 +985,33 @@ describe('customer Request workspace', () => {
     expect(await screen.findByText('AE is checking for evidence')).toBeTruthy()
   })
 
+  it('shows when a stop request was too late without implying that AE cancelled the business work', async () => {
+    localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
+      requestRef: 'request:too-late-to-stop',
+    }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:too-late-to-stop', revision: 1,
+      state: 'in_progress', summary: 'Your request is in progress.', nextAction: 'wait',
+      missingFields: [], criteria: [], options: [],
+      progress: { completed: 0, total: 1, current: { step: 1, state: 'contacting' } },
+      activity: {
+        actor: 'ae', certainty: 'pending', updatedAt: 20_100, nextCheckAt: 50_100,
+        retry: 'not_needed',
+        cancellation: {
+          state: 'not_available', reason: 'business_step_released',
+          changedAt: 20_100, requestedAt: 20_200,
+        },
+        safeNextAction: 'check_progress',
+      },
+    })))
+
+    render(<AeCustomerRequestWorkspace />)
+
+    expect(await screen.findByText('You asked AE to stop, but the business step had already started.')).toBeTruthy()
+    expect(screen.getByText(/AE recorded your stop request at/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Stop before the next step' })).toBeNull()
+  })
+
   it('shows completed and waiting business work without route machinery', async () => {
     localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
       requestRef: 'request:dependencies',

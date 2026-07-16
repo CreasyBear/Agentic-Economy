@@ -716,9 +716,10 @@ function RouteProgressCard({ projection, turns, refresh, cancel, edit, restart }
           ))}
         </div>}
         <Text type="supporting" color="secondary">AE is acting only within the choice you confirmed.</Text>
+        {cancellationMessage(projection.activity?.cancellation)}
         <div className="flex flex-wrap gap-3">
           <Button label="Check progress" variant="primary" clickAction={refresh} />
-          {projection.activity?.cancellation === 'available_before_next_step'
+          {cancellationAvailable(projection.activity?.cancellation)
             ? <Button label="Stop before the next step" variant="secondary" clickAction={cancel} />
             : null}
         </div>
@@ -727,6 +728,30 @@ function RouteProgressCard({ projection, turns, refresh, cancel, edit, restart }
       </div>
     </Card>
   </section>
+}
+
+function cancellationAvailable(
+  cancellation: NonNullable<CustomerRequestView['activity']>['cancellation'] | undefined,
+): boolean {
+  return cancellation === 'available_before_next_step'
+    || (typeof cancellation === 'object' && cancellation.state === 'available')
+}
+
+function cancellationMessage(
+  cancellation: NonNullable<CustomerRequestView['activity']>['cancellation'] | undefined,
+) {
+  if (typeof cancellation !== 'object' || cancellation.state !== 'not_available'
+    || cancellation.reason !== 'business_step_released') return null
+  return <div className="grid gap-1">
+    <Text type="supporting" color="secondary">
+      {cancellation.requestedAt === undefined
+        ? 'This business step has started, so AE can no longer stop it before release.'
+        : 'You asked AE to stop, but the business step had already started.'}
+    </Text>
+    {cancellation.requestedAt === undefined ? null : <Text type="supporting" color="secondary">
+      AE recorded your stop request at {new Date(cancellation.requestedAt).toISOString()}.
+    </Text>}
+  </div>
 }
 
 function ConfirmationLoadingCard() {

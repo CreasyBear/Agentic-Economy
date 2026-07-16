@@ -65,6 +65,8 @@ const runProjection = v.object({
     v.literal('cancelled'),
   ),
   resultJson: v.optional(v.string()),
+  cancellationUnavailableSince: v.optional(v.number()),
+  cancellationRequestedAt: v.optional(v.number()),
   updatedAt: v.number(),
 })
 
@@ -392,6 +394,7 @@ export const cancelCurrent = internalMutation({
       requestId: args.requestId,
       runRef: run.runRef,
       result: canCancel ? 'cancelled' : 'too_late',
+      boundaryChangedAt: run.updatedAt,
       committedAt: now,
     })
     const projection = await readRunProjection(ctx, run.runRef)
@@ -1898,6 +1901,10 @@ async function readRunProjection(
     .withIndex('by_runRef_and_position', (query) => query.eq('runRef', runRef))
     .take(run.totalSteps + 1)
   const current = attempts.find((attempt) => attempt.position === run.currentPosition)
+  const cancellation = await ctx.db.query('customerRequestRouteCancellationCommands')
+    .withIndex('by_runRef_and_committedAt', (query) => query.eq('runRef', runRef))
+    .order('desc')
+    .first()
   if (routeRunIdentityDigest(run) !== run.runDigest
     || attempts.length > run.totalSteps || current === undefined
     || attempts.some((attempt) => !routeAttemptIntegrityValid(attempt))) {
@@ -1920,6 +1927,12 @@ async function readRunProjection(
     currentPosition: projection.currentPosition,
     currentState: current.state,
     ...(projection.resultJson === undefined ? {} : { resultJson: projection.resultJson }),
+    ...(cancellation?.result === 'too_late'
+      ? {
+          cancellationUnavailableSince: cancellation.boundaryChangedAt ?? cancellation.committedAt,
+          cancellationRequestedAt: cancellation.committedAt,
+        }
+      : {}),
     updatedAt: projection.updatedAt,
   }
 }

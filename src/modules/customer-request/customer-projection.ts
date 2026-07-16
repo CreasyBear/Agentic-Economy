@@ -390,6 +390,8 @@ export function projectRouteProgress(input: Readonly<{
   }>
   updatedAt: number
   cancellationAvailable: boolean
+  cancellationUnavailableSince?: number
+  cancellationRequestedAt?: number
   businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   criteria?: readonly CustomerCriterion[]
 }>): CustomerRequestView {
@@ -412,7 +414,15 @@ export function projectRouteProgress(input: Readonly<{
     activity: {
       actor: progressActor(input.current.state), certainty: 'pending', updatedAt: input.updatedAt,
       nextCheckAt: input.updatedAt + 30_000, retry: 'not_needed',
-      cancellation: input.cancellationAvailable ? 'available_before_next_step' : 'too_late_or_unsupported',
+      cancellation: input.cancellationAvailable
+        ? { state: 'available', until: 'before_next_step_release' }
+        : {
+            state: 'not_available', reason: 'business_step_released',
+            changedAt: input.cancellationUnavailableSince ?? input.updatedAt,
+            ...(input.cancellationRequestedAt === undefined
+              ? {}
+              : { requestedAt: input.cancellationRequestedAt }),
+          },
       safeNextAction: 'check_progress',
     },
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
@@ -432,7 +442,9 @@ export function projectRouteCancelled(input: Readonly<{
     nextAction: 'revise_request',
     activity: {
       actor: 'none', certainty: 'cancelled', updatedAt: input.updatedAt ?? 0,
-      retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+      retry: 'not_needed',
+      cancellation: { state: 'stopped', stoppedAt: input.updatedAt ?? 0 },
+      safeNextAction: 'revise_request',
     },
   })
 }
@@ -482,7 +494,10 @@ export function projectCustomerActionStatus(input: Readonly<{
     activity: {
       actor: 'ae', certainty: 'unknown', updatedAt: input.status.observedAt,
       nextCheckAt: input.status.observedAt + 30_000, retry: 'blocked_until_reconciled',
-      cancellation: 'too_late_or_unsupported', safeNextAction: 'wait_for_evidence',
+      cancellation: {
+        state: 'not_available', reason: 'business_step_released', changedAt: input.status.observedAt,
+      },
+      safeNextAction: 'wait_for_evidence',
     },
   })
   if (input.status.kind === 'completed') return requestView({
@@ -499,7 +514,11 @@ export function projectCustomerActionStatus(input: Readonly<{
     },
     activity: {
       actor: 'none', certainty: 'confirmed', updatedAt: input.status.resolvedAt,
-      retry: 'not_needed', cancellation: 'complete', safeNextAction: 'review_result',
+      retry: 'not_needed',
+      cancellation: {
+        state: 'not_available', reason: 'request_finished', changedAt: input.status.resolvedAt,
+      },
+      safeNextAction: 'review_result',
     },
   })
   return requestView({
@@ -523,7 +542,11 @@ export function projectCustomerActionStatus(input: Readonly<{
       : { progress: terminalRouteProgress(input.routeProgress, input.businesses) }),
     activity: {
       actor: 'customer', certainty: 'failed', updatedAt: input.status.resolvedAt,
-      retry: 'manual_after_failure', cancellation: 'complete', safeNextAction: 'revise_request',
+      retry: 'manual_after_failure',
+      cancellation: {
+        state: 'not_available', reason: 'request_finished', changedAt: input.status.resolvedAt,
+      },
+      safeNextAction: 'revise_request',
     },
   })
 }

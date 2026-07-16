@@ -17,13 +17,34 @@ describe('customer action status projection', () => {
     )
 
     expect(progress('queued').activity).toMatchObject({ actor: 'ae' })
+    expect(progress('queued').activity).toMatchObject({
+      cancellation: { state: 'available', until: 'before_next_step_release' },
+    })
     expect(progress('contacting').activity).toMatchObject({ actor: 'ae' })
     expect(progress('awaiting_result').activity).toMatchObject({ actor: 'business' })
     expect(progress('validating_result').activity).toMatchObject({ actor: 'ae' })
     expect(progress('needs_attention').activity).toMatchObject({ actor: 'customer' })
     expect(projectRouteCancelled({
       requestRef: 'request:one', revision: 1, updatedAt: 11,
-    }).activity).toMatchObject({ actor: 'none' })
+    }).activity).toMatchObject({
+      actor: 'none',
+      cancellation: { state: 'stopped', stoppedAt: 11 },
+    })
+  })
+
+  it('records the exact non-cancellable boundary and a too-late stop request', () => {
+    expect(projectRouteProgress({
+      requestRef: 'request:released', revision: 1, generationRef: 'generation:one',
+      completed: 0, total: 2, current: { step: 1, state: 'contacting' },
+      updatedAt: 20, cancellationAvailable: false, cancellationRequestedAt: 25,
+    }).activity).toMatchObject({
+      cancellation: {
+        state: 'not_available',
+        reason: 'business_step_released',
+        changedAt: 20,
+        requestedAt: 25,
+      },
+    })
   })
 
   it('shows completed and blocked business dependencies only for multi-step work', () => {

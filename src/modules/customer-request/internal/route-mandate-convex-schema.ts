@@ -400,8 +400,11 @@ export const customerRequestRouteMandateTables = {
     requestId: v.string(),
     runRef: v.string(),
     result: v.union(v.literal('cancelled'), v.literal('too_late')),
+    boundaryChangedAt: v.optional(v.number()),
     committedAt: v.number(),
-  }).index('by_commandKey', ['commandKey']),
+  })
+    .index('by_commandKey', ['commandKey'])
+    .index('by_runRef_and_committedAt', ['runRef', 'committedAt']),
 
   customerRequestRouteProblemReports: defineTable({
     reportRef: v.string(),

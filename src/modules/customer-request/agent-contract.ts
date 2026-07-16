@@ -600,7 +600,23 @@ export const customerRequestViewSchema = z.strictObject({
     updatedAt: safeNonnegativeInteger,
     nextCheckAt: safeNonnegativeInteger.optional(),
     retry: z.enum(['not_needed', 'blocked_until_reconciled', 'manual_after_failure']),
-    cancellation: z.enum(['available_before_next_step', 'too_late_or_unsupported', 'complete']),
+    cancellation: z.union([
+      z.strictObject({
+        state: z.literal('available'),
+        until: z.literal('before_next_step_release'),
+      }),
+      z.strictObject({
+        state: z.literal('not_available'),
+        reason: z.enum(['business_step_released', 'request_finished']),
+        changedAt: safeNonnegativeInteger,
+        requestedAt: safeNonnegativeInteger.optional(),
+      }),
+      z.strictObject({
+        state: z.literal('stopped'),
+        stoppedAt: safeNonnegativeInteger,
+      }),
+      z.enum(['available_before_next_step', 'too_late_or_unsupported', 'complete']),
+    ]),
     safeNextAction: z.enum(['check_progress', 'wait_for_evidence', 'review_result', 'revise_request', 'none']),
   }).optional(),
   navigation: customerRequestAgentNavigationSchema.optional(),
