@@ -1446,6 +1446,71 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         message: 'The first result does not match the confirmed constraint.',
         recordedAt: 5_000,
       }],
+      reconstruction: {
+        request: {
+          revision: 1,
+          ordinaryRequest: 'Resolve a service reference and prepare its quote',
+        },
+        choice: {
+          businesses: ['Route admission-resolver', 'Route admission-quoter'],
+          selectedBecause: [
+            'All 2 registered steps can provide the requested result.',
+            'The confirmed option stays within AUD 10.00.',
+          ],
+          confirmedAt: 5_000,
+          validUntil: expect.any(Number),
+        },
+        authority: {
+          state: 'current',
+          source: 'customer_confirmation',
+          spend: {
+            limit: { currency: 'AUD', amountMinor: 1_000 },
+            admitted: { currency: 'AUD', amountMinor: 300 },
+          },
+          dataSharing: expect.arrayContaining([
+            expect.objectContaining({
+              classification: 'public',
+              recipient: 'Route admission-resolver',
+              purposes: ['resolve_service_reference'],
+              releaseState: 'authorized',
+            }),
+            expect.objectContaining({
+              classification: 'public',
+              recipient: 'Carrier network',
+              purposes: ['prepare_service_quote'],
+              releaseState: 'authorized',
+            }),
+          ]),
+          effects: expect.arrayContaining([
+            expect.objectContaining({
+              class: 'data_release', reversibility: 'irreversible', releaseState: 'authorized',
+            }),
+          ]),
+        },
+        execution: {
+          state: 'queued',
+          completedSteps: 0,
+          totalSteps: 2,
+          duplicateRisk: 'protected_by_required_idempotency',
+          steps: [
+            expect.objectContaining({
+              step: 1,
+              business: 'Route admission-resolver',
+              state: 'queued',
+            }),
+            expect.objectContaining({
+              step: 2,
+              business: 'Route admission-quoter',
+              state: 'blocked',
+            }),
+          ],
+        },
+        recovery: {
+          nextActor: 'ae',
+          nextAction: 'await_status_update',
+          retry: 'not_needed',
+        },
+      },
     })
     expect(JSON.stringify(supportExport)).not.toMatch(
       /principalId|runRef|mandateRef|attemptRef|commandKey|commandDigest|binding|transport|credential/u,

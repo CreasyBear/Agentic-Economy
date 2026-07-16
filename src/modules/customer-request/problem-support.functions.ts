@@ -75,6 +75,57 @@ const supportProblemExportSchema = z.union([
       message: z.string(),
       recordedAt: z.number().int().nonnegative(),
     })),
+    reconstruction: z.strictObject({
+      request: z.strictObject({
+        revision: z.number().int().nonnegative(),
+        ordinaryRequest: z.string(),
+      }),
+      choice: z.strictObject({
+        businesses: z.array(z.string()),
+        selectedBecause: z.array(z.string()),
+        confirmedAt: z.number().int().nonnegative(),
+        validUntil: z.number().int().nonnegative(),
+      }),
+      authority: z.strictObject({
+        state: z.enum(['current', 'expired', 'revoked']),
+        source: z.literal('customer_confirmation'),
+        spend: z.strictObject({
+          limit: z.strictObject({ currency: z.string(), amountMinor: z.number().int().nonnegative() }),
+          admitted: z.strictObject({ currency: z.string(), amountMinor: z.number().int().nonnegative() }),
+        }),
+        dataSharing: z.array(z.strictObject({
+          classification: z.enum(['public', 'personal', 'sensitive', 'credential']),
+          recipient: z.string(),
+          purposes: z.array(z.string()),
+          releaseState: z.enum(['authorized', 'business_step_released']),
+        })),
+        effects: z.array(z.strictObject({
+          class: z.enum(['data_release', 'financial_exposure', 'external_state_change']),
+          reversibility: z.enum(['not_applicable', 'reversible', 'conditional', 'irreversible']),
+          releaseState: z.enum(['authorized', 'business_step_released']),
+        })),
+      }),
+      execution: z.strictObject({
+        state: z.enum(['queued', 'running', 'outcome_unknown', 'completed', 'failed', 'cancelled']),
+        completedSteps: z.number().int().nonnegative(),
+        totalSteps: z.number().int().positive(),
+        duplicateRisk: z.enum(['protected_by_required_idempotency', 'mixed_or_not_applicable']),
+        steps: z.array(z.strictObject({
+          step: z.number().int().positive(),
+          business: z.string(),
+          state: z.enum([
+            'blocked', 'queued', 'contacting', 'awaiting_result',
+            'completed', 'failed', 'outcome_unknown', 'cancelled',
+          ]),
+          evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
+        })),
+      }),
+      recovery: z.strictObject({
+        nextActor: z.enum(['ae', 'customer', 'none']),
+        nextAction: z.enum(['await_status_update', 'check_status', 'provide_information', 'none']),
+        retry: z.enum(['not_needed', 'safe', 'blocked_until_reconciled']),
+      }),
+    }).optional(),
   }),
   z.strictObject({ kind: z.literal('not_found') }),
   z.strictObject({

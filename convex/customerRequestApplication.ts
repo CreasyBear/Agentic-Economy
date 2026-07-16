@@ -1483,6 +1483,73 @@ const supportProblemExportResult = v.union(
       message: v.string(),
       recordedAt: v.number(),
     })),
+    reconstruction: v.optional(v.object({
+      request: v.object({ revision: v.number(), ordinaryRequest: v.string() }),
+      choice: v.object({
+        businesses: v.array(v.string()),
+        selectedBecause: v.array(v.string()),
+        confirmedAt: v.number(),
+        validUntil: v.number(),
+      }),
+      authority: v.object({
+        state: v.union(v.literal('current'), v.literal('expired'), v.literal('revoked')),
+        source: v.literal('customer_confirmation'),
+        spend: v.object({
+          limit: v.object({ currency: v.string(), amountMinor: v.number() }),
+          admitted: v.object({ currency: v.string(), amountMinor: v.number() }),
+        }),
+        dataSharing: v.array(v.object({
+          classification: v.union(
+            v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential'),
+          ),
+          recipient: v.string(),
+          purposes: v.array(v.string()),
+          releaseState: v.union(v.literal('authorized'), v.literal('business_step_released')),
+        })),
+        effects: v.array(v.object({
+          class: v.union(
+            v.literal('data_release'), v.literal('financial_exposure'), v.literal('external_state_change'),
+          ),
+          reversibility: v.union(
+            v.literal('not_applicable'), v.literal('reversible'),
+            v.literal('conditional'), v.literal('irreversible'),
+          ),
+          releaseState: v.union(v.literal('authorized'), v.literal('business_step_released')),
+        })),
+      }),
+      execution: v.object({
+        state: v.union(
+          v.literal('queued'), v.literal('running'), v.literal('outcome_unknown'),
+          v.literal('completed'), v.literal('failed'), v.literal('cancelled'),
+        ),
+        completedSteps: v.number(),
+        totalSteps: v.number(),
+        duplicateRisk: v.union(
+          v.literal('protected_by_required_idempotency'),
+          v.literal('mixed_or_not_applicable'),
+        ),
+        steps: v.array(v.object({
+          step: v.number(),
+          business: v.string(),
+          state: v.union(
+            v.literal('blocked'), v.literal('queued'), v.literal('contacting'),
+            v.literal('awaiting_result'), v.literal('completed'), v.literal('failed'),
+            v.literal('outcome_unknown'), v.literal('cancelled'),
+          ),
+          evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+        })),
+      }),
+      recovery: v.object({
+        nextActor: v.union(v.literal('ae'), v.literal('customer'), v.literal('none')),
+        nextAction: v.union(
+          v.literal('await_status_update'), v.literal('check_status'),
+          v.literal('provide_information'), v.literal('none'),
+        ),
+        retry: v.union(
+          v.literal('not_needed'), v.literal('safe'), v.literal('blocked_until_reconciled'),
+        ),
+      }),
+    })),
   }),
   v.object({ kind: v.literal('not_found') }),
   v.object({

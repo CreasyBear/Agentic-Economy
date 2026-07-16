@@ -1754,6 +1754,67 @@ const supportProblemExport = v.object({
     message: v.string(),
     recordedAt: v.number(),
   })),
+  reconstruction: v.optional(v.object({
+    request: v.object({ revision: v.number(), ordinaryRequest: v.string() }),
+    choice: v.object({
+      businesses: v.array(v.string()), selectedBecause: v.array(v.string()),
+      confirmedAt: v.number(), validUntil: v.number(),
+    }),
+    authority: v.object({
+      state: v.union(v.literal('current'), v.literal('expired'), v.literal('revoked')),
+      source: v.literal('customer_confirmation'),
+      spend: v.object({
+        limit: v.object({ currency: v.string(), amountMinor: v.number() }),
+        admitted: v.object({ currency: v.string(), amountMinor: v.number() }),
+      }),
+      dataSharing: v.array(v.object({
+        classification: v.union(
+          v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential'),
+        ),
+        recipient: v.string(), purposes: v.array(v.string()),
+        releaseState: v.union(v.literal('authorized'), v.literal('business_step_released')),
+      })),
+      effects: v.array(v.object({
+        class: v.union(
+          v.literal('data_release'), v.literal('financial_exposure'), v.literal('external_state_change'),
+        ),
+        reversibility: v.union(
+          v.literal('not_applicable'), v.literal('reversible'),
+          v.literal('conditional'), v.literal('irreversible'),
+        ),
+        releaseState: v.union(v.literal('authorized'), v.literal('business_step_released')),
+      })),
+    }),
+    execution: v.object({
+      state: v.union(
+        v.literal('queued'), v.literal('running'), v.literal('outcome_unknown'),
+        v.literal('completed'), v.literal('failed'), v.literal('cancelled'),
+      ),
+      completedSteps: v.number(), totalSteps: v.number(),
+      duplicateRisk: v.union(
+        v.literal('protected_by_required_idempotency'), v.literal('mixed_or_not_applicable'),
+      ),
+      steps: v.array(v.object({
+        step: v.number(), business: v.string(),
+        state: v.union(
+          v.literal('blocked'), v.literal('queued'), v.literal('contacting'),
+          v.literal('awaiting_result'), v.literal('completed'), v.literal('failed'),
+          v.literal('outcome_unknown'), v.literal('cancelled'),
+        ),
+        evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+      })),
+    }),
+    recovery: v.object({
+      nextActor: v.union(v.literal('ae'), v.literal('customer'), v.literal('none')),
+      nextAction: v.union(
+        v.literal('await_status_update'), v.literal('check_status'),
+        v.literal('provide_information'), v.literal('none'),
+      ),
+      retry: v.union(
+        v.literal('not_needed'), v.literal('safe'), v.literal('blocked_until_reconciled'),
+      ),
+    }),
+  })),
 })
 
 export const exportProblemForSupport = internalQuery({
@@ -1781,19 +1842,63 @@ export const exportProblemForSupport = internalQuery({
     const problem = await ctx.db.query('customerRequestRouteProblemReports')
       .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
     if (problem === null) return { kind: 'not_found' as const }
-    const [updates, businessReports, attempt] = await Promise.all([
+    const [updates, businessReports, attempt, requestRevisions, mandateIssue, run, revocation,
+      reservations, attempts] = await Promise.all([
       readProblemUpdates(ctx, problem.reportRef),
       readProblemBusinessReports(ctx, problem.reportRef),
       problem.attemptRef === undefined
         ? null
         : ctx.db.query('customerRequestRouteStepAttempts')
           .withIndex('by_attemptRef', (query) => query.eq('attemptRef', problem.attemptRef!)).unique(),
+      ctx.db.query('customerRequestV2Revisions')
+        .withIndex('by_requestId_and_requestRevision', (query) => (
+          query.eq('requestId', problem.requestId)
+        )).collect(),
+      problem.mandateRef === undefined
+        ? null
+        : ctx.db.query('customerRequestRouteMandateIssues')
+          .withIndex('by_mandateRef', (query) => query.eq('mandateRef', problem.mandateRef!)).unique(),
+      ctx.db.query('customerRequestRouteRuns')
+        .withIndex('by_runRef', (query) => query.eq('runRef', problem.runRef)).unique(),
+      problem.mandateRef === undefined
+        ? null
+        : ctx.db.query('customerRequestRouteMandateRevocations')
+          .withIndex('by_mandateRef', (query) => query.eq('mandateRef', problem.mandateRef!)).first(),
+      problem.mandateRef === undefined
+        ? []
+        : ctx.db.query('customerRequestRouteStepReservations')
+          .withIndex('by_mandateRef_and_recordedAt', (query) => query.eq('mandateRef', problem.mandateRef!))
+          .collect(),
+      ctx.db.query('customerRequestRouteStepAttempts')
+        .withIndex('by_runRef_and_position', (query) => query.eq('runRef', problem.runRef))
+        .collect(),
     ])
     if (problem.attemptRef !== undefined && attempt === null) {
       throw new Error('customer_request_route_problem_attempt_integrity_failure')
     }
     if (attempt !== null && (attempt.requestId !== problem.requestId || attempt.position !== problem.step)) {
       throw new Error('customer_request_route_problem_attempt_integrity_failure')
+    }
+    const requestRevision = mandateIssue === null
+      ? undefined
+      : requestRevisions.find((revision) => (
+          revision.requestRevision === mandateIssue.mandate.request.requestRevision
+        ))
+    if (run === null || run.requestId !== problem.requestId) {
+      throw new Error('customer_request_route_problem_reconstruction_integrity_failure')
+    }
+    const businessNames = new Map<string, string>()
+    if (problem.mandateRef !== undefined) {
+      if (requestRevision === undefined || mandateIssue === null
+        || mandateIssue.requestId !== problem.requestId
+        || run.mandateRef !== mandateIssue.mandateRef) {
+        throw new Error('customer_request_route_problem_reconstruction_integrity_failure')
+      }
+      for (const step of mandateIssue.mandate.route.steps) {
+        const business = await ctx.db.get(step.businessId as Id<'businesses'>)
+        if (business === null) throw new Error('customer_request_route_problem_business_integrity_failure')
+        businessNames.set(step.businessId, business.name)
+      }
     }
     const latest = updates.at(-1)
     const tracking = projectCustomerRequestProblemTracking(
@@ -1883,9 +1988,199 @@ export const exportProblemForSupport = internalQuery({
           recordedAt: update.createdAt,
         })),
       ],
+      ...(requestRevision === undefined || mandateIssue === null
+        ? {}
+        : {
+            reconstruction: supportProblemReconstruction({
+              requestRevision,
+              mandate: mandateIssue.mandate,
+              run,
+              revocation,
+              reservations,
+              attempts,
+              businessNames,
+              tracking,
+            }),
+          }),
     }
   },
 })
+
+function supportProblemReconstruction(input: Readonly<{
+  requestRevision: {
+    requestRevision: number
+    aggregate: { snapshot: { intent: string } }
+  }
+  mandate: {
+    issuedAt: number
+    expiresAt: number
+    route: {
+      maximumTotalSpend: { currency: string; amountMinor: number }
+      steps: readonly Readonly<{
+        position: number
+        businessId: string
+        dataScope: readonly Readonly<{
+          classification: 'public' | 'personal' | 'sensitive' | 'credential'
+          recipient:
+            | { kind: 'registered_binding'; businessId: string; bindingId: string }
+            | { kind: 'named_recipient'; recipientId: string }
+          purposes: readonly string[]
+        }>[]
+        effects: readonly Readonly<{
+          class: 'data_release' | 'financial_exposure' | 'external_state_change'
+          reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible'
+        }>[]
+        recovery: {
+          idempotency: 'not_applicable' | 'required'
+          recovery: 'retry_safe' | 'reconcile_required'
+        }
+      }>[]
+    }
+  }
+  run: {
+    state: 'queued' | 'running' | 'outcome_unknown' | 'completed' | 'failed' | 'cancelled'
+    completedSteps: number
+    totalSteps: number
+    businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
+  }
+  revocation: null | { recordedAt: number }
+  reservations: readonly Readonly<{ reservedSpend: { currency: string; amountMinor: number } }>[]
+  attempts: readonly Readonly<{
+    position: number
+    state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+    attemptRef: string
+    evidence?: readonly Readonly<{
+      evidenceId: string
+      outputPointer: string
+      schemaIdentity: string
+      valueDigest: string
+    }>[]
+  }>[]
+  businessNames: ReadonlyMap<string, string>
+  tracking: {
+    nextAction: 'await_status_update' | 'check_status' | 'provide_information' | 'none'
+    nextActor: 'ae' | 'customer' | 'none'
+  }
+}>) {
+  const businesses = new Map((input.run.businesses ?? []).map((business) => [
+    business.businessRef,
+    business.name,
+  ]))
+  for (const [businessId, name] of input.businessNames) businesses.set(businessId, name)
+  const admitted = input.reservations.reduce((total, reservation) => {
+    if (reservation.reservedSpend.currency !== input.mandate.route.maximumTotalSpend.currency) {
+      throw new Error('customer_request_route_problem_spend_currency_integrity_failure')
+    }
+    return total + reservation.reservedSpend.amountMinor
+  }, 0)
+  const attempts = new Map(input.attempts.map((attempt) => [attempt.position, attempt]))
+  const allIdempotent = input.mandate.route.steps.every((step) => step.recovery.idempotency === 'required')
+  const allRetrySafe = input.mandate.route.steps.every((step) => step.recovery.recovery === 'retry_safe')
+  const maximum = input.mandate.route.maximumTotalSpend
+  return {
+    request: {
+      revision: input.requestRevision.requestRevision,
+      ordinaryRequest: input.requestRevision.aggregate.snapshot.intent,
+    },
+    choice: {
+      businesses: input.mandate.route.steps.map((step) => (
+        businesses.get(step.businessId) ?? 'Registered business'
+      )),
+      selectedBecause: [
+        input.mandate.route.steps.length === 1
+          ? 'The registered business can provide the requested result.'
+          : `All ${input.mandate.route.steps.length} registered steps can provide the requested result.`,
+        `The confirmed option stays within ${formatSupportMoney(maximum)}.`,
+      ],
+      confirmedAt: input.mandate.issuedAt,
+      validUntil: input.mandate.expiresAt,
+    },
+    authority: {
+      state: input.revocation !== null
+        ? 'revoked' as const
+        : Date.now() >= input.mandate.expiresAt ? 'expired' as const : 'current' as const,
+      source: 'customer_confirmation' as const,
+      spend: {
+        limit: { ...maximum },
+        admitted: { currency: maximum.currency, amountMinor: admitted },
+      },
+      dataSharing: input.mandate.route.steps.flatMap((step) => {
+        const released = supportAttemptWasReleased(attempts.get(step.position)?.state)
+        return step.dataScope.map((scope) => ({
+          classification: scope.classification,
+          recipient: scope.recipient.kind === 'named_recipient'
+            ? customerLabel(scope.recipient.recipientId)
+            : businesses.get(scope.recipient.businessId) ?? 'Registered business',
+          purposes: [...scope.purposes],
+          releaseState: released ? 'business_step_released' as const : 'authorized' as const,
+        }))
+      }),
+      effects: input.mandate.route.steps.flatMap((step) => {
+        const released = supportAttemptWasReleased(attempts.get(step.position)?.state)
+        return step.effects.map((effect) => ({
+          class: effect.class,
+          reversibility: effect.reversibility,
+          releaseState: released ? 'business_step_released' as const : 'authorized' as const,
+        }))
+      }),
+    },
+    execution: {
+      state: input.run.state,
+      completedSteps: input.run.completedSteps,
+      totalSteps: input.run.totalSteps,
+      duplicateRisk: allIdempotent
+        ? 'protected_by_required_idempotency' as const
+        : 'mixed_or_not_applicable' as const,
+      steps: input.mandate.route.steps.map((step) => {
+        const attempt = attempts.get(step.position)
+        return {
+          step: step.position,
+          business: businesses.get(step.businessId) ?? 'Registered business',
+          state: attempt === undefined ? 'blocked' as const : supportAttemptState(attempt.state),
+          evidence: (attempt?.evidence ?? []).map((item) => ({
+            receiptRef: `evidence:${canonicalDigest({ attemptRef: attempt!.attemptRef, evidence: item })}`,
+            label: customerLabel(item.evidenceId),
+          })),
+        }
+      }),
+    },
+    recovery: {
+      nextActor: input.tracking.nextActor,
+      nextAction: input.tracking.nextAction,
+      retry: input.run.state === 'outcome_unknown'
+        ? 'blocked_until_reconciled' as const
+        : input.run.state === 'failed'
+          ? allRetrySafe ? 'safe' as const : 'blocked_until_reconciled' as const
+          : 'not_needed' as const,
+    },
+  }
+}
+
+function supportAttemptState(
+  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
+) {
+  if (state === 'leased' || state === 'dispatched') return 'contacting' as const
+  if (state === 'accepted') return 'awaiting_result' as const
+  if (state === 'succeeded') return 'completed' as const
+  return state
+}
+
+function supportAttemptWasReleased(
+  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+    | undefined,
+): boolean {
+  return state === 'dispatched' || state === 'accepted' || state === 'succeeded'
+    || state === 'failed' || state === 'outcome_unknown'
+}
+
+function formatSupportMoney(value: Readonly<{ currency: string; amountMinor: number }>): string {
+  return `${value.currency} ${(value.amountMinor / 100).toFixed(2)}`
+}
+
+function customerLabel(value: string): string {
+  const words = value.replaceAll(/[-_]+/gu, ' ')
+  return `${words.slice(0, 1).toUpperCase()}${words.slice(1)}`
+}
 
 const exportedStepState = v.union(
   v.literal('queued'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),

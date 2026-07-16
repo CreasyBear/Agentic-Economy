@@ -172,6 +172,11 @@ function SupportProblemCard({ problem }: { problem: SupportProblemRow }) {
             </li>)}
           </ol>
         </div>
+        {record.reconstruction === undefined
+          ? <Text type="supporting" color="secondary">
+              This older report predates the single-record Request reconstruction.
+            </Text>
+          : <SupportProblemReconstruction reconstruction={record.reconstruction} />}
         <Text type="supporting" color="secondary">
           Cause remains unknown and the report is not adjudicated. No decision authority is assigned.
         </Text>
@@ -185,4 +190,117 @@ function SupportProblemCard({ problem }: { problem: SupportProblemRow }) {
       {error === undefined ? null : <Text type="supporting" color="secondary">{error}</Text>}
     </div>
   </Card>
+}
+
+export function SupportProblemReconstruction({
+  reconstruction,
+}: {
+  reconstruction: NonNullable<Extract<SupportProblemExport, { kind: 'problem_export' }>['reconstruction']>
+}) {
+  return <section aria-labelledby="support-request-reconstruction" className="grid gap-4 border-t border-border pt-4">
+    <div className="grid gap-1">
+      <Heading level={3} id="support-request-reconstruction">Request reconstruction</Heading>
+      <Text type="supporting" color="secondary">
+        One source record for what the customer asked, confirmed, shared, and can safely do next.
+      </Text>
+    </div>
+    <dl className="grid gap-3 text-sm">
+      <div>
+        <dt className="font-semibold">Customer request · revision {reconstruction.request.revision}</dt>
+        <dd className="text-secondary">{reconstruction.request.ordinaryRequest}</dd>
+      </div>
+      <div>
+        <dt className="font-semibold">Confirmed businesses</dt>
+        <dd className="text-secondary">{reconstruction.choice.businesses.join(' → ')}</dd>
+        {reconstruction.choice.selectedBecause.map((reason) => (
+          <dd key={reason} className="text-secondary">{reason}</dd>
+        ))}
+      </div>
+      <div>
+        <dt className="font-semibold">Customer-confirmed limits · {reconstruction.authority.state}</dt>
+        <dd className="text-secondary">
+          {formatMoney(reconstruction.authority.spend.limit)} maximum ·{' '}
+          {formatMoney(reconstruction.authority.spend.admitted)} admitted so far
+        </dd>
+        <dd className="text-secondary">
+          Confirmed {formatTimestamp(reconstruction.choice.confirmedAt)} · valid until{' '}
+          {formatTimestamp(reconstruction.choice.validUntil)}
+        </dd>
+      </div>
+      <div>
+        <dt className="font-semibold">Information authority and release</dt>
+        <dd>
+          <ul className="grid gap-1 text-secondary">
+            {reconstruction.authority.dataSharing.map((sharing, index) => <li key={`${sharing.recipient}:${index}`}>
+              {sharing.releaseState === 'authorized' ? 'Authorized' : 'Business step released'}
+              {': '}
+              {customerLabel(sharing.classification)} information with {sharing.recipient} for{' '}
+              {sharing.purposes.map(customerLabel).join(', ')}
+            </li>)}
+          </ul>
+        </dd>
+      </div>
+      <div>
+        <dt className="font-semibold">Business progress</dt>
+        <dd>
+          <ol className="grid gap-1 text-secondary">
+            {reconstruction.execution.steps.map((step) => <li key={step.step}>
+              Step {step.step}: {step.business} · {customerLabel(step.state)}
+              {step.evidence.length === 0 ? '' : ` · ${step.evidence.length} evidence receipt${step.evidence.length === 1 ? '' : 's'}`}
+            </li>)}
+          </ol>
+        </dd>
+        <dd className="text-secondary">
+          {reconstruction.execution.completedSteps} of {reconstruction.execution.totalSteps} completed ·{' '}
+          {reconstruction.execution.duplicateRisk === 'protected_by_required_idempotency'
+            ? 'AE reuses the same recorded attempt instead of asking the business twice.'
+            : 'Duplicate posture differs by step and requires support review.'}
+        </dd>
+      </div>
+      <div>
+        <dt className="font-semibold">Allowed effects</dt>
+        <dd>
+          <ul className="grid gap-1 text-secondary">
+            {reconstruction.authority.effects.map((effect, index) => <li key={`${effect.class}:${index}`}>
+              {effect.releaseState === 'authorized' ? 'Authorized' : 'Business step released'}
+              {': '}
+              {customerLabel(effect.class)} · {customerLabel(effect.reversibility)}
+            </li>)}
+          </ul>
+        </dd>
+      </div>
+      <div>
+        <dt className="font-semibold">Next safe action</dt>
+        <dd className="text-secondary">
+          {reconstruction.recovery.nextActor === 'ae' ? 'AE support' : customerLabel(reconstruction.recovery.nextActor)}
+          {' · '}
+          {supportNextAction(reconstruction.recovery.nextAction)}
+        </dd>
+      </div>
+    </dl>
+  </section>
+}
+
+function formatMoney(value: Readonly<{ currency: string; amountMinor: number }>): string {
+  return `${value.currency} ${(value.amountMinor / 100).toFixed(2)}`
+}
+
+function customerLabel(value: string): string {
+  const words = value.replaceAll(/[-_]+/gu, ' ')
+  return `${words.slice(0, 1).toUpperCase()}${words.slice(1)}`
+}
+
+function supportNextAction(
+  value: NonNullable<
+    Extract<SupportProblemExport, { kind: 'problem_export' }>['reconstruction']
+  >['recovery']['nextAction'],
+): string {
+  if (value === 'await_status_update') return 'Wait for the next status update'
+  if (value === 'check_status') return 'Check the latest status'
+  if (value === 'provide_information') return 'Ask the customer for the requested information'
+  return 'No further customer action is required'
+}
+
+function formatTimestamp(value: number): string {
+  return new Date(value).toISOString()
 }
