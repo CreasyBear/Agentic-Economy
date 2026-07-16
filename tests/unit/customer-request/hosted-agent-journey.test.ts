@@ -505,6 +505,73 @@ describe('hosted Customer Request journey', () => {
     })
   })
 
+  it('preserves a provider-declared partial result as matching evidence without exposing continuation authority', async () => {
+    const partialResult = {
+      kind: 'partial_result',
+      output: { quoteReference: 'sandbox-partial-quote:one' },
+    }
+    const partial = requestView('outcome_unknown', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'wait',
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+      action: {
+        state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false,
+        result: partialResult, observedAt: 9_100,
+      },
+    })
+    const responses = [
+      compositeRoutesReadyView(), compositeRoutesReadyView(),
+      requestView('route_confirmed', 2, { routeGenerationRef: 'generation:one', confirmation: confirmation() }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      }),
+      partial,
+      {
+        kind: 'evidence', requestRef: 'request:cold', state: 'outcome_unknown', generatedAt: 9_100,
+        steps: [
+          { step: 1, state: 'completed', observedAt: 9_050, evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }] },
+          { step: 2, state: 'outcome_unknown', observedAt: 9_100, evidence: [{ receiptRef: 'receipt:partial', label: 'Partial quote' }] },
+        ],
+        result: partialResult,
+      },
+      { kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:partial', state: 'received', reportedAt: 9_101 },
+      partial,
+    ]
+    const proof = await runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'http://127.0.0.1:4319', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'cold-external-agent', version: 'partial-result-v1' },
+      scenario: {
+        request: 'Resolve a labelled sandbox service and prepare its quote, even if only a partial result is available.',
+        facts: {}, messages: [], finish: 'partial_result',
+        expectedRoute: { stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'] },
+      },
+      sandbox: true,
+      fetch: vi.fn(async () => Response.json(responses.shift() ?? { error: 'unexpected' })),
+      verifyRelease: async () => ({
+        kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+      sleep: async () => undefined,
+    })
+
+    expect(proof.final).toMatchObject({
+      state: 'outcome_unknown', runState: 'outcome_unknown', evidenceState: 'outcome_unknown',
+      resumedState: 'outcome_unknown', completedSteps: 1, automaticRetry: false,
+      resultDigest: expect.stringMatching(/^sha256:/),
+    })
+    expect(proof.measurements).toMatchObject({
+      resultUsability: { state: 'unusable' },
+      resultIntegrity: { state: 'verified', digest: proof.final.resultDigest },
+    })
+  })
+
   it('keeps a definite provider denial failed, evidenced, resumable, and non-retryable', async () => {
     const failed = requestView('failed', 2, {
       routeGenerationRef: 'generation:one', nextAction: 'revise_request',

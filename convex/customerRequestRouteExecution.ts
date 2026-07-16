@@ -706,6 +706,7 @@ export const recordOutcome = internalMutation({
     observationJson: v.optional(v.string()),
     outcome: v.union(
       v.object({ kind: v.literal('succeeded'), outputJson: v.string() }),
+      v.object({ kind: v.literal('partial'), outputJson: v.string() }),
       v.object({ kind: v.literal('failed') }),
       v.object({ kind: v.literal('unknown') }),
     ),
@@ -734,6 +735,7 @@ export const recordOutcome = internalMutation({
       : parseRouteTransportObservationJson(args.observationJson)
     if (args.observationJson !== undefined && (observation === undefined
       || (args.outcome.kind === 'succeeded' && observation.disposition !== 'succeeded')
+      || (args.outcome.kind === 'partial' && observation.disposition !== 'partial')
       || (args.outcome.kind === 'failed' && observation.disposition !== 'refused')
       || (args.outcome.kind === 'unknown'
         && observation.disposition !== 'unknown' && observation.disposition !== 'partial')
@@ -743,6 +745,28 @@ export const recordOutcome = internalMutation({
     const observationPatch = observation === undefined ? {} : {
       transportObservationJson: args.observationJson,
       transportObservationDigest: canonicalDigest(observation),
+    }
+    if (args.outcome.kind === 'partial') {
+      const suppliedOutput = parseBoundedJson(args.outcome.outputJson)
+      const validated = suppliedOutput === undefined
+        ? null
+        : await validateAttemptOutput(ctx, attempt, suppliedOutput)
+      if (validated === null) {
+        await ctx.db.patch(attempt._id, observationPatch)
+        await markUnknownOutcome(ctx, run, attempt, now)
+      } else {
+        const partialResult: JsonValue = { kind: 'partial_result', output: validated.output }
+        await ctx.db.patch(attempt._id, {
+          outputJson: JSON.stringify(validated.output),
+          outputDigest: canonicalDigest(validated.output),
+          evidence: [...validated.evidence],
+          ...observationPatch,
+        })
+        await markUnknownOutcome(ctx, run, attempt, now, partialResult)
+      }
+      const partial = await readRunProjection(ctx, run.runRef)
+      if (partial === null) throw new Error('customer_request_route_run_integrity_failure')
+      return { kind: 'outcome_unknown', run: partial }
     }
     if (args.outcome.kind === 'unknown') {
       await ctx.db.patch(attempt._id, observationPatch)
@@ -1194,9 +1218,17 @@ async function markUnknownOutcome(
   run: Doc<'customerRequestRouteRuns'>,
   attempt: Doc<'customerRequestRouteStepAttempts'>,
   now: number,
+  result?: JsonValue,
 ): Promise<void> {
   await ctx.db.patch(attempt._id, { state: 'outcome_unknown', updatedAt: now })
-  await ctx.db.patch(run._id, { state: 'outcome_unknown', updatedAt: now })
+  await ctx.db.patch(run._id, {
+    state: 'outcome_unknown',
+    ...(result === undefined ? {} : {
+      resultJson: JSON.stringify(result),
+      resultDigest: canonicalDigest(result),
+    }),
+    updatedAt: now,
+  })
 }
 
 function readJsonPointer(value: JsonValue, pointer: string): JsonValue | undefined {

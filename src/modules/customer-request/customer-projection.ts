@@ -441,7 +441,10 @@ export function projectCustomerActionStatus(input: Readonly<{
   businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   routeProgress?: Readonly<{ completed: number; total: number; currentStep: number }>
   status:
-    | Readonly<{ kind: 'unknown'; reason: string; observedAt: number; automaticRetry: false }>
+    | Readonly<{
+        kind: 'unknown'; reason: string; observedAt: number; automaticRetry: false
+        partialResult?: JsonValue
+      }>
     | Readonly<{
         kind: 'completed'; resolution: 'provider_result' | 'reconciled'; result: JsonValue
         resolvedAt: number; automaticRetry: false
@@ -458,11 +461,16 @@ export function projectCustomerActionStatus(input: Readonly<{
     state: 'outcome_unknown', nextAction: 'wait',
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
     ...(input.businesses === undefined ? {} : { businesses: input.businesses }),
-    summary: multipleBusinesses
-      ? 'The businesses may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.'
-      : 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.',
+    summary: input.status.partialResult === undefined
+      ? multipleBusinesses
+        ? 'The businesses may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.'
+        : 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.'
+      : 'A business returned a partial result. AE has preserved it as evidence and will not claim completion or send the request again.',
     action: {
       state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false,
+      ...(input.status.partialResult === undefined
+        ? {}
+        : { result: structuredClone(input.status.partialResult) }),
       observedAt: input.status.observedAt,
     },
     ...(input.routeProgress === undefined ? {} : { progress: terminalRouteProgress(input.routeProgress) }),

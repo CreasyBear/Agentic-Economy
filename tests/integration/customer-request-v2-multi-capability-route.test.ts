@@ -907,6 +907,65 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(routeProviderFetch).toHaveBeenCalledTimes(2)
   })
 
+  it('preserves a validated partial provider result without completing or retrying', async () => {
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
+    vi.stubEnv('ROUTE_ADMISSION_RESOLVER_KEY', 'resolver-secret')
+    vi.stubEnv('ROUTE_ADMISSION_QUOTER_KEY', 'quoter-secret')
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'transport-partial-result')
+    routeProviderFetch.mockReset()
+    routeProviderFetch
+      .mockResolvedValueOnce(new UndiciResponse(JSON.stringify({ serviceReference: 'sandbox-service:partial' }), {
+        status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'sandbox:resolver' },
+      }))
+      .mockResolvedValueOnce(new UndiciResponse(JSON.stringify({ quoteReference: 'sandbox-partial-quote:one' }), {
+        status: 200, headers: {
+          'Content-Type': 'application/json',
+          'Provider-Receipt': 'sandbox:quoter-partial',
+          'Continuation-Token': 'sandbox-continuation:private',
+        },
+      }))
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:transport-partial-result',
+    })
+
+    await finishScheduledRouteWorkers(backend, 2)
+    const resumed = await admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })
+    expect(resumed).toMatchObject({
+      kind: 'request', state: 'outcome_unknown', nextAction: 'wait',
+      action: {
+        state: 'unknown', automaticRetry: false,
+        result: {
+          kind: 'partial_result',
+          output: { quoteReference: 'sandbox-partial-quote:one' },
+        },
+      },
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+    })
+    expect(JSON.stringify(resumed)).not.toContain('sandbox-continuation:private')
+    const evidence = await admin.action(api.customerRequestApplication.exportRouteEvidence, {
+      requestRef: confirmed.requestRef,
+    })
+    expect(evidence).toMatchObject({
+      kind: 'evidence', state: 'outcome_unknown',
+      steps: [{ step: 1, state: 'completed' }, { step: 2, state: 'outcome_unknown' }],
+      result: {
+        kind: 'partial_result',
+        output: { quoteReference: 'sandbox-partial-quote:one' },
+      },
+    })
+    expect(JSON.stringify(evidence)).not.toContain('sandbox-continuation:private')
+    await expect(backend.action(internal.customerRequestRouteTransportWorker.runNext, {
+      workerId: 'worker:transport:partial-retry',
+    })).resolves.toEqual({ kind: 'none' })
+    expect(routeProviderFetch).toHaveBeenCalledTimes(2)
+  })
+
   it('never advances or retries when a released step has an invalid or unknown outcome', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)

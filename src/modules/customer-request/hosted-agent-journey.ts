@@ -27,7 +27,7 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
     request: string
     facts: Readonly<Record<string, unknown>>
     messages: readonly string[]
-    finish?: 'cancel' | 'complete' | 'outcome_unknown' | 'provider_denied'
+    finish?: 'cancel' | 'complete' | 'outcome_unknown' | 'provider_denied' | 'partial_result'
     expiryRecovery?: Readonly<{ waitMs: number }>
     unsupportedRecovery?: Readonly<{ message: string }>
     expectedRoute?: Readonly<{
@@ -359,6 +359,13 @@ export async function runHostedCustomerRequestJourney(
           problemAction, started: view, nonce,
         })
       }
+      if (input.scenario.finish === 'partial_result') {
+        return await partialResultHostedJourney({
+          input: runtimeInput, release, requestRef, route, selectedBusiness, selectedBusinesses,
+          states, authorityStops, consumedFacts, consumedMessages, progressPath, evidencePath,
+          problemAction, started: view, nonce,
+        })
+      }
       if (input.scenario.finish === 'provider_denied') {
         return await providerDeniedHostedJourney({
           input: runtimeInput, release, requestRef, route, selectedBusiness, selectedBusinesses,
@@ -463,6 +470,77 @@ export async function runHostedCustomerRequestJourney(
     }
   }
   throw new Error('hosted_journey_transition_limit_exceeded')
+}
+
+async function partialResultHostedJourney(input: Parameters<typeof outcomeUnknownHostedJourney>[0]): Promise<HostedCustomerRequestJourneyProof> {
+  let partial: CustomerRequestView | undefined
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    partial = await callAgent(input.input, input.progressPath, 'GET', undefined, [200, 202])
+    observe(input.states, partial)
+    if (partial.state === 'outcome_unknown') break
+    if (partial.state !== 'in_progress') {
+      throw new Error(`hosted_journey_partial_stopped:${partial.state}:request=${input.requestRef}`)
+    }
+    await (input.input.sleep ?? defaultSleep)(1_000)
+  }
+  if (partial?.state !== 'outcome_unknown' || partial.action?.state !== 'unknown'
+    || partial.action.automaticRetry !== false || partial.action.result === undefined
+    || partial.progress?.completed !== input.route.stepCount - 1) {
+    throw new Error('hosted_journey_partial_timeout')
+  }
+  const result = partial.action.result
+  if (typeof result !== 'object' || result === null || Array.isArray(result)
+    || !('kind' in result) || result.kind !== 'partial_result' || !('output' in result)) {
+    throw new Error('hosted_journey_partial_result_missing')
+  }
+  if (JSON.stringify(partial).includes('sandbox-continuation:')) {
+    throw new Error('hosted_journey_partial_continuation_disclosed')
+  }
+  const evidence = await callAgentEvidence(input.input, input.evidencePath)
+  if (evidence.state !== 'outcome_unknown' || evidence.result === undefined
+    || evidence.steps.length !== input.route.stepCount
+    || evidence.steps.filter(({ state }) => state === 'completed').length !== input.route.stepCount - 1
+    || evidence.steps.at(-1)?.state !== 'outcome_unknown') {
+    throw new Error('hosted_journey_partial_evidence_missing')
+  }
+  const actionResultDigest = digestInput(result)
+  const evidenceResultDigest = digestInput(evidence.result)
+  if (actionResultDigest !== evidenceResultDigest) throw new Error('hosted_journey_partial_result_mismatch')
+  if (JSON.stringify(evidence).includes('sandbox-continuation:')) {
+    throw new Error('hosted_journey_partial_evidence_disclosed_continuation')
+  }
+  const problem = await callAgentProblem(input.input, input.problemAction.path, materializeObservedInput(
+    input.started, input.problemAction, {
+      '<unique string>': `acceptance:problem:${input.nonce}`,
+      '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
+      '<problem summary>': 'The labelled sandbox provider returned only a partial result.',
+    },
+  ))
+  const resumed = await callAgent(input.input, input.progressPath, 'GET')
+  observe(input.states, resumed)
+  if (resumed.state !== 'outcome_unknown' || resumed.action?.automaticRetry !== false
+    || resumed.action.result === undefined
+    || digestInput(resumed.action.result) !== actionResultDigest) {
+    throw new Error(`hosted_journey_partial_resume_failed:${resumed.state}`)
+  }
+  return hostedCustomerRequestJourneyProofSchema.parse({
+    kind: 'cold_external_agent_journey', agent: input.input.agent,
+    release: journeyReleaseProjection(input.input, input.release),
+    observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
+    input: { request: input.input.scenario.request, facts: input.consumedFacts, messages: input.consumedMessages },
+    observedStates: input.states, authorityStops: input.authorityStops,
+    final: {
+      requestRef: input.requestRef, revision: resumed.revision,
+      state: resumed.state, selectedBusiness: input.selectedBusiness,
+      selectedBusinesses: input.selectedBusinesses, stepCount: input.route.stepCount,
+      runState: 'outcome_unknown', evidenceState: evidence.state, problemState: problem.state,
+      resumedState: resumed.state, completedSteps: resumed.progress?.completed,
+      automaticRetry: false, resultDigest: evidenceResultDigest,
+    },
+    measurements: journeyMeasurements(input.input, input.route, false, true, evidenceResultDigest),
+    sandbox: true,
+    claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
+  })
 }
 
 async function providerDeniedHostedJourney(input: Readonly<{

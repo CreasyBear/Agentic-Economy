@@ -16,6 +16,8 @@ const MALFORMED_EVIDENCE_REQUEST_PHRASE = 'leave the quote evidence malformed'
 const MALFORMED_EVIDENCE_REFERENCE_PREFIX = 'sandbox-service:malformed-evidence:'
 const PROVIDER_DENIAL_REQUEST_PHRASE = 'provider denial scenario'
 const PROVIDER_DENIAL_REFERENCE_PREFIX = 'sandbox-service:provider-denial:'
+const PARTIAL_RESULT_REQUEST_PHRASE = 'only a partial result is available'
+const PARTIAL_RESULT_REFERENCE_PREFIX = 'sandbox-service:partial-result:'
 const scenarioValue = z.enum(['success', 'refusal', 'timeout', 'expired', 'duplicate'])
 const preparationEgressBody = z.strictObject({
   protocol: z.literal('ae.preparation-egress:v1'),
@@ -180,7 +182,9 @@ async function routeProviderResponse(
         ? MALFORMED_EVIDENCE_REFERENCE_PREFIX
         : normalizedRequest.includes(PROVIDER_DENIAL_REQUEST_PHRASE)
           ? PROVIDER_DENIAL_REFERENCE_PREFIX
-          : 'sandbox-service:'
+          : normalizedRequest.includes(PARTIAL_RESULT_REQUEST_PHRASE)
+            ? PARTIAL_RESULT_REFERENCE_PREFIX
+            : 'sandbox-service:'
     const serviceReference = `${prefix}${canonicalDigest(parsed.data).slice(7, 31)}`
     return json({ serviceReference }, 200, { 'Provider-Receipt': `sandbox-resolver:${serviceReference}` })
   }
@@ -198,6 +202,17 @@ async function routeProviderResponse(
       { kind: 'refused', reason: 'sandbox_provider_declined' },
       409,
       { 'Provider-Receipt': denialRef },
+    )
+  }
+  if (parsed.data.serviceReference.startsWith(PARTIAL_RESULT_REFERENCE_PREFIX)) {
+    const digest = canonicalDigest(parsed.data).slice(7, 31)
+    return json(
+      { quoteReference: `sandbox-partial-quote:${digest}` },
+      200,
+      {
+        'Provider-Receipt': `sandbox-quoter-partial:${digest}`,
+        'Continuation-Token': `sandbox-continuation:${digest}`,
+      },
     )
   }
   const quoteReference = `sandbox-quote:${canonicalDigest(parsed.data).slice(7, 31)}`

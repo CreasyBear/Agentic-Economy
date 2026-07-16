@@ -200,6 +200,30 @@ describe('sandbox capability provider', () => {
     })
   })
 
+  it('lets the route journey exercise a schema-valid partial second-step result', async () => {
+    const resolverUrl = 'https://ae.test/api/sandbox/providers/route-resolver'
+    const quoterUrl = 'https://ae.test/api/sandbox/providers/route-quoter'
+    const resolved = await handleSandboxRouteProviderRequest('resolver', new Request(resolverUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({
+        request: 'Resolve a labelled sandbox service and prepare its quote, even if only a partial result is available.',
+      }),
+    }), { providerKey: 'secret' })
+    const resolvedBody = await resolved.json() as { serviceReference: string }
+
+    const partial = await handleSandboxRouteProviderRequest('quoter', new Request(quoterUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({ serviceReference: resolvedBody.serviceReference }),
+    }), { providerKey: 'secret' })
+
+    expect(partial.status).toBe(200)
+    expect(partial.headers.get('Continuation-Token')).toEqual(expect.stringMatching(/^sandbox-continuation:/))
+    expect(partial.headers.get('Provider-Receipt')).toEqual(expect.stringMatching(/^sandbox-quoter-partial:/))
+    await expect(partial.json()).resolves.toEqual({
+      quoteReference: expect.stringMatching(/^sandbox-partial-quote:/),
+    })
+  })
+
   it('refuses missing credentials and never commits a real-world effect', async () => {
     const unauthorized = await handleSandboxCapabilityRequest(new Request('https://ae.test/api/sandbox/capability?profile=one', {
       method: 'POST', body: JSON.stringify({}),

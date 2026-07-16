@@ -68,7 +68,9 @@ describe('customer Request production smoke entrypoint', () => {
       AE_CUSTOMER_REQUEST_BASE_URL: 'https://ae.example',
       AE_CUSTOMER_REQUEST_API_KEY: 'ak_agent',
       AE_CUSTOMER_REQUEST_FINISH: 'compelete',
-    })).toThrow('AE_CUSTOMER_REQUEST_FINISH must be cancel, complete, outcome_unknown, or provider_denied')
+    })).toThrow(
+      'AE_CUSTOMER_REQUEST_FINISH must be cancel, complete, outcome_unknown, provider_denied, or partial_result',
+    )
   })
 
   it('freezes a complete direct-provider comparison from explicit environment inputs', () => {

@@ -2292,6 +2292,7 @@ function projectStoredRouteRun(
     },
     status: {
       kind: 'unknown', reason: 'provider_outcome_unconfirmed',
+      ...(isPartialRouteResult(result) ? { partialResult: result } : {}),
       observedAt: run.updatedAt, automaticRetry: false,
     },
   }))
@@ -2338,6 +2339,11 @@ function projectStoredRouteRun(
 function isProviderReportedRouteFailure(result: JsonValue): boolean {
   return typeof result === 'object' && result !== null && 'reason' in result
     && result.reason === 'business_reported_failure'
+}
+
+function isPartialRouteResult(result: JsonValue | undefined): result is JsonValue {
+  return typeof result === 'object' && result !== null && 'kind' in result
+    && result.kind === 'partial_result' && 'output' in result
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {

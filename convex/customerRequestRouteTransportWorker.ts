@@ -99,6 +99,8 @@ export const runNext = internalAction({
       })
       const outcome = observation.disposition === 'succeeded' && observation.outputJson !== undefined
         ? { kind: 'succeeded' as const, outputJson: observation.outputJson }
+        : observation.disposition === 'partial' && observation.outputJson !== undefined
+          ? { kind: 'partial' as const, outputJson: observation.outputJson }
         : observation.disposition === 'refused'
           ? { kind: 'failed' as const }
           : { kind: 'unknown' as const }
