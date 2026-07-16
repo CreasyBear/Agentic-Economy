@@ -110,7 +110,7 @@ export async function allowCustomerRequestRepeatPermissionThroughSource(
   return callSourceAction(allowRepeatRouteSourceAction, input)
 }
 
-export async function useCustomerRequestRepeatPermissionThroughSource(
+export async function executeCustomerRequestRepeatPermissionThroughSource(
   input: UseCustomerRequestRepeatPermissionInput,
 ): Promise<CustomerRequestAgentResult> {
   return callSourceAction(useRepeatRouteSourceAction, input)

@@ -23,7 +23,7 @@ import {
   reportCustomerRequestProblemThroughSource,
   replyCustomerRequestProblemThroughSource,
   allowCustomerRequestRepeatPermissionThroughSource,
-  useCustomerRequestRepeatPermissionThroughSource,
+  executeCustomerRequestRepeatPermissionThroughSource,
 } from './customer-request.functions'
 
 const confirmationActionInputSchema = customerRequestRouteConfirmationInputSchema.extend({
@@ -233,6 +233,6 @@ export const customerRequestUseRepeatPermissionAction = defineAction({
   readOnly: false,
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => customerRequestAgentResultSchema.parse(
-    await useCustomerRequestRepeatPermissionThroughSource(data),
+    await executeCustomerRequestRepeatPermissionThroughSource(data),
   ),
 })
