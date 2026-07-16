@@ -1,4 +1,4 @@
-import { auth } from '@clerk/tanstack-react-start/server'
+import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 
 import { CUSTOMER_REQUEST_AGENT_SCOPE } from '@/modules/customer-request/agent-contract'
 
@@ -12,6 +12,14 @@ type ApiKeyAuth = Readonly<{
   orgId?: string | null
 }>
 
+type CurrentApiKey = Readonly<{
+  id: string
+  subject: string
+  revoked: boolean
+  expired: boolean
+  scopes: readonly string[]
+}>
+
 export type CustomerRequestAgentPrincipal = Readonly<{
   principalId: string
   ownerId: string
@@ -21,6 +29,7 @@ export type CustomerRequestAgentPrincipal = Readonly<{
 
 export async function authenticateCustomerRequestAgent(options: Readonly<{
   authenticate?: () => Promise<ApiKeyAuth>
+  verifyKeyState?: (keyId: string) => Promise<CurrentApiKey>
 }> = {}): Promise<Readonly<{ kind: 'authenticated'; principal: CustomerRequestAgentPrincipal }> | Readonly<{
   kind: 'refused'
   status: 401 | 403
@@ -31,6 +40,24 @@ export async function authenticateCustomerRequestAgent(options: Readonly<{
     return { kind: 'refused', status: 401, reason: 'authentication_required' }
   }
   if (!candidate.scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return { kind: 'refused', status: 403, reason: 'scope_required' }
+  let admittedScopes = candidate.scopes
+  if (options.verifyKeyState !== undefined || options.authenticate === undefined) {
+    try {
+      const current = await (options.verifyKeyState ?? (async (keyId: string) => {
+        const key = await clerkClient().apiKeys.get(keyId)
+        return { id: key.id, subject: key.subject, revoked: key.revoked, expired: key.expired, scopes: key.scopes }
+      }))(candidate.id)
+      if (current.id !== candidate.id || current.subject !== candidate.subject || current.revoked || current.expired) {
+        return { kind: 'refused', status: 401, reason: 'authentication_required' }
+      }
+      if (!current.scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) {
+        return { kind: 'refused', status: 403, reason: 'scope_required' }
+      }
+      admittedScopes = current.scopes
+    } catch {
+      return { kind: 'refused', status: 401, reason: 'authentication_required' }
+    }
+  }
   const ownerId = candidate.orgId ?? candidate.userId ?? candidate.subject
   return {
     kind: 'authenticated',
@@ -38,7 +65,7 @@ export async function authenticateCustomerRequestAgent(options: Readonly<{
       principalId: `clerk_api_key:${candidate.id}`,
       ownerId,
       credentialId: candidate.id,
-      scopes: Object.freeze([...candidate.scopes].sort()),
+      scopes: Object.freeze([...admittedScopes].sort()),
     }),
   }
 }

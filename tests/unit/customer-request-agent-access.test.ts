@@ -10,7 +10,7 @@ describe('customer request agent access', () => {
       .mockResolvedValueOnce({ data: [] })
       .mockResolvedValueOnce({ data: [{
         id: 'key_123', name: 'My assistant', subject: 'user_123', revoked: false, expired: false,
-        claims: { aePurpose: 'customer_request_agent', aeIssuanceKey: 'setup-12345678' },
+        claims: { aePurpose: 'customer_request_agent', aeIssuanceKey: 'setup-12345678', aeDisplayName: 'My assistant' },
       }] })
 
     const first = await issueCustomerRequestAgentKey({
@@ -28,9 +28,9 @@ describe('customer request agent access', () => {
     expect(replay).toEqual({ kind: 'replayed', keyId: 'key_123', secret: 'ae_test_secret', expiresInSeconds: 604_800 })
     expect(create).toHaveBeenCalledOnce()
     expect(create).toHaveBeenCalledWith({
-      name: 'My assistant', subject: 'user_123', createdBy: 'user_123',
+      name: 'AE Customer Request setup-12345678', subject: 'user_123', createdBy: 'user_123',
       scopes: ['customer_requests:create'], secondsUntilExpiration: 604_800,
-      claims: { aePurpose: 'customer_request_agent', aeIssuanceKey: 'setup-12345678' },
+      claims: { aePurpose: 'customer_request_agent', aeIssuanceKey: 'setup-12345678', aeDisplayName: 'My assistant' },
       description: 'Use Agentic Economy Customer Requests with this assistant.',
     })
     expect(getSecret).toHaveBeenCalledWith('key_123')
@@ -60,7 +60,7 @@ describe('customer request agent access', () => {
       create: vi.fn(), getSecret: vi.fn(),
       list: vi.fn().mockResolvedValue({ data: [{
         id: 'key_123', name: 'First assistant', subject: 'user_123', revoked: false, expired: false,
-        claims: { aePurpose: 'customer_request_agent', aeIssuanceKey: 'setup-12345678' },
+        claims: { aePurpose: 'customer_request_agent', aeIssuanceKey: 'setup-12345678', aeDisplayName: 'First assistant' },
       }] }),
     }
     await expect(issueCustomerRequestAgentKey({

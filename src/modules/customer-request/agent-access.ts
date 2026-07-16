@@ -56,18 +56,20 @@ export async function issueCustomerRequestAgentKey(input: Readonly<{
       && key.claims?.aePurpose === PURPOSE
       && key.claims.aeIssuanceKey === idempotencyKey)
     if (existing !== undefined) {
-      if (existing.name !== name) return { kind: 'error', code: 'idempotency_conflict', retryable: false }
+      if (existing.claims?.aeDisplayName !== name) {
+        return { kind: 'error', code: 'idempotency_conflict', retryable: false }
+      }
       const { secret } = await input.api.getSecret(existing.id)
       return { kind: 'replayed', keyId: existing.id, secret, expiresInSeconds: KEY_LIFETIME_SECONDS }
     }
 
     const created = await input.api.create({
-      name,
+      name: `AE Customer Request ${idempotencyKey.slice(-16)}`,
       subject: input.principal.userId,
       createdBy: input.principal.userId,
       scopes: [CUSTOMER_REQUEST_SCOPE],
       secondsUntilExpiration: KEY_LIFETIME_SECONDS,
-      claims: { aePurpose: PURPOSE, aeIssuanceKey: idempotencyKey },
+      claims: { aePurpose: PURPOSE, aeIssuanceKey: idempotencyKey, aeDisplayName: name },
       description: 'Use Agentic Economy Customer Requests with this assistant.',
     })
     const secret = created.secret ?? (await input.api.getSecret(created.id)).secret
