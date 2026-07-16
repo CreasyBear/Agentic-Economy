@@ -1020,6 +1020,33 @@ describe('customer Request workspace', () => {
     expect(screen.queryByRole('button', { name: 'Stop before the next step' })).toBeNull()
   })
 
+  it('shows a provider-rejected stop request without implying that work stopped', async () => {
+    localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
+      requestRef: 'request:rejected-stop',
+    }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:rejected-stop', revision: 1,
+      state: 'in_progress', summary: 'Your request is in progress.', nextAction: 'wait',
+      missingFields: [], criteria: [], options: [],
+      progress: { completed: 0, total: 2, current: { step: 1, state: 'awaiting_result' } },
+      activity: {
+        actor: 'business', certainty: 'confirmed', updatedAt: 30, nextCheckAt: 30_030,
+        retry: 'not_needed',
+        cancellation: {
+          state: 'rejected', requestedAt: 20, observedAt: 30,
+          reason: 'sandbox_provider_kept_current_work',
+        },
+        safeNextAction: 'check_progress',
+      },
+    })))
+
+    render(<AeCustomerRequestWorkspace />)
+
+    expect(await screen.findByText('The business declined the stop request. The current work may continue.')).toBeTruthy()
+    expect(screen.getByText(/will not send the stop request twice/)).toBeTruthy()
+    expect(screen.queryByText(/cancelled the business work/i)).toBeNull()
+  })
+
   it('shows completed work and the unreleased stopped step after in-flight cancellation', async () => {
     localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
       requestRef: 'request:stopped-after-current',

@@ -23,6 +23,11 @@ const PROVIDER_DENIAL_REFERENCE_PREFIX = 'sandbox-service:provider-denial:'
 const PARTIAL_RESULT_REQUEST_PHRASE = 'only a partial result is available'
 const PARTIAL_RESULT_REFERENCE_PREFIX = 'sandbox-service:partial-result:'
 const CANCEL_AFTER_CURRENT_REQUEST_PHRASE = 'pause the first step for cancellation'
+const ACCEPT_PROVIDER_CANCELLATION_PHRASE = 'accept the provider cancellation'
+const REJECT_PROVIDER_CANCELLATION_PHRASE = 'reject the provider cancellation'
+const UNKNOWN_PROVIDER_CANCELLATION_PHRASE = 'leave the provider cancellation unknown'
+const MAX_OBSERVED_SANDBOX_OPERATIONS = 256
+const observedSandboxCancellationOutcomes = new Map<string, 'accepted' | 'rejected' | 'unknown'>()
 const scenarioValue = z.enum(['success', 'refusal', 'timeout', 'expired', 'duplicate'])
 const preparationEgressBody = z.strictObject({
   protocol: z.literal('ae.preparation-egress:v1'),
@@ -41,6 +46,11 @@ const requestBody = z.looseObject({
   operation: z.enum(['quote', 'structured_quote', 'structured_quote_reconcile', 'execute', 'reconcile', 'cancel']),
   bindingId: z.string().min(1).max(200),
   capabilityContractId: z.string().min(1).max(200),
+})
+const cancellationBody = z.strictObject({
+  cancellationRequestRef: z.string().min(1).max(500),
+  attemptRef: z.string().min(1).max(500),
+  operationKeyDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
 })
 
 type SandboxProfile = (typeof SANDBOX_PROVIDER_PROFILES)[keyof typeof SANDBOX_PROVIDER_PROFILES]
@@ -276,6 +286,10 @@ async function routeProviderResponse(
   request?: Request,
   options: HandlerOptions = {},
 ): Promise<Response> {
+  if (routeKey === 'resolver') {
+    const cancellation = cancellationBody.safeParse(input)
+    if (cancellation.success) return sandboxCancellationResponse(cancellation.data)
+  }
   const probe = requestBody.safeParse(input)
   if (probe.success && probe.data.operation === 'quote') return json({
     kind: 'quoted', expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor),
@@ -286,6 +300,10 @@ async function routeProviderResponse(
     const parsed = z.strictObject({ request: z.string().min(1) }).safeParse(input)
     if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
     const normalizedRequest = parsed.data.request.toLowerCase()
+    rememberSandboxCancellationOutcome(
+      request?.headers.get('Idempotency-Key'),
+      sandboxCancellationOutcome(normalizedRequest),
+    )
     if (normalizedRequest.includes(CANCEL_AFTER_CURRENT_REQUEST_PHRASE)) {
       await (options.wait ?? waitForDelay)(2_000, request?.signal ?? new AbortController().signal)
     }
@@ -330,6 +348,49 @@ async function routeProviderResponse(
   }
   const quoteReference = `sandbox-quote:${canonicalDigest(parsed.data).slice(7, 31)}`
   return json({ quoteReference }, 200, { 'Provider-Receipt': `sandbox-quoter:${quoteReference}` })
+}
+
+function sandboxCancellationOutcome(request: string): 'accepted' | 'rejected' | 'unknown' {
+  if (request.includes(REJECT_PROVIDER_CANCELLATION_PHRASE)) return 'rejected'
+  if (request.includes(UNKNOWN_PROVIDER_CANCELLATION_PHRASE)) return 'unknown'
+  if (request.includes(ACCEPT_PROVIDER_CANCELLATION_PHRASE)) return 'accepted'
+  return 'accepted'
+}
+
+function rememberSandboxCancellationOutcome(
+  operationKeyDigest: string | null | undefined,
+  outcome: 'accepted' | 'rejected' | 'unknown',
+): void {
+  if (operationKeyDigest === undefined || operationKeyDigest === null
+    || !/^sha256:[0-9a-f]{64}$/u.test(operationKeyDigest)) return
+  if (!observedSandboxCancellationOutcomes.has(operationKeyDigest)
+    && observedSandboxCancellationOutcomes.size >= MAX_OBSERVED_SANDBOX_OPERATIONS) {
+    const oldest = observedSandboxCancellationOutcomes.keys().next().value
+    if (typeof oldest === 'string') observedSandboxCancellationOutcomes.delete(oldest)
+  }
+  observedSandboxCancellationOutcomes.set(operationKeyDigest, outcome)
+}
+
+function sandboxCancellationResponse(input: z.infer<typeof cancellationBody>): Response {
+  const outcome = observedSandboxCancellationOutcomes.get(input.operationKeyDigest)
+  if (outcome === undefined) {
+    return json({
+      kind: 'cancellation_unknown',
+      reason: 'sandbox_operation_not_observed',
+    }, 409)
+  }
+  const providerReference = `sandbox-cancellation:${outcome}:${canonicalDigest(input).slice(7, 31)}`
+  if (outcome === 'accepted') {
+    return json({ kind: 'cancellation_accepted', providerReference })
+  }
+  if (outcome === 'rejected') {
+    return json({
+      kind: 'cancellation_rejected',
+      reason: 'sandbox_provider_kept_current_work',
+      providerReference,
+    })
+  }
+  return json({ kind: 'cancellation_unknown' })
 }
 
 function structuredQuote(profile: SandboxProfile, body: Record<string, unknown>, scenario: z.infer<typeof scenarioValue>): Response {

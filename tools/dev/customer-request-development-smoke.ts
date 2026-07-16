@@ -35,7 +35,9 @@ export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
   request: string
   facts: Readonly<Record<string, unknown>>
   messages: readonly string[]
-  finish: 'complete' | 'cancel' | 'cancel_after_current' | 'outcome_unknown' | 'invalid_output' | 'provider_denied' | 'partial_result'
+  finish: 'complete' | 'cancel' | 'cancel_after_current' | 'adapter_cancel_accepted'
+    | 'adapter_cancel_rejected' | 'adapter_cancel_unknown' | 'outcome_unknown'
+    | 'invalid_output' | 'provider_denied' | 'partial_result'
   expiryRecovery?: Readonly<{ waitMs: number }>
   unsupportedRecovery?: Readonly<{ message: string }>
   expectedRoute: Readonly<{
@@ -174,7 +176,11 @@ export async function runCustomerRequestDevelopmentSmoke(
     agent: { name: 'frozen-direct-development-integrator', version: '1' },
     fetch: config.fetch,
   })
-  const comparison = compareAgentJourneys({ direct, ae: proof })
+  if (proof.final.state === 'in_progress') {
+    throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
+  }
+  const terminalProof = proof as Parameters<typeof compareAgentJourneys>[0]['ae']
+  const comparison = compareAgentJourneys({ direct, ae: terminalProof })
   const combined = {
     kind: 'development_customer_request_comparison' as const,
     release: { revision: config.sourceRevision, deploymentId: config.convexDeployment },

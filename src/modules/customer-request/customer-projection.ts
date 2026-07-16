@@ -396,6 +396,7 @@ export function projectRouteProgress(input: Readonly<{
   cancellationAttempt?: Readonly<
     | { state: 'pending'; requestedAt: number; nextCheckAt: number }
     | { state: 'unknown'; requestedAt: number; observedAt: number; nextCheckAt: number }
+    | { state: 'rejected'; requestedAt: number; observedAt: number; reason: string }
   >
   businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   criteria?: readonly CustomerCriterion[]
@@ -418,9 +419,14 @@ export function projectRouteProgress(input: Readonly<{
     },
     activity: {
       actor: input.cancellationAttempt?.state === 'unknown' ? 'ae' : progressActor(input.current.state),
-      certainty: input.cancellationAttempt?.state === 'unknown' ? 'unknown' : 'pending',
+      certainty: input.cancellationAttempt?.state === 'unknown'
+        ? 'unknown'
+        : input.cancellationAttempt?.state === 'rejected' ? 'confirmed' : 'pending',
       updatedAt: input.updatedAt,
-      nextCheckAt: input.cancellationAttempt?.nextCheckAt ?? input.updatedAt + 30_000,
+      nextCheckAt: input.cancellationAttempt === undefined
+        || input.cancellationAttempt.state === 'rejected'
+        ? input.updatedAt + 30_000
+        : input.cancellationAttempt.nextCheckAt,
       retry: input.cancellationAttempt?.state === 'unknown'
         ? 'blocked_until_reconciled'
         : 'not_needed',

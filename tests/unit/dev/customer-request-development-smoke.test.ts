@@ -62,6 +62,20 @@ describe('customer Request development smoke configuration', () => {
     }, 'a'.repeat(40))).toMatchObject({ finish: 'cancel_after_current' })
   })
 
+  it.each([
+    'adapter_cancel_accepted',
+    'adapter_cancel_rejected',
+    'adapter_cancel_unknown',
+  ] as const)('selects the %s provider-cancellation journey explicitly', (finish) => {
+    expect(customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_FINISH: finish,
+    }, 'a'.repeat(40))).toMatchObject({ finish })
+  })
+
   it('selects the partial-progress unknown-outcome journey explicitly', () => {
     expect(customerRequestDevelopmentSmokeConfig({
       CLERK_SECRET_KEY: 'sk_test',

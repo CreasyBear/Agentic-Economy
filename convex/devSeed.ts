@@ -501,8 +501,19 @@ export async function registerSandboxRouteSupplyRegistrations(
         endpointUrl: new URL(profile.endpointPath, providerOrigin).href,
         credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
-        cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
-        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+        cancellation: profile === SANDBOX_ROUTE_PROVIDER_PROFILES.resolver
+          ? { kind: 'adapter_managed', evidenceRefs: ['seed:sandbox-adapter-cancellation'] }
+          : { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
+        adapter: {
+          adapterId: 'http-json:v1',
+          config: profile === SANDBOX_ROUTE_PROVIDER_PROFILES.resolver
+            ? {
+                method: 'POST',
+                requestTimeoutMs: 5_000,
+                cancellation: { path: profile.endpointPath, requestTimeoutMs: 3_000 },
+              }
+            : { method: 'POST', requestTimeoutMs: 5_000 },
+        },
         registrationEvidenceRefs: ['seed:production-v2-registration-path'],
       },
     }, registeredAt)
@@ -721,6 +732,13 @@ export async function retireSupersededSandboxRouteSupply(
           ? process.env.AE_SANDBOX_ROUTE_RESOLVER_V4_ORIGIN?.trim() || priorSharedProviderOrigin
           : process.env.AE_SANDBOX_ROUTE_QUOTER_V4_ORIGIN?.trim() || priorSharedProviderOrigin).href,
       },
+      ...('priorV5OfferingId' in profile ? [{
+        offeringId: profile.priorV5OfferingId,
+        bindingId: profile.priorV5BindingId,
+        endpointUrl: new URL(profile.endpointPath, process.env.AE_SANDBOX_ROUTE_RESOLVER_ORIGIN?.trim()
+          || process.env.AE_SANDBOX_PROVIDER_ORIGIN?.trim()
+          || siteUrl).href,
+      }] : []),
     ] as const
     for (const expected of historical) {
       const [offering, binding] = await Promise.all([

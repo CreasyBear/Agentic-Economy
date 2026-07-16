@@ -124,6 +124,32 @@ describe('customer action status projection', () => {
     })
   })
 
+  it('keeps a provider-rejected stop request distinct while current work continues', () => {
+    expect(projectRouteProgress({
+      requestRef: 'request:rejected-stop', revision: 1, generationRef: 'generation:one',
+      completed: 0, total: 2, current: { step: 1, state: 'awaiting_result' },
+      updatedAt: 30, cancellationAvailable: false,
+      cancellationAttempt: {
+        state: 'rejected', requestedAt: 20, observedAt: 30,
+        reason: 'sandbox_provider_kept_current_work',
+      },
+    })).toMatchObject({
+      state: 'in_progress',
+      activity: {
+        actor: 'business',
+        certainty: 'confirmed',
+        retry: 'not_needed',
+        cancellation: {
+          state: 'rejected',
+          requestedAt: 20,
+          observedAt: 30,
+          reason: 'sandbox_provider_kept_current_work',
+        },
+        safeNextAction: 'check_progress',
+      },
+    })
+  })
+
   it('shows completed and blocked business dependencies only for multi-step work', () => {
     const businesses = [
       { businessRef: 'business:resolver', name: 'Route Resolver' },

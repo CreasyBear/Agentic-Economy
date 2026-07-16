@@ -774,6 +774,16 @@ function cancellationMessage(
       </Text>
     </div>
   }
+  if (typeof cancellation === 'object' && cancellation.state === 'rejected') {
+    return <div className="grid gap-1">
+      <Text type="supporting" color="secondary">
+        The business declined the stop request. The current work may continue.
+      </Text>
+      <Text type="supporting" color="secondary">
+        AE recorded the response at {new Date(cancellation.observedAt).toISOString()} and will not send the stop request twice.
+      </Text>
+    </div>
+  }
   if (typeof cancellation !== 'object' || cancellation.state !== 'not_available'
     || cancellation.reason !== 'business_step_released') return null
   return <div className="grid gap-1">

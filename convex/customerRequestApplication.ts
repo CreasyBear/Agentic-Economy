@@ -485,6 +485,12 @@ const customerView = v.object({
         observedAt: v.number(),
         nextCheckAt: v.number(),
       }),
+      v.object({
+        state: v.literal('rejected'),
+        requestedAt: v.number(),
+        observedAt: v.number(),
+        reason: v.string(),
+      }),
     ),
     safeNextAction: v.union(
       v.literal('check_progress'), v.literal('wait_for_evidence'), v.literal('review_result'),
@@ -2932,6 +2938,7 @@ function projectStoredRouteRun(
     cancellationAttempt?: Readonly<
       | { state: 'pending'; requestedAt: number; nextCheckAt: number }
       | { state: 'unknown'; requestedAt: number; observedAt: number; nextCheckAt: number }
+      | { state: 'rejected'; requestedAt: number; observedAt: number; reason: string }
     >
     updatedAt: number
   }>,

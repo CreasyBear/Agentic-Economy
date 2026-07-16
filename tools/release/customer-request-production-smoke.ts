@@ -22,6 +22,9 @@ type DirectBaselineConfig = Readonly<{
 type CustomerRequestJourneyFinish =
   | 'cancel'
   | 'cancel_after_current'
+  | 'adapter_cancel_accepted'
+  | 'adapter_cancel_rejected'
+  | 'adapter_cancel_unknown'
   | 'complete'
   | 'outcome_unknown'
   | 'invalid_output'
@@ -125,7 +128,11 @@ export async function runCustomerRequestProductionSmoke(
     agent: { name: 'frozen-direct-provider-integrator', version: '1' },
     fetch: config.fetch,
   })
-  const comparison = compareAgentJourneys({ direct, ae: proof })
+  if (proof.final.state === 'in_progress') {
+    throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
+  }
+  const terminalProof = proof as Parameters<typeof compareAgentJourneys>[0]['ae']
+  const comparison = compareAgentJourneys({ direct, ae: terminalProof })
   process.stdout.write(`${JSON.stringify(comparison)}\n`)
   if (comparison.verdict !== 'pass_for_declared_class') {
     throw new Error(`customer_request_comparison_failed:${comparison.failures.join(',')}`)
@@ -199,10 +206,12 @@ function parseFinish(
 ): CustomerRequestJourneyFinish {
   const finish = optionalText(value) ?? 'cancel'
   if (finish !== 'cancel' && finish !== 'cancel_after_current'
+    && finish !== 'adapter_cancel_accepted' && finish !== 'adapter_cancel_rejected'
+    && finish !== 'adapter_cancel_unknown'
     && finish !== 'complete' && finish !== 'outcome_unknown'
     && finish !== 'invalid_output' && finish !== 'provider_denied' && finish !== 'partial_result') {
     throw new Error(
-      'AE_CUSTOMER_REQUEST_FINISH must be cancel, cancel_after_current, complete, outcome_unknown, invalid_output, provider_denied, or partial_result',
+      'AE_CUSTOMER_REQUEST_FINISH must be cancel, cancel_after_current, adapter_cancel_accepted, adapter_cancel_rejected, adapter_cancel_unknown, complete, outcome_unknown, invalid_output, provider_denied, or partial_result',
     )
   }
   return finish

@@ -154,6 +154,77 @@ describe('sandbox capability provider', () => {
     expect(wait.mock.calls[0]?.[0]).toBe(2_000)
   })
 
+  it.each([
+    {
+      request: 'Resolve this service and accept the provider cancellation.',
+      expected: { kind: 'cancellation_accepted', providerReference: expect.stringMatching(/^sandbox-cancellation:accepted:/u) },
+    },
+    {
+      request: 'Resolve this service and reject the provider cancellation.',
+      expected: {
+        kind: 'cancellation_rejected',
+        reason: 'sandbox_provider_kept_current_work',
+        providerReference: expect.stringMatching(/^sandbox-cancellation:rejected:/u),
+      },
+    },
+    {
+      request: 'Resolve this service and leave the provider cancellation unknown.',
+      expected: { kind: 'cancellation_unknown' },
+    },
+  ])('correlates a deterministic $expected.kind outcome to the released operation', async ({
+    request,
+    expected,
+  }) => {
+    const endpoint = 'https://ae.test/api/sandbox/providers/route-resolver'
+    const operationKeyDigest = `sha256:${'a'.repeat(64)}`
+    const execution = await handleSandboxRouteProviderRequest('resolver', new Request(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer secret',
+        'Idempotency-Key': operationKeyDigest,
+      },
+      body: JSON.stringify({ request }),
+    }), { providerKey: 'secret' })
+    expect(execution.status).toBe(200)
+
+    const cancellation = await handleSandboxRouteProviderRequest('resolver', new Request(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer secret',
+        'Idempotency-Key': 'route-cancellation:v1:test',
+      },
+      body: JSON.stringify({
+        cancellationRequestRef: 'route-cancellation:v1:test',
+        attemptRef: 'route-attempt:v1:test',
+        operationKeyDigest,
+      }),
+    }), { providerKey: 'secret' })
+
+    expect(cancellation.status).toBe(200)
+    await expect(cancellation.json()).resolves.toMatchObject(expected)
+  })
+
+  it('fails closed when a cancellation does not match a released sandbox operation', async () => {
+    const response = await handleSandboxRouteProviderRequest('resolver', new Request(
+      'https://ae.test/api/sandbox/providers/route-resolver',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer secret' },
+        body: JSON.stringify({
+          cancellationRequestRef: 'route-cancellation:v1:missing',
+          attemptRef: 'route-attempt:v1:missing',
+          operationKeyDigest: `sha256:${'b'.repeat(64)}`,
+        }),
+      },
+    ), { providerKey: 'secret' })
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      kind: 'cancellation_unknown',
+      reason: 'sandbox_operation_not_observed',
+    })
+  })
+
   it('executes the procurement workflow through three typed business endpoints', async () => {
     const requestText = 'Source comparable workplace catering options for 80 people next Thursday under AUD 4,000.'
     const brief = await workflowCall('procurement-brief', { request: requestText })

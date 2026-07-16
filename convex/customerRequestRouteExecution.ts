@@ -81,6 +81,12 @@ const runProjection = v.object({
       observedAt: v.number(),
       nextCheckAt: v.number(),
     }),
+    v.object({
+      state: v.literal('rejected'),
+      requestedAt: v.number(),
+      observedAt: v.number(),
+      reason: v.string(),
+    }),
   )),
   updatedAt: v.number(),
 })
@@ -2191,7 +2197,16 @@ async function readRunProjection(
               nextCheckAt: cancellationAttempt.updatedAt + 30_000,
             },
           }
-        : {}),
+        : cancellationAttempt?.state === 'rejected'
+          ? {
+              cancellationAttempt: {
+                state: 'rejected' as const,
+                requestedAt: cancellationAttempt.requestedAt,
+                observedAt: cancellationAttempt.resolvedAt ?? cancellationAttempt.updatedAt,
+                reason: cancellationAttempt.reason ?? 'provider_rejected_cancellation',
+              },
+            }
+          : {}),
     updatedAt: projection.updatedAt,
   }
 }
