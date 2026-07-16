@@ -66,6 +66,8 @@ type JourneyMetrics = {
     refreshedRouteRef: string
     staleConfirmationCreated: false
     staleExecutionStarted: false
+    restoredReason: 'choice_expired'
+    workRestarted: false
   }>
   unsupportedRecovery?: Readonly<{
     state: 'verified'
@@ -164,6 +166,8 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
       refreshedRouteRef: z.string(),
       staleConfirmationCreated: z.literal(false),
       staleExecutionStarted: z.literal(false),
+      restoredReason: z.literal('choice_expired'),
+      workRestarted: z.literal(false),
     }).optional(),
     unsupportedRecovery: z.strictObject({
       state: z.literal('verified'),
@@ -306,6 +310,8 @@ export async function runHostedCustomerRequestJourney(
           refreshedRouteRef: route.routeRef,
           staleConfirmationCreated: false,
           staleExecutionStarted: false,
+          restoredReason: 'choice_expired',
+          workRestarted: false,
         }
       }
       if (!authorityStops.includes('route_confirmation')) authorityStops.push('route_confirmation')
@@ -332,6 +338,17 @@ export async function runHostedCustomerRequestJourney(
         expiredChoice = {
           generationRef: requiredRouteGenerationRef(view),
           routeRef: route.routeRef,
+        }
+        const restoredExpired = await callObservedAgent(
+          runtimeInput, expired, 'inspect_progress', undefined, [200],
+        )
+        observe(states, restoredExpired)
+        if (restoredExpired.state !== 'needs_attention'
+          || restoredExpired.recovery?.reason !== 'choice_expired'
+          || restoredExpired.recovery.workRestarted !== false
+          || restoredExpired.confirmation !== undefined
+          || restoredExpired.navigation?.actions.some(({ relation }) => relation === 'start_confirmed_option')) {
+          throw new Error('hosted_journey_expired_restoration_not_proven')
         }
         view = await callObservedAgent(runtimeInput, expired, 'prepare_options', {
           '<unique string>': `acceptance:refresh-expired:${nonce}:${view.revision}`,

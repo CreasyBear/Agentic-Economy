@@ -310,6 +310,15 @@ describe('hosted Customer Request journey', () => {
       first,
       first,
       expired,
+      {
+        ...expired,
+        recovery: {
+          state: 'restored',
+          reason: 'choice_expired',
+          restoredAt: 4_000,
+          workRestarted: false,
+        },
+      },
       requestView('needs_attention', 2, {
         routeGenerationRef: 'generation:one',
         nextAction: 'retry',
@@ -391,6 +400,8 @@ describe('hosted Customer Request journey', () => {
       refreshedRouteRef: 'route:two',
       staleConfirmationCreated: false,
       staleExecutionStarted: false,
+      restoredReason: 'choice_expired',
+      workRestarted: false,
     })
   })
 
