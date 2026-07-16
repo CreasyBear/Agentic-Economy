@@ -2069,6 +2069,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestRef: submitted.requestRef,
     })).resolves.toMatchObject({
       kind: 'request', state: 'needs_attention', nextAction: 'retry',
+      recovery: {
+        state: 'restored',
+        reason: 'choice_expired',
+        restoredAt: expect.any(Number),
+        workRestarted: false,
+      },
       decision: {
         generationRef: submitted.routeGenerationRef,
         outcome: { kind: 'routes_expired' }, routes: [{ availability: 'expired' }],

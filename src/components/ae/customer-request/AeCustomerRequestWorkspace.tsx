@@ -325,7 +325,9 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
 
       {state.kind === 'request' && state.projection.recovery?.state === 'restored'
         ? <Card padding={3} className="mx-auto w-full max-w-4xl" aria-live="polite">
-            <Text color="secondary">AE restored the latest saved state for this Request. Checking it did not restart the work.</Text>
+            <Text color="secondary">{state.projection.recovery.reason === 'choice_expired'
+              ? 'AE restored this Request. The earlier choice expired, so no work was authorized or restarted.'
+              : 'AE restored the latest saved state for this Request. Checking it did not restart the work.'}</Text>
           </Card>
         : null}
 

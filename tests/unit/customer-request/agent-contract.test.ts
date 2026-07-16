@@ -66,6 +66,7 @@ describe('Customer Request agent contract', () => {
       options: [],
       recovery: {
         state: 'restored',
+        reason: 'choice_expired',
         restoredAt: 4_000,
         workRestarted: false,
       },
@@ -73,6 +74,7 @@ describe('Customer Request agent contract', () => {
 
     expect(resumed.recovery).toEqual({
       state: 'restored',
+      reason: 'choice_expired',
       restoredAt: 4_000,
       workRestarted: false,
     })

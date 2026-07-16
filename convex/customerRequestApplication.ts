@@ -482,6 +482,7 @@ const customerView = v.object({
   })),
   recovery: v.optional(v.object({
     state: v.literal('restored'),
+    reason: v.optional(v.union(v.literal('request_restored'), v.literal('choice_expired'))),
     restoredAt: v.number(),
     workRestarted: v.literal(false),
   })),
@@ -3076,7 +3077,12 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
       safeNextAction: activity.safeNextAction,
       ...(activity.nextCheckAt === undefined ? {} : { nextCheckAt: activity.nextCheckAt }),
     } }),
-    ...(recovery === undefined ? {} : { recovery: { ...recovery } }),
+    ...(recovery === undefined ? {} : { recovery: {
+      state: recovery.state,
+      restoredAt: recovery.restoredAt,
+      workRestarted: recovery.workRestarted,
+      ...(recovery.reason === undefined ? {} : { reason: recovery.reason }),
+    } }),
     ...(decision === undefined ? {} : {
       decision: writableClone(decision),
     }),
@@ -3104,6 +3110,9 @@ function withRestoredRequest(result: ActionResult, restoredAt: number): ActionRe
     ...result,
     recovery: {
       state: 'restored',
+      reason: result.decision?.outcome.kind === 'routes_expired'
+        ? 'choice_expired'
+        : 'request_restored',
       restoredAt,
       workRestarted: false,
     },

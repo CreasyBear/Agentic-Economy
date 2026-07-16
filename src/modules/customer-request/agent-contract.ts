@@ -622,6 +622,7 @@ export const customerRequestViewSchema = z.strictObject({
   }).optional(),
   recovery: z.strictObject({
     state: z.literal('restored'),
+    reason: z.enum(['request_restored', 'choice_expired']).optional(),
     restoredAt: safeNonnegativeInteger,
     workRestarted: z.literal(false),
   }).optional(),

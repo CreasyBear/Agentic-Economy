@@ -44,7 +44,10 @@ describe('customer Request workspace', () => {
     } as const
     const restoredProjection = {
       ...projection,
-      recovery: { state: 'restored', restoredAt: 4_000, workRestarted: false },
+      recovery: {
+        state: 'restored', reason: 'request_restored',
+        restoredAt: 4_000, workRestarted: false,
+      },
     } as const
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(Response.json(projection))
@@ -1078,6 +1081,41 @@ describe('customer Request workspace', () => {
     expect(await screen.findByText('Current way forward 1')).toBeTruthy()
     expect(screen.getByText('Expired way forward')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Check current options' })).toBeTruthy()
+  })
+
+  it('explains an expired choice after reload without implying authority or restarted work', async () => {
+    localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({ requestRef: 'request:expired' }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:expired', revision: 2,
+      routeGenerationRef: 'generation:expired', state: 'needs_attention',
+      summary: 'These ways forward have expired.', nextAction: 'retry',
+      missingFields: [], criteria: [], options: [],
+      recovery: {
+        state: 'restored', reason: 'choice_expired',
+        restoredAt: 4_000, workRestarted: false,
+      },
+      decision: {
+        generationRef: 'generation:expired', requestRevision: 2,
+        outcome: { kind: 'routes_expired', routeCount: 1, summary: 'These ways forward have expired.' },
+        routes: [routeChoice('route:expired', 'expired')],
+        comparison: {
+          kind: 'unranked', reason: 'stale_evidence',
+          summary: 'The earlier information is no longer current.',
+        },
+        changes: { kind: 'initial' },
+        nextBoundary: { kind: 'confirmation', authorityCreated: false },
+      },
+    })))
+
+    render(<AeCustomerRequestWorkspace />)
+
+    expect(await screen.findByText(
+      'AE restored this Request. The earlier choice expired, so no work was authorized or restarted.',
+    )).toBeTruthy()
+    expect(screen.getByText('Your Request is preserved. Check again to rebuild the available ways forward from current business information.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check current options' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Confirm this choice' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Start now' })).toBeNull()
   })
 
   it('turns a decision conflict into an explicit resume action', async () => {
