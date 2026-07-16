@@ -24,6 +24,7 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   await expect(page.locator('main')).toContainText('$10.00')
   const decisionText = await page.locator('main').innerText()
   expect(decisionText).not.toMatch(/capabilityId|bindingId|offeringId|RoutePlan|RouteMandate|transport|MCP|x402|graph node/u)
+  expect(decisionText).not.toContain('[object Object]')
 
   await page.getByRole('button', { name: /^Review /u }).first().click()
   await page.getByRole('button', { name: 'Confirm this choice' }).click()
