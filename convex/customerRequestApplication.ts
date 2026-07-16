@@ -440,7 +440,10 @@ const customerView = v.object({
     }),
   })),
   activity: v.optional(v.object({
-    actor: v.literal('ae_for_customer'),
+    actor: v.union(
+      v.literal('ae'), v.literal('business'), v.literal('customer'),
+      v.literal('none'), v.literal('ae_for_customer'),
+    ),
     certainty: v.union(
       v.literal('pending'), v.literal('unknown'), v.literal('confirmed'),
       v.literal('failed'), v.literal('cancelled'),

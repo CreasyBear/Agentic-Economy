@@ -407,7 +407,7 @@ export function projectRouteProgress(input: Readonly<{
       current: { ...input.current },
     },
     activity: {
-      actor: 'ae_for_customer', certainty: 'pending', updatedAt: input.updatedAt,
+      actor: progressActor(input.current.state), certainty: 'pending', updatedAt: input.updatedAt,
       nextCheckAt: input.updatedAt + 30_000, retry: 'not_needed',
       cancellation: input.cancellationAvailable ? 'available_before_next_step' : 'too_late_or_unsupported',
       safeNextAction: 'check_progress',
@@ -428,7 +428,7 @@ export function projectRouteCancelled(input: Readonly<{
     summary: 'This request was stopped before the next business step began.',
     nextAction: 'revise_request',
     activity: {
-      actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: input.updatedAt ?? 0,
+      actor: 'none', certainty: 'cancelled', updatedAt: input.updatedAt ?? 0,
       retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
     },
   })
@@ -475,7 +475,7 @@ export function projectCustomerActionStatus(input: Readonly<{
     },
     ...(input.routeProgress === undefined ? {} : { progress: terminalRouteProgress(input.routeProgress) }),
     activity: {
-      actor: 'ae_for_customer', certainty: 'unknown', updatedAt: input.status.observedAt,
+      actor: 'ae', certainty: 'unknown', updatedAt: input.status.observedAt,
       nextCheckAt: input.status.observedAt + 30_000, retry: 'blocked_until_reconciled',
       cancellation: 'too_late_or_unsupported', safeNextAction: 'wait_for_evidence',
     },
@@ -493,7 +493,7 @@ export function projectCustomerActionStatus(input: Readonly<{
       result: structuredClone(input.status.result), observedAt: input.status.resolvedAt,
     },
     activity: {
-      actor: 'ae_for_customer', certainty: 'confirmed', updatedAt: input.status.resolvedAt,
+      actor: 'none', certainty: 'confirmed', updatedAt: input.status.resolvedAt,
       retry: 'not_needed', cancellation: 'complete', safeNextAction: 'review_result',
     },
   })
@@ -515,10 +515,18 @@ export function projectCustomerActionStatus(input: Readonly<{
     },
     ...(input.routeProgress === undefined ? {} : { progress: terminalRouteProgress(input.routeProgress) }),
     activity: {
-      actor: 'ae_for_customer', certainty: 'failed', updatedAt: input.status.resolvedAt,
+      actor: 'customer', certainty: 'failed', updatedAt: input.status.resolvedAt,
       retry: 'manual_after_failure', cancellation: 'complete', safeNextAction: 'revise_request',
     },
   })
+}
+
+function progressActor(
+  state: 'queued' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention',
+): 'ae' | 'business' | 'customer' {
+  if (state === 'awaiting_result') return 'business'
+  if (state === 'needs_attention') return 'customer'
+  return 'ae'
 }
 
 function terminalRouteProgress(progress: Readonly<{ completed: number; total: number; currentStep: number }>) {

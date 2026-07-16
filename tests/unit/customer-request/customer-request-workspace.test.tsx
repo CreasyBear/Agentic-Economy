@@ -946,6 +946,45 @@ describe('customer Request workspace', () => {
     expect(await screen.findByText('Through Sandbox Route Resolver and Sandbox Route Quoter')).toBeTruthy()
   })
 
+  it('shows who must act next during progress and unknown-outcome recovery', async () => {
+    localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
+      requestRef: 'request:responsibility',
+    }))
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        kind: 'request', requestRef: 'request:responsibility', revision: 1,
+        state: 'in_progress', summary: 'Your request is in progress.', nextAction: 'wait',
+        missingFields: [], criteria: [], options: [],
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'awaiting_result' } },
+        activity: {
+          actor: 'business', certainty: 'pending', updatedAt: 10, nextCheckAt: 40,
+          retry: 'not_needed', cancellation: 'too_late_or_unsupported', safeNextAction: 'check_progress',
+        },
+      }))
+      .mockResolvedValueOnce(Response.json({
+        kind: 'request', requestRef: 'request:responsibility', revision: 1,
+        state: 'outcome_unknown',
+        summary: 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.',
+        nextAction: 'wait', missingFields: [], criteria: [], options: [],
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'needs_attention' } },
+        action: {
+          state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false, observedAt: 10,
+        },
+        activity: {
+          actor: 'ae', certainty: 'unknown', updatedAt: 10, nextCheckAt: 40,
+          retry: 'blocked_until_reconciled', cancellation: 'too_late_or_unsupported',
+          safeNextAction: 'wait_for_evidence',
+        },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<AeCustomerRequestWorkspace />)
+
+    expect(await screen.findByText('Waiting on the business')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check progress' }))
+    expect(await screen.findByText('AE is checking for evidence')).toBeTruthy()
+  })
+
   it('does not present an expired route as a current choice in a mixed generation', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-mixed-expiry' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({

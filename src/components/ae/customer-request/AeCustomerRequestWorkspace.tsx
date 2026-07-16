@@ -701,6 +701,9 @@ function RouteProgressCard({ projection, turns, refresh, cancel, edit, restart }
         <Heading level={2}>{projection.summary}</Heading>
         <Text weight="semibold">Step {progress.current.step} of {progress.total}</Text>
         <Text color="secondary">{stateLabel}</Text>
+        {projection.activity === undefined ? null : <Text weight="semibold">
+          {activityResponsibility(projection.activity.actor, projection.activity.certainty)}
+        </Text>}
         <Text type="supporting" color="secondary">{progress.completed} of {progress.total} steps completed. Rechecking will not send the work again.</Text>
         <Text type="supporting" color="secondary">AE is acting only within the choice you confirmed.</Text>
         <div className="flex flex-wrap gap-3">
@@ -1001,6 +1004,9 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
         </Text>
         <Heading level={2}>{projection.summary}</Heading>
         <Text color="secondary">{explanation}</Text>
+        {projection.activity === undefined ? null : <Text weight="semibold">
+          {activityResponsibility(projection.activity.actor, projection.activity.certainty)}
+        </Text>}
         {projection.businesses === undefined ? null : <Text color="secondary">
           Through {businessList(projection.businesses.map(({ name }) => name))}
         </Text>}
@@ -1032,6 +1038,20 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
     </Card>
   </section>
 }
+
+function activityResponsibility(
+  actor: NonNullable<CustomerRequestView['activity']>['actor'],
+  certainty: NonNullable<CustomerRequestView['activity']>['certainty'],
+): string {
+  if (actor === 'business') {
+    return certainty === 'unknown' ? 'Waiting on the business for evidence' : 'Waiting on the business'
+  }
+  if (actor === 'customer') return 'Waiting on you'
+  if (actor === 'none') return 'No action is required'
+  if (certainty === 'unknown') return 'AE is checking for evidence'
+  return 'AE is handling the next step'
+}
+
 function RequestRecordLinks({ requestRef }: { requestRef: string }) {
   const [reporting, setReporting] = useState(false)
   const [summary, setSummary] = useState('')

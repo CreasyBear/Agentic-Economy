@@ -1,8 +1,31 @@
 import { describe, expect, it } from 'vitest'
 
-import { projectCustomerActionStatus } from '@/modules/customer-request/customer-projection'
+import {
+  projectCustomerActionStatus,
+  projectRouteCancelled,
+  projectRouteProgress,
+} from '@/modules/customer-request/customer-projection'
 
 describe('customer action status projection', () => {
+  it('names who must act next without exposing execution machinery', () => {
+    const progress = (state: 'queued' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention') => (
+      projectRouteProgress({
+        requestRef: 'request:one', revision: 1, generationRef: 'generation:one',
+        completed: 0, total: 2, current: { step: 1, state },
+        updatedAt: 10, cancellationAvailable: true,
+      })
+    )
+
+    expect(progress('queued').activity).toMatchObject({ actor: 'ae' })
+    expect(progress('contacting').activity).toMatchObject({ actor: 'ae' })
+    expect(progress('awaiting_result').activity).toMatchObject({ actor: 'business' })
+    expect(progress('validating_result').activity).toMatchObject({ actor: 'ae' })
+    expect(progress('needs_attention').activity).toMatchObject({ actor: 'customer' })
+    expect(projectRouteCancelled({
+      requestRef: 'request:one', revision: 1, updatedAt: 11,
+    }).activity).toMatchObject({ actor: 'none' })
+  })
+
   it('makes unknown, reconciled completion, provider failure, and a not-sent failure legible', () => {
     const common = {
       requestRef: 'request:one', revision: 1, criteria: [],
@@ -18,6 +41,7 @@ describe('customer action status projection', () => {
       businesses: [{ name: 'Business One' }],
       action: { state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false },
       progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+      activity: { actor: 'ae' },
     })
     expect(projectCustomerActionStatus({
       ...common,
@@ -37,6 +61,7 @@ describe('customer action status projection', () => {
         { name: 'Sandbox Route Quoter' },
       ],
       action: { state: 'completed', resolution: 'reconciled', result: { confirmation: 'booked' } },
+      activity: { actor: 'none' },
     })
     const failed = projectCustomerActionStatus({
       ...common,
@@ -49,6 +74,7 @@ describe('customer action status projection', () => {
       state: 'failed', nextAction: 'revise_request',
       businesses: [{ name: 'Business One' }],
       action: { state: 'failed', resolution: 'reconciled', result: { recoveryCode: 'not_available' } },
+      activity: { actor: 'customer' },
     })
     expect(projectCustomerActionStatus({
       ...common,

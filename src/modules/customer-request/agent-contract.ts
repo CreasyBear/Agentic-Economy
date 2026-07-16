@@ -586,7 +586,7 @@ export const customerRequestViewSchema = z.strictObject({
     }).strict(),
   }).strict().optional(),
   activity: z.strictObject({
-    actor: z.literal('ae_for_customer'),
+    actor: z.enum(['ae', 'business', 'customer', 'none', 'ae_for_customer']),
     certainty: z.enum(['pending', 'unknown', 'confirmed', 'failed', 'cancelled']),
     updatedAt: safeNonnegativeInteger,
     nextCheckAt: safeNonnegativeInteger.optional(),

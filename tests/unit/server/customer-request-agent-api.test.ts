@@ -212,7 +212,7 @@ describe('agent-native customer Request API', () => {
         automaticRetry: false as const, observedAt: 1_000,
       },
       activity: {
-        actor: 'ae_for_customer' as const, certainty: 'unknown' as const, updatedAt: 1_000,
+        actor: 'ae' as const, certainty: 'unknown' as const, updatedAt: 1_000,
         nextCheckAt: 31_000, retry: 'blocked_until_reconciled' as const,
         cancellation: 'too_late_or_unsupported' as const, safeNextAction: 'wait_for_evidence' as const,
       },
@@ -226,7 +226,9 @@ describe('agent-native customer Request API', () => {
       state: 'outcome_unknown',
       progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
       action: { state: 'unknown', automaticRetry: false },
-      activity: { retry: 'blocked_until_reconciled', safeNextAction: 'wait_for_evidence' },
+      activity: {
+        actor: 'ae', retry: 'blocked_until_reconciled', safeNextAction: 'wait_for_evidence',
+      },
       navigation: { actions: [
         { relation: 'inspect_progress', method: 'GET' },
         { relation: 'inspect_evidence', method: 'GET' },
