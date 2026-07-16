@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test'
 
+import {
+  customerRequestAgentResultSchema,
+  customerRequestEvidenceResultSchema,
+} from '@/modules/customer-request/agent-contract'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
+
 import { applyVercelProtectionBypassToPage } from './vercel-bypass'
 
 const baseUrl = productionBaseUrl()
@@ -7,28 +14,41 @@ const requestText = process.env.AE_CUSTOMER_REQUEST_TEXT?.trim()
   || 'Find a labelled sandbox service and tell me what it costs.'
 const expectedBusinesses = expectedBusinessNames()
 const finish = expectedFinish()
+const existingRequestRef = process.env.AE_CUSTOMER_REQUEST_EXISTING_REF?.trim()
 
 test('a cold human browser executes and resumes the Request lifecycle', async ({ page }) => {
   test.setTimeout(180_000)
   await applyVercelProtectionBypassToPage(page, baseUrl)
+  const sessionToken = process.env.AE_CUSTOMER_REQUEST_HUMAN_SESSION_TOKEN?.trim()
+  if (sessionToken !== undefined && sessionToken.length > 0) {
+    await page.context().setExtraHTTPHeaders({ Authorization: `Bearer ${sessionToken}` })
+  }
+  if (existingRequestRef !== undefined && existingRequestRef.length > 0) {
+    const requestRef = existingRequestRef
+    await page.addInitScript(({ key, requestRef }) => {
+      localStorage.setItem(key, JSON.stringify({ requestRef }))
+    }, { key: 'ae.customer-request.active:v1', requestRef })
+  }
   await page.goto(new URL('/engine', baseUrl).href, { waitUntil: 'networkidle' })
 
-  await expect(page.getByRole('heading', { level: 1, name: 'What can we help you find?' })).toBeVisible()
-  await page.getByLabel('What are you looking for?').fill(requestText)
-  await page.getByRole('button', { name: 'Explore' }).click()
-  await reachComparableChoice(page)
+  if (existingRequestRef === undefined || existingRequestRef.length === 0) {
+    await expect(page.getByRole('heading', { level: 1, name: 'What can we help you find?' })).toBeVisible()
+    await page.getByLabel('What are you looking for?').fill(requestText)
+    await page.getByRole('button', { name: 'Explore' }).click()
+    await reachComparableChoice(page)
 
-  for (const business of expectedBusinesses) {
-    await expect(page.locator('main')).toContainText(business)
+    for (const business of expectedBusinesses) {
+      await expect(page.locator('main')).toContainText(business)
+    }
+    await expect(page.locator('main')).toContainText('$10.00')
+    const decisionText = await page.locator('main').innerText()
+    expect(decisionText).not.toMatch(/capabilityId|bindingId|offeringId|RoutePlan|RouteMandate|transport|MCP|x402|graph node/u)
+    expect(decisionText).not.toContain('[object Object]')
+
+    await page.getByRole('button', { name: /^Review /u }).first().click()
+    await page.getByRole('button', { name: 'Confirm this choice' }).click()
+    await page.getByRole('button', { name: 'Start now' }).click()
   }
-  await expect(page.locator('main')).toContainText('$10.00')
-  const decisionText = await page.locator('main').innerText()
-  expect(decisionText).not.toMatch(/capabilityId|bindingId|offeringId|RoutePlan|RouteMandate|transport|MCP|x402|graph node/u)
-  expect(decisionText).not.toContain('[object Object]')
-
-  await page.getByRole('button', { name: /^Review /u }).first().click()
-  await page.getByRole('button', { name: 'Confirm this choice' }).click()
-  await page.getByRole('button', { name: 'Start now' }).click()
   if (finish === 'outcome_unknown') {
     await proveUnknownOutcomeRecovery(page)
     return
@@ -36,6 +56,9 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   await waitForCompletedResult(page)
 
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible()
+  for (const business of expectedBusinesses) {
+    await expect(page.locator('main')).toContainText(business)
+  }
   await expect(page.getByText(/sandbox-quote:/u)).toBeVisible()
   await proveInlineActivityRecord(page, 'completed')
   const requestRef = await page.evaluate(() => {
@@ -44,7 +67,7 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
       ? String(stored.requestRef)
       : undefined
   })
-  expect(requestRef).toMatch(/^request:/u)
+  expect(requestRef).toMatch(/^(?:request|acceptance):/u)
 
   await page.reload({ waitUntil: 'networkidle' })
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
@@ -52,7 +75,33 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   expect(await page.locator('main').innerText()).not.toMatch(
     /capabilityId|bindingId|offeringId|RoutePlan|RouteMandate|transport|MCP|x402|graph node/u,
   )
+  await emitHumanObservation(page, requestRef as string)
 })
+
+async function emitHumanObservation(
+  page: import('@playwright/test').Page,
+  requestRef: string,
+): Promise<void> {
+  const [viewResponse, evidenceResponse] = await Promise.all([
+    page.request.get(new URL(`/api/requests/${encodeURIComponent(requestRef)}`, baseUrl).href),
+    page.request.get(new URL(`/api/requests/${encodeURIComponent(requestRef)}/evidence`, baseUrl).href),
+  ])
+  const view = customerRequestAgentResultSchema.parse(await viewResponse.json())
+  const evidence = customerRequestEvidenceResultSchema.parse(await evidenceResponse.json())
+  if (!viewResponse.ok() || view.kind !== 'request' || view.state !== 'completed'
+    || !evidenceResponse.ok() || evidence.kind !== 'evidence' || evidence.state !== 'completed'
+    || evidence.result === undefined) {
+    throw new Error('hosted_human_journey_parity_observation_incomplete')
+  }
+  process.stdout.write(`AE_HUMAN_REQUEST_OBSERVATION ${JSON.stringify({
+    requestRef: view.requestRef,
+    revision: view.revision,
+    state: view.state,
+    evidenceState: evidence.state,
+    resultDigest: canonicalDigest(evidence.result as StableHashValue),
+    resumedAfterReload: true,
+  })}\n`)
+}
 
 async function proveUnknownOutcomeRecovery(page: import('@playwright/test').Page): Promise<void> {
   for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -118,7 +167,7 @@ async function activeRequestRef(page: import('@playwright/test').Page): Promise<
       ? String(stored.requestRef)
       : undefined
   })
-  expect(requestRef).toMatch(/^request:/u)
+  expect(requestRef).toMatch(/^(?:request|acceptance):/u)
   return requestRef as string
 }
 

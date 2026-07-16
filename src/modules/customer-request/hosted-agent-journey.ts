@@ -87,7 +87,8 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
   ])),
   authorityStops: z.array(z.literal('route_confirmation')),
   final: z.object({
-    requestRef: z.string(), state: z.enum(['cancelled', 'completed', 'outcome_unknown']), selectedBusiness: z.string(),
+    requestRef: z.string(), revision: z.number().int().nonnegative(),
+    state: z.enum(['cancelled', 'completed', 'outcome_unknown']), selectedBusiness: z.string(),
     selectedBusinesses: z.array(z.string()).min(1), stepCount: z.number().int().positive(),
     runState: z.enum(['in_progress', 'completed', 'cancelled', 'outcome_unknown']),
     evidenceState: z.enum(['queued', 'running', 'completed', 'cancelled', 'outcome_unknown']),
@@ -293,7 +294,7 @@ export async function runHostedCustomerRequestJourney(
         input: { request: input.scenario.request, facts: consumedFacts, messages: consumedMessages },
         observedStates: states, authorityStops,
         final: {
-          requestRef, state: resumed.state, selectedBusiness, selectedBusinesses,
+          requestRef, revision: resumed.revision, state: resumed.state, selectedBusiness, selectedBusinesses,
           stepCount: route.stepCount, runState: 'cancelled',
           evidenceState: evidence.state, problemState: problem.state, resumedState: resumed.state,
         },
@@ -381,7 +382,8 @@ async function outcomeUnknownHostedJourney(input: Readonly<{
     input: { request: input.input.scenario.request, facts: input.consumedFacts, messages: input.consumedMessages },
     observedStates: input.states, authorityStops: input.authorityStops,
     final: {
-      requestRef: input.requestRef, state: resumed.state, selectedBusiness: input.selectedBusiness,
+      requestRef: input.requestRef, revision: resumed.revision,
+      state: resumed.state, selectedBusiness: input.selectedBusiness,
       selectedBusinesses: input.selectedBusinesses, stepCount: input.route.stepCount,
       runState: 'outcome_unknown', evidenceState: evidence.state, problemState: problem.state,
       resumedState: resumed.state, completedSteps: resumed.progress.completed, automaticRetry: false,
@@ -438,7 +440,8 @@ async function completeHostedJourney(input: Readonly<{
     },
     observedStates: input.states, authorityStops: input.authorityStops,
     final: {
-      requestRef: input.requestRef, state: resumed.state, selectedBusiness: input.selectedBusiness,
+      requestRef: input.requestRef, revision: resumed.revision,
+      state: resumed.state, selectedBusiness: input.selectedBusiness,
       selectedBusinesses: input.selectedBusinesses, stepCount: input.route.stepCount,
       runState: 'completed', evidenceState: evidence.state,
       problemState: 'not_reported', resumedState: resumed.state,

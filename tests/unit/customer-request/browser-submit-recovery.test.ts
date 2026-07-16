@@ -18,6 +18,20 @@ describe('browser Request submit recovery', () => {
     expect(sleep).toHaveBeenCalledOnce()
   })
 
+  it('retries a transient uncommitted Request response with the identical submit command', async () => {
+    const send = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ error: 'request_unavailable' }, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ kind: 'request', requestRef: 'request:one' }))
+    const sleep = vi.fn(async () => undefined)
+    const init = { method: 'POST', body: JSON.stringify({ idempotencyKey: 'submit:one' }) }
+
+    const response = await fetchBrowserRequestWithInterpreterRecovery('/api/requests', init, { send, sleep })
+
+    expect(response.status).toBe(200)
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(send.mock.calls[0]).toEqual(send.mock.calls[1])
+  })
+
   it('does not retry authentication, validation, or unknown server failures', async () => {
     for (const response of [
       Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401 }),
