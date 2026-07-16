@@ -125,6 +125,10 @@ const getResult = v.union(
   v.object({ kind: v.literal('revoked'), policy: standingRoutePolicyValue }),
   v.object({ kind: v.literal('not_found') }),
 )
+const resolvePermissionResult = v.union(
+  v.object({ kind: v.literal('found'), policy: standingRoutePolicyValue }),
+  v.object({ kind: v.literal('not_found') }),
+)
 const revokeResult = v.union(
   v.object({ kind: v.literal('revoked'), policy: standingRoutePolicyValue }),
   v.object({ kind: v.literal('replayed'), policy: standingRoutePolicyValue }),
@@ -568,6 +572,30 @@ export const get = internalQuery({
   },
 })
 
+export const resolvePermission = internalQuery({
+  args: { requestId: v.string(), permissionRef: v.string() },
+  returns: resolvePermissionResult,
+  handler: async (ctx, args) => {
+    const authenticated = await authenticateRequestOwner(ctx, args.requestId)
+    if (authenticated.kind !== 'authenticated') return { kind: 'not_found' as const }
+    const rows = await ctx.db.query('customerRequestStandingRoutePolicyIssues')
+      .withIndex('by_requestId_and_recordedAt', (query) => query.eq('requestId', args.requestId))
+      .order('desc')
+      .take(513)
+    if (rows.length > 512) throw new Error('customer_request_standing_route_policy_history_overflow')
+    const row = rows.find((candidate) => (
+      candidate.principalId === authenticated.principalId
+      && repeatPermissionRef(candidate.policyRef) === args.permissionRef
+    ))
+    if (row === undefined) return { kind: 'not_found' as const }
+    const policy = domainPolicy(row.policy)
+    if (!validStoredPolicy(row, policy, args.requestId)) {
+      throw new Error('customer_request_standing_route_policy_integrity_failure')
+    }
+    return { kind: 'found' as const, policy: writablePolicy(policy) }
+  },
+})
+
 export const revoke = internalMutation({
   args: {
     requestId: v.string(),
@@ -755,4 +783,8 @@ function validMoney(value: Readonly<{ currency: string; amountMinor: number }>):
   return value.currency.trim().length > 0
     && Number.isSafeInteger(value.amountMinor)
     && value.amountMinor >= 0
+}
+
+function repeatPermissionRef(policyRef: string): string {
+  return `repeat-permission:${canonicalDigest({ policyRef })}`
 }

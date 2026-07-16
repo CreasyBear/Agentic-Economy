@@ -504,6 +504,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(permission, JSON.stringify(permission)).toMatchObject({
       kind: 'repeat_permission',
       status: 'active',
+      permissionRef: expect.stringMatching(/^repeat-permission:sha256:/u),
       requestRef: compared.requestRef,
       revision: compared.revision,
       routeRef: displayedRoute.routeRef,
@@ -538,6 +539,32 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       validUntil: displayedRoute.validUntil,
       idempotencyKey: 'allow-repeat:customer',
     })).resolves.toEqual(permission)
+    const confirmed = await admin.action(api.customerRequestApplication.useRepeatRoute, {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: displayedRoute.routeRef,
+      permissionRef: permission.permissionRef,
+      delegatedCredentialId: permission.delegatedCredentialId,
+      idempotencyKey: 'use-repeat:customer',
+    })
+    expect(confirmed).toMatchObject({
+      kind: 'request',
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      state: 'route_confirmed',
+      confirmation: { route: displayedRoute },
+    })
+    expect(JSON.stringify(confirmed)).not.toMatch(
+      /policyRef|policyDigest|mandate|capabilityId|bindingId|offeringId|graph/u,
+    )
+    await expect(admin.action(api.customerRequestApplication.useRepeatRoute, {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: displayedRoute.routeRef,
+      permissionRef: permission.permissionRef,
+      delegatedCredentialId: permission.delegatedCredentialId,
+      idempotencyKey: 'use-repeat:customer',
+    })).resolves.toEqual(confirmed)
   })
 
   it('starts the confirmed choice through one customer command and replays one durable run', async () => {

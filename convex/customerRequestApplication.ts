@@ -535,6 +535,7 @@ const repeatPermissionResult = v.union(
   v.object({
     kind: v.literal('repeat_permission'),
     status: v.literal('active'),
+    permissionRef: v.string(),
     requestRef: v.string(),
     revision: v.number(),
     routeRef: v.string(),
@@ -1035,6 +1036,7 @@ export const allowRepeatRoute = action({
       return {
         kind: 'repeat_permission',
         status: 'active',
+        permissionRef: repeatPermissionRef(result.policy.policyRef),
         requestRef: args.requestRef,
         revision: args.revision,
         routeRef: args.routeRef,
@@ -1065,6 +1067,93 @@ export const allowRepeatRoute = action({
         ? 'That assistant is not authorized for repeat permission.'
         : 'Repeat permission is not available for this choice.',
     }
+  },
+})
+
+export const useRepeatRoute = action({
+  args: {
+    requestRef: v.string(),
+    revision: v.number(),
+    routeRef: v.string(),
+    permissionRef: v.string(),
+    delegatedCredentialId: v.string(),
+    idempotencyKey: v.string(),
+  },
+  returns: actionResult,
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const command = {
+      requestRef: args.requestRef,
+      revision: args.revision,
+      routeRef: args.routeRef,
+      permissionRef: args.permissionRef,
+      delegatedCredentialId: args.delegatedCredentialId,
+      idempotencyKey: args.idempotencyKey,
+    }
+    const caller = await resolveRequestCaller(ctx, 'use_repeat', command, undefined)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    if (current.aggregate.snapshot.revision !== args.revision) {
+      return { kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed' }
+    }
+    const preview = await projectCurrentRoutePlans(ctx, current.aggregate)
+    if (preview.kind !== 'request' || preview.decision?.outcome.kind !== 'routes_available') return preview
+    const displayedRoute = preview.decision.routes.find(({ routeRef }) => routeRef === args.routeRef)
+    if (displayedRoute?.availability !== 'current') return preview
+    const routeReadback: Readonly<
+      | { kind: 'found'; routeGeneration: StoredRouteGeneration }
+      | { kind: 'not_found' }
+    > = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanGeneration, {
+      requestId: args.requestRef,
+    })
+    const selectedRoute = routeReadback.kind === 'found'
+      ? routeReadback.routeGeneration.routes.find(({ routePlanId }) => (
+          customerRouteRef(preview.decision?.generationRef ?? '', routePlanId) === args.routeRef
+        ))
+      : undefined
+    if (selectedRoute === undefined) return preview
+    const permission = await ctx.runQuery(
+      internal.customerRequestStandingRoutePolicy.resolvePermission,
+      { requestId: args.requestRef, permissionRef: args.permissionRef },
+    )
+    if (permission.kind !== 'found'
+      || permission.policy.delegatedCredentialId !== args.delegatedCredentialId
+      || permission.policy.generationRef !== preview.decision.generationRef
+      || permission.policy.routes[0]?.routePlanId !== selectedRoute.routePlanId) {
+      return writableView(projectNeedsAttention({
+        requestRef: args.requestRef,
+        revision: args.revision,
+        summary: 'This repeat permission does not apply to the current choice.',
+      }))
+    }
+    const result = await ctx.runMutation(internal.customerRequestStandingRoutePolicy.issueMandate, {
+      requestId: args.requestRef,
+      policyRef: permission.policy.policyRef,
+      expectedPolicyDigest: permission.policy.policyDigest,
+      expectedRequestRevision: args.revision,
+      expectedGenerationRef: preview.decision.generationRef,
+      selectedRoutePlanId: selectedRoute.routePlanId,
+      delegatedCredentialId: args.delegatedCredentialId,
+      mandateExpiresAt: Math.min(displayedRoute.validUntil, permission.policy.validUntil),
+      idempotencyKey: args.idempotencyKey,
+    })
+    if (result.kind === 'issued' || result.kind === 'replayed') {
+      return projectConfirmedRoute(current.aggregate, displayedRoute, result.mandate)
+    }
+    if (result.kind === 'conflict') {
+      return result.reason === 'command_changed'
+        ? { kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused' }
+        : { kind: 'conflict', requestRef: args.requestRef, reason: 'options_changed' }
+    }
+    return writableView(projectNeedsAttention({
+      requestRef: args.requestRef,
+      revision: args.revision,
+      summary: result.reason === 'policy_revoked'
+        ? 'Repeat permission was withdrawn. Ask for confirmation before continuing.'
+        : 'Repeat permission cannot be used for this choice. Ask for confirmation before continuing.',
+    }))
   },
 })
 
@@ -3445,7 +3534,7 @@ type RequestCaller = Readonly<{
 
 async function resolveRequestCaller(
   ctx: ActionCtx,
-  operation: 'submit' | 'compare' | 'confirm' | 'allow_repeat' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence' | 'authorize' | 'resume' | 'facts' | 'refine',
+  operation: 'submit' | 'compare' | 'confirm' | 'allow_repeat' | 'use_repeat' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence' | 'authorize' | 'resume' | 'facts' | 'refine',
   command: Record<string, unknown>,
   assertion: ServiceAssertion | undefined,
   delegatedAgentId?: string,
@@ -3505,6 +3594,10 @@ async function resolveRequestCaller(
     principalId: assertion.principalId,
     delegatedAgentId: assertion.principalId,
   }
+}
+
+function repeatPermissionRef(policyRef: string): string {
+  return `repeat-permission:${canonicalDigest({ policyRef })}`
 }
 
 function customerProgressState(
