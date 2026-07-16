@@ -37,19 +37,19 @@ describe('labelled sandbox V2 capability supply', () => {
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
 
     expect(result.sandboxRouteBindings).toEqual([
-      'binding:sandbox-route-resolver:http-json:v4',
-      'binding:sandbox-route-quoter:http-json:v4',
+      'binding:sandbox-route-resolver:http-json:v5',
+      'binding:sandbox-route-quoter:http-json:v5',
     ])
     const bindings = await backend.run((ctx) => ctx.db.query('capabilityTransportBindings').collect())
     expect(bindings.filter(({ bindingId }) => bindingId.startsWith('binding:sandbox-route-')).map((binding) => ({
       bindingId: binding.bindingId, endpointUrl: binding.endpointUrl,
     }))).toEqual([
       {
-        bindingId: 'binding:sandbox-route-resolver:http-json:v4',
+        bindingId: 'binding:sandbox-route-resolver:http-json:v5',
         endpointUrl: 'https://resolver.test.example/api/sandbox/providers/route-resolver',
       },
       {
-        bindingId: 'binding:sandbox-route-quoter:http-json:v4',
+        bindingId: 'binding:sandbox-route-quoter:http-json:v5',
         endpointUrl: 'https://quoter.test.example/api/sandbox/providers/route-quoter',
       },
     ])
@@ -85,12 +85,12 @@ describe('labelled sandbox V2 capability supply', () => {
         'offering:sandbox-option-two:reference-lookup:v3',
       ],
       sandboxRouteBindings: [
-        'binding:sandbox-route-resolver:http-json:v4',
-        'binding:sandbox-route-quoter:http-json:v4',
+        'binding:sandbox-route-resolver:http-json:v5',
+        'binding:sandbox-route-quoter:http-json:v5',
       ],
       sandboxRoutePublicationRefs: [
-        'offering:sandbox-route-resolver:reference-resolve:v4',
-        'offering:sandbox-route-quoter:service-quote:v4',
+        'offering:sandbox-route-resolver:reference-resolve:v5',
+        'offering:sandbox-route-quoter:service-quote:v5',
       ],
     })
     const bindings = await backend.run((ctx) => ctx.db.query('capabilityTransportBindings').collect())
@@ -104,11 +104,11 @@ describe('labelled sandbox V2 capability supply', () => {
       bindingId: binding.bindingId, endpointUrl: binding.endpointUrl,
     }))).toEqual([
       {
-        bindingId: 'binding:sandbox-route-resolver:http-json:v4',
+        bindingId: 'binding:sandbox-route-resolver:http-json:v5',
         endpointUrl: 'https://agentic-economy-phi.vercel.app/api/sandbox/providers/route-resolver',
       },
       {
-        bindingId: 'binding:sandbox-route-quoter:http-json:v4',
+        bindingId: 'binding:sandbox-route-quoter:http-json:v5',
         endpointUrl: 'https://agentic-economy-phi.vercel.app/api/sandbox/providers/route-quoter',
       },
     ])
@@ -132,13 +132,13 @@ describe('labelled sandbox V2 capability supply', () => {
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
-        publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v4',
-        bindingId: 'binding:sandbox-route-resolver:http-json:v4',
+        publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v5',
+        bindingId: 'binding:sandbox-route-resolver:http-json:v5',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
-        publicationRef: 'offering:sandbox-route-quoter:service-quote:v4',
-        bindingId: 'binding:sandbox-route-quoter:http-json:v4',
+        publicationRef: 'offering:sandbox-route-quoter:service-quote:v5',
+        bindingId: 'binding:sandbox-route-quoter:http-json:v5',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
     ])
@@ -160,8 +160,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map(({ binding }) => binding.bindingId)).toEqual([
-      'binding:sandbox-route-quoter:http-json:v4',
-      'binding:sandbox-route-resolver:http-json:v4',
+      'binding:sandbox-route-quoter:http-json:v5',
+      'binding:sandbox-route-resolver:http-json:v5',
     ])
   })
 
@@ -253,13 +253,13 @@ describe('labelled sandbox V2 capability supply', () => {
         credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
       {
-        publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v4',
-        bindingId: 'binding:sandbox-route-resolver:http-json:v4',
+        publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v5',
+        bindingId: 'binding:sandbox-route-resolver:http-json:v5',
         credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
       {
-        publicationRef: 'offering:sandbox-route-quoter:service-quote:v4',
-        bindingId: 'binding:sandbox-route-quoter:http-json:v4',
+        publicationRef: 'offering:sandbox-route-quoter:service-quote:v5',
+        bindingId: 'binding:sandbox-route-quoter:http-json:v5',
         credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
     ])
@@ -322,8 +322,8 @@ describe('labelled sandbox V2 capability supply', () => {
       supplies: [
         { binding: { bindingId: 'binding:sandbox-option-one:http-json:v4' } },
         { binding: { bindingId: 'binding:sandbox-option-two:http-json:v4' } },
-        { binding: { bindingId: 'binding:sandbox-route-quoter:http-json:v4' } },
-        { binding: { bindingId: 'binding:sandbox-route-resolver:http-json:v4' } },
+        { binding: { bindingId: 'binding:sandbox-route-quoter:http-json:v5' } },
+        { binding: { bindingId: 'binding:sandbox-route-resolver:http-json:v5' } },
       ],
     })
   })
@@ -349,8 +349,8 @@ describe('labelled sandbox V2 capability supply', () => {
 
     expect(replay.businessIdsBySlug).toMatchObject(existing.businessIdsBySlug)
     expect(replay.sandboxRouteBindings).toEqual([
-      'binding:sandbox-route-resolver:http-json:v4',
-      'binding:sandbox-route-quoter:http-json:v4',
+      'binding:sandbox-route-resolver:http-json:v5',
+      'binding:sandbox-route-quoter:http-json:v5',
     ])
   })
 
@@ -372,8 +372,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
       'binding:sandbox-option-one:http-json:v4',
       'binding:sandbox-option-two:http-json:v4',
-      'binding:sandbox-route-quoter:http-json:v4',
-      'binding:sandbox-route-resolver:http-json:v4',
+      'binding:sandbox-route-quoter:http-json:v5',
+      'binding:sandbox-route-resolver:http-json:v5',
     ])
     const registrations = await backend.run(async (ctx) => ({
       offerings: await ctx.db.query('capabilityOfferings').collect(),
@@ -565,6 +565,33 @@ describe('labelled sandbox V2 capability supply', () => {
 
     await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
     await expect(readHistoricalRouteRetirement(backend, ':v3')).resolves.toEqual(afterMigration)
+  })
+
+  it('retires exact historical route v4 supply before adopting stable Funnel origins and replays idempotently', async () => {
+    vi.stubEnv('AE_SANDBOX_ROUTE_RESOLVER_V4_ORIGIN', 'https://resolver-old.test.example')
+    vi.stubEnv('AE_SANDBOX_ROUTE_QUOTER_V4_ORIGIN', 'https://quoter-old.test.example')
+    vi.stubEnv('AE_SANDBOX_ROUTE_RESOLVER_ORIGIN', 'https://resolver-funnel.test.example')
+    vi.stubEnv('AE_SANDBOX_ROUTE_QUOTER_ORIGIN', 'https://quoter-funnel.test.example')
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+        fixture.requestedSlug === 'sandbox-route-resolver' || fixture.requestedSlug === 'sandbox-route-quoter'
+      ))
+      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerHistoricalRouteV1Supply(ctx.db, { generation: 'v4' })
+    })
+
+    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    const afterMigration = await readHistoricalRouteRetirement(backend, ':v4')
+    expect(afterMigration.bindings).toEqual([
+      { bindingId: 'binding:sandbox-route-quoter:http-json:v4', admission: 'not_admitted', conformance: 'not_conformant' },
+      { bindingId: 'binding:sandbox-route-resolver:http-json:v4', admission: 'not_admitted', conformance: 'not_conformant' },
+    ])
+    expect(afterMigration.operations).toHaveLength(2)
+    expect(afterMigration.audits).toHaveLength(4)
+
+    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    await expect(readHistoricalRouteRetirement(backend, ':v4')).resolves.toEqual(afterMigration)
   })
 
   it('refuses to retire a reserved historical route binding at a different provider endpoint', async () => {
@@ -869,15 +896,19 @@ async function retireOriginalLegacySandboxBindings(
 
 async function registerHistoricalRouteV1Supply(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
-  options: Readonly<{ resolverEndpointUrl?: string; generation?: 'v1' | 'v2' | 'v3' }> = {},
+  options: Readonly<{ resolverEndpointUrl?: string; generation?: 'v1' | 'v2' | 'v3' | 'v4' }> = {},
 ): Promise<void> {
   for (const [routeKey, profile] of Object.entries(SANDBOX_ROUTE_PROVIDER_PROFILES)) {
-    const offeringId = options.generation === 'v3'
+    const offeringId = options.generation === 'v4'
+      ? profile.priorV4OfferingId
+      : options.generation === 'v3'
       ? profile.priorV3OfferingId
       : options.generation === 'v2'
         ? profile.priorV2OfferingId
         : profile.priorOfferingId
-    const bindingId = options.generation === 'v3'
+    const bindingId = options.generation === 'v4'
+      ? profile.priorV4BindingId
+      : options.generation === 'v3'
       ? profile.priorV3BindingId
       : options.generation === 'v2'
         ? profile.priorV2BindingId
@@ -925,7 +956,11 @@ async function registerHistoricalRouteV1Supply(
         networkId: 'ae:public', contractRef: contract.ref,
         endpointUrl: routeKey === 'resolver' && options.resolverEndpointUrl !== undefined
           ? options.resolverEndpointUrl
-          : options.generation === 'v3'
+          : options.generation === 'v4'
+            ? `${routeKey === 'resolver'
+              ? process.env.AE_SANDBOX_ROUTE_RESOLVER_V4_ORIGIN
+              : process.env.AE_SANDBOX_ROUTE_QUOTER_V4_ORIGIN}${profile.endpointPath}`
+            : options.generation === 'v3'
             ? `${process.env.AE_SANDBOX_PROVIDER_ORIGIN ?? 'https://agentic-economy-phi.vercel.app'}${profile.endpointPath}`
             : options.generation === 'v2'
             ? `https://agentic-economy-phi.vercel.app${profile.endpointPath}`
@@ -966,7 +1001,7 @@ async function readHistoricalRouteV1Retirement(
 
 async function readHistoricalRouteRetirement(
   backend: ReturnType<typeof convexTest>,
-  bindingSuffix: ':v1' | ':v2' | ':v3',
+  bindingSuffix: ':v1' | ':v2' | ':v3' | ':v4',
 ) {
   return backend.run(async (ctx) => ({
     bindings: (await ctx.db.query('capabilityTransportBindings').collect())

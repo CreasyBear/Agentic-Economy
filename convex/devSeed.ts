@@ -616,6 +616,13 @@ export async function retireSupersededSandboxRouteSupply(
         bindingId: profile.priorV3BindingId,
         endpointUrl: new URL(profile.endpointPath, priorSharedProviderOrigin).href,
       },
+      {
+        offeringId: profile.priorV4OfferingId,
+        bindingId: profile.priorV4BindingId,
+        endpointUrl: new URL(profile.endpointPath, profile === SANDBOX_ROUTE_PROVIDER_PROFILES.resolver
+          ? process.env.AE_SANDBOX_ROUTE_RESOLVER_V4_ORIGIN?.trim() || priorSharedProviderOrigin
+          : process.env.AE_SANDBOX_ROUTE_QUOTER_V4_ORIGIN?.trim() || priorSharedProviderOrigin).href,
+      },
     ] as const
     for (const expected of historical) {
       const [offering, binding] = await Promise.all([
