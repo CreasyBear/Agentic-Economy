@@ -21,6 +21,7 @@ const optionTimeFormatter = new Intl.DateTimeFormat('en-AU', {
   dateStyle: 'medium',
   timeStyle: 'short',
 })
+const moneyFormatters = new Map<string, Intl.NumberFormat>()
 
 export function CustomerRequestRepeatPermissionControl({
   projection,
@@ -256,13 +257,6 @@ export function CustomerRequestRepeatPermissionControl({
   </div>
 }
 
-export function repeatPermissionEligible(route: CustomerRoute): boolean {
-  return route.availability === 'current'
-    && route.maximumTotalCost.kind === 'known'
-    && route.effects.length > 0
-    && route.effects.every((effect) => effect.kind === 'information_shared')
-}
-
 function minorUnitsToInput(amountMinor: number): string {
   return (amountMinor / 100).toFixed(2)
 }
@@ -289,10 +283,12 @@ function repeatPermissionError(result: CustomerRequestRepeatPermissionResult): s
 }
 
 function formatMoney(currency: string, amountMinor: number): string {
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency,
-  }).format(amountMinor / 100)
+  let formatter = moneyFormatters.get(currency)
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat('en-AU', { style: 'currency', currency })
+    moneyFormatters.set(currency, formatter)
+  }
+  return formatter.format(amountMinor / 100)
 }
 
 function formatOptionTime(value: number): string {

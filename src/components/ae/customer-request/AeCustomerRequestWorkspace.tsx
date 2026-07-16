@@ -10,10 +10,7 @@ import {
 } from '@/modules/customer-request/agent-contract'
 import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
-import {
-  CustomerRequestRepeatPermissionControl,
-  repeatPermissionEligible,
-} from './CustomerRequestRepeatPermissionControl'
+import { CustomerRequestRepeatPermissionControl } from './CustomerRequestRepeatPermissionControl'
 
 type SubmitResponse = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: string }> | Readonly<{ error: string }>
 type WorkspaceState =
@@ -519,6 +516,13 @@ function RouteImportantDetails({ route }: { route: CustomerRoute }) {
       <RouteDisclosureDetails route={route} review={false} />
     </div>
   </details>
+}
+
+function repeatPermissionEligible(route: CustomerRoute): boolean {
+  return route.availability === 'current'
+    && route.maximumTotalCost.kind === 'known'
+    && route.effects.length > 0
+    && route.effects.every((effect) => effect.kind === 'information_shared')
 }
 
 function RouteReviewCard({ projection, routeRef, turns, confirm, decline, edit, restart }: {
