@@ -10,6 +10,7 @@ import {
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
+import { projectCustomerRequestProblemTracking } from '@/modules/customer-request/problem-tracking'
 import { routeStepGrantDigest } from '@/modules/customer-request/route-mandate-admission'
 import { routeStepGrantValue } from '@/modules/customer-request/runtime'
 
@@ -999,10 +1000,12 @@ export const exportCustomerEvidence = internalQuery({
         evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
       })),
       problems: v.array(v.object({
-        reportRef: v.string(), state: v.literal('received'),
+        reportRef: v.string(), state: v.union(v.literal('received'), v.literal('update_due')),
         category: problemCategory, summary: v.string(), claimSource: v.literal('customer'),
         causality: v.literal('unknown'), resolution: v.literal('not_adjudicated'),
-        nextAction: v.literal('await_review'), reportedAt: v.number(),
+        nextAction: v.union(v.literal('await_status_update'), v.literal('check_status')),
+        nextActor: v.literal('ae'), nextUpdateDueAt: v.number(),
+        decisionAuthority: v.literal('not_assigned'), reportedAt: v.number(),
         visibility: v.union(
           v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
         ),
@@ -1042,6 +1045,7 @@ export const exportCustomerEvidence = internalQuery({
         })),
       })),
       problems: problems.map((problem) => {
+        const tracking = projectCustomerRequestProblemTracking(problem.createdAt, Date.now())
         const attempt = attempts.find((candidate) => candidate.attemptRef === problem.attemptRef)
         const evidenceByReceipt = new Map<string, string>()
         if (attempt !== undefined) {
@@ -1053,10 +1057,14 @@ export const exportCustomerEvidence = internalQuery({
           }
         }
         return {
-          reportRef: problem.reportRef, state: 'received' as const,
+          reportRef: problem.reportRef, state: tracking.state,
           category: problem.category, summary: problem.summary,
           claimSource: 'customer' as const, causality: 'unknown' as const,
-          resolution: 'not_adjudicated' as const, nextAction: 'await_review' as const,
+          resolution: 'not_adjudicated' as const,
+          nextAction: tracking.nextAction,
+          nextActor: tracking.nextActor,
+          nextUpdateDueAt: tracking.nextUpdateDueAt,
+          decisionAuthority: tracking.decisionAuthority,
           visibility: problem.visibility ?? 'customer_and_ae_only',
           evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
             receiptRef, label: evidenceByReceipt.get(receiptRef) ?? 'Recorded evidence',

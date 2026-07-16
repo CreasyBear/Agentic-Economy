@@ -68,7 +68,10 @@ const customerRequestProblemProjectionSchema = z.strictObject({
   claimSource: z.literal('customer'),
   causality: z.literal('unknown'),
   resolution: z.literal('not_adjudicated'),
-  nextAction: z.literal('await_review'),
+  nextAction: z.enum(['await_status_update', 'check_status']),
+  nextActor: z.literal('ae'),
+  nextUpdateDueAt: safeNonnegativeInteger,
+  decisionAuthority: z.literal('not_assigned'),
   visibility: z.enum(['customer_and_ae_only', 'share_with_affected_business']),
   evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
   affected: z.strictObject({
@@ -96,7 +99,7 @@ export const customerRequestEvidenceExportSchema = z.strictObject({
   })),
   problems: z.array(customerRequestProblemProjectionSchema.extend({
     reportRef: z.string(),
-    state: z.literal('received'),
+    state: z.enum(['received', 'update_due']),
     summary: boundedText(1_000),
     reportedAt: safeNonnegativeInteger,
   }).strict()).default([]),

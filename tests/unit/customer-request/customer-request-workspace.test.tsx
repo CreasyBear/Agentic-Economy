@@ -433,7 +433,9 @@ describe('customer Request workspace', () => {
           category: 'incorrect_result',
           summary: 'The quote is over the confirmed maximum.',
           claimSource: 'customer', causality: 'unknown',
-          resolution: 'not_adjudicated', nextAction: 'await_review',
+          resolution: 'not_adjudicated', nextAction: 'await_status_update',
+          nextActor: 'ae', nextUpdateDueAt: 86_400_010,
+          decisionAuthority: 'not_assigned',
           visibility: 'customer_and_ae_only',
           evidence: [{ receiptRef: 'receipt:quoter', label: 'Quote reference accepted' }],
           reportedAt: 10,
@@ -453,6 +455,8 @@ describe('customer Request workspace', () => {
     expect(await screen.findByRole('heading', { name: 'Activity record' })).toBeTruthy()
     expect(screen.getByText('Step 1 completed')).toBeTruthy()
     expect(screen.getByText('Service reference accepted')).toBeTruthy()
+    expect(screen.getByText(/AE owns the next status update/u)).toBeTruthy()
+    expect(screen.getByText(/No reviewer or remedy authority has been assigned/u)).toBeTruthy()
     expect(screen.getByText('Step 2 completed')).toBeTruthy()
     expect(screen.getByText('Quote reference accepted')).toBeTruthy()
     expect(screen.getAllByText('sandbox-quote:usable')).toHaveLength(2)

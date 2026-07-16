@@ -1201,7 +1201,10 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         claimSource: 'customer',
         causality: 'unknown',
         resolution: 'not_adjudicated',
-        nextAction: 'await_review',
+        nextAction: 'await_status_update',
+        nextActor: 'ae',
+        nextUpdateDueAt: 86_404_000,
+        decisionAuthority: 'not_assigned',
         visibility: 'customer_and_ae_only',
         evidence: [],
         affected: { step: 1 },
@@ -1228,11 +1231,28 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         claimSource: 'customer',
         causality: 'unknown',
         resolution: 'not_adjudicated',
-        nextAction: 'await_review',
+        nextAction: 'await_status_update',
+        nextActor: 'ae',
+        nextUpdateDueAt: 86_404_000,
+        decisionAuthority: 'not_assigned',
         visibility: 'customer_and_ae_only',
         evidence: [],
         reportedAt: 4_000,
         affected: { step: 1 },
+      }],
+    })
+    vi.spyOn(Date, 'now').mockReturnValue(86_404_001)
+    await expect(admin.action(api.customerRequestApplication.exportRouteEvidence, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'evidence',
+      generatedAt: 86_404_001,
+      problems: [{
+        state: 'update_due',
+        nextAction: 'check_status',
+        nextActor: 'ae',
+        nextUpdateDueAt: 86_404_000,
+        decisionAuthority: 'not_assigned',
       }],
     })
     expect(JSON.stringify(exported)).not.toMatch(/transport|mandate|capability|binding|operationKey|inputJson/u)

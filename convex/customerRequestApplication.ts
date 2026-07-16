@@ -12,6 +12,7 @@ import {
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { CustomerRoutePlan } from '@/modules/customer-request/agent-contract'
+import { projectCustomerRequestProblemTracking } from '@/modules/customer-request/problem-tracking'
 import {
   compileCustomerRequest,
   writableCustomerRequestV2Aggregate,
@@ -913,7 +914,9 @@ const problemReceipt = v.object({
       v.literal('could_not_stop'), v.literal('other'),
     ),
     claimSource: v.literal('customer'), causality: v.literal('unknown'),
-    resolution: v.literal('not_adjudicated'), nextAction: v.literal('await_review'),
+    resolution: v.literal('not_adjudicated'), nextAction: v.literal('await_status_update'),
+    nextActor: v.literal('ae'), nextUpdateDueAt: v.number(),
+    decisionAuthority: v.literal('not_assigned'),
     visibility: v.union(
       v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
     ),
@@ -984,12 +987,15 @@ export const reportRouteProblem = action({
       kind: 'refused' as const,
       reason: result.reason === 'evidence_not_found' ? 'evidence_not_found' as const : 'request_not_found' as const,
     }
+    const tracking = projectCustomerRequestProblemTracking(result.reportedAt, result.reportedAt)
     return {
       kind: 'problem_reported' as const, requestRef: args.requestRef,
       reportRef: result.reportRef, state: 'received' as const, reportedAt: result.reportedAt,
       problem: {
         category: args.category, claimSource: 'customer' as const, causality: 'unknown' as const,
-        resolution: 'not_adjudicated' as const, nextAction: 'await_review' as const,
+        resolution: 'not_adjudicated' as const, nextAction: 'await_status_update' as const,
+        nextActor: tracking.nextActor, nextUpdateDueAt: tracking.nextUpdateDueAt,
+        decisionAuthority: tracking.decisionAuthority,
         visibility: result.visibility, evidence: result.evidence.map((item) => ({ ...item })),
         affected: { ...result.affected },
       },
@@ -1013,13 +1019,16 @@ const evidenceExport = v.object({
     observedAt: v.number(), evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
   })),
   problems: v.array(v.object({
-    reportRef: v.string(), state: v.literal('received'),
+    reportRef: v.string(), state: v.union(v.literal('received'), v.literal('update_due')),
     category: v.union(
       v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
       v.literal('could_not_stop'), v.literal('other'),
     ),
     summary: v.string(), claimSource: v.literal('customer'), causality: v.literal('unknown'),
-    resolution: v.literal('not_adjudicated'), nextAction: v.literal('await_review'),
+    resolution: v.literal('not_adjudicated'),
+    nextAction: v.union(v.literal('await_status_update'), v.literal('check_status')),
+    nextActor: v.literal('ae'), nextUpdateDueAt: v.number(),
+    decisionAuthority: v.literal('not_assigned'),
     visibility: v.union(
       v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
     ),
@@ -1060,13 +1069,16 @@ export const exportRouteEvidence = action({
           }>[]
           problems: readonly Readonly<{
             reportRef: string
-            state: 'received'
+            state: 'received' | 'update_due'
             category: 'incorrect_result' | 'unexpected_cost' | 'privacy_concern' | 'could_not_stop' | 'other'
             summary: string
             claimSource: 'customer'
             causality: 'unknown'
             resolution: 'not_adjudicated'
-            nextAction: 'await_review'
+            nextAction: 'await_status_update' | 'check_status'
+            nextActor: 'ae'
+            nextUpdateDueAt: number
+            decisionAuthority: 'not_assigned'
             visibility: 'customer_and_ae_only' | 'share_with_affected_business'
             evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
             reportedAt: number

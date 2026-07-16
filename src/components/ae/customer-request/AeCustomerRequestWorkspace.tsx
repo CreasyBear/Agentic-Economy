@@ -1134,12 +1134,17 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
         <Text weight="semibold">Reported problems</Text>
         <ol className="grid gap-3">
           {evidence.problems.map((problem) => <li key={problem.reportRef} className="grid gap-1 border-l-2 border-border pl-3">
-            <Text weight="semibold">Step {problem.affected.step}: report received</Text>
+            <Text weight="semibold">Step {problem.affected.step}: {problem.state === 'update_due' ? 'status update due' : 'report received'}</Text>
             <Text color="secondary">{problem.summary}</Text>
             {problem.affected.business === undefined ? null
               : <Text type="supporting" color="secondary">This report is attached to the step involving {problem.affected.business}.</Text>}
             <Text type="supporting" color="secondary">
               This is your report. AE has not decided what caused the problem, who is responsible, or whether a remedy is due.
+            </Text>
+            <Text type="supporting" color="secondary">
+              {problem.state === 'update_due'
+                ? `AE’s status update was due ${new Date(problem.nextUpdateDueAt).toLocaleString()}. No reviewer or remedy authority has been assigned.`
+                : `AE owns the next status update, due ${new Date(problem.nextUpdateDueAt).toLocaleString()}. No reviewer or remedy authority has been assigned.`}
             </Text>
             <Text type="supporting" color="secondary">
               {problem.visibility === 'customer_and_ae_only'
@@ -1148,7 +1153,9 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
             </Text>
             {problem.evidence.length === 0 ? null
               : <Text type="supporting" color="secondary">{problem.evidence.length} recorded evidence item{problem.evidence.length === 1 ? '' : 's'} attached.</Text>}
-            <Text type="supporting" color="secondary">Next: wait for review. Reported {new Date(problem.reportedAt).toLocaleString()}.</Text>
+            <Text type="supporting" color="secondary">
+              Next: {problem.nextAction === 'check_status' ? 'check the current status' : 'wait for the next status update'}. Reported {new Date(problem.reportedAt).toLocaleString()}.
+            </Text>
           </li>)}
         </ol>
       </div>}
