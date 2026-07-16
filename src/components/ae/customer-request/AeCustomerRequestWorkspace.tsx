@@ -705,6 +705,16 @@ function RouteProgressCard({ projection, turns, refresh, cancel, edit, restart }
           {activityResponsibility(projection.activity.actor, projection.activity.certainty)}
         </Text>}
         <Text type="supporting" color="secondary">{progress.completed} of {progress.total} steps completed. Rechecking will not send the work again.</Text>
+        {progress.dependencies === undefined ? null : <div className="grid gap-2 rounded-md border border-border bg-surface p-4">
+          {progress.dependencies.completed.map(({ step, business }) => (
+            <Text key={`completed:${step}`} type="supporting" color="secondary">Completed: {business}</Text>
+          ))}
+          {progress.dependencies.blocked.map(({ step, business, waitingForBusiness }) => (
+            <Text key={`blocked:${step}`} type="supporting" color="secondary">
+              Waiting: {business}, after {waitingForBusiness}
+            </Text>
+          ))}
+        </div>}
         <Text type="supporting" color="secondary">AE is acting only within the choice you confirmed.</Text>
         <div className="flex flex-wrap gap-3">
           <Button label="Check progress" variant="primary" clickAction={refresh} />

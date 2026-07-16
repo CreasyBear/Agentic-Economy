@@ -985,6 +985,37 @@ describe('customer Request workspace', () => {
     expect(await screen.findByText('AE is checking for evidence')).toBeTruthy()
   })
 
+  it('shows completed and waiting business work without route machinery', async () => {
+    localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
+      requestRef: 'request:dependencies',
+    }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:dependencies', revision: 1,
+      state: 'in_progress', summary: 'Your request is in progress.', nextAction: 'wait',
+      missingFields: [], criteria: [], options: [],
+      progress: {
+        completed: 1, total: 3, current: { step: 2, state: 'awaiting_result' },
+        dependencies: {
+          completed: [{ step: 1, business: 'Route Resolver' }],
+          blocked: [{
+            step: 3, business: 'Result Notifier',
+            waitingForStep: 2, waitingForBusiness: 'Route Quoter',
+          }],
+        },
+      },
+      activity: {
+        actor: 'business', certainty: 'pending', updatedAt: 10, nextCheckAt: 40,
+        retry: 'not_needed', cancellation: 'too_late_or_unsupported', safeNextAction: 'check_progress',
+      },
+    })))
+
+    render(<AeCustomerRequestWorkspace />)
+
+    expect(await screen.findByText('Completed: Route Resolver')).toBeTruthy()
+    expect(screen.getByText('Waiting: Result Notifier, after Route Quoter')).toBeTruthy()
+    expect(screen.queryByText(/RoutePlan|dependency graph|transport/i)).toBeNull()
+  })
+
   it('does not present an expired route as a current choice in a mixed generation', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-mixed-expiry' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({

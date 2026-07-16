@@ -206,7 +206,17 @@ describe('agent-native customer Request API', () => {
       state: 'outcome_unknown' as const,
       summary: 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.',
       nextAction: 'wait' as const, missingFields: [], criteria: [], options: [],
-      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' as const } },
+      businesses: [
+        { businessRef: 'business:resolver', name: 'Route Resolver' },
+        { businessRef: 'business:quoter', name: 'Route Quoter' },
+      ],
+      progress: {
+        completed: 1, total: 2, current: { step: 2, state: 'needs_attention' as const },
+        dependencies: {
+          completed: [{ step: 1, business: 'Route Resolver' }],
+          blocked: [],
+        },
+      },
       action: {
         state: 'unknown' as const, resolution: 'awaiting_evidence' as const,
         automaticRetry: false as const, observedAt: 1_000,
@@ -224,7 +234,13 @@ describe('agent-native customer Request API', () => {
     expect(response.status).toBe(200)
     expect(customerRequestAgentResultSchema.parse(await response.json())).toMatchObject({
       state: 'outcome_unknown',
-      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+      progress: {
+        completed: 1, total: 2, current: { step: 2, state: 'needs_attention' },
+        dependencies: {
+          completed: [{ step: 1, business: 'Route Resolver' }],
+          blocked: [],
+        },
+      },
       action: { state: 'unknown', automaticRetry: false },
       activity: {
         actor: 'ae', retry: 'blocked_until_reconciled', safeNextAction: 'wait_for_evidence',

@@ -462,7 +462,13 @@ describe('hosted Customer Request journey', () => {
   it('preserves partial progress and refuses replay when the final provider outcome is unknown', async () => {
     const unknown = requestView('outcome_unknown', 2, {
       routeGenerationRef: 'generation:one', nextAction: 'wait',
-      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+      progress: {
+        completed: 1, total: 2, current: { step: 2, state: 'needs_attention' },
+        dependencies: {
+          completed: [{ step: 1, business: 'Sandbox Route Resolver' }],
+          blocked: [],
+        },
+      },
       action: { state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false, observedAt: 9_100 },
     })
     const responses = [
@@ -508,6 +514,10 @@ describe('hosted Customer Request journey', () => {
       state: 'outcome_unknown', runState: 'outcome_unknown', evidenceState: 'outcome_unknown',
       problemState: 'received', resumedState: 'outcome_unknown', completedSteps: 1,
       automaticRetry: false,
+      dependencies: {
+        completedBusinesses: ['Sandbox Route Resolver'],
+        blockedBusinesses: [],
+      },
     })
   })
 

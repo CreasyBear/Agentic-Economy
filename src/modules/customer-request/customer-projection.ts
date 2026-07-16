@@ -390,6 +390,7 @@ export function projectRouteProgress(input: Readonly<{
   }>
   updatedAt: number
   cancellationAvailable: boolean
+  businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   criteria?: readonly CustomerCriterion[]
 }>): CustomerRequestView {
   return requestView({
@@ -397,6 +398,7 @@ export function projectRouteProgress(input: Readonly<{
     revision: input.revision,
     routeGenerationRef: input.generationRef,
     state: 'in_progress',
+    ...(input.businesses === undefined ? {} : { businesses: input.businesses }),
     summary: input.current.state === 'queued'
       ? 'Your request is queued to begin.'
       : 'Your request is in progress.',
@@ -405,6 +407,7 @@ export function projectRouteProgress(input: Readonly<{
       completed: input.completed,
       total: input.total,
       current: { ...input.current },
+      ...dependencyProgress(input.completed, input.total, input.current.step, input.businesses),
     },
     activity: {
       actor: progressActor(input.current.state), certainty: 'pending', updatedAt: input.updatedAt,
@@ -473,7 +476,9 @@ export function projectCustomerActionStatus(input: Readonly<{
         : { result: structuredClone(input.status.partialResult) }),
       observedAt: input.status.observedAt,
     },
-    ...(input.routeProgress === undefined ? {} : { progress: terminalRouteProgress(input.routeProgress) }),
+    ...(input.routeProgress === undefined
+      ? {}
+      : { progress: terminalRouteProgress(input.routeProgress, input.businesses) }),
     activity: {
       actor: 'ae', certainty: 'unknown', updatedAt: input.status.observedAt,
       nextCheckAt: input.status.observedAt + 30_000, retry: 'blocked_until_reconciled',
@@ -513,7 +518,9 @@ export function projectCustomerActionStatus(input: Readonly<{
       state: 'failed', resolution: input.status.resolution, automaticRetry: false,
       result: structuredClone(input.status.result), observedAt: input.status.resolvedAt,
     },
-    ...(input.routeProgress === undefined ? {} : { progress: terminalRouteProgress(input.routeProgress) }),
+    ...(input.routeProgress === undefined
+      ? {}
+      : { progress: terminalRouteProgress(input.routeProgress, input.businesses) }),
     activity: {
       actor: 'customer', certainty: 'failed', updatedAt: input.status.resolvedAt,
       retry: 'manual_after_failure', cancellation: 'complete', safeNextAction: 'revise_request',
@@ -529,11 +536,39 @@ function progressActor(
   return 'ae'
 }
 
-function terminalRouteProgress(progress: Readonly<{ completed: number; total: number; currentStep: number }>) {
+function terminalRouteProgress(
+  progress: Readonly<{ completed: number; total: number; currentStep: number }>,
+  businesses?: readonly Readonly<{ name: string }>[],
+) {
   return {
     completed: progress.completed,
     total: progress.total,
     current: { step: progress.currentStep, state: 'needs_attention' as const },
+    ...dependencyProgress(progress.completed, progress.total, progress.currentStep, businesses),
+  }
+}
+
+function dependencyProgress(
+  completed: number,
+  total: number,
+  currentStep: number,
+  businesses?: readonly Readonly<{ name: string }>[],
+): Pick<NonNullable<CustomerRequestView['progress']>, 'dependencies'> | Record<string, never> {
+  if (total <= 1 || businesses?.length !== total) return {}
+  const currentBusiness = businesses[currentStep - 1]
+  if (currentBusiness === undefined) return {}
+  return {
+    dependencies: {
+      completed: businesses.slice(0, completed).map(({ name }, index) => ({
+        step: index + 1, business: name,
+      })),
+      blocked: businesses.slice(currentStep).map(({ name }, index) => ({
+        step: currentStep + index + 1,
+        business: name,
+        waitingForStep: currentStep,
+        waitingForBusiness: currentBusiness.name,
+      })),
+    },
   }
 }
 
@@ -589,6 +624,12 @@ function requestView(input: Readonly<{
     ...(input.progress === undefined ? {} : { progress: Object.freeze({
       ...input.progress,
       current: Object.freeze({ ...input.progress.current }),
+      ...(input.progress.dependencies === undefined ? {} : {
+        dependencies: Object.freeze({
+          completed: Object.freeze(input.progress.dependencies.completed.map((step) => Object.freeze({ ...step }))),
+          blocked: Object.freeze(input.progress.dependencies.blocked.map((step) => Object.freeze({ ...step }))),
+        }),
+      }),
     }) }),
     ...(input.activity === undefined ? {} : { activity: Object.freeze({ ...input.activity }) }),
     ...(input.decision === undefined ? {} : { decision: input.decision }),

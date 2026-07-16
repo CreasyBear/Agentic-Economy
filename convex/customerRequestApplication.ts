@@ -438,6 +438,13 @@ const customerView = v.object({
         v.literal('validating_result'), v.literal('needs_attention'),
       ),
     }),
+    dependencies: v.optional(v.object({
+      completed: v.array(v.object({ step: v.number(), business: v.string() })),
+      blocked: v.array(v.object({
+        step: v.number(), business: v.string(),
+        waitingForStep: v.number(), waitingForBusiness: v.string(),
+      })),
+    })),
   })),
   activity: v.optional(v.object({
     actor: v.union(
@@ -2957,6 +2964,7 @@ function projectStoredRouteRun(
     current: { step: run.currentPosition, state: customerProgressState(run.currentState) },
     updatedAt: run.updatedAt,
     cancellationAvailable: run.currentState === 'queued' || run.currentState === 'leased',
+    ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
     criteria,
   }))
 }
@@ -3015,7 +3023,13 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
       ...(action.result === undefined ? {} : { result: structuredClone(action.result) }),
     } }),
     ...(progress === undefined ? {} : { progress: {
-      ...progress, current: { ...progress.current },
+      completed: progress.completed, total: progress.total, current: { ...progress.current },
+      ...(progress.dependencies === undefined ? {} : {
+        dependencies: {
+          completed: progress.dependencies.completed.map((step) => ({ ...step })),
+          blocked: progress.dependencies.blocked.map((step) => ({ ...step })),
+        },
+      }),
     } }),
     ...(activity === undefined ? {} : { activity: {
       actor: activity.actor, certainty: activity.certainty, updatedAt: activity.updatedAt,

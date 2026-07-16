@@ -122,6 +122,10 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
     automaticRetry: z.boolean().optional(),
     resultDigest: z.string().optional(),
     failureClass: z.enum(['outcome_unknown', 'invalid_output']).optional(),
+    dependencies: z.strictObject({
+      completedBusinesses: z.array(z.string()),
+      blockedBusinesses: z.array(z.string()),
+    }).optional(),
   }).strict(),
   measurements: z.strictObject({
     integrationBurden: z.strictObject({
@@ -720,6 +724,12 @@ async function outcomeUnknownHostedJourney(input: Readonly<{
       runState: 'outcome_unknown', evidenceState: evidence.state, problemState: problem.state,
       resumedState: resumed.state, completedSteps: resumed.progress.completed, automaticRetry: false,
       failureClass: input.failureClass,
+      ...(resumed.progress.dependencies === undefined ? {} : {
+        dependencies: {
+          completedBusinesses: resumed.progress.dependencies.completed.map(({ business }) => business),
+          blockedBusinesses: resumed.progress.dependencies.blocked.map(({ business }) => business),
+        },
+      }),
     },
     measurements: journeyMeasurements(input.input, input.route, false, true),
     sandbox: true,

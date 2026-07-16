@@ -584,6 +584,15 @@ export const customerRequestViewSchema = z.strictObject({
       step: safePositiveInteger,
       state: z.enum(['queued', 'contacting', 'awaiting_result', 'validating_result', 'needs_attention']),
     }).strict(),
+    dependencies: z.strictObject({
+      completed: z.array(z.strictObject({
+        step: safePositiveInteger, business: z.string(),
+      })),
+      blocked: z.array(z.strictObject({
+        step: safePositiveInteger, business: z.string(),
+        waitingForStep: safePositiveInteger, waitingForBusiness: z.string(),
+      })),
+    }).optional(),
   }).strict().optional(),
   activity: z.strictObject({
     actor: z.enum(['ae', 'business', 'customer', 'none', 'ae_for_customer']),

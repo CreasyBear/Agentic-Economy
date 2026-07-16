@@ -563,6 +563,22 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(advanced).toMatchObject({
       kind: 'advanced', run: { completedSteps: 1, currentPosition: 2, currentState: 'queued' },
     })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request',
+      state: 'in_progress',
+      businesses: [{ name: 'Route admission-resolver' }, { name: 'Route admission-quoter' }],
+      progress: {
+        completed: 1,
+        total: 2,
+        current: { step: 2, state: 'queued' },
+        dependencies: {
+          completed: [{ step: 1, business: 'Route admission-resolver' }],
+          blocked: [],
+        },
+      },
+    })
 
     const secondLease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
       workerId: 'worker:two', leaseDurationMs: 10_000,

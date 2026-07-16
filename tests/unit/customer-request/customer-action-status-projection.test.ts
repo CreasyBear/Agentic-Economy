@@ -26,6 +26,29 @@ describe('customer action status projection', () => {
     }).activity).toMatchObject({ actor: 'none' })
   })
 
+  it('shows completed and blocked business dependencies only for multi-step work', () => {
+    const businesses = [
+      { businessRef: 'business:resolver', name: 'Route Resolver' },
+      { businessRef: 'business:quoter', name: 'Route Quoter' },
+      { businessRef: 'business:notifier', name: 'Result Notifier' },
+    ]
+    expect(projectRouteProgress({
+      requestRef: 'request:multi', revision: 1, generationRef: 'generation:one',
+      completed: 1, total: 3, current: { step: 2, state: 'awaiting_result' },
+      businesses, updatedAt: 10, cancellationAvailable: false,
+    }).progress).toMatchObject({
+      dependencies: {
+        completed: [{ step: 1, business: 'Route Resolver' }],
+        blocked: [{ step: 3, business: 'Result Notifier', waitingForStep: 2, waitingForBusiness: 'Route Quoter' }],
+      },
+    })
+    expect(projectRouteProgress({
+      requestRef: 'request:single', revision: 1, generationRef: 'generation:one',
+      completed: 0, total: 1, current: { step: 1, state: 'awaiting_result' },
+      businesses: [businesses[0]!], updatedAt: 10, cancellationAvailable: false,
+    }).progress).not.toHaveProperty('dependencies')
+  })
+
   it('makes unknown, reconciled completion, provider failure, and a not-sent failure legible', () => {
     const common = {
       requestRef: 'request:one', revision: 1, criteria: [],
