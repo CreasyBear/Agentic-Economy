@@ -25,6 +25,7 @@ import {
   createJsonCustomerRequestSemanticInterpreter,
   deriveCustomerDecisionPreference,
   deriveCustomerMaximumTotalCostCriterion,
+  deriveCustomerProviderDataSharingCriterion,
 } from '@/modules/customer-request/semantic-interpreter'
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
 
@@ -913,6 +914,54 @@ describe('V2 Request semantics', () => {
     expect(result).not.toHaveProperty('routeGeneration')
     expect(projectCustomerRequest(result)).toMatchObject({
       state: 'unsupported', summary: 'No current option stays within your AUD 5.00 maximum.',
+      nextAction: 'revise_request',
+    })
+  })
+
+  it('refuses provider routes when the customer explicitly prohibits data sharing', () => {
+    expect(deriveCustomerProviderDataSharingCriterion(
+      'Find a labelled sandbox option, but do not share any data with a business.',
+    )).toMatchObject({
+      label: 'Share data with businesses', value: false, basis: 'extracted_from_request',
+    })
+    const lookup = compositionLookupModel()
+    const request = requiredInput(lookup, 'request')
+    const result = compileCustomerRequest({
+      requestId: 'request:no-provider-sharing', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Find a labelled sandbox option, but do not share any data with a business.',
+      networkId: 'ae:public',
+      proposal: { kind: 'capability_candidates', selections: [{
+        selectionKey: lookup.selectionKey, contractRef: lookup.contractRef,
+        facts: [{
+          contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+          inputKey: request.key, inputPointer: request.inputPointer, schemaIdentity: request.schemaIdentity,
+          value: 'labelled sandbox option',
+          source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
+        }],
+      }] },
+      interpreterId: 'interpreter:test',
+      bindings: [supply('binding:lookup:no-provider-sharing', lookup)],
+      models: [lookup], now: 10_000,
+    })
+
+    expect(result).toMatchObject({
+      kind: 'compiled',
+      aggregate: {
+        outcome: 'unsupported',
+        evaluation: {
+          candidates: [],
+        },
+      },
+    })
+    if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
+    expect(result.aggregate.evaluation.criteria).toContainEqual(expect.objectContaining({
+      label: 'Share data with businesses', value: false,
+    }))
+    expect(result).not.toHaveProperty('routeGeneration')
+    expect(projectCustomerRequest(result)).toMatchObject({
+      state: 'unsupported',
+      summary: 'Available options require sharing information with a business, which you asked AE not to do.',
       nextAction: 'revise_request',
     })
   })

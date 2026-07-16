@@ -132,6 +132,8 @@ export type UnderstoodCriterion = Readonly<{
   criterionDigest: string
 }>
 
+export const CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY = 'customer:provider-data-sharing' as CapabilityInputKey
+
 export type PreparationDisclosurePreview = Readonly<{
   maximumRecipients: number
   purposes: readonly string[]
@@ -202,7 +204,20 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
   decisionPreference?: RequestEvaluation['decisionPreference']
   derivedCriteria?: readonly UnderstoodCriterion[]
 }>): RequestEvaluation {
-  const candidates = input.candidates.map((candidate): RequestEvaluationCandidate => {
+  const criteria = Object.freeze([
+    ...projectUnderstoodCriteria(input.facts, input.candidates),
+    ...(input.derivedCriteria ?? []),
+  ].sort((left, right) => left.criterionDigest.localeCompare(right.criterionDigest)))
+  const providerDataSharingProhibited = criteria.some((criterion) => (
+    criterion.inputKey === CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY && criterion.value === false
+  ))
+  const admittedInputs = providerDataSharingProhibited
+    ? input.candidates.filter(({ model }) => !model.dataUse.some((use) => (
+        use.classification !== 'public'
+        && (use.recipient.kind === 'candidate_binding' || use.recipient.kind === 'selected_binding')
+      )))
+    : input.candidates
+  const candidates = admittedInputs.map((candidate): RequestEvaluationCandidate => {
     const facts = factsForModel(input.facts, candidate.model)
     const assessment = candidate.model.assessInput({
       contractRef: candidate.model.contractRef,
@@ -270,11 +285,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     })
   })
   const nextRequirement = chooseNextRequirement(candidates)
-  const criteria = Object.freeze([
-    ...projectUnderstoodCriteria(input.facts, input.candidates),
-    ...(input.derivedCriteria ?? []),
-  ].sort((left, right) => left.criterionDigest.localeCompare(right.criterionDigest)))
-  const preparationDisclosure = projectPreparationDisclosure(input.facts, input.candidates)
+  const preparationDisclosure = projectPreparationDisclosure(input.facts, admittedInputs)
   const completionRequirements = deriveCompletionRequirements(
     input.proposedActions ?? [], input.resolveModel,
   )

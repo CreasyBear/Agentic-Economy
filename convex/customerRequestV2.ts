@@ -27,6 +27,7 @@ import {
 import {
   deriveCustomerDecisionPreference,
   deriveCustomerMaximumTotalCostCriterion,
+  deriveCustomerProviderDataSharingCriterion,
 } from '@/modules/customer-request/semantic-interpreter'
 import {
   routePlanGenerationIsInternallyConsistent,
@@ -1146,8 +1147,11 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
           return preference === undefined ? {} : { decisionPreference: preference }
         })(),
         ...(() => {
-          const criterion = deriveCustomerMaximumTotalCostCriterion(aggregate.snapshot.intent)
-          return criterion === undefined ? {} : { derivedCriteria: [criterion] }
+          const criteria = [
+            deriveCustomerMaximumTotalCostCriterion(aggregate.snapshot.intent),
+            deriveCustomerProviderDataSharingCriterion(aggregate.snapshot.intent),
+          ].filter((criterion): criterion is NonNullable<typeof criterion> => criterion !== undefined)
+          return criteria.length === 0 ? {} : { derivedCriteria: criteria }
         })(),
         candidates: discoverRequestEvaluationCandidates({
           selectedCapabilities: actions.map(({ selectionKey, contractRef }) => ({ selectionKey, contractRef })),

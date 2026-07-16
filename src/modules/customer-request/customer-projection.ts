@@ -1,5 +1,6 @@
 import type { CompileCustomerRequestResult } from './compiler'
 import type { JsonValue } from '@/modules/capability-contract/public'
+import { CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY } from './evaluation'
 import type { PreparedRouteCandidateSet } from './preparation'
 import { projectCustomerOptionSet } from './customer-option-set'
 import type {
@@ -48,6 +49,7 @@ export type CustomerCriterion = Readonly<{
 
 export function projectCustomerCriteria(
   criteria: readonly Readonly<{
+    inputKey?: string
     label: string
     value: JsonValue
     basis: 'customer_provided' | 'extracted_from_request'
@@ -76,6 +78,7 @@ export type CustomerOptionsProjection =
 
 type RequestEvaluationProjectionInput = Readonly<{
   criteria: readonly Readonly<{
+    inputKey?: string
     label: string
     value: JsonValue
     basis: 'customer_provided' | 'extracted_from_request'
@@ -126,6 +129,9 @@ export function projectRequestEvaluation(input: Readonly<{
     ? {}
     : { routeGenerationRef: input.routeGenerationRef }
   const maximumTotalCost = customerMaximumTotalCost(input.evaluation.criteria)
+  const providerDataSharingProhibited = input.evaluation.criteria.some((criterion) => (
+    criterion.inputKey === CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY && criterion.value === false
+  ))
   if (input.evaluation.posture === 'unsupported' && input.actionCount === 0) return requestView({
     ...routeGeneration,
     requestRef: input.snapshot.requestId,
@@ -141,6 +147,15 @@ export function projectRequestEvaluation(input: Readonly<{
     revision: input.snapshot.revision,
     state: 'unsupported',
     summary: `No current option stays within your ${formatCustomerMoney(maximumTotalCost.currency, maximumTotalCost.amountMinor)} maximum.`,
+    nextAction: 'revise_request',
+    criteria,
+  })
+  if (input.outcome === 'unsupported' && providerDataSharingProhibited) return requestView({
+    ...routeGeneration,
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'unsupported',
+    summary: 'Available options require sharing information with a business, which you asked AE not to do.',
     nextAction: 'revise_request',
     criteria,
   })

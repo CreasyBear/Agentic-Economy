@@ -24,6 +24,7 @@ import {
 import {
   deriveCustomerDecisionPreference,
   deriveCustomerMaximumTotalCostCriterion,
+  deriveCustomerProviderDataSharingCriterion,
   type CustomerRequestSemanticProposal,
 } from './semantic-interpreter'
 import {
@@ -195,6 +196,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
   if (facts === undefined) return { kind: 'refused', reason: 'unsafe_interpretation' }
   const decisionPreference = deriveCustomerDecisionPreference(command.intent)
   const maximumTotalCostCriterion = deriveCustomerMaximumTotalCostCriterion(command.intent)
+  const providerDataSharingCriterion = deriveCustomerProviderDataSharingCriterion(command.intent)
+  const derivedCriteria = [maximumTotalCostCriterion, providerDataSharingCriterion]
+    .filter((criterion): criterion is NonNullable<typeof criterion> => criterion !== undefined)
   const baseActions = selected.map((selection, index): ProposedRequestAction => {
     const model = resolveExactModel(models, selection.contractRef)
     if (model === undefined || model.selectionKey !== selection.selectionKey) {
@@ -240,9 +244,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
         ...(decisionPreference === undefined
           ? {}
           : { decisionPreference }),
-        ...(maximumTotalCostCriterion === undefined
+        ...(derivedCriteria.length === 0
           ? {}
-          : { derivedCriteria: [maximumTotalCostCriterion] }),
+          : { derivedCriteria }),
         candidates: discoverRequestEvaluationCandidates({
           selectedCapabilities: selected.map(({ selectionKey, contractRef }) => ({ selectionKey, contractRef })),
           bindings: command.bindings,

@@ -11,7 +11,11 @@ import {
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import type { RequestFact, UnderstoodCriterion } from './evaluation'
+import {
+  CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY,
+  type RequestFact,
+  type UnderstoodCriterion,
+} from './evaluation'
 
 export type CustomerInputDescriptor = Readonly<{
   inputKey: CapabilityInputKey
@@ -151,6 +155,7 @@ const SYSTEM_INSTRUCTION = [
 const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v8'
 const EXPLICIT_PRICE_PRIORITY_VERSION = 'customer-request-price-priority:v1'
 const EXPLICIT_MAXIMUM_TOTAL_COST_VERSION = 'customer-request-maximum-total-cost:v1'
+const EXPLICIT_PROVIDER_DATA_SHARING_VERSION = 'customer-request-provider-data-sharing:v1'
 const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
   name: 'customer_request_semantic_proposal',
   strict: true,
@@ -489,6 +494,25 @@ export function deriveCustomerMaximumTotalCostCriterion(customerJob: string): Cu
     criterionDigest: canonicalDigest({
       customerJob, inputKey, inputPointer, label, value, basis,
       version: EXPLICIT_MAXIMUM_TOTAL_COST_VERSION,
+    }),
+  })
+}
+
+export function deriveCustomerProviderDataSharingCriterion(customerJob: string): UnderstoodCriterion | undefined {
+  const normalized = customerJob.normalize('NFKC').toLocaleLowerCase('en')
+  const prohibited = /\b(?:do\s+not|don't|never)\s+(?:share|send|disclose)\s+(?:any\s+)?(?:data|information|details)\s+(?:with|to)\s+(?:a\s+|any\s+|the\s+)?(?:business|businesses|provider|providers)\b/u.test(normalized)
+    || /\bwithout\s+(?:sharing|sending|disclosing)\s+(?:any\s+)?(?:data|information|details)\s+(?:with|to)\s+(?:a\s+|any\s+|the\s+)?(?:business|businesses|provider|providers)\b/u.test(normalized)
+  if (!prohibited) return undefined
+  const inputKey = CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY
+  const inputPointer = '/customerConstraints/providerDataSharingAllowed'
+  const label = 'Share data with businesses'
+  const value = false
+  const basis = 'extracted_from_request' as const
+  return Object.freeze({
+    inputKey, inputPointer, label, value, basis,
+    criterionDigest: canonicalDigest({
+      customerJob, inputKey, inputPointer, label, value, basis,
+      version: EXPLICIT_PROVIDER_DATA_SHARING_VERSION,
     }),
   })
 }
