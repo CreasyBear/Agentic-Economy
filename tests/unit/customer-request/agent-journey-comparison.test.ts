@@ -39,6 +39,15 @@ const ae = {
       purposes: ['prepare_quote', 'resolve_request'],
     },
     resultIntegrity: { state: 'verified' as const, digest: 'sha256:result' },
+    controlIntegrity: {
+      state: 'verified' as const,
+      operatorInterventions: 0 as const,
+      mutations: [
+        { path: '/api/v1/requests', source: 'declared_request' as const },
+        { path: '/api/v1/requests', source: 'automatic_replay' as const },
+        { path: '/api/v1/requests/request%3Acold/confirm', source: 'observed_navigation' as const },
+      ],
+    },
   },
   claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value' as const,
 }
@@ -58,6 +67,15 @@ describe('agent journey comparison', () => {
           purposes: ['prepare_quote', 'resolve_request'],
         },
         resultIntegrity: { state: 'verified', digest: 'sha256:result' },
+        controlIntegrity: {
+          state: 'verified',
+          operatorInterventions: 0,
+          mutations: [
+            { path: '/api/v1/requests', source: 'declared_request' },
+            { path: '/api/v1/requests', source: 'automatic_replay' },
+            { path: '/api/v1/requests/request%3Acold/confirm', source: 'observed_navigation' },
+          ],
+        },
       }),
       claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value',
     }))
@@ -127,6 +145,46 @@ describe('agent journey comparison', () => {
     })
     expect(proof.verdict).toBe('fail_for_declared_class')
     expect(proof.failures).toContain('ae_result_integrity_not_proven')
+  })
+
+  it('fails the zero-tolerance gate when workflow mutations are not proven operator-free', () => {
+    const proof = compareAgentJourneys({
+      direct,
+      ae: {
+        ...ae,
+        measurements: {
+          ...ae.measurements,
+          controlIntegrity: {
+            state: 'not_proven' as const,
+            operatorInterventions: 1,
+            mutations: [],
+          },
+        },
+      },
+    })
+    expect(proof.verdict).toBe('fail_for_declared_class')
+    expect(proof.failures).toContain('ae_control_integrity_not_proven')
+  })
+
+  it('rejects a replay label unless the same mutation path was already called', () => {
+    const proof = compareAgentJourneys({
+      direct,
+      ae: {
+        ...ae,
+        measurements: {
+          ...ae.measurements,
+          controlIntegrity: {
+            state: 'verified' as const,
+            operatorInterventions: 0,
+            mutations: [
+              { path: '/api/v1/requests', source: 'declared_request' as const },
+              { path: '/api/v1/requests/request%3Acold/run', source: 'automatic_replay' as const },
+            ],
+          },
+        },
+      },
+    })
+    expect(proof.failures).toContain('ae_control_integrity_not_proven')
   })
 
   it('fails closed for an unrecognized predeclared gain', () => {

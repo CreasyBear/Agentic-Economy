@@ -192,6 +192,17 @@ describe('hosted Customer Request journey', () => {
         purposes: ['prepare_sandbox_service_quote', 'resolve_sandbox_service_reference'],
       },
       resultIntegrity: { state: 'verified', digest: expect.stringMatching(/^sha256:/) },
+      controlIntegrity: {
+        state: 'verified',
+        operatorInterventions: 0,
+        mutations: [
+          { path: '/api/v1/requests', source: 'declared_request' },
+          { path: '/api/v1/requests', source: 'automatic_replay' },
+          { path: '/api/v1/requests/request%3Acold/confirmation', source: 'observed_navigation' },
+          { path: '/api/v1/requests/request%3Acold/run', source: 'observed_navigation' },
+          { path: '/api/v1/requests/request%3Acold/run', source: 'automatic_replay' },
+        ],
+      },
     })
   })
 

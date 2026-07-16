@@ -51,6 +51,14 @@ type AeJourney = Readonly<{
       { state: 'verified'; digest: string }
       | { state: 'not_applicable' | 'not_proven' }
     >
+    controlIntegrity: Readonly<{
+      state: 'verified' | 'not_proven'
+      operatorInterventions: number
+      mutations: readonly Readonly<{
+        path: string
+        source: 'declared_request' | 'observed_navigation' | 'automatic_replay'
+      }>[]
+    }>
   }>
   claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value'
 }>
@@ -66,6 +74,7 @@ type ComparisonFailure =
   | 'ae_execution_start_replay_not_proven'
   | 'ae_disclosure_integrity_not_proven'
   | 'ae_result_integrity_not_proven'
+  | 'ae_control_integrity_not_proven'
 
 export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae: AeJourney }>) {
   const { direct, ae } = input
@@ -100,6 +109,11 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
     || ae.final.resultDigest !== ae.measurements.resultIntegrity.digest) {
     failures.push('ae_result_integrity_not_proven')
   }
+  if (ae.measurements.controlIntegrity.state !== 'verified'
+    || ae.measurements.controlIntegrity.operatorInterventions !== 0
+    || !validControlMutations(ae.measurements.controlIntegrity.mutations)) {
+    failures.push('ae_control_integrity_not_proven')
+  }
 
   return {
     kind: 'agent_journey_comparison' as const,
@@ -127,9 +141,28 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
       replaySafety: { aeExecutionStart: ae.measurements.replaySafety.executionStart },
       disclosureIntegrity: ae.measurements.disclosureIntegrity,
       resultIntegrity: ae.measurements.resultIntegrity,
+      controlIntegrity: ae.measurements.controlIntegrity,
     },
     claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value' as const,
   }
+}
+
+function validControlMutations(
+  mutations: AeJourney['measurements']['controlIntegrity']['mutations'],
+): boolean {
+  if (mutations.length < 2
+    || mutations[0]?.path !== '/api/v1/requests'
+    || mutations[0]?.source !== 'declared_request') return false
+  const priorPaths = new Set<string>(['/api/v1/requests'])
+  let observedNavigation = false
+  for (const { path, source } of mutations.slice(1)) {
+    if ((path !== '/api/v1/requests' && !path.startsWith('/api/v1/requests/'))
+      || source === 'declared_request'
+      || (source === 'automatic_replay' && !priorPaths.has(path))) return false
+    if (source === 'observed_navigation') observedNavigation = true
+    priorPaths.add(path)
+  }
+  return observedNavigation
 }
 
 function aeCompleted(ae: AeJourney) {

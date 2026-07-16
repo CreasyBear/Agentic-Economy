@@ -49,7 +49,10 @@ type JourneyMetrics = {
   requestCalls: number
   clarifications: number
   executionStartReplay: 'not_proven' | 'same_request_monotonic_progress'
+  mutations: Array<Readonly<{ path: string; source: MutationSource }>>
 }
+
+type MutationSource = 'declared_request' | 'observed_navigation' | 'automatic_replay'
 
 type HostedCustomerRequestJourneyRuntimeInput = HostedCustomerRequestJourneyInput & Readonly<{
   metrics: JourneyMetrics
@@ -122,6 +125,14 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
       z.strictObject({ state: z.literal('verified'), digest: z.string().startsWith('sha256:') }),
       z.strictObject({ state: z.literal('not_applicable') }),
     ]),
+    controlIntegrity: z.strictObject({
+      state: z.literal('verified'),
+      operatorInterventions: z.literal(0),
+      mutations: z.array(z.strictObject({
+        path: z.string().startsWith('/api/v1/requests'),
+        source: z.enum(['declared_request', 'observed_navigation', 'automatic_replay']),
+      })).min(2),
+    }),
   }),
   sandbox: z.literal(true),
   claimBoundary: z.literal('contract_and_hosted_journey_only_not_real_supply_or_customer_value'),
@@ -135,7 +146,7 @@ export async function runHostedCustomerRequestJourney(
   assertJourneyBaseUrl(input.baseUrl, journeyEnvironment(input))
   const metrics: JourneyMetrics = {
     startedAt: (input.now ?? Date.now)(), requestCalls: 0, clarifications: 0,
-    executionStartReplay: 'not_proven',
+    executionStartReplay: 'not_proven', mutations: [],
   }
   const runtimeInput: HostedCustomerRequestJourneyRuntimeInput = { ...input, metrics }
   const release = await input.verifyRelease()
@@ -158,7 +169,9 @@ export async function runHostedCustomerRequestJourney(
     agentRef: `${input.agent.name}:${input.agent.version}`, request: input.scenario.request,
   })
   let view = await submitWithInterpreterRecovery(runtimeInput, submit)
-  const replay = await callAgent(runtimeInput, '/api/v1/requests', 'POST', submit)
+  const replay = await callAgent(
+    runtimeInput, '/api/v1/requests', 'POST', submit, [200], 'automatic_replay',
+  )
   if (JSON.stringify(view) !== JSON.stringify(replay)) throw new Error('hosted_journey_submit_replay_changed')
   observe(states, view)
 
@@ -228,10 +241,14 @@ export async function runHostedCustomerRequestJourney(
       const startCommand = materializeObservedInput(view, startAction, {
         '<unique string>': `acceptance:run:${nonce}`,
       })
-      view = await callAgent(runtimeInput, startAction.path, startAction.method, startCommand)
+      view = await callAgent(
+        runtimeInput, startAction.path, startAction.method, startCommand, [200], 'observed_navigation',
+      )
       observe(states, view)
       if (view.state !== 'in_progress') throw new Error(`hosted_journey_run_failed:${view.state}`)
-      const startReplay = await callAgent(runtimeInput, startAction.path, startAction.method, startCommand)
+      const startReplay = await callAgent(
+        runtimeInput, startAction.path, startAction.method, startCommand, [200], 'automatic_replay',
+      )
       assertExecutionStartReplay(view, startReplay)
       runtimeInput.metrics.executionStartReplay = 'same_request_monotonic_progress'
       const progressPath = observedNavigationPath(input, view, 'inspect_progress', 'GET')
@@ -512,7 +529,9 @@ async function callAgent(
   method: 'GET' | 'POST',
   body?: unknown,
   acceptedStatuses: readonly number[] = [200],
+  mutationSource?: MutationSource,
 ): Promise<CustomerRequestView> {
+  recordMutation(input, method, path, mutationSource)
   input.metrics.requestCalls += 1
   const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
     method, headers: headers(input, input.agentApiKey),
@@ -536,7 +555,10 @@ async function callObservedAgent(
 ): Promise<CustomerRequestView> {
   const action = observedNavigationAction(input, view, relation)
   const body = action.method === 'POST' ? materializeObservedInput(view, action, replacements) : undefined
-  return await callAgent(input, action.path, action.method, body, acceptedStatuses)
+  return await callAgent(
+    input, action.path, action.method, body, acceptedStatuses,
+    action.method === 'POST' ? 'observed_navigation' : undefined,
+  )
 }
 
 function observedNavigationPath(
@@ -635,6 +657,7 @@ async function callAgentProblem(
   path: string,
   body: unknown,
 ) {
+  recordMutation(input, 'POST', path, 'observed_navigation')
   input.metrics.requestCalls += 1
   const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
     method: 'POST', headers: headers(input, input.agentApiKey),
@@ -767,7 +790,10 @@ async function submitWithInterpreterRecovery(
 ): Promise<CustomerRequestView> {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      return await callAgent(input, '/api/v1/requests', 'POST', submit)
+      return await callAgent(
+        input, '/api/v1/requests', 'POST', submit, [200],
+        attempt === 1 ? 'declared_request' : 'automatic_replay',
+      )
     } catch (error) {
       const retryable = error instanceof HostedJourneyResponseError
         && error.method === 'POST'
@@ -817,7 +843,26 @@ function journeyMeasurements(
     resultIntegrity: resultDigest === undefined
       ? { state: 'not_applicable' as const }
       : { state: 'verified' as const, digest: resultDigest },
+    controlIntegrity: {
+      state: 'verified' as const,
+      operatorInterventions: 0 as const,
+      mutations: input.metrics.mutations,
+    },
   }
+}
+
+function recordMutation(
+  input: HostedCustomerRequestJourneyRuntimeInput,
+  method: 'GET' | 'POST',
+  path: string,
+  source: MutationSource | undefined,
+): void {
+  if (method === 'GET') {
+    if (source !== undefined) throw new Error('hosted_journey_read_has_mutation_source')
+    return
+  }
+  if (source === undefined) throw new Error('hosted_journey_mutation_source_missing')
+  input.metrics.mutations.push({ path, source })
 }
 
 function assertExecutionStartReplay(started: CustomerRequestView, replayed: CustomerRequestView): void {
