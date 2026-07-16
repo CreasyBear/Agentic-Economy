@@ -306,6 +306,28 @@ export const customerRequestRouteMandateTables = {
     committedAt: v.number(),
   }).index('by_commandKey', ['commandKey']),
 
+  customerRequestStandingRoutePolicyRevocations: defineTable({
+    revocationRef: v.string(),
+    revocationDigest: v.string(),
+    policyRef: v.string(),
+    policyDigest: v.string(),
+    principalId: v.string(),
+    requestId: v.string(),
+    revokedAt: v.number(),
+  })
+    .index('by_revocationRef', ['revocationRef'])
+    .index('by_policyRef', ['policyRef']),
+
+  customerRequestStandingRoutePolicyRevocationCommands: defineTable({
+    commandKey: v.string(),
+    commandDigest: v.string(),
+    principalId: v.string(),
+    requestId: v.string(),
+    policyRef: v.string(),
+    revocationRef: v.string(),
+    committedAt: v.number(),
+  }).index('by_commandKey', ['commandKey']),
+
   customerRequestStandingRouteAuthorityUses: defineTable({
     authorityUseRef: v.string(),
     authorityUseDigest: v.string(),

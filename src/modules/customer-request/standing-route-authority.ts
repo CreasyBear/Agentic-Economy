@@ -79,9 +79,15 @@ export type EvaluateStandingRouteAuthorityResult = Readonly<
 >
 
 export function standingRoutePolicyDigest(
-  policy: Omit<StandingRoutePolicy, 'policyRef' | 'policyDigest'>,
+  policy: Omit<StandingRoutePolicy, 'policyRef' | 'policyDigest'> | StandingRoutePolicy,
 ): string {
-  return canonicalDigest(policy as StableHashValue)
+  const {
+    policyRef: _policyRef,
+    policyDigest: _policyDigest,
+    revokedAt: _revokedAt,
+    ...issuedPolicy
+  } = policy as StandingRoutePolicy
+  return canonicalDigest(issuedPolicy as StableHashValue)
 }
 
 export function evaluateStandingRouteAuthority(input: Readonly<{

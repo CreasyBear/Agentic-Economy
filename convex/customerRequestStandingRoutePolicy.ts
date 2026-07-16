@@ -14,8 +14,9 @@ import {
 } from '@/modules/customer-request/internal/route-mandate-convex-schema'
 import { routeMandateValue } from '@/modules/customer-request/runtime'
 
-import { internalMutation } from './_generated/server'
+import { internalMutation, internalQuery } from './_generated/server'
 import {
+  authenticateRequestOwner,
   authenticateRequestOwnerForMutation,
   openCurrentRouteGeneration,
   persistRouteMandateIssue,
@@ -63,7 +64,7 @@ const issueResult = v.union(
   }),
 )
 
-const reserveUseCommand = {
+const issueMandateCommand = {
   requestId: v.string(),
   policyRef: v.string(),
   expectedPolicyDigest: v.string(),
@@ -116,6 +117,28 @@ const issueMandateResult = v.union(
       v.literal('occurrence_limit_exceeded'),
       v.literal('mandate_expiry_invalid'),
       v.literal('prior_use_invalid'),
+    ),
+  }),
+)
+const getResult = v.union(
+  v.object({ kind: v.literal('active'), policy: standingRoutePolicyValue }),
+  v.object({ kind: v.literal('revoked'), policy: standingRoutePolicyValue }),
+  v.object({ kind: v.literal('not_found') }),
+)
+const revokeResult = v.union(
+  v.object({ kind: v.literal('revoked'), policy: standingRoutePolicyValue }),
+  v.object({ kind: v.literal('replayed'), policy: standingRoutePolicyValue }),
+  v.object({
+    kind: v.literal('conflict'),
+    reason: v.union(v.literal('command_changed'), v.literal('policy_changed')),
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(
+      v.literal('authentication_required'),
+      v.literal('request_not_found'),
+      v.literal('policy_not_found'),
+      v.literal('policy_integrity_invalid'),
     ),
   }),
 )
@@ -291,7 +314,7 @@ export const issue = internalMutation({
 })
 
 export const issueMandate = internalMutation({
-  args: reserveUseCommand,
+  args: issueMandateCommand,
   returns: issueMandateResult,
   handler: async (ctx, args) => {
     const authenticated = await authenticateRequestOwnerForMutation(ctx, args.requestId)
@@ -351,7 +374,15 @@ export const issueMandate = internalMutation({
     if (issueRow.policyDigest !== args.expectedPolicyDigest) {
       return { kind: 'conflict' as const, reason: 'policy_changed' as const }
     }
-    const policy = domainPolicy(issueRow.policy)
+    const storedPolicy = domainPolicy(issueRow.policy)
+    const revocation = await ctx.db.query('customerRequestStandingRoutePolicyRevocations')
+      .withIndex('by_policyRef', (query) => query.eq('policyRef', args.policyRef)).unique()
+    if (revocation !== null && !validPolicyRevocation(revocation, storedPolicy, args.requestId)) {
+      return { kind: 'refused' as const, reason: 'policy_integrity_invalid' as const }
+    }
+    const policy = revocation === null
+      ? storedPolicy
+      : { ...storedPolicy, revokedAt: revocation.revokedAt }
     if (standingRoutePolicyDigest(policyMaterial(policy)) !== policy.policyDigest
       || policy.policyRef !== args.policyRef
       || issueRow.principalId !== authenticated.principalId
@@ -507,6 +538,125 @@ export const issueMandate = internalMutation({
   },
 })
 
+export const get = internalQuery({
+  args: { requestId: v.string(), policyRef: v.string() },
+  returns: getResult,
+  handler: async (ctx, args) => {
+    const authenticated = await authenticateRequestOwner(ctx, args.requestId)
+    if (authenticated.kind !== 'authenticated') return { kind: 'not_found' as const }
+    const issueRow = await ctx.db.query('customerRequestStandingRoutePolicyIssues')
+      .withIndex('by_policyRef', (query) => query.eq('policyRef', args.policyRef)).unique()
+    if (issueRow === null
+      || issueRow.requestId !== args.requestId
+      || issueRow.principalId !== authenticated.principalId) {
+      return { kind: 'not_found' as const }
+    }
+    const storedPolicy = domainPolicy(issueRow.policy)
+    if (!validStoredPolicy(issueRow, storedPolicy, args.requestId)) {
+      throw new Error('customer_request_standing_route_policy_integrity_failure')
+    }
+    const revocation = await ctx.db.query('customerRequestStandingRoutePolicyRevocations')
+      .withIndex('by_policyRef', (query) => query.eq('policyRef', args.policyRef)).unique()
+    if (revocation === null) return { kind: 'active' as const, policy: writablePolicy(storedPolicy) }
+    if (!validPolicyRevocation(revocation, storedPolicy, args.requestId)) {
+      throw new Error('customer_request_standing_route_policy_revocation_integrity_failure')
+    }
+    return {
+      kind: 'revoked' as const,
+      policy: writablePolicy({ ...storedPolicy, revokedAt: revocation.revokedAt }),
+    }
+  },
+})
+
+export const revoke = internalMutation({
+  args: {
+    requestId: v.string(),
+    policyRef: v.string(),
+    expectedPolicyDigest: v.string(),
+    idempotencyKey: v.string(),
+  },
+  returns: revokeResult,
+  handler: async (ctx, args) => {
+    const authenticated = await authenticateRequestOwnerForMutation(ctx, args.requestId)
+    if (authenticated.kind === 'unauthenticated') {
+      return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    }
+    if (authenticated.kind === 'not_found') {
+      return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    }
+    const commandKey = `standing-route-policy-revocation-command:v1:${canonicalDigest({
+      principalId: authenticated.principalId,
+      idempotencyKey: args.idempotencyKey,
+    })}`
+    const commandDigest = canonicalDigest(args)
+    const replay = await ctx.db.query('customerRequestStandingRoutePolicyRevocationCommands')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
+    if (replay !== null) {
+      if (replay.commandDigest !== commandDigest
+        || replay.principalId !== authenticated.principalId
+        || replay.requestId !== args.requestId
+        || replay.policyRef !== args.policyRef) {
+        return { kind: 'conflict' as const, reason: 'command_changed' as const }
+      }
+      const issueRow = await ctx.db.query('customerRequestStandingRoutePolicyIssues')
+        .withIndex('by_policyRef', (query) => query.eq('policyRef', args.policyRef)).unique()
+      const revocation = await ctx.db.query('customerRequestStandingRoutePolicyRevocations')
+        .withIndex('by_revocationRef', (query) => query.eq('revocationRef', replay.revocationRef)).unique()
+      if (issueRow === null || revocation === null
+        || !validStoredPolicy(issueRow, domainPolicy(issueRow.policy), args.requestId)
+        || !validPolicyRevocation(revocation, domainPolicy(issueRow.policy), args.requestId)) {
+        throw new Error('customer_request_standing_route_policy_revocation_command_integrity_failure')
+      }
+      return {
+        kind: 'replayed' as const,
+        policy: writablePolicy({ ...domainPolicy(issueRow.policy), revokedAt: revocation.revokedAt }),
+      }
+    }
+    const issueRow = await ctx.db.query('customerRequestStandingRoutePolicyIssues')
+      .withIndex('by_policyRef', (query) => query.eq('policyRef', args.policyRef)).unique()
+    if (issueRow === null
+      || issueRow.requestId !== args.requestId
+      || issueRow.principalId !== authenticated.principalId) {
+      return { kind: 'refused' as const, reason: 'policy_not_found' as const }
+    }
+    if (issueRow.policyDigest !== args.expectedPolicyDigest) {
+      return { kind: 'conflict' as const, reason: 'policy_changed' as const }
+    }
+    const policy = domainPolicy(issueRow.policy)
+    if (!validStoredPolicy(issueRow, policy, args.requestId)) {
+      return { kind: 'refused' as const, reason: 'policy_integrity_invalid' as const }
+    }
+    const existing = await ctx.db.query('customerRequestStandingRoutePolicyRevocations')
+      .withIndex('by_policyRef', (query) => query.eq('policyRef', args.policyRef)).unique()
+    if (existing !== null) return { kind: 'conflict' as const, reason: 'policy_changed' as const }
+    const revokedAt = Date.now()
+    const material = {
+      policyRef: policy.policyRef,
+      policyDigest: policy.policyDigest,
+      principalId: authenticated.principalId,
+      requestId: args.requestId,
+      revokedAt,
+    }
+    const revocationDigest = canonicalDigest(material)
+    const revocationRef = `standing-route-policy-revocation:v1:${revocationDigest}`
+    await ctx.db.insert('customerRequestStandingRoutePolicyRevocations', {
+      revocationRef,
+      revocationDigest,
+      ...material,
+    })
+    await ctx.db.insert('customerRequestStandingRoutePolicyRevocationCommands', {
+      commandKey,
+      commandDigest,
+      principalId: authenticated.principalId,
+      requestId: args.requestId,
+      policyRef: args.policyRef,
+      revocationRef,
+      committedAt: revokedAt,
+    })
+    return { kind: 'revoked' as const, policy: writablePolicy({ ...policy, revokedAt }) }
+  },
+})
+
 function domainPolicy(value: unknown): StandingRoutePolicy {
   return value as StandingRoutePolicy
 }
@@ -545,6 +695,52 @@ function policyMaterial(
 ): Omit<StandingRoutePolicy, 'policyRef' | 'policyDigest'> {
   const { policyRef: _policyRef, policyDigest: _policyDigest, ...material } = policy
   return material
+}
+
+function validStoredPolicy(
+  issueRow: Readonly<{
+    policyRef: string
+    policyDigest: string
+    principalId: string
+    requestId: string
+    policy: unknown
+  }>,
+  policy: StandingRoutePolicy,
+  requestId: string,
+): boolean {
+  return standingRoutePolicyDigest(policyMaterial(policy)) === policy.policyDigest
+    && policy.policyRef === issueRow.policyRef
+    && policy.policyDigest === issueRow.policyDigest
+    && policy.principalId === issueRow.principalId
+    && issueRow.requestId === requestId
+}
+
+function validPolicyRevocation(
+  revocation: Readonly<{
+    revocationRef: string
+    revocationDigest: string
+    policyRef: string
+    policyDigest: string
+    principalId: string
+    requestId: string
+    revokedAt: number
+  }>,
+  policy: StandingRoutePolicy,
+  requestId: string,
+): boolean {
+  const material = {
+    policyRef: revocation.policyRef,
+    policyDigest: revocation.policyDigest,
+    principalId: revocation.principalId,
+    requestId: revocation.requestId,
+    revokedAt: revocation.revokedAt,
+  }
+  return revocation.policyRef === policy.policyRef
+    && revocation.policyDigest === policy.policyDigest
+    && revocation.principalId === policy.principalId
+    && revocation.requestId === requestId
+    && revocation.revocationDigest === canonicalDigest(material)
+    && revocation.revocationRef === `standing-route-policy-revocation:v1:${revocation.revocationDigest}`
 }
 
 function validIdentifier(value: string): boolean {

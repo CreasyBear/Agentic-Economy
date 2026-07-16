@@ -164,6 +164,37 @@ describe('durable RouteMandate lifecycle', () => {
       internal.customerRequestStandingRoutePolicy.issueMandate,
       { ...useCommand, idempotencyKey: 'standing-use:three' },
     )).resolves.toEqual({ kind: 'refused', reason: 'occurrence_limit_exceeded' })
+    await expect(customer.query(internal.customerRequestStandingRoutePolicy.get, {
+      requestId: command.requestId,
+      policyRef: issued.policy.policyRef,
+    })).resolves.toEqual({ kind: 'active', policy: issued.policy })
+    const revokePolicyCommand = {
+      requestId: command.requestId,
+      policyRef: issued.policy.policyRef,
+      expectedPolicyDigest: issued.policy.policyDigest,
+      idempotencyKey: 'revoke:standing-policy:one',
+    }
+    const revokedPolicy = await customer.mutation(
+      internal.customerRequestStandingRoutePolicy.revoke,
+      revokePolicyCommand,
+    )
+    expect(revokedPolicy).toMatchObject({
+      kind: 'revoked',
+      policy: { policyRef: issued.policy.policyRef, revokedAt: 1_000 },
+    })
+    await expect(customer.mutation(
+      internal.customerRequestStandingRoutePolicy.revoke,
+      revokePolicyCommand,
+    )).resolves.toEqual({ ...revokedPolicy, kind: 'replayed' })
+    if (revokedPolicy.kind !== 'revoked') throw new Error('standing policy revocation failed')
+    await expect(customer.query(internal.customerRequestStandingRoutePolicy.get, {
+      requestId: command.requestId,
+      policyRef: issued.policy.policyRef,
+    })).resolves.toEqual({ kind: 'revoked', policy: revokedPolicy.policy })
+    await expect(customer.mutation(
+      internal.customerRequestStandingRoutePolicy.issueMandate,
+      { ...useCommand, idempotencyKey: 'standing-use:after-policy-revocation' },
+    )).resolves.toEqual({ kind: 'refused', reason: 'policy_revoked' })
   })
 
   it('issues and exactly replays one server-derived mandate only for the authenticated Request principal', async () => {

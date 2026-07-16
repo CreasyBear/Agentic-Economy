@@ -689,7 +689,7 @@ function issueCommandMaterial(args: IssueCommand): IssueCommand {
   }
 }
 
-async function authenticateRequestOwner(
+export async function authenticateRequestOwner(
   ctx: MutationCtx | QueryCtx,
   requestId: string,
 ): Promise<AuthenticatedRequestResult> {
