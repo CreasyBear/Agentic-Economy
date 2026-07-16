@@ -66,6 +66,12 @@ const useRepeatCommand = v.object({
   delegatedCredentialId: v.string(),
   idempotencyKey: v.string(),
 })
+const revokeRepeatCommand = v.object({
+  requestRef: v.string(),
+  permissionRef: v.string(),
+  routeRef: v.string(),
+  idempotencyKey: v.string(),
+})
 const serviceAuthorization = v.union(
   v.object({
     operation: v.literal('allow_repeat'),
@@ -75,6 +81,11 @@ const serviceAuthorization = v.union(
   v.object({
     operation: v.literal('use_repeat'),
     command: useRepeatCommand,
+    assertion: serviceAssertion,
+  }),
+  v.object({
+    operation: v.literal('revoke_repeat'),
+    command: revokeRepeatCommand,
     assertion: serviceAssertion,
   }),
 )
@@ -194,6 +205,7 @@ export const issue = internalMutation({
     const authenticated = await authenticateStandingRequestOwner(
       ctx,
       args.requestId,
+      'allow_repeat',
       args.serviceAuthorization,
     )
     if (authenticated.kind === 'unauthenticated') {
@@ -368,6 +380,7 @@ export const issueMandate = internalMutation({
     const authenticated = await authenticateStandingRequestOwner(
       ctx,
       args.requestId,
+      'use_repeat',
       args.serviceAuthorization,
     )
     if (authenticated.kind === 'unauthenticated') {
@@ -664,10 +677,16 @@ export const revoke = internalMutation({
     policyRef: v.string(),
     expectedPolicyDigest: v.string(),
     idempotencyKey: v.string(),
+    serviceAuthorization: v.optional(serviceAuthorization),
   },
   returns: revokeResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwnerForMutation(ctx, args.requestId)
+    const authenticated = await authenticateStandingRequestOwner(
+      ctx,
+      args.requestId,
+      'revoke_repeat',
+      args.serviceAuthorization,
+    )
     if (authenticated.kind === 'unauthenticated') {
       return { kind: 'refused' as const, reason: 'authentication_required' as const }
     }
@@ -678,7 +697,12 @@ export const revoke = internalMutation({
       principalId: authenticated.principalId,
       idempotencyKey: args.idempotencyKey,
     })}`
-    const commandDigest = canonicalDigest(args)
+    const commandDigest = canonicalDigest({
+      requestId: args.requestId,
+      policyRef: args.policyRef,
+      expectedPolicyDigest: args.expectedPolicyDigest,
+      idempotencyKey: args.idempotencyKey,
+    })
     const replay = await ctx.db.query('customerRequestStandingRoutePolicyRevocationCommands')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
     if (replay !== null) {
@@ -754,12 +778,16 @@ function domainPolicy(value: unknown): StandingRoutePolicy {
 async function authenticateStandingRequestOwner(
   ctx: Parameters<typeof authenticateRequestOwnerForMutation>[0],
   requestId: string,
+  expectedOperation: StandingServiceAuthorization['operation'],
   authorization?: StandingServiceAuthorization,
 ) {
   if (authorization === undefined) {
     return await authenticateRequestOwnerForMutation(ctx, requestId)
   }
   if (authorization.command.requestRef !== requestId) {
+    return { kind: 'unauthenticated' as const }
+  }
+  if (authorization.operation !== expectedOperation) {
     return { kind: 'unauthenticated' as const }
   }
   return await authenticateRequestOwnerForServiceOperation(

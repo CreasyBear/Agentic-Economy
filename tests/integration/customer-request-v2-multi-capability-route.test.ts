@@ -577,16 +577,38 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       ...useCommand,
       serviceAuth: { ...useAuth, scopes: [...useAuth.scopes] },
     })).resolves.toEqual(confirmed)
-    await expect(admin.action(api.customerRequestApplication.inspectRepeatRoute, {
+    const inspectCommand = {
       requestRef: compared.requestRef,
       permissionRef: permission.permissionRef,
       routeRef: displayedRoute.routeRef,
+    }
+    const inspectAuth = await createCustomerRequestServiceAssertion({
+      key: serviceKey,
+      operation: 'inspect_repeat',
+      command: inspectCommand,
+      principal: servicePrincipal,
+      issuedAt: 1_000,
+    })
+    await expect(backend.action(api.customerRequestApplication.inspectRepeatRoute, {
+      ...inspectCommand,
+      serviceAuth: { ...inspectAuth, scopes: [...inspectAuth.scopes] },
     })).resolves.toEqual(permission)
-    const withdrawn = await admin.action(api.customerRequestApplication.revokeRepeatRoute, {
+    const revokeCommand = {
       requestRef: compared.requestRef,
       permissionRef: permission.permissionRef,
       routeRef: displayedRoute.routeRef,
       idempotencyKey: 'revoke-repeat:customer',
+    }
+    const revokeAuth = await createCustomerRequestServiceAssertion({
+      key: serviceKey,
+      operation: 'revoke_repeat',
+      command: revokeCommand,
+      principal: servicePrincipal,
+      issuedAt: 1_000,
+    })
+    const withdrawn = await backend.action(api.customerRequestApplication.revokeRepeatRoute, {
+      ...revokeCommand,
+      serviceAuth: { ...revokeAuth, scopes: [...revokeAuth.scopes] },
     })
     expect(withdrawn).toMatchObject({
       ...permission,
@@ -594,10 +616,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       withdrawnAt: 1_000,
     })
     await expect(admin.action(api.customerRequestApplication.revokeRepeatRoute, {
-      requestRef: compared.requestRef,
-      permissionRef: permission.permissionRef,
-      routeRef: displayedRoute.routeRef,
-      idempotencyKey: 'revoke-repeat:customer',
+      ...revokeCommand,
     })).resolves.toEqual(withdrawn)
     await expect(admin.action(api.customerRequestApplication.inspectRepeatRoute, {
       requestRef: compared.requestRef,

@@ -1161,10 +1161,20 @@ export const useRepeatRoute = action({
 })
 
 export const inspectRepeatRoute = action({
-  args: { requestRef: v.string(), permissionRef: v.string(), routeRef: v.string() },
+  args: {
+    requestRef: v.string(),
+    permissionRef: v.string(),
+    routeRef: v.string(),
+    serviceAuth: v.optional(serviceAssertion),
+  },
   returns: repeatPermissionResult,
   handler: async (ctx, args): Promise<RepeatPermissionResult> => {
-    const caller = await resolveRequestCaller(ctx, 'inspect_repeat', args, undefined)
+    const command = {
+      requestRef: args.requestRef,
+      permissionRef: args.permissionRef,
+      routeRef: args.routeRef,
+    }
+    const caller = await resolveRequestCaller(ctx, 'inspect_repeat', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
     const current = await loadCurrent(ctx, args.requestRef)
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
@@ -1205,10 +1215,17 @@ export const revokeRepeatRoute = action({
     permissionRef: v.string(),
     routeRef: v.string(),
     idempotencyKey: v.string(),
+    serviceAuth: v.optional(serviceAssertion),
   },
   returns: repeatPermissionResult,
   handler: async (ctx, args): Promise<RepeatPermissionResult> => {
-    const caller = await resolveRequestCaller(ctx, 'revoke_repeat', args, undefined)
+    const command = {
+      requestRef: args.requestRef,
+      permissionRef: args.permissionRef,
+      routeRef: args.routeRef,
+      idempotencyKey: args.idempotencyKey,
+    }
+    const caller = await resolveRequestCaller(ctx, 'revoke_repeat', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
     const current = await loadCurrent(ctx, args.requestRef)
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
@@ -1239,6 +1256,13 @@ export const revokeRepeatRoute = action({
       policyRef: resolved.policy.policyRef,
       expectedPolicyDigest: resolved.policy.policyDigest,
       idempotencyKey: args.idempotencyKey,
+      ...(args.serviceAuth === undefined ? {} : {
+        serviceAuthorization: {
+          operation: 'revoke_repeat' as const,
+          command,
+          assertion: args.serviceAuth,
+        },
+      }),
     })
     if (result.kind === 'revoked' || result.kind === 'replayed') {
       return projectRepeatPermission(
