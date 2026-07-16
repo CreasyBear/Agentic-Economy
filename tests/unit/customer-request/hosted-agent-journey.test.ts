@@ -130,7 +130,7 @@ describe('hosted Customer Request journey', () => {
       }),
       requestView('in_progress', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'wait',
-        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+        progress: { completed: 1, total: 2, current: { step: 2, state: 'queued' } },
       }),
       requestView('completed', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'none',
@@ -181,7 +181,7 @@ describe('hosted Customer Request journey', () => {
       totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', amountMinor: 900 } },
       recovery: { state: 'durable', resumed: true, postures: ['retry_safe'] },
       resultUsability: { state: 'usable' },
-      replaySafety: { executionStart: 'byte_equivalent' },
+      replaySafety: { executionStart: 'same_request_monotonic_progress' },
     })
   })
 

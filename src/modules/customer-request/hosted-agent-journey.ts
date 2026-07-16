@@ -44,7 +44,7 @@ type JourneyMetrics = {
   startedAt: number
   requestCalls: number
   clarifications: number
-  executionStartReplay: 'not_proven' | 'byte_equivalent'
+  executionStartReplay: 'not_proven' | 'same_request_monotonic_progress'
 }
 
 type HostedCustomerRequestJourneyRuntimeInput = HostedCustomerRequestJourneyInput & Readonly<{
@@ -107,7 +107,7 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
     }),
     resultUsability: z.strictObject({ state: z.enum(['usable', 'unusable']) }),
     replaySafety: z.strictObject({
-      executionStart: z.enum(['not_proven', 'byte_equivalent']),
+      executionStart: z.enum(['not_proven', 'same_request_monotonic_progress']),
     }),
   }),
   sandbox: z.literal(true),
@@ -219,10 +219,8 @@ export async function runHostedCustomerRequestJourney(
       observe(states, view)
       if (view.state !== 'in_progress') throw new Error(`hosted_journey_run_failed:${view.state}`)
       const startReplay = await callAgent(runtimeInput, startAction.path, startAction.method, startCommand)
-      if (JSON.stringify(view) !== JSON.stringify(startReplay)) {
-        throw new Error('hosted_journey_execution_start_replay_changed')
-      }
-      runtimeInput.metrics.executionStartReplay = 'byte_equivalent'
+      assertExecutionStartReplay(view, startReplay)
+      runtimeInput.metrics.executionStartReplay = 'same_request_monotonic_progress'
       const progressPath = observedNavigationPath(input, view, 'inspect_progress', 'GET')
       const evidencePath = observedNavigationPath(input, view, 'inspect_evidence', 'GET')
       if (input.scenario.finish === 'complete') {
@@ -750,6 +748,26 @@ function journeyMeasurements(
     },
     resultUsability: { state: resultUsable ? 'usable' as const : 'unusable' as const },
     replaySafety: { executionStart: input.metrics.executionStartReplay },
+  }
+}
+
+function assertExecutionStartReplay(started: CustomerRequestView, replayed: CustomerRequestView): void {
+  const startedProgress = started.progress
+  const replayedProgress = replayed.progress
+  const sameExecutionAuthority = replayed.requestRef === started.requestRef
+    && replayed.revision === started.revision
+    && replayed.routeGenerationRef === started.routeGenerationRef
+    && replayed.confirmation?.confirmationRef === started.confirmation?.confirmationRef
+  const monotonicProgress = startedProgress === undefined || replayedProgress === undefined
+    ? replayed.state === 'completed'
+    : replayedProgress.total === startedProgress.total
+      && replayedProgress.completed >= startedProgress.completed
+  const replayableAgain = replayed.navigation?.actions.some(
+    ({ relation }) => relation === 'start_confirmed_option',
+  ) ?? false
+  if (!sameExecutionAuthority || !monotonicProgress || replayableAgain
+    || (replayed.state !== 'in_progress' && replayed.state !== 'completed')) {
+    throw new Error('hosted_journey_execution_start_replay_changed')
   }
 }
 

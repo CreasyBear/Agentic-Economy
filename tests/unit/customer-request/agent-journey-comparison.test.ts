@@ -31,7 +31,7 @@ const ae = {
     totalCostAccuracy: { state: 'exact' as const, total: { currency: 'AUD', amountMinor: 1_000 } },
     recovery: { state: 'durable' as const, resumed: true, postures: ['retry_safe' as const] },
     resultUsability: { state: 'usable' as const },
-    replaySafety: { executionStart: 'byte_equivalent' as const },
+    replaySafety: { executionStart: 'same_request_monotonic_progress' as const },
   },
   claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value' as const,
 }
@@ -44,7 +44,7 @@ describe('agent journey comparison', () => {
         completion: { direct: 'completed', ae: 'completed' },
         totalCostAccuracy: { direct: 'exact', ae: 'exact', totalsMatch: true },
         recovery: { direct: 'unsupported', ae: 'durable', aeResumed: true },
-        replaySafety: { aeExecutionStart: 'byte_equivalent' },
+        replaySafety: { aeExecutionStart: 'same_request_monotonic_progress' },
       }),
       claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value',
     }))
