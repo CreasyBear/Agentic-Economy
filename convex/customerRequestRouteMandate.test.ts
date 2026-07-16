@@ -97,29 +97,71 @@ describe('durable RouteMandate lifecycle', () => {
       mandateExpiresAt: command.validUntil,
       idempotencyKey: 'standing-use:one',
     }
-    const firstUse = await customer.mutation(
-      internal.customerRequestStandingRoutePolicy.reserveUse,
+    const firstIssue = await customer.mutation(
+      internal.customerRequestStandingRoutePolicy.issueMandate,
       useCommand,
     )
-    expect(firstUse).toMatchObject({
-      kind: 'reserved',
+    expect(firstIssue).toMatchObject({
+      kind: 'issued',
       use: {
         standingPolicyRef: issued.policy.policyRef,
         occurrence: 1,
         maximumSpend: command.perUseSpend,
         dataAllocations: command.perUseDataAllocations,
       },
+      mandate: {
+        format: 'ae.route-mandate:v1',
+        principal: { principalId: identity.tokenIdentifier },
+        authorization: {
+          kind: 'standing_low_risk',
+          standingPolicyRef: issued.policy.policyRef,
+        },
+        request: {
+          requestId: command.requestId,
+          requestRevision: command.expectedRequestRevision,
+        },
+        route: {
+          generationRef: command.expectedGenerationRef,
+          routePlanId: command.selectedRoutePlanId,
+          maximumTotalSpend: command.perUseSpend,
+        },
+      },
     })
     await expect(customer.mutation(
-      internal.customerRequestStandingRoutePolicy.reserveUse,
+      internal.customerRequestStandingRoutePolicy.issueMandate,
       useCommand,
-    )).resolves.toEqual({ ...firstUse, kind: 'replayed' })
+    )).resolves.toEqual({ ...firstIssue, kind: 'replayed' })
+    if (firstIssue.kind !== 'issued') throw new Error('standing mandate issuance failed')
+    await expect(customer.query(internal.customerRequestRouteMandate.getCurrent, {
+      requestId: command.requestId,
+    })).resolves.toEqual({ kind: 'active', mandate: firstIssue.mandate })
+    const secondCommand = { ...useCommand, idempotencyKey: 'standing-use:two' }
     await expect(customer.mutation(
-      internal.customerRequestStandingRoutePolicy.reserveUse,
-      { ...useCommand, idempotencyKey: 'standing-use:two' },
-    )).resolves.toMatchObject({ kind: 'reserved', use: { occurrence: 2 } })
+      internal.customerRequestStandingRoutePolicy.issueMandate,
+      secondCommand,
+    )).resolves.toEqual({ kind: 'conflict', reason: 'active_mandate_exists' })
+    await expect(backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestStandingRouteAuthorityUses').take(10)
+    ))).resolves.toHaveLength(1)
+
+    await expect(customer.mutation(internal.customerRequestRouteMandate.revoke, {
+      requestId: command.requestId,
+      mandateRef: firstIssue.mandate.mandateRef,
+      idempotencyKey: 'revoke:standing-use:one',
+    })).resolves.toMatchObject({ kind: 'revoked' })
+    const secondIssue = await customer.mutation(
+      internal.customerRequestStandingRoutePolicy.issueMandate,
+      secondCommand,
+    )
+    expect(secondIssue).toMatchObject({ kind: 'issued', use: { occurrence: 2 } })
+    if (secondIssue.kind !== 'issued') throw new Error('second standing mandate issuance failed')
+    await expect(customer.mutation(internal.customerRequestRouteMandate.revoke, {
+      requestId: command.requestId,
+      mandateRef: secondIssue.mandate.mandateRef,
+      idempotencyKey: 'revoke:standing-use:two',
+    })).resolves.toMatchObject({ kind: 'revoked' })
     await expect(customer.mutation(
-      internal.customerRequestStandingRoutePolicy.reserveUse,
+      internal.customerRequestStandingRoutePolicy.issueMandate,
       { ...useCommand, idempotencyKey: 'standing-use:three' },
     )).resolves.toEqual({ kind: 'refused', reason: 'occurrence_limit_exceeded' })
   })

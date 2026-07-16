@@ -284,53 +284,22 @@ export const issue = internalMutation({
     if (compiled.kind !== 'compiled') {
       return { kind: 'refused' as const, reason: 'mandate_scope_invalid' as const }
     }
-    const mandate = writableMandate(compiled.mandate)
-    const existingIssue = await ctx.db.query('customerRequestRouteMandateIssues')
-      .withIndex('by_mandateRef', (query) => query.eq('mandateRef', mandate.mandateRef)).unique()
-    if (existingIssue !== null) throw new Error('customer_request_route_mandate_ref_collision')
-    await ctx.db.insert('customerRequestRouteMandateIssues', {
-      mandateRef: mandate.mandateRef,
-      mandateDigest: mandate.mandateDigest,
+    const persisted = await persistRouteMandateIssue(ctx, {
+      mandate: compiled.mandate,
+      evidence: { authentication: authenticationEvidence, authorization: authorizationEvidence },
       principalId: authenticated.principalId,
       requestId: args.requestId,
       requestRevision: args.expectedRequestRevision,
       generationRef: args.expectedGenerationRef,
       routePlanId: args.selectedRoutePlanId,
-      mandate,
-      evidence: { authentication: authenticationEvidence, authorization: authorizationEvidence },
-      recordedAt: issuedAt,
-    })
-    if (activeHead === null) {
-      await ctx.db.insert('customerRequestRouteMandateHeads', {
-        requestId: args.requestId,
-        principalId: authenticated.principalId,
-        currentMandateRef: mandate.mandateRef,
-        currentMandateDigest: mandate.mandateDigest,
-        currentRequestRevision: args.expectedRequestRevision,
-        currentGenerationRef: args.expectedGenerationRef,
-        createdAt: issuedAt,
-        updatedAt: issuedAt,
-      })
-    } else {
-      await ctx.db.patch(activeHead._id, {
-        currentMandateRef: mandate.mandateRef,
-        currentMandateDigest: mandate.mandateDigest,
-        currentRequestRevision: args.expectedRequestRevision,
-        currentGenerationRef: args.expectedGenerationRef,
-        updatedAt: issuedAt,
-      })
-    }
-    await ctx.db.insert('customerRequestRouteMandateCommands', {
       commandKey,
       commandDigest,
-      principalId: authenticated.principalId,
-      requestId: args.requestId,
-      mandateRef: mandate.mandateRef,
-      mandateDigest: mandate.mandateDigest,
-      result: mandate,
-      committedAt: issuedAt,
+      recordedAt: issuedAt,
     })
-    return { kind: 'issued' as const, mandate }
+    if (persisted.kind === 'active_mandate_exists') {
+      return { kind: 'conflict' as const, reason: 'active_mandate_exists' as const }
+    }
+    return { kind: 'issued' as const, mandate: persisted.mandate }
   },
 })
 
@@ -581,6 +550,91 @@ function routeMandateCommandKey(principalId: string, args: IssueCommand): string
     requestId: args.requestId,
     idempotencyKey: args.idempotencyKey,
   })}`
+}
+
+export async function persistRouteMandateIssue(
+  ctx: MutationCtx,
+  input: Readonly<{
+    mandate: RouteMandate
+    evidence: IssueEvidence
+    principalId: string
+    requestId: string
+    requestRevision: number
+    generationRef: string
+    routePlanId: string
+    commandKey: string
+    commandDigest: string
+    recordedAt: number
+  }>,
+): Promise<
+  | { kind: 'issued'; mandate: ReturnType<typeof writableMandate> }
+  | { kind: 'active_mandate_exists' }
+> {
+  const activeHead = await ctx.db.query('customerRequestRouteMandateHeads')
+    .withIndex('by_requestId', (query) => query.eq('requestId', input.requestId)).unique()
+  if (activeHead !== null) {
+    const revocation = await ctx.db.query('customerRequestRouteMandateRevocations')
+      .withIndex('by_mandateRef', (query) => query.eq('mandateRef', activeHead.currentMandateRef)).unique()
+    if (revocation === null) return { kind: 'active_mandate_exists' }
+    const priorIssue = await ctx.db.query('customerRequestRouteMandateIssues')
+      .withIndex('by_mandateRef', (query) => query.eq('mandateRef', activeHead.currentMandateRef)).unique()
+    if (priorIssue === null
+      || !routeMandateHeadMatchesIssue(activeHead, priorIssue)
+      || !routeMandateRevocationRecordIsValid(revocation, priorIssue)) {
+      throw new Error('customer_request_route_mandate_replacement_integrity_failure')
+    }
+  }
+  const mandate = writableMandate(input.mandate)
+  const issueRecord = {
+    mandateRef: mandate.mandateRef,
+    mandateDigest: mandate.mandateDigest,
+    principalId: input.principalId,
+    requestId: input.requestId,
+    requestRevision: input.requestRevision,
+    generationRef: input.generationRef,
+    routePlanId: input.routePlanId,
+    mandate,
+    evidence: input.evidence,
+    recordedAt: input.recordedAt,
+  }
+  if (!routeMandateIssueRecordIsValid(issueRecord)) {
+    throw new Error('customer_request_route_mandate_issue_integrity_failure')
+  }
+  const existingIssue = await ctx.db.query('customerRequestRouteMandateIssues')
+    .withIndex('by_mandateRef', (query) => query.eq('mandateRef', mandate.mandateRef)).unique()
+  if (existingIssue !== null) throw new Error('customer_request_route_mandate_ref_collision')
+  await ctx.db.insert('customerRequestRouteMandateIssues', issueRecord)
+  if (activeHead === null) {
+    await ctx.db.insert('customerRequestRouteMandateHeads', {
+      requestId: input.requestId,
+      principalId: input.principalId,
+      currentMandateRef: mandate.mandateRef,
+      currentMandateDigest: mandate.mandateDigest,
+      currentRequestRevision: input.requestRevision,
+      currentGenerationRef: input.generationRef,
+      createdAt: input.recordedAt,
+      updatedAt: input.recordedAt,
+    })
+  } else {
+    await ctx.db.patch(activeHead._id, {
+      currentMandateRef: mandate.mandateRef,
+      currentMandateDigest: mandate.mandateDigest,
+      currentRequestRevision: input.requestRevision,
+      currentGenerationRef: input.generationRef,
+      updatedAt: input.recordedAt,
+    })
+  }
+  await ctx.db.insert('customerRequestRouteMandateCommands', {
+    commandKey: input.commandKey,
+    commandDigest: input.commandDigest,
+    principalId: input.principalId,
+    requestId: input.requestId,
+    mandateRef: mandate.mandateRef,
+    mandateDigest: mandate.mandateDigest,
+    result: mandate,
+    committedAt: input.recordedAt,
+  })
+  return { kind: 'issued', mandate }
 }
 
 export async function authenticateRequestOwnerForMutation(

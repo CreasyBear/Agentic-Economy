@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { compileRouteMandate } from '@/modules/customer-request/route-mandate'
 import {
   evaluateStandingRouteAuthority,
   standingRoutePolicyDigest,
@@ -11,13 +12,16 @@ import {
   standingRouteAuthorityUseValue,
   standingRoutePolicyValue,
 } from '@/modules/customer-request/internal/route-mandate-convex-schema'
+import { routeMandateValue } from '@/modules/customer-request/runtime'
 
 import { internalMutation } from './_generated/server'
 import {
   authenticateRequestOwnerForMutation,
   openCurrentRouteGeneration,
+  persistRouteMandateIssue,
 } from './customerRequestRouteMandate'
 import { currentRoutePlanGenerationGraphStatus } from './customerRequestV2'
+import { routeMandateIssueRecordIsValid } from './customerRequestRouteMandateIntegrity'
 
 const money = v.object({ currency: v.string(), amountMinor: v.number() })
 const issueCommand = {
@@ -70,9 +74,17 @@ const reserveUseCommand = {
   mandateExpiresAt: v.number(),
   idempotencyKey: v.string(),
 }
-const reserveUseResult = v.union(
-  v.object({ kind: v.literal('reserved'), use: standingRouteAuthorityUseValue }),
-  v.object({ kind: v.literal('replayed'), use: standingRouteAuthorityUseValue }),
+const issueMandateResult = v.union(
+  v.object({
+    kind: v.literal('issued'),
+    use: standingRouteAuthorityUseValue,
+    mandate: routeMandateValue,
+  }),
+  v.object({
+    kind: v.literal('replayed'),
+    use: standingRouteAuthorityUseValue,
+    mandate: routeMandateValue,
+  }),
   v.object({
     kind: v.literal('conflict'),
     reason: v.union(
@@ -80,6 +92,7 @@ const reserveUseResult = v.union(
       v.literal('request_revision_changed'),
       v.literal('route_generation_changed'),
       v.literal('policy_changed'),
+      v.literal('active_mandate_exists'),
     ),
   }),
   v.object({
@@ -277,9 +290,9 @@ export const issue = internalMutation({
   },
 })
 
-export const reserveUse = internalMutation({
+export const issueMandate = internalMutation({
   args: reserveUseCommand,
-  returns: reserveUseResult,
+  returns: issueMandateResult,
   handler: async (ctx, args) => {
     const authenticated = await authenticateRequestOwnerForMutation(ctx, args.requestId)
     if (authenticated.kind === 'unauthenticated') {
@@ -309,20 +322,28 @@ export const reserveUse = internalMutation({
     if (replay !== null) {
       const useRow = await ctx.db.query('customerRequestStandingRouteAuthorityUses')
         .withIndex('by_authorityUseRef', (query) => query.eq('authorityUseRef', replay.authorityUseRef)).unique()
+      const mandateIssue = await ctx.db.query('customerRequestRouteMandateIssues')
+        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', replay.mandateRef)).unique()
       if (replay.commandDigest !== commandDigest
         || replay.principalId !== authenticated.principalId
         || replay.requestId !== args.requestId
         || replay.standingPolicyRef !== args.policyRef) {
         return { kind: 'conflict' as const, reason: 'command_changed' as const }
       }
-      if (useRow === null
+      if (useRow === null || mandateIssue === null
         || useRow.authorityUseDigest !== replay.authorityUseDigest
         || useRow.commandDigest !== replay.commandDigest
+        || useRow.mandateRef !== replay.mandateRef
+        || useRow.mandateDigest !== replay.mandateDigest
         || !validUse(domainUse(useRow.use))
-        || canonicalDigest(useRow.use) !== canonicalDigest(replay.result)) {
+        || canonicalDigest(useRow.use) !== canonicalDigest(replay.result)
+        || replay.mandate.mandateRef !== replay.mandateRef
+        || replay.mandate.mandateDigest !== replay.mandateDigest
+        || !routeMandateIssueRecordIsValid(mandateIssue)
+        || canonicalDigest(mandateIssue.mandate) !== canonicalDigest(replay.mandate)) {
         throw new Error('customer_request_standing_route_authority_use_command_integrity_failure')
       }
-      return { kind: 'replayed' as const, use: replay.result }
+      return { kind: 'replayed' as const, use: replay.result, mandate: replay.mandate }
     }
     const issueRow = await ctx.db.query('customerRequestStandingRoutePolicyIssues')
       .withIndex('by_policyRef', (query) => query.eq('policyRef', args.policyRef)).unique()
@@ -379,7 +400,81 @@ export const reserveUse = internalMutation({
       mandateExpiresAt: args.mandateExpiresAt,
     })
     if (evaluated.kind !== 'authorized') return evaluated
+    const compiled = compileRouteMandate({
+      generation: current.generation,
+      selectedRoutePlanId: args.selectedRoutePlanId,
+      principal: {
+        principalId: authenticated.principalId,
+        authenticationEvidenceRef: `clerk-identity:${canonicalDigest(authenticated.identity)}`,
+      },
+      authorization: evaluated.authorization,
+      maximumTotalSpend: evaluated.use.maximumSpend,
+      expiresAt: args.mandateExpiresAt,
+      now: evaluated.use.usedAt,
+    })
+    if (compiled.kind !== 'compiled') {
+      return { kind: 'refused' as const, reason: 'policy_integrity_invalid' as const }
+    }
     const writable = writableUse(evaluated.use)
+    const evidenceMaterial = {
+      kind: 'standing_low_risk' as const,
+      commandDigest,
+      principalId: authenticated.principalId,
+      requestId: args.requestId,
+      requestRevision: args.expectedRequestRevision,
+      generationRef: args.expectedGenerationRef,
+      selectedRoutePlanId: args.selectedRoutePlanId,
+      standingPolicyRef: policy.policyRef,
+      standingPolicyDigest: policy.policyDigest,
+      authorityUseRef: writable.authorityUseRef,
+      authorityUseDigest: writable.authorityUseDigest,
+      delegatedCredentialId: args.delegatedCredentialId,
+      maximumTotalSpend: { ...writable.maximumSpend },
+      issuedAt: writable.usedAt,
+      expiresAt: writable.mandateExpiresAt,
+      authenticatedBy: authenticated.identity,
+    }
+    const evidenceDigest = canonicalDigest(evidenceMaterial)
+    const persisted = await persistRouteMandateIssue(ctx, {
+      mandate: compiled.mandate,
+      evidence: {
+        authentication: {
+          evidenceRef: `clerk-identity:${canonicalDigest(authenticated.identity)}`,
+          ...authenticated.identity,
+        },
+        authorization: {
+          kind: 'standing_low_risk',
+          evidenceRef: `route-authorization:standing-low-risk:${evidenceDigest}`,
+          evidenceDigest,
+          commandDigest,
+          principalId: authenticated.principalId,
+          requestId: args.requestId,
+          requestRevision: args.expectedRequestRevision,
+          generationRef: args.expectedGenerationRef,
+          selectedRoutePlanId: args.selectedRoutePlanId,
+          standingPolicyRef: policy.policyRef,
+          standingPolicyDigest: policy.policyDigest,
+          authorityUseRef: writable.authorityUseRef,
+          authorityUseDigest: writable.authorityUseDigest,
+          delegatedCredentialId: args.delegatedCredentialId,
+          maximumTotalSpend: { ...writable.maximumSpend },
+          issuedAt: writable.usedAt,
+          expiresAt: writable.mandateExpiresAt,
+          authenticatedActor: { ...authenticated.identity },
+        },
+      },
+      principalId: authenticated.principalId,
+      requestId: args.requestId,
+      requestRevision: args.expectedRequestRevision,
+      generationRef: args.expectedGenerationRef,
+      routePlanId: args.selectedRoutePlanId,
+      commandKey,
+      commandDigest,
+      recordedAt: writable.usedAt,
+    })
+    if (persisted.kind === 'active_mandate_exists') {
+      return { kind: 'conflict' as const, reason: 'active_mandate_exists' as const }
+    }
     await ctx.db.insert('customerRequestStandingRouteAuthorityUses', {
       authorityUseRef: writable.authorityUseRef,
       authorityUseDigest: writable.authorityUseDigest,
@@ -388,6 +483,8 @@ export const reserveUse = internalMutation({
       principalId: authenticated.principalId,
       requestId: args.requestId,
       delegatedCredentialId: args.delegatedCredentialId,
+      mandateRef: persisted.mandate.mandateRef,
+      mandateDigest: persisted.mandate.mandateDigest,
       use: writable,
       commandDigest,
       recordedAt: writable.usedAt,
@@ -400,10 +497,13 @@ export const reserveUse = internalMutation({
       standingPolicyRef: policy.policyRef,
       authorityUseRef: writable.authorityUseRef,
       authorityUseDigest: writable.authorityUseDigest,
+      mandateRef: persisted.mandate.mandateRef,
+      mandateDigest: persisted.mandate.mandateDigest,
+      mandate: persisted.mandate,
       result: writable,
       committedAt: writable.usedAt,
     })
-    return { kind: 'reserved' as const, use: writable }
+    return { kind: 'issued' as const, use: writable, mandate: persisted.mandate }
   },
 })
 

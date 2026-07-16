@@ -115,13 +115,54 @@ export function routeMandateRevocationEvidence(value: RouteMandateRevocationReco
 }
 
 function routeMandateIssueEvidenceIsValid(mandate: StoredMandate, evidence: IssueEvidence): boolean {
-  if (mandate.authorization.kind !== 'explicit') return false
   const authenticatedActor = {
     issuer: evidence.authentication.issuer,
     subject: evidence.authentication.subject,
     tokenIdentifier: evidence.authentication.tokenIdentifier,
   }
   const authenticationEvidenceRef = `clerk-identity:${canonicalDigest(authenticatedActor)}`
+  if (mandate.authorization.kind === 'standing_low_risk'
+    && evidence.authorization.kind === 'standing_low_risk') {
+    const authorizationMaterial = {
+      kind: 'standing_low_risk' as const,
+      commandDigest: evidence.authorization.commandDigest,
+      principalId: evidence.authorization.principalId,
+      requestId: evidence.authorization.requestId,
+      requestRevision: evidence.authorization.requestRevision,
+      generationRef: evidence.authorization.generationRef,
+      selectedRoutePlanId: evidence.authorization.selectedRoutePlanId,
+      standingPolicyRef: evidence.authorization.standingPolicyRef,
+      standingPolicyDigest: evidence.authorization.standingPolicyDigest,
+      authorityUseRef: evidence.authorization.authorityUseRef,
+      authorityUseDigest: evidence.authorization.authorityUseDigest,
+      delegatedCredentialId: evidence.authorization.delegatedCredentialId,
+      maximumTotalSpend: evidence.authorization.maximumTotalSpend,
+      issuedAt: evidence.authorization.issuedAt,
+      expiresAt: evidence.authorization.expiresAt,
+      authenticatedBy: evidence.authorization.authenticatedActor,
+    }
+    const authorizationEvidenceDigest = canonicalDigest(authorizationMaterial)
+    return evidence.authentication.evidenceRef === authenticationEvidenceRef
+      && canonicalDigest(evidence.authorization.authenticatedActor) === canonicalDigest(authenticatedActor)
+      && evidence.authorization.evidenceDigest === authorizationEvidenceDigest
+      && evidence.authorization.evidenceRef
+        === `route-authorization:standing-low-risk:${authorizationEvidenceDigest}`
+      && mandate.principal.principalId === evidence.authorization.principalId
+      && mandate.principal.authenticationEvidenceRef === evidence.authentication.evidenceRef
+      && mandate.authorization.standingPolicyRef === evidence.authorization.standingPolicyRef
+      && mandate.authorization.standingPolicyDigest === evidence.authorization.standingPolicyDigest
+      && mandate.authorization.authorityUseRef === evidence.authorization.authorityUseRef
+      && mandate.request.requestId === evidence.authorization.requestId
+      && mandate.request.requestRevision === evidence.authorization.requestRevision
+      && mandate.route.generationRef === evidence.authorization.generationRef
+      && mandate.route.routePlanId === evidence.authorization.selectedRoutePlanId
+      && canonicalDigest(mandate.route.maximumTotalSpend)
+        === canonicalDigest(evidence.authorization.maximumTotalSpend)
+      && mandate.issuedAt === evidence.authorization.issuedAt
+      && mandate.expiresAt === evidence.authorization.expiresAt
+  }
+  if (mandate.authorization.kind !== 'explicit'
+    || evidence.authorization.kind !== 'explicit') return false
   const authorizationMaterial = {
     kind: 'explicit' as const,
     commandDigest: evidence.authorization.commandDigest,
