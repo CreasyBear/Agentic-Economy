@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
+import { Link } from '@astryxdesign/core/Link'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 
@@ -319,9 +320,11 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
   return (
     <main className="mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14">
       {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-3 text-center">
-        <Text className="text-sm font-semibold text-accent">Ask AE</Text>
-        <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">What can we help you find?</Heading>
-        <Text type="large" color="secondary">Enter a place, a type of business, or describe the situation. We’ll ask what matters and help you compare your options.</Text>
+        <Text className="text-sm font-semibold text-accent">Your agent knows who to call.</Text>
+        <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">What do you need to make happen?</Heading>
+        <Text type="large" color="secondary">Start with the outcome in your own words. AE asks only for details that change the decision, then shows the available ways forward.</Text>
+        <Text type="supporting" color="secondary">Nothing is confirmed, shared, or started until you decide.</Text>
+        <Link href="/SKILL.md" className="mx-auto min-h-11 py-2 font-semibold">Use AE with your AI</Link>
       </header> : null}
 
       {state.kind === 'request' && state.projection.recovery?.state === 'restored'
@@ -335,12 +338,12 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
       {state.kind === 'idle' || state.kind === 'error' ? <section className="mx-auto grid w-full max-w-3xl gap-3" aria-label="Start a request">
         <form onSubmit={(event) => { event.preventDefault(); void submit() }} className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-low sm:flex-row">
           <label className="sr-only" htmlFor="customer-need">What are you looking for?</label>
-          <textarea id="customer-need" value={need} onChange={(event) => setNeed(event.target.value)} rows={2} maxLength={2_000} required placeholder="Try a place, business type, or need" className="min-h-16 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-lg text-primary outline-none focus:ring-2 focus:ring-accent" />
+          <textarea id="customer-need" value={need} onChange={(event) => setNeed(event.target.value)} rows={2} maxLength={2_000} required placeholder="Describe the outcome, constraints, and timing you already know" className="min-h-16 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-lg text-primary outline-none focus:ring-2 focus:ring-accent" />
           <button type="submit" disabled={need.trim().length === 0} className="min-h-11 self-end rounded-md bg-accent px-5 font-semibold text-on-accent disabled:opacity-50">Explore</button>
         </form>
         <Text type="supporting" color="secondary" className="text-center">No budget or full specification required. Keep contact, payment, and account details until AE asks for them.</Text>
         {editingRevision !== undefined ? <Text type="supporting" color="secondary">Editing revision {editingRevision} of this Request.</Text> : null}
-        {state.kind === 'error' ? <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : <StartExamples />}
+        {state.kind === 'error' ? <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : null}
       </section> : <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} />}
     </main>
   )
@@ -1518,8 +1521,6 @@ function workingCriterionLabel(label: string, value: unknown, requestSummary: st
 }
 function RecoveryActions({ edit, restart }: { edit: () => void; restart: () => void }) { return <div className="flex flex-wrap gap-3 border-t border-border pt-4"><Button label="Edit this Request" variant="secondary" clickAction={edit} /><Button label="Start a new Request" variant="ghost" clickAction={restart} /></div> }
 
-function StartExamples() { return <div className="grid gap-2 border-t border-border pt-6 sm:grid-cols-4"><Example label="Place" value="Fremantle" /><Example label="Business type" value="Electrician" /><Example label="Situation" value="A quiet dinner with my parents" /><Example label="Detailed" value="Dog-friendly stay near the beach" /></div> }
-function Example({ label, value }: { label: string; value: string }) { return <div className="grid gap-1 rounded-md bg-surface p-4"><Text type="supporting" weight="semibold">{label}</Text><Text color="secondary">{value}</Text></div> }
 function Conversation({ turns }: { turns: readonly ConversationTurn[] }) { return <div className="grid gap-3" aria-label="Request conversation">{turns.map((turn, index) => turn.speaker === 'customer' ? <div key={`${index}:${turn.text}`} className="ml-auto max-w-[85%] rounded-md bg-accent px-4 py-3 text-on-accent">{turn.text}</div> : <div key={`${index}:${turn.text}`} className="max-w-[90%] border-l-2 border-accent py-1 pl-4"><Text className="text-sm font-semibold text-accent">AE</Text><Heading level={2} className="mt-1">{customerFacingAeTurn(turn.text)}</Heading></div>)}</div> }
 function Clarification({ prompt, answer, setAnswer, submit }: { prompt: string; answer: string; setAnswer: (answer: string) => void; submit: () => void }) { return <form className="border-t border-border pt-5" onSubmit={(event) => { event.preventDefault(); submit() }}><label htmlFor="clarification-answer" className="sr-only">{prompt}</label><div className="flex flex-col gap-2 sm:flex-row"><input id="clarification-answer" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Add a detail…" className="min-h-11 min-w-0 flex-1 rounded-md border border-border bg-card px-3 outline-none focus:ring-2 focus:ring-accent" /><button type="submit" disabled={!answer.trim()} className="min-h-11 rounded-md bg-accent px-5 font-semibold text-on-accent disabled:opacity-50">Continue</button></div></form> }
 

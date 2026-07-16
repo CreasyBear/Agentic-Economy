@@ -24,12 +24,15 @@ test.describe('public owner routes', () => {
   test('home exposes the public landing story and claim path', async ({ page }, testInfo) => {
     await page.goto('/')
 
-    await expect(page.getByRole('heading', { name: 'Your agent knows who to call.' })).toBeVisible()
-    const composer = page.getByRole('search', { name: 'Find local service businesses' })
-    await expect(composer).toBeVisible()
-    await expect(composer.getByRole('searchbox', { name: 'What do you need?' })).toBeVisible()
-    await expect(composer.getByRole('button', { name: 'Find businesses' })).toBeVisible()
-    await expect(page.getByText('AE searches published business pages. You decide before anything is sent to a business.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'What do you need to make happen?' })).toBeVisible()
+    await expect(page.getByLabel('What are you looking for?')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Explore' })).toBeDisabled()
+    await expect(page.getByText('Nothing is confirmed, shared, or started until you decide.')).toBeVisible()
+    const agentSetup = page.getByRole('link', { name: 'Use AE with your AI' })
+    await expect(agentSetup).toHaveAttribute('href', '/SKILL.md')
+    const setupResponse = await page.request.get('/SKILL.md')
+    expect(setupResponse.status()).toBe(200)
+    expect(await setupResponse.text()).toContain('assistant setup')
 
     if (testInfo.project.name.includes('compact')) {
       const menuButton = page.getByRole('button', { name: 'Open public menu' })

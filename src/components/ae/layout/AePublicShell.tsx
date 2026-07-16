@@ -49,7 +49,7 @@ const publicTopNav = (
       <>
         <div className="hidden items-center gap-2 md:flex">
           <Button label="Businesses" variant="ghost" size="sm" href={defaultRegistryHref} icon={<NetworkIcon aria-hidden="true" />} />
-          <Button label="Ask AE" variant="primary" size="sm" href="/engine" icon={<RouteIcon aria-hidden="true" />} />
+          <Button label="Ask AE" variant="primary" size="sm" href="/" icon={<RouteIcon aria-hidden="true" />} />
         </div>
         <div className="flex items-center gap-1 md:hidden">
           <Button
@@ -65,7 +65,7 @@ const publicTopNav = (
             label="Ask AE"
             variant="primary"
             size="lg"
-            href="/engine"
+            href="/"
             icon={<RouteIcon aria-hidden="true" />}
             isIconOnly
             className="min-h-11 min-w-11"
@@ -104,10 +104,10 @@ function PublicNavItems() {
   if (isMobile) {
     return (
       <>
-        <TopNavItem label="Ask AE" href="/engine" />
+        <TopNavItem label="Ask AE" href="/" />
         <TopNavItem label="Businesses" href={defaultRegistryHref} />
         <TopNavItem label="Claim your business page" href="/claim" />
-        <TopNavItem label="For agents" href="/developers/discovery" />
+        <TopNavItem label="For agents" href="/SKILL.md" />
         <TopNavItem label="Activity" href="/admin/runs" />
       </>
     )
@@ -115,10 +115,10 @@ function PublicNavItems() {
 
   return (
     <div className="hidden md:contents">
-      <Button label="Ask AE" variant="ghost" size="sm" href="/engine" />
+      <Button label="Ask AE" variant="ghost" size="sm" href="/" />
       <Button label="Businesses" variant="ghost" size="sm" href={defaultRegistryHref} />
       <Button label="Claim your business page" variant="ghost" size="sm" href="/claim" />
-      <Button label="For agents" variant="ghost" size="sm" href="/developers/discovery" />
+      <Button label="For agents" variant="ghost" size="sm" href="/SKILL.md" />
       <Button label="Activity" variant="ghost" size="sm" href="/admin/runs" />
     </div>
   )
@@ -153,7 +153,7 @@ function PublicFooter({ immersive }: { immersive: boolean }) {
           <a href="/llms.txt" className="text-secondary underline-offset-4 hover:text-primary hover:underline">Assistants</a>
           <Link href="/privacy">Privacy</Link>
           <Link href="/terms">Terms</Link>
-          {immersive ? null : <Link href="/engine">Ask AE</Link>}
+          {immersive ? null : <Link href="/">Ask AE</Link>}
         </nav>
       </div>
     </footer>

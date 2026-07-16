@@ -234,6 +234,8 @@ describe('CustomerRequest source completeness', () => {
       '/api/v1/requests',
       'customer_requests:create',
       'needs_information | ready_to_compare | routes_ready | route_confirmed | in_progress',
+      'Use AE when a customer needs to compare available business options before deciding what happens next.',
+      'Nothing is confirmed, shared, or started until the customer explicitly decides.',
       '/confirmation', '/run', '/evidence', '/problems', '/cancellation',
     ]
 

@@ -58,6 +58,17 @@ describe('Request-first home', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('explains the Request journey and customer control before asking', () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>())
+
+    renderHomeRoute()
+
+    expect(screen.getByRole('heading', { level: 1, name: 'What do you need to make happen?' })).toBeTruthy()
+    expect(screen.getByText(/Start with the outcome in your own words/)).toBeTruthy()
+    expect(screen.getByText(/Nothing is confirmed, shared, or started until you decide/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Use AE with your AI' }).getAttribute('href')).toBe('/SKILL.md')
+  })
+
   it('adopts a valid q as an editable Request draft without submitting it', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
