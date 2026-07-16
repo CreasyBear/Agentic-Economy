@@ -717,7 +717,8 @@ export const customerRequestV2Tables = {
   })
     .index('by_principalId', ['principalId'])
     .index('by_credentialId', ['credentialId'])
-    .index('by_ownerId', ['ownerId']),
+    .index('by_ownerId', ['ownerId'])
+    .index('by_ownerId_and_lastSeenAt', ['ownerId', 'lastSeenAt']),
 
   customerRequestV2Heads: defineTable({
     requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), currentRevision: v.number(),

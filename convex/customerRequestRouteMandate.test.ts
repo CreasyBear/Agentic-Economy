@@ -23,6 +23,33 @@ const identity = {
 describe('durable RouteMandate lifecycle', () => {
   afterEach(() => vi.restoreAllMocks())
 
+  it('returns the newest bounded repeat-permission assistants without history lockout', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      for (let index = 0; index < 70; index += 1) {
+        await ctx.db.insert('customerRequestAgentPrincipals', {
+          principalId: `agent:history:${index}`,
+          ownerId: 'owner:history',
+          credentialId: `credential:history:${index}`,
+          scopes: index % 2 === 0
+            ? ['customer_requests:create', 'customer_requests:standing_authority']
+            : ['customer_requests:create'],
+          recordedAt: index,
+          lastSeenAt: index,
+        })
+      }
+    })
+
+    const credentials = await backend.query(
+      internal.customerRequestPrincipals.listStandingCredentials,
+      { ownerId: 'owner:history' },
+    )
+
+    expect(credentials).toHaveLength(32)
+    expect(credentials[0]).toEqual({ credentialId: 'credential:history:68', lastSeenAt: 68 })
+    expect(credentials.at(-1)).toEqual({ credentialId: 'credential:history:6', lastSeenAt: 6 })
+  })
+
   it('issues and exactly replays one immutable standing policy against the current route generation', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000)
     const backend = convexTest(schema, modules)

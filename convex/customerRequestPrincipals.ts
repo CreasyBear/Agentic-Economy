@@ -61,14 +61,13 @@ export const listStandingCredentials = internalQuery({
   })),
   handler: async (ctx, args) => {
     const rows = await ctx.db.query('customerRequestAgentPrincipals')
-      .withIndex('by_ownerId', (query) => query.eq('ownerId', args.ownerId))
-      .take(65)
-    if (rows.length > 64) throw new Error('customer_request_agent_principal_history_overflow')
+      .withIndex('by_ownerId_and_lastSeenAt', (query) => query.eq('ownerId', args.ownerId))
+      .order('desc')
+      .take(64)
     return rows
       .filter((row) => (
         row.scopes.includes('customer_requests:standing_authority')
       ))
-      .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
       .map((row) => ({ credentialId: row.credentialId, lastSeenAt: row.lastSeenAt }))
   },
 })
