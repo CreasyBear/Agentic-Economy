@@ -171,10 +171,10 @@ const cases: readonly ParityCase[] = [
     operation: 'cancel',
     actionName: 'customerRequestApplication:cancelRoute',
     human: async (cancel) => await handleCustomerRequestCancelPost(post('/cancellation', {
-      idempotencyKey: 'cancel:parity',
+      idempotencyKey: 'cancel:parity', mode: 'after_current_step',
     }), requestRef, { cancel }),
     agent: async (callAction) => await handleAgentCustomerRequestCancelPost(post('/api/v1/cancellation', {
-      idempotencyKey: 'cancel:parity',
+      idempotencyKey: 'cancel:parity', mode: 'after_current_step',
     }), requestRef, agentOptions(callAction)),
   },
   {

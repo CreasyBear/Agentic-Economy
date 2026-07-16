@@ -811,11 +811,6 @@ async function cancelAfterCurrentHostedJourney(input: Readonly<{
   startCommand: unknown
   nonce: string
 }>): Promise<HostedCustomerRequestJourneyProof> {
-  const cancelAction = observedNavigationAction(input.input, input.started, 'cancel')
-  if (cancelAction.method !== 'POST') throw new Error('hosted_journey_navigation_method:cancel')
-  const cancelCommand = materializeObservedInput(input.started, cancelAction, {
-    '<unique string>': `acceptance:cancel-after-current:${input.nonce}`,
-  })
   let released: CustomerRequestView | undefined
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const progress = await callAgent(input.input, input.progressPath, 'GET', undefined, [200, 202])
@@ -833,6 +828,11 @@ async function cancelAfterCurrentHostedJourney(input: Readonly<{
   if (released?.progress?.current.step !== 1) {
     throw new Error('hosted_journey_cancel_after_current_release_not_observed')
   }
+  const cancelAction = observedNavigationAction(input.input, released, 'stop_after_current')
+  if (cancelAction.method !== 'POST') throw new Error('hosted_journey_navigation_method:stop_after_current')
+  const cancelCommand = materializeObservedInput(released, cancelAction, {
+    '<unique string>': `acceptance:cancel-after-current:${input.nonce}`,
+  })
   const requested = await callAgent(
     input.input, cancelAction.path, cancelAction.method, cancelCommand, [200], 'observed_navigation',
   )

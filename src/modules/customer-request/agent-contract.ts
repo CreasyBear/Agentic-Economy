@@ -55,6 +55,11 @@ export const customerRequestRouteActionInputSchema = z.strictObject({
   idempotencyKey: boundedText(200),
 })
 
+export const customerRequestCancellationInputSchema = z.strictObject({
+  idempotencyKey: boundedText(200),
+  mode: z.enum(['current_and_downstream', 'after_current_step']).default('current_and_downstream'),
+})
+
 const repeatPermissionMoneySchema = z.strictObject({
   currency: z.string().regex(/^[A-Z]{3}$/u),
   amountMinor: safeNonnegativeInteger,
@@ -567,7 +572,7 @@ export const customerRequestAgentNavigationSchema = z.strictObject({
   actions: z.array(z.strictObject({
     relation: z.enum([
       'answer_clarification', 'prepare_options', 'change_request', 'confirm_option', 'start_confirmed_option',
-      'inspect_progress', 'inspect_evidence', 'cancel', 'report_problem',
+      'inspect_progress', 'inspect_evidence', 'cancel', 'stop_after_current', 'report_problem',
     ]),
     method: z.enum(['GET', 'POST']),
     href: z.string(),
@@ -825,6 +830,7 @@ export type CustomerRoutePlanDecision = DeepReadonly<z.infer<typeof customerRout
 export type CustomerRouteConfirmation = DeepReadonly<z.infer<typeof customerRouteConfirmationSchema>>
 export type CustomerRequestRouteConfirmationInput = DeepReadonly<z.infer<typeof customerRequestRouteConfirmationInputSchema>>
 export type CustomerRequestRouteActionInput = DeepReadonly<z.infer<typeof customerRequestRouteActionInputSchema>>
+export type CustomerRequestCancellationInput = DeepReadonly<z.infer<typeof customerRequestCancellationInputSchema>>
 export type CustomerRequestProblemInput = DeepReadonly<z.infer<typeof customerRequestProblemInputSchema>>
 export type CustomerRequestProblemReplyInput = DeepReadonly<z.infer<typeof customerRequestProblemReplyInputSchema>>
 export type CustomerRequestProblemStatusChange = DeepReadonly<z.infer<typeof customerRequestProblemStatusChangeSchema>>

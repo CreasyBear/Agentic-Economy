@@ -2,6 +2,7 @@ import { callSourceAction, sourceAction } from '@/lib/server/convex-source'
 
 import type {
   CustomerRequestAgentResult,
+  CustomerRequestCancellationInput,
   CustomerRequestConnectedAssistantsResult,
   CustomerRequestEvidenceResult,
   CustomerRequestProblemInput,
@@ -17,6 +18,7 @@ export type ConfirmCustomerRequestInput = CustomerRequestRouteConfirmationInput 
   requestRef: string
 }>
 export type ActOnCustomerRequestRouteInput = CustomerRequestRouteActionInput & Readonly<{ requestRef: string }>
+export type CancelCustomerRequestRouteInput = CustomerRequestCancellationInput & Readonly<{ requestRef: string }>
 export type ReportCustomerRequestProblemInput = CustomerRequestProblemInput & Readonly<{ requestRef: string }>
 export type ReplyCustomerRequestProblemInput = CustomerRequestProblemReplyInput & Readonly<{
   requestRef: string
@@ -61,7 +63,7 @@ const listRepeatPermissionAssistantsSourceAction = sourceAction<
 const runRouteSourceAction = sourceAction<ActOnCustomerRequestRouteInput, CustomerRequestAgentResult>(
   'customerRequestApplication:runRoute',
 )
-const cancelRouteSourceAction = sourceAction<ActOnCustomerRequestRouteInput, CustomerRequestAgentResult>(
+const cancelRouteSourceAction = sourceAction<CancelCustomerRequestRouteInput, CustomerRequestAgentResult>(
   'customerRequestApplication:cancelRoute',
 )
 const reportRouteProblemSourceAction = sourceAction<ReportCustomerRequestProblemInput, CustomerRequestProblemResult>(
@@ -109,7 +111,7 @@ export async function runCustomerRequestThroughSource(
 }
 
 export async function cancelCustomerRequestThroughSource(
-  input: ActOnCustomerRequestRouteInput,
+  input: CancelCustomerRequestRouteInput,
 ): Promise<CustomerRequestAgentResult> {
   return callSourceAction(cancelRouteSourceAction, input)
 }

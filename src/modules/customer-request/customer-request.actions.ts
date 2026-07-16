@@ -4,6 +4,7 @@ import { defineAction, type ActionParameter } from '@/modules/common/action'
 
 import {
   customerRequestAgentResultSchema,
+  customerRequestCancellationInputSchema,
   customerRequestConnectedAssistantsResultSchema,
   customerRequestEvidenceResultSchema,
   customerRequestProblemInputSchema,
@@ -64,6 +65,10 @@ const routeActionInputSchema = customerRequestRouteActionInputSchema.extend({
   requestRef: z.string().trim().min(1).max(200),
 }).strict()
 
+const cancellationActionInputSchema = customerRequestCancellationInputSchema.extend({
+  requestRef: z.string().trim().min(1).max(200),
+}).strict()
+
 const routeActionParameters: readonly ActionParameter[] = [
   { name: 'requestRef', type: 'string', description: 'The confirmed Customer Request to continue.', required: true },
   { name: 'idempotencyKey', type: 'string', description: 'A stable retry key for this operation.', required: true },
@@ -95,9 +100,16 @@ export const customerRequestCancelAction = defineAction({
     'AE reports when it is too late to stop safely.',
     'Repeating the same operation key does not duplicate the cancellation.',
   ],
-  schema: routeActionInputSchema,
+  schema: cancellationActionInputSchema,
   outputSchema: customerRequestAgentResultSchema,
-  parameters: routeActionParameters,
+  parameters: [
+    ...routeActionParameters,
+    {
+      name: 'mode', type: 'string',
+      description: 'Stop the active business too, or let it finish and stop before the next business.',
+      required: false,
+    },
+  ],
   readOnly: false,
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => cancelCustomerRequestThroughSource(data),

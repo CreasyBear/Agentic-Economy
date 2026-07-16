@@ -1380,11 +1380,13 @@ export const runRoute = action({
 export const cancelRoute = action({
   args: {
     requestRef: v.string(), idempotencyKey: v.string(),
+    mode: v.optional(v.union(v.literal('current_and_downstream'), v.literal('after_current_step'))),
     serviceAuth: v.optional(serviceAssertion),
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
-    const command = { requestRef: args.requestRef, idempotencyKey: args.idempotencyKey }
+    const mode = args.mode ?? 'current_and_downstream'
+    const command = { requestRef: args.requestRef, idempotencyKey: args.idempotencyKey, mode }
     const caller = await resolveRequestCaller(ctx, 'cancel', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
     const current = await loadCurrent(ctx, args.requestRef)
@@ -1395,6 +1397,7 @@ export const cancelRoute = action({
       requestId: args.requestRef,
       principalId: caller.principalId,
       idempotencyKey: args.idempotencyKey,
+      mode,
     })
     if (result.kind === 'conflict') return {
       kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused',

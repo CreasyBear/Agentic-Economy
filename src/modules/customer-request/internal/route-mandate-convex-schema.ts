@@ -546,6 +546,7 @@ export const customerRequestRouteMandateTables = {
     principalId: v.string(),
     requestId: v.string(),
     runRef: v.string(),
+    mode: v.optional(v.union(v.literal('current_and_downstream'), v.literal('after_current_step'))),
     result: v.union(
       v.literal('cancelled'), v.literal('too_late'),
       v.literal('pending'), v.literal('rejected'),

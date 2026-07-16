@@ -2191,7 +2191,9 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       .mockReturnValue(40_200)
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)
-    const confirmed = await confirmedTwoStepRoute(backend, admin, 'cancel-after-current')
+    const confirmed = await confirmedTwoStepRoute(
+      backend, admin, 'cancel-after-current', { adapterCancellation: true },
+    )
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:cancel-after-current',
     })
@@ -2211,6 +2213,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
     await expect(admin.action(api.customerRequestApplication.cancelRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'cancel:after-current',
+      mode: 'after_current_step',
     })).resolves.toMatchObject({
       kind: 'request', state: 'in_progress',
       activity: {
@@ -2220,6 +2223,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
           requestedAt: 40_200,
         },
       },
+    })
+    await expect(admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:after-current',
+      mode: 'current_and_downstream',
+    })).resolves.toMatchObject({
+      kind: 'conflict', reason: 'idempotency_key_reused',
     })
 
     await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
@@ -2242,6 +2251,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     await expect(admin.action(api.customerRequestApplication.cancelRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'cancel:after-current',
+      mode: 'after_current_step',
     })).resolves.toMatchObject({
       kind: 'request', state: 'cancelled', progress: { completed: 1, total: 2 },
     })
@@ -2268,6 +2278,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       const cancellations = await ctx.db.query('customerRequestRouteCancellationCommands').collect()
       expect(cancellations).toHaveLength(1)
       expect(cancellations[0]).toMatchObject({ result: 'too_late', committedAt: 40_200 })
+      expect(await ctx.db.query('customerRequestRouteCancellationAttempts').collect()).toHaveLength(0)
     })
   })
 
@@ -2297,6 +2308,26 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
 
     const first = await admin.action(api.customerRequestApplication.cancelRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'cancel:adapter-pending',
+    })
+    await backend.run(async (ctx) => {
+      const command = await ctx.db.query('customerRequestRouteCancellationCommands').unique()
+      if (command === null) throw new Error('cancellation command missing')
+      await ctx.db.replace(command._id, {
+        commandKey: command.commandKey,
+        commandDigest: canonicalDigest({
+          requestId: command.requestId,
+          principalId: command.principalId,
+          idempotencyKey: 'cancel:adapter-pending',
+        }),
+        principalId: command.principalId,
+        requestId: command.requestId,
+        runRef: command.runRef,
+        result: command.result,
+        ...(command.boundaryChangedAt === undefined
+          ? {}
+          : { boundaryChangedAt: command.boundaryChangedAt }),
+        committedAt: command.committedAt,
+      })
     })
     const replay = await admin.action(api.customerRequestApplication.cancelRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'cancel:adapter-pending',

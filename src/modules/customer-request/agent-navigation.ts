@@ -101,7 +101,17 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
         || (typeof cancellation === 'object' && cancellation.state === 'available')) {
         actions.push({
           relation: 'cancel', method: 'POST', href: `${current}/cancellation`,
-          summary: 'Cancel before the next external step.', input: { idempotencyKey },
+          summary: 'Stop the current Request before any business step begins.',
+          input: { idempotencyKey, mode: 'current_and_downstream' },
+        })
+      }
+      if (view.progress !== undefined && view.progress.current.step < view.progress.total
+        && (view.progress.current.state === 'contacting'
+          || view.progress.current.state === 'awaiting_result')) {
+        actions.push({
+          relation: 'stop_after_current', method: 'POST', href: `${current}/cancellation`,
+          summary: 'Let the current business step finish, then stop before the next business begins.',
+          input: { idempotencyKey, mode: 'after_current_step' },
         })
       }
     }

@@ -357,7 +357,10 @@ export const startOrResume = internalMutation({
 })
 
 export const cancelCurrent = internalMutation({
-  args: { requestId: v.string(), principalId: v.string(), idempotencyKey: v.string() },
+  args: {
+    requestId: v.string(), principalId: v.string(), idempotencyKey: v.string(),
+    mode: v.union(v.literal('current_and_downstream'), v.literal('after_current_step')),
+  },
   returns: v.union(
     v.object({ kind: v.literal('cancelled'), run: runProjection }),
     v.object({ kind: v.literal('replayed'), run: runProjection }),
@@ -378,7 +381,15 @@ export const cancelCurrent = internalMutation({
     const prior = await ctx.db.query('customerRequestRouteCancellationCommands')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
     if (prior !== null) {
-      if (prior.commandDigest !== commandDigest || prior.principalId !== args.principalId
+      const historicalDefaultDigest = canonicalDigest({
+        requestId: args.requestId,
+        principalId: args.principalId,
+        idempotencyKey: args.idempotencyKey,
+      })
+      const digestMatches = prior.commandDigest === commandDigest
+        || (prior.mode === undefined && args.mode === 'current_and_downstream'
+          && prior.commandDigest === historicalDefaultDigest)
+      if (!digestMatches || prior.principalId !== args.principalId
         || prior.requestId !== args.requestId) {
         return { kind: 'conflict' as const, reason: 'command_changed' as const }
       }
@@ -411,6 +422,7 @@ export const cancelCurrent = internalMutation({
     const canCancel = (attempt.state === 'queued' || attempt.state === 'leased')
       && (outbox.state === 'pending' || outbox.state === 'leased')
     const canRequestAdapterCancellation = !canCancel
+      && args.mode === 'current_and_downstream'
       && attempt.grant.step.cancellation.kind === 'adapter_managed'
       && (attempt.state === 'dispatched' || attempt.state === 'accepted')
     if (canCancel) {
@@ -454,6 +466,7 @@ export const cancelCurrent = internalMutation({
       principalId: args.principalId,
       requestId: args.requestId,
       runRef: run.runRef,
+      mode: args.mode,
       result: commandResult,
       boundaryChangedAt: run.updatedAt,
       committedAt: now,
