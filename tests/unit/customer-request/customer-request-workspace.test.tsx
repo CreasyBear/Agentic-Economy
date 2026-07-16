@@ -429,7 +429,7 @@ describe('customer Request workspace', () => {
           },
         ],
         problems: [{
-          reportRef: 'problem:opaque', state: 'received',
+          reportRef: 'problem:opaque', version: 0, state: 'received',
           category: 'incorrect_result',
           summary: 'The quote is over the confirmed maximum.',
           claimSource: 'customer', causality: 'unknown',
@@ -440,6 +440,10 @@ describe('customer Request workspace', () => {
           evidence: [{ receiptRef: 'receipt:quoter', label: 'Quote reference accepted' }],
           reportedAt: 10,
           affected: { step: 2, attemptRef: 'attempt:opaque', business: 'Quote preparation service' },
+          history: [{
+            version: 0, state: 'received', source: 'customer',
+            message: 'The quote is over the confirmed maximum.', recordedAt: 10,
+          }],
         }],
         result: { quoteReference: 'sandbox-quote:usable' },
       }))

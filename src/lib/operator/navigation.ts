@@ -97,6 +97,7 @@ const adminNavGroups: readonly OperatorNavGroup[] = [
       { href: '/admin/business-actions', label: 'Business actions', icon: Wrench, tier: 'advanced' },
       { href: '/admin/protected-actions', label: 'Protected actions', icon: LockKeyhole, tier: 'advanced' },
       { href: '/admin/inquiries', label: 'Inquiries', icon: Inbox, tier: 'core' },
+      { href: '/admin/request-problems', label: 'Request problems', icon: CircleHelp, tier: 'core' },
     ],
   },
   {

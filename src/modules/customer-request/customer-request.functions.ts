@@ -4,7 +4,9 @@ import type {
   CustomerRequestAgentResult,
   CustomerRequestEvidenceResult,
   CustomerRequestProblemInput,
+  CustomerRequestProblemReplyInput,
   CustomerRequestProblemResult,
+  CustomerRequestProblemStatusChange,
   CustomerRequestRouteActionInput,
   CustomerRequestRouteConfirmationInput,
 } from './agent-contract'
@@ -14,6 +16,10 @@ export type ConfirmCustomerRequestInput = CustomerRequestRouteConfirmationInput 
 }>
 export type ActOnCustomerRequestRouteInput = CustomerRequestRouteActionInput & Readonly<{ requestRef: string }>
 export type ReportCustomerRequestProblemInput = CustomerRequestProblemInput & Readonly<{ requestRef: string }>
+export type ReplyCustomerRequestProblemInput = CustomerRequestProblemReplyInput & Readonly<{
+  requestRef: string
+  reportRef: string
+}>
 export type InspectCustomerRequestEvidenceInput = Readonly<{ requestRef: string }>
 
 const confirmRouteSourceAction = sourceAction<ConfirmCustomerRequestInput, CustomerRequestAgentResult>(
@@ -30,6 +36,9 @@ const reportRouteProblemSourceAction = sourceAction<ReportCustomerRequestProblem
 )
 const exportRouteEvidenceSourceAction = sourceAction<InspectCustomerRequestEvidenceInput, CustomerRequestEvidenceResult>(
   'customerRequestApplication:exportRouteEvidence',
+)
+const replyRouteProblemSourceAction = sourceAction<ReplyCustomerRequestProblemInput, CustomerRequestProblemStatusChange>(
+  'customerRequestApplication:replyRouteProblem',
 )
 
 export async function confirmCustomerRequestThroughSource(
@@ -60,4 +69,10 @@ export async function inspectCustomerRequestEvidenceThroughSource(
   input: InspectCustomerRequestEvidenceInput,
 ): Promise<CustomerRequestEvidenceResult> {
   return callSourceAction(exportRouteEvidenceSourceAction, input)
+}
+
+export async function replyCustomerRequestProblemThroughSource(
+  input: ReplyCustomerRequestProblemInput,
+): Promise<CustomerRequestProblemStatusChange> {
+  return callSourceAction(replyRouteProblemSourceAction, input)
 }

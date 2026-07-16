@@ -1051,6 +1051,11 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
       setEvidence(undefined)
       return
     }
+    await loadEvidence()
+  }
+
+  async function loadEvidence() {
+    if (evidenceLoading) return
     setEvidenceLoading(true)
     setEvidenceError(undefined)
     try {
@@ -1142,9 +1147,15 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
               This is your report. AE has not decided what caused the problem, who is responsible, or whether a remedy is due.
             </Text>
             <Text type="supporting" color="secondary">
-              {problem.state === 'update_due'
-                ? `AE’s status update was due ${new Date(problem.nextUpdateDueAt).toLocaleString()}. No reviewer or remedy authority has been assigned.`
-                : `AE owns the next status update, due ${new Date(problem.nextUpdateDueAt).toLocaleString()}. No reviewer or remedy authority has been assigned.`}
+              {problem.nextActor === 'customer'
+                ? 'AE needs more information from you before it can continue checking this report.'
+                : problem.nextActor === 'none'
+                  ? 'This record is closed without deciding cause, responsibility, or remedy.'
+                  : problem.state === 'update_due' && problem.nextUpdateDueAt !== undefined
+                    ? `AE’s status update was due ${new Date(problem.nextUpdateDueAt).toLocaleString()}. No reviewer or remedy authority has been assigned.`
+                    : problem.nextUpdateDueAt === undefined
+                      ? 'AE owns the next status update. No reviewer or remedy authority has been assigned.'
+                      : `AE owns the next status update, due ${new Date(problem.nextUpdateDueAt).toLocaleString()}. No reviewer or remedy authority has been assigned.`}
             </Text>
             <Text type="supporting" color="secondary">
               {problem.visibility === 'customer_and_ae_only'
@@ -1153,9 +1164,27 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
             </Text>
             {problem.evidence.length === 0 ? null
               : <Text type="supporting" color="secondary">{problem.evidence.length} recorded evidence item{problem.evidence.length === 1 ? '' : 's'} attached.</Text>}
+            {problem.history.length <= 1 ? null : <ol className="grid gap-1 border-l border-border pl-3">
+              {problem.history.slice(1).map((update) => <li key={update.version}>
+                <Text type="supporting" color="secondary">
+                  {update.source === 'customer' ? 'You' : 'AE support'}: {update.message}
+                </Text>
+              </li>)}
+            </ol>}
             <Text type="supporting" color="secondary">
-              Next: {problem.nextAction === 'check_status' ? 'check the current status' : 'wait for the next status update'}. Reported {new Date(problem.reportedAt).toLocaleString()}.
+              Next: {problem.nextAction === 'check_status'
+                ? 'check the current status'
+                : problem.nextAction === 'provide_information'
+                  ? 'provide the requested information'
+                  : problem.nextAction === 'none'
+                    ? 'no further action is requested'
+                    : 'wait for the next status update'}. Reported {new Date(problem.reportedAt).toLocaleString()}.
             </Text>
+            {problem.state !== 'waiting_for_customer' ? null : <ProblemReplyForm
+              requestRef={requestRef}
+              problem={problem}
+              refresh={loadEvidence}
+            />}
           </li>)}
         </ol>
       </div>}
@@ -1201,6 +1230,64 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
     {receipt === undefined ? null : <Text type="supporting" color="secondary">Problem recorded. Report reference {receipt}</Text>}
     {error === undefined ? null : <Text type="supporting" color="secondary">{error}</Text>}
   </div>
+}
+
+function ProblemReplyForm({
+  requestRef,
+  problem,
+  refresh,
+}: {
+  requestRef: string
+  problem: CustomerRequestEvidenceExport['problems'][number]
+  refresh: () => Promise<void>
+}) {
+  const [message, setMessage] = useState('')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+  async function reply() {
+    if (message.trim().length === 0 || status === 'sending') return
+    setStatus('sending')
+    try {
+      const response = await fetch(
+        `/api/requests/${encodeURIComponent(requestRef)}/problems/${encodeURIComponent(problem.reportRef)}/replies`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expectedVersion: problem.version,
+            idempotencyKey: `problem-reply:${problem.reportRef}:${crypto.randomUUID()}`,
+            message: message.trim(),
+          }),
+        },
+      )
+      const result: unknown = await response.json()
+      if (!response.ok || typeof result !== 'object' || result === null
+        || !('kind' in result) || result.kind !== 'problem_reply_recorded') {
+        setStatus('error')
+        return
+      }
+      setMessage('')
+      setStatus('sent')
+      await refresh()
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  return <form className="grid gap-2 pt-2" onSubmit={(event) => { event.preventDefault(); void reply() }}>
+    <label htmlFor={`problem-reply-${problem.reportRef}`} className="text-sm font-semibold">Your reply</label>
+    <textarea
+      id={`problem-reply-${problem.reportRef}`}
+      value={message}
+      onChange={(event) => setMessage(event.target.value)}
+      maxLength={1_000}
+      required
+      className="min-h-20 rounded-md border border-border bg-card p-3 outline-none focus:ring-2 focus:ring-accent"
+    />
+    <Button label={status === 'sending' ? 'Sending reply…' : 'Send reply'} variant="secondary" type="submit" isDisabled={status === 'sending'} />
+    {status === 'sent' ? <Text type="supporting" color="secondary">Reply recorded. AE owns the next status update.</Text> : null}
+    {status === 'error' ? <Text type="supporting" color="secondary">AE could not record your reply. The report is unchanged.</Text> : null}
+  </form>
 }
 
 function activityRecordSummary(state: CustomerRequestEvidenceExport['state']): string {

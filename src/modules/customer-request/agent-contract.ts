@@ -63,14 +63,49 @@ export const customerRequestProblemInputSchema = z.strictObject({
   visibility: z.enum(['customer_and_ae_only', 'share_with_affected_business']).default('customer_and_ae_only'),
 })
 
+export const customerRequestProblemReplyInputSchema = z.strictObject({
+  expectedVersion: safeNonnegativeInteger,
+  idempotencyKey: boundedText(200),
+  message: boundedText(1_000),
+})
+
+export const customerRequestProblemStatusChangeSchema = z.union([
+  z.strictObject({
+    kind: z.enum(['problem_status_updated', 'problem_reply_recorded']),
+    reportRef: z.string(),
+    version: safePositiveInteger,
+    state: z.enum(['investigating', 'waiting_for_customer', 'closed']),
+    nextAction: z.enum(['await_status_update', 'provide_information', 'none']),
+    nextActor: z.enum(['ae', 'customer', 'none']),
+    nextUpdateDueAt: safeNonnegativeInteger.optional(),
+    decisionAuthority: z.literal('not_assigned'),
+    recordedAt: safeNonnegativeInteger,
+  }),
+  z.strictObject({
+    kind: z.literal('conflict'),
+    reportRef: z.string(),
+    reason: z.enum(['idempotency_key_reused', 'stale_version']),
+  }),
+  z.strictObject({
+    kind: z.literal('refused'),
+    reason: z.enum([
+      'authentication_required',
+      'authority_denied',
+      'request_not_found',
+      'report_not_found',
+      'invalid_update',
+    ]),
+  }),
+])
+
 const customerRequestProblemProjectionSchema = z.strictObject({
   category: z.enum(['incorrect_result', 'unexpected_cost', 'privacy_concern', 'could_not_stop', 'other']),
   claimSource: z.literal('customer'),
   causality: z.literal('unknown'),
   resolution: z.literal('not_adjudicated'),
-  nextAction: z.enum(['await_status_update', 'check_status']),
-  nextActor: z.literal('ae'),
-  nextUpdateDueAt: safeNonnegativeInteger,
+  nextAction: z.enum(['await_status_update', 'check_status', 'provide_information', 'none']),
+  nextActor: z.enum(['ae', 'customer', 'none']),
+  nextUpdateDueAt: safeNonnegativeInteger.optional(),
   decisionAuthority: z.literal('not_assigned'),
   visibility: z.enum(['customer_and_ae_only', 'share_with_affected_business']),
   evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
@@ -99,9 +134,17 @@ export const customerRequestEvidenceExportSchema = z.strictObject({
   })),
   problems: z.array(customerRequestProblemProjectionSchema.extend({
     reportRef: z.string(),
-    state: z.enum(['received', 'update_due']),
+    version: safeNonnegativeInteger.default(0),
+    state: z.enum(['received', 'update_due', 'investigating', 'waiting_for_customer', 'closed']),
     summary: boundedText(1_000),
     reportedAt: safeNonnegativeInteger,
+    history: z.array(z.strictObject({
+      version: safeNonnegativeInteger,
+      state: z.enum(['received', 'investigating', 'waiting_for_customer', 'closed']),
+      source: z.enum(['customer', 'ae_support']),
+      message: boundedText(1_000),
+      recordedAt: safeNonnegativeInteger,
+    })).default([]),
   }).strict()).default([]),
   result: customerRequestJsonValueSchema.optional(),
 })
@@ -609,6 +652,8 @@ export type CustomerRouteConfirmation = DeepReadonly<z.infer<typeof customerRout
 export type CustomerRequestRouteConfirmationInput = DeepReadonly<z.infer<typeof customerRequestRouteConfirmationInputSchema>>
 export type CustomerRequestRouteActionInput = DeepReadonly<z.infer<typeof customerRequestRouteActionInputSchema>>
 export type CustomerRequestProblemInput = DeepReadonly<z.infer<typeof customerRequestProblemInputSchema>>
+export type CustomerRequestProblemReplyInput = DeepReadonly<z.infer<typeof customerRequestProblemReplyInputSchema>>
+export type CustomerRequestProblemStatusChange = DeepReadonly<z.infer<typeof customerRequestProblemStatusChangeSchema>>
 export type CustomerRequestProblemReceipt = DeepReadonly<z.infer<typeof customerRequestProblemReceiptSchema>>
 export type CustomerRequestEvidenceExport = DeepReadonly<z.infer<typeof customerRequestEvidenceExportSchema>>
 export type CustomerRequestProblemResult = DeepReadonly<z.infer<typeof customerRequestProblemResultSchema>>

@@ -427,7 +427,27 @@ export const customerRequestRouteMandateTables = {
     createdAt: v.number(),
   })
     .index('by_commandKey', ['commandKey'])
+    .index('by_reportRef', ['reportRef'])
     .index('by_requestId', ['requestId']),
+
+  customerRequestRouteProblemUpdates: defineTable({
+    updateRef: v.string(),
+    reportRef: v.string(),
+    commandKey: v.string(),
+    commandDigest: v.string(),
+    version: v.number(),
+    source: v.union(v.literal('customer'), v.literal('ae_support')),
+    actorRef: v.string(),
+    state: v.union(
+      v.literal('investigating'),
+      v.literal('waiting_for_customer'),
+      v.literal('closed'),
+    ),
+    message: v.string(),
+    createdAt: v.number(),
+  })
+    .index('by_commandKey', ['commandKey'])
+    .index('by_reportRef_and_version', ['reportRef', 'version']),
 
   customerRequestRouteStepAttempts: defineTable({
     attemptRef: v.string(),

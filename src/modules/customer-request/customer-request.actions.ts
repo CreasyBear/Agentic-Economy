@@ -6,7 +6,9 @@ import {
   customerRequestAgentResultSchema,
   customerRequestEvidenceResultSchema,
   customerRequestProblemInputSchema,
+  customerRequestProblemReplyInputSchema,
   customerRequestProblemResultSchema,
+  customerRequestProblemStatusChangeSchema,
   customerRequestRouteActionInputSchema,
   customerRequestRouteConfirmationInputSchema,
 } from './agent-contract'
@@ -16,6 +18,7 @@ import {
   runCustomerRequestThroughSource,
   inspectCustomerRequestEvidenceThroughSource,
   reportCustomerRequestProblemThroughSource,
+  replyCustomerRequestProblemThroughSource,
 } from './customer-request.functions'
 
 const confirmationActionInputSchema = customerRequestRouteConfirmationInputSchema.extend({
@@ -116,6 +119,36 @@ export const customerRequestReportProblemAction = defineAction({
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => customerRequestProblemResultSchema.parse(
     await reportCustomerRequestProblemThroughSource(data),
+  ),
+})
+
+const problemReplyInputSchema = customerRequestProblemReplyInputSchema.extend({
+  requestRef: z.string().trim().min(1).max(200),
+  reportRef: z.string().trim().min(1).max(300),
+}).strict()
+
+export const customerRequestReplyProblemAction = defineAction({
+  id: 'customerRequest.replyProblem',
+  name: 'Reply to a Customer Request problem',
+  summary: 'Add requested customer information to one exact reported problem.',
+  boundaries: [
+    'Only the customer who owns the Request can reply.',
+    'A reply does not retry work, decide responsibility, or authorize a remedy.',
+    'Stale or differently replayed replies fail closed.',
+  ],
+  schema: problemReplyInputSchema,
+  outputSchema: customerRequestProblemStatusChangeSchema,
+  parameters: [
+    { name: 'requestRef', type: 'string', description: 'The existing Customer Request.', required: true },
+    { name: 'reportRef', type: 'string', description: 'The exact reported problem awaiting information.', required: true },
+    { name: 'expectedVersion', type: 'number', description: 'The latest problem version shown to the customer.', required: true },
+    { name: 'idempotencyKey', type: 'string', description: 'A stable retry key for this reply.', required: true },
+    { name: 'message', type: 'string', description: 'The requested customer information.', required: true },
+  ],
+  readOnly: false,
+  surfaces: ['ui', 'http', 'agentJson'],
+  run: async ({ data }) => customerRequestProblemStatusChangeSchema.parse(
+    await replyCustomerRequestProblemThroughSource(data),
   ),
 })
 

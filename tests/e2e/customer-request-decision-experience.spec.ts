@@ -151,6 +151,83 @@ test('problem reporting binds selected step evidence and keeps sharing private b
   })
 })
 
+test('customer can answer an exact support question and hand the next update back to AE', async ({ page }) => {
+  let replied = false
+  let replyBody: unknown
+  await page.route('**/api/requests', async (route) => await route.fulfill({ json: unknownOutcomeView() }))
+  await page.route('**/api/requests/*/problems/*/replies', async (route) => {
+    replyBody = route.request().postDataJSON()
+    replied = true
+    await route.fulfill({ json: {
+      kind: 'problem_reply_recorded',
+      reportRef: 'problem:one',
+      version: 2,
+      state: 'investigating',
+      nextAction: 'await_status_update',
+      nextActor: 'ae',
+      nextUpdateDueAt: 86_407_000,
+      decisionAuthority: 'not_assigned',
+      recordedAt: 7_000,
+    } })
+  })
+  await page.route('**/api/requests/*/evidence', async (route) => await route.fulfill({ json: {
+    kind: 'evidence', requestRef: 'request:unknown', state: 'outcome_unknown', generatedAt: replied ? 7_000 : 6_000,
+    steps: [
+      { step: 1, state: 'completed', observedAt: 10, evidence: [] },
+      { step: 2, state: 'outcome_unknown', observedAt: 20, evidence: [] },
+    ],
+    problems: [{
+      reportRef: 'problem:one',
+      version: replied ? 2 : 1,
+      state: replied ? 'investigating' : 'waiting_for_customer',
+      category: 'incorrect_result',
+      summary: 'The first result does not match the confirmed constraint.',
+      claimSource: 'customer',
+      causality: 'unknown',
+      resolution: 'not_adjudicated',
+      nextAction: replied ? 'await_status_update' : 'provide_information',
+      nextActor: replied ? 'ae' : 'customer',
+      ...(replied ? { nextUpdateDueAt: 86_407_000 } : {}),
+      decisionAuthority: 'not_assigned',
+      visibility: 'customer_and_ae_only',
+      evidence: [],
+      reportedAt: 5_000,
+      affected: { step: 1, business: 'Journey Case Intake' },
+      history: [
+        {
+          version: 0, state: 'received', source: 'customer',
+          message: 'The first result does not match the confirmed constraint.', recordedAt: 5_000,
+        },
+        {
+          version: 1, state: 'waiting_for_customer', source: 'ae_support',
+          message: 'Please identify the constraint that the result did not meet.', recordedAt: 6_000,
+        },
+        ...(replied ? [{
+          version: 2, state: 'investigating', source: 'customer',
+          message: 'The result exceeded the maximum by 25 dollars.', recordedAt: 7_000,
+        }] : []),
+      ],
+    }],
+  } }))
+
+  await page.goto('/engine')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('What are you looking for?').fill('Recover an uncertain result')
+  await page.getByRole('button', { name: 'Explore' }).click()
+  await page.getByRole('button', { name: 'View activity record' }).click()
+
+  await expect(page.getByText('AE support: Please identify the constraint that the result did not meet.')).toBeVisible()
+  await page.getByLabel('Your reply').fill('The result exceeded the maximum by 25 dollars.')
+  await page.getByRole('button', { name: 'Send reply' }).click()
+
+  await expect(page.getByText('You: The result exceeded the maximum by 25 dollars.')).toBeVisible()
+  await expect(page.getByText(/AE owns the next status update/u)).toBeVisible()
+  expect(replyBody).toMatchObject({
+    expectedVersion: 1,
+    message: 'The result exceeded the maximum by 25 dollars.',
+  })
+})
+
 function clarificationView(): CustomerRequestView {
   return {
     kind: 'request', requestRef: 'request:clarification', revision: 1,

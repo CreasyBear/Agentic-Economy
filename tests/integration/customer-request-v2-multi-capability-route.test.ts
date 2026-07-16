@@ -1261,6 +1261,154 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
+  it('tracks an authenticated support question and customer reply without assigning remedy authority', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(5_000)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const support = await supportAdmin(backend)
+    const reviewer = await reviewerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'problem-status-loop')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:problem-status-loop',
+    })
+    const reported = await admin.action(api.customerRequestApplication.reportRouteProblem, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'problem:status-loop',
+      category: 'incorrect_result',
+      summary: 'The first result does not match the confirmed constraint.',
+      affectedStep: 1,
+      evidenceReceiptRefs: [],
+      visibility: 'customer_and_ae_only',
+    })
+    if (reported.kind !== 'problem_reported') throw new Error('problem report was not accepted')
+
+    await expect(support.action(api.customerRequestApplication.listRouteProblemsForSupport, {
+      limit: 10,
+    })).resolves.toMatchObject({
+      kind: 'allowed',
+      rows: [{
+        reportRef: reported.reportRef,
+        requestRef: confirmed.requestRef,
+        version: 0,
+        state: 'received',
+        nextActor: 'ae',
+      }],
+    })
+    await expect(reviewer.action(api.customerRequestApplication.updateRouteProblemStatus, {
+      reportRef: reported.reportRef,
+      expectedVersion: 0,
+      idempotencyKey: 'reviewer:status-loop',
+      state: 'investigating',
+      publicMessage: 'A reviewer must not write support status.',
+    })).resolves.toEqual({ kind: 'refused', reason: 'authority_denied' })
+    now.mockReturnValue(6_000)
+    const supportUpdate = await support.action(api.customerRequestApplication.updateRouteProblemStatus, {
+      reportRef: reported.reportRef,
+      expectedVersion: 0,
+      idempotencyKey: 'support:status-loop',
+      state: 'waiting_for_customer',
+      publicMessage: 'Please identify the constraint that the result did not meet.',
+    })
+    expect(supportUpdate).toMatchObject({
+      kind: 'problem_status_updated',
+      version: 1,
+      state: 'waiting_for_customer',
+      nextActor: 'customer',
+    })
+    await expect(support.action(api.customerRequestApplication.updateRouteProblemStatus, {
+      reportRef: reported.reportRef,
+      expectedVersion: 0,
+      idempotencyKey: 'support:status-loop',
+      state: 'waiting_for_customer',
+      publicMessage: 'Please identify the constraint that the result did not meet.',
+    })).resolves.toEqual(supportUpdate)
+    await expect(support.action(api.customerRequestApplication.updateRouteProblemStatus, {
+      reportRef: reported.reportRef,
+      expectedVersion: 0,
+      idempotencyKey: 'support:status-loop',
+      state: 'investigating',
+      publicMessage: 'Changed replay.',
+    })).resolves.toEqual({
+      kind: 'conflict',
+      reportRef: reported.reportRef,
+      reason: 'idempotency_key_reused',
+    })
+    await expect(support.action(api.customerRequestApplication.updateRouteProblemStatus, {
+      reportRef: reported.reportRef,
+      expectedVersion: 0,
+      idempotencyKey: 'support:stale-status-loop',
+      state: 'investigating',
+      publicMessage: 'This command was based on an older version.',
+    })).resolves.toEqual({
+      kind: 'conflict',
+      reportRef: reported.reportRef,
+      reason: 'stale_version',
+    })
+
+    now.mockReturnValue(7_000)
+    const replied = await admin.action(api.customerRequestApplication.replyRouteProblem, {
+      requestRef: confirmed.requestRef,
+      reportRef: reported.reportRef,
+      expectedVersion: 1,
+      idempotencyKey: 'customer:status-loop',
+      message: 'The result exceeded the confirmed maximum by 25 dollars.',
+    })
+    expect(replied).toMatchObject({
+      kind: 'problem_reply_recorded',
+      reportRef: reported.reportRef,
+      version: 2,
+      state: 'investigating',
+      nextActor: 'ae',
+      nextAction: 'await_status_update',
+      decisionAuthority: 'not_assigned',
+    })
+    await expect(admin.action(api.customerRequestApplication.replyRouteProblem, {
+      requestRef: confirmed.requestRef,
+      reportRef: reported.reportRef,
+      expectedVersion: 1,
+      idempotencyKey: 'customer:status-loop',
+      message: 'The result exceeded the confirmed maximum by 25 dollars.',
+    })).resolves.toEqual(replied)
+
+    const exported = await admin.action(api.customerRequestApplication.exportRouteEvidence, {
+      requestRef: confirmed.requestRef,
+    })
+    expect(exported).toMatchObject({
+      kind: 'evidence',
+      problems: [{
+        reportRef: reported.reportRef,
+        version: 2,
+        state: 'investigating',
+        nextActor: 'ae',
+        nextAction: 'await_status_update',
+        decisionAuthority: 'not_assigned',
+        history: [
+          {
+            version: 0,
+            state: 'received',
+            source: 'customer',
+            message: 'The first result does not match the confirmed constraint.',
+            recordedAt: 5_000,
+          },
+          {
+            version: 1,
+            state: 'waiting_for_customer',
+            source: 'ae_support',
+            message: 'Please identify the constraint that the result did not meet.',
+            recordedAt: 6_000,
+          },
+          {
+            version: 2,
+            state: 'investigating',
+            source: 'customer',
+            message: 'The result exceeded the confirmed maximum by 25 dollars.',
+            recordedAt: 7_000,
+          },
+        ],
+      }],
+    })
+  })
+
   it('refuses a problem report that names another step evidence receipt', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(4_100)
     const backend = convexTest(schema, modules)
@@ -2363,6 +2511,36 @@ async function finishScheduledRouteWorkers(backend: ReturnType<typeof convexTest
 async function ownerAdmin(backend: ReturnType<typeof convexTest>) {
   const identity = { subject: 'user_route_admin', issuer: 'https://identity.example', tokenIdentifier: 'token_route_admin' }
   await backend.run(async (ctx) => { await ctx.db.insert('adminMemberships', { clerkUserId: identity.subject, tokenIdentifier: identity.tokenIdentifier, role: 'owner_admin', state: 'active', grantedBy: 'test_bootstrap', grantedAt: 1 }) })
+  return backend.withIdentity(identity)
+}
+
+async function supportAdmin(backend: ReturnType<typeof convexTest>) {
+  const identity = { subject: 'user_route_support', issuer: 'https://identity.example', tokenIdentifier: 'token_route_support' }
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('adminMemberships', {
+      clerkUserId: identity.subject,
+      tokenIdentifier: identity.tokenIdentifier,
+      role: 'support',
+      state: 'active',
+      grantedBy: 'test_bootstrap',
+      grantedAt: 1,
+    })
+  })
+  return backend.withIdentity(identity)
+}
+
+async function reviewerAdmin(backend: ReturnType<typeof convexTest>) {
+  const identity = { subject: 'user_route_reviewer', issuer: 'https://identity.example', tokenIdentifier: 'token_route_reviewer' }
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('adminMemberships', {
+      clerkUserId: identity.subject,
+      tokenIdentifier: identity.tokenIdentifier,
+      role: 'reviewer',
+      state: 'active',
+      grantedBy: 'test_bootstrap',
+      grantedAt: 1,
+    })
+  })
   return backend.withIdentity(identity)
 }
 

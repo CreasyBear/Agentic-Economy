@@ -929,6 +929,45 @@ const problemReceipt = v.object({
 const problemActionResult = v.union(problemReceipt, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
 type ProblemActionResult = Infer<typeof problemActionResult>
 
+const problemTrackedState = v.union(
+  v.literal('investigating'),
+  v.literal('waiting_for_customer'),
+  v.literal('closed'),
+)
+const problemStatusChangeResult = v.union(
+  v.object({
+    kind: v.union(v.literal('problem_status_updated'), v.literal('problem_reply_recorded')),
+    reportRef: v.string(),
+    version: v.number(),
+    state: problemTrackedState,
+    nextAction: v.union(
+      v.literal('await_status_update'),
+      v.literal('provide_information'),
+      v.literal('none'),
+    ),
+    nextActor: v.union(v.literal('ae'), v.literal('customer'), v.literal('none')),
+    nextUpdateDueAt: v.optional(v.number()),
+    decisionAuthority: v.literal('not_assigned'),
+    recordedAt: v.number(),
+  }),
+  v.object({
+    kind: v.literal('conflict'),
+    reportRef: v.string(),
+    reason: v.union(v.literal('idempotency_key_reused'), v.literal('stale_version')),
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(
+      v.literal('authentication_required'),
+      v.literal('authority_denied'),
+      v.literal('request_not_found'),
+      v.literal('report_not_found'),
+      v.literal('invalid_update'),
+    ),
+  }),
+)
+type ProblemStatusChangeResult = Infer<typeof problemStatusChangeResult>
+
 export const reportRouteProblem = action({
   args: {
     requestRef: v.string(), idempotencyKey: v.string(),
@@ -994,12 +1033,179 @@ export const reportRouteProblem = action({
       problem: {
         category: args.category, claimSource: 'customer' as const, causality: 'unknown' as const,
         resolution: 'not_adjudicated' as const, nextAction: 'await_status_update' as const,
-        nextActor: tracking.nextActor, nextUpdateDueAt: tracking.nextUpdateDueAt,
+        nextActor: 'ae' as const, nextUpdateDueAt: tracking.nextUpdateDueAt ?? result.reportedAt,
         decisionAuthority: tracking.decisionAuthority,
         visibility: result.visibility, evidence: result.evidence.map((item) => ({ ...item })),
         affected: { ...result.affected },
       },
     }
+  },
+})
+
+export const updateRouteProblemStatus = action({
+  args: {
+    reportRef: v.string(),
+    expectedVersion: v.number(),
+    idempotencyKey: v.string(),
+    state: problemTrackedState,
+    publicMessage: v.string(),
+  },
+  returns: problemStatusChangeResult,
+  handler: async (ctx, args): Promise<ProblemStatusChangeResult> => {
+    const result: Readonly<
+      | {
+          kind: 'updated'
+          reportRef: string
+          version: number
+          state: 'investigating' | 'waiting_for_customer' | 'closed'
+          recordedAt: number
+        }
+      | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'stale_version' }
+      | {
+          kind: 'refused'
+          reason: 'authentication_required' | 'authority_denied' | 'report_not_found' | 'invalid_update'
+        }
+    > = await ctx.runMutation(internal.customerRequestRouteExecution.updateProblemStatus, args)
+    if (result.kind === 'conflict') {
+      return { kind: 'conflict', reportRef: args.reportRef, reason: result.reason }
+    }
+    if (result.kind === 'refused') return result
+    const tracking = projectCustomerRequestProblemTracking(
+      result.recordedAt,
+      result.recordedAt,
+      { state: result.state, recordedAt: result.recordedAt },
+    )
+    if (tracking.nextAction === 'check_status') throw new Error('problem_status_projection_integrity_failure')
+    return {
+      kind: 'problem_status_updated',
+      reportRef: result.reportRef,
+      version: result.version,
+      state: result.state,
+      nextAction: tracking.nextAction,
+      nextActor: tracking.nextActor,
+      ...(tracking.nextUpdateDueAt === undefined ? {} : { nextUpdateDueAt: tracking.nextUpdateDueAt }),
+      decisionAuthority: tracking.decisionAuthority,
+      recordedAt: result.recordedAt,
+    }
+  },
+})
+
+export const replyRouteProblem = action({
+  args: {
+    requestRef: v.string(),
+    reportRef: v.string(),
+    expectedVersion: v.number(),
+    idempotencyKey: v.string(),
+    message: v.string(),
+    serviceAuth: v.optional(serviceAssertion),
+  },
+  returns: problemStatusChangeResult,
+  handler: async (ctx, args): Promise<ProblemStatusChangeResult> => {
+    const command = {
+      requestRef: args.requestRef,
+      reportRef: args.reportRef,
+      expectedVersion: args.expectedVersion,
+      idempotencyKey: args.idempotencyKey,
+      message: args.message,
+    }
+    const caller = await resolveRequestCaller(ctx, 'report', command, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    const result: Readonly<
+      | {
+          kind: 'updated'
+          reportRef: string
+          version: number
+          state: 'investigating' | 'waiting_for_customer' | 'closed'
+          recordedAt: number
+        }
+      | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'stale_version' }
+      | {
+          kind: 'refused'
+          reason: 'authentication_required' | 'authority_denied' | 'report_not_found' | 'invalid_update'
+        }
+    > = await ctx.runMutation(internal.customerRequestRouteExecution.replyProblem, {
+      requestId: args.requestRef,
+      reportRef: args.reportRef,
+      principalId: caller.principalId,
+      expectedVersion: args.expectedVersion,
+      idempotencyKey: args.idempotencyKey,
+      message: args.message,
+    })
+    if (result.kind === 'conflict') {
+      return { kind: 'conflict', reportRef: args.reportRef, reason: result.reason }
+    }
+    if (result.kind === 'refused') return result
+    const tracking = projectCustomerRequestProblemTracking(
+      result.recordedAt,
+      result.recordedAt,
+      { state: result.state, recordedAt: result.recordedAt },
+    )
+    if (tracking.nextAction === 'check_status') throw new Error('problem_status_projection_integrity_failure')
+    return {
+      kind: 'problem_reply_recorded',
+      reportRef: result.reportRef,
+      version: result.version,
+      state: result.state,
+      nextAction: tracking.nextAction,
+      nextActor: tracking.nextActor,
+      ...(tracking.nextUpdateDueAt === undefined ? {} : { nextUpdateDueAt: tracking.nextUpdateDueAt }),
+      decisionAuthority: tracking.decisionAuthority,
+      recordedAt: result.recordedAt,
+    }
+  },
+})
+
+const supportProblemListResult = v.union(
+  v.object({
+    kind: v.literal('allowed'),
+    rows: v.array(v.object({
+      reportRef: v.string(),
+      requestRef: v.string(),
+      version: v.number(),
+      state: v.union(
+        v.literal('received'),
+        v.literal('update_due'),
+        v.literal('investigating'),
+        v.literal('waiting_for_customer'),
+        v.literal('closed'),
+      ),
+      nextActor: v.union(v.literal('ae'), v.literal('customer'), v.literal('none')),
+      category: v.union(
+        v.literal('incorrect_result'),
+        v.literal('unexpected_cost'),
+        v.literal('privacy_concern'),
+        v.literal('could_not_stop'),
+        v.literal('other'),
+      ),
+      summary: v.string(),
+      business: v.optional(v.string()),
+      reportedAt: v.number(),
+      lastUpdatedAt: v.number(),
+    })),
+  }),
+  v.object({
+    kind: v.literal('denied'),
+    reason: v.union(
+      v.literal('missing_membership'),
+      v.literal('inactive_membership'),
+      v.literal('action_not_allowed'),
+    ),
+    rows: v.array(v.any()),
+  }),
+)
+type SupportProblemListResult = Infer<typeof supportProblemListResult>
+
+export const listRouteProblemsForSupport = action({
+  args: { limit: v.optional(v.number()) },
+  returns: supportProblemListResult,
+  handler: async (ctx, args): Promise<SupportProblemListResult> => {
+    return await ctx.runQuery(internal.customerRequestRouteExecution.listProblemsForSupport, {
+      limit: args.limit ?? 50,
+    })
   },
 })
 
@@ -1019,15 +1225,29 @@ const evidenceExport = v.object({
     observedAt: v.number(), evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
   })),
   problems: v.array(v.object({
-    reportRef: v.string(), state: v.union(v.literal('received'), v.literal('update_due')),
+    reportRef: v.string(),
+    version: v.number(),
+    state: v.union(
+      v.literal('received'),
+      v.literal('update_due'),
+      v.literal('investigating'),
+      v.literal('waiting_for_customer'),
+      v.literal('closed'),
+    ),
     category: v.union(
       v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
       v.literal('could_not_stop'), v.literal('other'),
     ),
     summary: v.string(), claimSource: v.literal('customer'), causality: v.literal('unknown'),
     resolution: v.literal('not_adjudicated'),
-    nextAction: v.union(v.literal('await_status_update'), v.literal('check_status')),
-    nextActor: v.literal('ae'), nextUpdateDueAt: v.number(),
+    nextAction: v.union(
+      v.literal('await_status_update'),
+      v.literal('check_status'),
+      v.literal('provide_information'),
+      v.literal('none'),
+    ),
+    nextActor: v.union(v.literal('ae'), v.literal('customer'), v.literal('none')),
+    nextUpdateDueAt: v.optional(v.number()),
     decisionAuthority: v.literal('not_assigned'),
     visibility: v.union(
       v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
@@ -1037,6 +1257,18 @@ const evidenceExport = v.object({
     affected: v.object({
       step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
     }),
+    history: v.array(v.object({
+      version: v.number(),
+      state: v.union(
+        v.literal('received'),
+        v.literal('investigating'),
+        v.literal('waiting_for_customer'),
+        v.literal('closed'),
+      ),
+      source: v.union(v.literal('customer'), v.literal('ae_support')),
+      message: v.string(),
+      recordedAt: v.number(),
+    })),
   })),
   result: v.optional(v.any()), // runtime-validated JsonValue boundary
 })
@@ -1069,20 +1301,28 @@ export const exportRouteEvidence = action({
           }>[]
           problems: readonly Readonly<{
             reportRef: string
-            state: 'received' | 'update_due'
+            version: number
+            state: 'received' | 'update_due' | 'investigating' | 'waiting_for_customer' | 'closed'
             category: 'incorrect_result' | 'unexpected_cost' | 'privacy_concern' | 'could_not_stop' | 'other'
             summary: string
             claimSource: 'customer'
             causality: 'unknown'
             resolution: 'not_adjudicated'
-            nextAction: 'await_status_update' | 'check_status'
-            nextActor: 'ae'
-            nextUpdateDueAt: number
+            nextAction: 'await_status_update' | 'check_status' | 'provide_information' | 'none'
+            nextActor: 'ae' | 'customer' | 'none'
+            nextUpdateDueAt?: number
             decisionAuthority: 'not_assigned'
             visibility: 'customer_and_ae_only' | 'share_with_affected_business'
             evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
             reportedAt: number
             affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
+            history: readonly Readonly<{
+              version: number
+              state: 'received' | 'investigating' | 'waiting_for_customer' | 'closed'
+              source: 'customer' | 'ae_support'
+              message: string
+              recordedAt: number
+            }>[]
           }>[]
         }
     > = await ctx.runQuery(internal.customerRequestRouteExecution.exportCustomerEvidence, {
@@ -1098,6 +1338,7 @@ export const exportRouteEvidence = action({
       problems: exported.problems.map((problem) => ({
         ...problem, affected: { ...problem.affected },
         evidence: problem.evidence.map((item) => ({ ...item })),
+        history: problem.history.map((item) => ({ ...item })),
       })),
       ...(result === undefined ? {} : { result }),
     }
@@ -2546,7 +2787,7 @@ type RequestCaller = Readonly<{
 
 async function resolveRequestCaller(
   ctx: ActionCtx,
-  operation: 'submit' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'evidence' | 'authorize' | 'resume' | 'facts' | 'refine',
+  operation: 'submit' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence' | 'authorize' | 'resume' | 'facts' | 'refine',
   command: Record<string, unknown>,
   assertion: ServiceAssertion | undefined,
   delegatedAgentId?: string,

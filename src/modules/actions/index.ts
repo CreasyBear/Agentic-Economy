@@ -17,6 +17,7 @@ import {
   customerRequestConfirmAction,
   customerRequestInspectEvidenceAction,
   customerRequestReportProblemAction,
+  customerRequestReplyProblemAction,
   customerRequestRunAction,
 } from '@/modules/customer-request/customer-request.actions'
 import { demandCaptureAction } from '@/modules/demand/demand.actions'
@@ -34,6 +35,7 @@ const actions: readonly AnyAction[] = [
   customerRequestRunAction,
   customerRequestCancelAction,
   customerRequestReportProblemAction,
+  customerRequestReplyProblemAction,
   customerRequestInspectEvidenceAction,
   submitInquiryAction,
   readCustomerRecordAction,

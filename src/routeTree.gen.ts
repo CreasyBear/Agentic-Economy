@@ -58,6 +58,7 @@ import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/ow
 import { Route as OperatorOwnerInquiriesRouteImport } from './routes/_operator/owner.inquiries'
 import { Route as OperatorDevelopersDiscoveryRouteImport } from './routes/_operator/developers.discovery'
 import { Route as OperatorAdminRunsRouteImport } from './routes/_operator/admin.runs'
+import { Route as OperatorAdminRequestProblemsRouteImport } from './routes/_operator/admin.request-problems'
 import { Route as OperatorAdminInquiriesRouteImport } from './routes/_operator/admin.inquiries'
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
 import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
@@ -86,6 +87,8 @@ import { Route as ApiV1RequestsRequestRefFactsRouteImport } from './routes/api.v
 import { Route as ApiV1RequestsRequestRefEvidenceRouteImport } from './routes/api.v1.requests.$requestRef.evidence'
 import { Route as ApiV1RequestsRequestRefConfirmationRouteImport } from './routes/api.v1.requests.$requestRef.confirmation'
 import { Route as ApiV1RequestsRequestRefCancellationRouteImport } from './routes/api.v1.requests.$requestRef.cancellation'
+import { Route as ApiRequestsRequestRefProblemsReportRefRepliesRouteImport } from './routes/api.requests.$requestRef.problems.$reportRef.replies'
+import { Route as ApiV1RequestsRequestRefProblemsReportRefRepliesRouteImport } from './routes/api.v1.requests.$requestRef.problems.$reportRef.replies'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -337,6 +340,12 @@ const OperatorAdminRunsRoute = OperatorAdminRunsRouteImport.update({
   path: '/admin/runs',
   getParentRoute: () => OperatorRoute,
 } as any)
+const OperatorAdminRequestProblemsRoute =
+  OperatorAdminRequestProblemsRouteImport.update({
+    id: '/admin/request-problems',
+    path: '/admin/request-problems',
+    getParentRoute: () => OperatorRoute,
+  } as any)
 const OperatorAdminInquiriesRoute = OperatorAdminInquiriesRouteImport.update({
   id: '/admin/inquiries',
   path: '/admin/inquiries',
@@ -501,6 +510,18 @@ const ApiV1RequestsRequestRefCancellationRoute =
     path: '/cancellation',
     getParentRoute: () => ApiV1RequestsRequestRefRoute,
   } as any)
+const ApiRequestsRequestRefProblemsReportRefRepliesRoute =
+  ApiRequestsRequestRefProblemsReportRefRepliesRouteImport.update({
+    id: '/$reportRef/replies',
+    path: '/$reportRef/replies',
+    getParentRoute: () => ApiRequestsRequestRefProblemsRoute,
+  } as any)
+const ApiV1RequestsRequestRefProblemsReportRefRepliesRoute =
+  ApiV1RequestsRequestRefProblemsReportRefRepliesRouteImport.update({
+    id: '/$reportRef/replies',
+    path: '/$reportRef/replies',
+    getParentRoute: () => ApiV1RequestsRequestRefProblemsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -532,6 +553,7 @@ export interface FileRoutesByFullPath {
   '/admin/claims': typeof OperatorAdminClaimsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/admin/inquiries': typeof OperatorAdminInquiriesRoute
+  '/admin/request-problems': typeof OperatorAdminRequestProblemsRoute
   '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
@@ -565,7 +587,7 @@ export interface FileRoutesByFullPath {
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
-  '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRoute
+  '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
   '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
@@ -577,8 +599,10 @@ export interface FileRoutesByFullPath {
   '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
   '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
   '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
-  '/api/v1/requests/$requestRef/problems': typeof ApiV1RequestsRequestRefProblemsRoute
+  '/api/v1/requests/$requestRef/problems': typeof ApiV1RequestsRequestRefProblemsRouteWithChildren
   '/api/v1/requests/$requestRef/run': typeof ApiV1RequestsRequestRefRunRoute
+  '/api/requests/$requestRef/problems/$reportRef/replies': typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
+  '/api/v1/requests/$requestRef/problems/$reportRef/replies': typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -610,6 +634,7 @@ export interface FileRoutesByTo {
   '/admin/claims': typeof OperatorAdminClaimsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/admin/inquiries': typeof OperatorAdminInquiriesRoute
+  '/admin/request-problems': typeof OperatorAdminRequestProblemsRoute
   '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
@@ -643,7 +668,7 @@ export interface FileRoutesByTo {
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
-  '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRoute
+  '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
   '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
@@ -655,8 +680,10 @@ export interface FileRoutesByTo {
   '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
   '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
   '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
-  '/api/v1/requests/$requestRef/problems': typeof ApiV1RequestsRequestRefProblemsRoute
+  '/api/v1/requests/$requestRef/problems': typeof ApiV1RequestsRequestRefProblemsRouteWithChildren
   '/api/v1/requests/$requestRef/run': typeof ApiV1RequestsRequestRefRunRoute
+  '/api/requests/$requestRef/problems/$reportRef/replies': typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
+  '/api/v1/requests/$requestRef/problems/$reportRef/replies': typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -690,6 +717,7 @@ export interface FileRoutesById {
   '/_operator/admin/claims': typeof OperatorAdminClaimsRoute
   '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/_operator/admin/inquiries': typeof OperatorAdminInquiriesRoute
+  '/_operator/admin/request-problems': typeof OperatorAdminRequestProblemsRoute
   '/_operator/admin/runs': typeof OperatorAdminRunsRouteWithChildren
   '/_operator/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/_operator/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
@@ -723,7 +751,7 @@ export interface FileRoutesById {
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
-  '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRoute
+  '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
   '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
@@ -735,8 +763,10 @@ export interface FileRoutesById {
   '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
   '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
   '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
-  '/api/v1/requests/$requestRef/problems': typeof ApiV1RequestsRequestRefProblemsRoute
+  '/api/v1/requests/$requestRef/problems': typeof ApiV1RequestsRequestRefProblemsRouteWithChildren
   '/api/v1/requests/$requestRef/run': typeof ApiV1RequestsRequestRefRunRoute
+  '/api/requests/$requestRef/problems/$reportRef/replies': typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
+  '/api/v1/requests/$requestRef/problems/$reportRef/replies': typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -770,6 +800,7 @@ export interface FileRouteTypes {
     | '/admin/claims'
     | '/admin/index-health'
     | '/admin/inquiries'
+    | '/admin/request-problems'
     | '/admin/runs'
     | '/developers/discovery'
     | '/owner/inquiries'
@@ -817,6 +848,8 @@ export interface FileRouteTypes {
     | '/api/v1/requests/$requestRef/options'
     | '/api/v1/requests/$requestRef/problems'
     | '/api/v1/requests/$requestRef/run'
+    | '/api/requests/$requestRef/problems/$reportRef/replies'
+    | '/api/v1/requests/$requestRef/problems/$reportRef/replies'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -848,6 +881,7 @@ export interface FileRouteTypes {
     | '/admin/claims'
     | '/admin/index-health'
     | '/admin/inquiries'
+    | '/admin/request-problems'
     | '/admin/runs'
     | '/developers/discovery'
     | '/owner/inquiries'
@@ -895,6 +929,8 @@ export interface FileRouteTypes {
     | '/api/v1/requests/$requestRef/options'
     | '/api/v1/requests/$requestRef/problems'
     | '/api/v1/requests/$requestRef/run'
+    | '/api/requests/$requestRef/problems/$reportRef/replies'
+    | '/api/v1/requests/$requestRef/problems/$reportRef/replies'
   id:
     | '__root__'
     | '/'
@@ -927,6 +963,7 @@ export interface FileRouteTypes {
     | '/_operator/admin/claims'
     | '/_operator/admin/index-health'
     | '/_operator/admin/inquiries'
+    | '/_operator/admin/request-problems'
     | '/_operator/admin/runs'
     | '/_operator/developers/discovery'
     | '/_operator/owner/inquiries'
@@ -974,6 +1011,8 @@ export interface FileRouteTypes {
     | '/api/v1/requests/$requestRef/options'
     | '/api/v1/requests/$requestRef/problems'
     | '/api/v1/requests/$requestRef/run'
+    | '/api/requests/$requestRef/problems/$reportRef/replies'
+    | '/api/v1/requests/$requestRef/problems/$reportRef/replies'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1364,6 +1403,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAdminRunsRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/admin/request-problems': {
+      id: '/_operator/admin/request-problems'
+      path: '/admin/request-problems'
+      fullPath: '/admin/request-problems'
+      preLoaderRoute: typeof OperatorAdminRequestProblemsRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/_operator/admin/inquiries': {
       id: '/_operator/admin/inquiries'
       path: '/admin/inquiries'
@@ -1560,6 +1606,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1RequestsRequestRefCancellationRouteImport
       parentRoute: typeof ApiV1RequestsRequestRefRoute
     }
+    '/api/requests/$requestRef/problems/$reportRef/replies': {
+      id: '/api/requests/$requestRef/problems/$reportRef/replies'
+      path: '/$reportRef/replies'
+      fullPath: '/api/requests/$requestRef/problems/$reportRef/replies'
+      preLoaderRoute: typeof ApiRequestsRequestRefProblemsReportRefRepliesRouteImport
+      parentRoute: typeof ApiRequestsRequestRefProblemsRoute
+    }
+    '/api/v1/requests/$requestRef/problems/$reportRef/replies': {
+      id: '/api/v1/requests/$requestRef/problems/$reportRef/replies'
+      path: '/$reportRef/replies'
+      fullPath: '/api/v1/requests/$requestRef/problems/$reportRef/replies'
+      preLoaderRoute: typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRouteImport
+      parentRoute: typeof ApiV1RequestsRequestRefProblemsRoute
+    }
   }
 }
 
@@ -1605,6 +1665,7 @@ interface OperatorRouteChildren {
   OperatorAdminClaimsRoute: typeof OperatorAdminClaimsRoute
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
   OperatorAdminInquiriesRoute: typeof OperatorAdminInquiriesRoute
+  OperatorAdminRequestProblemsRoute: typeof OperatorAdminRequestProblemsRoute
   OperatorAdminRunsRoute: typeof OperatorAdminRunsRouteWithChildren
   OperatorDevelopersDiscoveryRoute: typeof OperatorDevelopersDiscoveryRoute
   OperatorOwnerInquiriesRoute: typeof OperatorOwnerInquiriesRouteWithChildren
@@ -1617,6 +1678,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAdminClaimsRoute: OperatorAdminClaimsRoute,
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
   OperatorAdminInquiriesRoute: OperatorAdminInquiriesRoute,
+  OperatorAdminRequestProblemsRoute: OperatorAdminRequestProblemsRoute,
   OperatorAdminRunsRoute: OperatorAdminRunsRouteWithChildren,
   OperatorDevelopersDiscoveryRoute: OperatorDevelopersDiscoveryRoute,
   OperatorOwnerInquiriesRoute: OperatorOwnerInquiriesRouteWithChildren,
@@ -1663,6 +1725,21 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
   ApiBusinessesRouteChildren,
 )
 
+interface ApiRequestsRequestRefProblemsRouteChildren {
+  ApiRequestsRequestRefProblemsReportRefRepliesRoute: typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
+}
+
+const ApiRequestsRequestRefProblemsRouteChildren: ApiRequestsRequestRefProblemsRouteChildren =
+  {
+    ApiRequestsRequestRefProblemsReportRefRepliesRoute:
+      ApiRequestsRequestRefProblemsReportRefRepliesRoute,
+  }
+
+const ApiRequestsRequestRefProblemsRouteWithChildren =
+  ApiRequestsRequestRefProblemsRoute._addFileChildren(
+    ApiRequestsRequestRefProblemsRouteChildren,
+  )
+
 interface ApiRequestsRequestRefRouteChildren {
   ApiRequestsRequestRefAuthorizationRoute: typeof ApiRequestsRequestRefAuthorizationRoute
   ApiRequestsRequestRefCancellationRoute: typeof ApiRequestsRequestRefCancellationRoute
@@ -1671,7 +1748,7 @@ interface ApiRequestsRequestRefRouteChildren {
   ApiRequestsRequestRefFactsRoute: typeof ApiRequestsRequestRefFactsRoute
   ApiRequestsRequestRefMessagesRoute: typeof ApiRequestsRequestRefMessagesRoute
   ApiRequestsRequestRefOptionsRoute: typeof ApiRequestsRequestRefOptionsRoute
-  ApiRequestsRequestRefProblemsRoute: typeof ApiRequestsRequestRefProblemsRoute
+  ApiRequestsRequestRefProblemsRoute: typeof ApiRequestsRequestRefProblemsRouteWithChildren
   ApiRequestsRequestRefRunRoute: typeof ApiRequestsRequestRefRunRoute
 }
 
@@ -1686,7 +1763,8 @@ const ApiRequestsRequestRefRouteChildren: ApiRequestsRequestRefRouteChildren = {
   ApiRequestsRequestRefFactsRoute: ApiRequestsRequestRefFactsRoute,
   ApiRequestsRequestRefMessagesRoute: ApiRequestsRequestRefMessagesRoute,
   ApiRequestsRequestRefOptionsRoute: ApiRequestsRequestRefOptionsRoute,
-  ApiRequestsRequestRefProblemsRoute: ApiRequestsRequestRefProblemsRoute,
+  ApiRequestsRequestRefProblemsRoute:
+    ApiRequestsRequestRefProblemsRouteWithChildren,
   ApiRequestsRequestRefRunRoute: ApiRequestsRequestRefRunRoute,
 }
 
@@ -1718,6 +1796,21 @@ const ApiAnswerThreadsRouteChildren: ApiAnswerThreadsRouteChildren = {
 const ApiAnswerThreadsRouteWithChildren =
   ApiAnswerThreadsRoute._addFileChildren(ApiAnswerThreadsRouteChildren)
 
+interface ApiV1RequestsRequestRefProblemsRouteChildren {
+  ApiV1RequestsRequestRefProblemsReportRefRepliesRoute: typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
+}
+
+const ApiV1RequestsRequestRefProblemsRouteChildren: ApiV1RequestsRequestRefProblemsRouteChildren =
+  {
+    ApiV1RequestsRequestRefProblemsReportRefRepliesRoute:
+      ApiV1RequestsRequestRefProblemsReportRefRepliesRoute,
+  }
+
+const ApiV1RequestsRequestRefProblemsRouteWithChildren =
+  ApiV1RequestsRequestRefProblemsRoute._addFileChildren(
+    ApiV1RequestsRequestRefProblemsRouteChildren,
+  )
+
 interface ApiV1RequestsRequestRefRouteChildren {
   ApiV1RequestsRequestRefCancellationRoute: typeof ApiV1RequestsRequestRefCancellationRoute
   ApiV1RequestsRequestRefConfirmationRoute: typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -1725,7 +1818,7 @@ interface ApiV1RequestsRequestRefRouteChildren {
   ApiV1RequestsRequestRefFactsRoute: typeof ApiV1RequestsRequestRefFactsRoute
   ApiV1RequestsRequestRefMessagesRoute: typeof ApiV1RequestsRequestRefMessagesRoute
   ApiV1RequestsRequestRefOptionsRoute: typeof ApiV1RequestsRequestRefOptionsRoute
-  ApiV1RequestsRequestRefProblemsRoute: typeof ApiV1RequestsRequestRefProblemsRoute
+  ApiV1RequestsRequestRefProblemsRoute: typeof ApiV1RequestsRequestRefProblemsRouteWithChildren
   ApiV1RequestsRequestRefRunRoute: typeof ApiV1RequestsRequestRefRunRoute
 }
 
@@ -1739,7 +1832,8 @@ const ApiV1RequestsRequestRefRouteChildren: ApiV1RequestsRequestRefRouteChildren
     ApiV1RequestsRequestRefFactsRoute: ApiV1RequestsRequestRefFactsRoute,
     ApiV1RequestsRequestRefMessagesRoute: ApiV1RequestsRequestRefMessagesRoute,
     ApiV1RequestsRequestRefOptionsRoute: ApiV1RequestsRequestRefOptionsRoute,
-    ApiV1RequestsRequestRefProblemsRoute: ApiV1RequestsRequestRefProblemsRoute,
+    ApiV1RequestsRequestRefProblemsRoute:
+      ApiV1RequestsRequestRefProblemsRouteWithChildren,
     ApiV1RequestsRequestRefRunRoute: ApiV1RequestsRequestRefRunRoute,
   }
 

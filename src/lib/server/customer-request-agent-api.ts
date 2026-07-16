@@ -14,6 +14,7 @@ import { createCustomerRequestServiceAssertion } from '@/modules/customer-reques
 import type {
   CustomerRequestEvidenceResult,
   CustomerRequestProblemResult,
+  CustomerRequestProblemStatusChange,
 } from '@/modules/customer-request/agent-contract'
 import {
   handleCustomerRequestCancelPost,
@@ -22,6 +23,7 @@ import {
 import {
   handleCustomerRequestEvidenceGet,
   handleCustomerRequestProblemPost,
+  handleCustomerRequestProblemReplyPost,
 } from '@/lib/server/customer-request-recovery-api'
 import { withCustomerRequestAgentNavigation } from '@/modules/customer-request/agent-navigation'
 
@@ -33,7 +35,7 @@ type HandlerOptions = Readonly<{
 }>
 
 type AgentActionResult = SubmitResult | FactsResult | MessageResult | CustomerOptionsProjection | InspectResult | ConfirmationResult
-  | CustomerRequestProblemResult | CustomerRequestEvidenceResult
+  | CustomerRequestProblemResult | CustomerRequestProblemStatusChange | CustomerRequestEvidenceResult
 
 export async function handleAgentCustomerRequestPost(request: Request, options: HandlerOptions = {}): Promise<Response> {
   const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
@@ -131,6 +133,27 @@ export async function handleAgentCustomerRequestProblemPost(
   })
 }
 
+export async function handleAgentCustomerRequestProblemReplyPost(
+  request: Request,
+  requestRef: string,
+  reportRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({
+    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+  })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  return await handleCustomerRequestProblemReplyPost(request, requestRef, reportRef, {
+    reply: async (args) => await callAsAgent(
+      'customerRequestApplication:replyRouteProblem',
+      'reply',
+      args,
+      admitted.principal,
+      options,
+    ),
+  })
+}
+
 export async function handleAgentCustomerRequestEvidenceGet(
   request: Request,
   requestRef: string,
@@ -153,7 +176,7 @@ export async function handleAgentCustomerRequestGet(requestRef: string, options:
 
 async function callAsAgent<Result = SubmitResult>(
   name: string,
-  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'evidence' | 'resume',
+  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence' | 'resume',
   command: Record<string, unknown>,
   principal: CustomerRequestAgentPrincipal,
   options: HandlerOptions,

@@ -10,6 +10,7 @@ import type {
   CustomerRequestAgentResult,
   CustomerRequestEvidenceResult,
   CustomerRequestProblemResult,
+  CustomerRequestProblemStatusChange,
 } from '@/modules/customer-request/agent-contract'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
@@ -20,7 +21,8 @@ const SESSION_LIFETIME_MS = SESSION_LIFETIME_SECONDS * 1_000
 const SESSION_SCOPE = 'customer_requests:create'
 
 type BrowserActionResult = SubmitResult | FactsResult | MessageResult | CustomerOptionsProjection | InspectResult
-  | ConfirmationResult | CustomerRequestAgentResult | CustomerRequestProblemResult | CustomerRequestEvidenceResult
+  | ConfirmationResult | CustomerRequestAgentResult | CustomerRequestProblemResult
+  | CustomerRequestProblemStatusChange | CustomerRequestEvidenceResult
 
 export type BrowserApiOptions = Readonly<{
   env?: Record<string, string | undefined>
@@ -114,7 +116,7 @@ export async function handleBrowserCustomerRequestGet(
 export async function callBrowserGuestAction<Result extends BrowserActionResult>(
   request: Request,
   name: string,
-  operation: 'confirm' | 'run' | 'cancel' | 'report' | 'evidence',
+  operation: 'confirm' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence',
   command: Record<string, unknown>,
   options: BrowserApiOptions = {},
 ): Promise<Result | undefined> {
@@ -140,7 +142,7 @@ async function handleGuestSubmit(request: Request, session: GuestSession, option
 
 async function callAsGuest<Result extends BrowserActionResult>(
   name: string,
-  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'resume' | 'confirm' | 'run' | 'cancel' | 'report' | 'evidence',
+  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'resume' | 'confirm' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence',
   command: Record<string, unknown>,
   session: GuestSession,
   options: BrowserApiOptions,

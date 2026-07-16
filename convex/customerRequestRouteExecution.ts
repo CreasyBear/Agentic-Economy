@@ -17,12 +17,14 @@ import { routeStepGrantValue } from '@/modules/customer-request/runtime'
 import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
+import { resolveAdminAuthority } from './authz'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { getEligibleExactCapabilitySupply } from './capabilitySupply'
 import { admitRouteStep } from './customerRequestRouteMandateAdmission'
 import {
   readCurrentRouteMandateStateForPrincipal,
 } from './customerRequestRouteMandate'
+import { runtimeDb } from './source_state'
 
 const MAX_PENDING_DISPATCH_SCAN = 64
 
@@ -979,10 +981,259 @@ export const reportProblem = internalMutation({
   },
 })
 
+const problemUpdateState = v.union(
+  v.literal('investigating'),
+  v.literal('waiting_for_customer'),
+  v.literal('closed'),
+)
+
+const problemUpdateResult = v.union(
+  v.object({
+    kind: v.literal('updated'),
+    reportRef: v.string(),
+    version: v.number(),
+    state: problemUpdateState,
+    recordedAt: v.number(),
+  }),
+  v.object({ kind: v.literal('conflict'), reason: v.union(
+    v.literal('idempotency_key_reused'),
+    v.literal('stale_version'),
+  ) }),
+  v.object({ kind: v.literal('refused'), reason: v.union(
+    v.literal('authentication_required'),
+    v.literal('authority_denied'),
+    v.literal('report_not_found'),
+    v.literal('invalid_update'),
+  ) }),
+)
+
+export const updateProblemStatus = internalMutation({
+  args: {
+    reportRef: v.string(),
+    expectedVersion: v.number(),
+    idempotencyKey: v.string(),
+    state: problemUpdateState,
+    publicMessage: v.string(),
+  },
+  returns: problemUpdateResult,
+  handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => {
+    const authority = await resolveAdminAuthority(
+      { db: runtimeDb(ctx.db), auth: ctx.auth },
+      'annotate_triage',
+    )
+    if (authority.kind === 'denied') {
+      return {
+        kind: 'refused',
+        reason: authority.reason === 'missing_membership'
+          ? 'authentication_required'
+          : 'authority_denied',
+      }
+    }
+    const report = await ctx.db.query('customerRequestRouteProblemReports')
+      .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
+    if (report === null) return { kind: 'refused', reason: 'report_not_found' }
+    const message = args.publicMessage.trim()
+    if (!Number.isSafeInteger(args.expectedVersion) || args.expectedVersion < 0
+      || args.idempotencyKey.trim().length === 0 || message.length === 0 || message.length > 1_000) {
+      return { kind: 'refused', reason: 'invalid_update' }
+    }
+    const commandKey = `route-problem-update:v1:${canonicalDigest({
+      reportRef: args.reportRef,
+      actorRef: authority.membership.clerkUserId,
+      idempotencyKey: args.idempotencyKey,
+    })}`
+    const commandDigest = canonicalDigest(args)
+    const prior = await ctx.db.query('customerRequestRouteProblemUpdates')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
+    if (prior !== null) return prior.commandDigest === commandDigest
+      ? {
+          kind: 'updated',
+          reportRef: prior.reportRef,
+          version: prior.version,
+          state: prior.state,
+          recordedAt: prior.createdAt,
+        }
+      : { kind: 'conflict', reason: 'idempotency_key_reused' }
+    const updates = await readProblemUpdates(ctx, args.reportRef)
+    if (updates.length !== args.expectedVersion) {
+      return { kind: 'conflict', reason: 'stale_version' }
+    }
+    const version = updates.length + 1
+    const recordedAt = Date.now()
+    await ctx.db.insert('customerRequestRouteProblemUpdates', {
+      updateRef: `problem-update:${canonicalDigest({ commandKey, commandDigest, version })}`,
+      reportRef: args.reportRef,
+      commandKey,
+      commandDigest,
+      version,
+      source: 'ae_support',
+      actorRef: authority.membership.clerkUserId,
+      state: args.state,
+      message,
+      createdAt: recordedAt,
+    })
+    return { kind: 'updated', reportRef: args.reportRef, version, state: args.state, recordedAt }
+  },
+})
+
+export const replyProblem = internalMutation({
+  args: {
+    requestId: v.string(),
+    reportRef: v.string(),
+    principalId: v.string(),
+    expectedVersion: v.number(),
+    idempotencyKey: v.string(),
+    message: v.string(),
+  },
+  returns: problemUpdateResult,
+  handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => {
+    const report = await ctx.db.query('customerRequestRouteProblemReports')
+      .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
+    if (report === null || report.requestId !== args.requestId || report.principalId !== args.principalId) {
+      return { kind: 'refused', reason: 'report_not_found' }
+    }
+    const message = args.message.trim()
+    if (!Number.isSafeInteger(args.expectedVersion) || args.expectedVersion < 1
+      || args.idempotencyKey.trim().length === 0 || message.length === 0 || message.length > 1_000) {
+      return { kind: 'refused', reason: 'invalid_update' }
+    }
+    const commandKey = `route-problem-reply:v1:${canonicalDigest({
+      reportRef: args.reportRef,
+      principalId: args.principalId,
+      idempotencyKey: args.idempotencyKey,
+    })}`
+    const commandDigest = canonicalDigest(args)
+    const prior = await ctx.db.query('customerRequestRouteProblemUpdates')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
+    if (prior !== null) return prior.commandDigest === commandDigest
+      ? {
+          kind: 'updated',
+          reportRef: prior.reportRef,
+          version: prior.version,
+          state: prior.state,
+          recordedAt: prior.createdAt,
+        }
+      : { kind: 'conflict', reason: 'idempotency_key_reused' }
+    const updates = await readProblemUpdates(ctx, args.reportRef)
+    const latest = updates.at(-1)
+    if (updates.length !== args.expectedVersion) {
+      return { kind: 'conflict', reason: 'stale_version' }
+    }
+    if (latest?.state !== 'waiting_for_customer') {
+      return { kind: 'refused', reason: 'invalid_update' }
+    }
+    const version = updates.length + 1
+    const recordedAt = Date.now()
+    await ctx.db.insert('customerRequestRouteProblemUpdates', {
+      updateRef: `problem-update:${canonicalDigest({ commandKey, commandDigest, version })}`,
+      reportRef: args.reportRef,
+      commandKey,
+      commandDigest,
+      version,
+      source: 'customer',
+      actorRef: args.principalId,
+      state: 'investigating',
+      message,
+      createdAt: recordedAt,
+    })
+    return {
+      kind: 'updated',
+      reportRef: args.reportRef,
+      version,
+      state: 'investigating',
+      recordedAt,
+    }
+  },
+})
+
+export const listProblemsForSupport = internalQuery({
+  args: { limit: v.number() },
+  returns: v.union(
+    v.object({
+      kind: v.literal('allowed'),
+      rows: v.array(v.object({
+        reportRef: v.string(),
+        requestRef: v.string(),
+        version: v.number(),
+        state: v.union(
+          v.literal('received'),
+          v.literal('update_due'),
+          v.literal('investigating'),
+          v.literal('waiting_for_customer'),
+          v.literal('closed'),
+        ),
+        nextActor: v.union(v.literal('ae'), v.literal('customer'), v.literal('none')),
+        category: problemCategory,
+        summary: v.string(),
+        business: v.optional(v.string()),
+        reportedAt: v.number(),
+        lastUpdatedAt: v.number(),
+      })),
+    }),
+    v.object({
+      kind: v.literal('denied'),
+      reason: v.union(
+        v.literal('missing_membership'),
+        v.literal('inactive_membership'),
+        v.literal('action_not_allowed'),
+      ),
+      rows: v.array(v.any()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const authority = await resolveAdminAuthority(
+      { db: runtimeDb(ctx.db), auth: ctx.auth },
+      'read_admin_readbacks',
+    )
+    if (authority.kind === 'denied') {
+      return { kind: 'denied' as const, reason: authority.reason, rows: [] }
+    }
+    const limit = Number.isSafeInteger(args.limit) ? Math.min(Math.max(args.limit, 1), 100) : 50
+    const reports = await ctx.db.query('customerRequestRouteProblemReports').order('desc').take(limit)
+    const updatesByProblem = await Promise.all(
+      reports.map(async (problem) => readProblemUpdates(ctx, problem.reportRef)),
+    )
+    return {
+      kind: 'allowed' as const,
+      rows: reports.map((problem, index) => {
+        const updates = updatesByProblem[index] ?? []
+        const latest = updates.at(-1)
+        const tracking = projectCustomerRequestProblemTracking(
+          problem.createdAt,
+          Date.now(),
+          latest === undefined ? undefined : { state: latest.state, recordedAt: latest.createdAt },
+        )
+        return {
+          reportRef: problem.reportRef,
+          requestRef: problem.requestId,
+          version: updates.length,
+          state: tracking.state,
+          nextActor: tracking.nextActor,
+          category: problem.category,
+          summary: problem.summary,
+          ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
+          reportedAt: problem.createdAt,
+          lastUpdatedAt: latest?.createdAt ?? problem.createdAt,
+        }
+      }),
+    }
+  },
+})
+
 const exportedStepState = v.union(
   v.literal('queued'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
   v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
 )
+
+async function readProblemUpdates(ctx: MutationCtx | QueryCtx, reportRef: string) {
+  const updates = await ctx.db.query('customerRequestRouteProblemUpdates')
+    .withIndex('by_reportRef_and_version', (query) => query.eq('reportRef', reportRef))
+    .take(101)
+  if (updates.length > 100 || updates.some((update, index) => update.version !== index + 1)) {
+    throw new Error('customer_request_route_problem_update_integrity_failure')
+  }
+  return updates
+}
 
 export const exportCustomerEvidence = internalQuery({
   args: { requestId: v.string(), principalId: v.string() },
@@ -1000,11 +1251,25 @@ export const exportCustomerEvidence = internalQuery({
         evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
       })),
       problems: v.array(v.object({
-        reportRef: v.string(), state: v.union(v.literal('received'), v.literal('update_due')),
+        reportRef: v.string(),
+        version: v.number(),
+        state: v.union(
+          v.literal('received'),
+          v.literal('update_due'),
+          v.literal('investigating'),
+          v.literal('waiting_for_customer'),
+          v.literal('closed'),
+        ),
         category: problemCategory, summary: v.string(), claimSource: v.literal('customer'),
         causality: v.literal('unknown'), resolution: v.literal('not_adjudicated'),
-        nextAction: v.union(v.literal('await_status_update'), v.literal('check_status')),
-        nextActor: v.literal('ae'), nextUpdateDueAt: v.number(),
+        nextAction: v.union(
+          v.literal('await_status_update'),
+          v.literal('check_status'),
+          v.literal('provide_information'),
+          v.literal('none'),
+        ),
+        nextActor: v.union(v.literal('ae'), v.literal('customer'), v.literal('none')),
+        nextUpdateDueAt: v.optional(v.number()),
         decisionAuthority: v.literal('not_assigned'), reportedAt: v.number(),
         visibility: v.union(
           v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
@@ -1013,6 +1278,18 @@ export const exportCustomerEvidence = internalQuery({
         affected: v.object({
           step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
         }),
+        history: v.array(v.object({
+          version: v.number(),
+          state: v.union(
+            v.literal('received'),
+            v.literal('investigating'),
+            v.literal('waiting_for_customer'),
+            v.literal('closed'),
+          ),
+          source: v.union(v.literal('customer'), v.literal('ae_support')),
+          message: v.string(),
+          recordedAt: v.number(),
+        })),
       })),
     }),
   ),
@@ -1034,6 +1311,9 @@ export const exportCustomerEvidence = internalQuery({
     if (problems.length > 100 || problems.some((problem) => problem.principalId !== args.principalId)) {
       throw new Error('customer_request_route_problem_integrity_failure')
     }
+    const updatesByProblem = await Promise.all(
+      problems.map(async (problem) => readProblemUpdates(ctx, problem.reportRef)),
+    )
     return {
       kind: 'found' as const, state: run.state, generatedAt: Date.now(),
       ...(run.resultJson === undefined ? {} : { resultJson: run.resultJson }),
@@ -1044,8 +1324,17 @@ export const exportCustomerEvidence = internalQuery({
           label: `Result evidence ${index + 1}`,
         })),
       })),
-      problems: problems.map((problem) => {
-        const tracking = projectCustomerRequestProblemTracking(problem.createdAt, Date.now())
+      problems: problems.map((problem, problemIndex) => {
+        const updates = updatesByProblem[problemIndex] ?? []
+        const latest = updates.at(-1)
+        const tracking = projectCustomerRequestProblemTracking(
+          problem.createdAt,
+          Date.now(),
+          latest === undefined ? undefined : {
+            state: latest.state,
+            recordedAt: latest.createdAt,
+          },
+        )
         const attempt = attempts.find((candidate) => candidate.attemptRef === problem.attemptRef)
         const evidenceByReceipt = new Map<string, string>()
         if (attempt !== undefined) {
@@ -1057,13 +1346,15 @@ export const exportCustomerEvidence = internalQuery({
           }
         }
         return {
-          reportRef: problem.reportRef, state: tracking.state,
+          reportRef: problem.reportRef,
+          version: updates.length,
+          state: tracking.state,
           category: problem.category, summary: problem.summary,
           claimSource: 'customer' as const, causality: 'unknown' as const,
           resolution: 'not_adjudicated' as const,
           nextAction: tracking.nextAction,
           nextActor: tracking.nextActor,
-          nextUpdateDueAt: tracking.nextUpdateDueAt,
+          ...(tracking.nextUpdateDueAt === undefined ? {} : { nextUpdateDueAt: tracking.nextUpdateDueAt }),
           decisionAuthority: tracking.decisionAuthority,
           visibility: problem.visibility ?? 'customer_and_ae_only',
           evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
@@ -1075,6 +1366,22 @@ export const exportCustomerEvidence = internalQuery({
             ...(problem.attemptRef === undefined ? {} : { attemptRef: problem.attemptRef }),
             ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
           },
+          history: [
+            {
+              version: 0,
+              state: 'received' as const,
+              source: 'customer' as const,
+              message: problem.summary,
+              recordedAt: problem.createdAt,
+            },
+            ...updates.map((update) => ({
+              version: update.version,
+              state: update.state,
+              source: update.source,
+              message: update.message,
+              recordedAt: update.createdAt,
+            })),
+          ],
         }
       }),
     }
