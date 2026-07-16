@@ -126,6 +126,7 @@ const revokeResult = v.union(
 
 type IssueCommand = Infer<typeof issueCommandValue>
 type ServiceAuthorization = Infer<typeof serviceAuthorization>
+export type CustomerRequestServiceAssertion = Infer<typeof serviceAssertion>
 type IssueEvidence = Infer<typeof routeMandateIssueEvidenceValue>
 type RouteGeneration = CustomerRequestRoutePlanGeneration
 type AuthenticatedRequest = Readonly<{
@@ -647,27 +648,17 @@ export async function authenticateRequestOwnerForMutation(
     .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
   if (head === null) return { kind: 'not_found' }
   if (identity === null) {
-    const key = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
     const proof = serviceAuthorization
-    if (proof === undefined || key === undefined || key.length < 32
-      || proof.command.requestRef !== requestId
-      || !proof.assertion.scopes.includes('customer_requests:create')
-      || !await verifyCustomerRequestServiceAssertion({
-        key, operation: 'confirm', command: proof.command, assertion: proof.assertion,
-      })) return { kind: 'unauthenticated' }
-    if (head.principalId !== proof.assertion.principalId) return { kind: 'not_found' }
-    const recorded = await ctx.db.query('customerRequestAgentPrincipals')
-      .withIndex('by_principalId', (query) => query.eq('principalId', proof.assertion.principalId)).unique()
-    const recordedScopes = new Set(recorded?.scopes ?? [])
-    if (recorded === null || recorded.ownerId !== proof.assertion.ownerId
-      || recorded.credentialId !== proof.assertion.credentialId
-      || !proof.assertion.scopes.every((scope) => recordedScopes.has(scope))) {
+    if (proof === undefined || proof.command.requestRef !== requestId) {
       return { kind: 'unauthenticated' }
     }
-    return authenticatedRequest(head.principalId, {
-      issuer: 'ae:clerk-api-key', subject: proof.assertion.ownerId,
-      tokenIdentifier: proof.assertion.credentialId,
-    })
+    return await authenticateRequestOwnerForServiceOperation(
+      ctx,
+      requestId,
+      'confirm',
+      proof.command,
+      proof.assertion,
+    )
   }
   if (head.principalId !== identity.tokenIdentifier) {
     const delegated = await ctx.db.query('customerRequestAgentPrincipals')
@@ -675,6 +666,41 @@ export async function authenticateRequestOwnerForMutation(
     if (delegated?.ownerTokenIdentifier !== identity.tokenIdentifier) return { kind: 'not_found' }
   }
   return authenticatedRequest(head.principalId, identity)
+}
+
+export async function authenticateRequestOwnerForServiceOperation(
+  ctx: MutationCtx,
+  requestId: string,
+  operation: string,
+  command: Record<string, unknown>,
+  assertion: CustomerRequestServiceAssertion,
+): Promise<AuthenticatedRequestResult> {
+  const head = await ctx.db.query('customerRequestV2Heads')
+    .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
+  if (head === null) return { kind: 'not_found' }
+  const key = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  if (key === undefined || key.length < 32
+    || !assertion.scopes.includes('customer_requests:create')
+    || !await verifyCustomerRequestServiceAssertion({
+      key,
+      operation,
+      command: command as never,
+      assertion,
+    })) return { kind: 'unauthenticated' }
+  if (head.principalId !== assertion.principalId) return { kind: 'not_found' }
+  const recorded = await ctx.db.query('customerRequestAgentPrincipals')
+    .withIndex('by_principalId', (query) => query.eq('principalId', assertion.principalId)).unique()
+  const recordedScopes = new Set(recorded?.scopes ?? [])
+  if (recorded === null || recorded.ownerId !== assertion.ownerId
+    || recorded.credentialId !== assertion.credentialId
+    || !assertion.scopes.every((scope) => recordedScopes.has(scope))) {
+    return { kind: 'unauthenticated' }
+  }
+  return authenticatedRequest(head.principalId, {
+    issuer: 'ae:clerk-api-key',
+    subject: assertion.ownerId,
+    tokenIdentifier: assertion.credentialId,
+  })
 }
 
 function issueCommandMaterial(args: IssueCommand): IssueCommand {

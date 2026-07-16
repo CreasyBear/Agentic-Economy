@@ -956,6 +956,7 @@ export const allowRepeatRoute = action({
     cumulativeSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
     validUntil: v.number(),
     idempotencyKey: v.string(),
+    serviceAuth: v.optional(serviceAssertion),
   },
   returns: repeatPermissionResult,
   handler: async (ctx, args): Promise<RepeatPermissionResult> => {
@@ -969,7 +970,7 @@ export const allowRepeatRoute = action({
       validUntil: args.validUntil,
       idempotencyKey: args.idempotencyKey,
     }
-    const caller = await resolveRequestCaller(ctx, 'allow_repeat', command, undefined)
+    const caller = await resolveRequestCaller(ctx, 'allow_repeat', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
     const current = await loadCurrent(ctx, args.requestRef)
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
@@ -1032,6 +1033,13 @@ export const allowRepeatRoute = action({
       occurrences: args.occurrences,
       validUntil: args.validUntil,
       idempotencyKey: args.idempotencyKey,
+      ...(args.serviceAuth === undefined ? {} : {
+        serviceAuthorization: {
+          operation: 'allow_repeat' as const,
+          command,
+          assertion: args.serviceAuth,
+        },
+      }),
     })
     if (result.kind === 'issued' || result.kind === 'replayed') {
       return projectRepeatPermission(args.requestRef, args.revision, args.routeRef, result.policy)
@@ -1061,6 +1069,7 @@ export const useRepeatRoute = action({
     permissionRef: v.string(),
     delegatedCredentialId: v.string(),
     idempotencyKey: v.string(),
+    serviceAuth: v.optional(serviceAssertion),
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
@@ -1072,7 +1081,7 @@ export const useRepeatRoute = action({
       delegatedCredentialId: args.delegatedCredentialId,
       idempotencyKey: args.idempotencyKey,
     }
-    const caller = await resolveRequestCaller(ctx, 'use_repeat', command, undefined)
+    const caller = await resolveRequestCaller(ctx, 'use_repeat', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
     const current = await loadCurrent(ctx, args.requestRef)
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
@@ -1099,7 +1108,11 @@ export const useRepeatRoute = action({
     if (selectedRoute === undefined) return preview
     const permission = await ctx.runQuery(
       internal.customerRequestStandingRoutePolicy.resolvePermission,
-      { requestId: args.requestRef, permissionRef: args.permissionRef },
+      {
+        requestId: args.requestRef,
+        permissionRef: args.permissionRef,
+        principalId: caller.principalId,
+      },
     )
     if (permission.kind !== 'found'
       || permission.policy.delegatedCredentialId !== args.delegatedCredentialId
@@ -1121,6 +1134,13 @@ export const useRepeatRoute = action({
       delegatedCredentialId: args.delegatedCredentialId,
       mandateExpiresAt: Math.min(displayedRoute.validUntil, permission.policy.validUntil),
       idempotencyKey: args.idempotencyKey,
+      ...(args.serviceAuth === undefined ? {} : {
+        serviceAuthorization: {
+          operation: 'use_repeat' as const,
+          command,
+          assertion: args.serviceAuth,
+        },
+      }),
     })
     if (result.kind === 'issued' || result.kind === 'replayed') {
       return projectConfirmedRoute(current.aggregate, displayedRoute, result.mandate)
@@ -1152,7 +1172,11 @@ export const inspectRepeatRoute = action({
     }
     const resolved = await ctx.runQuery(
       internal.customerRequestStandingRoutePolicy.resolvePermission,
-      { requestId: args.requestRef, permissionRef: args.permissionRef },
+      {
+        requestId: args.requestRef,
+        permissionRef: args.permissionRef,
+        principalId: caller.principalId,
+      },
     )
     if (resolved.kind !== 'found'
       || resolved.policy.routes[0] === undefined
@@ -1192,7 +1216,11 @@ export const revokeRepeatRoute = action({
     }
     const resolved = await ctx.runQuery(
       internal.customerRequestStandingRoutePolicy.resolvePermission,
-      { requestId: args.requestRef, permissionRef: args.permissionRef },
+      {
+        requestId: args.requestRef,
+        permissionRef: args.permissionRef,
+        principalId: caller.principalId,
+      },
     )
     if (resolved.kind !== 'found'
       || resolved.policy.routes[0] === undefined

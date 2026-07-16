@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { compileRouteMandate } from '@/modules/customer-request/route-mandate'
@@ -18,6 +18,7 @@ import { internalMutation, internalQuery } from './_generated/server'
 import {
   authenticateRequestOwner,
   authenticateRequestOwnerForMutation,
+  authenticateRequestOwnerForServiceOperation,
   openCurrentRouteGeneration,
   persistRouteMandateIssue,
 } from './customerRequestRouteMandate'
@@ -39,6 +40,45 @@ const issueCommand = {
   validUntil: v.number(),
   idempotencyKey: v.string(),
 }
+const serviceAssertion = v.object({
+  principalId: v.string(),
+  ownerId: v.string(),
+  credentialId: v.string(),
+  scopes: v.array(v.string()),
+  issuedAt: v.number(),
+  signature: v.string(),
+})
+const allowRepeatCommand = v.object({
+  requestRef: v.string(),
+  revision: v.number(),
+  routeRef: v.string(),
+  delegatedCredentialId: v.string(),
+  occurrences: v.number(),
+  cumulativeSpend: money,
+  validUntil: v.number(),
+  idempotencyKey: v.string(),
+})
+const useRepeatCommand = v.object({
+  requestRef: v.string(),
+  revision: v.number(),
+  routeRef: v.string(),
+  permissionRef: v.string(),
+  delegatedCredentialId: v.string(),
+  idempotencyKey: v.string(),
+})
+const serviceAuthorization = v.union(
+  v.object({
+    operation: v.literal('allow_repeat'),
+    command: allowRepeatCommand,
+    assertion: serviceAssertion,
+  }),
+  v.object({
+    operation: v.literal('use_repeat'),
+    command: useRepeatCommand,
+    assertion: serviceAssertion,
+  }),
+)
+type StandingServiceAuthorization = Infer<typeof serviceAuthorization>
 
 const issueResult = v.union(
   v.object({ kind: v.literal('issued'), policy: standingRoutePolicyValue }),
@@ -148,10 +188,14 @@ const revokeResult = v.union(
 )
 
 export const issue = internalMutation({
-  args: issueCommand,
+  args: { ...issueCommand, serviceAuthorization: v.optional(serviceAuthorization) },
   returns: issueResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwnerForMutation(ctx, args.requestId)
+    const authenticated = await authenticateStandingRequestOwner(
+      ctx,
+      args.requestId,
+      args.serviceAuthorization,
+    )
     if (authenticated.kind === 'unauthenticated') {
       return { kind: 'refused' as const, reason: 'authentication_required' as const }
     }
@@ -222,7 +266,7 @@ export const issue = internalMutation({
     const delegatedCredential = await ctx.db.query('customerRequestAgentPrincipals')
       .withIndex('by_credentialId', (query) => query.eq('credentialId', args.delegatedCredentialId)).unique()
     if (delegatedCredential === null
-      || delegatedCredential.ownerTokenIdentifier !== authenticated.identity.tokenIdentifier
+      || !credentialBelongsToAuthenticatedRequest(delegatedCredential, authenticated)
       || !delegatedCredential.scopes.includes('customer_requests:standing_authority')) {
       return { kind: 'refused' as const, reason: 'credential_not_authorized' as const }
     }
@@ -318,10 +362,14 @@ export const issue = internalMutation({
 })
 
 export const issueMandate = internalMutation({
-  args: issueMandateCommand,
+  args: { ...issueMandateCommand, serviceAuthorization: v.optional(serviceAuthorization) },
   returns: issueMandateResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwnerForMutation(ctx, args.requestId)
+    const authenticated = await authenticateStandingRequestOwner(
+      ctx,
+      args.requestId,
+      args.serviceAuthorization,
+    )
     if (authenticated.kind === 'unauthenticated') {
       return { kind: 'refused' as const, reason: 'authentication_required' as const }
     }
@@ -396,7 +444,7 @@ export const issueMandate = internalMutation({
     const delegatedCredential = await ctx.db.query('customerRequestAgentPrincipals')
       .withIndex('by_credentialId', (query) => query.eq('credentialId', args.delegatedCredentialId)).unique()
     if (delegatedCredential === null
-      || delegatedCredential.ownerTokenIdentifier !== authenticated.identity.tokenIdentifier
+      || !credentialBelongsToAuthenticatedRequest(delegatedCredential, authenticated)
       || !delegatedCredential.scopes.includes('customer_requests:standing_authority')) {
       return { kind: 'refused' as const, reason: 'credential_mismatch' as const }
     }
@@ -573,18 +621,16 @@ export const get = internalQuery({
 })
 
 export const resolvePermission = internalQuery({
-  args: { requestId: v.string(), permissionRef: v.string() },
+  args: { requestId: v.string(), permissionRef: v.string(), principalId: v.string() },
   returns: resolvePermissionResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwner(ctx, args.requestId)
-    if (authenticated.kind !== 'authenticated') return { kind: 'not_found' as const }
     const rows = await ctx.db.query('customerRequestStandingRoutePolicyIssues')
       .withIndex('by_requestId_and_recordedAt', (query) => query.eq('requestId', args.requestId))
       .order('desc')
       .take(513)
     if (rows.length > 512) throw new Error('customer_request_standing_route_policy_history_overflow')
     const row = rows.find((candidate) => (
-      candidate.principalId === authenticated.principalId
+      candidate.principalId === args.principalId
       && repeatPermissionRef(candidate.policyRef) === args.permissionRef
     ))
     if (row === undefined) return { kind: 'not_found' as const }
@@ -705,6 +751,26 @@ function domainPolicy(value: unknown): StandingRoutePolicy {
   return value as StandingRoutePolicy
 }
 
+async function authenticateStandingRequestOwner(
+  ctx: Parameters<typeof authenticateRequestOwnerForMutation>[0],
+  requestId: string,
+  authorization?: StandingServiceAuthorization,
+) {
+  if (authorization === undefined) {
+    return await authenticateRequestOwnerForMutation(ctx, requestId)
+  }
+  if (authorization.command.requestRef !== requestId) {
+    return { kind: 'unauthenticated' as const }
+  }
+  return await authenticateRequestOwnerForServiceOperation(
+    ctx,
+    requestId,
+    authorization.operation,
+    authorization.command,
+    authorization.assertion,
+  )
+}
+
 function domainUse(value: unknown): StandingRouteAuthorityUse {
   return value as StandingRouteAuthorityUse
 }
@@ -799,6 +865,22 @@ function validMoney(value: Readonly<{ currency: string; amountMinor: number }>):
   return value.currency.trim().length > 0
     && Number.isSafeInteger(value.amountMinor)
     && value.amountMinor >= 0
+}
+
+function credentialBelongsToAuthenticatedRequest(
+  credential: Readonly<{
+    principalId: string
+    credentialId: string
+    ownerTokenIdentifier?: string
+  }>,
+  authenticated: Readonly<{
+    principalId: string
+    identity: Readonly<{ tokenIdentifier: string }>
+  }>,
+): boolean {
+  return credential.ownerTokenIdentifier === authenticated.identity.tokenIdentifier
+    || (credential.principalId === authenticated.principalId
+      && credential.credentialId === authenticated.identity.tokenIdentifier)
 }
 
 function repeatPermissionRef(policyRef: string): string {

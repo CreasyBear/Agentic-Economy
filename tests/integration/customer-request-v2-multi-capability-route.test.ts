@@ -474,16 +474,13 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       throw new Error(`customer route missing: ${JSON.stringify(compared)}`)
     }
     const displayedRoute = compared.decision.routes[0]
-    await admin.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
-      principalId: 'agent:repeat-permission',
+    const servicePrincipal = {
+      principalId: current.aggregate.snapshot.principalId,
       ownerId: 'user_route_admin',
-      ownerTokenIdentifier: 'token_route_admin',
       credentialId: 'credential:repeat-permission',
       scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
-      seenAt: 900,
-    })
-
-    const permission = await admin.action(api.customerRequestApplication.allowRepeatRoute, {
+    }
+    const permissionCommand = {
       requestRef: compared.requestRef,
       revision: compared.revision,
       routeRef: displayedRoute.routeRef,
@@ -499,6 +496,20 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       },
       validUntil: displayedRoute.validUntil,
       idempotencyKey: 'allow-repeat:customer',
+    }
+    const serviceKey = 'repeat-permission-service-key-long-enough'
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
+    vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', 'https://identity.example')
+    const serviceAuth = await createCustomerRequestServiceAssertion({
+      key: serviceKey,
+      operation: 'allow_repeat',
+      command: permissionCommand,
+      principal: servicePrincipal,
+      issuedAt: 1_000,
+    })
+    const permission = await backend.action(api.customerRequestApplication.allowRepeatRoute, {
+      ...permissionCommand,
+      serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
     })
 
     expect(permission, JSON.stringify(permission)).toMatchObject({
@@ -530,22 +541,27 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       throw new Error(`repeat permission failed: ${JSON.stringify(permission)}`)
     }
     await expect(admin.action(api.customerRequestApplication.allowRepeatRoute, {
-      requestRef: compared.requestRef,
-      revision: compared.revision,
-      routeRef: displayedRoute.routeRef,
-      delegatedCredentialId: 'credential:repeat-permission',
-      occurrences: 2,
+      ...permissionCommand,
       cumulativeSpend: permission.limits.cumulativeSpend,
-      validUntil: displayedRoute.validUntil,
-      idempotencyKey: 'allow-repeat:customer',
     })).resolves.toEqual(permission)
-    const confirmed = await admin.action(api.customerRequestApplication.useRepeatRoute, {
+    const useCommand = {
       requestRef: compared.requestRef,
       revision: compared.revision,
       routeRef: displayedRoute.routeRef,
       permissionRef: permission.permissionRef,
       delegatedCredentialId: permission.delegatedCredentialId,
       idempotencyKey: 'use-repeat:customer',
+    }
+    const useAuth = await createCustomerRequestServiceAssertion({
+      key: serviceKey,
+      operation: 'use_repeat',
+      command: useCommand,
+      principal: servicePrincipal,
+      issuedAt: 1_000,
+    })
+    const confirmed = await backend.action(api.customerRequestApplication.useRepeatRoute, {
+      ...useCommand,
+      serviceAuth: { ...useAuth, scopes: [...useAuth.scopes] },
     })
     expect(confirmed).toMatchObject({
       kind: 'request',
@@ -557,13 +573,9 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(JSON.stringify(confirmed)).not.toMatch(
       /policyRef|policyDigest|mandate|capabilityId|bindingId|offeringId|graph/u,
     )
-    await expect(admin.action(api.customerRequestApplication.useRepeatRoute, {
-      requestRef: compared.requestRef,
-      revision: compared.revision,
-      routeRef: displayedRoute.routeRef,
-      permissionRef: permission.permissionRef,
-      delegatedCredentialId: permission.delegatedCredentialId,
-      idempotencyKey: 'use-repeat:customer',
+    await expect(backend.action(api.customerRequestApplication.useRepeatRoute, {
+      ...useCommand,
+      serviceAuth: { ...useAuth, scopes: [...useAuth.scopes] },
     })).resolves.toEqual(confirmed)
     await expect(admin.action(api.customerRequestApplication.inspectRepeatRoute, {
       requestRef: compared.requestRef,
@@ -592,13 +604,24 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       permissionRef: permission.permissionRef,
       routeRef: displayedRoute.routeRef,
     })).resolves.toEqual(withdrawn)
-    await expect(admin.action(api.customerRequestApplication.useRepeatRoute, {
+    const withdrawnUseCommand = {
       requestRef: compared.requestRef,
       revision: compared.revision,
       routeRef: displayedRoute.routeRef,
       permissionRef: permission.permissionRef,
       delegatedCredentialId: permission.delegatedCredentialId,
       idempotencyKey: 'use-repeat:after-withdrawal',
+    }
+    const withdrawnUseAuth = await createCustomerRequestServiceAssertion({
+      key: serviceKey,
+      operation: 'use_repeat',
+      command: withdrawnUseCommand,
+      principal: servicePrincipal,
+      issuedAt: 1_000,
+    })
+    await expect(backend.action(api.customerRequestApplication.useRepeatRoute, {
+      ...withdrawnUseCommand,
+      serviceAuth: { ...withdrawnUseAuth, scopes: [...withdrawnUseAuth.scopes] },
     })).resolves.toMatchObject({
       kind: 'request',
       state: 'needs_attention',
