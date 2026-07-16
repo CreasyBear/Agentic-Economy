@@ -399,12 +399,38 @@ export const customerRequestRouteMandateTables = {
     principalId: v.string(),
     requestId: v.string(),
     runRef: v.string(),
-    result: v.union(v.literal('cancelled'), v.literal('too_late')),
+    result: v.union(
+      v.literal('cancelled'), v.literal('too_late'),
+      v.literal('pending'), v.literal('rejected'),
+    ),
     boundaryChangedAt: v.optional(v.number()),
     committedAt: v.number(),
   })
     .index('by_commandKey', ['commandKey'])
     .index('by_runRef_and_committedAt', ['runRef', 'committedAt']),
+
+  customerRequestRouteCancellationAttempts: defineTable({
+    cancellationRef: v.string(),
+    runRef: v.string(),
+    attemptRef: v.string(),
+    operationKeyDigest: v.string(),
+    state: v.union(
+      v.literal('pending'),
+      v.literal('accepted'),
+      v.literal('rejected'),
+      v.literal('unknown'),
+    ),
+    requestDigest: v.optional(v.string()),
+    responseDigest: v.optional(v.string()),
+    providerReference: v.optional(v.string()),
+    reason: v.optional(v.string()),
+    failureCode: v.optional(v.string()),
+    requestedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index('by_cancellationRef', ['cancellationRef'])
+    .index('by_runRef_and_attemptRef', ['runRef', 'attemptRef']),
 
   customerRequestRouteProblemReports: defineTable({
     reportRef: v.string(),

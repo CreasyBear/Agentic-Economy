@@ -19,6 +19,7 @@ import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
 import type * as customerRequestApplication from "../customerRequestApplication.js";
 import type * as customerRequestPrincipals from "../customerRequestPrincipals.js";
+import type * as customerRequestRouteCancellationWorker from "../customerRequestRouteCancellationWorker.js";
 import type * as customerRequestRouteExecution from "../customerRequestRouteExecution.js";
 import type * as customerRequestRouteMandate from "../customerRequestRouteMandate.js";
 import type * as customerRequestRouteMandateAdmission from "../customerRequestRouteMandateAdmission.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   customerRequestApplication: typeof customerRequestApplication;
   customerRequestPrincipals: typeof customerRequestPrincipals;
+  customerRequestRouteCancellationWorker: typeof customerRequestRouteCancellationWorker;
   customerRequestRouteExecution: typeof customerRequestRouteExecution;
   customerRequestRouteMandate: typeof customerRequestRouteMandate;
   customerRequestRouteMandateAdmission: typeof customerRequestRouteMandateAdmission;

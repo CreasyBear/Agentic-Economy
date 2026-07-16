@@ -1929,6 +1929,257 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
+  it('claims one adapter cancellation attempt and replays without scheduling another request', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(50_000)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(
+      backend, admin, 'adapter-cancel-pending', { adapterCancellation: true },
+    )
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:adapter-cancel-pending',
+    })
+    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:adapter-cancel-pending', leaseDurationMs: 10_000,
+    })
+    if (lease.kind !== 'leased') throw new Error('adapter cancellation step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+      workerId: 'worker:adapter-cancel-pending',
+    })
+    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
+      attemptRef: lease.dispatch.attemptRef,
+      operationKeyDigest: lease.dispatch.operationKeyDigest,
+    })
+
+    const first = await admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:adapter-pending',
+    })
+    const replay = await admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:adapter-pending',
+    })
+    expect(first).toMatchObject({
+      kind: 'request', state: 'in_progress',
+      activity: {
+        cancellation: {
+          state: 'pending',
+          requestedAt: 50_000,
+          nextCheckAt: 80_000,
+        },
+      },
+    })
+    expect(replay).toEqual(first)
+    await backend.run(async (ctx) => {
+      const attempts = await ctx.db.query('customerRequestRouteCancellationAttempts').take(10)
+      const commands = await ctx.db.query('customerRequestRouteCancellationCommands').take(10)
+      expect(attempts).toHaveLength(1)
+      expect(attempts[0]).toMatchObject({
+        attemptRef: lease.dispatch.attemptRef,
+        operationKeyDigest: lease.dispatch.operationKeyDigest,
+        state: 'pending',
+        requestedAt: 50_000,
+      })
+      expect(commands.filter(({ result }) => result === 'pending')).toHaveLength(1)
+    })
+    const cancellationRef = await backend.run(async (ctx) => {
+      const attempt = await ctx.db.query('customerRequestRouteCancellationAttempts').first()
+      if (attempt === null) throw new Error('cancellation attempt missing')
+      return attempt.cancellationRef
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
+      attemptRef: lease.dispatch.attemptRef,
+      operationKeyDigest: lease.dispatch.operationKeyDigest,
+      outcome: {
+        kind: 'succeeded',
+        outputJson: JSON.stringify({ serviceReference: 'service:cancel-pending' }),
+      },
+    })).resolves.toMatchObject({
+      kind: 'replayed',
+      run: {
+        state: 'running',
+        completedSteps: 1,
+        currentPosition: 1,
+        cancellationAttempt: { state: 'pending' },
+      },
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:must-not-release-while-cancel-pending',
+      leaseDurationMs: 10_000,
+    })).resolves.toEqual({ kind: 'none' })
+    const unknown = await backend.mutation(
+      internal.customerRequestRouteExecution.resolveCancellationAttempt,
+      {
+        cancellationRef,
+        observation: {
+          disposition: 'unknown',
+          requestDigest: 'sha256:cancellation-request',
+          failureCode: 'network_timeout',
+        },
+      },
+    )
+    const replayedUnknown = await backend.mutation(
+      internal.customerRequestRouteExecution.resolveCancellationAttempt,
+      {
+        cancellationRef,
+        observation: {
+          disposition: 'accepted',
+          requestDigest: 'sha256:changed-replay',
+        },
+      },
+    )
+    expect(unknown).toMatchObject({
+      kind: 'recorded',
+      run: {
+        state: 'running',
+        completedSteps: 1,
+        cancellationAttempt: {
+          state: 'unknown',
+          requestedAt: 50_000,
+          observedAt: 50_000,
+          nextCheckAt: 80_000,
+        },
+      },
+    })
+    expect(replayedUnknown).toMatchObject({
+      kind: 'replayed',
+      run: { state: 'running', cancellationAttempt: { state: 'unknown' } },
+    })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'in_progress',
+      activity: {
+        actor: 'ae',
+        certainty: 'unknown',
+        retry: 'blocked_until_reconciled',
+        cancellation: { state: 'unknown' },
+        safeNextAction: 'wait_for_evidence',
+      },
+    })
+  })
+
+  it('stops the current route when the exact adapter cancellation is accepted', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(60_000)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(
+      backend, admin, 'adapter-cancel-accepted', { adapterCancellation: true },
+    )
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:adapter-cancel-accepted',
+    })
+    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:adapter-cancel-accepted', leaseDurationMs: 10_000,
+    })
+    if (lease.kind !== 'leased') throw new Error('adapter cancellation step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+      workerId: 'worker:adapter-cancel-accepted',
+    })
+    await admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:adapter-accepted',
+    })
+    const cancellationRef = await backend.run(async (ctx) => {
+      const attempt = await ctx.db.query('customerRequestRouteCancellationAttempts').first()
+      if (attempt === null) throw new Error('cancellation attempt missing')
+      return attempt.cancellationRef
+    })
+    await expect(backend.mutation(
+      internal.customerRequestRouteExecution.resolveCancellationAttempt,
+      {
+        cancellationRef,
+        observation: {
+          disposition: 'accepted',
+          requestDigest: 'sha256:cancellation-request',
+          responseDigest: 'sha256:cancellation-response',
+          providerReference: 'provider-cancel:accepted',
+        },
+      },
+    )).resolves.toMatchObject({
+      kind: 'recorded',
+      run: { state: 'cancelled', currentState: 'cancelled', completedSteps: 0 },
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:must-not-release-after-provider-cancel', leaseDurationMs: 10_000,
+    })).resolves.toEqual({ kind: 'none' })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'cancelled',
+      progress: { completed: 0, total: 2 },
+      activity: { cancellation: { state: 'stopped' } },
+    })
+  })
+
+  it('continues exactly once after a provider rejects cancellation', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(70_000)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(
+      backend, admin, 'adapter-cancel-rejected', { adapterCancellation: true },
+    )
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:adapter-cancel-rejected',
+    })
+    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:adapter-cancel-rejected', leaseDurationMs: 10_000,
+    })
+    if (lease.kind !== 'leased') throw new Error('adapter cancellation step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+      workerId: 'worker:adapter-cancel-rejected',
+    })
+    await admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:adapter-rejected',
+    })
+    await backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
+      attemptRef: lease.dispatch.attemptRef,
+      operationKeyDigest: lease.dispatch.operationKeyDigest,
+      outcome: {
+        kind: 'succeeded',
+        outputJson: JSON.stringify({ serviceReference: 'service:cancel-rejected' }),
+      },
+    })
+    const cancellationRef = await backend.run(async (ctx) => {
+      const attempt = await ctx.db.query('customerRequestRouteCancellationAttempts').first()
+      if (attempt === null) throw new Error('cancellation attempt missing')
+      return attempt.cancellationRef
+    })
+    await expect(backend.mutation(
+      internal.customerRequestRouteExecution.resolveCancellationAttempt,
+      {
+        cancellationRef,
+        observation: {
+          disposition: 'rejected',
+          requestDigest: 'sha256:cancellation-request',
+          responseDigest: 'sha256:cancellation-response',
+          reason: 'work_already_completed',
+        },
+      },
+    )).resolves.toMatchObject({
+      kind: 'recorded',
+      run: {
+        state: 'running',
+        completedSteps: 1,
+        currentPosition: 2,
+        currentState: 'queued',
+      },
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:continue-after-cancel-rejection', leaseDurationMs: 10_000,
+    })).resolves.toMatchObject({
+      kind: 'leased',
+      dispatch: { position: 2 },
+    })
+    await backend.run(async (ctx) => {
+      const commands = await ctx.db.query('customerRequestRouteCancellationCommands').take(10)
+      expect(commands.filter(({ result }) => result === 'rejected')).toHaveLength(1)
+    })
+  })
+
   it('uses the same run, lease, validation, and completion machinery for one step', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)
@@ -2656,6 +2907,7 @@ function objectSchema(properties: Record<string, object>, required: string[]) {
 async function publishAndActivate(
   backend: ReturnType<typeof convexTest>, admin: Awaited<ReturnType<typeof ownerAdmin>>,
   suffix: string, document: RouteCapabilityDocument, amountMinor: number,
+  options: Readonly<{ adapterCancellation?: boolean }> = {},
 ) {
   const { businessId, owner } = await publishedBusinessOwner(backend, suffix)
   const offering = {
@@ -2669,8 +2921,19 @@ async function publishAndActivate(
   }
   const binding = {
     bindingId: `binding:route:${suffix}`, endpointUrl: `https://${suffix}.example.test/capability`, credentialRef: `env:ROUTE_${suffix.toUpperCase().replaceAll('-', '_')}_KEY`,
-    continuation: { kind: 'single_response' as const, evidenceRefs: ['test:single-response'] }, cancellation: { kind: 'unsupported' as const, evidenceRefs: ['test:no-cancellation'] },
-    adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } }, registrationEvidenceRefs: [`test:binding:${suffix}`],
+    continuation: { kind: 'single_response' as const, evidenceRefs: ['test:single-response'] },
+    cancellation: options.adapterCancellation
+      ? { kind: 'adapter_managed' as const, evidenceRefs: ['test:adapter-cancellation'] }
+      : { kind: 'unsupported' as const, evidenceRefs: ['test:no-cancellation'] },
+    adapter: {
+      adapterId: 'http-json:v1',
+      config: {
+        method: 'POST', requestTimeoutMs: 5_000,
+        ...(options.adapterCancellation
+          ? { cancellation: { path: '/ae/cancel', requestTimeoutMs: 3_000 } }
+          : {}),
+      },
+    }, registrationEvidenceRefs: [`test:binding:${suffix}`],
   }
   const published = await owner.mutation(api.capabilitySupply.publishCapability, {
     businessId, source: { kind: 'ae_envelope', documentJson: JSON.stringify(document) },
@@ -2781,8 +3044,9 @@ async function confirmedTwoStepRoute(
   backend: ReturnType<typeof convexTest>,
   admin: Awaited<ReturnType<typeof ownerAdmin>>,
   suffix: string,
+  options: Readonly<{ adapterCancellation?: boolean }> = {},
 ) {
-  const current = await committedTwoStepAdmissionRoute(backend, admin)
+  const current = await committedTwoStepAdmissionRoute(backend, admin, options)
   const compared = await admin.action(api.customerRequestApplication.compare, {
     requestRef: current.aggregate.snapshot.requestId,
     revision: current.aggregate.snapshot.revision,
@@ -2806,8 +3070,9 @@ async function confirmedTwoStepRoute(
 async function committedTwoStepAdmissionRoute(
   backend: ReturnType<typeof convexTest>,
   admin: Awaited<ReturnType<typeof ownerAdmin>>,
+  options: Readonly<{ adapterCancellation?: boolean }> = {},
 ) {
-  await publishAndActivate(backend, admin, 'admission-resolver', upstreamDocument, 300)
+  await publishAndActivate(backend, admin, 'admission-resolver', upstreamDocument, 300, options)
   await publishAndActivate(backend, admin, 'admission-quoter', downstreamDocument, 700)
   const supply = await backend.query(internal.capabilitySupply.listEligible, {
     networkId: 'ae:public', limit: 16,

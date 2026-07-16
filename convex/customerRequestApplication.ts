@@ -2929,6 +2929,10 @@ function projectStoredRouteRun(
     cancellationReleaseMayStartAt?: number
     cancellationUnavailableSince?: number
     cancellationRequestedAt?: number
+    cancellationAttempt?: Readonly<
+      | { state: 'pending'; requestedAt: number; nextCheckAt: number }
+      | { state: 'unknown'; requestedAt: number; observedAt: number; nextCheckAt: number }
+    >
     updatedAt: number
   }>,
 ): ActionResult {
@@ -3020,6 +3024,9 @@ function projectStoredRouteRun(
     ...(run.cancellationRequestedAt === undefined
       ? {}
       : { cancellationRequestedAt: run.cancellationRequestedAt }),
+    ...(run.cancellationAttempt === undefined
+      ? {}
+      : { cancellationAttempt: run.cancellationAttempt }),
     ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
     criteria,
   }))
