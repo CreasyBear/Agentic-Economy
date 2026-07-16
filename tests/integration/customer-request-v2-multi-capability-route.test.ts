@@ -565,6 +565,45 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       delegatedCredentialId: permission.delegatedCredentialId,
       idempotencyKey: 'use-repeat:customer',
     })).resolves.toEqual(confirmed)
+    await expect(admin.action(api.customerRequestApplication.inspectRepeatRoute, {
+      requestRef: compared.requestRef,
+      permissionRef: permission.permissionRef,
+      routeRef: displayedRoute.routeRef,
+    })).resolves.toEqual(permission)
+    const withdrawn = await admin.action(api.customerRequestApplication.revokeRepeatRoute, {
+      requestRef: compared.requestRef,
+      permissionRef: permission.permissionRef,
+      routeRef: displayedRoute.routeRef,
+      idempotencyKey: 'revoke-repeat:customer',
+    })
+    expect(withdrawn).toMatchObject({
+      ...permission,
+      status: 'withdrawn',
+      withdrawnAt: 1_000,
+    })
+    await expect(admin.action(api.customerRequestApplication.revokeRepeatRoute, {
+      requestRef: compared.requestRef,
+      permissionRef: permission.permissionRef,
+      routeRef: displayedRoute.routeRef,
+      idempotencyKey: 'revoke-repeat:customer',
+    })).resolves.toEqual(withdrawn)
+    await expect(admin.action(api.customerRequestApplication.inspectRepeatRoute, {
+      requestRef: compared.requestRef,
+      permissionRef: permission.permissionRef,
+      routeRef: displayedRoute.routeRef,
+    })).resolves.toEqual(withdrawn)
+    await expect(admin.action(api.customerRequestApplication.useRepeatRoute, {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: displayedRoute.routeRef,
+      permissionRef: permission.permissionRef,
+      delegatedCredentialId: permission.delegatedCredentialId,
+      idempotencyKey: 'use-repeat:after-withdrawal',
+    })).resolves.toMatchObject({
+      kind: 'request',
+      state: 'needs_attention',
+      summary: 'Repeat permission was withdrawn. Ask for confirmation before continuing.',
+    })
   })
 
   it('starts the confirmed choice through one customer command and replays one durable run', async () => {

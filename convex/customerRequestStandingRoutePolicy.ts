@@ -126,7 +126,7 @@ const getResult = v.union(
   v.object({ kind: v.literal('not_found') }),
 )
 const resolvePermissionResult = v.union(
-  v.object({ kind: v.literal('found'), policy: standingRoutePolicyValue }),
+  v.object({ kind: v.literal('found'), requestRevision: v.number(), policy: standingRoutePolicyValue }),
   v.object({ kind: v.literal('not_found') }),
 )
 const revokeResult = v.union(
@@ -592,7 +592,23 @@ export const resolvePermission = internalQuery({
     if (!validStoredPolicy(row, policy, args.requestId)) {
       throw new Error('customer_request_standing_route_policy_integrity_failure')
     }
-    return { kind: 'found' as const, policy: writablePolicy(policy) }
+    const revocation = await ctx.db.query('customerRequestStandingRoutePolicyRevocations')
+      .withIndex('by_policyRef', (query) => query.eq('policyRef', policy.policyRef)).unique()
+    if (revocation === null) {
+      return {
+        kind: 'found' as const,
+        requestRevision: row.requestRevision,
+        policy: writablePolicy(policy),
+      }
+    }
+    if (!validPolicyRevocation(revocation, policy, args.requestId)) {
+      throw new Error('customer_request_standing_route_policy_revocation_integrity_failure')
+    }
+    return {
+      kind: 'found' as const,
+      requestRevision: row.requestRevision,
+      policy: writablePolicy({ ...policy, revokedAt: revocation.revokedAt }),
+    }
   },
 })
 

@@ -534,7 +534,7 @@ type ActionResult = Infer<typeof actionResult>
 const repeatPermissionResult = v.union(
   v.object({
     kind: v.literal('repeat_permission'),
-    status: v.literal('active'),
+    status: v.union(v.literal('active'), v.literal('withdrawn')),
     permissionRef: v.string(),
     requestRef: v.string(),
     revision: v.number(),
@@ -550,6 +550,7 @@ const repeatPermissionResult = v.union(
     fallback: v.literal('ask_for_confirmation'),
     validFrom: v.number(),
     validUntil: v.number(),
+    withdrawnAt: v.optional(v.number()),
   }),
   conflict,
   v.object({ kind: v.literal('refused'), reason: refusedReason }),
@@ -1033,25 +1034,7 @@ export const allowRepeatRoute = action({
       idempotencyKey: args.idempotencyKey,
     })
     if (result.kind === 'issued' || result.kind === 'replayed') {
-      return {
-        kind: 'repeat_permission',
-        status: 'active',
-        permissionRef: repeatPermissionRef(result.policy.policyRef),
-        requestRef: args.requestRef,
-        revision: args.revision,
-        routeRef: args.routeRef,
-        delegatedCredentialId: args.delegatedCredentialId,
-        limits: {
-          perUseSpend: { ...result.policy.limits.perUseSpend },
-          cumulativeSpend: { ...result.policy.limits.cumulativeSpend },
-          perUseDataAllocations: result.policy.limits.perUseDataAllocations,
-          cumulativeDataAllocations: result.policy.limits.cumulativeDataAllocations,
-          occurrences: result.policy.limits.occurrences,
-        },
-        fallback: 'ask_for_confirmation',
-        validFrom: result.policy.validFrom,
-        validUntil: result.policy.validUntil,
-      }
+      return projectRepeatPermission(args.requestRef, args.revision, args.routeRef, result.policy)
     }
     if (result.kind === 'conflict') {
       return result.reason === 'command_changed'
@@ -1154,6 +1137,99 @@ export const useRepeatRoute = action({
         ? 'Repeat permission was withdrawn. Ask for confirmation before continuing.'
         : 'Repeat permission cannot be used for this choice. Ask for confirmation before continuing.',
     }))
+  },
+})
+
+export const inspectRepeatRoute = action({
+  args: { requestRef: v.string(), permissionRef: v.string(), routeRef: v.string() },
+  returns: repeatPermissionResult,
+  handler: async (ctx, args): Promise<RepeatPermissionResult> => {
+    const caller = await resolveRequestCaller(ctx, 'inspect_repeat', args, undefined)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    const resolved = await ctx.runQuery(
+      internal.customerRequestStandingRoutePolicy.resolvePermission,
+      { requestId: args.requestRef, permissionRef: args.permissionRef },
+    )
+    if (resolved.kind !== 'found'
+      || resolved.policy.routes[0] === undefined
+      || customerRouteRef(
+        resolved.policy.generationRef,
+        resolved.policy.routes[0].routePlanId,
+      ) !== args.routeRef) {
+      return {
+        kind: 'unavailable',
+        reason: 'repeat_permission_not_available',
+        summary: 'AE could not find that repeat permission for this choice.',
+      }
+    }
+    return projectRepeatPermission(
+      args.requestRef,
+      resolved.requestRevision,
+      args.routeRef,
+      resolved.policy,
+    )
+  },
+})
+
+export const revokeRepeatRoute = action({
+  args: {
+    requestRef: v.string(),
+    permissionRef: v.string(),
+    routeRef: v.string(),
+    idempotencyKey: v.string(),
+  },
+  returns: repeatPermissionResult,
+  handler: async (ctx, args): Promise<RepeatPermissionResult> => {
+    const caller = await resolveRequestCaller(ctx, 'revoke_repeat', args, undefined)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    const resolved = await ctx.runQuery(
+      internal.customerRequestStandingRoutePolicy.resolvePermission,
+      { requestId: args.requestRef, permissionRef: args.permissionRef },
+    )
+    if (resolved.kind !== 'found'
+      || resolved.policy.routes[0] === undefined
+      || customerRouteRef(
+        resolved.policy.generationRef,
+        resolved.policy.routes[0].routePlanId,
+      ) !== args.routeRef) {
+      return {
+        kind: 'unavailable',
+        reason: 'repeat_permission_not_available',
+        summary: 'AE could not find that repeat permission for this choice.',
+      }
+    }
+    const result = await ctx.runMutation(internal.customerRequestStandingRoutePolicy.revoke, {
+      requestId: args.requestRef,
+      policyRef: resolved.policy.policyRef,
+      expectedPolicyDigest: resolved.policy.policyDigest,
+      idempotencyKey: args.idempotencyKey,
+    })
+    if (result.kind === 'revoked' || result.kind === 'replayed') {
+      return projectRepeatPermission(
+        args.requestRef,
+        resolved.requestRevision,
+        args.routeRef,
+        result.policy,
+      )
+    }
+    if (result.kind === 'conflict') {
+      return result.reason === 'command_changed'
+        ? { kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused' }
+        : { kind: 'conflict', requestRef: args.requestRef, reason: 'options_changed' }
+    }
+    return {
+      kind: 'unavailable',
+      reason: 'repeat_permission_not_available',
+      summary: 'AE could not withdraw that repeat permission.',
+    }
   },
 })
 
@@ -3534,7 +3610,7 @@ type RequestCaller = Readonly<{
 
 async function resolveRequestCaller(
   ctx: ActionCtx,
-  operation: 'submit' | 'compare' | 'confirm' | 'allow_repeat' | 'use_repeat' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence' | 'authorize' | 'resume' | 'facts' | 'refine',
+  operation: 'submit' | 'compare' | 'confirm' | 'allow_repeat' | 'use_repeat' | 'inspect_repeat' | 'revoke_repeat' | 'run' | 'cancel' | 'report' | 'reply' | 'evidence' | 'authorize' | 'resume' | 'facts' | 'refine',
   command: Record<string, unknown>,
   assertion: ServiceAssertion | undefined,
   delegatedAgentId?: string,
@@ -3598,6 +3674,47 @@ async function resolveRequestCaller(
 
 function repeatPermissionRef(policyRef: string): string {
   return `repeat-permission:${canonicalDigest({ policyRef })}`
+}
+
+function projectRepeatPermission(
+  requestRef: string,
+  revision: number,
+  routeRef: string,
+  policy: Readonly<{
+    policyRef: string
+    delegatedCredentialId: string
+    limits: Readonly<{
+      perUseSpend: Readonly<{ currency: string; amountMinor: number }>
+      cumulativeSpend: Readonly<{ currency: string; amountMinor: number }>
+      perUseDataAllocations: number
+      cumulativeDataAllocations: number
+      occurrences: number
+    }>
+    validFrom: number
+    validUntil: number
+    revokedAt?: number
+  }>,
+): Extract<RepeatPermissionResult, { kind: 'repeat_permission' }> {
+  return {
+    kind: 'repeat_permission',
+    status: policy.revokedAt === undefined ? 'active' : 'withdrawn',
+    permissionRef: repeatPermissionRef(policy.policyRef),
+    requestRef,
+    revision,
+    routeRef,
+    delegatedCredentialId: policy.delegatedCredentialId,
+    limits: {
+      perUseSpend: { ...policy.limits.perUseSpend },
+      cumulativeSpend: { ...policy.limits.cumulativeSpend },
+      perUseDataAllocations: policy.limits.perUseDataAllocations,
+      cumulativeDataAllocations: policy.limits.cumulativeDataAllocations,
+      occurrences: policy.limits.occurrences,
+    },
+    fallback: 'ask_for_confirmation',
+    validFrom: policy.validFrom,
+    validUntil: policy.validUntil,
+    ...(policy.revokedAt === undefined ? {} : { withdrawnAt: policy.revokedAt }),
+  }
 }
 
 function customerProgressState(
