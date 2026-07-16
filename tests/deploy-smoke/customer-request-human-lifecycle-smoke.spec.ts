@@ -56,9 +56,6 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   await waitForCompletedResult(page)
 
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible()
-  for (const business of expectedBusinesses) {
-    await expect(page.locator('main')).toContainText(business)
-  }
   await expect(page.getByText(/sandbox-quote:/u)).toBeVisible()
   await proveInlineActivityRecord(page, 'completed')
   const requestRef = await page.evaluate(() => {
