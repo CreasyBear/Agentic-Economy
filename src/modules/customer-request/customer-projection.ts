@@ -393,6 +393,10 @@ export function projectRouteProgress(input: Readonly<{
   cancellationReleaseMayStartAt?: number
   cancellationUnavailableSince?: number
   cancellationRequestedAt?: number
+  cancellationAttempt?: Readonly<
+    | { state: 'pending'; requestedAt: number; nextCheckAt: number }
+    | { state: 'unknown'; requestedAt: number; observedAt: number; nextCheckAt: number }
+  >
   businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   criteria?: readonly CustomerCriterion[]
 }>): CustomerRequestView {
@@ -413,9 +417,14 @@ export function projectRouteProgress(input: Readonly<{
       ...dependencyProgress(input.completed, input.total, input.current.step, input.businesses),
     },
     activity: {
-      actor: progressActor(input.current.state), certainty: 'pending', updatedAt: input.updatedAt,
-      nextCheckAt: input.updatedAt + 30_000, retry: 'not_needed',
-      cancellation: input.cancellationAvailable
+      actor: input.cancellationAttempt?.state === 'unknown' ? 'ae' : progressActor(input.current.state),
+      certainty: input.cancellationAttempt?.state === 'unknown' ? 'unknown' : 'pending',
+      updatedAt: input.updatedAt,
+      nextCheckAt: input.cancellationAttempt?.nextCheckAt ?? input.updatedAt + 30_000,
+      retry: input.cancellationAttempt?.state === 'unknown'
+        ? 'blocked_until_reconciled'
+        : 'not_needed',
+      cancellation: input.cancellationAttempt ?? (input.cancellationAvailable
         ? {
             state: 'available', until: 'before_next_step_release',
             releaseMayStartAt: input.cancellationReleaseMayStartAt ?? input.updatedAt,
@@ -426,8 +435,10 @@ export function projectRouteProgress(input: Readonly<{
             ...(input.cancellationRequestedAt === undefined
               ? {}
               : { requestedAt: input.cancellationRequestedAt }),
-          },
-      safeNextAction: 'check_progress',
+          }),
+      safeNextAction: input.cancellationAttempt?.state === 'unknown'
+        ? 'wait_for_evidence'
+        : 'check_progress',
     },
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
   })

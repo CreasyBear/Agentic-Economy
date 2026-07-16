@@ -754,6 +754,26 @@ function cancellationMessage(
       AE will not release the next business step before {new Date(cancellation.releaseMayStartAt).toISOString()}.
     </Text>
   }
+  if (typeof cancellation === 'object' && cancellation.state === 'pending') {
+    return <div className="grid gap-1">
+      <Text type="supporting" color="secondary">
+        AE sent one stop request to the business. The business has not confirmed the outcome yet.
+      </Text>
+      <Text type="supporting" color="secondary">
+        Check again after {new Date(cancellation.nextCheckAt).toISOString()}. AE will not send the stop request twice.
+      </Text>
+    </div>
+  }
+  if (typeof cancellation === 'object' && cancellation.state === 'unknown') {
+    return <div className="grid gap-1">
+      <Text type="supporting" color="secondary">
+        AE cannot yet confirm whether the business received or accepted the stop request.
+      </Text>
+      <Text type="supporting" color="secondary">
+        AE will not repeat it while the outcome is unknown. Check again after {new Date(cancellation.nextCheckAt).toISOString()}.
+      </Text>
+    </div>
+  }
   if (typeof cancellation !== 'object' || cancellation.state !== 'not_available'
     || cancellation.reason !== 'business_step_released') return null
   return <div className="grid gap-1">

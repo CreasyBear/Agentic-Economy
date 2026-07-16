@@ -7,6 +7,69 @@ import {
 } from '@/modules/customer-request/customer-projection'
 
 describe('customer action status projection', () => {
+  it('keeps an adapter cancellation request pending without claiming the business stopped', () => {
+    expect(projectRouteProgress({
+      requestRef: 'request:cancel-pending',
+      revision: 3,
+      generationRef: 'generation:3',
+      completed: 0,
+      total: 2,
+      current: { step: 1, state: 'awaiting_result' },
+      updatedAt: 5_000,
+      cancellationAvailable: false,
+      cancellationAttempt: {
+        state: 'pending',
+        requestedAt: 4_900,
+        nextCheckAt: 9_900,
+      },
+    })).toMatchObject({
+      state: 'in_progress',
+      activity: {
+        actor: 'business',
+        certainty: 'pending',
+        cancellation: {
+          state: 'pending',
+          requestedAt: 4_900,
+          nextCheckAt: 9_900,
+        },
+        safeNextAction: 'check_progress',
+      },
+    })
+  })
+
+  it('keeps an ambiguous adapter cancellation blocked until reconciled', () => {
+    expect(projectRouteProgress({
+      requestRef: 'request:cancel-unknown',
+      revision: 4,
+      generationRef: 'generation:4',
+      completed: 0,
+      total: 2,
+      current: { step: 1, state: 'awaiting_result' },
+      updatedAt: 6_000,
+      cancellationAvailable: false,
+      cancellationAttempt: {
+        state: 'unknown',
+        requestedAt: 5_500,
+        observedAt: 6_000,
+        nextCheckAt: 36_000,
+      },
+    })).toMatchObject({
+      state: 'in_progress',
+      activity: {
+        actor: 'ae',
+        certainty: 'unknown',
+        retry: 'blocked_until_reconciled',
+        cancellation: {
+          state: 'unknown',
+          requestedAt: 5_500,
+          observedAt: 6_000,
+          nextCheckAt: 36_000,
+        },
+        safeNextAction: 'wait_for_evidence',
+      },
+    })
+  })
+
   it('names who must act next without exposing execution machinery', () => {
     const progress = (state: 'queued' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention') => (
       projectRouteProgress({

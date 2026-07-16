@@ -616,6 +616,17 @@ export const customerRequestViewSchema = z.strictObject({
         state: z.literal('stopped'),
         stoppedAt: safeNonnegativeInteger,
       }),
+      z.strictObject({
+        state: z.literal('pending'),
+        requestedAt: safeNonnegativeInteger,
+        nextCheckAt: safeNonnegativeInteger,
+      }),
+      z.strictObject({
+        state: z.literal('unknown'),
+        requestedAt: safeNonnegativeInteger,
+        observedAt: safeNonnegativeInteger,
+        nextCheckAt: safeNonnegativeInteger,
+      }),
       z.enum(['available_before_next_step', 'too_late_or_unsupported', 'complete']),
     ]),
     safeNextAction: z.enum(['check_progress', 'wait_for_evidence', 'review_result', 'revise_request', 'none']),

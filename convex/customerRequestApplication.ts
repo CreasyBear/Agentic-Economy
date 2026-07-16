@@ -474,6 +474,17 @@ const customerView = v.object({
         state: v.literal('stopped'),
         stoppedAt: v.number(),
       }),
+      v.object({
+        state: v.literal('pending'),
+        requestedAt: v.number(),
+        nextCheckAt: v.number(),
+      }),
+      v.object({
+        state: v.literal('unknown'),
+        requestedAt: v.number(),
+        observedAt: v.number(),
+        nextCheckAt: v.number(),
+      }),
     ),
     safeNextAction: v.union(
       v.literal('check_progress'), v.literal('wait_for_evidence'), v.literal('review_result'),
