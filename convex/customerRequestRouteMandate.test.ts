@@ -85,6 +85,43 @@ describe('durable RouteMandate lifecycle', () => {
       ...command,
       expectedGenerationRef: 'route-generation:changed',
     })).resolves.toEqual({ kind: 'conflict', reason: 'command_changed' })
+    if (issued.kind !== 'issued') throw new Error('standing policy issuance failed')
+    const useCommand = {
+      requestId: command.requestId,
+      policyRef: issued.policy.policyRef,
+      expectedPolicyDigest: issued.policy.policyDigest,
+      expectedRequestRevision: command.expectedRequestRevision,
+      expectedGenerationRef: command.expectedGenerationRef,
+      selectedRoutePlanId: command.selectedRoutePlanId,
+      delegatedCredentialId: command.delegatedCredentialId,
+      mandateExpiresAt: command.validUntil,
+      idempotencyKey: 'standing-use:one',
+    }
+    const firstUse = await customer.mutation(
+      internal.customerRequestStandingRoutePolicy.reserveUse,
+      useCommand,
+    )
+    expect(firstUse).toMatchObject({
+      kind: 'reserved',
+      use: {
+        standingPolicyRef: issued.policy.policyRef,
+        occurrence: 1,
+        maximumSpend: command.perUseSpend,
+        dataAllocations: command.perUseDataAllocations,
+      },
+    })
+    await expect(customer.mutation(
+      internal.customerRequestStandingRoutePolicy.reserveUse,
+      useCommand,
+    )).resolves.toEqual({ ...firstUse, kind: 'replayed' })
+    await expect(customer.mutation(
+      internal.customerRequestStandingRoutePolicy.reserveUse,
+      { ...useCommand, idempotencyKey: 'standing-use:two' },
+    )).resolves.toMatchObject({ kind: 'reserved', use: { occurrence: 2 } })
+    await expect(customer.mutation(
+      internal.customerRequestStandingRoutePolicy.reserveUse,
+      { ...useCommand, idempotencyKey: 'standing-use:three' },
+    )).resolves.toEqual({ kind: 'refused', reason: 'occurrence_limit_exceeded' })
   })
 
   it('issues and exactly replays one server-derived mandate only for the authenticated Request principal', async () => {

@@ -236,6 +236,21 @@ export const standingRoutePolicyValue = v.object({
   revokedAt: v.optional(v.number()),
 })
 
+export const standingRouteAuthorityUseValue = v.object({
+  authorityUseRef: v.string(),
+  authorityUseDigest: v.string(),
+  standingPolicyRef: v.string(),
+  standingPolicyDigest: v.string(),
+  generationRef: v.string(),
+  routePlanId: v.string(),
+  routeDigest: v.string(),
+  occurrence: v.number(),
+  maximumSpend: money,
+  dataAllocations: v.number(),
+  usedAt: v.number(),
+  mandateExpiresAt: v.number(),
+})
+
 export const customerRequestRouteMandateTables = {
   customerRequestStandingRoutePolicyIssues: defineTable({
     policyRef: v.string(),
@@ -262,6 +277,33 @@ export const customerRequestRouteMandateTables = {
     policyRef: v.string(),
     policyDigest: v.string(),
     result: standingRoutePolicyValue,
+    committedAt: v.number(),
+  }).index('by_commandKey', ['commandKey']),
+
+  customerRequestStandingRouteAuthorityUses: defineTable({
+    authorityUseRef: v.string(),
+    authorityUseDigest: v.string(),
+    standingPolicyRef: v.string(),
+    standingPolicyDigest: v.string(),
+    principalId: v.string(),
+    requestId: v.string(),
+    delegatedCredentialId: v.string(),
+    use: standingRouteAuthorityUseValue,
+    commandDigest: v.string(),
+    recordedAt: v.number(),
+  })
+    .index('by_authorityUseRef', ['authorityUseRef'])
+    .index('by_standingPolicyRef_and_recordedAt', ['standingPolicyRef', 'recordedAt']),
+
+  customerRequestStandingRouteAuthorityUseCommands: defineTable({
+    commandKey: v.string(),
+    commandDigest: v.string(),
+    principalId: v.string(),
+    requestId: v.string(),
+    standingPolicyRef: v.string(),
+    authorityUseRef: v.string(),
+    authorityUseDigest: v.string(),
+    result: standingRouteAuthorityUseValue,
     committedAt: v.number(),
   }).index('by_commandKey', ['commandKey']),
 
