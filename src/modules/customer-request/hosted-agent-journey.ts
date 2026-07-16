@@ -27,7 +27,7 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
     request: string
     facts: Readonly<Record<string, unknown>>
     messages: readonly string[]
-    finish?: 'cancel' | 'complete' | 'outcome_unknown' | 'provider_denied' | 'partial_result'
+    finish?: 'cancel' | 'complete' | 'outcome_unknown' | 'invalid_output' | 'provider_denied' | 'partial_result'
     expiryRecovery?: Readonly<{ waitMs: number }>
     unsupportedRecovery?: Readonly<{ message: string }>
     expectedRoute?: Readonly<{
@@ -121,6 +121,7 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
     completedSteps: z.number().int().nonnegative().optional(),
     automaticRetry: z.boolean().optional(),
     resultDigest: z.string().optional(),
+    failureClass: z.enum(['outcome_unknown', 'invalid_output']).optional(),
   }).strict(),
   measurements: z.strictObject({
     integrationBurden: z.strictObject({
@@ -370,6 +371,19 @@ export async function runHostedCustomerRequestJourney(
           input: runtimeInput, release, requestRef, route, selectedBusiness, selectedBusinesses,
           states, authorityStops, consumedFacts, consumedMessages, progressPath, evidencePath,
           problemAction, started: view, nonce,
+          failureClass: 'outcome_unknown',
+          problemCategory: 'other',
+          problemSummary: 'The labelled sandbox provider outcome is unknown after release.',
+        })
+      }
+      if (input.scenario.finish === 'invalid_output') {
+        return await outcomeUnknownHostedJourney({
+          input: runtimeInput, release, requestRef, route, selectedBusiness, selectedBusinesses,
+          states, authorityStops, consumedFacts, consumedMessages, progressPath, evidencePath,
+          problemAction, started: view, nonce,
+          failureClass: 'invalid_output',
+          problemCategory: 'incorrect_result',
+          problemSummary: 'The labelled sandbox provider returned output that did not match the registered result contract.',
         })
       }
       if (input.scenario.finish === 'partial_result') {
@@ -486,7 +500,9 @@ export async function runHostedCustomerRequestJourney(
   throw new Error('hosted_journey_transition_limit_exceeded')
 }
 
-async function partialResultHostedJourney(input: Parameters<typeof outcomeUnknownHostedJourney>[0]): Promise<HostedCustomerRequestJourneyProof> {
+async function partialResultHostedJourney(
+  input: Omit<Parameters<typeof outcomeUnknownHostedJourney>[0], 'failureClass' | 'problemCategory' | 'problemSummary'>,
+): Promise<HostedCustomerRequestJourneyProof> {
   let partial: CustomerRequestView | undefined
   for (let attempt = 0; attempt < 24; attempt += 1) {
     partial = await callAgent(input.input, input.progressPath, 'GET', undefined, [200, 202])
@@ -651,6 +667,9 @@ async function outcomeUnknownHostedJourney(input: Readonly<{
   problemAction: ObservedNavigationAction
   started: CustomerRequestView
   nonce: string
+  failureClass: 'outcome_unknown' | 'invalid_output'
+  problemCategory: 'incorrect_result' | 'other'
+  problemSummary: string
 }>): Promise<HostedCustomerRequestJourneyProof> {
   let uncertain: CustomerRequestView | undefined
   for (let attempt = 0; attempt < 24; attempt += 1) {
@@ -676,8 +695,9 @@ async function outcomeUnknownHostedJourney(input: Readonly<{
   const problem = await callAgentProblem(input.input, input.problemAction.path, materializeObservedInput(
     input.started, input.problemAction, {
       '<unique string>': `acceptance:problem:${input.nonce}`,
-      '<incorrect_result | unexpected_cost | duplicate_charge_or_effect | privacy_concern | could_not_stop | other>': 'other',
-      '<problem summary>': 'The labelled sandbox provider outcome is unknown after release.',
+      '<incorrect_result | unexpected_cost | duplicate_charge_or_effect | privacy_concern | could_not_stop | other>':
+        input.problemCategory,
+      '<problem summary>': input.problemSummary,
       '<step number from evidence>': input.route.stepCount,
     },
   ))
@@ -699,6 +719,7 @@ async function outcomeUnknownHostedJourney(input: Readonly<{
       selectedBusinesses: input.selectedBusinesses, stepCount: input.route.stepCount,
       runState: 'outcome_unknown', evidenceState: evidence.state, problemState: problem.state,
       resumedState: resumed.state, completedSteps: resumed.progress.completed, automaticRetry: false,
+      failureClass: input.failureClass,
     },
     measurements: journeyMeasurements(input.input, input.route, false, true),
     sandbox: true,

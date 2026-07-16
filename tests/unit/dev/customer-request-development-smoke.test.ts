@@ -62,6 +62,16 @@ describe('customer Request development smoke configuration', () => {
     }, 'a'.repeat(40))).toMatchObject({ finish: 'outcome_unknown' })
   })
 
+  it('selects the invalid-output journey explicitly', () => {
+    expect(customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_FINISH: 'invalid_output',
+    }, 'a'.repeat(40))).toMatchObject({ finish: 'invalid_output' })
+  })
+
   it('configures an explicit stale-choice recovery wait', () => {
     expect(customerRequestDevelopmentSmokeConfig({
       CLERK_SECRET_KEY: 'sk_test',

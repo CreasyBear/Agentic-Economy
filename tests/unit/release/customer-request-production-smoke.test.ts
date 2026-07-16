@@ -69,8 +69,14 @@ describe('customer Request production smoke entrypoint', () => {
       AE_CUSTOMER_REQUEST_API_KEY: 'ak_agent',
       AE_CUSTOMER_REQUEST_FINISH: 'compelete',
     })).toThrow(
-      'AE_CUSTOMER_REQUEST_FINISH must be cancel, complete, outcome_unknown, provider_denied, or partial_result',
+      'AE_CUSTOMER_REQUEST_FINISH must be cancel, complete, outcome_unknown, invalid_output, provider_denied, or partial_result',
     )
+  })
+
+  it('selects the invalid-output journey explicitly', () => {
+    expect(customerRequestProductionSmokeConfigFromEnvironment({
+      AE_CUSTOMER_REQUEST_FINISH: 'invalid_output',
+    })).toMatchObject({ finish: 'invalid_output' })
   })
 
   it('freezes a complete direct-provider comparison from explicit environment inputs', () => {

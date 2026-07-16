@@ -32,7 +32,7 @@ export type CustomerRequestProductionSmokeConfig = Readonly<{
   }>
   facts: Readonly<Record<string, unknown>>
   fetch: typeof globalThis.fetch
-  finish?: 'cancel' | 'complete' | 'outcome_unknown' | 'provider_denied' | 'partial_result'
+  finish?: 'cancel' | 'complete' | 'outcome_unknown' | 'invalid_output' | 'provider_denied' | 'partial_result'
   messages: readonly string[]
   preflightOnly: boolean
   requestText: string
@@ -126,7 +126,7 @@ export async function runCustomerRequestProductionSmoke(
 
 function parseDirectBaseline(
   env: Record<string, string | undefined>,
-  finish: 'cancel' | 'complete' | 'outcome_unknown' | 'provider_denied' | 'partial_result',
+  finish: 'cancel' | 'complete' | 'outcome_unknown' | 'invalid_output' | 'provider_denied' | 'partial_result',
 ): DirectBaselineConfig | undefined {
   const raw = {
     origins: optionalText(env.AE_DIRECT_PROVIDER_ORIGINS_JSON),
@@ -187,12 +187,12 @@ function isMoney(value: unknown): value is Readonly<{ currency: string; amountMi
 
 function parseFinish(
   value: string | undefined,
-): 'cancel' | 'complete' | 'outcome_unknown' | 'provider_denied' | 'partial_result' {
+): 'cancel' | 'complete' | 'outcome_unknown' | 'invalid_output' | 'provider_denied' | 'partial_result' {
   const finish = optionalText(value) ?? 'cancel'
   if (finish !== 'cancel' && finish !== 'complete' && finish !== 'outcome_unknown'
-    && finish !== 'provider_denied' && finish !== 'partial_result') {
+    && finish !== 'invalid_output' && finish !== 'provider_denied' && finish !== 'partial_result') {
     throw new Error(
-      'AE_CUSTOMER_REQUEST_FINISH must be cancel, complete, outcome_unknown, provider_denied, or partial_result',
+      'AE_CUSTOMER_REQUEST_FINISH must be cancel, complete, outcome_unknown, invalid_output, provider_denied, or partial_result',
     )
   }
   return finish

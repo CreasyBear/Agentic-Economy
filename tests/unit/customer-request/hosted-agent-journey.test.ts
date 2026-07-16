@@ -511,6 +511,78 @@ describe('hosted Customer Request journey', () => {
     })
   })
 
+  it('fails closed on schema-invalid provider output and reports an incorrect result', async () => {
+    const invalid = requestView('outcome_unknown', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'wait',
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+      action: { state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false, observedAt: 9_100 },
+    })
+    const responses = [
+      compositeRoutesReadyView(), compositeRoutesReadyView(),
+      requestView('route_confirmed', 2, { routeGenerationRef: 'generation:one', confirmation: confirmation() }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      }),
+      invalid,
+      {
+        kind: 'evidence', requestRef: 'request:cold', state: 'outcome_unknown', generatedAt: 9_100,
+        steps: [
+          { step: 1, state: 'completed', observedAt: 9_050, evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }] },
+          { step: 2, state: 'outcome_unknown', observedAt: 9_100, evidence: [] },
+        ],
+      },
+      { kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:invalid', state: 'received', reportedAt: 9_101 },
+      invalid,
+    ]
+    let problemBody: unknown
+    const fetch = vi.fn<typeof globalThis.fetch>(async (request, init) => {
+      if (String(request).endsWith('/problems')) {
+        problemBody = JSON.parse(String(init?.body))
+      }
+      return Response.json(responses.shift() ?? { error: 'unexpected' })
+    })
+    const proof = await runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'http://127.0.0.1:4319', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'cold-external-agent', version: 'invalid-output-v1' },
+      scenario: {
+        request: 'Resolve a labelled sandbox service, then prepare its quote, but leave the quote evidence malformed.',
+        facts: {}, messages: [], finish: 'invalid_output',
+        expectedRoute: { stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'] },
+      },
+      sandbox: true,
+      fetch,
+      verifyRelease: async () => ({
+        kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+      sleep: async () => undefined,
+    })
+
+    expect(proof.final).toMatchObject({
+      state: 'outcome_unknown',
+      runState: 'outcome_unknown',
+      evidenceState: 'outcome_unknown',
+      problemState: 'received',
+      resumedState: 'outcome_unknown',
+      completedSteps: 1,
+      automaticRetry: false,
+      failureClass: 'invalid_output',
+    })
+    expect(proof.final).not.toHaveProperty('resultDigest')
+    expect(problemBody).toMatchObject({
+      category: 'incorrect_result',
+      affectedStep: 2,
+    })
+  })
+
   it('preserves a provider-declared partial result as matching evidence without exposing continuation authority', async () => {
     const partialResult = {
       kind: 'partial_result',
