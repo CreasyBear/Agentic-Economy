@@ -12,6 +12,8 @@ const MAX_BODY_BYTES = 64 * 1024
 const SANDBOX_OFFER_EXPIRES_AT = Date.UTC(2035, 0, 1)
 const UNKNOWN_ROUTE_REQUEST_PHRASE = 'leave the quote outcome unknown'
 const UNKNOWN_ROUTE_REFERENCE_PREFIX = 'sandbox-service:unknown:'
+const MALFORMED_EVIDENCE_REQUEST_PHRASE = 'leave the quote evidence malformed'
+const MALFORMED_EVIDENCE_REFERENCE_PREFIX = 'sandbox-service:malformed-evidence:'
 const scenarioValue = z.enum(['success', 'refusal', 'timeout', 'expired', 'duplicate'])
 const preparationEgressBody = z.strictObject({
   protocol: z.literal('ae.preparation-egress:v1'),
@@ -169,9 +171,12 @@ async function routeProviderResponse(
   if (routeKey === 'resolver') {
     const parsed = z.strictObject({ request: z.string().min(1) }).safeParse(input)
     if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
-    const prefix = parsed.data.request.toLowerCase().includes(UNKNOWN_ROUTE_REQUEST_PHRASE)
+    const normalizedRequest = parsed.data.request.toLowerCase()
+    const prefix = normalizedRequest.includes(UNKNOWN_ROUTE_REQUEST_PHRASE)
       ? UNKNOWN_ROUTE_REFERENCE_PREFIX
-      : 'sandbox-service:'
+      : normalizedRequest.includes(MALFORMED_EVIDENCE_REQUEST_PHRASE)
+        ? MALFORMED_EVIDENCE_REFERENCE_PREFIX
+        : 'sandbox-service:'
     const serviceReference = `${prefix}${canonicalDigest(parsed.data).slice(7, 31)}`
     return json({ serviceReference }, 200, { 'Provider-Receipt': `sandbox-resolver:${serviceReference}` })
   }
@@ -179,6 +184,9 @@ async function routeProviderResponse(
   if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
   if (parsed.data.serviceReference.startsWith(UNKNOWN_ROUTE_REFERENCE_PREFIX)) {
     await (options.wait ?? waitForDelay)(10_100, request?.signal ?? new AbortController().signal)
+  }
+  if (parsed.data.serviceReference.startsWith(MALFORMED_EVIDENCE_REFERENCE_PREFIX)) {
+    return json({ malformedSandboxEvidence: true })
   }
   const quoteReference = `sandbox-quote:${canonicalDigest(parsed.data).slice(7, 31)}`
   return json({ quoteReference }, 200, { 'Provider-Receipt': `sandbox-quoter:${quoteReference}` })

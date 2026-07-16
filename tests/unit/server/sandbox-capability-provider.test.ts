@@ -153,6 +153,29 @@ describe('sandbox capability provider', () => {
     expect(wait).toHaveBeenCalledOnce()
   })
 
+  it('lets the route journey exercise malformed second-step evidence without fabricating success', async () => {
+    const resolverUrl = 'https://ae.test/api/sandbox/providers/route-resolver'
+    const quoterUrl = 'https://ae.test/api/sandbox/providers/route-quoter'
+    const resolved = await handleSandboxRouteProviderRequest('resolver', new Request(resolverUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({
+        request: 'Resolve a labelled sandbox service, then prepare its quote, but leave the quote evidence malformed.',
+      }),
+    }), { providerKey: 'secret' })
+    const resolvedBody = await resolved.json() as { serviceReference: string }
+
+    const quoted = await handleSandboxRouteProviderRequest('quoter', new Request(quoterUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({ serviceReference: resolvedBody.serviceReference }),
+    }), { providerKey: 'secret' })
+
+    expect(quoted.status).toBe(200)
+    expect(quoted.headers.get('Provider-Receipt')).toBeNull()
+    await expect(quoted.json()).resolves.toEqual({
+      malformedSandboxEvidence: true,
+    })
+  })
+
   it('refuses missing credentials and never commits a real-world effect', async () => {
     const unauthorized = await handleSandboxCapabilityRequest(new Request('https://ae.test/api/sandbox/capability?profile=one', {
       method: 'POST', body: JSON.stringify({}),
