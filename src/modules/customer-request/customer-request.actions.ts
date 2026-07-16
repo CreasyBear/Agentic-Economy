@@ -109,7 +109,7 @@ export const customerRequestReportProblemAction = defineAction({
   outputSchema: customerRequestProblemResultSchema,
   parameters: [
     ...routeActionParameters,
-    { name: 'category', type: 'enum', description: 'The customer-visible problem category.', required: true, enum: ['incorrect_result', 'unexpected_cost', 'privacy_concern', 'could_not_stop', 'other'] },
+    { name: 'category', type: 'enum', description: 'The customer-visible problem category.', required: true, enum: ['incorrect_result', 'unexpected_cost', 'duplicate_charge_or_effect', 'privacy_concern', 'could_not_stop', 'other'] },
     { name: 'summary', type: 'string', description: 'A short description of what went wrong.', required: true },
     { name: 'affectedStep', type: 'number', description: 'The customer-selected step this report is about.', required: false },
     { name: 'evidenceReceiptRefs', type: 'string', description: 'JSON array of existing AE evidence receipt references selected from that step.', required: false },

@@ -110,7 +110,7 @@ test('partial progress remains legible when a later business result is unknown',
   await expect(page.getByRole('button', { name: 'Start a new Request' })).not.toBeVisible()
 })
 
-test('problem reporting binds selected step evidence and keeps sharing private by default', async ({ page }) => {
+test('suspected duplicate-effect reporting binds selected step evidence and keeps sharing private by default', async ({ page }) => {
   let problemBody: unknown
   await page.route('**/api/requests', async (route) => await route.fulfill({ json: unknownOutcomeView() }))
   await page.route('**/api/requests/*/evidence', async (route) => await route.fulfill({ json: {
@@ -137,14 +137,14 @@ test('problem reporting binds selected step evidence and keeps sharing private b
   await expect(page.getByLabel('Which step is this about?')).toBeVisible()
   await page.getByLabel('Which step is this about?').selectOption('1')
   await page.getByLabel('First result evidence').check()
-  await page.getByLabel('What kind of problem is this?').selectOption('incorrect_result')
-  await page.getByLabel('What went wrong?').fill('The first result contradicts the confirmed constraint.')
+  await page.getByLabel('What kind of problem is this?').selectOption('duplicate_charge_or_effect')
+  await page.getByLabel('What went wrong?').fill('I received two notifications and may have been charged or affected twice.')
   await expect(page.getByLabel('Who can see this report?')).toHaveValue('customer_and_ae_only')
   await page.getByRole('button', { name: 'Send problem report' }).click()
 
   await expect(page.getByText(/Problem recorded/)).toBeVisible()
   expect(problemBody).toMatchObject({
-    category: 'incorrect_result',
+    category: 'duplicate_charge_or_effect',
     affectedStep: 1,
     evidenceReceiptRefs: ['evidence:first'],
     visibility: 'customer_and_ae_only',

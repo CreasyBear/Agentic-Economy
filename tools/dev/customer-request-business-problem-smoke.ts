@@ -19,9 +19,18 @@ const reportSchema = z.looseObject({
   kind: z.literal('problem_reported'),
   reportRef: z.string().min(1),
   problem: z.looseObject({
+    category: z.enum([
+      'incorrect_result',
+      'unexpected_cost',
+      'duplicate_charge_or_effect',
+      'privacy_concern',
+      'could_not_stop',
+      'other',
+    ]),
     visibility: z.literal('share_with_affected_business'),
   }),
 })
+const problemCategorySchema = reportSchema.shape.problem.shape.category
 
 async function run(): Promise<void> {
   const env = { ...loadEnv('development', process.cwd(), ''), ...process.env }
@@ -35,26 +44,11 @@ async function run(): Promise<void> {
     env.AE_CUSTOMER_REQUEST_CLERK_SUBJECT,
     'AE_CUSTOMER_REQUEST_CLERK_SUBJECT',
   )
-  const customerEmail = required(
-    env.AE_CUSTOMER_REQUEST_CLERK_EMAIL,
-    'AE_CUSTOMER_REQUEST_CLERK_EMAIL',
+  const problemCategory = problemCategorySchema.parse(
+    env.AE_CUSTOMER_REQUEST_PROBLEM_CATEGORY ?? 'incorrect_result',
   )
-  const ownerSubject = required(
-    env.AE_CUSTOMER_REQUEST_BUSINESS_CLERK_SUBJECT,
-    'AE_CUSTOMER_REQUEST_BUSINESS_CLERK_SUBJECT',
-  )
-  const ownerEmail = required(
-    env.AE_CUSTOMER_REQUEST_BUSINESS_CLERK_EMAIL,
-    'AE_CUSTOMER_REQUEST_BUSINESS_CLERK_EMAIL',
-  )
-  const supportSubject = required(
-    env.AE_CUSTOMER_REQUEST_SUPPORT_CLERK_SUBJECT,
-    'AE_CUSTOMER_REQUEST_SUPPORT_CLERK_SUBJECT',
-  )
-  const supportEmail = required(
-    env.AE_CUSTOMER_REQUEST_SUPPORT_CLERK_EMAIL,
-    'AE_CUSTOMER_REQUEST_SUPPORT_CLERK_EMAIL',
-  )
+  const problemSummary = env.AE_CUSTOMER_REQUEST_PROBLEM_SUMMARY?.trim()
+    || 'The first recorded result did not satisfy the confirmed customer constraint.'
   const clerk = {
     clerkSecretKey: required(env.CLERK_SECRET_KEY, 'CLERK_SECRET_KEY'),
     expectedInstanceId: required(
@@ -65,6 +59,11 @@ async function run(): Promise<void> {
   }
   let reportRef: string | undefined
   let receiptRef: string | undefined
+  let customerChecks: Readonly<{
+    exactReplay: boolean
+    changedReplayRejected: boolean
+    evidenceReadback: boolean
+  }> | undefined
 
   await withTemporaryClerkApiKey({
     ...clerk,
@@ -85,9 +84,9 @@ async function run(): Promise<void> {
           method: 'POST',
           headers,
           body: JSON.stringify({
-            idempotencyKey: `dev-business-problem:${requestRef}`,
-            category: 'incorrect_result',
-            summary: 'The first recorded result did not satisfy the confirmed customer constraint.',
+            idempotencyKey: `dev-business-problem:${problemCategory}:${requestRef}`,
+            category: problemCategory,
+            summary: problemSummary,
             affectedStep: 1,
             evidenceReceiptRefs: [receiptRef],
             visibility: 'share_with_affected_business',
@@ -95,12 +94,104 @@ async function run(): Promise<void> {
         },
       )
       if (!reportResponse.ok) throw new Error(`business_problem_report_failed:${reportResponse.status}`)
-      reportRef = reportSchema.parse(await reportResponse.json()).reportRef
+      const report = reportSchema.parse(await reportResponse.json())
+      if (report.problem.category !== problemCategory) {
+        throw new Error('business_problem_category_mismatch')
+      }
+      reportRef = report.reportRef
+      const replayResponse = await fetch(
+        `${baseUrl}/api/v1/requests/${encodeURIComponent(requestRef)}/problems`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            idempotencyKey: `dev-business-problem:${problemCategory}:${requestRef}`,
+            category: problemCategory,
+            summary: problemSummary,
+            affectedStep: 1,
+            evidenceReceiptRefs: [receiptRef],
+            visibility: 'share_with_affected_business',
+          }),
+        },
+      )
+      const replay = reportSchema.parse(await replayResponse.json())
+      const changedReplayResponse = await fetch(
+        `${baseUrl}/api/v1/requests/${encodeURIComponent(requestRef)}/problems`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            idempotencyKey: `dev-business-problem:${problemCategory}:${requestRef}`,
+            category: problemCategory,
+            summary: `${problemSummary} Changed replay.`,
+            affectedStep: 1,
+            evidenceReceiptRefs: [receiptRef],
+            visibility: 'share_with_affected_business',
+          }),
+        },
+      )
+      const readbackResponse = await fetch(
+        `${baseUrl}/api/v1/requests/${encodeURIComponent(requestRef)}/evidence`,
+        { headers },
+      )
+      const readback = z.looseObject({
+        kind: z.literal('evidence'),
+        problems: z.array(z.looseObject({
+          reportRef: z.string(),
+          category: problemCategorySchema,
+          claimSource: z.literal('customer'),
+          causality: z.literal('unknown'),
+          resolution: z.literal('not_adjudicated'),
+        })),
+      }).parse(await readbackResponse.json())
+      customerChecks = {
+        exactReplay: replayResponse.ok && JSON.stringify(replay) === JSON.stringify(report),
+        changedReplayRejected: changedReplayResponse.status === 409,
+        evidenceReadback: readbackResponse.ok && readback.problems.some((problem) => (
+          problem.reportRef === reportRef && problem.category === problemCategory
+        )),
+      }
     },
   })
-  if (reportRef === undefined || receiptRef === undefined) {
+  if (reportRef === undefined || receiptRef === undefined || customerChecks === undefined
+    || Object.values(customerChecks).some((value) => !value)) {
     throw new Error('business_problem_customer_step_incomplete')
   }
+  if (env.AE_CUSTOMER_REQUEST_PROBLEM_CUSTOMER_ONLY === 'true') {
+    process.stdout.write(`${JSON.stringify({
+      kind: 'development_customer_problem_round_trip',
+      requestRef,
+      reportRef,
+      receiptRef,
+      category: problemCategory,
+      customerChecks,
+      causality: 'unknown',
+      resolution: 'not_adjudicated',
+      claimBoundary:
+        'customer_report_not_proof_the_claimed_failure_occurred;labelled_sandbox_development_only',
+    })}\n`)
+    return
+  }
+  const customerEmail = required(
+    env.AE_CUSTOMER_REQUEST_CLERK_EMAIL,
+    'AE_CUSTOMER_REQUEST_CLERK_EMAIL',
+  )
+  const ownerSubject = required(
+    env.AE_CUSTOMER_REQUEST_BUSINESS_CLERK_SUBJECT,
+    'AE_CUSTOMER_REQUEST_BUSINESS_CLERK_SUBJECT',
+  )
+  const ownerEmail = required(
+    env.AE_CUSTOMER_REQUEST_BUSINESS_CLERK_EMAIL,
+    'AE_CUSTOMER_REQUEST_BUSINESS_CLERK_EMAIL',
+  )
+  const supportSubject = required(
+    env.AE_CUSTOMER_REQUEST_SUPPORT_CLERK_SUBJECT,
+    'AE_CUSTOMER_REQUEST_SUPPORT_CLERK_SUBJECT',
+  )
+  const supportEmail = required(
+    env.AE_CUSTOMER_REQUEST_SUPPORT_CLERK_EMAIL,
+    'AE_CUSTOMER_REQUEST_SUPPORT_CLERK_EMAIL',
+  )
 
   let ownerObservation: Readonly<{
     customerStatementVisible: boolean
@@ -124,7 +215,7 @@ async function run(): Promise<void> {
           { waitUntil: 'networkidle' },
         )
         const customerStatementVisible = await page.getByText(
-          'The first recorded result did not satisfy the confirmed customer constraint.',
+          problemSummary,
           { exact: true },
         ).first().isVisible()
         const evidenceVisible = await page.getByText('Result evidence 1', { exact: true }).first().isVisible()
@@ -267,6 +358,8 @@ async function run(): Promise<void> {
     requestRef,
     reportRef,
     receiptRef,
+    category: problemCategory,
+    customerChecks,
     ownerObservation,
     supportObservation,
     claimBoundary:

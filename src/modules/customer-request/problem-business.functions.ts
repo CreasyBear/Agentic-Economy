@@ -16,6 +16,7 @@ const businessProblemSchema = z.union([
     category: z.enum([
       'incorrect_result',
       'unexpected_cost',
+      'duplicate_charge_or_effect',
       'privacy_concern',
       'could_not_stop',
       'other',

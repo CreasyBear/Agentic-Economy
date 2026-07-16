@@ -1035,7 +1035,14 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
 function RequestRecordLinks({ requestRef }: { requestRef: string }) {
   const [reporting, setReporting] = useState(false)
   const [summary, setSummary] = useState('')
-  const [problemCategory, setProblemCategory] = useState<'incorrect_result' | 'unexpected_cost' | 'privacy_concern' | 'could_not_stop' | 'other'>('other')
+  const [problemCategory, setProblemCategory] = useState<
+    'incorrect_result'
+    | 'unexpected_cost'
+    | 'duplicate_charge_or_effect'
+    | 'privacy_concern'
+    | 'could_not_stop'
+    | 'other'
+  >('other')
   const [affectedStep, setAffectedStep] = useState<number | undefined>()
   const [selectedEvidence, setSelectedEvidence] = useState<string[]>([])
   const [visibility, setVisibility] = useState<'customer_and_ae_only' | 'share_with_affected_business'>('customer_and_ae_only')
@@ -1218,6 +1225,7 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
       <select id={`problem-category-${requestRef}`} value={problemCategory} onChange={(event) => setProblemCategory(event.target.value as typeof problemCategory)} className="min-h-11 rounded-md border border-border bg-card px-3">
         <option value="incorrect_result">The result looks wrong</option>
         <option value="unexpected_cost">The cost was unexpected</option>
+        <option value="duplicate_charge_or_effect">I may have been charged or affected twice</option>
         <option value="privacy_concern">Information may have been shared incorrectly</option>
         <option value="could_not_stop">The work could not be stopped</option>
         <option value="other">Something else happened</option>

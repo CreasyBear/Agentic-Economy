@@ -1261,6 +1261,100 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
+  it('records a suspected duplicate charge or effect without adjudicating whether it occurred', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(4_500)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const support = await supportAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'suspected-duplicate-effect')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:suspected-duplicate-effect',
+    })
+
+    const command = {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'problem:suspected-duplicate-effect',
+      category: 'duplicate_charge_or_effect' as const,
+      summary: 'I received two provider notifications and may have been charged or affected twice.',
+      affectedStep: 1,
+      evidenceReceiptRefs: [] as string[],
+      visibility: 'share_with_affected_business' as const,
+    }
+    const reported = await admin.action(api.customerRequestApplication.reportRouteProblem, command)
+    expect(reported).toMatchObject({
+      kind: 'problem_reported',
+      requestRef: confirmed.requestRef,
+      problem: {
+        category: 'duplicate_charge_or_effect',
+        claimSource: 'customer',
+        causality: 'unknown',
+        resolution: 'not_adjudicated',
+        decisionAuthority: 'not_assigned',
+        visibility: 'share_with_affected_business',
+        affected: { step: 1 },
+      },
+    })
+    await expect(admin.action(
+      api.customerRequestApplication.reportRouteProblem,
+      command,
+    )).resolves.toEqual(reported)
+    await expect(admin.action(api.customerRequestApplication.reportRouteProblem, {
+      ...command,
+      summary: 'Changed duplicate-effect claim under the same key.',
+    })).resolves.toEqual({
+      kind: 'conflict',
+      requestRef: confirmed.requestRef,
+      reason: 'idempotency_key_reused',
+    })
+
+    await expect(admin.action(api.customerRequestApplication.exportRouteEvidence, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'evidence',
+      problems: [{
+        category: 'duplicate_charge_or_effect',
+        summary: 'I received two provider notifications and may have been charged or affected twice.',
+        claimSource: 'customer',
+        causality: 'unknown',
+        resolution: 'not_adjudicated',
+        decisionAuthority: 'not_assigned',
+        claims: [{
+          claimSource: 'customer',
+          causalityPosition: 'reported_problem',
+        }],
+      }],
+    })
+    if (reported.kind !== 'problem_reported') throw new Error('duplicate-effect report was not accepted')
+    const attemptRef = reported.problem.affected.attemptRef
+    if (attemptRef === undefined) throw new Error('duplicate-effect report did not bind an exact attempt')
+    const affectedOwner = await businessOwnerForAttempt(backend, attemptRef)
+    await expect(affectedOwner.action(api.customerRequestApplication.readRouteProblemForBusiness, {
+      reportRef: reported.reportRef,
+    })).resolves.toMatchObject({
+      kind: 'business_problem',
+      reportRef: reported.reportRef,
+      category: 'duplicate_charge_or_effect',
+      customerStatement: 'I received two provider notifications and may have been charged or affected twice.',
+      causality: 'unknown',
+      resolution: 'not_adjudicated',
+      decisionAuthority: 'not_assigned',
+    })
+    await expect(support.action(api.customerRequestApplication.exportRouteProblemForSupport, {
+      reportRef: reported.reportRef,
+    })).resolves.toMatchObject({
+      kind: 'problem_export',
+      reportRef: reported.reportRef,
+      category: 'duplicate_charge_or_effect',
+      claimSource: 'customer',
+      causality: 'unknown',
+      resolution: 'not_adjudicated',
+      decisionAuthority: 'not_assigned',
+    })
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteProblemReports').collect()).toHaveLength(1)
+    })
+  })
+
   it('tracks an authenticated support question and customer reply without assigning remedy authority', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(5_000)
     const backend = convexTest(schema, modules)

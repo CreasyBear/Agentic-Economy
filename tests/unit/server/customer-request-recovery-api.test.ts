@@ -61,6 +61,58 @@ describe('Customer Request recovery surface', () => {
     })).resolves.toBe(true)
   })
 
+  it('accepts the same suspected duplicate charge or effect report through human and agent surfaces', async () => {
+    const receipt = {
+      kind: 'problem_reported' as const,
+      requestRef,
+      reportRef: 'problem:duplicate-effect',
+      state: 'received' as const,
+      reportedAt: 1_000,
+      problem: {
+        category: 'duplicate_charge_or_effect' as const,
+        claimSource: 'customer' as const,
+        causality: 'unknown' as const,
+        resolution: 'not_adjudicated' as const,
+        nextAction: 'await_status_update' as const,
+        nextActor: 'ae' as const,
+        nextUpdateDueAt: 86_400_100,
+        decisionAuthority: 'not_assigned' as const,
+        visibility: 'share_with_affected_business' as const,
+        evidence: [],
+        affected: { step: 1, attemptRef: 'attempt:opaque', business: 'Example business' },
+        claims: [],
+      },
+    }
+    const request = () => new Request('https://ae.test/problems', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ak_secret', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotencyKey: 'report:duplicate-effect',
+        category: 'duplicate_charge_or_effect',
+        summary: 'I may have been charged or affected twice.',
+        affectedStep: 1,
+        evidenceReceiptRefs: [],
+        visibility: 'share_with_affected_business',
+      }),
+    })
+    let humanCommand: Record<string, unknown> | undefined
+    const human = await handleCustomerRequestProblemPost(request(), requestRef, {
+      report: async (command) => {
+        humanCommand = command
+        return receipt
+      },
+    })
+    const callAction = vi.fn(async (_name: string, _args: Record<string, unknown>) => receipt)
+    const agent = await handleAgentCustomerRequestProblemPost(request(), requestRef, agentOptions(callAction))
+
+    expect(human.status).toBe(200)
+    expect(agent.status).toBe(200)
+    expect(await agent.json()).toEqual(await human.json())
+    const [, calledArgs] = callAction.mock.calls[0] ?? []
+    const { serviceAuth: _serviceAuth, ...agentCommand } = calledArgs ?? {}
+    expect(agentCommand).toEqual(humanCommand)
+  })
+
   it('exports only customer-safe observed evidence through the same signed read', async () => {
     const exported = {
       kind: 'evidence' as const, requestRef, state: 'outcome_unknown' as const, generatedAt: 1_000,

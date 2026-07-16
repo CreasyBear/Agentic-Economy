@@ -855,7 +855,7 @@ export const getCurrent = internalQuery({
 
 const problemCategory = v.union(
   v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
-  v.literal('could_not_stop'), v.literal('other'),
+  v.literal('duplicate_charge_or_effect'), v.literal('could_not_stop'), v.literal('other'),
 )
 
 export const reportProblem = internalMutation({
@@ -1020,6 +1020,7 @@ const businessProblemViewResult = v.union(
     category: v.union(
       v.literal('incorrect_result'),
       v.literal('unexpected_cost'),
+      v.literal('duplicate_charge_or_effect'),
       v.literal('privacy_concern'),
       v.literal('could_not_stop'),
       v.literal('other'),

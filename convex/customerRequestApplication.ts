@@ -918,7 +918,7 @@ const problemReceipt = v.object({
   problem: v.object({
     category: v.union(
       v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
-      v.literal('could_not_stop'), v.literal('other'),
+      v.literal('duplicate_charge_or_effect'), v.literal('could_not_stop'), v.literal('other'),
     ),
     claimSource: v.literal('customer'), causality: v.literal('unknown'),
     resolution: v.literal('not_adjudicated'), nextAction: v.literal('await_status_update'),
@@ -980,7 +980,7 @@ export const reportRouteProblem = action({
     requestRef: v.string(), idempotencyKey: v.string(),
     category: v.union(
       v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
-      v.literal('could_not_stop'), v.literal('other'),
+      v.literal('duplicate_charge_or_effect'), v.literal('could_not_stop'), v.literal('other'),
     ),
     summary: v.string(), affectedStep: v.optional(v.number()),
     evidenceReceiptRefs: v.optional(v.array(v.string())),
@@ -1091,6 +1091,7 @@ const businessProblemViewActionResult = v.union(
     category: v.union(
       v.literal('incorrect_result'),
       v.literal('unexpected_cost'),
+      v.literal('duplicate_charge_or_effect'),
       v.literal('privacy_concern'),
       v.literal('could_not_stop'),
       v.literal('other'),
@@ -1329,6 +1330,7 @@ const supportProblemListResult = v.union(
       category: v.union(
         v.literal('incorrect_result'),
         v.literal('unexpected_cost'),
+        v.literal('duplicate_charge_or_effect'),
         v.literal('privacy_concern'),
         v.literal('could_not_stop'),
         v.literal('other'),
@@ -1377,6 +1379,7 @@ const supportProblemExportResult = v.union(
     category: v.union(
       v.literal('incorrect_result'),
       v.literal('unexpected_cost'),
+      v.literal('duplicate_charge_or_effect'),
       v.literal('privacy_concern'),
       v.literal('could_not_stop'),
       v.literal('other'),
@@ -1477,7 +1480,7 @@ const evidenceExport = v.object({
     ),
     category: v.union(
       v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
-      v.literal('could_not_stop'), v.literal('other'),
+      v.literal('duplicate_charge_or_effect'), v.literal('could_not_stop'), v.literal('other'),
     ),
     summary: v.string(), claimSource: v.literal('customer'), causality: v.literal('unknown'),
     resolution: v.literal('not_adjudicated'),
@@ -1557,7 +1560,13 @@ export const exportRouteEvidence = action({
             reportRef: string
             version: number
             state: 'received' | 'update_due' | 'investigating' | 'waiting_for_customer' | 'closed'
-            category: 'incorrect_result' | 'unexpected_cost' | 'privacy_concern' | 'could_not_stop' | 'other'
+            category:
+              | 'incorrect_result'
+              | 'unexpected_cost'
+              | 'duplicate_charge_or_effect'
+              | 'privacy_concern'
+              | 'could_not_stop'
+              | 'other'
             summary: string
             claimSource: 'customer'
             causality: 'unknown'

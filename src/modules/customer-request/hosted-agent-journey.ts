@@ -398,7 +398,7 @@ export async function runHostedCustomerRequestJourney(
       }
       const problem = await callAgentProblem(runtimeInput, problemAction.path, materializeObservedInput(view, problemAction, {
         '<unique string>': `acceptance:problem:${nonce}`,
-        '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
+        '<incorrect_result | unexpected_cost | duplicate_charge_or_effect | privacy_concern | could_not_stop | other>': 'other',
         '<problem summary>': 'Labelled sandbox recovery verification.',
         '<step number from evidence>': 1,
       }))
@@ -526,7 +526,7 @@ async function partialResultHostedJourney(input: Parameters<typeof outcomeUnknow
   const problem = await callAgentProblem(input.input, input.problemAction.path, materializeObservedInput(
     input.started, input.problemAction, {
       '<unique string>': `acceptance:problem:${input.nonce}`,
-      '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
+      '<incorrect_result | unexpected_cost | duplicate_charge_or_effect | privacy_concern | could_not_stop | other>': 'other',
       '<problem summary>': 'The labelled sandbox provider returned only a partial result.',
       '<step number from evidence>': input.route.stepCount,
     },
@@ -604,7 +604,7 @@ async function providerDeniedHostedJourney(input: Readonly<{
   const problem = await callAgentProblem(input.input, input.problemAction.path, materializeObservedInput(
     input.started, input.problemAction, {
       '<unique string>': `acceptance:problem:${input.nonce}`,
-      '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
+      '<incorrect_result | unexpected_cost | duplicate_charge_or_effect | privacy_concern | could_not_stop | other>': 'other',
       '<problem summary>': 'The labelled sandbox provider declined the second step.',
       '<step number from evidence>': input.route.stepCount,
     },
@@ -676,7 +676,7 @@ async function outcomeUnknownHostedJourney(input: Readonly<{
   const problem = await callAgentProblem(input.input, input.problemAction.path, materializeObservedInput(
     input.started, input.problemAction, {
       '<unique string>': `acceptance:problem:${input.nonce}`,
-      '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
+      '<incorrect_result | unexpected_cost | duplicate_charge_or_effect | privacy_concern | could_not_stop | other>': 'other',
       '<problem summary>': 'The labelled sandbox provider outcome is unknown after release.',
       '<step number from evidence>': input.route.stepCount,
     },

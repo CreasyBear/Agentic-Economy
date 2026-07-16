@@ -56,7 +56,14 @@ export const customerRequestRouteActionInputSchema = z.strictObject({
 
 export const customerRequestProblemInputSchema = z.strictObject({
   idempotencyKey: boundedText(200),
-  category: z.enum(['incorrect_result', 'unexpected_cost', 'privacy_concern', 'could_not_stop', 'other']),
+  category: z.enum([
+    'incorrect_result',
+    'unexpected_cost',
+    'duplicate_charge_or_effect',
+    'privacy_concern',
+    'could_not_stop',
+    'other',
+  ]),
   summary: boundedText(1_000),
   affectedStep: safePositiveInteger.optional(),
   evidenceReceiptRefs: z.array(boundedText(300)).max(20).default([]),
@@ -99,7 +106,14 @@ export const customerRequestProblemStatusChangeSchema = z.union([
 ])
 
 const customerRequestProblemProjectionSchema = z.strictObject({
-  category: z.enum(['incorrect_result', 'unexpected_cost', 'privacy_concern', 'could_not_stop', 'other']),
+  category: z.enum([
+    'incorrect_result',
+    'unexpected_cost',
+    'duplicate_charge_or_effect',
+    'privacy_concern',
+    'could_not_stop',
+    'other',
+  ]),
   claimSource: z.literal('customer'),
   causality: z.literal('unknown'),
   resolution: z.literal('not_adjudicated'),
