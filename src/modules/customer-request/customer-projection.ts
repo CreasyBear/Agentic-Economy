@@ -1,5 +1,6 @@
 import type { CompileCustomerRequestResult } from './compiler'
 import type { JsonValue } from '@/modules/capability-contract/public'
+import { stableStringify } from '@/modules/common/stable-hash'
 import {
   CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY,
   CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY,
@@ -58,12 +59,18 @@ export function projectCustomerCriteria(
     basis: 'customer_provided' | 'extracted_from_request'
   }>[],
 ): readonly CustomerCriterion[] {
-  return Object.freeze(criteria.map(({ label, value, basis }) => Object.freeze({
-    label,
-    value: structuredClone(value),
-    basis,
-    impact: 'eligibility_and_comparison' as const,
-  })))
+  const seen = new Set<string>()
+  return Object.freeze(criteria.flatMap(({ label, value, basis }) => {
+    const identity = stableStringify({ label, value, basis })
+    if (seen.has(identity)) return []
+    seen.add(identity)
+    return [Object.freeze({
+      label,
+      value: structuredClone(value),
+      basis,
+      impact: 'eligibility_and_comparison' as const,
+    })]
+  }))
 }
 
 export type CustomerRequestProjection =

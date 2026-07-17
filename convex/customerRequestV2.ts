@@ -104,7 +104,16 @@ const commandReplayResult = v.union(
   v.object({
     kind: v.literal('replayed'), aggregate: customerRequestV2AggregateValue,
     routeGenerationRef: v.optional(v.string()),
+    noEffect: v.boolean(),
   }),
+)
+const noopCommitResult = v.union(
+  v.object({ kind: v.literal('stored') }),
+  v.object({ kind: v.literal('replayed') }),
+  v.object({ kind: v.literal('revision_conflict') }),
+  v.object({ kind: v.literal('route_generation_conflict') }),
+  v.object({ kind: v.literal('identity_conflict') }),
+  v.object({ kind: v.literal('command_conflict') }),
 )
 const generationRefreshResult = v.union(
   v.object({ kind: v.literal('unchanged'), routeGeneration: routePlanGenerationV2Value }),
@@ -281,6 +290,57 @@ export const commitAggregate = internalMutation({
       committedAt: snapshot.recordedAt,
     })
     return { kind: 'stored' as const, requestId: snapshot.requestId, revision: snapshot.revision }
+  },
+})
+
+export const recordNoopCommand = internalMutation({
+  args: {
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
+    expectedRevision: v.number(), expectedRouteGeneration: v.number(), aggregateDigest: v.string(),
+    routeGenerationRef: v.optional(v.string()), committedAt: v.number(),
+  },
+  returns: noopCommitResult,
+  handler: async (ctx, args) => {
+    const prior = await ctx.db.query('customerRequestV2Commands')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
+    if (prior !== null) {
+      return prior.commandDigest === args.commandDigest
+        && prior.principalId === args.principalId
+        && prior.requestId === args.requestId
+        && prior.expectedRevision === args.expectedRevision
+        && prior.resultingRevision === args.expectedRevision
+        && prior.aggregateDigest === args.aggregateDigest
+        && prior.expectedRouteGeneration === args.expectedRouteGeneration
+        && prior.resultingRouteGenerationRef === args.routeGenerationRef
+        && prior.noEffect === true
+        ? { kind: 'replayed' as const }
+        : { kind: 'command_conflict' as const }
+    }
+    const head = await ctx.db.query('customerRequestV2Heads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (head === null || head.currentRevision !== args.expectedRevision
+      || head.currentAggregateDigest !== args.aggregateDigest) return { kind: 'revision_conflict' as const }
+    if (head.principalId !== args.principalId) return { kind: 'identity_conflict' as const }
+    const routeHead = await ctx.db.query('customerRequestV2RoutePlanHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if ((routeHead?.currentGeneration ?? 0) !== args.expectedRouteGeneration
+      || routeHead?.currentGenerationRef !== args.routeGenerationRef) {
+      return { kind: 'route_generation_conflict' as const }
+    }
+    await ctx.db.insert('customerRequestV2Commands', {
+      commandKey: args.commandKey,
+      commandDigest: args.commandDigest,
+      principalId: args.principalId,
+      requestId: args.requestId,
+      expectedRevision: args.expectedRevision,
+      resultingRevision: args.expectedRevision,
+      aggregateDigest: args.aggregateDigest,
+      expectedRouteGeneration: args.expectedRouteGeneration,
+      ...(args.routeGenerationRef === undefined ? {} : { resultingRouteGenerationRef: args.routeGenerationRef }),
+      noEffect: true,
+      committedAt: args.committedAt,
+    })
+    return { kind: 'stored' as const }
   },
 })
 
@@ -761,6 +821,7 @@ export const getCommandReplay = internalQuery({
     return {
       kind: 'replayed' as const,
       aggregate: verified.aggregate,
+      noEffect: command.noEffect === true,
       ...(command.resultingRouteGenerationRef === undefined
         ? {}
         : { routeGenerationRef: command.resultingRouteGenerationRef }),
@@ -776,6 +837,7 @@ async function readVerifiedCommandReplay(
     aggregateDigest: string
     expectedRouteGeneration?: number
     resultingRouteGenerationRef?: string
+    noEffect?: boolean
   }>,
 ): Promise<Readonly<{ kind: 'legacy' } | { kind: 'current'; aggregate: Aggregate }>> {
   const revision = await db.query('customerRequestV2Revisions')
@@ -810,7 +872,7 @@ async function readVerifiedCommandReplay(
       || !routePlanGenerationMatchesAggregate(
         domainRouteGeneration(generation.routeGeneration),
         domainAggregate(revision.aggregate),
-        command.expectedRouteGeneration,
+        command.noEffect === true ? command.expectedRouteGeneration - 1 : command.expectedRouteGeneration,
       )) {
       throw new Error('customer_request_v2_command_generation_integrity_failure')
     }

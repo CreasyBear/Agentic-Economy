@@ -639,6 +639,9 @@ export const refine = action({
     const commandDigest = canonicalDigest(command)
     const replay = await replayCommittedCommand(ctx, {
       commandKey, commandDigest, requestId: args.requestRef, principalId: caller.principalId,
+      noEffectReplay: async () => await resumeRequest(ctx, {
+        requestRef: args.requestRef,
+      }, caller),
     })
     if (replay !== undefined) return replay
     const current = await loadCurrent(ctx, args.requestRef)
@@ -651,6 +654,34 @@ export const refine = action({
       kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
     }
     const mode = args.mode ?? 'append'
+    if (mode === 'replace' && args.message.trim() === current.aggregate.snapshot.intent.trim()) {
+      const expectedRouteGeneration = await loadCurrentRouteGenerationNumber(ctx, current)
+      if (expectedRouteGeneration === undefined) return writableView(projectNeedsAttention({
+        requestRef: args.requestRef, revision: args.expectedRevision,
+        summary: 'AE could not verify the current options. Try this request again.',
+      }))
+      const recorded = await ctx.runMutation(internal.customerRequestV2.recordNoopCommand, {
+        commandKey,
+        commandDigest,
+        principalId: caller.principalId,
+        requestId: args.requestRef,
+        expectedRevision: args.expectedRevision,
+        expectedRouteGeneration,
+        aggregateDigest: current.aggregate.aggregateDigest,
+        ...(current.routeGenerationRef === undefined ? {} : { routeGenerationRef: current.routeGenerationRef }),
+        committedAt: Date.now(),
+      })
+      if (recorded.kind === 'command_conflict') return {
+        kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused',
+      }
+      if (recorded.kind !== 'stored' && recorded.kind !== 'replayed') return {
+        kind: 'conflict', requestRef: args.requestRef,
+        reason: recorded.kind === 'identity_conflict' ? 'identity_changed' : 'revision_changed',
+      }
+      return await resumeRequest(ctx, {
+        requestRef: args.requestRef,
+      }, caller)
+    }
     const intent = mode === 'replace'
       ? args.message.trim()
       : `${current.aggregate.snapshot.intent.trim()}\n${args.message.trim()}`
@@ -769,8 +800,10 @@ export const resume = action({
 async function resumeRequest(
   ctx: ActionCtx,
   args: Readonly<{ requestRef: string; serviceAuth?: Infer<typeof serviceAssertion> }>,
+  authenticatedCaller?: RequestCaller,
 ): Promise<ActionResult> {
-    const caller = await resolveRequestCaller(ctx, 'resume', { requestRef: args.requestRef }, args.serviceAuth)
+    const caller = authenticatedCaller
+      ?? await resolveRequestCaller(ctx, 'resume', { requestRef: args.requestRef }, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
     const current = await loadCurrent(ctx, args.requestRef)
     if (current.kind === 'needs_attention') return writableView(projectNeedsAttention({
@@ -2394,6 +2427,7 @@ async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
   commandDigest: string
   requestId: string
   principalId: string
+  noEffectReplay?: () => Promise<ActionResult>
 }>): Promise<ActionResult | undefined> {
   const replay: CommandReplayResult = await ctx.runQuery(internal.customerRequestV2.getCommandReplay, {
     commandKey: input.commandKey,
@@ -2410,6 +2444,7 @@ async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
     revision: 0,
     summary: 'This earlier request used a retired format. Start a new request to continue.',
   }))
+  if (replay.noEffect && input.noEffectReplay !== undefined) return await input.noEffectReplay()
   return projectStoredAggregate(replay.aggregate, replay.routeGenerationRef)
 }
 
@@ -2548,7 +2583,7 @@ type CommandReplayResult = Readonly<
   | { kind: 'not_found' }
   | { kind: 'conflict' }
   | { kind: 'needs_attention'; requestId: string; reason: 'historical_request_resubmit_required'; resumable: false }
-  | { kind: 'replayed'; aggregate: StoredAggregate; routeGenerationRef?: string }
+  | { kind: 'replayed'; aggregate: StoredAggregate; routeGenerationRef?: string; noEffect: boolean }
 >
 type GenerationRefreshResult = Readonly<
   | { kind: 'unchanged'; routeGeneration: StoredRouteGeneration }

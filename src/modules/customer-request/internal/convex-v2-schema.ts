@@ -747,7 +747,8 @@ export const customerRequestV2Tables = {
   customerRequestV2Commands: defineTable({
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
     expectedRevision: v.number(), resultingRevision: v.number(), aggregateDigest: v.string(),
-    expectedRouteGeneration: v.optional(v.number()), resultingRouteGenerationRef: v.optional(v.string()), committedAt: v.number(),
+    expectedRouteGeneration: v.optional(v.number()), resultingRouteGenerationRef: v.optional(v.string()),
+    noEffect: v.optional(v.boolean()), committedAt: v.number(),
   })
     .index('by_commandKey', ['commandKey'])
     .index('by_requestId_and_resultingRevision', ['requestId', 'resultingRevision']),

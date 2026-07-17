@@ -1073,6 +1073,71 @@ describe('current V2 Customer Request application path', () => {
     })
     expect(generate).toHaveBeenCalledTimes(2)
   })
+
+  it('treats an exact replacement as a no-op instead of compiling a new revision', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
+    const generate = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(response) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', generate)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+    const intent = 'Find an accessible transfer and hotel before noon.'
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:exact-replacement',
+      requestId: 'request:v2:exact-replacement',
+      delegatedAgentId: 'agent:exact-replacement',
+      customerJob: intent,
+      routing: { networkId: 'ae:public' },
+    })
+    expect(submitted).toMatchObject({ kind: 'request', revision: 1, state: 'ready_to_compare' })
+    if (submitted.kind !== 'request') throw new Error('submitted request missing')
+
+    const repeated = await customer.action(api.customerRequestApplication.refine, {
+      requestRef: 'request:v2:exact-replacement',
+      expectedRevision: 1,
+      idempotencyKey: 'replace:v2:exact-replacement:1',
+      message: intent,
+      mode: 'replace',
+    })
+
+    expect(repeated).toMatchObject({
+      kind: 'request',
+      requestRef: submitted.requestRef,
+      revision: submitted.revision,
+      routeGenerationRef: submitted.routeGenerationRef,
+      summary: intent,
+      state: 'routes_ready',
+    })
+    await expect(customer.action(api.customerRequestApplication.refine, {
+      requestRef: 'request:v2:exact-replacement',
+      expectedRevision: 1,
+      idempotencyKey: 'replace:v2:exact-replacement:1',
+      message: intent,
+      mode: 'replace',
+    })).resolves.toMatchObject({
+      kind: 'request',
+      revision: 1,
+      routeGenerationRef: submitted.routeGenerationRef,
+      state: 'routes_ready',
+    })
+    await expect(customer.action(api.customerRequestApplication.refine, {
+      requestRef: 'request:v2:exact-replacement',
+      expectedRevision: 1,
+      idempotencyKey: 'replace:v2:exact-replacement:1',
+      message: 'Use the same key for a different replacement.',
+      mode: 'replace',
+    })).resolves.toEqual({
+      kind: 'conflict',
+      requestRef: 'request:v2:exact-replacement',
+      reason: 'idempotency_key_reused',
+    })
+    expect(generate).toHaveBeenCalledTimes(1)
+  })
 })
 
 async function beginHistoricalPreparationProof(
