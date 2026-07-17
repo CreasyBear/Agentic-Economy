@@ -13,6 +13,8 @@
 | P1 | Q-006 | What benchmark best demonstrates that AE improves a calling agent's answer? | H-001; H-005 | Request corpus design, adjudication rubric, baselines, agent restatement evaluation | QUEUED | — |
 | P1 | Q-007 | Which distribution surface should AE package first after the canonical contract? | D-001; H-006 | Current platform access, user concentration, review friction, observability, integration effort | UNBLOCKED FOR PRODUCT-SPECIFIC COMPARISON | — |
 | P0 | Q-009 | Can one Action Invocation control record support standalone and Request-owned work without duplicating authority, attempts, evidence or recovery? | D-006; D-007; ADR-009; ADR-010 | Cross-surface approval, interrupted-effect recovery, generation-race and reference-only composition evals | ARCHITECTURE SELECTED; EVALS REQUIRED | [Production agent execution patterns](../research/2026-07-17-production-agent-execution-patterns.md) |
+| P0 | Q-010 | Do listed-business owners want a recommendation, comparable finished work samples, or done-for-you delegation? | Tender H-1; cold-start H-CS6; ADR-009 barrier hypothesis | 5-10 forced-choice owner interviews in the launch atom with on-the-spot budget naming | FIELDWORK REQUIRED | [Tender exploration](../research/2026-07-17-demand-side-tender-market-exploration.md); [Cold-start mechanisms](../research/2026-07-17-cold-start-onboarding-mechanisms.md) |
+| P1 | Q-011 | Which non-monetary incentive (seeded-page correction bait, AI-visibility mirror, founding receipts, job-in-hand) converts supply best under the no-money/no-overclaim constraints? | H-CS1..H-CS4 | Per-mechanism conversion measurement inside the launch atom | QUEUED | [Cold-start mechanisms](../research/2026-07-17-cold-start-onboarding-mechanisms.md) |
 
 ## Queue rule
 
