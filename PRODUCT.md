@@ -22,14 +22,76 @@ provider infrastructure. They tell their agent what they need. Agentic Economy
 helps that agent find the right real businesses, compare the available ways
 forward, and carry the work into action.
 
+They may ask for one useful piece of work or a complete outcome. AE should help
+with the task they recognize now, preserve the result, and make the next useful
+tasks easier. When it adds value, AE can coordinate those tasks into a complete
+route. The customer does not need to surrender the entire project before
+receiving value.
+
+## Vision: a local platform on global rails
+
+AE is not being built on the assumption that it must defeat global agent,
+hosting, payment, search, or commerce platforms at their own layer. Their scale
+does not make local markets understandable or operable.
+
+Global infrastructure can run an agent, expose a tool, move money, or complete
+a conventional checkout. It does not automatically know which local businesses
+can satisfy a particular need, whether their information is current, which
+conditions apply, how unlike offers should be compared, what remains to be
+confirmed, or how work involving several businesses should continue when
+something changes.
+
+AE may use global infrastructure wherever it is the best rail. It should remain
+able to support more than one rail and must not surrender its product meaning to
+any one of them. AE's ambition is to own the useful local layer above those
+rails:
+
+- the relationship with participating businesses;
+- clear, current descriptions of what each business can provide;
+- locally meaningful conditions, eligibility, geography, timing and evidence;
+- discovery and comparison shaped around a person's actual constraints;
+- supported individual tasks and composed work across several providers;
+- continuity when a person, their agent, a business or an AE-assisted experience
+  hands the work to another participant;
+- an honest record of what was attempted, confirmed, completed, contradicted or
+  left unresolved.
+
+This is not a retreat into a narrow directory or regional wrapper. A sufficiently
+useful local network can become the operating layer through which people and
+agents understand available supply and coordinate real work. Global rails may
+make that network cheaper and more interoperable; they do not replace the local
+knowledge, supply relationships and coordination required to make it valuable.
+
+AE can create value before every business is fully integrated. Participating
+businesses can expose structured information and supported actions. Known but
+unintegrated businesses can be discovered or contacted with their unknowns made
+clear. Open-market candidates can be researched as leads without being presented
+as admitted or immediately routeable supply. Repeated demand and coordination
+can then inform which businesses and tasks should be onboarded more deeply.
+
+The strategic boundary is therefore:
+
+> Global platforms may run the agent, expose the service, move the money or
+> complete a standard checkout. AE helps determine which real businesses can do
+> the work, makes the available ways forward understandable, coordinates the
+> parts that benefit from coordination, and preserves enough truth for the work
+> to continue or recover.
+
 The target customer experience is:
 
 1. **Ask** — say what you need in your own words.
 2. **Clarify** — answer only the questions that materially improve the choice.
-3. **Choose** — see a recommendation, alternatives, price, timing, and important
-   tradeoffs in ordinary language.
+3. **Choose** — see comparable options, price, timing, and important tradeoffs in
+   ordinary language. AE recommends one only when an explicit customer priority
+   supports a deterministic, evidence-backed ordering; otherwise the options
+   remain unranked for the person and their agent to judge.
 4. **Confirm** — approve the exact spend, information sharing, and next action.
 5. **Follow** — see progress, respond when needed, and keep the resulting record.
+
+These are recurring movements through the product, not a mandatory funnel. A
+person or agent may arrive with constraints, a shortlist, an existing quote, a
+prior commitment, one immediate task, or a complete need. They may stop after a
+useful result, continue progressively, or ask AE to coordinate what remains.
 
 ## Current evidenced state — 2026-07-14
 
@@ -73,24 +135,37 @@ semantics should be added to Answer Thread that belong to Customer Request.
 
 ## Target product contract
 
-Agentic Economy is powered by a neutral routing engine for agents.
+Agentic Economy is powered by neutral machinery for agents working with real
+businesses.
 
-An agent gives AE a natural-language request and constraints. AE finds registered
-capability bindings, composes viable route graphs, and returns a signed route
-quote: an inspectable plan with providers, steps, cost, data disclosures, and
-failure paths declared before execution. The caller approves that exact quote.
-AE then executes it once and records the outcome as a Root Run. These sentences
-define the target contract; they are not permission to describe those operations
-as currently available.
+An agent may give AE a complete need, one immediate task, or attributable work
+already completed elsewhere. AE uses registered business information and
+capability bindings to find candidates, gather missing information, test
+suitability, prepare comparisons or perform an authorized action. Each useful
+result can stand alone or become input to the next task.
+
+For a complete outcome, AE composes viable route graphs and returns a signed
+route quote: an inspectable plan with providers, steps, cost, data disclosures,
+and failure paths declared before execution. The caller approves that exact
+quote. AE then executes it once and records the outcome as a Root Run. These
+sentences define the target contract; they are not permission to describe those
+operations as currently available.
 
 The marketplace is a projection of the engine's routeable supply. It is not the
 engine and it is not the primary product.
 
-## Target lifecycle
+## Target task and route lifecycle
+
+The following controls describe the complete route. They are not mandatory
+entry steps for every useful task. Read-only discovery or comparison may end
+without authority or execution. Work that began elsewhere may enter with
+attributable prior state rather than a fabricated AE history.
 
 1. **Request** — an agent submits an intent, network, and constraints.
-2. **Quote** — AE returns ranked route graphs with declared cost, data use,
-   provider bindings, and fallback order.
+2. **Quote** — AE returns viable route graphs with declared cost, data use,
+   provider bindings, and fallback order. Routes remain unranked unless the
+   Request contains an explicit supported objective and current comparable
+   evidence produces a unique ordering.
 3. **Approve** — the principal grants bounded authority tied to the exact quote
    digest, spend, expiry, recipients, purposes, and allowed data.
 4. **Run** — AE executes the approved graph with idempotency and least authority.
@@ -108,14 +183,21 @@ binding between an entity, a contract, an operation, an endpoint, and evidence o
 admission and conformance. A page without a registered capability is discoverable
 inventory, not routeable supply.
 
+For product and onboarding purposes, this means AE must know what information a
+business can provide, which questions it can answer, which actions it can
+perform, what each requires, what evidence it returns, and how refusal, timeout
+or uncertainty is handled. Those declarations are what let agents perform
+useful work and compose larger outcomes.
+
 The engine is neutral about entity type and domain. Businesses are the first
 source of supply; household, business, procurement, and industry labels do not
 belong in kernel contracts.
 
 ## Target users and surfaces
 
-- **Calling agents** use signed HTTP or MCP operations: route, authorize,
-  execute, inspect, reconcile, and cancel.
+- **Calling agents** discover business information, perform supported individual
+  tasks, and optionally use signed HTTP or MCP operations to route, authorize,
+  execute, inspect, reconcile, and cancel complete work.
 - **Principals** inspect and approve exact route quotes and set spend and data
   limits.
 - **Capability providers** register and operate endpoint bindings.
@@ -125,13 +207,15 @@ belong in kernel contracts.
 
 ## Target surface architecture
 
-- `/` becomes the canonical Request surface: it starts with a need, not an
-  engine or a schema.
+- `/` becomes the canonical customer surface: it may start with a need, one
+  recognizable task, or prior work. Larger outcomes compile into Customer
+  Request; partial entry uses the supported task without inventing a Request
+  history.
 - `/engine` is migration-only and redirects to `/` after the canonical Request
   journey reaches cutover evidence.
 - `/registry` is the marketplace projection of registered entities and published
-  supply. It supports the Request journey; it does not own customer intent,
-  recommendation, authority, or execution.
+  supply. It supports discovery, individual tasks and the Request journey; it
+  does not own customer intent, recommendation, authority, or execution.
 - `/developers/discovery` and machine-readable discovery files expose the agent
   integration contract.
 - `/admin/runs` is the protected Root Run and evidence surface.
@@ -151,8 +235,9 @@ current capability.
 ## Product rules
 
 1. The graph is the differentiator and stays backstage. Customer surfaces show
-   its useful consequence: a better recommendation, a clear alternative, an
-   upfront boundary, or a recoverable failure.
+   its useful consequence: comparable ways forward, a justified recommendation
+   when an explicit priority supports one, an upfront boundary, or a recoverable
+   failure.
 2. Quote before authority. No execution without approval bound to an immutable
    quote digest.
 3. Data is authority. Disclosure is bounded by field, recipient, purpose, and
@@ -168,9 +253,22 @@ current capability.
 9. Current product, committed substrate, and target contract are separate
    maturity states. Never promote a capability between them without executable
    evidence at the intended customer or agent surface.
-10. Conversation is an input and presentation adapter over Customer Request. It
-    must not become a second intent, persistence, recommendation, or recovery
+10. Conversation is an input and presentation adapter. It either invokes a
+    supported task or compiles a larger outcome into Customer Request. It must
+    not become a second intent, persistence, recommendation, task, or recovery
     domain.
+11. Useful tasks are independently valuable. A person or agent may enter with
+    prior work, stop after one result, continue progressively, or ask AE to
+    coordinate the remaining route.
+12. A full route is presented as understandable tasks, decisions and handoffs.
+    It is not required upfront, and approval for one task never grants authority
+    for another.
+13. Business onboarding is judged by the useful information and supported
+    actions it makes available to agents, not by registration alone.
+14. Global infrastructure is leverage, not the boundary of AE's ambition. Adopt
+    suitable hosting, tool, payment and checkout rails without outsourcing
+    business meaning, local supply relationships, comparison, coordination or
+    continuity to a single provider.
 
 ## Banned framing
 
