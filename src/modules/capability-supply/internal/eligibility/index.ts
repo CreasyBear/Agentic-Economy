@@ -16,3 +16,14 @@ export {
   eligibleBindingProjection,
   eligibleOfferingProjection,
 } from './projection'
+
+export type {
+  ActiveExactCapabilityContractResult,
+  EligiblePublicationRow,
+  EligiblePublishedBusiness,
+  EligibleSupplyPorts,
+} from './ports'
+
+export { MAX_ELIGIBLE_SUPPLY, listEligibleCapabilitySupply } from './list'
+
+export { getEligibleExactCapabilitySupply } from './exact'

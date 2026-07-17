@@ -42,11 +42,12 @@ describe('capability-supply operation-ledger thinness', () => {
     expect(convexHost).toContain('runQuarantineCommand(portsFor(db)')
   })
 
-  it('leaves raw writers and listEligible in the host', () => {
+  it('leaves raw writers in the host and delegates listEligible via ports', () => {
     expect(convexHost).toMatch(/export async function registerCapabilityOffering\s*\(/)
     expect(convexHost).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
     expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
     expect(convexHost).toMatch(/export async function listEligibleCapabilitySupply\s*\(/)
+    expect(convexHost).toContain('listEligibleCapabilitySupplyFromModule(eligibleSupplyPorts(db)')
     expect(convexHost).toMatch(/export const publishCapability\s*=/)
   })
 

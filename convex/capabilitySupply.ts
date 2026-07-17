@@ -20,10 +20,10 @@ import {
 } from '@/modules/capability-supply/internal/binding'
 import {
   bindingEligibilityIsValid,
-  compareStableIdentifier,
   desiredEligibility,
-  eligibleBindingProjection,
-  eligibleOfferingProjection,
+  getEligibleExactCapabilitySupply as getEligibleExactCapabilitySupplyFromModule,
+  listEligibleCapabilitySupply as listEligibleCapabilitySupplyFromModule,
+  MAX_ELIGIBLE_SUPPLY,
   offeringEligibilityIsValid,
   validEligibilityInput,
   type EligibilityInput,
@@ -75,9 +75,9 @@ import {
   getExactRegisteredCapabilityContract,
   registerCapabilityContractDocument,
 } from './capabilityContractDocuments'
+import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
 import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
 
-const MAX_ELIGIBLE_SUPPLY = 256
 const contractRefValue = v.object({
   capabilityId: v.string(),
   version: v.number(),
@@ -1420,105 +1420,18 @@ export async function setCapabilitySupplyEligibility(
 export async function listEligibleCapabilitySupply(
   db: QueryCtx['db'], input: Readonly<{ networkId: string; limit: number; now?: number }>,
 ) {
-  if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > MAX_ELIGIBLE_SUPPLY) {
-    return { kind: 'unavailable' as const, reason: 'limit_invalid' as const }
-  }
-  const bindings = await db.query('capabilityTransportBindings')
-    .withIndex('by_networkId_admission_conformance', (query) => (
-      query.eq('networkId', input.networkId).eq('admission', 'admitted').eq('conformance', 'conformant')
-    ))
-    .take(input.limit + 1)
-  if (bindings.length > input.limit) {
-    return { kind: 'unavailable' as const, reason: 'eligible_supply_limit_exceeded' as const }
-  }
-  const supplies: Array<{
-    offering: ReturnType<typeof eligibleOfferingProjection<Doc<'capabilityOfferings'>>>
-    binding: ReturnType<typeof eligibleBindingProjection<Doc<'capabilityTransportBindings'>>>
-    publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
-  }> = []
-  const now = input.now ?? Date.now()
-  for (const binding of bindings) {
-    if (!bindingIntegrityIsValid(binding) || !bindingEligibilityIsValid(binding)) {
-      return { kind: 'unavailable' as const, reason: 'supply_integrity_failure' as const }
-    }
-    const offering = await db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (query) => query.eq('offeringId', binding.offeringId)).unique()
-    if (offering === null || offering.status !== 'active') continue
-    if (!offeringIntegrityIsValid(offering) || !offeringEligibilityIsValid(offering)) {
-      return { kind: 'unavailable' as const, reason: 'supply_integrity_failure' as const }
-    }
-    if (
-      offering.networkId !== binding.networkId
-      || !sameCapabilityContractRef(contractRefFromRow(offering), contractRefFromRow(binding))
-    ) continue
-    if (await publishedBusiness(db, offering.businessId) === null) continue
-    const contract = await getActiveExactCapabilityContract(db, contractRefFromRow(binding))
-    if (contract.kind === 'unavailable') {
-      if (contract.reason === 'integrity_failure') {
-        return { kind: 'unavailable' as const, reason: 'contract_integrity_failure' as const }
-      }
-      continue
-    }
-    const publication = await db.query('capabilityPublications')
-      .withIndex('by_bindingId_and_disposition', (query) => (
-        query.eq('bindingId', binding.bindingId).eq('disposition', 'current')
-      )).unique()
-    const activePublication = publication !== null
-      && publication.readinessValidUntil !== undefined
-      && publicationLifecycle(publication, offering, binding, now).state === 'active'
-      ? {
-          publicationRef: publication.publicationRef, revision: publication.revision,
-          readinessValidUntil: publication.readinessValidUntil,
-        }
-      : undefined
-    supplies.push({
-      offering: eligibleOfferingProjection(offering), binding: eligibleBindingProjection(binding),
-      ...(activePublication === undefined ? {} : { publication: activePublication }),
-    })
-  }
-  supplies.sort((left, right) => (
-    compareStableIdentifier(left.offering.offeringId, right.offering.offeringId)
-    || compareStableIdentifier(left.binding.bindingId, right.binding.bindingId)
-  ))
-  return { kind: 'available' as const, supplies }
+  return listEligibleCapabilitySupplyFromModule(eligibleSupplyPorts(db), input)
 }
 
 export async function getEligibleExactCapabilitySupply(
   db: QueryCtx['db'],
   input: Readonly<{
-    networkId: string
-    businessId: string
-    offeringId: string
-    bindingId: string
+    networkId: string; businessId: string; offeringId: string; bindingId: string
     contractRef: ContractRef
-    expectedOfferingRegistrationHash: string
-    expectedBindingRegistrationHash: string
+    expectedOfferingRegistrationHash: string; expectedBindingRegistrationHash: string
   }>,
 ) {
-  const [offering, binding] = await Promise.all([
-    db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (query) => query.eq('offeringId', input.offeringId)).unique(),
-    db.query('capabilityTransportBindings')
-      .withIndex('by_bindingId', (query) => query.eq('bindingId', input.bindingId)).unique(),
-  ])
-  if (offering === null || binding === null
-    || String(offering.businessId) !== input.businessId
-    || offering.networkId !== input.networkId || binding.networkId !== input.networkId
-    || binding.offeringId !== offering.offeringId
-    || offering.registrationHash !== input.expectedOfferingRegistrationHash
-    || binding.registrationHash !== input.expectedBindingRegistrationHash
-    || offering.status !== 'active' || binding.admission !== 'admitted' || binding.conformance !== 'conformant'
-    || !sameCapabilityContractRef(contractRefFromRow(offering), input.contractRef)
-    || !sameCapabilityContractRef(contractRefFromRow(binding), input.contractRef)
-    || !offeringIntegrityIsValid(offering) || !offeringEligibilityIsValid(offering)
-    || !bindingIntegrityIsValid(binding) || !bindingEligibilityIsValid(binding)) {
-    return { kind: 'unavailable' as const }
-  }
-  const business = await publishedBusiness(db, offering.businessId)
-  if (business === null) return { kind: 'unavailable' as const }
-  const contract = await getActiveExactCapabilityContract(db, input.contractRef)
-  if (contract.kind !== 'found') return { kind: 'unavailable' as const }
-  return { kind: 'available' as const, offering, binding, business, contract }
+  return getEligibleExactCapabilitySupplyFromModule(eligibleSupplyPorts(db), input)
 }
 
 async function ownsPublishedBusiness(

@@ -77,6 +77,17 @@ describe('capability-supply convex host thinness', () => {
       }
     }
   })
+
+  it('delegates eligible inventory reads via ports while keeping thin wrappers', () => {
+    expect(convexHost).toContain('eligibleSupplyPorts')
+    expect(convexHost).toContain('listEligibleCapabilitySupplyFromModule')
+    expect(convexHost).toContain('getEligibleExactCapabilitySupplyFromModule')
+    expect(convexHost).toMatch(/export async function listEligibleCapabilitySupply\s*\(/)
+    expect(convexHost).toMatch(/export async function getEligibleExactCapabilitySupply\s*\(/)
+    expect(convexHost).not.toMatch(/reason: 'eligible_supply_limit_exceeded' as const/)
+    expect(convexHost).not.toMatch(/reason: 'supply_integrity_failure' as const/)
+    expect(convexHost).not.toMatch(/bindings\.length > input\.limit/)
+  })
 })
 
 function listTsFiles(directory: string): string[] {
