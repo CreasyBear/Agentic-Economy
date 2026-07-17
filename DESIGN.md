@@ -17,16 +17,21 @@ It is not decoration. Status colours remain functional.
 
 ## Product shape
 
-The primary customer object is the **recommendation**:
+The primary customer object is the **current task and its result**:
 
-- the need in the customer's words;
-- the recommended way forward;
+- what the person or agent is trying to do now;
+- the constraints and prior work being relied upon;
 - the business or businesses involved;
-- price, timing, and the few tradeoffs that matter;
-- one clear confirmation action;
-- alternatives when they change the decision.
+- what AE learned, prepared, sent or observed;
+- what remains unknown or blocked;
+- the useful next action and who owns it.
 
-The **route docket** is the technical projection behind that recommendation:
+A recommendation is one possible task result. It shows the recommended way
+forward, price, timing, the few tradeoffs that matter, one clear confirmation
+action, and alternatives when they change the decision.
+
+The **route docket** is the technical projection behind a complete route or a
+recommendation that depends on one:
 
 - the request and constraints;
 - ranked graph options;
@@ -40,9 +45,15 @@ Secondary objects are a network ledger, binding record, incident record, and run
 timeline. These replace inquiry receipts, household imagery, generic feature
 cards, and ornamental diagrams.
 
+The customer-facing route is a progressive composition of recognizable tasks:
+completed, current, next, optional, blocked, or human-owned. It is offered as AE
+learns enough to be useful. It is never presented as a graph the customer must
+design or approve wholesale before receiving value.
+
 ## Customer information architecture
 
-- **Ask** — public header; say what you need and clarify the important constraints.
+- **Ask** — public header; say what you need, ask for one task, or continue from
+  work already completed.
 - **Businesses** — public header; discover real businesses and what they can help with.
 - **Claim your business page** — public header; the supply-side entry.
 - **For agents** — footer; integrate through the machine-readable contract.
@@ -51,6 +62,10 @@ cards, and ornamental diagrams.
 Recommendation views progressively disclose **Why this**, **What it costs**,
 **What will be shared**, **Other options**, and **Technical details**. Graphs,
 digests, bindings, and protocols never lead the customer journey.
+
+Task views show **What you asked**, **What we know**, **What happened**, **What
+needs attention**, and **What you can do next**. Route views grow from those
+tasks rather than replacing them with a project dashboard.
 
 Use a familiar top navigation publicly and a compact side navigation for
 protected operational surfaces. Mobile navigation collapses structurally.
@@ -68,10 +83,16 @@ protected operational surfaces. Mobile navigation collapses structurally.
 5. Empty states teach the next valid action. Loading uses stable skeletons.
 6. Motion explains state change only, lasts 120–250ms, and respects reduced
    motion.
+7. Completing one task may reveal or recommend later tasks, but never selects or
+   authorizes them silently.
+8. A person or agent can stop after any completed task and later resume from the
+   durable result without reconstructing the conversation.
+9. Overall progress never hides an unresolved, externally owned, or unsupported
+   task behind a generic completion state.
 
 ## Copy
 
-Use the customer's nouns: need, business, option, price, timing, details,
+Use the customer's nouns: need, task, business, option, price, timing, details,
 confirmation, progress, and problem. Builder surfaces may use request, route
 quote, provider, capability, approval, run, and incident.
 
