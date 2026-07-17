@@ -282,8 +282,16 @@ describe('current V2 Customer Request application path', () => {
         facts: [{ inputKey: input.key, value: 'Find an option before the hard deadline.' }],
       }],
     }
+    const replacementRequest = 'Find an option with a flexible deadline.'
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(modelResponse(selected))
+      .mockResolvedValueOnce(modelResponse({
+        ...selected,
+        selections: [{
+          selectionKey: model.selectionKey,
+          facts: [{ inputKey: input.key, value: replacementRequest }],
+        }],
+      }))
       .mockRejectedValue(new Error('reported option feedback must not require model reinterpretation')))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
@@ -405,7 +413,31 @@ describe('current V2 Customer Request application path', () => {
         recordedAtRevision: 3,
       },
     ])
-    expect(fetch).toHaveBeenCalledTimes(1)
+    const recoveryCommand = {
+      requestRef: noAlternative.requestRef,
+      expectedRevision: noAlternative.revision,
+      idempotencyKey: 'replace:v2:reported-option-recovery',
+      message: replacementRequest,
+      mode: 'replace' as const,
+    }
+    const recovered = await customer.action(api.customerRequestApplication.refine, recoveryCommand)
+    expect(recovered).toMatchObject({
+      kind: 'request',
+      requestRef: noAlternative.requestRef,
+      revision: 4,
+      state: 'ready_to_compare',
+      nextAction: 'prepare_options',
+      summary: replacementRequest,
+    })
+    const recoveredRevision = await backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestV2Revisions')
+        .withIndex('by_requestId_and_requestRevision', (query) => (
+          query.eq('requestId', noAlternative.requestRef).eq('requestRevision', 4)
+        )).unique()
+    ))
+    expect(recoveredRevision?.aggregate.snapshot.routeExclusions).toBeUndefined()
+    await expect(customer.action(api.customerRequestApplication.refine, recoveryCommand)).resolves.toEqual(recovered)
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
 
   it('asks once for a registered procurement specification and continues the same Request after the answer', async () => {

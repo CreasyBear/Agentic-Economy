@@ -752,7 +752,9 @@ export const refine = action({
       requestRef: args.requestRef, revision: args.expectedRevision,
       summary: 'AE could not verify the current options. Try this request again.',
     }))
-    const routeExclusions = [...(current.aggregate.snapshot.routeExclusions ?? [])]
+    const routeExclusions = mode === 'replace'
+      ? []
+      : [...(current.aggregate.snapshot.routeExclusions ?? [])]
     if (args.reportedRouteRef !== undefined) {
       const generation = await loadCurrentRouteGeneration(ctx, current)
       const route = generation?.routes.find((candidate) => (
