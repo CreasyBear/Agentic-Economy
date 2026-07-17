@@ -245,6 +245,31 @@ test('partial progress remains legible when a later business result is unknown',
   await expect(page.getByRole('button', { name: 'Start a new Request' })).not.toBeVisible()
 })
 
+test('returning customer resumes the same uncertain Request without restarting work', async ({ page }) => {
+  const methods: string[] = []
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'ae.customer-request.active:v1',
+      JSON.stringify({ requestRef: 'request:partial-unknown' }),
+    )
+  })
+  await page.route('**/api/requests/**', async (route) => {
+    methods.push(route.request().method())
+    await route.fulfill({ json: unknownOutcomeView() })
+  })
+
+  await page.goto('/')
+
+  await expect(page.getByText('Still confirming', { exact: true })).toBeVisible()
+  await expect(page.getByText('1 of 2 business steps completed.')).toBeVisible()
+  await expect(page.getByText('AE will not repeat the step whose result is still being confirmed.')).toBeVisible()
+  await expect(page.getByText('Wait for confirmation before changing or starting this Request again.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'What do you need to make happen?' })).not.toBeVisible()
+  expect(methods.length).toBeGreaterThan(0)
+  expect(new Set(methods)).toEqual(new Set(['GET']))
+})
+
 test('a too-late stop request remains legible without offering cancellation again', async ({ page }) => {
   await page.route('**/api/requests', async (route) => await route.fulfill({ json: {
     kind: 'request', requestRef: 'request:too-late-to-stop', revision: 1,
