@@ -4,6 +4,7 @@ type Money = Readonly<{ currency: string; amountMinor: number }>
 
 type DirectJourney = Readonly<{
   kind: 'frozen_direct_agent_baseline'
+  cohortInputDigest?: string
   jobDigest: string
   predeclaredGain: string
   comparisonEligibility: Readonly<{ state: 'eligible' | 'ineligible' }>
@@ -23,6 +24,7 @@ type DirectJourney = Readonly<{
 
 type AeJourney = Readonly<{
   kind: 'cold_external_agent_journey'
+  cohortInputDigest?: string
   sandbox: true
   input: Readonly<{ request: string }>
   final: Readonly<{
@@ -70,7 +72,8 @@ type AeJourney = Readonly<{
 }>
 
 type ComparisonFailure =
-  | 'predeclared_gain_unsupported' | 'request_mismatch' | 'provider_set_mismatch'
+  | 'predeclared_gain_unsupported' | 'cohort_input_not_proven' | 'cohort_input_mismatch'
+  | 'request_mismatch' | 'provider_set_mismatch'
   | 'direct_baseline_ineligible'
   | 'direct_incomplete' | 'ae_incomplete'
   | 'direct_hard_constraint_not_satisfied' | 'ae_hard_constraint_not_satisfied'
@@ -87,6 +90,11 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
   const { direct, ae } = input
   const failures: ComparisonFailure[] = []
   if (direct.predeclaredGain !== 'recoverable_progress') failures.push('predeclared_gain_unsupported')
+  if (direct.cohortInputDigest === undefined || ae.cohortInputDigest === undefined) {
+    failures.push('cohort_input_not_proven')
+  } else if (direct.cohortInputDigest !== ae.cohortInputDigest) {
+    failures.push('cohort_input_mismatch')
+  }
   if (direct.jobDigest !== canonicalDigest(ae.input.request)) failures.push('request_mismatch')
   if (!sameStringSet(direct.invocations.map(({ business }) => business), ae.final.selectedBusinesses)) {
     failures.push('provider_set_mismatch')
@@ -127,6 +135,7 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
 
   return {
     kind: 'agent_journey_comparison' as const,
+    cohortInputDigest: direct.cohortInputDigest,
     predeclaredGain: direct.predeclaredGain,
     verdict: failures.length === 0 ? 'pass_for_declared_class' as const : 'fail_for_declared_class' as const,
     failures,

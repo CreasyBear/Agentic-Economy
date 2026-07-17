@@ -5,6 +5,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const direct = {
   kind: 'frozen_direct_agent_baseline' as const,
+  cohortInputDigest: 'sha256:' + 'c'.repeat(64),
   jobDigest: canonicalDigest('Find the cheapest labelled sandbox option.'),
   predeclaredGain: 'recoverable_progress',
   comparisonEligibility: { state: 'eligible' as const },
@@ -20,6 +21,7 @@ const direct = {
 
 const ae = {
   kind: 'cold_external_agent_journey' as const, sandbox: true as const,
+  cohortInputDigest: 'sha256:' + 'c'.repeat(64),
   input: { request: 'Find the cheapest labelled sandbox option.' },
   final: {
     state: 'completed' as const, runState: 'completed' as const, evidenceState: 'completed' as const,
@@ -223,5 +225,23 @@ describe('agent journey comparison', () => {
       ae: { ...ae, input: { request: 'A different job.' }, final: { ...ae.final, selectedBusinesses: ['Sandbox Quoter'] } },
     })
     expect(proof.failures).toEqual(expect.arrayContaining(['request_mismatch', 'provider_set_mismatch']))
+  })
+
+  it('fails closed when both paths are not independently bound to the same frozen cohort inputs', () => {
+    const proof = compareAgentJourneys({
+      direct: { ...direct, cohortInputDigest: 'sha256:' + 'a'.repeat(64) },
+      ae: { ...ae, cohortInputDigest: 'sha256:' + 'b'.repeat(64) },
+    })
+
+    expect(proof.verdict).toBe('fail_for_declared_class')
+    expect(proof.failures).toContain('cohort_input_mismatch')
+  })
+
+  it('fails closed when either path omits its frozen cohort-input proof', () => {
+    const { cohortInputDigest: _directDigest, ...directWithoutDigest } = direct
+    const proof = compareAgentJourneys({ direct: directWithoutDigest, ae })
+
+    expect(proof.verdict).toBe('fail_for_declared_class')
+    expect(proof.failures).toContain('cohort_input_not_proven')
   })
 })
