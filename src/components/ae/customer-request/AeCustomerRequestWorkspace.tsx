@@ -12,6 +12,10 @@ import {
 import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
+import {
+  resolveReplacementCommandKey,
+  type ReplacementCommandIdentity,
+} from '@/modules/customer-request/replacement-command-key'
 import { CustomerRequestRepeatPermissionControl } from './CustomerRequestRepeatPermissionControl'
 
 type SubmitResponse = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: string }> | Readonly<{ error: string }>
@@ -49,6 +53,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
   const [turns, setTurns] = useState<readonly ConversationTurn[]>([])
   const [editingRevision, setEditingRevision] = useState<number | undefined>()
   const requestIdentityRef = useRef<BrowserRequestIdentity | undefined>(undefined)
+  const replacementCommandRef = useRef<ReplacementCommandIdentity | undefined>(undefined)
   const submittingRef = useRef(false)
 
   useEffect(() => {
@@ -97,17 +102,27 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
       const endpoint = replacing
         ? `/api/requests/${encodeURIComponent(identity.requestRef)}/messages`
         : '/api/requests'
+      const requestBody = replacing
+        ? (() => {
+            const replacementCommand = resolveReplacementCommandKey(replacementCommandRef.current, {
+              requestRef: identity.requestRef,
+              expectedRevision: editingRevision,
+              message: need.trim(),
+              mode: 'replace',
+            }, () => crypto.randomUUID())
+            replacementCommandRef.current = replacementCommand
+            return {
+              idempotencyKey: replacementCommand.idempotencyKey,
+              expectedRevision: editingRevision, message: need.trim(), mode: 'replace' as const,
+            }
+          })()
+        : {
+            idempotencyKey: `submit:${identity.requestRef}:0`, requestRef: identity.requestRef,
+            agentRef: identity.agentRef, request: need.trim(), routing: { network: 'ae:public' },
+          }
       const requestInit = {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(replacing
-          ? {
-              idempotencyKey: `replace:${identity.requestRef}:${editingRevision}`,
-              expectedRevision: editingRevision, message: need.trim(), mode: 'replace',
-            }
-          : {
-              idempotencyKey: `submit:${identity.requestRef}:0`, requestRef: identity.requestRef,
-              agentRef: identity.agentRef, request: need.trim(), routing: { network: 'ae:public' },
-            }),
+        body: JSON.stringify(requestBody),
       }
       const response = replacing
         ? await fetch(endpoint, requestInit)
@@ -124,6 +139,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
         }]),
       ])
       rememberRequestIdentity(result.requestRef)
+      if (replacing && result.revision !== editingRevision) replacementCommandRef.current = undefined
       setEditingRevision(undefined)
       setState({ kind: 'request', projection: result })
     } catch {
@@ -143,6 +159,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
     setAnswer('')
     setTurns([])
     setEditingRevision(undefined)
+    replacementCommandRef.current = undefined
     requestIdentityRef.current = undefined
     forgetStoredRequestIdentity()
     setState({ kind: 'idle' })

@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AeCustomerRequestWorkspace } from '@/components/ae/customer-request/AeCustomerRequestWorkspace'
+import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
 
 describe('customer Request workspace', () => {
   beforeEach(() => {
@@ -19,8 +20,8 @@ describe('customer Request workspace', () => {
   it('opens with a customer question instead of explaining the request mechanism', () => {
     render(<AeCustomerRequestWorkspace />)
 
-    expect(screen.getByRole('heading', { level: 1, name: 'What can we help you find?' })).toBeTruthy()
-    expect(screen.getByText('Enter a place, a type of business, or describe the situation. We’ll ask what matters and help you compare your options.')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'What do you need to make happen?' })).toBeTruthy()
+    expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation)).toBeTruthy()
     expect(screen.queryByText('Start with whatever you know.')).toBeNull()
     expect(screen.queryByText(/work out the next decision/i)).toBeNull()
     expect(screen.queryByText('Lookup instruction')).toBeNull()
@@ -847,7 +848,7 @@ describe('customer Request workspace', () => {
       method: 'POST',
     }))
     expect(secondBody).toEqual({
-      idempotencyKey: 'replace:request:uuid-1:1', expectedRevision: 1,
+      idempotencyKey: 'replace:request:uuid-1:1:uuid-3', expectedRevision: 1,
       message: 'Lunch in Fremantle', mode: 'replace',
     })
 
@@ -857,8 +858,49 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     await screen.findByRole('button', { name: 'Edit this Request' })
     const thirdBody = JSON.parse(String((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.body))
-    expect(thirdBody).toMatchObject({ requestRef: 'request:uuid-3', agentRef: 'web:uuid-4', request: 'A separate request' })
+    expect(thirdBody).toMatchObject({ requestRef: 'request:uuid-4', agentRef: 'web:uuid-5', request: 'A separate request' })
     expect(thirdBody).not.toHaveProperty('expectedRevision')
+  })
+
+  it('reuses an exact replacement key but gives a changed edit a new operation key', async () => {
+    let sequence = 0
+    vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })
+    const projection = {
+      kind: 'request', requestRef: 'request:uuid-1', revision: 1, state: 'unsupported',
+      summary: 'Find an accessible itinerary', nextAction: 'revise_request', missingFields: [], options: [],
+    } as const
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json(projection))
+      .mockResolvedValueOnce(Response.json(projection))
+      .mockResolvedValueOnce(Response.json({
+        ...projection, revision: 2, state: 'ready_to_compare', nextAction: 'prepare_options',
+        summary: 'Find an accessible itinerary under AUD 11,000',
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: projection.summary },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit this Request' }))
+    await screen.findByText('Editing revision 1 of this Request.')
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
+    const editAgain = await screen.findByRole('button', { name: 'Edit this Request' })
+    await waitFor(() => expect((editAgain as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(editAgain)
+    await screen.findByText('Editing revision 1 of this Request.')
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find an accessible itinerary under AUD 11,000' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
+    await screen.findByRole('button', { name: 'Show available options' })
+
+    const exactRetry = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body))
+    const changedEdit = JSON.parse(String((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.body))
+    expect(exactRetry.idempotencyKey).toBe('replace:request:uuid-1:1:uuid-3')
+    expect(changedEdit.idempotencyKey).toBe('replace:request:uuid-1:1:uuid-4')
+    expect(changedEdit.idempotencyKey).not.toBe(exactRetry.idempotencyKey)
   })
 
   it('explains protected data sharing before any provider preparation', async () => {
