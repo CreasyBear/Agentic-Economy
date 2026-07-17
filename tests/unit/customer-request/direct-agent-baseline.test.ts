@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { runFrozenDirectAgentBaseline } from '@/modules/customer-request/direct-agent-baseline'
 
 describe('frozen direct-agent baseline', () => {
@@ -42,6 +43,7 @@ describe('frozen direct-agent baseline', () => {
       agent: { name: 'frozen-direct-integrator', version: '1' },
       predeclaredGain: 'recoverable_progress',
       hardConstraints: { maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 } },
+      cohort: baselineCohort(),
       fetch,
       now: sequence(1_000, 1_125),
     })
@@ -58,6 +60,23 @@ describe('frozen direct-agent baseline', () => {
       totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', amountMinor: 1_000 } },
       recovery: { state: 'unsupported', reason: 'direct_calls_have_no_durable_request_to_resume' },
       resultUsability: { state: 'usable', result: { quoteReference: 'sandbox-quote:one' } },
+      cohortInputDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
+      disclosureLedger: [
+        {
+          business: 'Sandbox Route Resolver',
+          sentFields: ['request'],
+          withheldCustomerFields: ['passengers'],
+          inputDigest: canonicalDigest({ request: 'Resolve a labelled sandbox service and prepare its quote' }),
+          outputDigest: canonicalDigest({ serviceReference: 'sandbox-service:one' }),
+        },
+        {
+          business: 'Sandbox Route Quoter',
+          sentFields: ['serviceReference'],
+          withheldCustomerFields: ['passengers'],
+          inputDigest: canonicalDigest({ serviceReference: 'sandbox-service:one' }),
+          outputDigest: canonicalDigest({ quoteReference: 'sandbox-quote:one' }),
+        },
+      ],
       claimBoundary: 'labelled_sandbox_direct_baseline_not_real_supply_or_customer_value',
     })
     expect(calls.map(({ method }) => method)).toEqual(['GET', 'GET', 'POST', 'POST'])
@@ -79,6 +98,39 @@ describe('frozen direct-agent baseline', () => {
     expect(proof.comparisonEligibility).toEqual({
       state: 'ineligible', reason: 'provider_discovery_missing_cannot_count_as_ae_gain',
     })
+  })
+
+  it('stops before invocation when discovered provider fields differ from the frozen cohort', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      expect(init?.method ?? 'GET').toBe('GET')
+      const url = input.toString()
+      return Response.json(url.endsWith('/route-resolver')
+        ? discovery(url, 'Sandbox Route Resolver', 300, ['request'], ['serviceReference'])
+        : discovery(url, 'Sandbox Route Quoter', 700, ['serviceReference'], ['quoteReference']))
+    })
+    const cohort = baselineCohort()
+    const proof = await runFrozenDirectAgentBaseline({
+      job: cohort.request,
+      providerOrigins: cohort.providerOrigins,
+      credential: 'secret',
+      agent: { name: 'frozen-direct-integrator', version: '1' },
+      predeclaredGain: 'recoverable_progress',
+      hardConstraints: { maximumTotalCost: cohort.maximumTotalCost },
+      cohort: {
+        ...cohort,
+        providerInputs: [
+          { provider: 'Sandbox Route Resolver', fields: ['request', 'passengers'] },
+          { provider: 'Sandbox Route Quoter', fields: ['serviceReference'] },
+        ],
+      },
+      fetch,
+    })
+
+    expect(proof.completion).toMatchObject({ state: 'blocked', reason: 'cohort_provider_inputs_mismatch' })
+    expect(proof.comparisonEligibility).toEqual({
+      state: 'ineligible', reason: 'cohort_conditions_not_equal',
+    })
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
 
   it('allows HTTP only for loopback development provider origins', async () => {
@@ -178,4 +230,36 @@ function discovery(
 function sequence(...values: readonly number[]): () => number {
   let index = 0
   return () => values[Math.min(index++, values.length - 1)] ?? 0
+}
+
+function baselineCohort() {
+  return {
+    request: 'Resolve a labelled sandbox service and prepare its quote',
+    customerAnswers: { passengers: 2 },
+    providerOrigins: [
+      'https://agentic-economy-phi.vercel.app/api/sandbox/providers/route-resolver',
+      'https://agentic-economy-phi.vercel.app/api/sandbox/providers/route-quoter',
+    ],
+    maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+    authorityScope: {
+      recipients: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+      purposes: ['prepare_quote', 'resolve_request'],
+      effects: ['prepare_quote'],
+    },
+    providerInputs: [
+      { provider: 'Sandbox Route Resolver', fields: ['request'] },
+      { provider: 'Sandbox Route Quoter', fields: ['serviceReference'] },
+    ],
+    providerOutputs: [
+      {
+        provider: 'Sandbox Route Resolver',
+        digest: canonicalDigest({ serviceReference: 'sandbox-service:one' }),
+      },
+      {
+        provider: 'Sandbox Route Quoter',
+        digest: canonicalDigest({ quoteReference: 'sandbox-quote:one' }),
+      },
+    ],
+    resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1',
+  } as const
 }

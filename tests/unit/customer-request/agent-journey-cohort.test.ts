@@ -61,6 +61,10 @@ function cohort() {
       { provider: 'Sandbox Resolver', digest: 'sha256:' + 'a'.repeat(64) },
       { provider: 'Sandbox Quoter', digest: 'sha256:' + 'b'.repeat(64) },
     ],
+    providerInputs: [
+      { provider: 'Sandbox Resolver', fields: ['request'] },
+      { provider: 'Sandbox Quoter', fields: ['serviceReference'] },
+    ],
     resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1',
   } as const
 }

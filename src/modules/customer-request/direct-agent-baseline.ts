@@ -1,6 +1,11 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
+import {
+  freezeAgentJourneyCohort,
+  type AgentJourneyCohortInput,
+} from '@/modules/customer-request/agent-journey-cohort'
 
 const moneySchema = z.strictObject({ currency: z.string().min(1), amountMinor: z.number().int().nonnegative() })
 const jsonObjectSchema = z.record(z.string(), z.unknown())
@@ -38,12 +43,17 @@ export type FrozenDirectAgentBaselineInput = Readonly<{
   agent: Readonly<{ name: string; version: string }>
   predeclaredGain: string
   hardConstraints: Readonly<{ maximumTotalCost?: Money }>
+  cohort?: AgentJourneyCohortInput
   fetch?: typeof globalThis.fetch
   now?: () => number
 }>
 
 export async function runFrozenDirectAgentBaseline(input: FrozenDirectAgentBaselineInput) {
   const startedAt = (input.now ?? Date.now)()
+  const cohort = input.cohort === undefined ? undefined : freezeAgentJourneyCohort(input.cohort)
+  if (cohort !== undefined && !cohortMatchesDirectInput(cohort.input, input)) {
+    throw new Error('direct_baseline_cohort_conditions_mismatch')
+  }
   const discoveryResults = await Promise.all(input.providerOrigins.map(async (origin) => (
     await discoverProvider(origin, input.fetch ?? fetch)
   )))
@@ -54,6 +64,12 @@ export async function runFrozenDirectAgentBaseline(input: FrozenDirectAgentBasel
       reason: 'provider_discovery_missing_cannot_count_as_ae_gain' as const,
     })
   }
+  if (cohort !== undefined && !cohortProviderContractsMatch(cohort.input, discoveries)) {
+    return blockedProof(input, startedAt, discoveries.length, 'cohort_provider_inputs_mismatch', {
+      state: 'ineligible' as const,
+      reason: 'cohort_conditions_not_equal' as const,
+    }, discoveries)
+  }
 
   const total = totalMaximumCost(discoveries)
   const constraint = evaluateMaximumCostConstraint(input.hardConstraints.maximumTotalCost, total)
@@ -63,13 +79,17 @@ export async function runFrozenDirectAgentBaseline(input: FrozenDirectAgentBasel
     }, discoveries, total, constraint)
   }
 
-  const available: Record<string, unknown> = { request: input.job }
+  const customerAnswers = cohort?.input.customerAnswers ?? {}
+  const available: Record<string, unknown> = { request: input.job, ...customerAnswers }
   const remaining = [...discoveries]
   const invocations: Array<Readonly<{
     business: string
     endpoint: string
     inputFields: readonly string[]
     output: Readonly<Record<string, unknown>>
+    inputDigest: string
+    outputDigest: string
+    withheldCustomerFields: readonly string[]
     receipt?: string
   }>> = []
   let schemaMappings = 0
@@ -103,10 +123,24 @@ export async function runFrozenDirectAgentBaseline(input: FrozenDirectAgentBasel
       }, discoveries, total, constraint, invocations.length + 1, schemaMappings, invocations)
     }
     Object.assign(available, output)
+    const inputDigest = canonicalDigest(body as StableHashValue)
+    const outputDigest = canonicalDigest(output as StableHashValue)
+    const declaredOutput = cohort?.input.providerOutputs.find(
+      ({ provider: declaredProvider }) => declaredProvider === provider.business.name,
+    )
+    if (declaredOutput !== undefined && declaredOutput.digest !== outputDigest) {
+      return blockedProof(input, startedAt, discoveries.length, 'cohort_provider_outputs_mismatch', {
+        state: 'ineligible' as const,
+        reason: 'cohort_conditions_not_equal' as const,
+      }, discoveries, total, constraint, invocations.length + 1, schemaMappings, invocations)
+    }
     const receipt = response.headers.get('Provider-Receipt') ?? undefined
     invocations.push({
       business: provider.business.name, endpoint: provider.operation.endpoint,
-      inputFields: provider.operation.inputSchema.required, output,
+      inputFields: provider.operation.inputSchema.required, output, inputDigest, outputDigest,
+      withheldCustomerFields: Object.keys(customerAnswers)
+        .filter((field) => !provider.operation.inputSchema.required.includes(field))
+        .sort(),
       ...(receipt === undefined ? {} : { receipt }),
     })
   }
@@ -128,6 +162,13 @@ export async function runFrozenDirectAgentBaseline(input: FrozenDirectAgentBasel
     totalCostAccuracy: { state: 'exact' as const, total },
     recovery: { state: 'unsupported' as const, reason: 'direct_calls_have_no_durable_request_to_resume' as const },
     resultUsability: { state: 'usable' as const, result },
+    disclosureLedger: invocations.map((invocation) => ({
+      business: invocation.business,
+      sentFields: invocation.inputFields,
+      withheldCustomerFields: invocation.withheldCustomerFields,
+      inputDigest: invocation.inputDigest,
+      outputDigest: invocation.outputDigest,
+    })),
     invocations,
     claimBoundary: 'labelled_sandbox_direct_baseline_not_real_supply_or_customer_value' as const,
   }
@@ -188,12 +229,14 @@ function burden(
 }
 
 function proofBase(input: FrozenDirectAgentBaselineInput, startedAt: number) {
+  const cohort = input.cohort === undefined ? undefined : freezeAgentJourneyCohort(input.cohort)
   return {
     kind: 'frozen_direct_agent_baseline' as const,
     agent: input.agent,
     jobDigest: canonicalDigest(input.job),
     predeclaredGain: input.predeclaredGain,
     policy: { ...FROZEN_POLICY, digest: canonicalDigest(FROZEN_POLICY) },
+    ...(cohort === undefined ? {} : { cohortInputDigest: cohort.digest }),
     startedAt,
   }
 }
@@ -203,9 +246,11 @@ function blockedProof(
   startedAt: number,
   providerCount: number,
   reason: 'provider_discovery_unavailable' | 'hard_constraint_violated' | 'provider_chain_unresolved'
-    | 'provider_invocation_failed' | 'provider_result_invalid' | 'provider_chain_empty',
+    | 'provider_invocation_failed' | 'provider_result_invalid' | 'provider_chain_empty'
+    | 'cohort_provider_inputs_mismatch' | 'cohort_provider_outputs_mismatch',
   comparisonEligibility: Readonly<{ state: 'eligible' } | {
-    state: 'ineligible'; reason: 'provider_discovery_missing_cannot_count_as_ae_gain'
+    state: 'ineligible'
+    reason: 'provider_discovery_missing_cannot_count_as_ae_gain' | 'cohort_conditions_not_equal'
   }>,
   discoveries: readonly Discovery[] = [],
   total: Money = { currency: 'AUD', amountMinor: 0 },
@@ -217,6 +262,9 @@ function blockedProof(
     endpoint: string
     inputFields: readonly string[]
     output: Readonly<Record<string, unknown>>
+    inputDigest: string
+    outputDigest: string
+    withheldCustomerFields: readonly string[]
     receipt?: string
   }>[] = [],
 ) {
@@ -238,6 +286,38 @@ function blockedProof(
       ? { state: 'unusable' as const, reason }
       : { state: 'partial' as const, reason, result: partialResult },
     invocations,
+    disclosureLedger: invocations.map((invocation) => ({
+      business: invocation.business,
+      sentFields: invocation.inputFields,
+      withheldCustomerFields: invocation.withheldCustomerFields,
+      inputDigest: invocation.inputDigest,
+      outputDigest: invocation.outputDigest,
+    })),
     claimBoundary: 'labelled_sandbox_direct_baseline_not_real_supply_or_customer_value' as const,
   }
+}
+
+function cohortMatchesDirectInput(
+  cohort: ReturnType<typeof freezeAgentJourneyCohort>['input'],
+  input: FrozenDirectAgentBaselineInput,
+): boolean {
+  const maximum = input.hardConstraints.maximumTotalCost
+  return cohort.request === input.job
+    && canonicalDigest(cohort.providerOrigins) === canonicalDigest([...input.providerOrigins].sort())
+    && maximum !== undefined
+    && canonicalDigest(cohort.maximumTotalCost) === canonicalDigest(maximum)
+}
+
+function cohortProviderContractsMatch(
+  cohort: ReturnType<typeof freezeAgentJourneyCohort>['input'],
+  discoveries: readonly Discovery[],
+): boolean {
+  const discoveredInputs = discoveries.map(({ business, operation }) => ({
+    provider: business.name,
+    fields: [...operation.inputSchema.required].sort(),
+  })).sort((left, right) => left.provider.localeCompare(right.provider))
+  const declaredOutputs = cohort.providerOutputs.map(({ provider }) => provider).sort()
+  const discoveredProviders = discoveries.map(({ business }) => business.name).sort()
+  return canonicalDigest(discoveredInputs) === canonicalDigest(cohort.providerInputs)
+    && canonicalDigest(declaredOutputs) === canonicalDigest(discoveredProviders)
 }

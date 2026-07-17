@@ -1,6 +1,11 @@
 import { pathToFileURL } from 'node:url'
 
 import { compareAgentJourneys } from '../../src/modules/customer-request/agent-journey-comparison'
+import {
+  freezeAgentJourneyCohort,
+  parseAgentJourneyCohortInput,
+  type AgentJourneyCohortInput,
+} from '../../src/modules/customer-request/agent-journey-cohort'
 import { runFrozenDirectAgentBaseline } from '../../src/modules/customer-request/direct-agent-baseline'
 import {
   runHostedCustomerRequestJourney,
@@ -17,6 +22,7 @@ type DirectBaselineConfig = Readonly<{
   credential: string
   predeclaredGain: 'recoverable_progress'
   maximumTotalCost: Readonly<{ currency: string; amountMinor: number }>
+  cohort: AgentJourneyCohortInput
 }>
 
 type CustomerRequestJourneyFinish =
@@ -125,13 +131,20 @@ export async function runCustomerRequestProductionSmoke(
     credential: config.directBaseline.credential,
     predeclaredGain: config.directBaseline.predeclaredGain,
     hardConstraints: { maximumTotalCost: config.directBaseline.maximumTotalCost },
+    cohort: config.directBaseline.cohort,
     agent: { name: 'frozen-direct-provider-integrator', version: '1' },
     fetch: config.fetch,
   })
   if (proof.final.state === 'in_progress') {
     throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
   }
-  const terminalProof = proof as Parameters<typeof compareAgentJourneys>[0]['ae']
+  const aeCohort = freezeAgentJourneyCohort(parseAgentJourneyCohortInput(
+    JSON.parse(JSON.stringify(config.directBaseline.cohort)),
+  ))
+  const terminalProof = {
+    ...proof,
+    cohortInputDigest: aeCohort.digest,
+  } as Parameters<typeof compareAgentJourneys>[0]['ae']
   const comparison = compareAgentJourneys({ direct, ae: terminalProof })
   process.stdout.write(`${JSON.stringify(comparison)}\n`)
   if (comparison.verdict !== 'pass_for_declared_class') {
@@ -149,6 +162,7 @@ function parseDirectBaseline(
     credential: optionalText(env.AE_DIRECT_PROVIDER_CREDENTIAL),
     gain: optionalText(env.AE_DIRECT_PREDECLARED_GAIN),
     maximum: optionalText(env.AE_DIRECT_MAXIMUM_TOTAL_COST_JSON),
+    cohort: optionalText(env.AE_AGENT_JOURNEY_COHORT_JSON),
   }
   if (Object.values(raw).every((value) => value === undefined)) return undefined
   if (Object.values(raw).some((value) => value === undefined)) {
@@ -160,13 +174,14 @@ function parseDirectBaseline(
   }
   const origins: unknown = JSON.parse(required(raw.origins, 'AE_DIRECT_PROVIDER_ORIGINS_JSON'))
   const maximum: unknown = JSON.parse(required(raw.maximum, 'AE_DIRECT_MAXIMUM_TOTAL_COST_JSON'))
+  const cohort = parseAgentJourneyCohortInput(JSON.parse(required(raw.cohort, 'AE_AGENT_JOURNEY_COHORT_JSON')))
   if (!Array.isArray(origins) || !origins.every((value) => typeof value === 'string')) {
     throw new Error('AE_DIRECT_PROVIDER_ORIGINS_JSON must contain at least two provider origins')
   }
   if (!isMoney(maximum)) throw new Error('AE_DIRECT_MAXIMUM_TOTAL_COST_JSON must be nonnegative money')
   const config: DirectBaselineConfig = {
     providerOrigins: origins, credential: required(raw.credential, 'AE_DIRECT_PROVIDER_CREDENTIAL'),
-    predeclaredGain: raw.gain, maximumTotalCost: maximum,
+    predeclaredGain: raw.gain, maximumTotalCost: maximum, cohort,
   }
   assertDirectBaselineConfig(config)
   return config

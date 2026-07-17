@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url'
 import { loadEnv } from 'vite'
 
 import { compareAgentJourneys } from '../../src/modules/customer-request/agent-journey-comparison'
+import {
+  freezeAgentJourneyCohort,
+  parseAgentJourneyCohortInput,
+} from '../../src/modules/customer-request/agent-journey-cohort'
 import { runFrozenDirectAgentBaseline } from '../../src/modules/customer-request/direct-agent-baseline'
 import {
   resolveCustomerRequestJourneyKeyring,
@@ -73,6 +77,7 @@ export function customerRequestDevelopmentSmokeConfig(
     AE_DIRECT_PROVIDER_CREDENTIAL: env.AE_DIRECT_PROVIDER_CREDENTIAL,
     AE_DIRECT_PREDECLARED_GAIN: env.AE_DIRECT_PREDECLARED_GAIN,
     AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: env.AE_DIRECT_MAXIMUM_TOTAL_COST_JSON,
+    AE_AGENT_JOURNEY_COHORT_JSON: env.AE_AGENT_JOURNEY_COHORT_JSON,
   })
   const journeyKeyring = env.AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY === undefined
     ? undefined
@@ -199,13 +204,20 @@ export async function runCustomerRequestDevelopmentSmoke(
     credential: config.directBaseline.credential,
     predeclaredGain: config.directBaseline.predeclaredGain,
     hardConstraints: { maximumTotalCost: config.directBaseline.maximumTotalCost },
+    cohort: config.directBaseline.cohort,
     agent: { name: 'frozen-direct-development-integrator', version: '1' },
     fetch: config.fetch,
   })
   if (proof.final.state === 'in_progress') {
     throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
   }
-  const terminalProof = proof as Parameters<typeof compareAgentJourneys>[0]['ae']
+  const aeCohort = freezeAgentJourneyCohort(parseAgentJourneyCohortInput(
+    JSON.parse(JSON.stringify(config.directBaseline.cohort)),
+  ))
+  const terminalProof = {
+    ...proof,
+    cohortInputDigest: aeCohort.digest,
+  } as Parameters<typeof compareAgentJourneys>[0]['ae']
   const comparison = compareAgentJourneys({ direct, ae: terminalProof })
   const combined = {
     kind: 'development_customer_request_comparison' as const,

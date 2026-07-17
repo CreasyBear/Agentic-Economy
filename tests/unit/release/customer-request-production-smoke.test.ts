@@ -75,7 +75,7 @@ describe('customer Request production smoke entrypoint', () => {
       AE_CUSTOMER_REQUEST_API_KEY: 'ak_agent',
       AE_CUSTOMER_REQUEST_FINISH: 'compelete',
     })).toThrow(
-      'AE_CUSTOMER_REQUEST_FINISH must be cancel, cancel_after_current, complete, outcome_unknown, invalid_output, provider_denied, or partial_result',
+      'AE_CUSTOMER_REQUEST_FINISH must be cancel, cancel_after_current, adapter_cancel_accepted, adapter_cancel_rejected, adapter_cancel_unknown, complete, outcome_unknown, invalid_output, provider_denied, or partial_result',
     )
   })
 
@@ -92,12 +92,14 @@ describe('customer Request production smoke entrypoint', () => {
       AE_DIRECT_PROVIDER_CREDENTIAL: 'provider_credential',
       AE_DIRECT_PREDECLARED_GAIN: 'recoverable_progress',
       AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","amountMinor":1000}',
+      AE_AGENT_JOURNEY_COHORT_JSON: JSON.stringify(comparisonCohort()),
     })).toMatchObject({
       finish: 'complete',
       directBaseline: {
         providerOrigins: ['https://resolver.example/api', 'https://quoter.example/api'],
         credential: 'provider_credential', predeclaredGain: 'recoverable_progress',
         maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+        cohort: comparisonCohort(),
       },
     })
   })
@@ -112,6 +114,7 @@ describe('customer Request production smoke entrypoint', () => {
       AE_DIRECT_PROVIDER_CREDENTIAL: 'provider_credential',
       AE_DIRECT_PREDECLARED_GAIN: 'recoverable_progress',
       AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","amountMinor":1000}',
+      AE_AGENT_JOURNEY_COHORT_JSON: JSON.stringify(comparisonCohort()),
     })).toThrow('Direct comparison requires AE_CUSTOMER_REQUEST_FINISH=complete')
     expect(() => customerRequestProductionSmokeConfigFromEnvironment({
       AE_CUSTOMER_REQUEST_FINISH: 'complete',
@@ -119,6 +122,7 @@ describe('customer Request production smoke entrypoint', () => {
       AE_DIRECT_PROVIDER_CREDENTIAL: 'provider_credential',
       AE_DIRECT_PREDECLARED_GAIN: 'faster',
       AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","amountMinor":1000}',
+      AE_AGENT_JOURNEY_COHORT_JSON: JSON.stringify(comparisonCohort()),
     })).toThrow('AE_DIRECT_PREDECLARED_GAIN must be recoverable_progress')
   })
 
@@ -132,6 +136,7 @@ describe('customer Request production smoke entrypoint', () => {
         providerOrigins: ['https://resolver.example/api', 'https://quoter.example/api'],
         credential: 'provider_credential', predeclaredGain: 'recoverable_progress',
         maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+        cohort: comparisonCohort(),
       },
     })).rejects.toThrow('Direct comparison requires a completed hosted journey')
     expect(fetch).not.toHaveBeenCalled()
@@ -144,8 +149,34 @@ describe('customer Request production smoke entrypoint', () => {
         providerOrigins: ['http://resolver.example/api', 'https://quoter.example/api'],
         credential: 'provider_credential', predeclaredGain: 'recoverable_progress',
         maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+        cohort: comparisonCohort(['http://resolver.example/api', 'https://quoter.example/api']),
       },
     })).rejects.toThrow('must contain at least two safe provider origins')
     expect(fetch).not.toHaveBeenCalled()
   })
 })
+
+function comparisonCohort(
+  providerOrigins: readonly string[] = ['https://resolver.example/api', 'https://quoter.example/api'],
+) {
+  return {
+    request: 'Find a sandbox option.',
+    customerAnswers: {},
+    providerOrigins,
+    maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+    authorityScope: {
+      recipients: ['Resolver', 'Quoter'],
+      purposes: ['resolve', 'quote'],
+      effects: ['prepare_quote'],
+    },
+    providerInputs: [
+      { provider: 'Resolver', fields: ['request'] },
+      { provider: 'Quoter', fields: ['serviceReference'] },
+    ],
+    providerOutputs: [
+      { provider: 'Resolver', digest: 'sha256:' + 'a'.repeat(64) },
+      { provider: 'Quoter', digest: 'sha256:' + 'b'.repeat(64) },
+    ],
+    resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1',
+  } as const
+}

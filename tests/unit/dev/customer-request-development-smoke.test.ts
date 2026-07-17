@@ -234,6 +234,7 @@ describe('customer Request development smoke configuration', () => {
       AE_DIRECT_PROVIDER_CREDENTIAL: 'provider-secret',
       AE_DIRECT_PREDECLARED_GAIN: 'recoverable_progress',
       AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: JSON.stringify({ currency: 'AUD', amountMinor: 1_000 }),
+      AE_AGENT_JOURNEY_COHORT_JSON: JSON.stringify(developmentComparisonCohort()),
     }, 'a'.repeat(40))).toMatchObject({
       directBaseline: {
         predeclaredGain: 'recoverable_progress',
@@ -256,3 +257,29 @@ describe('customer Request development smoke configuration', () => {
     }, 'a'.repeat(40))).toThrow('Direct comparison requires complete explicit configuration')
   })
 })
+
+function developmentComparisonCohort() {
+  return {
+    request: 'Resolve a labelled sandbox service, then prepare its quote. Keep the total under AUD 15.',
+    customerAnswers: {},
+    providerOrigins: [
+      'https://loyal-peacock-107.convex.site/api/sandbox/providers/route-resolver',
+      'https://loyal-peacock-107.convex.site/api/sandbox/providers/route-quoter',
+    ],
+    maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+    authorityScope: {
+      recipients: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+      purposes: ['resolve_sandbox_service_reference', 'prepare_sandbox_service_quote'],
+      effects: ['prepare_quote'],
+    },
+    providerInputs: [
+      { provider: 'Sandbox Route Resolver', fields: ['request'] },
+      { provider: 'Sandbox Route Quoter', fields: ['serviceReference'] },
+    ],
+    providerOutputs: [
+      { provider: 'Sandbox Route Resolver', digest: 'sha256:' + 'a'.repeat(64) },
+      { provider: 'Sandbox Route Quoter', digest: 'sha256:' + 'b'.repeat(64) },
+    ],
+    resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1',
+  } as const
+}
