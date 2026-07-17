@@ -10,7 +10,16 @@ import {
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
-import { projectCustomerRequestProblemTracking } from '@/modules/customer-request/problem-tracking'
+import {
+  decideBusinessProblemClaim,
+  decideCustomerProblemReply,
+  decideCustomerProblemReport,
+  decideSupportProblemStatus,
+  projectBusinessProblem,
+  projectCustomerEvidenceProblems,
+  projectSupportProblemExport,
+  projectSupportProblemList,
+} from '@/modules/customer-request/route-execution/problem-support'
 import { routeStepGrantDigest } from '@/modules/customer-request/route-mandate-admission'
 import { routeStepGrantValue } from '@/modules/customer-request/runtime'
 
@@ -1161,43 +1170,42 @@ export const reportProblem = internalMutation({
     const commandKey = `route-problem:v1:${canonicalDigest({
       principalId: args.principalId, requestId: args.requestId, idempotencyKey: args.idempotencyKey,
     })}`
-    const commandDigest = canonicalDigest(args)
-    const legacyCommandDigest = canonicalDigest({
-      requestId: args.requestId, principalId: args.principalId, idempotencyKey: args.idempotencyKey,
-      category: args.category, summary: args.summary,
-    })
     const prior = await ctx.db.query('customerRequestRouteProblemReports')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    if (prior !== null) return (
-      prior.commandDigest === commandDigest
-      || (prior.evidenceReceiptRefs === undefined && prior.visibility === undefined
-        && prior.commandDigest === legacyCommandDigest)
-    )
-      ? {
-          kind: 'replayed' as const, reportRef: prior.reportRef, reportedAt: prior.createdAt,
+    if (prior !== null) {
+      const decision = decideCustomerProblemReport({ args, head, prior, now: Date.now() })
+      if (decision.kind === 'reported' || decision.kind === 'replayed') {
+        return {
+          kind: decision.kind,
+          reportRef: decision.reportRef,
+          reportedAt: decision.reportedAt,
           affected: {
-            step: prior.step ?? 1,
-            ...(prior.attemptRef === undefined ? {} : { attemptRef: prior.attemptRef }),
-            ...(prior.businessName === undefined ? {} : { business: prior.businessName }),
+            step: decision.affected.step,
+            ...(decision.affected.attemptRef === undefined
+              ? {}
+              : { attemptRef: decision.affected.attemptRef }),
+            ...(decision.affected.business === undefined
+              ? {}
+              : { business: decision.affected.business }),
           },
-          visibility: prior.visibility ?? 'customer_and_ae_only',
-          evidence: (prior.evidenceReceiptRefs ?? []).map((receiptRef, index) => ({
-            receiptRef, label: `Attached evidence ${index + 1}`,
+          visibility: decision.visibility,
+          evidence: decision.evidence.map((item) => ({
+            receiptRef: item.receiptRef,
+            label: item.label,
           })),
         }
-      : { kind: 'conflict' as const }
-    const reportedAt = Date.now()
-    const reportRef = `problem:${canonicalDigest({ commandKey, commandDigest, runRef: head.currentRunRef })}`
+      }
+      if (decision.kind === 'conflict' || decision.kind === 'refused') {
+        return decision
+      }
+      throw new Error('customer_request_route_problem_integrity_failure')
+    }
     const run = await ctx.db.query('customerRequestRouteRuns')
       .withIndex('by_runRef', (query) => query.eq('runRef', head.currentRunRef)).unique()
     if (run === null || run.principalId !== args.principalId) {
       return { kind: 'refused' as const, reason: 'request_not_found' as const }
     }
     const affectedStep = args.affectedStep ?? run.currentPosition
-    if (!Number.isSafeInteger(affectedStep) || affectedStep < 1 || affectedStep > run.totalSteps
-      || args.evidenceReceiptRefs.length > 20 || new Set(args.evidenceReceiptRefs).size !== args.evidenceReceiptRefs.length) {
-      return { kind: 'refused' as const, reason: 'evidence_not_found' as const }
-    }
     const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
       .withIndex('by_runRef_and_position', (query) => (
         query.eq('runRef', run.runRef).eq('position', affectedStep)
@@ -1205,35 +1213,40 @@ export const reportProblem = internalMutation({
     if (attempt === null || !routeAttemptIntegrityValid(attempt)) {
       return { kind: 'refused' as const, reason: 'evidence_not_found' as const }
     }
-    const availableEvidence = (attempt.evidence ?? []).map((item, index) => ({
-      receiptRef: `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
-      label: `Result evidence ${index + 1}`,
-    }))
-    const selectedEvidence = args.evidenceReceiptRefs.map((receiptRef) => (
-      availableEvidence.find((item) => item.receiptRef === receiptRef)
-    ))
-    if (selectedEvidence.some((item) => item === undefined)) {
-      return { kind: 'refused' as const, reason: 'evidence_not_found' as const }
-    }
-    const businessName = run.businesses?.[attempt.position - 1]?.name
-    await ctx.db.insert('customerRequestRouteProblemReports', {
-      reportRef, commandKey, commandDigest, principalId: args.principalId,
-      requestId: args.requestId, runRef: head.currentRunRef, mandateRef: run.mandateRef,
-      attemptRef: attempt.attemptRef, step: attempt.position,
-      ...(businessName === undefined ? {} : { businessName }),
-      evidenceReceiptRefs: args.evidenceReceiptRefs,
-      visibility: args.visibility,
-      category: args.category, summary: args.summary.trim(), createdAt: reportedAt,
+    const decision = decideCustomerProblemReport({
+      args, head, prior: null, run, attempt, now: Date.now(),
     })
-    return {
-      kind: 'reported' as const, reportRef, reportedAt,
-      affected: {
-        step: attempt.position, attemptRef: attempt.attemptRef,
-        ...(businessName === undefined ? {} : { business: businessName }),
-      },
-      visibility: args.visibility,
-      evidence: selectedEvidence.filter((item) => item !== undefined),
+    if (decision.kind === 'append') {
+      const { businessName, evidenceReceiptRefs, ...record } = decision.record
+      await ctx.db.insert('customerRequestRouteProblemReports', {
+        ...record,
+        evidenceReceiptRefs: [...evidenceReceiptRefs],
+        ...(businessName === undefined ? {} : { businessName }),
+      })
+      return {
+        kind: decision.result.kind,
+        reportRef: decision.result.reportRef,
+        reportedAt: decision.result.reportedAt,
+        affected: {
+          step: decision.result.affected.step,
+          ...(decision.result.affected.attemptRef === undefined
+            ? {}
+            : { attemptRef: decision.result.affected.attemptRef }),
+          ...(decision.result.affected.business === undefined
+            ? {}
+            : { business: decision.result.affected.business }),
+        },
+        visibility: decision.result.visibility,
+        evidence: decision.result.evidence.map((item) => ({
+          receiptRef: item.receiptRef,
+          label: item.label,
+        })),
+      }
     }
+    if (decision.kind === 'conflict' || decision.kind === 'refused') {
+      return decision
+    }
+    throw new Error('customer_request_route_problem_integrity_failure')
   },
 })
 
@@ -1335,39 +1348,29 @@ export const readProblemForBusiness = internalQuery({
       return { kind: 'refused', reason: 'authority_denied' }
     }
     const businessReports = await readProblemBusinessReports(ctx, report.reportRef)
-    if (businessReports.some((item) => item.businessId !== String(business._id))) {
-      throw new Error('customer_request_route_problem_business_report_integrity_failure')
-    }
-    const availableEvidence = labelAttemptEvidence(
+    const projected = projectBusinessProblem({
+      report,
       attempt,
-      (attempt.evidence ?? []).map((item) => (
-        `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`
-      )),
-    )
-    const evidence = labelAttemptEvidence(attempt, report.evidenceReceiptRefs ?? [])
-    if (evidence.length !== (report.evidenceReceiptRefs ?? []).length
-      || businessReports.some((item) => (
-        labelAttemptEvidence(attempt, item.evidenceReceiptRefs).length !== item.evidenceReceiptRefs.length
-      ))) {
-      throw new Error('customer_request_route_problem_evidence_integrity_failure')
-    }
+      businessName: business.name,
+      businessId: String(business._id),
+      businessReports,
+    })
     return {
-      kind: 'business_problem',
-      reportRef: report.reportRef,
-      business: business.name,
-      category: report.category,
-      customerStatement: report.summary,
-      causality: 'unknown',
-      resolution: 'not_adjudicated',
-      decisionAuthority: 'not_assigned',
-      evidence,
-      availableEvidence,
-      businessClaims: businessReports.map((item) => ({
-        statementRef: item.statementRef,
-        causalityPosition: item.causalityPosition,
-        statement: item.statement,
-        evidence: labelAttemptEvidence(attempt, item.evidenceReceiptRefs),
-        recordedAt: item.createdAt,
+      ...projected,
+      evidence: projected.evidence.map((item) => ({
+        receiptRef: item.receiptRef,
+        label: item.label,
+      })),
+      availableEvidence: projected.availableEvidence.map((item) => ({
+        receiptRef: item.receiptRef,
+        label: item.label,
+      })),
+      businessClaims: projected.businessClaims.map((claim) => ({
+        ...claim,
+        evidence: claim.evidence.map((item) => ({
+          receiptRef: item.receiptRef,
+          label: item.label,
+        })),
       })),
     }
   },
@@ -1404,69 +1407,48 @@ export const recordProblemBusinessReport = internalMutation({
     if (business === null || owner === null || owner.clerkUserId !== identity.subject) {
       return { kind: 'refused', reason: 'authority_denied' }
     }
-    const statement = args.statement.trim()
-    if (args.idempotencyKey.trim().length === 0 || statement.length === 0 || statement.length > 1_000
-      || args.evidenceReceiptRefs.length > 20
-      || new Set(args.evidenceReceiptRefs).size !== args.evidenceReceiptRefs.length) {
-      return { kind: 'refused', reason: 'invalid_report' }
-    }
     const commandKey = `route-problem-business-report:v1:${canonicalDigest({
       reportRef: args.reportRef,
       businessId: String(business._id),
       idempotencyKey: args.idempotencyKey,
     })}`
-    const commandDigest = canonicalDigest(args)
     const prior = await ctx.db.query('customerRequestRouteProblemBusinessReports')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    if (prior !== null) {
-      const priorEvidence = labelAttemptEvidence(attempt, prior.evidenceReceiptRefs)
-      if (priorEvidence.length !== prior.evidenceReceiptRefs.length) {
-        throw new Error('customer_request_route_problem_business_report_integrity_failure')
-      }
-      return prior.commandDigest === commandDigest
-        ? {
-          kind: 'replayed',
-          statementRef: prior.statementRef,
-          reportRef: prior.reportRef,
-          business: prior.businessName,
-          causalityPosition: prior.causalityPosition,
-          statement: prior.statement,
-          evidence: priorEvidence,
-          recordedAt: prior.createdAt,
-        }
-        : { kind: 'conflict' }
-    }
-    const evidence = labelAttemptEvidence(attempt, args.evidenceReceiptRefs)
-    if (evidence.length !== args.evidenceReceiptRefs.length) {
-      return { kind: 'refused', reason: 'evidence_not_found' }
-    }
-    const recordedAt = Date.now()
-    const statementRef = `problem-business-report:${canonicalDigest({
-      commandKey, commandDigest, attemptRef: attempt.attemptRef,
-    })}`
-    await ctx.db.insert('customerRequestRouteProblemBusinessReports', {
-      statementRef,
-      reportRef: report.reportRef,
-      commandKey,
-      commandDigest,
-      businessId: String(business._id),
-      businessName: business.name,
+    const decision = decideBusinessProblemClaim({
+      args,
+      report,
+      attempt,
+      business: { id: String(business._id), name: business.name },
       actorRef: identity.tokenIdentifier,
-      causalityPosition: args.causalityPosition,
-      statement,
-      evidenceReceiptRefs: args.evidenceReceiptRefs,
-      createdAt: recordedAt,
+      prior,
+      now: Date.now(),
     })
-    return {
-      kind: 'recorded',
-      statementRef,
-      reportRef: report.reportRef,
-      business: business.name,
-      causalityPosition: args.causalityPosition,
-      statement,
-      evidence,
-      recordedAt,
+    if (decision.kind === 'append') {
+      await ctx.db.insert('customerRequestRouteProblemBusinessReports', {
+        ...decision.record,
+        evidenceReceiptRefs: [...decision.record.evidenceReceiptRefs],
+      })
+      return {
+        ...decision.result,
+        evidence: decision.result.evidence.map((item) => ({
+          receiptRef: item.receiptRef,
+          label: item.label,
+        })),
+      }
     }
+    if (decision.kind === 'recorded' || decision.kind === 'replayed') {
+      return {
+        ...decision,
+        evidence: decision.evidence.map((item) => ({
+          receiptRef: item.receiptRef,
+          label: item.label,
+        })),
+      }
+    }
+    if (decision.kind === 'conflict' || decision.kind === 'refused') {
+      return decision
+    }
+    throw new Error('customer_request_route_problem_business_report_integrity_failure')
   },
 })
 
@@ -1521,47 +1503,39 @@ export const updateProblemStatus = internalMutation({
     const report = await ctx.db.query('customerRequestRouteProblemReports')
       .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
     if (report === null) return { kind: 'refused', reason: 'report_not_found' }
-    const message = args.publicMessage.trim()
-    if (!Number.isSafeInteger(args.expectedVersion) || args.expectedVersion < 0
-      || args.idempotencyKey.trim().length === 0 || message.length === 0 || message.length > 1_000) {
-      return { kind: 'refused', reason: 'invalid_update' }
-    }
     const commandKey = `route-problem-update:v1:${canonicalDigest({
       reportRef: args.reportRef,
       actorRef: authority.membership.clerkUserId,
       idempotencyKey: args.idempotencyKey,
     })}`
-    const commandDigest = canonicalDigest(args)
     const prior = await ctx.db.query('customerRequestRouteProblemUpdates')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    if (prior !== null) return prior.commandDigest === commandDigest
-      ? {
-          kind: 'updated',
-          reportRef: prior.reportRef,
-          version: prior.version,
-          state: prior.state,
-          recordedAt: prior.createdAt,
-        }
-      : { kind: 'conflict', reason: 'idempotency_key_reused' }
-    const updates = await readProblemUpdates(ctx, args.reportRef)
-    if (updates.length !== args.expectedVersion) {
-      return { kind: 'conflict', reason: 'stale_version' }
+    if (prior !== null) {
+      const decision = decideSupportProblemStatus({
+        args,
+        actorRef: authority.membership.clerkUserId,
+        updates: [],
+        prior,
+        now: Date.now(),
+      })
+      if (decision.kind === 'append') {
+        throw new Error('customer_request_route_problem_update_integrity_failure')
+      }
+      return decision
     }
-    const version = updates.length + 1
-    const recordedAt = Date.now()
-    await ctx.db.insert('customerRequestRouteProblemUpdates', {
-      updateRef: `problem-update:${canonicalDigest({ commandKey, commandDigest, version })}`,
-      reportRef: args.reportRef,
-      commandKey,
-      commandDigest,
-      version,
-      source: 'ae_support',
+    const updates = await readProblemUpdates(ctx, args.reportRef)
+    const decision = decideSupportProblemStatus({
+      args,
       actorRef: authority.membership.clerkUserId,
-      state: args.state,
-      message,
-      createdAt: recordedAt,
+      updates,
+      prior: null,
+      now: Date.now(),
     })
-    return { kind: 'updated', reportRef: args.reportRef, version, state: args.state, recordedAt }
+    if (decision.kind === 'append') {
+      await ctx.db.insert('customerRequestRouteProblemUpdates', { ...decision.record })
+      return decision.result
+    }
+    return decision
   },
 })
 
@@ -1581,57 +1555,37 @@ export const replyProblem = internalMutation({
     if (report === null || report.requestId !== args.requestId || report.principalId !== args.principalId) {
       return { kind: 'refused', reason: 'report_not_found' }
     }
-    const message = args.message.trim()
-    if (!Number.isSafeInteger(args.expectedVersion) || args.expectedVersion < 1
-      || args.idempotencyKey.trim().length === 0 || message.length === 0 || message.length > 1_000) {
-      return { kind: 'refused', reason: 'invalid_update' }
-    }
     const commandKey = `route-problem-reply:v1:${canonicalDigest({
       reportRef: args.reportRef,
       principalId: args.principalId,
       idempotencyKey: args.idempotencyKey,
     })}`
-    const commandDigest = canonicalDigest(args)
     const prior = await ctx.db.query('customerRequestRouteProblemUpdates')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    if (prior !== null) return prior.commandDigest === commandDigest
-      ? {
-          kind: 'updated',
-          reportRef: prior.reportRef,
-          version: prior.version,
-          state: prior.state,
-          recordedAt: prior.createdAt,
-        }
-      : { kind: 'conflict', reason: 'idempotency_key_reused' }
+    if (prior !== null) {
+      const decision = decideCustomerProblemReply({
+        args,
+        updates: [],
+        prior,
+        now: Date.now(),
+      })
+      if (decision.kind === 'append') {
+        throw new Error('customer_request_route_problem_update_integrity_failure')
+      }
+      return decision
+    }
     const updates = await readProblemUpdates(ctx, args.reportRef)
-    const latest = updates.at(-1)
-    if (updates.length !== args.expectedVersion) {
-      return { kind: 'conflict', reason: 'stale_version' }
-    }
-    if (latest?.state !== 'waiting_for_customer') {
-      return { kind: 'refused', reason: 'invalid_update' }
-    }
-    const version = updates.length + 1
-    const recordedAt = Date.now()
-    await ctx.db.insert('customerRequestRouteProblemUpdates', {
-      updateRef: `problem-update:${canonicalDigest({ commandKey, commandDigest, version })}`,
-      reportRef: args.reportRef,
-      commandKey,
-      commandDigest,
-      version,
-      source: 'customer',
-      actorRef: args.principalId,
-      state: 'investigating',
-      message,
-      createdAt: recordedAt,
+    const decision = decideCustomerProblemReply({
+      args,
+      updates,
+      prior: null,
+      now: Date.now(),
     })
-    return {
-      kind: 'updated',
-      reportRef: args.reportRef,
-      version,
-      state: 'investigating',
-      recordedAt,
+    if (decision.kind === 'append') {
+      await ctx.db.insert('customerRequestRouteProblemUpdates', { ...decision.record })
+      return decision.result
     }
+    return decision
   },
 })
 
@@ -1679,31 +1633,15 @@ export const listProblemsForSupport = internalQuery({
     }
     const limit = Number.isSafeInteger(args.limit) ? Math.min(Math.max(args.limit, 1), 100) : 50
     const reports = await ctx.db.query('customerRequestRouteProblemReports').order('desc').take(limit)
-    const updatesByProblem = await Promise.all(
+    const updatesByReport = await Promise.all(
       reports.map(async (problem) => readProblemUpdates(ctx, problem.reportRef)),
     )
     return {
       kind: 'allowed' as const,
-      rows: reports.map((problem, index) => {
-        const updates = updatesByProblem[index] ?? []
-        const latest = updates.at(-1)
-        const tracking = projectCustomerRequestProblemTracking(
-          problem.createdAt,
-          Date.now(),
-          latest === undefined ? undefined : { state: latest.state, recordedAt: latest.createdAt },
-        )
-        return {
-          reportRef: problem.reportRef,
-          requestRef: problem.requestId,
-          version: updates.length,
-          state: tracking.state,
-          nextActor: tracking.nextActor,
-          category: problem.category,
-          summary: problem.summary,
-          ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
-          reportedAt: problem.createdAt,
-          lastUpdatedAt: latest?.createdAt ?? problem.createdAt,
-        }
+      rows: projectSupportProblemList({
+        reports,
+        updatesByReport,
+        observedAt: Date.now(),
       }),
     }
   },
@@ -1886,10 +1824,7 @@ export const exportProblemForSupport = internalQuery({
         .withIndex('by_runRef_and_position', (query) => query.eq('runRef', problem.runRef))
         .collect(),
     ])
-    if (problem.attemptRef !== undefined && attempt === null) {
-      throw new Error('customer_request_route_problem_attempt_integrity_failure')
-    }
-    if (attempt !== null && (attempt.requestId !== problem.requestId || attempt.position !== problem.step)) {
+    if (attempt !== null && !routeAttemptIntegrityValid(attempt)) {
       throw new Error('customer_request_route_problem_attempt_integrity_failure')
     }
     const requestRevision = mandateIssue === null
@@ -1897,309 +1832,34 @@ export const exportProblemForSupport = internalQuery({
       : requestRevisions.find((revision) => (
           revision.requestRevision === mandateIssue.mandate.request.requestRevision
         ))
-    if (run === null || run.requestId !== problem.requestId) {
+    if (run === null) {
       throw new Error('customer_request_route_problem_reconstruction_integrity_failure')
     }
     const businessNames = new Map<string, string>()
-    if (problem.mandateRef !== undefined) {
-      if (requestRevision === undefined || mandateIssue === null
-        || mandateIssue.requestId !== problem.requestId
-        || run.mandateRef !== mandateIssue.mandateRef) {
-        throw new Error('customer_request_route_problem_reconstruction_integrity_failure')
-      }
+    if (problem.mandateRef !== undefined && mandateIssue !== null) {
       for (const step of mandateIssue.mandate.route.steps) {
         const business = await ctx.db.get(step.businessId as Id<'businesses'>)
         if (business === null) throw new Error('customer_request_route_problem_business_integrity_failure')
         businessNames.set(step.businessId, business.name)
       }
     }
-    const latest = updates.at(-1)
-    const tracking = projectCustomerRequestProblemTracking(
-      problem.createdAt,
-      Date.now(),
-      latest === undefined ? undefined : { state: latest.state, recordedAt: latest.createdAt },
-    )
-    const evidenceByReceipt = new Map<string, string>()
-    if (attempt !== null) {
-      for (const [index, item] of (attempt.evidence ?? []).entries()) {
-        evidenceByReceipt.set(
-          `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
-          `Result evidence ${index + 1}`,
-        )
-      }
-    }
-    if ((problem.evidenceReceiptRefs ?? []).some((receiptRef) => !evidenceByReceipt.has(receiptRef))) {
-      throw new Error('customer_request_route_problem_evidence_integrity_failure')
-    }
-    if (businessReports.some((report) => (
-      report.businessId !== attempt?.grant.step.businessId
-      || report.evidenceReceiptRefs.some((receiptRef) => !evidenceByReceipt.has(receiptRef))
-    ))) {
-      throw new Error('customer_request_route_problem_business_report_integrity_failure')
-    }
-    return {
-      kind: 'problem_export' as const,
-      reportRef: problem.reportRef,
-      requestRef: problem.requestId,
-      version: updates.length,
-      state: tracking.state,
-      category: problem.category,
-      summary: problem.summary,
-      claimSource: 'customer' as const,
-      causality: 'unknown' as const,
-      resolution: 'not_adjudicated' as const,
-      nextAction: tracking.nextAction,
-      nextActor: tracking.nextActor,
-      ...(tracking.nextUpdateDueAt === undefined ? {} : { nextUpdateDueAt: tracking.nextUpdateDueAt }),
-      decisionAuthority: tracking.decisionAuthority,
-      visibility: problem.visibility ?? 'customer_and_ae_only',
-      evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
-        receiptRef,
-        label: evidenceByReceipt.get(receiptRef)!,
-      })),
-      reportedAt: problem.createdAt,
-      affected: {
-        step: problem.step ?? 1,
-        ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
-      },
-      claims: [
-        {
-          claimSource: 'customer' as const,
-          causalityPosition: 'reported_problem' as const,
-          statement: problem.summary,
-          evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
-            receiptRef,
-            label: evidenceByReceipt.get(receiptRef)!,
-          })),
-          recordedAt: problem.createdAt,
-        },
-        ...businessReports.map((businessReport) => ({
-          claimSource: 'business' as const,
-          causalityPosition: businessReport.causalityPosition,
-          statement: businessReport.statement,
-          business: businessReport.businessName,
-          evidence: businessReport.evidenceReceiptRefs.map((receiptRef) => ({
-            receiptRef,
-            label: evidenceByReceipt.get(receiptRef)!,
-          })),
-          recordedAt: businessReport.createdAt,
-        })),
-      ],
-      history: [
-        {
-          version: 0,
-          state: 'received' as const,
-          source: 'customer' as const,
-          message: problem.summary,
-          recordedAt: problem.createdAt,
-        },
-        ...updates.map((update) => ({
-          version: update.version,
-          state: update.state,
-          source: update.source,
-          message: update.message,
-          recordedAt: update.createdAt,
-        })),
-      ],
-      ...(requestRevision === undefined || mandateIssue === null
-        ? {}
-        : {
-            reconstruction: supportProblemReconstruction({
-              requestRevision,
-              mandate: mandateIssue.mandate,
-              run,
-              revocation,
-              reservations,
-              attempts,
-              businessNames,
-              tracking,
-            }),
-          }),
-    }
+    const observedAt = Date.now()
+    return projectSupportProblemExport({
+      problem,
+      updates,
+      businessReports,
+      attempt,
+      requestRevision,
+      mandateIssue,
+      run,
+      revocation,
+      reservations,
+      attempts,
+      businessNames,
+      observedAt,
+    })
   },
 })
-
-function supportProblemReconstruction(input: Readonly<{
-  requestRevision: {
-    requestRevision: number
-    aggregate: { snapshot: { intent: string } }
-  }
-  mandate: {
-    issuedAt: number
-    expiresAt: number
-    route: {
-      maximumTotalSpend: { currency: string; amountMinor: number }
-      steps: readonly Readonly<{
-        position: number
-        businessId: string
-        dataScope: readonly Readonly<{
-          classification: 'public' | 'personal' | 'sensitive' | 'credential'
-          recipient:
-            | { kind: 'registered_binding'; businessId: string; bindingId: string }
-            | { kind: 'named_recipient'; recipientId: string }
-          purposes: readonly string[]
-        }>[]
-        effects: readonly Readonly<{
-          class: 'data_release' | 'financial_exposure' | 'external_state_change'
-          reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible'
-        }>[]
-        recovery: {
-          idempotency: 'not_applicable' | 'required'
-          recovery: 'retry_safe' | 'reconcile_required'
-        }
-      }>[]
-    }
-  }
-  run: {
-    state: 'queued' | 'running' | 'outcome_unknown' | 'completed' | 'failed' | 'cancelled'
-    completedSteps: number
-    totalSteps: number
-    businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
-  }
-  revocation: null | { recordedAt: number }
-  reservations: readonly Readonly<{ reservedSpend: { currency: string; amountMinor: number } }>[]
-  attempts: readonly Readonly<{
-    position: number
-    state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
-    attemptRef: string
-    evidence?: readonly Readonly<{
-      evidenceId: string
-      outputPointer: string
-      schemaIdentity: string
-      valueDigest: string
-    }>[]
-  }>[]
-  businessNames: ReadonlyMap<string, string>
-  tracking: {
-    nextAction: 'await_status_update' | 'check_status' | 'provide_information' | 'none'
-    nextActor: 'ae' | 'customer' | 'none'
-  }
-}>) {
-  const businesses = new Map((input.run.businesses ?? []).map((business) => [
-    business.businessRef,
-    business.name,
-  ]))
-  for (const [businessId, name] of input.businessNames) businesses.set(businessId, name)
-  const admitted = input.reservations.reduce((total, reservation) => {
-    if (reservation.reservedSpend.currency !== input.mandate.route.maximumTotalSpend.currency) {
-      throw new Error('customer_request_route_problem_spend_currency_integrity_failure')
-    }
-    return total + reservation.reservedSpend.amountMinor
-  }, 0)
-  const attempts = new Map(input.attempts.map((attempt) => [attempt.position, attempt]))
-  const allIdempotent = input.mandate.route.steps.every((step) => step.recovery.idempotency === 'required')
-  const allRetrySafe = input.mandate.route.steps.every((step) => step.recovery.recovery === 'retry_safe')
-  const maximum = input.mandate.route.maximumTotalSpend
-  return {
-    request: {
-      revision: input.requestRevision.requestRevision,
-      ordinaryRequest: input.requestRevision.aggregate.snapshot.intent,
-    },
-    choice: {
-      businesses: input.mandate.route.steps.map((step) => (
-        businesses.get(step.businessId) ?? 'Registered business'
-      )),
-      selectedBecause: [
-        input.mandate.route.steps.length === 1
-          ? 'The registered business can provide the requested result.'
-          : `All ${input.mandate.route.steps.length} registered steps can provide the requested result.`,
-        `The confirmed option stays within ${formatSupportMoney(maximum)}.`,
-      ],
-      confirmedAt: input.mandate.issuedAt,
-      validUntil: input.mandate.expiresAt,
-    },
-    authority: {
-      state: input.revocation !== null
-        ? 'revoked' as const
-        : Date.now() >= input.mandate.expiresAt ? 'expired' as const : 'current' as const,
-      source: 'customer_confirmation' as const,
-      spend: {
-        limit: { ...maximum },
-        admitted: { currency: maximum.currency, amountMinor: admitted },
-      },
-      dataSharing: input.mandate.route.steps.flatMap((step) => {
-        const released = supportAttemptWasReleased(attempts.get(step.position)?.state)
-        return step.dataScope.map((scope) => ({
-          classification: scope.classification,
-          recipient: scope.recipient.kind === 'named_recipient'
-            ? customerLabel(scope.recipient.recipientId)
-            : businesses.get(scope.recipient.businessId) ?? 'Registered business',
-          purposes: [...scope.purposes],
-          releaseState: released ? 'business_step_released' as const : 'authorized' as const,
-        }))
-      }),
-      effects: input.mandate.route.steps.flatMap((step) => {
-        const released = supportAttemptWasReleased(attempts.get(step.position)?.state)
-        return step.effects.map((effect) => ({
-          class: effect.class,
-          reversibility: effect.reversibility,
-          releaseState: released ? 'business_step_released' as const : 'authorized' as const,
-        }))
-      }),
-    },
-    execution: {
-      state: input.run.state,
-      completedSteps: input.run.completedSteps,
-      totalSteps: input.run.totalSteps,
-      duplicateRisk: allIdempotent
-        ? 'protected_by_required_idempotency' as const
-        : 'mixed_or_not_applicable' as const,
-      steps: input.mandate.route.steps.map((step) => {
-        const attempt = attempts.get(step.position)
-        return {
-          step: step.position,
-          business: businesses.get(step.businessId) ?? 'Registered business',
-          state: attempt === undefined ? 'blocked' as const : supportAttemptState(attempt.state),
-          evidence: (attempt?.evidence ?? []).map((item) => ({
-            receiptRef: `evidence:${canonicalDigest({ attemptRef: attempt!.attemptRef, evidence: item })}`,
-            label: customerLabel(item.evidenceId),
-          })),
-        }
-      }),
-    },
-    recovery: {
-      nextActor: input.tracking.nextActor,
-      nextAction: input.tracking.nextAction,
-      retry: input.run.state === 'outcome_unknown'
-        ? 'blocked_until_reconciled' as const
-        : input.run.state === 'failed'
-          ? allRetrySafe ? 'safe' as const : 'blocked_until_reconciled' as const
-          : 'not_needed' as const,
-    },
-  }
-}
-
-function supportAttemptState(
-  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
-) {
-  if (state === 'leased') return 'ready_to_contact' as const
-  if (state === 'dispatched') return 'contacting' as const
-  if (state === 'accepted') return 'awaiting_result' as const
-  if (state === 'succeeded') return 'completed' as const
-  return state
-}
-
-function supportAttemptWasReleased(
-  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
-    | undefined,
-): boolean {
-  return state === 'dispatched' || state === 'accepted' || state === 'succeeded'
-    || state === 'failed' || state === 'outcome_unknown'
-}
-
-function formatSupportMoney(value: Readonly<{ currency: string; amountMinor: number }>): string {
-  return `${value.currency} ${(value.amountMinor / 100).toFixed(2)}`
-}
-
-function customerLabel(value: string): string {
-  const words = value.replaceAll(/[-_]+/gu, ' ')
-  return `${words.slice(0, 1).toUpperCase()}${words.slice(1)}`
-}
-
-const exportedStepState = v.union(
-  v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
-  v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
-)
 
 async function readProblemUpdates(ctx: MutationCtx | QueryCtx, reportRef: string) {
   const updates = await ctx.db.query('customerRequestRouteProblemUpdates')
@@ -2221,19 +1881,10 @@ async function readProblemBusinessReports(ctx: MutationCtx | QueryCtx, reportRef
   return reports
 }
 
-function labelAttemptEvidence(
-  attempt: Doc<'customerRequestRouteStepAttempts'>,
-  receiptRefs: readonly string[],
-) {
-  const available = new Map((attempt.evidence ?? []).map((item, index) => [
-    `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
-    `Result evidence ${index + 1}`,
-  ]))
-  return receiptRefs.flatMap((receiptRef) => {
-    const label = available.get(receiptRef)
-    return label === undefined ? [] : [{ receiptRef, label }]
-  })
-}
+const exportedStepState = v.union(
+  v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
+  v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
+)
 
 export const exportCustomerEvidence = internalQuery({
   args: { requestId: v.string(), principalId: v.string() },
@@ -2357,95 +2008,12 @@ export const exportCustomerEvidence = internalQuery({
           label: `Result evidence ${index + 1}`,
         })),
       })),
-      problems: problems.map((problem, problemIndex) => {
-        const updates = updatesByProblem[problemIndex] ?? []
-        const businessReports = businessReportsByProblem[problemIndex] ?? []
-        const latest = updates.at(-1)
-        const tracking = projectCustomerRequestProblemTracking(
-          problem.createdAt,
-          Date.now(),
-          latest === undefined ? undefined : {
-            state: latest.state,
-            recordedAt: latest.createdAt,
-          },
-        )
-        const attempt = attempts.find((candidate) => candidate.attemptRef === problem.attemptRef)
-        const evidenceByReceipt = new Map<string, string>()
-        if (attempt !== undefined) {
-          for (const [index, item] of (attempt.evidence ?? []).entries()) {
-            evidenceByReceipt.set(
-              `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
-              `Result evidence ${index + 1}`,
-            )
-          }
-        }
-        if (businessReports.some((businessReport) => (
-          businessReport.businessId !== attempt?.grant.step.businessId
-          || businessReport.evidenceReceiptRefs.some((receiptRef) => !evidenceByReceipt.has(receiptRef))
-        ))) {
-          throw new Error('customer_request_route_problem_business_report_integrity_failure')
-        }
-        return {
-          reportRef: problem.reportRef,
-          version: updates.length,
-          state: tracking.state,
-          category: problem.category, summary: problem.summary,
-          claimSource: 'customer' as const, causality: 'unknown' as const,
-          resolution: 'not_adjudicated' as const,
-          nextAction: tracking.nextAction,
-          nextActor: tracking.nextActor,
-          ...(tracking.nextUpdateDueAt === undefined ? {} : { nextUpdateDueAt: tracking.nextUpdateDueAt }),
-          decisionAuthority: tracking.decisionAuthority,
-          visibility: problem.visibility ?? 'customer_and_ae_only',
-          evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
-            receiptRef, label: evidenceByReceipt.get(receiptRef) ?? 'Recorded evidence',
-          })),
-          reportedAt: problem.createdAt,
-          affected: {
-            step: problem.step ?? 1,
-            ...(problem.attemptRef === undefined ? {} : { attemptRef: problem.attemptRef }),
-            ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
-          },
-          claims: [
-            {
-              claimSource: 'customer' as const,
-              causalityPosition: 'reported_problem' as const,
-              statement: problem.summary,
-              evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
-                receiptRef,
-                label: evidenceByReceipt.get(receiptRef) ?? 'Recorded evidence',
-              })),
-              recordedAt: problem.createdAt,
-            },
-            ...businessReports.map((businessReport) => ({
-              claimSource: 'business' as const,
-              causalityPosition: businessReport.causalityPosition,
-              statement: businessReport.statement,
-              business: businessReport.businessName,
-              evidence: businessReport.evidenceReceiptRefs.map((receiptRef) => ({
-                receiptRef,
-                label: evidenceByReceipt.get(receiptRef) ?? 'Recorded evidence',
-              })),
-              recordedAt: businessReport.createdAt,
-            })),
-          ],
-          history: [
-            {
-              version: 0,
-              state: 'received' as const,
-              source: 'customer' as const,
-              message: problem.summary,
-              recordedAt: problem.createdAt,
-            },
-            ...updates.map((update) => ({
-              version: update.version,
-              state: update.state,
-              source: update.source,
-              message: update.message,
-              recordedAt: update.createdAt,
-            })),
-          ],
-        }
+      problems: projectCustomerEvidenceProblems({
+        problems,
+        updatesByProblem,
+        businessReportsByProblem,
+        attempts,
+        observedAt: Date.now(),
       }),
     }
   },

@@ -1,0 +1,99 @@
+import type { CapabilityContractRef, CapabilityDecisionModel } from '@/modules/capability-contract/public'
+import type {
+  CompileCustomerRequestResult,
+  CustomerReportedRouteExclusion,
+} from '@/modules/customer-request/compiler'
+import type { RegisteredEvaluationBinding, RegisteredSupplyPrice, RequestFact } from '@/modules/customer-request/evaluation'
+import type { CustomerRequestSemanticProposal } from '@/modules/customer-request/semantic-interpreter'
+import { bindCustomerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
+
+export type EligibleSupply = Readonly<{
+  offering: Readonly<{
+    offeringId: string
+    businessId: string
+    networkId: string
+    capabilityId: string
+    version: number
+    contractDigest: string
+    presentation: Readonly<{
+      label: string
+      summary: string
+      price: RegisteredSupplyPrice
+      commercialRelationship: Readonly<{
+        kind: 'none' | 'direct' | 'affiliate' | 'ownership'
+        summary: string
+        influencesEligibility: boolean
+        influencesInclusion: boolean
+        influencesOrder: boolean
+        evidenceRefs: readonly string[]
+      }>
+    }>
+    registrationHash: string
+  }>
+  publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
+  binding: Readonly<{
+    bindingId: string
+    offeringId: string
+    networkId: string
+    capabilityId: string
+    version: number
+    contractDigest: string
+    registrationHash: string
+    cancellation: Readonly<{
+      kind: 'unsupported' | 'adapter_managed'
+      evidenceRefs: readonly string[]
+    }>
+  }>
+}>
+
+export type EligibleSupplyResult = Readonly<
+  | { kind: 'available'; supplies: readonly EligibleSupply[] }
+  | { kind: 'unavailable'; reason: string }
+>
+
+export type ExactContractResult = Readonly<
+  | { kind: 'found'; ref: CapabilityContractRef; documentJson: string; registeredAt: number }
+  | { kind: 'unavailable'; reason: string }
+>
+
+export type RequestGraph = Readonly<{
+  kind: 'available'
+  models: readonly CapabilityDecisionModel[]
+  descriptors: ReturnType<typeof bindCustomerCapabilityDescriptor>[]
+  bindings: readonly RegisteredEvaluationBinding[]
+  registrySnapshotDigest: string
+}>
+
+export type CompileCommitInput = Readonly<{
+  commandKey: string
+  commandDigest: string
+  requestId: string
+  expectedRevision: number
+  expectedRouteGeneration: number
+  principalId: string
+  delegatedAgentId: string
+  intent: string
+  networkId: string
+  priorFacts: readonly RequestFact[]
+  routeExclusions?: readonly CustomerReportedRouteExclusion[]
+  proposal: CustomerRequestSemanticProposal
+  interpreterId: string
+  graph: RequestGraph
+  now: number
+  compiledResult?: Extract<CompileCustomerRequestResult, { kind: 'compiled' }>
+}>
+
+export type CommitResult = Readonly<
+  | { kind: 'stored' | 'replayed'; requestId: string; revision: number }
+  | {
+      kind: 'revision_conflict' | 'route_generation_conflict' | 'identity_conflict'
+        | 'command_conflict' | 'aggregate_invalid' | 'context_stale'
+    }
+>
+
+export type CommandReplayResult = Readonly<
+  | { kind: 'not_found' }
+  | { kind: 'conflict' }
+  | { kind: 'needs_attention'; requestId: string; reason: 'historical_request_resubmit_required'; resumable: false }
+  | { kind: 'replayed'; aggregate: unknown; routeGenerationRef?: string; noEffect: boolean }
+>

@@ -3,28 +3,8 @@ import {
   type AnswerSnapshot,
   type AnswerSource,
   type AnswerWorkStep,
-} from '@/modules/answer/public'
-import {
-  buildBoundaryNextStep,
-  buildBoundaryOneLine,
-  buildBoundarySummary,
-  buildInquiryHandoffNextStep,
-  buildInquiryHandoffOneLine,
-  buildInquiryHandoffSummary,
-  buildUnsupportedNextStep,
-  buildUnsupportedOneLine,
-  buildUnsupportedSummary,
-  inquiryHandoffProviders,
-  resolveInquiryHandoff,
-} from '@/modules/answer/public'
-import {
-  buildAgentJsonUrl,
-  buildCompactFollowUpProse,
   collectAllowedSlugsFromToolResults,
-  computeLayoutProfile,
   emitSnapshotEvents,
-  extractRequestedLocation,
-  runAnswerToolUseAgent,
 } from '@/modules/answer/public'
 import type {
   HarnessModelRequestRecord,
@@ -37,8 +17,6 @@ import {
 } from '@/modules/answer/search-context'
 import { resolveIntentRoute } from './intent-router'
 import {
-  ANSWER_SEARCH_PROVIDER_LIMIT,
-  hasAnswerServiceSignal,
   planAnswerTurn,
   type AnswerResponsePlan,
 } from './answer-response-planner'
@@ -53,7 +31,7 @@ import type {
 } from '../answer-thread.schema'
 import { assertAnswerTurnAccess } from './turn-guard'
 import type { AnswerTurnAccessDecision } from './turn-guard'
-import { runAnswerToolCall, toolCallRecordsToGateInput } from './tool-runner'
+import { toolCallRecordsToGateInput } from './tool-runner'
 import { classifyFollowUpIntent, buildThreadTitle } from './follow-up-intent'
 import { filterProvidersBySuburb, parseNarrowToSuburb } from './follow-up-query'
 import {
@@ -67,46 +45,31 @@ import {
   type PersistAnswerTurnInput,
   type PersistAnswerTurnResult,
 } from './answer-turn-finalization'
-import {
-  answerRunGateFromAnswerGate,
-  finalizeAnswerTurnSnapshot,
-  type FinalizeAnswerTurnSnapshotResult,
-} from './answer-turn-safety'
+import { finalizeAnswerTurnSnapshot } from './answer-turn-safety'
 import {
   createLiveAnswerHarnessOperation,
   type LiveAnswerHarnessOperation,
 } from './answer-harness-operation'
 import type { AnswerHarnessFinalizationResult } from '../answer-thread.functions'
-
-const DEFAULT_LIMIT = ANSWER_SEARCH_PROVIDER_LIMIT
-
-type AnswerRegistrySearchInput = {
-  query: string
-  limit: number
-  mode?: 'near_me' | 'whole_catalogue'
-  location?: string
-}
-
-type StreamPlanEvent = Extract<AnswerEvent, { type: 'plan' }>
-type StreamPlanMode = StreamPlanEvent['mode']
-type SnapshotPlanInput = Pick<StreamPlanEvent, 'mode' | 'providerBudget' | 'artifactBudget'>
-type SnapshotPlanMetadata = {
-  plan?: SnapshotPlanInput
-  planMode?: StreamPlanMode
-}
-type SnapshotAssemblyPlan = {
-  path: string
-  metadata?: SnapshotPlanMetadata
-}
-type StreamToolLedTurnResult = {
-  snapshot: AnswerSnapshot | undefined
-  toolCalls: AnswerToolCallRecord[]
-  modelRequests?: readonly HarnessModelRequestRecord[]
-  allowedSlugs: ReadonlySet<string>
-  errorCopyId: string | undefined
-  gate: AnswerRunGateSummary | undefined
-  assembly?: SnapshotAssemblyPlan
-}
+import {
+  agentTurnPath,
+  boundaryTurnPath,
+  clarificationTurnPath,
+  describeProviderCount,
+  frozenKnownTurnPath,
+  inquiryHandoffTurnPath,
+  insufficientFrozenTurnPath,
+  makeCopyId,
+  reindexProviders,
+  retrievalFirstTurnPath,
+  selectFrozenProviders,
+  type SnapshotAssemblyPlan,
+  type SnapshotPlanMetadata,
+  type TurnPathContext,
+  type TurnPathResult,
+  type TurnTimingCollector,
+  type WorkStepEmitter,
+} from './turns'
 
 type StreamAnswerRoute = ReturnType<typeof resolveIntentRoute>
 
@@ -124,7 +87,7 @@ type StreamAnswerTurnRuntimeState = {
   intent: FollowUpIntent
   route?: StreamAnswerRoute | undefined
   responsePlan?: AnswerResponsePlan | undefined
-  retrievalFirst?: StreamToolLedTurnResult | undefined
+  retrievalFirst?: TurnPathResult | undefined
   narrowSuburb?: string | undefined
   captured?: AnswerSnapshot | undefined
   errorCopyId?: string | undefined
@@ -333,7 +296,10 @@ function buildStreamAnswerTurnPhases(input: {
         return { ...state, responsePlan }
       }
 
-      const retrievalFirst = await streamRetrievalFirstTurn(runtimeStreamInput(input, state), responsePlan)
+      const retrievalFirst = await retrievalFirstTurnPath.run(
+        runtimeTurnPathContext(input, state),
+        responsePlan,
+      )
       const nextState = {
         ...state,
         responsePlan,
@@ -359,12 +325,12 @@ function buildStreamAnswerTurnPhases(input: {
         case 'unsupported':
           return applyToolLedResult(
             state,
-            await streamBoundaryTurn(runtimeStreamInput(input, state), route.kind),
+            await boundaryTurnPath.run(runtimeTurnPathContext(input, state), route.kind),
           )
         case 'inquiry_handoff':
           return applyToolLedResult(
             state,
-            await streamInquiryHandoffTurn(runtimeStreamInput(input, state)),
+            await inquiryHandoffTurnPath.run(runtimeTurnPathContext(input, state)),
           )
         case 'frozen_filter':
         case 'frozen_compare': {
@@ -372,12 +338,12 @@ function buildStreamAnswerTurnPhases(input: {
           if (state.priorProviders.length === 0 || (route.kind === 'frozen_compare' && frozen.length < 2)) {
             return applyToolLedResult(
               state,
-              await streamInsufficientFrozenContextTurn(runtimeStreamInput(input, state), route.kind),
+              await insufficientFrozenTurnPath.run(runtimeTurnPathContext(input, state), route.kind),
             )
           }
           emitFrozenProviderSteps(input.workLog, route.kind, frozen)
-          const result = await streamFrozenKnownProviderTurn(
-            runtimeStreamInput(input, state),
+          const result = await frozenKnownTurnPath.run(
+            runtimeTurnPathContext(input, state),
             frozen,
             route.kind,
           )
@@ -385,28 +351,42 @@ function buildStreamAnswerTurnPhases(input: {
         }
         case 'tool_search': {
           if (state.narrowSuburb !== undefined) {
-            const result = await streamAgentTurn(runtimeStreamInput(input, state), {
-              query: state.query,
-              priorProviders: reindexProviders(filterProvidersBySuburb(state.priorProviders, state.narrowSuburb)),
-              priorAllowedSlugs: state.priorAllowedSlugs,
-              followUpIntent: state.intent,
-              searchContext: state.searchContext,
-              disableTools: true,
-            }, [], 'filter')
+            const result = await agentTurnPath.run(
+              runtimeTurnPathContext(input, state),
+              {
+                query: state.query,
+                priorProviders: reindexProviders(filterProvidersBySuburb(state.priorProviders, state.narrowSuburb)),
+                priorAllowedSlugs: state.priorAllowedSlugs,
+                followUpIntent: state.intent,
+                searchContext: state.searchContext,
+                disableTools: true,
+              },
+              [],
+              'filter',
+            )
             return applyToolLedResult(state, result)
           }
           if (state.responsePlan?.mode === 'clarify') {
             return applyToolLedResult(
               state,
-              await streamClarificationTurn(runtimeStreamInput(input, state), state.responsePlan),
+              await clarificationTurnPath.run(runtimeTurnPathContext(input, state), state.responsePlan),
             )
           }
-          const result = await streamAgentTurn(runtimeStreamInput(input, state), {
-            query: state.query,
-            followUpIntent: state.intent,
-            searchContext: state.searchContext,
-          }, state.retrievalFirst?.toolCalls ?? [])
+          const result = await agentTurnPath.run(
+            runtimeTurnPathContext(input, state),
+            {
+              query: state.query,
+              followUpIntent: state.intent,
+              searchContext: state.searchContext,
+            },
+            state.retrievalFirst?.toolCalls ?? [],
+            undefined,
+          )
           return applyToolLedResult(state, result)
+        }
+        default: {
+          const _exhaustive: never = route
+          return _exhaustive
         }
       }
     },
@@ -559,7 +539,7 @@ class AnswerHarnessFinalizationError extends Error {
   }
 }
 
-function runtimeStreamInput(
+function runtimeTurnPathContext(
   input: {
     input: StreamAnswerTurnInput
     send: (event: AnswerEvent) => void
@@ -569,7 +549,8 @@ function runtimeStreamInput(
   },
   state: StreamAnswerTurnRuntimeState,
   options: { deferAssembly?: boolean } = {},
-) {
+): TurnPathContext {
+  const deferAssembly = options.deferAssembly ?? true
   return {
     query: state.query,
     intent: state.intent,
@@ -582,13 +563,26 @@ function runtimeStreamInput(
     timings: input.timings,
     workLog: input.workLog,
     harness: input.harness,
-    deferAssembly: options.deferAssembly ?? true,
+    deferAssembly,
+    emitOrDeferSnapshot: (snapshot, path, metadata = {}) => emitOrDeferSnapshot(
+      {
+        signal: input.input.signal,
+        send: input.send,
+        timings: input.timings,
+        workLog: input.workLog,
+        harness: input.harness,
+        deferAssembly,
+      },
+      snapshot,
+      path,
+      metadata,
+    ),
   }
 }
 
 function applyToolLedResult(
   state: StreamAnswerTurnRuntimeState,
-  result: StreamToolLedTurnResult | undefined,
+  result: TurnPathResult | undefined,
 ): StreamAnswerTurnRuntimeState {
   if (result === undefined) {
     return state
@@ -606,311 +600,6 @@ function applyToolLedResult(
   }
 }
 
-async function streamClarificationTurn(
-  input: {
-    query: string
-    intent: FollowUpIntent
-    priorTurnsCount: number
-    signal: AbortSignal | undefined
-    send: (event: AnswerEvent) => void
-    timings: TurnTimingCollector
-    workLog: WorkStepEmitter
-    deferAssembly?: boolean
-  },
-  plan: Extract<AnswerResponsePlan, { mode: 'clarify' }>,
-): Promise<StreamToolLedTurnResult> {
-  const startedAt = Date.now()
-  input.workLog.emit({
-    id: 'route.clarify',
-    phase: 'route',
-    status: 'running',
-    title: 'Choosing a useful next question',
-    summary: 'The request needs one more detail before showing listed businesses.',
-    detailRows: [{ label: 'Missing detail', value: plan.reason === 'missing_service' ? 'Service type' : 'Search area' }],
-    startedAtMs: startedAt,
-  })
-  input.workLog.emit({
-    id: 'route.clarify',
-    phase: 'route',
-    status: input.signal?.aborted === true ? 'stopped' : 'complete',
-    title: 'Choosing a useful next question',
-    summary: 'Asking for the missing detail before showing provider cards.',
-    detailRows: [{ label: 'Missing detail', value: plan.reason === 'missing_service' ? 'Service type' : 'Search area' }],
-    startedAtMs: startedAt,
-    completedAtMs: Date.now(),
-  })
-
-  const allowedSlugs = new Set<string>()
-  const finalized = finalizeAnswerTurnSnapshot({ snapshot: plan.snapshot, allowedSlugs })
-  if (!finalized.ok) {
-    return rejectBlockedSnapshot(input, [], allowedSlugs, finalized)
-  }
-  const assembly = await emitOrDeferSnapshot(input, finalized.snapshot, 'clarification', { plan })
-  return {
-    snapshot: finalized.snapshot,
-    toolCalls: [],
-    allowedSlugs,
-    errorCopyId: undefined,
-    gate: finalized.gate,
-    ...(assembly === undefined ? {} : { assembly }),
-  }
-}
-
-async function streamRetrievalFirstTurn(
-  input: {
-    query: string
-    intent: FollowUpIntent
-    priorTurnsCount: number
-    searchContext: AeSearchContext | undefined
-    signal: AbortSignal | undefined
-    send: (event: AnswerEvent) => void
-    timings: TurnTimingCollector
-    workLog: WorkStepEmitter
-    harness: LiveAnswerHarnessOperation
-    deferAssembly?: boolean
-  },
-  plan: Extract<AnswerResponsePlan, { mode: 'answer' }>,
-): Promise<StreamToolLedTurnResult | undefined> {
-  if (isSignalAborted(input.signal)) {
-    return undefined
-  }
-
-  const searchInput = buildInitialRegistrySearchInput(input.query, input.searchContext, plan.providerBudget.searchLimit)
-  const searchStartedAt = Date.now()
-  input.workLog.emit({
-    id: 'search.registry.initial',
-    phase: 'search',
-    status: 'running',
-    title: 'Searching listed businesses',
-    summary: 'Looking for listed businesses that match the request.',
-    detailRows: buildSearchWorkStepDetailRows(searchInput),
-    startedAtMs: searchStartedAt,
-  })
-  const stopSearchTiming = input.timings.start('retrieval.initial_search', {
-    mode: searchInput.mode ?? 'query',
-    hasLocation: searchInput.location !== undefined,
-  })
-  const result = await runAnswerToolCall({
-    toolId: 'registry.search',
-    input: searchInput,
-    turnId: 'pending',
-    seq: 0,
-    harnessLoop: input.harness.loop,
-  })
-  stopSearchTiming({
-    status: result.record.status,
-    providerCount: result.providers.length,
-  })
-  input.workLog.emit({
-    id: 'search.registry.initial',
-    phase: 'search',
-    status: result.record.status === 'complete' ? 'complete' : 'error',
-    title: 'Searching listed businesses',
-    summary: result.record.status === 'complete'
-      ? describeProviderCount(result.providers.length, 'listed business')
-      : 'The listed-business search did not complete.',
-    detailRows: [
-      ...buildSearchWorkStepDetailRows(searchInput),
-      { label: 'Results', value: String(result.providers.length) },
-    ],
-    relatedProviderSlugs: result.providers.map((provider) => provider.slug),
-    startedAtMs: searchStartedAt,
-    completedAtMs: Date.now(),
-  })
-  input.timings.add(result.timings, {
-    phase: 'initial_search',
-    toolId: result.record.toolId,
-    toolSeq: result.record.seq,
-  })
-
-  if (isSignalAborted(input.signal)) {
-    return { snapshot: undefined, toolCalls: [result.record], allowedSlugs: result.allowedSlugs, errorCopyId: undefined, gate: undefined }
-  }
-
-  if (result.record.status !== 'complete') {
-    return { snapshot: undefined, toolCalls: [result.record], allowedSlugs: result.allowedSlugs, errorCopyId: undefined, gate: undefined }
-  }
-
-  emitReadAndCompareSteps(input.workLog, result.providers)
-
-  if (result.providers.length === 0) {
-    if (!shouldReturnDeterministicEmptyState(input.query, searchInput)) {
-      return { snapshot: undefined, toolCalls: [result.record], allowedSlugs: result.allowedSlugs, errorCopyId: undefined, gate: undefined }
-    }
-
-    const snapshot = withFollowUpLayout(
-      buildDeterministicEmptySnapshot({
-        query: input.query,
-        searchInput,
-        searchContext: input.searchContext,
-      }),
-      input.priorTurnsCount,
-      input.intent,
-    )
-
-    const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs: result.allowedSlugs })
-    if (!finalized.ok) {
-      return rejectBlockedSnapshot(input, [result.record], result.allowedSlugs, finalized)
-    }
-    const assembly = await emitOrDeferSnapshot(input, finalized.snapshot, 'retrieval_empty', { planMode: 'empty' })
-    return {
-      snapshot: finalized.snapshot,
-      toolCalls: [result.record],
-      allowedSlugs: result.allowedSlugs,
-      errorCopyId: undefined,
-      gate: finalized.gate,
-      ...(assembly === undefined ? {} : { assembly }),
-    }
-  }
-
-  const snapshot = withFollowUpLayout(
-    buildRetrievalFirstSnapshot({
-      query: input.query,
-      providers: result.providers,
-      visibleLimit: plan.providerBudget.visibleLimit,
-      searchInput,
-      searchContext: input.searchContext,
-    }),
-    input.priorTurnsCount,
-    input.intent,
-  )
-
-  const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs: result.allowedSlugs })
-  if (!finalized.ok) {
-    return rejectBlockedSnapshot(input, [result.record], result.allowedSlugs, finalized)
-  }
-  const assembly = await emitOrDeferSnapshot(input, finalized.snapshot, 'retrieval_first', { plan })
-
-  return {
-    snapshot: finalized.snapshot,
-    toolCalls: [result.record],
-    allowedSlugs: result.allowedSlugs,
-    errorCopyId: undefined,
-    gate: finalized.gate,
-    ...(assembly === undefined ? {} : { assembly }),
-  }
-}
-
-function buildInitialRegistrySearchInput(
-  query: string,
-  searchContext: AeSearchContext | undefined,
-  searchLimit: number,
-): AnswerRegistrySearchInput {
-  const input: AnswerRegistrySearchInput = {
-    query,
-    limit: searchLimit,
-  }
-
-  if (searchContext?.mode === 'whole_catalogue') {
-    return { ...input, mode: 'whole_catalogue' }
-  }
-
-  const contextLocation = aeSearchContextLocationQuery(searchContext)
-  const userNamedLocation = extractRequestedLocation(query)
-  if (contextLocation !== undefined && userNamedLocation === undefined) {
-    return { ...input, mode: 'near_me', location: contextLocation }
-  }
-
-  return input
-}
-
-function buildRetrievalFirstSnapshot(input: {
-  query: string
-  providers: readonly AnswerSource[]
-  visibleLimit: number
-  searchInput: AnswerRegistrySearchInput
-  searchContext: AeSearchContext | undefined
-}): AnswerSnapshot {
-  const providers = reindexProviders(input.providers.slice(0, input.visibleLimit))
-  const count = providers.length
-  const names = providerNameList(providers)
-  const place = input.searchInput.location ?? extractRequestedLocation(input.query)
-  const placeSuffix = place === undefined ? '' : ` for ${place}`
-
-  return {
-    query: input.query,
-    oneLine: count === 1
-      ? `1 listed business matches${placeSuffix}.`
-      : `${count} listed businesses match${placeSuffix}.`,
-    providers,
-    summary: count === 1
-      ? `${names} publishes service coverage${placeSuffix}. Agentic Economy does not book or take payment on this page.`
-      : `${names} publish service coverage${placeSuffix}. Agentic Economy does not book or take payment on this page.`,
-    nextStep: 'Open a listed business page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.',
-    agentJsonUrl: buildAgentJsonUrl(
-      buildAgentJsonQuery(input.query, input.searchInput),
-      input.searchInput.limit,
-      buildAgentJsonScope(input.searchInput, input.searchContext),
-    ),
-  }
-}
-
-function buildDeterministicEmptySnapshot(input: {
-  query: string
-  searchInput: AnswerRegistrySearchInput
-  searchContext: AeSearchContext | undefined
-}): AnswerSnapshot {
-  const place = input.searchInput.location ?? extractRequestedLocation(input.query)
-  const placeSuffix = place === undefined ? '' : ` for ${place}`
-
-  return {
-    query: input.query,
-    oneLine: `No listed businesses match "${input.query}" yet.`,
-    providers: [],
-    summary: place === undefined
-      ? 'No listed businesses publish matching coverage yet.'
-      : `No listed businesses publish coverage${placeSuffix} yet.`,
-    nextStep: 'Try a nearby suburb, browse the registry, or list a business that should appear here.',
-    agentJsonUrl: buildAgentJsonUrl(
-      buildAgentJsonQuery(input.query, input.searchInput),
-      input.searchInput.limit,
-      buildAgentJsonScope(input.searchInput, input.searchContext),
-    ),
-  }
-}
-
-function shouldReturnDeterministicEmptyState(
-  query: string,
-  searchInput: AnswerRegistrySearchInput,
-): boolean {
-  const requestedLocation = searchInput.location ?? extractRequestedLocation(query)
-  return requestedLocation !== undefined && hasAnswerServiceSignal(query)
-}
-
-function providerNameList(providers: readonly AnswerSource[]): string {
-  const names = providers.map((provider) => provider.name)
-  if (names.length <= 2) {
-    return names.join(' and ')
-  }
-  return `${names.slice(0, -1).join(', ')}, and ${names.at(-1)}`
-}
-
-function buildAgentJsonQuery(
-  query: string,
-  searchInput: AnswerRegistrySearchInput,
-): string {
-  if (searchInput.location === undefined || extractRequestedLocation(query) !== undefined) {
-    return query
-  }
-  return `${query} near ${searchInput.location}`
-}
-
-function buildAgentJsonScope(
-  searchInput: AnswerRegistrySearchInput,
-  searchContext: AeSearchContext | undefined,
-): { mode?: 'near_me' | 'whole_catalogue'; location?: string } | undefined {
-  if (searchInput.mode === 'whole_catalogue') {
-    return { mode: 'whole_catalogue' }
-  }
-
-  const location = searchInput.location ?? aeSearchContextLocationQuery(searchContext)
-  return location === undefined ? undefined : { mode: 'near_me', location }
-}
-
-function isSignalAborted(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true
-}
-
 function harnessStatusForAnswerTurn(
   status: AnswerTurnRecord['status'],
   gate: AnswerRunGateSummary | undefined,
@@ -919,544 +608,6 @@ function harnessStatusForAnswerTurn(
     return 'blocked'
   }
   return status === 'complete' ? 'ok' : 'error'
-}
-
-function rejectBlockedSnapshot(
-  input: { send: (event: AnswerEvent) => void },
-  toolCalls: readonly AnswerToolCallRecord[],
-  allowedSlugs: ReadonlySet<string>,
-  blocked: Extract<FinalizeAnswerTurnSnapshotResult, { ok: false }>,
-): StreamToolLedTurnResult {
-  input.send({ type: 'error', code: blocked.code, copyId: blocked.copyId })
-  return {
-    snapshot: undefined,
-    toolCalls: [...toolCalls],
-    allowedSlugs,
-    errorCopyId: blocked.copyId,
-    gate: blocked.gate,
-  }
-}
-
-async function streamInsufficientFrozenContextTurn(
-  input: {
-    query: string
-    intent: FollowUpIntent
-    priorTurnsCount: number
-    signal: AbortSignal | undefined
-    send: (event: AnswerEvent) => void
-    timings: TurnTimingCollector
-    workLog: WorkStepEmitter
-    harness: LiveAnswerHarnessOperation
-    deferAssembly?: boolean
-  },
-  routeKind: 'frozen_filter' | 'frozen_compare',
-): Promise<StreamToolLedTurnResult> {
-  const isCompare = routeKind === 'frozen_compare'
-  const snapshot = withFollowUpLayout(
-    {
-      query: input.query,
-      oneLine: isCompare ? 'No two listed businesses to compare yet.' : 'No listed businesses to filter yet.',
-      providers: [],
-      summary: isCompare
-        ? 'There are not enough listed businesses in the latest answer to compare.'
-        : 'There are no listed businesses in the latest answer to filter.',
-      nextStep: 'Ask for a need and place, then compare or filter the listed businesses that appear.',
-      agentJsonUrl: buildAgentJsonUrl(input.query, DEFAULT_LIMIT),
-    },
-    input.priorTurnsCount,
-    input.intent,
-  )
-
-  input.workLog.emit({
-    id: 'read.providers',
-    phase: 'read',
-    status: 'skipped',
-    title: 'Using previous listed businesses',
-    summary: 'There were not enough listed businesses in the latest answer for this follow-up.',
-    detailRows: [{ label: 'Available from latest answer', value: '0' }],
-    completedAtMs: Date.now(),
-  })
-
-  const allowedSlugs = new Set<string>()
-
-  const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
-  if (!finalized.ok) {
-    return rejectBlockedSnapshot(input, [], allowedSlugs, finalized)
-  }
-  const assembly = await emitOrDeferSnapshot(
-    input,
-    finalized.snapshot,
-    routeKind,
-    { planMode: routeKind === 'frozen_compare' ? 'compare' : 'filter' },
-  )
-
-  return {
-    snapshot: finalized.snapshot,
-    toolCalls: [],
-    allowedSlugs,
-    errorCopyId: undefined,
-    gate: finalized.gate,
-    ...(assembly === undefined ? {} : { assembly }),
-  }
-}
-
-async function streamFrozenKnownProviderTurn(
-  input: {
-    query: string
-    intent: FollowUpIntent
-    priorTurnsCount: number
-    priorAllowedSlugs: readonly string[]
-    signal: AbortSignal | undefined
-    send: (event: AnswerEvent) => void
-    timings: TurnTimingCollector
-    workLog: WorkStepEmitter
-    harness: LiveAnswerHarnessOperation
-    deferAssembly?: boolean
-  },
-  providers: readonly AnswerSource[],
-  routeKind: 'frozen_filter' | 'frozen_compare',
-): Promise<StreamToolLedTurnResult> {
-  const prose = buildCompactFollowUpProse({
-    followUpIntent: input.intent,
-    displayQuery: input.query,
-    providers,
-  })
-  const snapshot = withFollowUpLayout(
-    {
-      query: input.query,
-      providers,
-      oneLine: prose.oneLine,
-      summary: prose.summary,
-      nextStep: prose.nextStep,
-      agentJsonUrl: buildAgentJsonUrl(input.query, DEFAULT_LIMIT),
-    },
-    input.priorTurnsCount,
-    input.intent,
-  )
-  const allowedSlugs = new Set(input.priorAllowedSlugs.length > 0
-    ? input.priorAllowedSlugs
-    : providers.map((provider) => provider.slug))
-
-  const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
-  if (!finalized.ok) {
-    return rejectBlockedSnapshot(input, [], allowedSlugs, finalized)
-  }
-  const assembly = await emitOrDeferSnapshot(
-    input,
-    finalized.snapshot,
-    routeKind,
-    { planMode: routeKind === 'frozen_compare' ? 'compare' : 'filter' },
-  )
-
-  return {
-    snapshot: finalized.snapshot,
-    toolCalls: [],
-    allowedSlugs,
-    errorCopyId: undefined,
-    gate: finalized.gate,
-    ...(assembly === undefined ? {} : { assembly }),
-  }
-}
-
-function selectFrozenProviders(
-  routeKind: 'frozen_filter' | 'frozen_compare',
-  priorProviders: readonly AnswerSource[],
-): AnswerSource[] {
-  if (routeKind === 'frozen_filter') {
-    return reindexProviders(priorProviders.filter((provider) => provider.inquiryUrl !== undefined))
-  }
-  return reindexProviders(priorProviders.slice(0, 2))
-}
-
-async function streamAgentTurn(
-  input: {
-    query: string
-    intent: FollowUpIntent
-    priorTurnsCount: number
-    signal: AbortSignal | undefined
-    send: (event: AnswerEvent) => void
-    timings: TurnTimingCollector
-    workLog: WorkStepEmitter
-    harness: LiveAnswerHarnessOperation
-    deferAssembly?: boolean
-  },
-  agentInput: Parameters<typeof runAnswerToolUseAgent>[0],
-  seedToolCalls: readonly AnswerToolCallRecord[] = [],
-  planMode?: StreamPlanMode,
-): Promise<StreamToolLedTurnResult | undefined> {
-  const recoveryStartedAt = Date.now()
-  if (agentInput.disableTools === true) {
-    input.workLog.emit({
-      id: 'search.registry.recovery',
-      phase: 'search',
-      status: 'skipped',
-      title: 'Using listed businesses already in view',
-      summary: 'No extra listed-business search is needed for this follow-up.',
-      completedAtMs: recoveryStartedAt,
-    })
-  } else {
-    input.workLog.emit({
-      id: 'search.registry.recovery',
-      phase: 'search',
-      status: 'running',
-      title: 'Trying another listed-business search',
-      summary: 'The first search did not settle the answer, so AE is checking another listed-business search.',
-      startedAtMs: recoveryStartedAt,
-    })
-  }
-  input.send({ type: 'thinking', step: 'search', label: 'Searching listed businesses…' })
-
-  const stopModelTiming = input.timings.start('model.agent_total', {
-    toolsEnabled: agentInput.disableTools !== true,
-    seedToolCalls: seedToolCalls.length,
-  })
-  try {
-    const result = await runAnswerToolUseAgent({
-      ...agentInput,
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
-      harnessLoop: input.harness.loop,
-    })
-    stopModelTiming({
-      providerCount: result.providers.length,
-      toolCalls: result.toolCalls.length,
-      gateOk: result.gate.ok,
-    })
-    input.timings.add(result.timings, { phase: 'agent' })
-    if (agentInput.disableTools !== true) {
-      input.workLog.emit({
-        id: 'search.registry.recovery',
-        phase: 'search',
-        status: result.toolCalls.length === 0 ? 'skipped' : 'complete',
-        title: result.toolCalls.length === 0
-          ? 'Using the first search result'
-          : 'Trying another listed-business search',
-        summary: result.toolCalls.length === 0
-          ? 'No extra listed-business search was needed.'
-          : describeProviderCount(result.providers.length, 'listed business'),
-        detailRows: buildRecoveryWorkStepDetailRows(result.toolCalls, result.providers.length),
-        relatedProviderSlugs: result.providers.map((provider) => provider.slug),
-        startedAtMs: recoveryStartedAt,
-        completedAtMs: Date.now(),
-      })
-    }
-    const toolCalls = [
-      ...seedToolCalls,
-      ...resequenceToolCalls(result.toolCalls, seedToolCalls.length),
-    ]
-    const gate = answerRunGateFromAnswerGate(result.gate)
-    if (!result.gate.ok) {
-      const copyId = result.gate.copyId
-      input.send({ type: 'error', code: result.gate.code, copyId })
-      return {
-        snapshot: undefined,
-        toolCalls,
-        modelRequests: result.modelRequests,
-        allowedSlugs: result.allowedSlugs,
-        errorCopyId: copyId,
-        gate,
-      }
-    }
-
-    emitReadAndCompareSteps(input.workLog, result.providers)
-    const snapshot = withFollowUpLayout(result.snapshot, input.priorTurnsCount, input.intent)
-    const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs: result.allowedSlugs })
-    if (!finalized.ok) {
-      return {
-        ...rejectBlockedSnapshot(input, toolCalls, result.allowedSlugs, finalized),
-        modelRequests: result.modelRequests,
-      }
-    }
-    const assembly = await emitOrDeferSnapshot(
-      input,
-      finalized.snapshot,
-      'agent',
-      planMode === undefined ? {} : { planMode },
-    )
-    return {
-      snapshot: finalized.snapshot,
-      toolCalls,
-      modelRequests: result.modelRequests,
-      allowedSlugs: result.allowedSlugs,
-      errorCopyId: undefined,
-      gate: finalized.gate,
-      ...(assembly === undefined ? {} : { assembly }),
-    }
-  } catch {
-    stopModelTiming({ error: true })
-    input.workLog.emit({
-      id: 'search.registry.recovery',
-      phase: 'search',
-      status: 'error',
-      title: 'Trying another listed-business search',
-      summary: 'The extra listed-business search did not complete.',
-      startedAtMs: recoveryStartedAt,
-      completedAtMs: Date.now(),
-    })
-    const copyId = makeCopyId()
-    input.send({ type: 'error', code: 'answer_turn_failed', copyId })
-    return {
-      snapshot: undefined,
-      toolCalls: [...seedToolCalls],
-      allowedSlugs: collectAllowedSlugsFromToolResults(toolCallRecordsToGateInput(seedToolCalls)),
-      errorCopyId: copyId,
-      gate: undefined,
-    }
-  }
-}
-
-function resequenceToolCalls(
-  records: readonly AnswerToolCallRecord[],
-  startSeq: number,
-): AnswerToolCallRecord[] {
-  return records.map((record, index) => ({
-    ...record,
-    seq: startSeq + index,
-  }))
-}
-
-async function streamInquiryHandoffTurn(
-  input: {
-    query: string
-    intent: FollowUpIntent
-    priorTurnsCount: number
-    priorProviders: AnswerSource[]
-    priorAllowedSlugs: readonly string[]
-    signal: AbortSignal | undefined
-    send: (event: AnswerEvent) => void
-    timings: TurnTimingCollector
-    workLog: WorkStepEmitter
-    deferAssembly?: boolean
-  },
-): Promise<StreamToolLedTurnResult> {
-  const priorProviders = reindexProviders(input.priorProviders)
-  const resolution = resolveInquiryHandoff({ query: input.query, providers: priorProviders })
-  const providers = reindexProviders(inquiryHandoffProviders(resolution))
-  const selectedProvider =
-    resolution.kind === 'resolved' || resolution.kind === 'provider_unavailable'
-      ? resolution.provider
-      : undefined
-  const routeStartedAt = Date.now()
-
-  input.workLog.emit({
-    id: 'route.resolve_provider',
-    phase: 'route',
-    status: 'running',
-    title: 'Resolving provider',
-    summary: 'Matching the follow-up to a listed business already in this thread.',
-    detailRows: [{ label: 'Listed businesses in thread', value: String(priorProviders.length) }],
-    relatedProviderSlugs: priorProviders.map((provider) => provider.slug),
-    startedAtMs: routeStartedAt,
-  })
-  input.workLog.emit({
-    id: 'route.resolve_provider',
-    phase: 'route',
-    status: selectedProvider === undefined && resolution.kind !== 'choose_provider' ? 'skipped' : 'complete',
-    title: 'Resolving provider',
-    summary: describeInquiryHandoffResolution(resolution),
-    detailRows: [
-      { label: 'Listed businesses in thread', value: String(priorProviders.length) },
-      { label: 'Selected business', value: selectedProvider?.name ?? 'Needs selection' },
-    ],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
-    startedAtMs: routeStartedAt,
-    completedAtMs: Date.now(),
-  })
-
-  const pathStartedAt = Date.now()
-  input.workLog.emit({
-    id: 'route.inquiry_path',
-    phase: 'route',
-    status: 'running',
-    title: 'Checking inquiry path',
-    summary: 'Checking whether the selected listing publishes a qualified inquiry form.',
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
-    startedAtMs: pathStartedAt,
-  })
-  input.workLog.emit({
-    id: 'route.inquiry_path',
-    phase: 'route',
-    status: resolution.kind === 'resolved' ? 'complete' : 'skipped',
-    title: 'Checking inquiry path',
-    summary: describeInquiryPath(resolution),
-    detailRows: [{ label: 'Inquiry path', value: inquiryPathLabel(resolution) }],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
-    startedAtMs: pathStartedAt,
-    completedAtMs: Date.now(),
-  })
-
-  const boundaryStartedAt = Date.now()
-  input.workLog.emit({
-    id: 'route.safe_boundary',
-    phase: 'route',
-    status: 'complete',
-    title: 'Checking safe-action boundary',
-    summary: 'AE can route a qualified inquiry for owner review; it does not book, charge, or dispatch.',
-    detailRows: [{ label: 'Allowed next step', value: 'Qualified inquiry for owner review' }],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
-    startedAtMs: boundaryStartedAt,
-    completedAtMs: Date.now(),
-  })
-
-  const snapshot = withFollowUpLayout(
-    {
-      query: input.query,
-      oneLine: buildInquiryHandoffOneLine(resolution),
-      providers,
-      ...(selectedProvider === undefined ? {} : { selectedProvider }),
-      summary: buildInquiryHandoffSummary(resolution),
-      nextStep: buildInquiryHandoffNextStep(resolution),
-      agentJsonUrl: buildAgentJsonUrl(input.query, DEFAULT_LIMIT),
-    },
-    input.priorTurnsCount,
-    input.intent,
-  )
-
-  const allowedSlugs = new Set(input.priorAllowedSlugs)
-  const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
-  if (!finalized.ok) {
-    return rejectBlockedSnapshot(input, [], allowedSlugs, finalized)
-  }
-  const assembly = await emitOrDeferSnapshot(input, finalized.snapshot, 'inquiry_handoff', { planMode: 'boundary' })
-  return {
-    snapshot: finalized.snapshot,
-    toolCalls: [],
-    allowedSlugs,
-    errorCopyId: undefined,
-    gate: finalized.gate,
-    ...(assembly === undefined ? {} : { assembly }),
-  }
-}
-
-async function streamBoundaryTurn(
-  input: {
-    query: string
-    intent: FollowUpIntent
-    priorTurnsCount: number
-    priorProviders: AnswerSource[]
-    priorAllowedSlugs: readonly string[]
-    signal: AbortSignal | undefined
-    send: (event: AnswerEvent) => void
-    timings: TurnTimingCollector
-    workLog: WorkStepEmitter
-    deferAssembly?: boolean
-  },
-  kind: 'boundary_explain' | 'unsupported',
-): Promise<StreamToolLedTurnResult> {
-  const providers = reindexProviders(input.priorProviders)
-  const oneLine = kind === 'boundary_explain' ? buildBoundaryOneLine() : buildUnsupportedOneLine()
-  const summary =
-    kind === 'boundary_explain'
-      ? buildBoundarySummary(providers)
-      : buildUnsupportedSummary(providers)
-  const nextStep =
-    kind === 'boundary_explain'
-      ? buildBoundaryNextStep(providers)
-      : buildUnsupportedNextStep(providers)
-  const routeStartedAt = Date.now()
-  input.workLog.emit({
-    id: 'route.next_step',
-    phase: 'route',
-    status: 'running',
-    title: 'Preparing the next step',
-    summary: 'Separating listed facts from actions this page does not handle.',
-    startedAtMs: routeStartedAt,
-  })
-  input.workLog.emit({
-    id: 'route.next_step',
-    phase: 'route',
-    status: 'complete',
-    title: 'Preparing the next step',
-    summary: 'This page can help read, compare, and route to a listed business page. It does not book, take payment, or dispatch work.',
-    detailRows: [{ label: 'Listed businesses carried forward', value: String(providers.length) }],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
-    startedAtMs: routeStartedAt,
-    completedAtMs: Date.now(),
-  })
-
-  const snapshot = withFollowUpLayout(
-    {
-      query: input.query,
-      oneLine,
-      providers,
-      summary,
-      nextStep,
-      agentJsonUrl: buildAgentJsonUrl(input.query, DEFAULT_LIMIT),
-    },
-    input.priorTurnsCount,
-    input.intent,
-  )
-
-  const allowedSlugs = new Set(input.priorAllowedSlugs)
-  const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
-  if (!finalized.ok) {
-    return rejectBlockedSnapshot(input, [], allowedSlugs, finalized)
-  }
-  const assembly = await emitOrDeferSnapshot(input, finalized.snapshot, kind, { planMode: 'boundary' })
-  return {
-    snapshot: finalized.snapshot,
-    toolCalls: [],
-    allowedSlugs,
-    errorCopyId: undefined,
-    gate: finalized.gate,
-    ...(assembly === undefined ? {} : { assembly }),
-  }
-}
-
-function describeInquiryHandoffResolution(resolution: ReturnType<typeof resolveInquiryHandoff>): string {
-  switch (resolution.kind) {
-    case 'resolved':
-      return `${resolution.provider.name} was selected from the latest listed businesses.`
-    case 'provider_unavailable':
-      return `${resolution.provider.name} was selected, but it does not publish an AE inquiry form yet.`
-    case 'choose_provider':
-      return 'More than one listed business could match; the user needs to choose one.'
-    case 'no_provider':
-      return 'No listed business is available in the latest answer thread.'
-  }
-}
-
-function describeInquiryPath(resolution: ReturnType<typeof resolveInquiryHandoff>): string {
-  switch (resolution.kind) {
-    case 'resolved':
-      return `${resolution.provider.name} publishes a qualified inquiry path.`
-    case 'provider_unavailable':
-      return `${resolution.provider.name} does not publish an AE inquiry form yet.`
-    case 'choose_provider':
-      return 'Choose a business before opening an inquiry path.'
-    case 'no_provider':
-      return 'Find a listed business before opening an inquiry path.'
-  }
-}
-
-function inquiryPathLabel(resolution: ReturnType<typeof resolveInquiryHandoff>): string {
-  switch (resolution.kind) {
-    case 'resolved':
-      return 'Available'
-    case 'provider_unavailable':
-      return 'Not published'
-    case 'choose_provider':
-      return 'Needs business selection'
-    case 'no_provider':
-      return 'Needs listed business'
-  }
-}
-
-function withFollowUpLayout(
-  snapshot: AnswerSnapshot,
-  priorTurnsCount: number,
-  intent: FollowUpIntent,
-): AnswerSnapshot {
-  const compactLayout = priorTurnsCount > 0
-  const layoutProfile = computeLayoutProfile({
-    providerCount: snapshot.providers.length,
-    ...(compactLayout ? { compactLayout: true } : {}),
-    followUpIntent: intent,
-  })
-  return {
-    ...snapshot,
-    ...(compactLayout ? { compactLayout: true } : {}),
-    layoutProfile,
-  }
 }
 
 async function emitTimedSnapshot(
@@ -1580,11 +731,6 @@ async function emitSnapshotWithAssembly(
   await input.harness.phase('assemble', assemble)
 }
 
-type WorkStepEmitter = {
-  emit: (step: AnswerWorkStep) => void
-  entries: () => AnswerWorkStep[]
-}
-
 function createWorkStepEmitter(send: (event: AnswerEvent) => void): WorkStepEmitter {
   const steps: AnswerWorkStep[] = []
 
@@ -1631,65 +777,6 @@ function describeSearchContext(searchContext: AeSearchContext | undefined): stri
   return aeSearchContextLocationQuery(searchContext) ?? 'Request only'
 }
 
-function buildSearchWorkStepDetailRows(
-  searchInput: AnswerRegistrySearchInput,
-): NonNullable<AnswerWorkStep['detailRows']> {
-  return [
-    { label: 'Search words', value: safeWorkLogUserText(searchInput.query) },
-    { label: 'Area', value: describeSearchInputArea(searchInput) },
-    { label: 'Limit', value: String(searchInput.limit) },
-  ]
-}
-
-function describeSearchInputArea(searchInput: AnswerRegistrySearchInput): string {
-  if (searchInput.mode === 'whole_catalogue') {
-    return 'Whole catalogue'
-  }
-  return searchInput.location ?? 'Request only'
-}
-
-function describeProviderCount(count: number, noun: string): string {
-  if (count === 0) {
-    return `No ${noun}es found.`
-  }
-  if (count === 1) {
-    return `1 ${noun} found.`
-  }
-  return `${count} ${noun}es found.`
-}
-
-function emitReadAndCompareSteps(
-  workLog: WorkStepEmitter,
-  providers: readonly AnswerSource[],
-): void {
-  const completedAt = Date.now()
-  workLog.emit({
-    id: 'read.providers',
-    phase: 'read',
-    status: 'complete',
-    title: 'Reading listed businesses',
-    summary: providers.length === 0
-      ? 'No listed businesses were returned for this search.'
-      : describeProviderCount(providers.length, 'listed business'),
-    detailRows: [{ label: 'Listed businesses', value: String(providers.length) }],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
-    completedAtMs: completedAt,
-  })
-
-  workLog.emit({
-    id: 'compare.fit',
-    phase: 'compare',
-    status: 'complete',
-    title: 'Checking fit',
-    summary: providers.length === 0
-      ? 'No listed businesses fit this request yet.'
-      : 'Keeping listed businesses whose published details fit this request.',
-    detailRows: [{ label: 'Kept for answer', value: String(providers.length) }],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
-    completedAtMs: completedAt,
-  })
-}
-
 function emitFrozenProviderSteps(
   workLog: WorkStepEmitter,
   routeKind: 'frozen_filter' | 'frozen_compare',
@@ -1718,50 +805,6 @@ function emitFrozenProviderSteps(
     relatedProviderSlugs: providers.map((provider) => provider.slug),
     completedAtMs: completedAt,
   })
-}
-
-function buildRecoveryWorkStepDetailRows(
-  toolCalls: readonly AnswerToolCallRecord[],
-  providerCount: number,
-): NonNullable<AnswerWorkStep['detailRows']> {
-  const queries: string[] = []
-  for (const call of toolCalls) {
-    const query = readToolCallQuery(call)
-    if (query.length > 0) {
-      queries.push(query)
-    }
-  }
-
-  return [
-    ...(queries.length === 0 ? [] : [{ label: 'Searches tried', value: queries.map(safeWorkLogUserText).join(' -> ') }]),
-    { label: 'Results', value: String(providerCount) },
-  ]
-}
-
-function readToolCallQuery(call: AnswerToolCallRecord): string {
-  try {
-    const parsed = JSON.parse(call.inputJson) as { query?: unknown }
-    return typeof parsed.query === 'string' ? parsed.query : ''
-  } catch {
-    return ''
-  }
-}
-
-type TurnTimingCollector = {
-  start: (
-    name: string,
-    metadata?: Record<string, string | number | boolean | null>,
-  ) => (metadata?: Record<string, string | number | boolean | null>) => void
-  record: (
-    name: string,
-    durationMs: number,
-    metadata?: Record<string, string | number | boolean | null>,
-  ) => void
-  add: (
-    entries: readonly AnswerTurnTimingEntry[],
-    metadata?: Record<string, string | number | boolean | null>,
-  ) => void
-  entries: () => readonly AnswerTurnTimingEntry[]
 }
 
 function createTurnTimingCollector(): TurnTimingCollector {
@@ -1803,17 +846,4 @@ function createTurnTimingCollector(): TurnTimingCollector {
     },
     entries: () => [...entries],
   }
-}
-
-
-function reindexProviders(providers: readonly AnswerSource[]): AnswerSource[] {
-  return providers.map((provider, index) => ({
-    ...provider,
-    citationIndex: index + 1,
-  }))
-}
-
-
-function makeCopyId(): string {
-  return `turn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }

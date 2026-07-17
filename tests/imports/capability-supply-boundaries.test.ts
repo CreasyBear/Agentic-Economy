@@ -1,10 +1,21 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 const neutralSources = [
   'src/modules/capability-supply/public.ts',
   'src/modules/capability-supply/internal/convex-schema.ts',
   'convex/capabilitySupply.ts',
+] as const
+
+const deepenedFolders = [
+  'src/modules/capability-supply/internal/offering',
+  'src/modules/capability-supply/internal/binding',
+  'src/modules/capability-supply/internal/eligibility',
+  'src/modules/capability-supply/internal/quarantine',
+  'src/modules/capability-supply/internal/publication',
+  'src/modules/capability-supply/internal/shared',
 ] as const
 
 describe('capability supply boundaries', () => {
@@ -56,5 +67,20 @@ describe('capability supply boundaries', () => {
 })
 
 function sources(): string[] {
-  return neutralSources.map((path) => readFileSync(path, 'utf8'))
+  return [
+    ...neutralSources.map((path) => readFileSync(path, 'utf8')),
+    ...deepenedFolders.flatMap((directory) => listTsFiles(directory).map((path) => readFileSync(path, 'utf8'))),
+  ]
+}
+
+function listTsFiles(directory: string): string[] {
+  const entries = readdirSync(directory)
+  const files: string[] = []
+  for (const entry of entries) {
+    const path = join(directory, entry)
+    const stats = statSync(path)
+    if (stats.isDirectory()) files.push(...listTsFiles(path))
+    else if (entry.endsWith('.ts')) files.push(path)
+  }
+  return files
 }

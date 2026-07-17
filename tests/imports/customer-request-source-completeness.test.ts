@@ -34,7 +34,7 @@ describe('CustomerRequest source completeness', () => {
       expect(readFileSync(file, 'utf8'), `${responsibility} authority missing at ${file}`).not.toHaveLength(0)
     }
     const application = source('application')
-    expect(application).toContain('compileCustomerRequest')
+    expect(application).toContain('compileProposal')
     expect(application).toContain('capabilitySupply.listEligible')
     expect(application).toContain('capabilityContractDocuments.getActiveExactInternal')
     expect(application).toContain('customerRequestV2.commitAggregate')

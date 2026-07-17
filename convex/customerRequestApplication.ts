@@ -1,37 +1,18 @@
 import { v, type Infer } from 'convex/values'
 
-import {
-  openCapabilityDecisionModel,
-  projectCapabilityInputValueSchemas,
-  sameCapabilityContractRef,
-  isBoundedJsonValue,
-  type CapabilityContractRef,
-  type CapabilityDecisionModel,
-  type JsonValue,
-} from '@/modules/capability-contract/public'
-import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
+import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { CustomerRoutePlan } from '@/modules/customer-request/agent-contract'
 import { projectCustomerRequestProblemTracking } from '@/modules/customer-request/problem-tracking'
 import {
-  compileCustomerRequest,
   routeChoiceSignature,
   writableCustomerRequestV2Aggregate,
-  type CompileCustomerRequestResult,
-  type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
 import {
   writableCustomerRequestRoutePlanGeneration,
-  type CustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
 import {
-  capabilitySemanticsKey,
   customerRouteRef,
-  projectCustomerRoutePlanDecision,
 } from '@/modules/customer-request/route-plan-customer-projection'
-import {
-  requestRegistrySnapshotDigest, type RegisteredEvaluationBinding, type RegisteredSupplyPrice, type RequestFact,
-} from '@/modules/customer-request/evaluation'
 import {
   customerRequestV2AggregateValue,
   durableActionPreparationV2Value,
@@ -40,25 +21,41 @@ import {
   routePlanGenerationV2Value,
 } from '@/modules/customer-request/runtime'
 import {
-  projectCustomerActionStatus,
   projectCustomerCriteria,
   projectNeedsAttention,
-  projectRequestEvaluation,
   repeatPermissionUseRecoverySummary,
-  projectRouteConfirmed,
-  projectRouteCancelled,
-  projectRouteProgress,
-  projectRoutePlansReady,
   type CustomerRequestView,
 } from '@/modules/customer-request/customer-projection'
 import {
-  bindCustomerCapabilityDescriptor,
-  createJsonCustomerRequestSemanticInterpreter,
   type CustomerRequestAmendment,
   type CustomerRequestSemanticProposal,
 } from '@/modules/customer-request/semantic-interpreter'
-import { createOpenRouterCustomerRequestSemanticTransport } from '@/modules/customer-request/openrouter-transport'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import {
+  bindRequirementAnswer,
+  compileCommit as compileCommitApplication,
+  createConfiguredRequestInterpreter,
+  durableSubmissionShellView,
+  interpretCompileCommit as interpretCompileCommitApplication,
+  interpreterFailureCode,
+  loadRequestGraph as loadRequestGraphApplication,
+  parseCustomerRouteResult,
+  projectConfirmedRoute as projectConfirmedRouteApplication,
+  projectRoutePlansFromMaterial,
+  projectStoredAggregate as projectStoredAggregateApplication,
+  projectStoredRouteRun as projectStoredRouteRunApplication,
+  proposeThenCompile,
+  rebindStoredFacts,
+  replayCommittedCommand as replayCommittedCommandApplication,
+  storedGenerationRepresentsAggregate,
+  type CommandReplayResult,
+  type CompileCommitInput,
+  type CustomerRequestActionResult,
+  type EligibleSupplyResult,
+  type ExactContractResult,
+  type RequestGraph,
+  type RoutePlanProjectionMaterial,
+} from '@/modules/customer-request/application/public'
 
 import { internal } from './_generated/api'
 import { action, env, type ActionCtx } from './_generated/server'
@@ -668,6 +665,7 @@ export const submit = action({
       networkId: args.routing.networkId,
       priorFacts: [],
       durableShell: true,
+      now: Date.now(),
     })
   },
 })
@@ -806,6 +804,7 @@ export const refine = action({
         proposal: { kind: 'capability_candidates', selections },
         interpreterId: 'customer:reported-option-unavailable',
         graph,
+        now: Date.now(),
       })
     }
     return await interpretCompileCommit(ctx, {
@@ -830,6 +829,7 @@ export const refine = action({
       priorFacts: current.aggregate.snapshot.facts,
       routeExclusions,
       replaceCustomerRequestLiteral: true,
+      now: Date.now(),
     })
   },
 })
@@ -913,6 +913,7 @@ export const provideFacts = action({
       proposal,
       interpreterId: 'customer:requirement-answer',
       graph,
+      now: Date.now(),
     })
   },
 })
@@ -944,7 +945,7 @@ async function resumeRequest(
         principalId: caller.principalId,
       })
       return shell.kind === 'found'
-        ? durableSubmissionShellView(shell.shell.requestId)
+        ? toActionResult(durableSubmissionShellView(shell.shell.requestId))
         : { kind: 'refused', reason: 'request_not_found' }
     }
     if (current.aggregate.snapshot.principalId !== caller.principalId) {
@@ -953,7 +954,9 @@ async function resumeRequest(
     const currentRun = await ctx.runQuery(internal.customerRequestRouteExecution.getCurrent, {
       requestId: args.requestRef,
     })
-    if (currentRun.kind === 'found') return projectStoredRouteRun(current.aggregate, currentRun.run)
+    if (currentRun.kind === 'found') {
+      return toActionResult(projectStoredRouteRunApplication(current.aggregate, currentRun.run))
+    }
     const currentMandate = await ctx.runQuery(internal.customerRequestRouteMandate.getCurrentForPrincipal, {
       requestId: args.requestRef, principalId: caller.principalId,
     })
@@ -966,11 +969,15 @@ async function resumeRequest(
             currentMandate.mandate.route.routePlanId,
           )
         ))
-        if (route !== undefined) return projectConfirmedRoute(current.aggregate, route, currentMandate.mandate)
+        if (route !== undefined) {
+          return toActionResult(projectConfirmedRouteApplication(
+            current.aggregate, route, currentMandate.mandate,
+          ))
+        }
       }
     }
     if (current.aggregate.outcome !== 'plan_ready') {
-      return projectStoredAggregate(current.aggregate, undefined)
+      return toActionResult(projectStoredAggregateApplication(current.aggregate, undefined))
     }
     if (current.routeGenerationRef !== undefined) {
       const routeReadback: Readonly<
@@ -1040,7 +1047,7 @@ async function resumeRequest(
       }
     }
     return current.routeGenerationRef === undefined
-      ? projectStoredAggregate(current.aggregate, undefined)
+      ? toActionResult(projectStoredAggregateApplication(current.aggregate, undefined))
       : await projectCurrentRoutePlans(ctx, current.aggregate)
 }
 
@@ -1108,7 +1115,7 @@ export const confirmRoute = action({
       }),
     })
     if (result.kind === 'issued' || result.kind === 'replayed') {
-      return projectConfirmedRoute(current.aggregate, route, result.mandate)
+      return toActionResult(projectConfirmedRouteApplication(current.aggregate, route, result.mandate))
     }
     if (result.kind === 'conflict') {
       if (result.reason === 'command_changed') return {
@@ -1373,7 +1380,9 @@ export const useRepeatRoute = action({
       }),
     })
     if (result.kind === 'issued' || result.kind === 'replayed') {
-      return projectConfirmedRoute(current.aggregate, displayedRoute, result.mandate)
+      return toActionResult(projectConfirmedRouteApplication(
+        current.aggregate, displayedRoute, result.mandate,
+      ))
     }
     if (result.kind === 'conflict') {
       return result.reason === 'command_changed'
@@ -1543,7 +1552,7 @@ export const runRoute = action({
         : 'This choice cannot start yet. Review the current request.',
       criteria: projectCustomerCriteria(current.aggregate.evaluation.criteria),
     }))
-    return projectStoredRouteRun(current.aggregate, result.run)
+    return toActionResult(projectStoredRouteRunApplication(current.aggregate, result.run))
   },
 })
 
@@ -1577,7 +1586,7 @@ export const cancelRoute = action({
       revision: current.aggregate.snapshot.revision,
       summary: 'There is no active request to stop.',
     }))
-    return projectStoredRouteRun(current.aggregate, result.run)
+    return toActionResult(projectStoredRouteRunApplication(current.aggregate, result.run))
   },
 })
 
@@ -2431,6 +2440,11 @@ export const authorizePreparation = action({
   },
 })
 
+function toActionResult(result: CustomerRequestActionResult): ActionResult {
+  if (result.kind === 'request') return writableView(result)
+  return result
+}
+
 async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   commandKey: string
   commandDigest: string
@@ -2446,149 +2460,47 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   routeExclusions?: StoredAggregate['snapshot']['routeExclusions']
   replaceCustomerRequestLiteral?: boolean
   durableShell?: boolean
+  now: number
 }>): Promise<ActionResult> {
-  const replay = await replayCommittedCommand(ctx, input)
-  if (replay !== undefined) return replay
-  const interpreter = createConfiguredRequestInterpreter()
-  if (interpreter === undefined) return input.durableShell === true
-    ? durableSubmissionShellView(input.requestId)
-    : { kind: 'refused', reason: 'interpreter_unavailable' }
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const graph = await loadRequestGraph(ctx, input.networkId)
-    if (graph.kind !== 'available') return input.durableShell === true
-      ? durableSubmissionShellView(input.requestId)
-      : { kind: 'refused', reason: 'capabilities_unavailable' }
-    const priorFacts = rebindStoredFacts(input.priorFacts, graph.models).filter((fact) => (
-      input.replaceCustomerRequestLiteral !== true
-      || fact.source.kind !== 'customer'
-      || !fact.source.assertionRef.startsWith('assertion:customer-request-literal:')
-    ))
-    let proposal: CustomerRequestSemanticProposal
-    try {
-      proposal = await interpreter.propose({
-        customerJob: input.intent,
-        ...(input.amendment === undefined ? {} : { amendment: input.amendment }),
-        capabilities: graph.descriptors,
-      })
-    } catch (error) {
-      console.error('customer_request_semantic_interpretation_failed', interpreterFailureCode(error))
-      if (attempt === 0) continue
-      return input.durableShell === true
-        ? durableSubmissionShellView(input.requestId)
-        : { kind: 'refused', reason: 'interpreter_unavailable' }
-    }
-    const compilationInput: CompileCommitInput = {
-      ...input,
-      intent: proposal.canonicalCustomerJob ?? input.intent,
-      priorFacts, proposal, interpreterId: interpreter.interpreterId, graph,
-    }
-    const preview = compileProposal(compilationInput)
-    if (preview.kind === 'compiled') {
-      const committed = await compileCommit(ctx, { ...compilationInput, compiledResult: preview })
-      if (attempt === 0 && retryableCompileAdmissionFailure(committed, input.expectedRevision)) continue
-      return committed
-    }
-    if (preview.reason === 'capability_graph_invalid') break
-  }
-  return writableView(projectNeedsAttention({
-    requestRef: input.requestId, revision: input.expectedRevision,
-    summary: 'The request could not be interpreted safely.',
+  const {
+    amendment,
+    routeExclusions,
+    replaceCustomerRequestLiteral,
+    durableShell,
+    ...required
+  } = input
+  return toActionResult(await interpretCompileCommitApplication({
+    ...required,
+    ...(amendment === undefined ? {} : { amendment }),
+    ...(routeExclusions === undefined ? {} : { routeExclusions }),
+    ...(replaceCustomerRequestLiteral === undefined ? {} : { replaceCustomerRequestLiteral }),
+    ...(durableShell === undefined ? {} : { durableShell }),
+  }, {
+    replayCommittedCommand: (replayInput) => replayCommittedCommand(ctx, replayInput),
+    loadRequestGraph: (networkId) => loadRequestGraph(ctx, networkId),
+    commitAggregate: async (commitInput) => await ctx.runMutation(
+      internal.customerRequestV2.commitAggregate,
+      commitInput,
+    ),
+    logInterpretationFailure: (code) => {
+      console.error('customer_request_semantic_interpretation_failed', code)
+    },
+  }, {
+    maximumDescriptorBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
+    ...(env.OPENROUTER_API_KEY === undefined ? {} : { openRouterApiKey: env.OPENROUTER_API_KEY }),
+    ...(env.AE_CUSTOMER_REQUEST_MODEL === undefined ? {} : { modelName: env.AE_CUSTOMER_REQUEST_MODEL }),
+    ...(env.AE_SITE_URL === undefined ? {} : { siteUrl: env.AE_SITE_URL }),
   }))
-}
-
-function durableSubmissionShellView(requestRef: string): ActionResult {
-  return writableView(projectNeedsAttention({
-    requestRef,
-    revision: 0,
-    summary: 'AE saved this Request but could not interpret it yet. Try again.',
-  }))
-}
-
-function retryableCompileAdmissionFailure(result: ActionResult, expectedRevision: number): boolean {
-  return result.kind === 'request'
-    && result.revision === expectedRevision
-    && result.state === 'needs_attention'
-    && result.nextAction === 'retry'
-}
-
-type CompileCommitInput = Readonly<{
-  commandKey: string
-  commandDigest: string
-  requestId: string
-  expectedRevision: number
-  expectedRouteGeneration: number
-  principalId: string
-  delegatedAgentId: string
-  intent: string
-  networkId: string
-  priorFacts: readonly RequestFact[]
-  routeExclusions?: StoredAggregate['snapshot']['routeExclusions']
-  proposal: CustomerRequestSemanticProposal
-  interpreterId: string
-  graph: RequestGraph
-  compiledResult?: Extract<CompileCustomerRequestResult, { kind: 'compiled' }>
-}>
-
-function compileProposal(input: CompileCommitInput) {
-  return compileCustomerRequest({
-    requestId: input.requestId,
-    expectedRevision: input.expectedRevision,
-    expectedRouteGeneration: input.expectedRouteGeneration,
-    principalId: input.principalId,
-    delegatedAgentId: input.delegatedAgentId,
-    intent: input.intent,
-    networkId: input.networkId,
-    priorFacts: input.priorFacts,
-    ...(input.routeExclusions === undefined ? {} : { routeExclusions: input.routeExclusions }),
-    proposal: input.proposal,
-    interpreterId: input.interpreterId,
-    bindings: input.graph.bindings,
-    models: input.graph.models,
-    now: Date.now(),
-  })
 }
 
 async function compileCommit(ctx: ActionCtx, input: CompileCommitInput): Promise<ActionResult> {
-  const replay = await replayCommittedCommand(ctx, input)
-  if (replay !== undefined) return replay
-  const compiled = input.compiledResult === undefined
-    ? compileProposal(input)
-    : input.compiledResult
-  if (compiled.kind === 'refused') return writableView(projectNeedsAttention({
-    requestRef: input.requestId,
-    revision: input.expectedRevision,
-    summary: compiled.reason === 'capability_graph_invalid'
-      ? 'The registered options changed. Try this request again.'
-      : 'The request could not be interpreted safely.',
+  return toActionResult(await compileCommitApplication(input, {
+    replayCommittedCommand: (replayInput) => replayCommittedCommand(ctx, replayInput),
+    commitAggregate: async (commitInput) => await ctx.runMutation(
+      internal.customerRequestV2.commitAggregate,
+      commitInput,
+    ),
   }))
-  const result: CommitResult = await ctx.runMutation(internal.customerRequestV2.commitAggregate, {
-    commandKey: input.commandKey,
-    commandDigest: input.commandDigest,
-    expectedRevision: input.expectedRevision,
-    expectedRouteGeneration: input.expectedRouteGeneration,
-    aggregate: writableCustomerRequestV2Aggregate(compiled.aggregate),
-    ...(compiled.routeGeneration === undefined
-      ? {}
-      : { routeGeneration: writableCustomerRequestRoutePlanGeneration(compiled.routeGeneration) }),
-  })
-  if (result.kind === 'revision_conflict' || result.kind === 'route_generation_conflict') return {
-    kind: 'conflict', requestRef: input.requestId, reason: 'revision_changed',
-  }
-  if (result.kind === 'identity_conflict') return {
-    kind: 'conflict', requestRef: input.requestId, reason: 'identity_changed',
-  }
-  if (result.kind === 'command_conflict') return {
-    kind: 'conflict', requestRef: input.requestId, reason: 'idempotency_key_reused',
-  }
-  if (result.kind === 'aggregate_invalid') return writableView(projectNeedsAttention({
-    requestRef: input.requestId, revision: input.expectedRevision,
-    summary: 'The request changed before it could be recorded. Try again.',
-  }))
-  if (result.kind === 'context_stale') return writableView(projectNeedsAttention({
-    requestRef: input.requestId, revision: input.expectedRevision,
-    summary: 'The registered options changed. Try this request again.',
-  }))
-  return projectStoredAggregate(compiled.aggregate, compiled.routeGeneration?.generationRef)
 }
 
 async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
@@ -2598,162 +2510,29 @@ async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
   principalId: string
   noEffectReplay?: () => Promise<ActionResult>
 }>): Promise<ActionResult | undefined> {
-  const replay: CommandReplayResult = await ctx.runQuery(internal.customerRequestV2.getCommandReplay, {
-    commandKey: input.commandKey,
-    commandDigest: input.commandDigest,
-    principalId: input.principalId,
-    requestId: input.requestId,
+  const result = await replayCommittedCommandApplication(input, {
+    getCommandReplay: async (replayInput) => await ctx.runQuery(
+      internal.customerRequestV2.getCommandReplay,
+      replayInput,
+    ) as CommandReplayResult,
   })
-  if (replay.kind === 'not_found') return undefined
-  if (replay.kind === 'conflict') return {
-    kind: 'conflict', requestRef: input.requestId, reason: 'idempotency_key_reused',
-  }
-  if (replay.kind === 'needs_attention') return writableView(projectNeedsAttention({
-    requestRef: input.requestId,
-    revision: 0,
-    summary: 'This earlier request used a retired format. Start a new request to continue.',
-  }))
-  if (replay.noEffect && input.noEffectReplay !== undefined) return await input.noEffectReplay()
-  return projectStoredAggregate(replay.aggregate, replay.routeGenerationRef)
+  return result === undefined ? undefined : toActionResult(result)
 }
-
-type EligibleSupply = Readonly<{
-  offering: Readonly<{
-    offeringId: string; businessId: string; networkId: string; capabilityId: string; version: number; contractDigest: string
-    presentation: Readonly<{
-      label: string; summary: string
-      price: RegisteredSupplyPrice
-      commercialRelationship: Readonly<{
-        kind: 'none' | 'direct' | 'affiliate' | 'ownership'
-        summary: string
-        influencesEligibility: boolean
-        influencesInclusion: boolean
-        influencesOrder: boolean
-        evidenceRefs: readonly string[]
-      }>
-    }>; registrationHash: string
-  }>
-  publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
-  binding: Readonly<{
-    bindingId: string; offeringId: string; networkId: string; capabilityId: string; version: number; contractDigest: string
-    registrationHash: string
-    cancellation: Readonly<{
-      kind: 'unsupported' | 'adapter_managed'
-      evidenceRefs: readonly string[]
-    }>
-  }>
-}>
-type EligibleSupplyResult = Readonly<
-  | { kind: 'available'; supplies: readonly EligibleSupply[] }
-  | { kind: 'unavailable'; reason: string }
->
-type RequestGraph = Readonly<{
-  kind: 'available'
-  models: readonly CapabilityDecisionModel[]
-  descriptors: ReturnType<typeof bindCustomerCapabilityDescriptor>[]
-  bindings: readonly RegisteredEvaluationBinding[]
-  registrySnapshotDigest: string
-}>
 
 async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<RequestGraph | Readonly<{ kind: 'unavailable' }>> {
-  const supply: EligibleSupplyResult = await ctx.runQuery(internal.capabilitySupply.listEligible, { networkId, limit: 64 })
-  if (supply.kind !== 'available' || supply.supplies.length === 0) return { kind: 'unavailable' }
-  const modelsByRef = new Map<string, CapabilityDecisionModel>()
-  const descriptors: ReturnType<typeof bindCustomerCapabilityDescriptor>[] = []
-  let descriptorBytes = 0
-  const bindings = []
-  for (const item of supply.supplies) {
-    const contractRef = {
-      capabilityId: item.binding.capabilityId,
-      version: item.binding.version,
-      contractDigest: item.binding.contractDigest,
-    }
-    const key = exactRefKey(contractRef)
-    let model = modelsByRef.get(key)
-    if (model === undefined) {
-      const stored: ExactContractResult = await ctx.runQuery(
-        internal.capabilityContractDocuments.getActiveExactInternal, contractRef,
-      )
-      if (stored.kind !== 'found') return { kind: 'unavailable' }
-      const decoded = encodeCapabilityContractDocumentJson(stored.documentJson)
-      if (!sameCapabilityContractRef(decoded.contract.ref, contractRef)) return { kind: 'unavailable' }
-      model = openCapabilityDecisionModel(decoded.contract)
-      modelsByRef.set(key, model)
-      let descriptor: ReturnType<typeof bindCustomerCapabilityDescriptor>
-      try {
-        descriptor = bindCustomerCapabilityDescriptor({
-          contractRef: model.contractRef,
-          selectionKey: model.selectionKey,
-          name: decoded.contract.name,
-          description: decoded.contract.description,
-          inputs: model.inputs,
-          valueSchemas: projectCapabilityInputValueSchemas(
-            decoded.contract.inputSchema,
-            model.inputs,
-            MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES,
-          ),
-          evidence: model.evidence.map(({ label, purpose, schemaIdentity, semanticIdentity, guaranteed }) => ({
-            label, purpose, schemaIdentity, guaranteed,
-            ...(semanticIdentity === undefined ? {} : { semanticIdentity }),
-          })),
-        })
-      } catch {
-        return { kind: 'unavailable' }
-      }
-      descriptorBytes += new TextEncoder().encode(JSON.stringify(descriptor)).byteLength
-      if (descriptorBytes > MAX_INTERPRETER_DESCRIPTOR_BYTES) return { kind: 'unavailable' }
-      descriptors.push(descriptor)
-    }
-    bindings.push({
-      businessId: String(item.offering.businessId),
-      offeringId: item.offering.offeringId,
-      bindingId: item.binding.bindingId,
-      contractRef: model.contractRef,
-      offeringRegistrationHash: item.offering.registrationHash,
-      bindingRegistrationHash: item.binding.registrationHash,
-      price: item.offering.presentation.price,
-      commercialRelationship: {
-        ...item.offering.presentation.commercialRelationship,
-        evidenceRefs: [...item.offering.presentation.commercialRelationship.evidenceRefs],
-      },
-      cancellation: {
-        ...item.binding.cancellation,
-        evidenceRefs: [...item.binding.cancellation.evidenceRefs],
-      },
-      ...(item.publication === undefined ? {} : {
-        publicationRef: item.publication.publicationRef,
-        publicationRevision: item.publication.revision,
-        readinessValidUntil: item.publication.readinessValidUntil,
-      }),
-    })
-  }
-  const registrySnapshotDigest = requestRegistrySnapshotDigest(bindings)
-  return {
-    kind: 'available',
-    models: [...modelsByRef.values()],
-    descriptors,
-    bindings,
-    registrySnapshotDigest,
-  }
+  return await loadRequestGraphApplication(networkId, {
+    listEligible: async (id) => await ctx.runQuery(
+      internal.capabilitySupply.listEligible, { networkId: id, limit: 64 },
+    ) as EligibleSupplyResult,
+    getActiveExact: async (contractRef) => await ctx.runQuery(
+      internal.capabilityContractDocuments.getActiveExactInternal, contractRef,
+    ) as ExactContractResult,
+  }, {
+    maximumDescriptorBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
+    maximumContractProjectedInputSchemaBytes: MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES,
+  })
 }
 
-type ExactContractResult = Readonly<
-  | { kind: 'found'; ref: CapabilityContractRef; documentJson: string; registeredAt: number }
-  | { kind: 'unavailable'; reason: string }
->
-type CommitResult = Readonly<
-  | { kind: 'stored' | 'replayed'; requestId: string; revision: number }
-  | {
-      kind: 'revision_conflict' | 'route_generation_conflict' | 'identity_conflict'
-        | 'command_conflict' | 'aggregate_invalid' | 'context_stale'
-    }
->
-type CommandReplayResult = Readonly<
-  | { kind: 'not_found' }
-  | { kind: 'conflict' }
-  | { kind: 'needs_attention'; requestId: string; reason: 'historical_request_resubmit_required'; resumable: false }
-  | { kind: 'replayed'; aggregate: StoredAggregate; routeGenerationRef?: string; noEffect: boolean }
->
 type GenerationRefreshResult = Readonly<
   | { kind: 'unchanged'; routeGeneration: StoredRouteGeneration }
   | { kind: 'superseded'; routeGeneration: StoredRouteGeneration }
@@ -2779,19 +2558,6 @@ type StoredAggregateResult = Readonly<
 >
 type StoredAggregate = Infer<typeof customerRequestV2AggregateValue>
 type StoredRouteGeneration = Infer<typeof routePlanGenerationV2Value>
-type RoutePlanProjectionMaterial = Readonly<
-  | {
-      kind: 'found'
-      current: StoredRouteGeneration
-      previous?: StoredRouteGeneration
-      businesses: readonly Readonly<{ businessId: string; name: string }>[]
-      capabilities: readonly Readonly<{
-        capabilityId: string; version: number; contractDigest: string
-        name: string; description: string; resultLabels: readonly string[]
-      }>[]
-    }
-  | { kind: 'not_found' }
->
 type StoredPreparation = Infer<typeof durableActionPreparationV2Value>
 type PreparationMutationResult = Readonly<
   | { kind: 'stored' | 'replayed'; preparation: StoredPreparation }
@@ -2808,26 +2574,6 @@ type PreparedActionMutationResult = Readonly<
   | { kind: 'not_prepared'; reason: Infer<typeof preparedActionRecoveryReasonV2Value>; recoveryRef: string }
   | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'prepared_action_material_changed' }
 >
-function storedGenerationRepresentsAggregate(
-  generation: StoredRouteGeneration,
-  aggregate: StoredAggregate,
-): boolean {
-  if (generation.decisionSnapshot !== undefined) {
-    return generation.decisionSnapshot.requestSnapshotDigest === aggregate.snapshot.snapshotDigest
-      && generation.decisionSnapshot.factsDigest === aggregate.evaluation.factsDigest
-      && generation.decisionSnapshot.evaluationDigest === aggregate.evaluation.evaluationDigest
-      && generation.decisionSnapshot.planRevisionId === aggregate.plan.planRevisionId
-      && generation.decisionSnapshot.planDigest === aggregate.plan.planDigest
-  }
-  // Historical generations predate decision snapshots. They were atomically
-  // validated against this immutable plan at commit, so exact compiler lineage
-  // and creation time identify the only aggregate they can safely prepare.
-  return generation.createdAt === aggregate.plan.createdAt
-    && generation.registrySnapshotDigest === aggregate.plan.registrySnapshotDigest
-    && generation.compiler.compilerVersion === aggregate.plan.compilerVersion
-    && generation.compiler.interpreterId === aggregate.plan.interpreterId
-    && generation.compiler.proposalDigest === aggregate.plan.proposalDigest
-}
 
 async function projectCurrentRoutePlans(
   ctx: ActionCtx,
@@ -2837,7 +2583,7 @@ async function projectCurrentRoutePlans(
   try {
     material = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanProjectionMaterial, {
       requestId: aggregate.snapshot.requestId,
-    })
+    }) as RoutePlanProjectionMaterial
   } catch (error) {
     console.error('customer_request_route_plan_projection_failed', error)
     return writableView(projectNeedsAttention({
@@ -2846,46 +2592,14 @@ async function projectCurrentRoutePlans(
       summary: 'AE could not verify the current ways forward. Try this request again.',
     }))
   }
-  if (material.kind !== 'found'
-    || material.current.requestId !== aggregate.snapshot.requestId
-    || material.current.requestRevision !== aggregate.snapshot.revision) {
-    return writableView(projectNeedsAttention({
-      requestRef: aggregate.snapshot.requestId,
-      revision: aggregate.snapshot.revision,
-      summary: 'AE could not verify the current ways forward. Try this request again.',
-    }))
-  }
-  let decision: ReturnType<typeof projectCustomerRoutePlanDecision>
-  try {
-    decision = projectCustomerRoutePlanDecision({
-      current: material.current,
-      ...(material.previous === undefined ? {} : { previous: material.previous }),
-      businessNames: Object.fromEntries(material.businesses.map(({ businessId, name }) => [businessId, name])),
-      capabilitySemantics: Object.fromEntries(material.capabilities.map((capability) => [
-        capabilitySemanticsKey(capability),
-        {
-          name: capability.name,
-          description: capability.description,
-          resultLabels: capability.resultLabels,
-        },
-      ])),
-      now: Date.now(),
-    })
-  } catch (error) {
-    console.error('customer_request_route_plan_projection_invalid', error)
-    return writableView(projectNeedsAttention({
-      requestRef: aggregate.snapshot.requestId,
-      revision: aggregate.snapshot.revision,
-      summary: 'AE could not verify the current ways forward. Try this request again.',
-    }))
-  }
-  return writableView(projectRoutePlansReady({
-    requestRef: aggregate.snapshot.requestId,
-    revision: aggregate.snapshot.revision,
-    summary: aggregate.snapshot.intent,
-    decision,
-    criteria: projectCustomerCriteria(material.current.decisionSnapshot?.criteria ?? aggregate.evaluation.criteria),
-  }))
+  return toActionResult(projectRoutePlansFromMaterial(
+    aggregate,
+    material,
+    Date.now(),
+    (error) => {
+      console.error('customer_request_route_plan_projection_invalid', error)
+    },
+  ))
 }
 
 async function loadCurrent(ctx: ActionCtx, requestId: string): Promise<StoredAggregateResult> {
@@ -3048,41 +2762,42 @@ async function refreshCurrentRouteGeneration(
   )
   if (replay.kind !== 'not_found') return await generationRefreshResultView(ctx, current.aggregate, replay)
 
-  const interpreter = createConfiguredRequestInterpreter()
+  const interpreter = createConfiguredRequestInterpreter({
+    maximumDescriptorBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
+    ...(env.OPENROUTER_API_KEY === undefined ? {} : { openRouterApiKey: env.OPENROUTER_API_KEY }),
+    ...(env.AE_CUSTOMER_REQUEST_MODEL === undefined ? {} : { modelName: env.AE_CUSTOMER_REQUEST_MODEL }),
+    ...(env.AE_SITE_URL === undefined ? {} : { siteUrl: env.AE_SITE_URL }),
+  })
   if (interpreter === undefined) return await persistRetryableRouteRefresh(
     ctx, args, caller, current, currentGeneration, 'interpreter_unavailable',
   )
   const priorFacts = rebindStoredFacts(current.aggregate.snapshot.facts, graph.models)
+  const now = Date.now()
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    let proposal: CustomerRequestSemanticProposal
-    try {
-      proposal = await interpreter.propose({
-        customerJob: current.aggregate.snapshot.intent,
-        capabilities: graph.descriptors,
-      })
-    } catch (error) {
-      console.error('customer_request_route_refresh_interpretation_failed', interpreterFailureCode(error))
+    const step = await proposeThenCompile({
+      intent: current.aggregate.snapshot.intent,
+      priorFacts,
+      graph,
+      compileBase: {
+        commandKey,
+        commandDigest,
+        requestId: args.requestRef,
+        expectedRevision: args.revision - 1,
+        expectedRouteGeneration: currentGeneration.generation,
+        principalId: caller.principalId,
+        delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
+        networkId: current.aggregate.snapshot.networkId,
+        now,
+      },
+    }, interpreter)
+    if (step.kind === 'propose_failed') {
+      console.error('customer_request_route_refresh_interpretation_failed', interpreterFailureCode(step.error))
       return await persistRetryableRouteRefresh(
         ctx, args, caller, current, currentGeneration, 'interpreter_unavailable',
       )
     }
-    const compiled = compileCustomerRequest({
-      requestId: args.requestRef,
-      expectedRevision: args.revision - 1,
-      expectedRouteGeneration: currentGeneration.generation,
-      principalId: caller.principalId,
-      delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
-      intent: current.aggregate.snapshot.intent,
-      networkId: current.aggregate.snapshot.networkId,
-      priorFacts,
-      proposal,
-      interpreterId: interpreter.interpreterId,
-      bindings: graph.bindings,
-      models: graph.models,
-      now: Date.now(),
-    })
-    if (compiled.kind === 'refused') {
-      if (compiled.reason === 'capability_graph_invalid') continue
+    if (step.kind === 'refused') {
+      if (step.reason === 'capability_graph_invalid') continue
       return await persistRetryableRouteRefresh(
         ctx, args, caller, current, currentGeneration, 'interpretation_unusable',
       )
@@ -3097,9 +2812,9 @@ async function refreshCurrentRouteGeneration(
         ...(current.currentDecisionCommandKey === undefined
           ? {}
           : { expectedDecisionCommandKey: current.currentDecisionCommandKey }),
-        candidateAggregate: writableCustomerRequestV2Aggregate(compiled.aggregate),
-        ...(compiled.routeGeneration === undefined ? {} : {
-          candidateRouteGeneration: writableCustomerRequestRoutePlanGeneration(compiled.routeGeneration),
+        candidateAggregate: writableCustomerRequestV2Aggregate(step.preview.aggregate),
+        ...(step.preview.routeGeneration === undefined ? {} : {
+          candidateRouteGeneration: writableCustomerRequestRoutePlanGeneration(step.preview.routeGeneration),
         }),
       },
     )
@@ -3114,29 +2829,7 @@ async function refreshCurrentRouteGeneration(
   )
 }
 
-function createConfiguredRequestInterpreter() {
-  const apiKey = env.OPENROUTER_API_KEY?.trim()
-  if (apiKey === undefined || apiKey.length === 0) return undefined
-  const modelName = env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-5-mini'
-  return createJsonCustomerRequestSemanticInterpreter({
-    interpreterId: `openrouter:${modelName}`,
-    transport: createOpenRouterCustomerRequestSemanticTransport({
-      apiKey, model: modelName,
-      ...(env.AE_SITE_URL?.trim() ? { siteUrl: env.AE_SITE_URL.trim() } : {}),
-      reasoningEffort: 'low',
-      maximumCompletionTokens: 1_024,
-    }),
-    timeoutMs: 45_000,
-    maximumPayloadBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
-    maximumResponseBytes: 64_000,
-  })
-}
 
-function interpreterFailureCode(error: unknown): string {
-  if (!(error instanceof Error)) return 'unknown'
-  if (error.name === 'AbortError') return 'aborted'
-  return error.message.startsWith('customer_request_') ? error.message : 'unknown'
-}
 
 type RouteRefreshRetryReason = Extract<GenerationRefreshResult, { kind: 'retryable' }>['reason']
 
@@ -3205,7 +2898,9 @@ async function generationRefreshResultView(
     summary: 'AE could not refresh the available options. Try again.',
   }))
   if (result.kind === 'needs_information' || result.kind === 'unsupported') {
-    if (result.kind === 'needs_information') return projectStoredAggregate(result.aggregate, undefined)
+    if (result.kind === 'needs_information') {
+      return toActionResult(projectStoredAggregateApplication(result.aggregate, undefined))
+    }
     return writableView({
       kind: 'request', requestRef: result.aggregate.snapshot.requestId,
       revision: result.aggregate.snapshot.revision, state: 'unsupported',
@@ -3554,233 +3249,6 @@ function customerPurposeLabel(value: string): string {
   return `${words.at(0)?.toUpperCase() ?? ''}${words.slice(1)}`
 }
 
-function bindRequirementAnswer(
-  requirement: Extract<StoredAggregate['evaluation']['nextRequirement'], { kind: 'contract_fact' }>,
-  value: unknown,
-  models: readonly CapabilityDecisionModel[],
-  requestRevision: number,
-): readonly RequestFact[] | undefined {
-  if (!isBoundedJsonValue(value)) return undefined
-  const facts: RequestFact[] = []
-  for (const target of requirement.targets) {
-    const model = models.find((candidate) => sameCapabilityContractRef(candidate.contractRef, target.contractRef))
-    const semantic = model?.inputs.find((candidate) => candidate.key === target.inputKey
-      && candidate.inputPointer === target.inputPointer && candidate.schemaIdentity === target.schemaIdentity)
-    if (model === undefined || semantic === undefined || model.selectionKey !== target.selectionKey) return undefined
-    const assessment = model.assessInput({
-      contractRef: model.contractRef, selectionKey: model.selectionKey, stage: 'option_selection',
-      facts: [{ input: semantic.key, inputPointer: semantic.inputPointer, value }],
-    })
-    if (assessment.kind === 'incompatible') return undefined
-    facts.push({
-      contractRef: model.contractRef,
-      selectionKey: model.selectionKey,
-      inputKey: semantic.key,
-      inputPointer: semantic.inputPointer,
-      schemaIdentity: semantic.schemaIdentity,
-      value,
-      source: {
-        kind: 'customer',
-        assertionRef: `assertion:${canonicalDigest({
-          requirementKey: requirement.requirementKey, requestRevision, contractRef: model.contractRef,
-          inputKey: semantic.key, value,
-        })}`,
-      },
-    })
-  }
-  return facts
-}
-
-function rebindStoredFacts(
-  stored: StoredAggregate['snapshot']['facts'], models: readonly CapabilityDecisionModel[],
-): readonly RequestFact[] {
-  return stored.flatMap((fact) => {
-    const model = models.find((candidate) => sameCapabilityContractRef(candidate.contractRef, fact.contractRef))
-    const semantic = model?.inputs.find((input) => input.key === fact.inputKey
-      && input.inputPointer === fact.inputPointer && input.schemaIdentity === fact.schemaIdentity)
-    if (model === undefined || semantic === undefined || model.selectionKey !== fact.selectionKey || !isBoundedJsonValue(fact.value)) return []
-    return [{
-      contractRef: model.contractRef,
-      selectionKey: model.selectionKey,
-      inputKey: semantic.key,
-      inputPointer: semantic.inputPointer,
-      schemaIdentity: semantic.schemaIdentity,
-      value: fact.value,
-      source: fact.source,
-    }]
-  })
-}
-
-function projectStoredAggregate(
-  aggregate: StoredAggregate | CustomerRequestV2Aggregate,
-  routeGenerationRef?: string,
-): ActionResult {
-  return writableView(projectRequestEvaluation({
-    snapshot: aggregate.snapshot,
-    evaluation: aggregate.evaluation,
-    outcome: aggregate.outcome,
-    actionCount: aggregate.plan.actions.length,
-    reportedOptionFailure: (aggregate.snapshot.routeExclusions?.length ?? 0) > 0,
-    ...(routeGenerationRef === undefined ? {} : { routeGenerationRef }),
-  }))
-}
-
-function projectConfirmedRoute(
-  aggregate: StoredAggregate | CustomerRequestV2Aggregate,
-  route: CustomerRoutePlan,
-  mandate: Readonly<{
-    mandateRef: string
-    route: Readonly<{ generationRef: string }>
-    request: Readonly<{ requestRevision: number }>
-    issuedAt: number
-    expiresAt: number
-  }>,
-): ActionResult {
-  return writableView(projectRouteConfirmed({
-    requestRef: aggregate.snapshot.requestId,
-    revision: aggregate.snapshot.revision,
-    criteria: projectCustomerCriteria(aggregate.evaluation.criteria),
-    confirmation: {
-      confirmationRef: `confirmation:${canonicalDigest({ authorityRef: mandate.mandateRef })}`,
-      generationRef: mandate.route.generationRef,
-      requestRevision: mandate.request.requestRevision,
-      confirmedAt: mandate.issuedAt,
-      validUntil: mandate.expiresAt,
-      route,
-    },
-  }))
-}
-
-function projectStoredRouteRun(
-  aggregate: StoredAggregate | CustomerRequestV2Aggregate,
-  run: Readonly<{
-    requestId: string
-    requestRevision: number
-    generationRef: string
-    state: 'queued' | 'running' | 'outcome_unknown' | 'completed' | 'failed' | 'cancelled'
-    totalSteps: number
-    completedSteps: number
-    currentPosition: number
-    currentState: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
-    businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
-    resultJson?: string
-    cancellationReleaseMayStartAt?: number
-    cancellationUnavailableSince?: number
-    cancellationRequestedAt?: number
-    cancellationAttempt?: Readonly<
-      | { state: 'pending'; requestedAt: number; nextCheckAt: number }
-      | { state: 'unknown'; requestedAt: number; observedAt: number; nextCheckAt: number }
-      | { state: 'rejected'; requestedAt: number; observedAt: number; reason: string }
-    >
-    updatedAt: number
-  }>,
-): ActionResult {
-  const criteria = projectCustomerCriteria(aggregate.evaluation.criteria)
-  const result = run.resultJson === undefined ? undefined : parseCustomerRouteResult(run.resultJson)
-  if ((run.state === 'completed' || run.state === 'failed' || run.state === 'outcome_unknown')
-    && run.businesses === undefined) {
-    return writableView(projectNeedsAttention({
-      requestRef: run.requestId,
-      revision: run.requestRevision,
-      criteria,
-      summary: 'AE could not verify which businesses handled this earlier run. The result has not been changed.',
-    }))
-  }
-  if (run.state === 'completed' && result !== undefined) {
-    return writableView(projectCustomerActionStatus({
-      requestRef: run.requestId,
-      revision: run.requestRevision,
-      criteria,
-      ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
-      status: {
-        kind: 'completed', resolution: 'provider_result', result,
-        resolvedAt: run.updatedAt, automaticRetry: false,
-      },
-    }))
-  }
-  if (run.state === 'outcome_unknown') return writableView(projectCustomerActionStatus({
-    requestRef: run.requestId,
-    revision: run.requestRevision,
-    criteria,
-    ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
-    routeProgress: {
-      completed: run.completedSteps, total: run.totalSteps, currentStep: run.currentPosition,
-    },
-    status: {
-      kind: 'unknown', reason: 'provider_outcome_unconfirmed',
-      ...(isPartialRouteResult(result) ? { partialResult: result } : {}),
-      observedAt: run.updatedAt, automaticRetry: false,
-    },
-  }))
-  if (run.state === 'cancelled') return writableView(projectRouteCancelled({
-    requestRef: run.requestId,
-    revision: run.requestRevision,
-    ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
-    routeProgress: {
-      completed: run.completedSteps,
-      total: run.totalSteps,
-      currentStep: Math.min(run.completedSteps + 1, run.totalSteps),
-    },
-    criteria,
-    updatedAt: run.updatedAt,
-  }))
-  if (run.state === 'failed' && result !== undefined) {
-    const providerReportedFailure = isProviderReportedRouteFailure(result)
-    return writableView(projectCustomerActionStatus({
-      requestRef: run.requestId,
-      revision: run.requestRevision,
-      criteria,
-      ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
-      routeProgress: {
-        completed: run.completedSteps, total: run.totalSteps, currentStep: run.currentPosition,
-      },
-      status: {
-        kind: 'failed', resolution: providerReportedFailure ? 'reconciled' : 'not_sent',
-        result: providerReportedFailure ? result : { reason: 'business_contact_not_started' },
-        resolvedAt: run.updatedAt, automaticRetry: false,
-      },
-    }))
-  }
-  if (run.state === 'failed') return writableView(projectNeedsAttention({
-    requestRef: run.requestId, revision: run.requestRevision, criteria,
-    summary: 'This request needs attention before it can continue.',
-  }))
-  return writableView(projectRouteProgress({
-    requestRef: run.requestId,
-    revision: run.requestRevision,
-    generationRef: run.generationRef,
-    completed: run.completedSteps,
-    total: run.totalSteps,
-    current: { step: run.currentPosition, state: customerProgressState(run.currentState) },
-    updatedAt: run.updatedAt,
-    cancellationAvailable: run.currentState === 'queued' || run.currentState === 'leased',
-    ...(run.cancellationReleaseMayStartAt === undefined
-      ? {}
-      : { cancellationReleaseMayStartAt: run.cancellationReleaseMayStartAt }),
-    ...(run.cancellationUnavailableSince === undefined
-      ? {}
-      : { cancellationUnavailableSince: run.cancellationUnavailableSince }),
-    ...(run.cancellationRequestedAt === undefined
-      ? {}
-      : { cancellationRequestedAt: run.cancellationRequestedAt }),
-    ...(run.cancellationAttempt === undefined
-      ? {}
-      : { cancellationAttempt: run.cancellationAttempt }),
-    ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
-    criteria,
-  }))
-}
-
-function isProviderReportedRouteFailure(result: JsonValue): boolean {
-  return typeof result === 'object' && result !== null && 'reason' in result
-    && result.reason === 'business_reported_failure'
-}
-
-function isPartialRouteResult(result: JsonValue | undefined): result is JsonValue {
-  return typeof result === 'object' && result !== null && 'kind' in result
-    && result.kind === 'partial_result' && 'output' in result
-}
-
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
   const {
     disclosureReview, dataHandling, unsupportedRecovery, optionSet, clarification, preparedAction,
@@ -4061,30 +3529,9 @@ function projectRepeatPermission(
   }
 }
 
-function customerProgressState(
-  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
-): 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention' {
-  if (state === 'queued') return 'queued'
-  if (state === 'leased') return 'ready_to_contact'
-  if (state === 'dispatched') return 'contacting'
-  if (state === 'accepted') return 'awaiting_result'
-  if (state === 'succeeded') return 'completed'
-  return 'needs_attention'
-}
 
-function parseCustomerRouteResult(resultJson: string): JsonValue | undefined {
-  try {
-    const parsed: unknown = JSON.parse(resultJson)
-    return isBoundedJsonValue(parsed) ? parsed : undefined
-  } catch {
-    return undefined
-  }
-}
 
 function namespacedKey(principalId: string, operation: string, requestRef: string, callerKey: string): string {
   return `${operation}:${canonicalDigest({ principalId, requestRef, callerKey })}`
 }
 
-function exactRefKey(ref: CapabilityContractRef): string {
-  return `${ref.capabilityId}\u0000${ref.version}\u0000${ref.contractDigest}`
-}

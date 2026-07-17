@@ -14,6 +14,58 @@ import {
   type CapabilityOfferingRegistration,
   type CapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
+import {
+  bindingIntegrityIsValid,
+  bindingRegistrationAudit,
+  transportAdmissionInput,
+} from '@/modules/capability-supply/internal/binding'
+import {
+  bindingEligibilityIsValid,
+  compareStableIdentifier,
+  desiredEligibility,
+  eligibilityPublicResult,
+  eligibilityReplayAudits,
+  eligibleBindingProjection,
+  eligibleOfferingProjection,
+  offeringEligibilityIsValid,
+  validEligibilityInput,
+  type DesiredEligibility,
+  type EligibilityInput,
+} from '@/modules/capability-supply/internal/eligibility'
+import {
+  contractRefFromRow,
+  offeringIntegrityIsValid,
+  writablePresentation,
+} from '@/modules/capability-supply/internal/offering'
+import {
+  INITIAL_PUBLICATION_LIFECYCLE,
+  decodeConvexPublicationSource,
+  isDirectPublicationSource,
+  publicationLifecycle,
+  publicationProjection,
+} from '@/modules/capability-supply/internal/publication'
+import {
+  bindingObservedRowDigest,
+  offeringStatusAfterBindingQuarantine,
+  quarantineBindingAudit,
+  quarantineParentAudit,
+  quarantineParentUpdatedDisposition,
+  validQuarantineAuditPayload,
+  type QuarantineParentDisposition,
+} from '@/modules/capability-supply/internal/quarantine'
+import {
+  MAX_CONTEXT_VALUE_LENGTH,
+  boundedTrimmed,
+  storedAuditMatches,
+  storedSupplyAuditEffectRef,
+  supplyAuditEffectRef,
+  supplyAuditEventId,
+  validCommandEnvelope,
+  validRegistrationContext,
+  type RegistrationContext,
+  type SupplyAuditInput,
+  type SupplyCommandActor,
+} from '@/modules/capability-supply/internal/shared'
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
@@ -30,8 +82,6 @@ import {
 } from './capabilityContractDocuments'
 
 const MAX_ELIGIBLE_SUPPLY = 256
-const MAX_CONTEXT_VALUE_LENGTH = 200
-const MAX_EVIDENCE_REF_LENGTH = 500
 const contractRefValue = v.object({
   capabilityId: v.string(),
   version: v.number(),
@@ -313,57 +363,7 @@ const capabilityGraphResultValue = v.union(
   }),
 )
 
-type RegistrationContext = Readonly<{
-  operationKey: string
-  correlationId: string
-  reasonCode: string
-  evidenceRefs: readonly string[]
-}>
 type ContractRef = Infer<typeof contractRefValue>
-type SupplyCommandActor = Readonly<{ kind: 'admin' | 'owner' | 'system'; ref: string }>
-type SupplyAuditInput = Readonly<{
-  eventType: 'capability_offering.registered' | 'capability_binding.registered' | 'capability_supply.eligibility_changed'
-    | 'capability_binding.quarantined' | 'capability_publication.published'
-  action: 'register_offering' | 'register_binding' | 'set_eligibility' | 'quarantine_binding' | 'publish_capability'
-  targetType: 'capability_offering' | 'capability_binding' | 'capability_publication'
-  targetRef: string
-  actor: SupplyCommandActor
-  context: RegistrationContext
-  payload: StableHashValue
-  beforeState: string
-  afterState: string
-  createdAt: number
-}>
-type EligibilityInput = Readonly<{
-  offeringId: string
-  bindingId: string
-  contractRef: ContractRef
-  decision: 'admit' | 'revoke'
-  expectedOfferingRegistrationHash: string
-  expectedBindingRegistrationHash: string
-  admissionEvidenceRefs: readonly string[]
-  conformanceEvidenceRefs: readonly string[]
-}>
-
-type PublicationLifecycleReason =
-  | 'admission_unproven' | 'conformance_unproven' | 'credential_readiness_unobserved'
-  | 'health_unobserved' | 'credential_unavailable' | 'health_unhealthy' | 'health_stale'
-  | 'withdrawn' | 'incompatible_revision'
-  | 'eligibility_integrity_failure'
-type PublicationLifecycle = {
-  state: 'inactive' | 'active' | 'withdrawn' | 'incompatible'
-  reasons: PublicationLifecycleReason[]
-}
-
-const INITIAL_PUBLICATION_LIFECYCLE: PublicationLifecycle = {
-  state: 'inactive',
-  reasons: [
-    'admission_unproven',
-    'conformance_unproven',
-    'credential_readiness_unobserved',
-    'health_unobserved',
-  ],
-}
 
 export const publishCapability = mutation({
   args: {
@@ -1368,7 +1368,9 @@ export async function quarantineCapabilityBindingCommand(
       .withIndex('by_offeringId_and_admission_and_conformance', (index) => (
         index.eq('offeringId', parent.offeringId).eq('admission', 'admitted').eq('conformance', 'conformant')
       )).take(2)
-    const status = siblings.some((candidate) => candidate.bindingId !== binding.bindingId) ? 'active' : 'inactive'
+    const status = offeringStatusAfterBindingQuarantine(
+      siblings.some((candidate) => candidate.bindingId !== binding.bindingId),
+    )
     const parentEligibilityHash = capabilityOfferingEligibilityHash({
       offeringId: parent.offeringId, registrationHash: parent.registrationHash,
       status, admissionEvidenceRefs: command.context.evidenceRefs,
@@ -1377,10 +1379,7 @@ export async function quarantineCapabilityBindingCommand(
       status, admissionEvidenceRefs: [...command.context.evidenceRefs],
       eligibilityHash: parentEligibilityHash, updatedAt: now,
     })
-    parentDisposition = {
-      kind: 'updated', offeringId: parent.offeringId, status,
-      registrationHash: parent.registrationHash, eligibilityHash: parentEligibilityHash,
-    }
+    parentDisposition = quarantineParentUpdatedDisposition(parent, status, parentEligibilityHash)
     parentAuditId = await ensureSupplyAudit(db, quarantineParentAudit(
       command, parent, parentDisposition, now,
     ))
@@ -1626,8 +1625,8 @@ export async function listEligibleCapabilitySupply(
     return { kind: 'unavailable' as const, reason: 'eligible_supply_limit_exceeded' as const }
   }
   const supplies: Array<{
-    offering: ReturnType<typeof eligibleOfferingProjection>
-    binding: ReturnType<typeof eligibleBindingProjection>
+    offering: ReturnType<typeof eligibleOfferingProjection<Doc<'capabilityOfferings'>>>
+    binding: ReturnType<typeof eligibleBindingProjection<Doc<'capabilityTransportBindings'>>>
     publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
   }> = []
   const now = input.now ?? Date.now()
@@ -1675,10 +1674,6 @@ export async function listEligibleCapabilitySupply(
     || compareStableIdentifier(left.binding.bindingId, right.binding.bindingId)
   ))
   return { kind: 'available' as const, supplies }
-}
-
-function compareStableIdentifier(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0
 }
 
 export async function getEligibleExactCapabilitySupply(
@@ -1751,131 +1746,6 @@ async function recoverOfferingReplay(
   })
 }
 
-function offeringIntegrityIsValid(row: Doc<'capabilityOfferings'>): boolean {
-  try {
-    return capabilityOfferingRegistrationHash(offeringRegistrationFromRow(row)) === row.registrationHash
-  } catch {
-    return false
-  }
-}
-
-function bindingIntegrityIsValid(row: Doc<'capabilityTransportBindings'>): boolean {
-  try {
-    return capabilityBindingRegistrationHash(bindingRegistrationFromRow(row), {
-      configJson: row.configJson, configDigest: row.configDigest,
-    }) === row.registrationHash
-  } catch {
-    return false
-  }
-}
-
-function offeringEligibilityIsValid(row: Doc<'capabilityOfferings'>): boolean {
-  return capabilityOfferingEligibilityHash({
-    offeringId: row.offeringId, registrationHash: row.registrationHash,
-    status: row.status, admissionEvidenceRefs: row.admissionEvidenceRefs,
-  }) === row.eligibilityHash
-}
-
-function bindingEligibilityIsValid(row: Doc<'capabilityTransportBindings'>): boolean {
-  return capabilityBindingEligibilityHash({
-    bindingId: row.bindingId, registrationHash: row.registrationHash,
-    admission: row.admission, conformance: row.conformance,
-    admissionEvidenceRefs: row.admissionEvidenceRefs,
-    conformanceEvidenceRefs: row.conformanceEvidenceRefs,
-  }) === row.eligibilityHash
-}
-
-function offeringRegistrationFromRow(row: Doc<'capabilityOfferings'>): CapabilityOfferingRegistration {
-  return defineCapabilityOfferingRegistration({
-    offeringId: row.offeringId, businessId: row.businessId, networkId: row.networkId,
-    contractRef: contractRefFromRow(row), presentation: row.presentation,
-    searchTerms: row.searchTerms, registrationEvidenceRefs: row.registrationEvidenceRefs,
-  })
-}
-
-function bindingRegistrationFromRow(row: Doc<'capabilityTransportBindings'>): CapabilityTransportBindingRegistration {
-  return defineCapabilityTransportBindingRegistration({
-    bindingId: row.bindingId, offeringId: row.offeringId, networkId: row.networkId,
-    contractRef: contractRefFromRow(row), endpointUrl: row.endpointUrl, credentialRef: row.credentialRef,
-    continuation: row.continuation, cancellation: row.cancellation,
-    adapter: { adapterId: row.adapterId, config: null },
-    registrationEvidenceRefs: row.registrationEvidenceRefs,
-  })
-}
-
-function contractRefFromRow(row: Readonly<{ capabilityId: string; version: number; contractDigest: string }>) {
-  return { capabilityId: row.capabilityId, version: row.version, contractDigest: row.contractDigest }
-}
-
-function publicationProjection(
-  contractRef: ContractRef,
-  offeringId: string,
-  bindingId: string,
-  lifecycle: PublicationLifecycle = INITIAL_PUBLICATION_LIFECYCLE,
-) {
-  return {
-    kind: 'published' as const,
-    publicationRef: offeringId,
-    contractRef,
-    offeringId,
-    bindingId,
-    lifecycle,
-  }
-}
-
-function isDirectPublicationSource(value: unknown): value is Readonly<{ kind: 'ae_envelope'; documentJson: string }> {
-  return typeof value === 'object' && value !== null
-    && 'kind' in value && value.kind === 'ae_envelope'
-    && 'documentJson' in value && typeof value.documentJson === 'string'
-}
-
-function decodeConvexPublicationSource(value: unknown): unknown {
-  if (typeof value !== 'object' || value === null || !('kind' in value)) return value
-  try {
-    if (value.kind === 'openapi_http' && 'documentJson' in value && typeof value.documentJson === 'string') {
-      const { documentJson, ...source } = value
-      return { ...source, document: JSON.parse(documentJson) }
-    }
-    if (value.kind === 'mcp' && 'toolJson' in value && typeof value.toolJson === 'string') {
-      const { toolJson, ...source } = value
-      return { ...source, tool: JSON.parse(toolJson) }
-    }
-    if (value.kind === 'x402' && 'resourceJson' in value && typeof value.resourceJson === 'string') {
-      const { resourceJson, ...source } = value
-      return { ...source, resource: JSON.parse(resourceJson) }
-    }
-  } catch {
-    return undefined
-  }
-  return value
-}
-
-function publicationLifecycle(
-  publication: Doc<'capabilityPublications'>,
-  offering: Doc<'capabilityOfferings'>,
-  binding: Doc<'capabilityTransportBindings'>,
-  now: number,
-): PublicationLifecycle {
-  if (publication.disposition === 'withdrawn') {
-    return { state: 'withdrawn' as const, reasons: ['withdrawn' as const] }
-  }
-  if (publication.disposition === 'incompatible') {
-    return { state: 'incompatible' as const, reasons: ['incompatible_revision' as const] }
-  }
-  const reasons: PublicationLifecycleReason[] = []
-  if (!offeringEligibilityIsValid(offering) || !bindingEligibilityIsValid(binding)) {
-    return { state: 'inactive', reasons: ['eligibility_integrity_failure'] }
-  }
-  if (binding.admission !== 'admitted' || offering.status !== 'active') reasons.push('admission_unproven')
-  if (binding.conformance !== 'conformant') reasons.push('conformance_unproven')
-  if (publication.credentialState === 'unobserved') reasons.push('credential_readiness_unobserved')
-  if (publication.credentialState === 'unavailable') reasons.push('credential_unavailable')
-  if (publication.healthState === 'unobserved') reasons.push('health_unobserved')
-  if (publication.healthState === 'unhealthy') reasons.push('health_unhealthy')
-  if (publication.readinessValidUntil !== undefined && publication.readinessValidUntil < now) reasons.push('health_stale')
-  return { state: reasons.length === 0 ? 'active' as const : 'inactive' as const, reasons }
-}
-
 async function ownsPublishedBusiness(
   ctx: Pick<MutationCtx | QueryCtx, 'auth' | 'db'>,
   businessId: Id<'businesses'>,
@@ -1908,122 +1778,6 @@ async function resolveExactContract(db: QueryCtx['db'], ref: ContractRef) {
       : result.reason === 'not_active'
         ? 'contract_not_active' as const
         : 'contract_integrity_failure' as const,
-  }
-}
-
-function transportAdmissionInput(registration: CapabilityTransportBindingRegistration) {
-  return {
-    adapterId: registration.adapter.adapterId,
-    endpointUrl: registration.endpointUrl,
-    credentialRef: registration.credentialRef,
-    continuation: registration.continuation,
-    cancellation: registration.cancellation,
-    config: registration.adapter.config,
-  }
-}
-
-function writablePresentation(presentation: CapabilityOfferingRegistration['presentation']) {
-  return {
-    ...presentation,
-    materialTerms: presentation.materialTerms.map((term) => ({ ...term })),
-    commercialRelationship: {
-      ...presentation.commercialRelationship,
-      evidenceRefs: [...presentation.commercialRelationship.evidenceRefs],
-    },
-  }
-}
-
-function eligibleOfferingProjection(row: Doc<'capabilityOfferings'>) {
-  return {
-    offeringId: row.offeringId, businessId: row.businessId, networkId: row.networkId,
-    ...contractRefFromRow(row), presentation: row.presentation, status: 'active' as const,
-    registrationHash: row.registrationHash,
-  }
-}
-
-function eligibleBindingProjection(row: Doc<'capabilityTransportBindings'>) {
-  return {
-    bindingId: row.bindingId, offeringId: row.offeringId, networkId: row.networkId,
-    ...contractRefFromRow(row), endpointUrl: row.endpointUrl, credentialRef: row.credentialRef,
-    continuation: row.continuation, cancellation: row.cancellation,
-    adapterId: row.adapterId, configJson: row.configJson, configDigest: row.configDigest,
-    admission: 'admitted' as const, conformance: 'conformant' as const,
-    registrationHash: row.registrationHash,
-  }
-}
-
-function validRegistrationContext(input: RegistrationContext): boolean {
-  return boundedTrimmed(input.operationKey, MAX_CONTEXT_VALUE_LENGTH)
-    && boundedTrimmed(input.correlationId, MAX_CONTEXT_VALUE_LENGTH)
-    && boundedTrimmed(input.reasonCode, MAX_CONTEXT_VALUE_LENGTH)
-    && validEvidenceRefs(input.evidenceRefs)
-}
-
-function validCommandEnvelope(actor: SupplyCommandActor, context: RegistrationContext): boolean {
-  return boundedTrimmed(actor.ref, MAX_CONTEXT_VALUE_LENGTH) && validRegistrationContext(context)
-}
-
-function validEligibilityInput(input: EligibilityInput): boolean {
-  return boundedTrimmed(input.offeringId, MAX_CONTEXT_VALUE_LENGTH)
-    && boundedTrimmed(input.bindingId, MAX_CONTEXT_VALUE_LENGTH)
-    && boundedTrimmed(input.contractRef.capabilityId, MAX_CONTEXT_VALUE_LENGTH)
-    && Number.isSafeInteger(input.contractRef.version)
-    && input.contractRef.version > 0
-    && isCanonicalDigest(input.contractRef.contractDigest)
-    && isCanonicalDigest(input.expectedOfferingRegistrationHash)
-    && isCanonicalDigest(input.expectedBindingRegistrationHash)
-    && validEvidenceRefs(input.admissionEvidenceRefs)
-    && validEvidenceRefs(input.conformanceEvidenceRefs)
-}
-
-function validEvidenceRefs(references: readonly string[]): boolean {
-  return references.length > 0
-    && references.length <= 64
-    && references.every((reference) => boundedTrimmed(reference, MAX_EVIDENCE_REF_LENGTH))
-}
-
-function boundedTrimmed(value: string, maximumLength: number): boolean {
-  return value.length > 0 && value.length <= maximumLength && value === value.trim()
-}
-
-type DesiredEligibility = Readonly<{
-  offeringStatus: 'active' | 'inactive'
-  bindingAdmission: 'admitted' | 'not_admitted'
-  bindingConformance: 'conformant' | 'not_conformant'
-}>
-
-function desiredEligibility(
-  decision: 'admit' | 'revoke', remainingOfferingStatus: 'active' | 'inactive',
-): DesiredEligibility {
-  return decision === 'admit'
-    ? {
-        offeringStatus: 'active' as const,
-        bindingAdmission: 'admitted' as const,
-        bindingConformance: 'conformant' as const,
-      }
-    : {
-        offeringStatus: remainingOfferingStatus,
-        bindingAdmission: 'not_admitted' as const,
-        bindingConformance: 'not_conformant' as const,
-      }
-}
-
-function eligibilityPublicResult(input: EligibilityInput, desired: DesiredEligibility) {
-  return {
-    kind: input.decision === 'admit' ? 'eligible' as const : 'ineligible' as const,
-    offeringId: input.offeringId,
-    bindingId: input.bindingId,
-    eligibilityHash: capabilitySupplyEligibilityHash({
-      offeringId: input.offeringId,
-      bindingId: input.bindingId,
-      offeringRegistrationHash: input.expectedOfferingRegistrationHash,
-      bindingRegistrationHash: input.expectedBindingRegistrationHash,
-      offeringStatus: desired.offeringStatus,
-      bindingAdmission: desired.bindingAdmission,
-      bindingConformance: desired.bindingConformance,
-      admissionEvidenceRefs: input.admissionEvidenceRefs,
-      conformanceEvidenceRefs: input.conformanceEvidenceRefs,
-    }),
   }
 }
 
@@ -2083,66 +1837,6 @@ async function succeedOperation(
   })
 }
 
-function bindingRegistrationAudit(
-  actor: SupplyCommandActor,
-  context: RegistrationContext,
-  offeringId: string,
-  result: Readonly<{ bindingId: string; registrationHash: string }>,
-  createdAt: number,
-): SupplyAuditInput {
-  return {
-    eventType: 'capability_binding.registered',
-    action: 'register_binding',
-    targetType: 'capability_binding',
-    targetRef: result.bindingId,
-    actor,
-    context,
-    payload: { bindingId: result.bindingId, offeringId, registrationHash: result.registrationHash },
-    beforeState: 'absent',
-    afterState: 'not_admitted',
-    createdAt,
-  }
-}
-
-function bindingObservedRowDigest(binding: Doc<'capabilityTransportBindings'>): string {
-  return canonicalDigest({
-    _id: binding._id,
-    _creationTime: binding._creationTime,
-    bindingId: binding.bindingId,
-    offeringId: binding.offeringId,
-    networkId: binding.networkId,
-    capabilityId: binding.capabilityId,
-    version: binding.version,
-    contractDigest: binding.contractDigest,
-    endpointUrl: binding.endpointUrl,
-    credentialRef: binding.credentialRef,
-    continuation: binding.continuation,
-    cancellation: binding.cancellation,
-    adapterId: binding.adapterId,
-    configJson: binding.configJson,
-    configDigest: binding.configDigest,
-    registrationEvidenceRefs: binding.registrationEvidenceRefs,
-    registrationHash: binding.registrationHash,
-    admission: binding.admission,
-    conformance: binding.conformance,
-    admissionEvidenceRefs: binding.admissionEvidenceRefs,
-    conformanceEvidenceRefs: binding.conformanceEvidenceRefs,
-    eligibilityHash: binding.eligibilityHash,
-    registeredAt: binding.registeredAt,
-    updatedAt: binding.updatedAt,
-  })
-}
-
-type QuarantineParentDisposition =
-  | Readonly<{ kind: 'unresolved' }>
-  | Readonly<{
-      kind: 'updated'
-      offeringId: string
-      status: 'active' | 'inactive'
-      registrationHash: string
-      eligibilityHash: string
-    }>
-
 async function trustedQuarantineParent(
   db: QueryCtx['db'], binding: Doc<'capabilityTransportBindings'>,
 ): Promise<Doc<'capabilityOfferings'> | null> {
@@ -2155,48 +1849,6 @@ async function trustedQuarantineParent(
     || !sameCapabilityContractRef(contractRefFromRow(offering), contractRefFromRow(binding))
   ) return null
   return offering
-}
-
-function quarantineBindingAudit(
-  command: Readonly<{
-    actor: SupplyCommandActor
-    bindingId: string
-    expectedObservedRowDigest: string
-    context: RegistrationContext
-  }>,
-  binding: Doc<'capabilityTransportBindings'>,
-  eligibilityHash: string,
-  parent: QuarantineParentDisposition,
-  createdAt: number,
-): SupplyAuditInput {
-  return {
-    eventType: 'capability_binding.quarantined', targetType: 'capability_binding',
-    action: 'quarantine_binding',
-    targetRef: binding.bindingId, actor: command.actor, context: command.context,
-    payload: {
-      bindingId: binding.bindingId, observedRowDigest: command.expectedObservedRowDigest, eligibilityHash, parent,
-    },
-    beforeState: `${binding.admission}:${binding.conformance}`,
-    afterState: 'not_admitted:not_conformant', createdAt,
-  }
-}
-
-function quarantineParentAudit(
-  command: Readonly<{ actor: SupplyCommandActor; context: RegistrationContext }>,
-  offering: Doc<'capabilityOfferings'>,
-  parent: Extract<QuarantineParentDisposition, { kind: 'updated' }>,
-  createdAt: number,
-): SupplyAuditInput {
-  return {
-    eventType: 'capability_supply.eligibility_changed', targetType: 'capability_offering',
-    action: 'quarantine_binding',
-    targetRef: offering.offeringId, actor: command.actor, context: command.context,
-    payload: {
-      offeringId: offering.offeringId, registrationHash: parent.registrationHash,
-      eligibilityHash: parent.eligibilityHash,
-    },
-    beforeState: offering.status, afterState: parent.status, createdAt,
-  }
 }
 
 async function replayQuarantineBinding(
@@ -2264,36 +1916,6 @@ async function replayQuarantineBinding(
   return replayOperationResult(replay, result)
 }
 
-function validQuarantineAuditPayload(
-  payload: unknown,
-  command: Readonly<{ bindingId: string; expectedObservedRowDigest: string }>,
-): payload is {
-  bindingId: string
-  observedRowDigest: string
-  eligibilityHash: string
-  parent: QuarantineParentDisposition
-} {
-  if (typeof payload !== 'object' || payload === null) return false
-  const value = payload as Record<string, unknown>
-  if (
-    value.bindingId !== command.bindingId
-    || value.observedRowDigest !== command.expectedObservedRowDigest
-    || typeof value.eligibilityHash !== 'string'
-    || !isCanonicalDigest(value.eligibilityHash)
-    || typeof value.parent !== 'object'
-    || value.parent === null
-  ) return false
-  const parent = value.parent as Record<string, unknown>
-  return parent.kind === 'unresolved' || (
-    parent.kind === 'updated'
-    && typeof parent.offeringId === 'string'
-    && (parent.status === 'active' || parent.status === 'inactive')
-    && typeof parent.registrationHash === 'string'
-    && typeof parent.eligibilityHash === 'string'
-    && isCanonicalDigest(parent.eligibilityHash)
-  )
-}
-
 async function recoverEligibilityReplayDesired(
   db: QueryCtx['db'],
   replay: Readonly<{ effectRefs: readonly string[] }>,
@@ -2314,68 +1936,6 @@ async function recoverEligibilityReplayDesired(
     throw new Error('capability_supply_operation_integrity_failure')
   }
   return desiredEligibility(command.eligibility.decision, audit.afterState)
-}
-
-function eligibilityReplayAudits(
-  command: Readonly<{ actor: SupplyCommandActor; eligibility: EligibilityInput; context: RegistrationContext }>,
-  desired: DesiredEligibility,
-  createdAt: number,
-): readonly Readonly<{ audit: SupplyAuditInput; allowedBeforeStates: readonly string[] }>[] {
-  const offeringEligibilityHash = capabilityOfferingEligibilityHash({
-    offeringId: command.eligibility.offeringId,
-    registrationHash: command.eligibility.expectedOfferingRegistrationHash,
-    status: desired.offeringStatus,
-    admissionEvidenceRefs: command.eligibility.admissionEvidenceRefs,
-  })
-  const bindingEligibilityHash = capabilityBindingEligibilityHash({
-    bindingId: command.eligibility.bindingId,
-    registrationHash: command.eligibility.expectedBindingRegistrationHash,
-    admission: desired.bindingAdmission,
-    conformance: desired.bindingConformance,
-    admissionEvidenceRefs: command.eligibility.admissionEvidenceRefs,
-    conformanceEvidenceRefs: command.eligibility.conformanceEvidenceRefs,
-  })
-  return [
-    {
-      audit: {
-        eventType: 'capability_supply.eligibility_changed' as const,
-        action: 'set_eligibility' as const,
-        targetType: 'capability_offering' as const,
-        targetRef: command.eligibility.offeringId,
-        actor: command.actor,
-        context: command.context,
-        payload: {
-          offeringId: command.eligibility.offeringId,
-          registrationHash: command.eligibility.expectedOfferingRegistrationHash,
-          eligibilityHash: offeringEligibilityHash,
-        },
-        beforeState: '',
-        afterState: desired.offeringStatus,
-        createdAt,
-      },
-      allowedBeforeStates: ['inactive', 'active'],
-    },
-    {
-      audit: {
-        eventType: 'capability_supply.eligibility_changed' as const,
-        action: 'set_eligibility' as const,
-        targetType: 'capability_binding' as const,
-        targetRef: command.eligibility.bindingId,
-        actor: command.actor,
-        context: command.context,
-        payload: {
-          offeringId: command.eligibility.offeringId,
-          bindingId: command.eligibility.bindingId,
-          registrationHash: command.eligibility.expectedBindingRegistrationHash,
-          eligibilityHash: bindingEligibilityHash,
-        },
-        beforeState: '',
-        afterState: `${desired.bindingAdmission}:${desired.bindingConformance}`,
-        createdAt,
-      },
-      allowedBeforeStates: ['not_admitted:not_conformant', 'admitted:conformant'],
-    },
-  ]
 }
 
 async function verifyReplayAudits(
@@ -2422,65 +1982,4 @@ async function ensureSupplyAudit(
     redactedPayloadJson, payloadHash, createdAt: input.createdAt,
   })
   return supplyAuditEffectRef(input)
-}
-
-function supplyAuditEffectRef(input: SupplyAuditInput): string {
-  return `${supplyAuditEventId(input)}#${canonicalDigest({
-    eventId: supplyAuditEventId(input), eventType: input.eventType,
-    actorKind: input.actor.kind, actorRef: input.actor.ref,
-    targetType: input.targetType, targetRef: input.targetRef,
-    beforeState: input.beforeState, afterState: input.afterState,
-    idempotencyKey: input.context.operationKey, correlationId: input.context.correlationId,
-    reasonCode: input.context.reasonCode, evidenceRefs: input.context.evidenceRefs,
-    redactedPayloadJson: stableStringify(input.payload), payloadHash: canonicalDigest(input.payload),
-    createdAt: input.createdAt,
-  })}`
-}
-
-function storedSupplyAuditEffectRef(existing: Doc<'auditEvents'>): string {
-  return `${existing.eventId}#${canonicalDigest({
-    eventId: existing.eventId, eventType: existing.eventType,
-    actorKind: existing.actorKind, actorRef: existing.actorRef,
-    targetType: existing.targetType, targetRef: existing.targetRef,
-    beforeState: existing.beforeState ?? '', afterState: existing.afterState ?? '',
-    idempotencyKey: existing.idempotencyKey ?? '', correlationId: existing.correlationId ?? '',
-    reasonCode: existing.reasonCode ?? '', evidenceRefs: existing.evidenceRefs ?? [],
-    redactedPayloadJson: existing.redactedPayloadJson ?? '', payloadHash: existing.payloadHash ?? '',
-    createdAt: existing.createdAt,
-  })}`
-}
-
-function supplyAuditEventId(input: SupplyAuditInput): string {
-  return `audit:capability_supply:${canonicalDigest({
-    action: input.action, eventType: input.eventType, targetType: input.targetType, targetRef: input.targetRef,
-    actorKind: input.actor.kind, actorRef: input.actor.ref, operationKey: input.context.operationKey,
-  })}`
-}
-
-function storedAuditMatches(
-  existing: Doc<'auditEvents'>,
-  input: SupplyAuditInput,
-  allowedBeforeStates: readonly string[],
-): boolean {
-  const redactedPayloadJson = stableStringify(input.payload)
-  const payloadHash = canonicalDigest(input.payload)
-  return existing.eventId === supplyAuditEventId(input)
-    && existing.eventType === input.eventType
-    && existing.actorKind === input.actor.kind
-    && existing.actorRef === input.actor.ref
-    && existing.targetType === input.targetType
-    && existing.targetRef === input.targetRef
-    && existing.beforeState !== undefined
-    && allowedBeforeStates.includes(existing.beforeState)
-    && existing.afterState === input.afterState
-    && existing.idempotencyKey === input.context.operationKey
-    && existing.correlationId === input.context.correlationId
-    && existing.reasonCode === input.context.reasonCode
-    && sameStrings(existing.evidenceRefs, input.context.evidenceRefs)
-    && existing.redactedPayloadJson === redactedPayloadJson
-    && existing.payloadHash === payloadHash
-}
-
-function sameStrings(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index])
 }
