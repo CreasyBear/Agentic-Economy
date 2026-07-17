@@ -1,18 +1,19 @@
 import { v, type Infer } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { repeatPermissionRef } from '@/modules/customer-request/application/public'
 import { compileRouteMandate } from '@/modules/customer-request/route-mandate'
+import {
+  routeMandateValue,
+  standingRouteAuthorityUseValue,
+  standingRoutePolicyValue,
+} from '@/modules/customer-request/runtime'
 import {
   evaluateStandingRouteAuthority,
   standingRoutePolicyDigest,
   type StandingRouteAuthorityUse,
   type StandingRoutePolicy,
 } from '@/modules/customer-request/standing-route-authority'
-import {
-  routeMandateValue,
-  standingRouteAuthorityUseValue,
-  standingRoutePolicyValue,
-} from '@/modules/customer-request/runtime'
 
 import { internalMutation, internalQuery } from './_generated/server'
 import {
@@ -948,8 +949,4 @@ function credentialBelongsToAuthenticatedRequest(
   return credential.ownerTokenIdentifier === authenticated.identity.tokenIdentifier
     || (credential.principalId === authenticated.principalId
       && credential.credentialId === authenticated.identity.tokenIdentifier)
-}
-
-function repeatPermissionRef(policyRef: string): string {
-  return `repeat-permission:${canonicalDigest({ policyRef })}`
 }
