@@ -45,7 +45,7 @@ import {
   resumeCustomerRequest,
   revokeStandingRoute,
   runPreparationEgress as runPreparationEgressApplication,
-  useStandingRoute,
+  applyStandingRoute,
   type CommandReplayResult,
   type CompileCommitInput,
   type CustomerRequestActionResult,
@@ -1122,7 +1122,7 @@ export const useRepeatRoute = action({
     }
     const caller = await resolveRequestCaller(ctx, 'use_repeat', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return toActionResult(await useStandingRoute({
+    return toActionResult(await applyStandingRoute({
       ...command,
       principalId: caller.principalId,
       ...(args.serviceAuth === undefined ? {} : {

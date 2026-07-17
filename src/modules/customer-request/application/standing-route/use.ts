@@ -11,7 +11,7 @@ import type {
   UseStandingRouteInput,
 } from './types'
 
-export async function useStandingRoute(
+export async function applyStandingRoute(
   input: UseStandingRouteInput,
   ports: StandingRoutePorts,
 ): Promise<CustomerRequestActionResult> {

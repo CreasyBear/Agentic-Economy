@@ -9,7 +9,7 @@ const moduleRoot = 'src/modules/customer-request/application/standing-route'
 const movedSymbols = [
   'listStandingRouteAssistants',
   'allowStandingRoute',
-  'useStandingRoute',
+  'applyStandingRoute',
   'inspectStandingRoute',
   'revokeStandingRoute',
   'projectRepeatPermission',
@@ -29,7 +29,7 @@ describe('customer-request standing-route thinness', () => {
     expect(convexHost).toContain("from '@/modules/customer-request/application/public'")
     expect(convexHost).toContain('listStandingRouteAssistants')
     expect(convexHost).toContain('allowStandingRoute')
-    expect(convexHost).toContain('useStandingRoute')
+    expect(convexHost).toContain('applyStandingRoute')
     expect(convexHost).toContain('inspectStandingRoute')
     expect(convexHost).toContain('revokeStandingRoute')
     expect(convexHost).toContain('standingRoutePorts')
@@ -72,7 +72,7 @@ describe('customer-request standing-route thinness', () => {
     )
     expect(publicSource).toContain("from './standing-route'")
     expect(publicSource).toContain('allowStandingRoute')
-    expect(publicSource).toContain('useStandingRoute')
+    expect(publicSource).toContain('applyStandingRoute')
     expect(publicSource).toContain('listStandingRouteAssistants')
     expect(publicSource).toContain('repeatPermissionRef')
     expect(publicSource).toContain('resolveSelectableCurrentRoute')

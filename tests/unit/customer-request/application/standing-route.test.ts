@@ -8,7 +8,7 @@ import {
   repeatPermissionRef,
   resolveSelectableCurrentRoute,
   revokeStandingRoute,
-  useStandingRoute,
+  applyStandingRoute,
   type StandingRouteAggregate,
   type StandingRouteGeneration,
   type StandingRoutePorts,
@@ -199,7 +199,7 @@ describe('customer-request standing-route', () => {
 
   it('uses a standing permission by issuing a mandate through the port only', async () => {
     const ports = basePorts()
-    const result = await useStandingRoute({
+    const result = await applyStandingRoute({
       requestRef: 'req:1',
       revision: 3,
       routeRef,

@@ -114,7 +114,7 @@ export {
   repeatPermissionRef,
   resolveSelectableCurrentRoute,
   revokeStandingRoute,
-  useStandingRoute,
+  applyStandingRoute,
   type AllowStandingRouteInput,
   type InspectStandingRouteInput,
   type ListStandingRouteAssistantsInput,

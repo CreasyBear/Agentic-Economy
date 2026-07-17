@@ -4,7 +4,7 @@ export { listStandingRouteAssistants } from './list-assistants'
 export { projectRepeatPermission, repeatPermissionRef } from './project'
 export { revokeStandingRoute } from './revoke'
 export { resolveSelectableCurrentRoute } from './select'
-export { useStandingRoute } from './use'
+export { applyStandingRoute } from './use'
 export type {
   AllowStandingRouteInput,
   InspectStandingRouteInput,
