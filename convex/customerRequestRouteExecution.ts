@@ -11,6 +11,12 @@ import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contr
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
 import {
+  exportState,
+  routeAttemptIntegrityValid,
+  routeDispatchIntegrityValid,
+  routeRunIdentityDigest,
+} from '@/modules/customer-request/route-execution/journal'
+import {
   decideBusinessProblemClaim,
   decideCustomerProblemReply,
   decideCustomerProblemReport,
@@ -2019,14 +2025,6 @@ export const exportCustomerEvidence = internalQuery({
   },
 })
 
-function exportState(state: Doc<'customerRequestRouteStepAttempts'>['state']): Infer<typeof exportedStepState> {
-  if (state === 'leased') return 'ready_to_contact'
-  if (state === 'dispatched') return 'contacting'
-  if (state === 'accepted') return 'awaiting_result'
-  if (state === 'succeeded') return 'completed'
-  return state
-}
-
 async function readRunProjection(
   ctx: MutationCtx | QueryCtx,
   runRef: string,
@@ -2470,38 +2468,6 @@ async function currentLeasedInvocation(
   }
 }
 
-function routeRunIdentityDigest(run: Readonly<{
-  runRef: string
-  principalId: string
-  requestId: string
-  requestRevision: number
-  mandateRef: string
-  mandateDigest: string
-  generationRef: string
-  routePlanId: string
-  routeDigest: string
-  businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
-  totalSteps: number
-  createdAt: number
-}>): string {
-  return canonicalDigest({
-    runRef: run.runRef,
-    principalId: run.principalId,
-    requestId: run.requestId,
-    requestRevision: run.requestRevision,
-    mandateRef: run.mandateRef,
-    mandateDigest: run.mandateDigest,
-    generationRef: run.generationRef,
-    routePlanId: run.routePlanId,
-    routeDigest: run.routeDigest,
-    ...(run.businesses === undefined ? {} : {
-      businesses: run.businesses.map((business) => ({ ...business })),
-    }),
-    totalSteps: run.totalSteps,
-    createdAt: run.createdAt,
-  })
-}
-
 async function snapshotRouteBusinesses(
   ctx: MutationCtx,
   steps: readonly Readonly<{ businessId: string }>[],
@@ -2520,43 +2486,3 @@ async function snapshotRouteBusinesses(
   return businesses
 }
 
-function routeAttemptIntegrityValid(attempt: Doc<'customerRequestRouteStepAttempts'>): boolean {
-  const attemptDigest = canonicalDigest({
-    runRef: attempt.runRef,
-    requestId: attempt.requestId,
-    mandateRef: attempt.mandateRef,
-    actionId: attempt.actionId,
-    position: attempt.position,
-    operationKeyDigest: attempt.operationKeyDigest,
-    grantDigest: attempt.grant.grantDigest,
-    inputDigest: attempt.inputDigest,
-    createdAt: attempt.createdAt,
-  })
-  const input = parseBoundedJson(attempt.inputJson)
-  const output = attempt.outputJson === undefined ? undefined : parseBoundedJson(attempt.outputJson)
-  const observation = attempt.transportObservationJson === undefined
-    ? undefined
-    : parseRouteTransportObservationJson(attempt.transportObservationJson)
-  return attempt.attemptDigest === attemptDigest
-    && attempt.attemptRef === `route-step-attempt:v1:${attemptDigest}`
-    && input !== undefined
-    && canonicalDigest(input) === attempt.inputDigest
-    && (attempt.outputJson === undefined
-      ? attempt.outputDigest === undefined
-      : output !== undefined && canonicalDigest(output) === attempt.outputDigest)
-    && (attempt.transportObservationJson === undefined
-      ? attempt.transportObservationDigest === undefined
-      : observation !== undefined && canonicalDigest(observation) === attempt.transportObservationDigest)
-}
-
-function routeDispatchIntegrityValid(dispatch: Doc<'customerRequestRouteDispatchOutbox'>): boolean {
-  const digest = canonicalDigest({
-    runRef: dispatch.runRef,
-    attemptRef: dispatch.attemptRef,
-    operationKeyDigest: dispatch.operationKeyDigest,
-    availableAt: dispatch.createdAt,
-    createdAt: dispatch.createdAt,
-  })
-  return dispatch.dispatchDigest === digest
-    && dispatch.dispatchRef === `route-dispatch:v1:${digest}`
-}
