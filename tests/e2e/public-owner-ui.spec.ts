@@ -63,6 +63,25 @@ test.describe('public owner routes', () => {
     await assertPublicLanguage(page)
   })
 
+  test('human and agent entries state the same current boundary and next decisions', async ({ page }) => {
+    await page.goto('/')
+    const assistantIndex = await page.request.get('/llms.txt')
+
+    expect(assistantIndex.ok()).toBe(true)
+    const assistantText = await assistantIndex.text()
+    for (const statement of CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES) {
+      await expect(page.getByText(statement, { exact: true })).toBeVisible()
+      expect(assistantText).toContain(statement)
+    }
+
+    await expect(page.getByRole('button', { name: 'Start my Request' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Use AE with your AI' })).toHaveAttribute('href', '/for-agents')
+    expect(assistantText).toContain('Human entry=')
+    expect(assistantText).toContain('/api/v1/requests')
+    expect(assistantText).toContain('auth=Bearer AE API key with customer_requests:create')
+    expect(assistantText).toContain('You decide whether to confirm an option. Starting it is a separate decision.')
+  })
+
   test('registry search lists Sam and renders truthful no-results and pagination states', async ({ page }) => {
     await page.goto('/registry')
 
