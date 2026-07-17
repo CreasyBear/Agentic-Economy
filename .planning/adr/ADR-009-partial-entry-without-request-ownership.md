@@ -5,15 +5,22 @@ decision_owner: Founder
 review_by: 2026-08-17
 ---
 
-# Make Economic Operation the reusable unit beneath Customer Request
+# Allow partial entry without requiring Customer Request ownership
 
-AE proposes to treat an **Economic Operation**—one bounded interaction with one
-declared business capability—as the reusable unit of preparation, authority,
-attempt, evidence, inspection and recovery. Customer Request would remain the
-durable statement of a larger customer outcome, but would become one
-orchestrator of Economic Operations rather than the required owner of every
-operation. Direct callers and bundles could create the same operation through
-different origins without receiving weaker trust semantics.
+AE proposes that a caller may ask AE to perform one bounded task—such as finding
+businesses, qualifying supplied businesses, obtaining quotes, sending an
+approved order, checking an outcome or attempting recovery—without first
+creating a synthetic end-to-end Customer Request.
+
+Customer Request remains the durable statement of a larger customer outcome and
+may coordinate several such tasks. It is not required to own work that began
+elsewhere.
+
+This ADR deliberately does **not** introduce an `EconomicOperation` schema,
+table, base class, endpoint, lifecycle or kernel primitive. “Bounded task” is
+descriptive language for the unit a caller is trying to complete. Evals must
+first establish whether different tasks share enough implementation structure
+to justify any common type.
 
 This direction is proposed because the neutral engine is internally
 compositional while current durable lineage is Request-owned. Action preparation
@@ -24,7 +31,7 @@ partial entry in synthetic Requests would preserve this coupling and create
 misleading lineage.
 
 The primary-source lifecycle review in
-[Economic-operation lifecycle crosswalk](../research/2026-07-17-economic-operation-lifecycle-crosswalk.md)
+[Partial-entry lifecycle crosswalk](../research/2026-07-17-partial-entry-lifecycle-crosswalk.md)
 supports the shape of this proposal. OCDS, UBL, Peppol and the FAR divide
 procurement differently, but repeatedly preserve separately meaningful,
 referenced interactions such as qualification, quotation, order response,
@@ -33,7 +40,7 @@ supporting evidence, not sufficient evidence to accept this ADR.
 
 ## Decision constraints
 
-An Economic Operation must bind:
+Regardless of its entry point, each independently callable task must preserve:
 
 - the exact capability contract and operation;
 - the caller, principal and ownership scope;
@@ -44,18 +51,17 @@ An Economic Operation must bind:
 - expected evidence, cancellation and recovery semantics;
 - an honest resolution, including an unresolved or unknown external effect.
 
-An operation origin may be a Customer Request action, direct invocation, bundle
-step or external observation. Origin changes provenance only. It must not change
-the meaning of authority, execution, evidence, cancellation or recovery.
+Work may begin from a Customer Request, a direct invocation, a bundle step or an
+external observation. That entry context changes provenance only. It must not
+change the meaning of authority, execution, evidence, cancellation or recovery.
 
-A **Bundle** is a versioned graph of Economic Operation references and typed
-input/output bindings. It may coordinate dependencies and completion conditions,
-but it must not implement a second authority, attempt, evidence or recovery
-lifecycle.
+A bundle may coordinate independently callable tasks, their dependencies and
+completion conditions. It must not implement a second authority, attempt,
+evidence or recovery lifecycle.
 
 Customer Request remains the canonical customer-outcome aggregate. RoutePlan and
 RouteMandate remain valid for complete AE-generated routes. This ADR does not
-authorize weakening or replacing them before operation-level evidence earns a
+authorize weakening or replacing them before task-level evidence earns a
 generalized mandate.
 
 ## Considered options
@@ -73,9 +79,9 @@ shallow and difficult-to-use interface.
 because each product would tend to duplicate lineage, authority, attempts,
 evidence and recovery, contaminating the wedge-neutral engine.
 
-**Introduce a neutral Economic Operation beneath all entry paths.** Proposed
-because it preserves one trust implementation while allowing independently
-useful operations and optional compositions.
+**Allow partial entry while preserving the same trust rules.** Proposed because
+it permits independently useful work and optional composition without deciding
+prematurely that every task must share one persisted object.
 
 ## Acceptance gates
 
@@ -87,11 +93,11 @@ This ADR may move from proposed to accepted only when evals demonstrate that:
    authority, provider attempts and uncertainty reconciliation;
 3. external commitment observation preserves imported state as attributable
    claims unless an admitted provider adapter supplies current evidence;
-4. Request-owned and direct-origin operations retain identical authority,
+4. Request-owned and directly invoked tasks retain identical authority,
    idempotency, evidence and recovery meaning;
 5. existing Customer Request traces replay without semantic regression;
-6. a bundle consists only of independently inspectable operation references and
-   typed dependencies;
+6. a bundle consists only of independently inspectable task references and
+   declared dependencies;
 7. the direct-booking negative control is not burdened with unnecessary
    orchestration;
 8. no domain nouns enter the neutral contracts.
@@ -101,19 +107,20 @@ loosening the current guardrails.
 
 ## Consequences
 
-The likely engineering work is lineage generalization, not an engine rewrite:
-add a neutral operation origin and ownership digest; allow structured
-preparation to be operation-owned; scope inspection to operation ownership or an
-explicit grant; and eventually allow Customer Request actions to compile into
-the same operation interface.
+If the evals pass, the likely engineering work is to remove unnecessary
+Request ownership from existing lineage, preparation and inspection paths—not
+to add a new universal engine object. The implementation might reuse an
+existing action, run or receipt reference; use a small shared envelope; or keep
+separate task records with common trust rules. This ADR does not choose among
+those designs.
 
 The minimum durable projection for an agent is therefore not a transcript or
-one universal workflow status. It is the operation reference, actor and
+one universal workflow status. It is the task reference, actor and
 principal, input provenance and freshness, version, authority, attempt and
 idempotency identity, attributed observations, resolution including `unknown`,
 expected evidence, allowed continuations and next owner.
 
-Retry policy follows the consequence of the operation: computation may repeat;
+Retry policy follows the consequence of the task: computation may repeat;
 communication creates a new attributable attempt; a possibly completed external
 effect must be reconciled before retry unless the provider contract guarantees
 safe idempotent replay.
@@ -121,7 +128,7 @@ safe idempotent replay.
 Imported facts, offers and commitments remain claims made by their named source.
 AE owns admission decisions, authority reservations, attempt records, transport
 observations and resolutions. AE does not retroactively claim that it performed
-or verified an external operation.
+or verified work completed elsewhere.
 
 No current product claim, public endpoint or production capability changes as a
 result of this proposed ADR.

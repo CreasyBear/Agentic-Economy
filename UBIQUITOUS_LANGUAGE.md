@@ -8,20 +8,12 @@ Agentic Economy connects a customer job to registered business capabilities, pre
 The durable statement of the outcome a principal wants, including known facts, hard constraints, preferences, substitution boundaries, completion requirements, and revision history.
 _Avoid_: Prompt, household intent, job post
 
-**Economic Operation**:
-One bounded interaction with one declared capability, including its attributable inputs, provider or candidate scope, authority requirements, expected evidence and recovery posture. It may originate from a Customer Request, a direct caller, a Bundle or an external observation without changing its meaning.
-_Avoid_: Mini Request, endpoint call, lifecycle step
-
-**Operation Origin**:
-The attributable context through which an Economic Operation entered AE: a Customer Request action, direct invocation, Bundle step or external observation. Origin records provenance and ownership; it does not grant authority or establish truth.
-_Avoid_: Trusted source, execution permission
-
 **Imported Claim**:
 A fact, offer, commitment, status or other assertion supplied by a caller about work that may have occurred outside AE. AE preserves its source, observation time and freshness without upgrading it to AE-verified truth.
 _Avoid_: Imported fact, confirmed external state
 
 **Bundle**:
-A versioned composition of independently meaningful Economic Operations, their typed dependencies, branches and completion conditions. A Bundle coordinates Operations but does not own a separate authority, attempt, evidence or recovery lifecycle.
+A versioned composition of independently meaningful tasks, their declared dependencies, branches and completion conditions. A Bundle coordinates tasks but does not own a separate authority, attempt, evidence or recovery lifecycle.
 _Avoid_: Wedge-specific engine, mandatory end-to-end journey
 
 **Workflow Cohort**:

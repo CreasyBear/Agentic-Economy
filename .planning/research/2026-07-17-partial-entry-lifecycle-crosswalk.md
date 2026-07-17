@@ -1,10 +1,10 @@
-# Economic-operation lifecycle crosswalk
+# Partial-entry lifecycle crosswalk
 
 **Owner:** Engineering  
 **Status:** Active  
 **Maturity:** Target research  
-**Question:** Which recurring human tasks and durable records appear across established order, procurement, and contract-administration lifecycles, and what do they imply for AE Economic Operations and bundles?  
-**Decision affected:** [ADR-009: Make Economic Operation the reusable unit beneath Customer Request](../adr/ADR-009-economic-operation-beneath-customer-request.md)  
+**Question:** Which recurring human tasks and durable records appear across established order, procurement, and contract-administration lifecycles, and what do they imply for independently callable AE tasks and bundles?
+**Decision affected:** [ADR-009: Allow partial entry without requiring Customer Request ownership](../adr/ADR-009-partial-entry-without-request-ownership.md)
 **Evidence cutoff:** 2026-07-17  
 **Review by:** 2026-10-17  
 **Supersedes:** None  
@@ -20,7 +20,7 @@ The recurring unit of work has five parts:
 
 > prior state → authorized task → attributable attempt → durable result → explicit next owner
 
-This research supports an eval-first Economic Operation design. It does not prove demand, provider adoption, endpoint shape, pricing, or that every task should be automated.
+This research supports eval-first partial entry. It does not prove demand, provider adoption, endpoint shape, pricing, a common task schema, or that every task should be automated.
 
 ## Observations
 
@@ -95,7 +95,7 @@ This table decomposes the standards into recurring human work. “Candidate AE t
 The crosswalk supports this target grammar for evaluation:
 
 ```text
-Economic Operation
+Independently callable task
   accepts:
     caller-owned facts and references
     declared business capability
@@ -111,7 +111,7 @@ Economic Operation
     explicit next owner and allowed operations
 ```
 
-A full route is then a graph of Operations. A bundle is a versioned recipe for a recurring subset of that graph. Neither changes the semantics of its constituent Operations.
+A full route is then a graph of independently callable tasks. A bundle is a versioned recipe for a recurring subset of that graph. Neither changes the semantics of its constituent tasks.
 
 Three composition patterns recur:
 
@@ -160,16 +160,16 @@ The resulting retry rule is:
 
 ## Decision impact
 
-This research supports documenting the proposed Economic Operation dependency inversion in an ADR, with status proposed rather than accepted until compilation evals pass.
+This research supports documenting partial entry without mandatory Customer Request ownership, with status proposed rather than accepted until compilation evals pass.
 
 The ADR should preserve:
 
 - Customer Request as one orchestrator, not the universal trust parent;
-- one neutral operation lineage with direct, request-owned, bundle-step, and externally observed origins;
+- consistent lineage rules for direct, request-owned, bundle-step, and externally observed work;
 - separate facts, authority, attempts, observations, and resolution;
 - `unknown` as a first-class result;
 - repair through referenced records rather than history mutation;
-- bundles as compositions of independently meaningful Operations;
+- bundles as compositions of independently meaningful tasks;
 - current RouteMandate and production surfaces until migration evidence exists.
 
 It does not yet justify endpoint names, schema changes, source work, kernel promotion, or public product claims. A project-record update is required only when the architecture decision is adopted.
@@ -177,7 +177,7 @@ It does not yet justify endpoint names, schema changes, source work, kernel prom
 ## Current-versus-target check
 
 - **Current evidenced behavior:** AE's current assistant-safe surface supports published-business discovery, comparison, and qualified inquiry. Richer quote, authority, execution, inspection, and recovery behavior remains owned by the canonical Customer Request or internal machinery.
-- **Target behavior informed by this research:** Agents can invoke or resume bounded Economic Operations from portable entry state; Customer Requests and bundles compose the same Operations without duplicating authority, evidence, or recovery semantics.
+- **Target behavior informed by this research:** Agents can invoke or resume bounded tasks from portable entry state; Customer Requests and bundles compose the same tasks without duplicating authority, evidence, or recovery semantics.
 - **Claims this research does not authorize:** AE does not presently provide open quotation, ordering, contracting, payment, fulfilment, acceptance, or cross-provider recovery through independently callable network operations.
 
 ## Sources
