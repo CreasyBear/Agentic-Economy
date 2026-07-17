@@ -25,6 +25,7 @@ import {
 import {
   SANDBOX_WORKFLOW_PROVIDER_PROFILES,
   historicalItineraryBuilderCapabilityContractDocument,
+  historicalProcurementBriefCapabilityContractDocument,
   sandboxWorkflowCapabilityContractDocument,
   type SandboxWorkflowProviderKey,
 } from '@/modules/sandbox-supply/workflow-cohorts'
@@ -104,12 +105,12 @@ describe('labelled sandbox V2 capability supply', () => {
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
 
     expect(result.sandboxWorkflowBindings).toEqual(expect.arrayContaining([
-      'binding:sandbox-procurement-brief:http-json:v2',
+      'binding:sandbox-procurement-brief:http-json:v3',
       'binding:sandbox-supplier-options:http-json:v2',
       'binding:sandbox-procurement-recommendation:http-json:v2',
     ]))
     expect(result.sandboxWorkflowPublicationRefs).toEqual(expect.arrayContaining([
-      'offering:sandbox-procurement-brief:v2',
+      'offering:sandbox-procurement-brief:v3',
       'offering:sandbox-supplier-options:v2',
       'offering:sandbox-procurement-recommendation:v2',
     ]))
@@ -124,7 +125,7 @@ describe('labelled sandbox V2 capability supply', () => {
         || binding.bindingId.includes('sandbox-supplier-options'))
       .map(({ binding }) => binding.bindingId)
       .sort()).toEqual([
-      'binding:sandbox-procurement-brief:http-json:v2',
+      'binding:sandbox-procurement-brief:http-json:v3',
       'binding:sandbox-procurement-recommendation:http-json:v2',
       'binding:sandbox-supplier-options:http-json:v2',
     ])
@@ -319,8 +320,8 @@ describe('labelled sandbox V2 capability supply', () => {
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
-        publicationRef: 'offering:sandbox-procurement-brief:v2',
-        bindingId: 'binding:sandbox-procurement-brief:http-json:v2',
+        publicationRef: 'offering:sandbox-procurement-brief:v3',
+        bindingId: 'binding:sandbox-procurement-brief:http-json:v3',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
@@ -410,7 +411,7 @@ describe('labelled sandbox V2 capability supply', () => {
       'binding:sandbox-journey-case:http-json:v2',
       'binding:sandbox-meeting-schedule:http-json:v2',
       'binding:sandbox-milestone-plan:http-json:v2',
-      'binding:sandbox-procurement-brief:http-json:v2',
+      'binding:sandbox-procurement-brief:http-json:v3',
       'binding:sandbox-procurement-recommendation:http-json:v2',
       'binding:sandbox-progress-synthesis:http-json:v2',
       'binding:sandbox-route-quoter:http-json:v5',
@@ -774,6 +775,7 @@ describe('labelled sandbox V2 capability supply', () => {
   })
 
   it('retires exact historical procurement v1 supply after corrected workflow supply is published and replays idempotently', async () => {
+    vi.stubEnv('AE_SANDBOX_WORKFLOW_ORIGIN', 'https://workflow-provider.example.test')
     const backend = convexTest(schema, modules)
     await backend.run(async (ctx) => {
       const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
@@ -782,13 +784,15 @@ describe('labelled sandbox V2 capability supply', () => {
         || fixture.requestedSlug === 'sandbox-procurement-recommendation'
       ))
       await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
-      await registerHistoricalProcurementV1Supply(ctx.db)
+      await registerHistoricalProcurementV1Supply(ctx.db, {
+        workflowOrigin: 'https://workflow-provider.example.test',
+      })
     })
 
     await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
     const afterMigration = await readHistoricalProcurementV1Retirement(backend)
     expect(afterMigration.bindings).toEqual([
-      { bindingId: 'binding:sandbox-procurement-brief:http-json:v1', admission: 'not_admitted', conformance: 'not_conformant' },
+      { bindingId: 'binding:sandbox-procurement-brief:http-json:v2', admission: 'not_admitted', conformance: 'not_conformant' },
       { bindingId: 'binding:sandbox-procurement-recommendation:http-json:v1', admission: 'not_admitted', conformance: 'not_conformant' },
       { bindingId: 'binding:sandbox-supplier-options:http-json:v1', admission: 'not_admitted', conformance: 'not_conformant' },
     ])
@@ -841,7 +845,7 @@ describe('labelled sandbox V2 capability supply', () => {
 
     await expect(backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {}))
       .rejects.toThrow(
-        'sandbox_workflow_historical_identity_mismatch_binding:sandbox-procurement-brief:http-json:v1',
+        'sandbox_workflow_historical_identity_mismatch_binding:sandbox-procurement-brief:http-json:v2',
       )
   })
 
@@ -1377,13 +1381,15 @@ async function registerHistoricalRouteV1Supply(
 
 async function registerHistoricalProcurementV1Supply(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
-  options: Readonly<{ briefEndpointUrl?: string }> = {},
+  options: Readonly<{ briefEndpointUrl?: string; workflowOrigin?: string }> = {},
 ): Promise<void> {
   const procurementProfiles = Object.entries(SANDBOX_WORKFLOW_PROVIDER_PROFILES)
     .filter(([, profile]) => profile.cohortId === 'procurement')
   for (const [providerKey, profile] of procurementProfiles) {
     const encoded = encodeCapabilityContractDocument(
-      sandboxWorkflowCapabilityContractDocument(providerKey as SandboxWorkflowProviderKey),
+      providerKey === 'procurement-brief'
+        ? historicalProcurementBriefCapabilityContractDocument()
+        : sandboxWorkflowCapabilityContractDocument(providerKey as SandboxWorkflowProviderKey),
     )
     const contract = await registerCapabilityContractDocument(db, encoded.documentJson, 2_000)
     if (contract.kind !== 'registered') throw new Error(`historical workflow contract failed: ${contract.reason}`)
@@ -1445,7 +1451,12 @@ async function registerHistoricalProcurementV1Supply(
         contractRef: contract.ref,
         endpointUrl: providerKey === 'procurement-brief' && options.briefEndpointUrl !== undefined
           ? options.briefEndpointUrl
-          : new URL(profile.endpointPath, 'https://agentic-economy-phi.vercel.app').href,
+          : new URL(
+              profile.endpointPath,
+              providerKey === 'procurement-brief'
+                ? options.workflowOrigin ?? 'https://agentic-economy-phi.vercel.app'
+                : 'https://agentic-economy-phi.vercel.app',
+            ).href,
         credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
         cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
@@ -1591,7 +1602,8 @@ async function readHistoricalProcurementV1Retirement(
       .filter((binding) => (
         (binding.bindingId.startsWith('binding:sandbox-procurement-')
           || binding.bindingId === 'binding:sandbox-supplier-options:http-json:v1')
-        && binding.bindingId.endsWith(':v1')
+        && (binding.bindingId.endsWith(':v1')
+          || binding.bindingId === 'binding:sandbox-procurement-brief:http-json:v2')
       ))
       .map(({ bindingId, admission, conformance }) => ({ bindingId, admission, conformance }))
       .sort((left, right) => left.bindingId.localeCompare(right.bindingId)),

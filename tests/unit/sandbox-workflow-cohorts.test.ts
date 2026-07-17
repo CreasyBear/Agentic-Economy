@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { SANDBOX_WORKFLOW_COHORTS } from '@/modules/sandbox-supply/workflow-cohorts'
+import {
+  SANDBOX_WORKFLOW_COHORTS,
+  SANDBOX_WORKFLOW_PROVIDER_PROFILES,
+  sandboxWorkflowCapabilityContractDocument,
+} from '@/modules/sandbox-supply/workflow-cohorts'
 
 describe('sandbox workflow cohorts', () => {
   it('defines five economically distinct workflows with typed composition', () => {
@@ -48,5 +52,32 @@ describe('sandbox workflow cohorts', () => {
     expect(claims).toContain('no hidden operator coordination')
     expect(claims).toContain('no fabricated field completion')
     expect(claims).toContain('no claim that recovery actions occurred')
+  })
+
+  it('requires the packaging specification that changes which procurement options are viable', () => {
+    const profile = SANDBOX_WORKFLOW_PROVIDER_PROFILES['procurement-brief']
+    const contract = sandboxWorkflowCapabilityContractDocument('procurement-brief')
+    if (profile === undefined) throw new Error('procurement workflow profile missing')
+
+    expect(profile.contractVersion).toBe(2)
+    expect(contract.inputSchema).toMatchObject({
+      required: ['request', 'packageDimensions'],
+      properties: {
+        request: { type: 'string', minLength: 1 },
+        packageDimensions: {
+          type: 'string',
+          pattern: expect.stringContaining('[xX×]'),
+        },
+      },
+    })
+    expect(contract.customerAnnotations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        document: 'input',
+        pointer: '/packageDimensions',
+        label: 'Internal carton dimensions',
+        role: 'constraint',
+        inference: 'allowed',
+      }),
+    ]))
   })
 })

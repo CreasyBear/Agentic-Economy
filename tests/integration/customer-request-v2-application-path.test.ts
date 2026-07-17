@@ -7,6 +7,7 @@ import {
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
+import { sandboxWorkflowCapabilityContractDocument } from '@/modules/sandbox-supply/workflow-cohorts'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import { registerCapabilityContractDocument } from '../../convex/capabilityContractDocuments'
 import {
@@ -262,6 +263,100 @@ describe('current V2 Customer Request application path', () => {
     expect(persisted.legacyHeads).toEqual([])
     expect(persisted.legacyRequests).toEqual([])
     expect(persisted.legacyPreparations).toEqual([])
+  })
+
+  it('asks once for a registered procurement specification and continues the same Request after the answer', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    await observeSandboxPublications(backend, true)
+    const currentSupply = await backend.query(internal.capabilitySupply.listEligible, {
+      networkId: 'ae:public',
+      limit: 64,
+    })
+    if (currentSupply.kind !== 'available') throw new Error('procurement supply unavailable')
+    const procurementSupplies = currentSupply.supplies.filter(({ binding }) => (
+      binding.bindingId === 'binding:sandbox-procurement-brief:http-json:v3'
+    ))
+    expect(procurementSupplies).toHaveLength(1)
+    expect(procurementSupplies[0]?.publication).toMatchObject({
+      readinessValidUntil: expect.any(Number),
+    })
+    const document = sandboxWorkflowCapabilityContractDocument('procurement-brief')
+    const model = openCapabilityDecisionModel(defineCapabilityContract(document))
+    const requestInput = model.inputs.find(({ inputPointer }) => inputPointer === '/request')
+    const dimensionsInput = model.inputs.find(({ inputPointer }) => inputPointer === '/packageDimensions')
+    if (requestInput === undefined || dimensionsInput === undefined) {
+      throw new Error('procurement decision inputs missing')
+    }
+    const customerJob = 'Source 500 food-safe custom cartons within 21 days under AUD 4,000.'
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: model.selectionKey,
+          facts: [{ inputKey: requestInput.key, value: customerJob }],
+        }],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:procurement-specification',
+      requestId: 'request:v2:procurement-specification',
+      delegatedAgentId: 'agent:procurement',
+      customerJob,
+      routing: { networkId: 'ae:public' },
+    })
+    expect(submitted).toMatchObject({
+      kind: 'request',
+      requestRef: 'request:v2:procurement-specification',
+      revision: 1,
+      state: 'needs_information',
+      nextAction: 'provide_information',
+      missingFields: [{
+        label: 'Internal carton dimensions',
+        explanation: 'This answer changes which options can be considered now.',
+      }],
+      clarification: {
+        kind: 'contract_fact',
+        prompt: 'What internal length, width, and height must each carton fit?',
+      },
+    })
+    if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
+      throw new Error(`procurement clarification missing: ${JSON.stringify(submitted)}`)
+    }
+
+    const answered = await customer.action(api.customerRequestApplication.provideFacts, {
+      requestRef: submitted.requestRef,
+      expectedRevision: submitted.revision,
+      idempotencyKey: 'fact:v2:procurement-dimensions',
+      requirementKey: submitted.clarification.requirementKey,
+      value: '300 × 200 × 150 mm internal',
+    })
+    expect(answered).toMatchObject({
+      kind: 'request',
+      requestRef: submitted.requestRef,
+      revision: 2,
+      state: 'ready_to_compare',
+      nextAction: 'prepare_options',
+      criteria: expect.arrayContaining([expect.objectContaining({
+        label: 'Internal carton dimensions',
+        value: '300 × 200 × 150 mm internal',
+        basis: 'customer_provided',
+      })]),
+    })
+    if (answered.kind !== 'request') throw new Error(`procurement answer failed: ${answered.reason}`)
+    expect(answered.missingFields).toEqual([])
+    expect(answered.clarification).toBeUndefined()
+    expect(fetch).toHaveBeenCalledTimes(1)
+    await expect(customer.action(api.customerRequestApplication.provideFacts, {
+      requestRef: submitted.requestRef,
+      expectedRevision: submitted.revision,
+      idempotencyKey: 'fact:v2:procurement-dimensions',
+      requirementKey: submitted.clarification.requirementKey,
+      value: '300 × 200 × 150 mm internal',
+    })).resolves.toEqual(answered)
   })
 
   it('starts a customer-confirmed route from the normally seeded registered supply', async () => {

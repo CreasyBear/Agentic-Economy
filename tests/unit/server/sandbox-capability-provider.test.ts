@@ -226,8 +226,11 @@ describe('sandbox capability provider', () => {
   })
 
   it('executes the procurement workflow through three typed business endpoints', async () => {
-    const requestText = 'Source comparable workplace catering options for 80 people next Thursday under AUD 4,000.'
-    const brief = await workflowCall('procurement-brief', { request: requestText })
+    const requestText = 'Source 500 food-safe custom cartons within 21 days under AUD 4,000.'
+    const brief = await workflowCall('procurement-brief', {
+      request: requestText,
+      packageDimensions: '300 × 200 × 150 mm internal',
+    })
     expect(brief.status).toBe(200)
     const briefBody = await brief.json() as { requirementsBrief: string }
     expect(briefBody.requirementsBrief).toMatch(/^sandbox-procurement-brief:/u)
@@ -248,6 +251,20 @@ describe('sandbox capability provider', () => {
     })
     expect(recommendation.headers.get('Provider-Receipt'))
       .toMatch(/^sandbox-workflow:procurement-recommendation:/u)
+  })
+
+  it('refuses a procurement brief without three positive unit-bearing dimensions', async () => {
+    for (const packageDimensions of [undefined, ' ', '300 × 200 × 150', '300 mm × 200 mm']) {
+      const response = await workflowCall('procurement-brief', {
+        request: 'Source 500 food-safe custom cartons within 21 days under AUD 4,000.',
+        ...(packageDimensions === undefined ? {} : { packageDimensions }),
+      })
+      expect(response.status).toBe(400)
+      await expect(response.json()).resolves.toEqual({
+        kind: 'refused',
+        reason: 'request_invalid',
+      })
+    }
   })
 
   it('executes the itinerary workflow through three typed business endpoints', async () => {
@@ -335,6 +352,21 @@ describe('sandbox capability provider', () => {
   })
 
   it('publishes exact procurement discovery and refuses cross-step input', async () => {
+    const briefEndpoint = 'https://ae.test/api/sandbox/providers/workflow?provider=procurement-brief'
+    const briefDiscovery = await readSandboxWorkflowProviderDiscovery(
+      'procurement-brief',
+      new Request(briefEndpoint),
+    )
+    await expect(briefDiscovery.json()).resolves.toMatchObject({
+      operation: {
+        inputSchema: {
+          required: ['request', 'packageDimensions'],
+          properties: {
+            packageDimensions: { pattern: expect.stringContaining('[xX×]') },
+          },
+        },
+      },
+    })
     const endpoint = 'https://ae.test/api/sandbox/providers/workflow?provider=supplier-options'
     const discovery = await readSandboxWorkflowProviderDiscovery(
       'supplier-options',
@@ -362,7 +394,7 @@ describe('sandbox capability provider', () => {
     const response = await workflowCall('procurement-brief', {
       protocolVersion: 'ae-capability:v1',
       operation: 'quote',
-      bindingId: 'binding:sandbox-procurement-brief:http-json:v2',
+      bindingId: 'binding:sandbox-procurement-brief:http-json:v3',
       capabilityContractId: 'sandbox.workflow.procurement-brief',
     })
 

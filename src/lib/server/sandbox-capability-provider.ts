@@ -122,6 +122,7 @@ export async function readSandboxWorkflowProviderDiscovery(
       maximumCost: money(profile.amountMinor),
       inputSchema: workflowObjectSchema(
         profile.inputField,
+        profile.decisionInputs,
         profile.optionalInputs?.map(({ field }) => field),
       ),
       outputSchema: workflowObjectSchema(profile.outputField),
@@ -171,6 +172,7 @@ export async function handleSandboxWorkflowProviderRequest(
   const input = exactWorkflowInput(
     parsed,
     profile.inputField,
+    profile.decisionInputs ?? [],
     profile.optionalInputs?.map(({ field }) => field) ?? [],
   )
   if (input === undefined) {
@@ -467,14 +469,25 @@ function workflowProfile(providerKey: string) {
   return SANDBOX_WORKFLOW_PROVIDER_PROFILES[providerKey as SandboxWorkflowProviderKey]
 }
 
-function workflowObjectSchema(field: string, optionalFields: readonly string[] = []) {
+function workflowObjectSchema(
+  field: string,
+  requiredInputs: readonly Readonly<{ field: string; pattern: string }>[] = [],
+  optionalFields: readonly string[] = [],
+) {
+  const requiredFields = requiredInputs.map(({ field: requiredField }) => requiredField)
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     type: 'object',
-    properties: Object.fromEntries([field, ...optionalFields].map((name) => [
-      name, { type: 'string', minLength: 1 },
-    ])),
-    required: [field],
+    properties: {
+      [field]: { type: 'string', minLength: 1 },
+      ...Object.fromEntries(requiredInputs.map(({ field: name, pattern }) => [
+        name, { type: 'string', pattern },
+      ])),
+      ...Object.fromEntries(optionalFields.map((name) => [
+        name, { type: 'string', minLength: 1 },
+      ])),
+    },
+    required: [field, ...requiredFields],
     additionalProperties: false,
   }
 }
@@ -482,12 +495,17 @@ function workflowObjectSchema(field: string, optionalFields: readonly string[] =
 function exactWorkflowInput(
   value: unknown,
   requiredField: string,
+  requiredInputs: readonly Readonly<{ field: string; pattern: string }>[],
   optionalFields: readonly string[],
 ): Readonly<Record<string, string>> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
-  const allowed = new Set([requiredField, ...optionalFields])
+  const requiredFields = requiredInputs.map(({ field }) => field)
+  const allowed = new Set([requiredField, ...requiredFields, ...optionalFields])
   if (typeof record[requiredField] !== 'string' || record[requiredField].length === 0
+    || requiredInputs.some(({ field, pattern }) => (
+      typeof record[field] !== 'string' || !new RegExp(pattern, 'u').test(record[field])
+    ))
     || Object.entries(record).some(([field, entry]) => (
       !allowed.has(field) || typeof entry !== 'string' || entry.length === 0
     ))) return undefined

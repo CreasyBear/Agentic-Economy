@@ -33,6 +33,7 @@ import {
 import {
   SANDBOX_WORKFLOW_PROVIDER_PROFILES,
   historicalItineraryBuilderCapabilityContractDocument,
+  historicalProcurementBriefCapabilityContractDocument,
   sandboxWorkflowCapabilityContractDocument,
   type SandboxWorkflowProviderKey,
 } from '@/modules/sandbox-supply/workflow-cohorts'
@@ -877,8 +878,11 @@ export async function retireSupersededSandboxProcurementSupply(
   retiredAt: number,
 ): Promise<string[]> {
   const retired: string[] = []
-  const historicalOrigin = process.env.AE_SITE_URL?.trim()
+  const historicalSiteOrigin = process.env.AE_SITE_URL?.trim()
     || 'https://agentic-economy-phi.vercel.app'
+  const historicalWorkflowOrigin = process.env.AE_SANDBOX_WORKFLOW_ORIGIN?.trim()
+    || process.env.AE_SANDBOX_ROUTE_RESOLVER_ORIGIN?.trim()
+    || historicalSiteOrigin
   const registrationsBySlug = new Map(registrations.map((registration) => [registration.slug, registration]))
   const procurementProfiles = Object.entries(SANDBOX_WORKFLOW_PROVIDER_PROFILES)
     .filter(([, profile]) => profile.cohortId === 'procurement')
@@ -886,7 +890,12 @@ export async function retireSupersededSandboxProcurementSupply(
     if (registrationsBySlug.get(profile.slug) === undefined) {
       throw new Error(`sandbox_workflow_corrected_registration_missing_${profile.slug}`)
     }
-    const document = sandboxWorkflowCapabilityContractDocument(providerKey as SandboxWorkflowProviderKey)
+    const document = providerKey === 'procurement-brief'
+      ? historicalProcurementBriefCapabilityContractDocument()
+      : sandboxWorkflowCapabilityContractDocument(providerKey as SandboxWorkflowProviderKey)
+    const historicalOrigin = providerKey === 'procurement-brief'
+      ? historicalWorkflowOrigin
+      : historicalSiteOrigin
     const contractRef = encodeCapabilityContractDocument(document).contract.ref
     const [business, offering, binding] = await Promise.all([
       db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique(),
