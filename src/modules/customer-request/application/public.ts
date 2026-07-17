@@ -137,6 +137,17 @@ export {
 } from './confirm-route'
 
 export {
+  refineCustomerRequest,
+  type RecordNoopCommandResult,
+  type RefineAggregate,
+  type RefineCustomerRequestInput,
+  type RefineCustomerRequestPorts,
+  type RefineCustomerRequestResult,
+  type RefineRouteGeneration,
+  type RefineStoredResult,
+} from './refine'
+
+export {
   exportRouteEvidence,
   exportRouteProblemForSupport,
   listRouteProblemsForSupport,
