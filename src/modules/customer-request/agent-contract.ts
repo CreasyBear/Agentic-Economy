@@ -47,12 +47,20 @@ export const customerRequestMessageInputSchema = z.object({
   idempotencyKey: boundedText(200), expectedRevision: safePositiveInteger,
   message: boundedText(2_000), mode: z.enum(['append', 'replace']).default('append'),
   replacesPriorStatement: boundedText(2_000).optional(),
+  reportedRouteRef: boundedText(300).optional(),
 }).strict().superRefine((value, context) => {
   if (value.mode === 'replace' && value.replacesPriorStatement !== undefined) {
     context.addIssue({
       code: 'custom',
       path: ['replacesPriorStatement'],
       message: 'replacesPriorStatement is only valid for append amendments',
+    })
+  }
+  if (value.mode === 'replace' && value.reportedRouteRef !== undefined) {
+    context.addIssue({
+      code: 'custom',
+      path: ['reportedRouteRef'],
+      message: 'reportedRouteRef is only valid for append amendments',
     })
   }
 })
@@ -609,6 +617,7 @@ const customerUnsupportedRecoverySchema = z.strictObject({
     'maximum_total_cost_exceeded',
     'no_current_business',
     'route_composition_unavailable',
+    'reported_option_unavailable',
   ]),
   preservedRequest: z.literal(true),
   authorityCreatedForThisRevision: z.literal(false),

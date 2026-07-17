@@ -716,6 +716,79 @@ describe('customer Request workspace', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('lets a person report why one exact current option cannot work without knowing its reference', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'uuid-unavailable' })
+    const route = routeChoice('route:unavailable', 'current')
+    const preview = {
+      kind: 'request' as const, requestRef: 'request:unavailable', revision: 2,
+      routeGenerationRef: 'generation:unavailable', state: 'routes_ready' as const,
+      summary: 'One way forward is available.', nextAction: 'inspect_routes' as const,
+      missingFields: [], criteria: [], options: [],
+      decision: {
+        generationRef: 'generation:unavailable', requestRevision: 2,
+        outcome: { kind: 'routes_available' as const, routeCount: 1, summary: 'One way forward is available.' },
+        routes: [route], changes: { kind: 'initial' as const },
+        comparison: {
+          kind: 'single' as const,
+          summary: 'One current way forward is available. This is not a comparison or recommendation.',
+        },
+        actions: routeDecisionActions(),
+        nextBoundary: { kind: 'confirmation' as const, authorityCreated: false as const },
+      },
+    }
+    const unsupported = {
+      kind: 'request' as const, requestRef: 'request:unavailable', revision: 3,
+      state: 'unsupported' as const, summary: 'Find an option before Friday.',
+      nextAction: 'revise_request' as const, missingFields: [], criteria: [], options: [],
+      dataHandling: {
+        requestStorage: 'saved_for_revision' as const,
+        businessSharing: 'not_shared' as const,
+        explanation: 'AE saved this revision so you can change it. No information from this revision was sent to a business.',
+      },
+      unsupportedRecovery: {
+        reason: 'reported_option_unavailable' as const,
+        preservedRequest: true as const,
+        authorityCreatedForThisRevision: false as const,
+        businessContactedForThisRevision: false as const,
+        nextStep: {
+          kind: 'change_request' as const,
+          summary: 'Change what matters, or wait for different registered options while keeping this Request and its history.',
+        },
+      },
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json(preview))
+      .mockResolvedValueOnce(Response.json(
+        { kind: 'refused', reason: 'interpreter_unavailable' },
+        { status: 503 },
+      ))
+      .mockResolvedValueOnce(Response.json(unsupported))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find an option before Friday.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Review Result from route:unavailable' }))
+    expect(await screen.findByRole('heading', { name: 'Review before you confirm' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Why does this option not work?'), {
+      target: { value: 'It cannot meet the Friday deadline.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Find another option' }))
+
+    expect(await screen.findByText('Not supported yet', undefined, { timeout: 4_000 })).toBeTruthy()
+    const submitted = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body))
+    expect(submitted).toEqual({
+      idempotencyKey: 'report-option:request:unavailable:2:uuid-unavailable',
+      expectedRevision: 2,
+      message: 'It cannot meet the Friday deadline.',
+      reportedRouteRef: 'route:unavailable',
+    })
+    expect((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.body)
+      .toBe((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body)
+  })
+
   it('keeps disclosed commercial relationships visible without letting them explain the recommendation', async () => {
     const baseLower = routeChoice('route:lower', 'current')
     const lower = {

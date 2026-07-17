@@ -657,6 +657,10 @@ export const customerRequestV2AggregateValue = v.object({
   snapshot: v.object({
     requestId: v.string(), revision: v.number(), principalId: v.string(), delegatedAgentId: v.string(),
     intent: v.string(), networkId: v.string(), facts: v.array(requestFactV2Value),
+    routeExclusions: v.optional(v.array(v.object({
+      choiceSignature: v.string(), reportedRouteRef: v.string(), reportedGenerationRef: v.string(),
+      reason: v.string(), recordedAtRevision: v.number(),
+    }))),
     snapshotDigest: v.string(), recordedAt: v.number(),
   }),
   evaluation: v.object({

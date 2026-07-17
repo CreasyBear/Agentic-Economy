@@ -126,6 +126,18 @@ const cases: readonly ParityCase[] = [
     }), requestRef, agentOptions(callAction)),
   },
   {
+    operation: 'refine',
+    actionName: 'customerRequestApplication:refine',
+    human: async (refine) => await handleCustomerRequestMessagePost(post('/messages', {
+      idempotencyKey: 'message:reported-route', expectedRevision: 2,
+      message: 'This exact option cannot meet the deadline.', reportedRouteRef: 'choice:current:route:one',
+    }), requestRef, { refine }),
+    agent: async (callAction) => await handleAgentCustomerRequestMessagePost(post('/api/v1/messages', {
+      idempotencyKey: 'message:reported-route', expectedRevision: 2,
+      message: 'This exact option cannot meet the deadline.', reportedRouteRef: 'choice:current:route:one',
+    }), requestRef, agentOptions(callAction)),
+  },
+  {
     operation: 'facts',
     actionName: 'customerRequestApplication:provideFacts',
     human: async (provideFacts) => await handleCustomerRequestFactsPost(post('/facts', {

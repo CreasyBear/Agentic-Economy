@@ -54,7 +54,8 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
       {
         relation: 'change_request', method: 'POST', href: `${current}/messages`,
         summary: 'Change what matters and prepare a new current choice without confirming this one. '
-          + 'To replace one statement, also send replacesPriorStatement with its exact current text.',
+          + 'To replace one statement, also send replacesPriorStatement with its exact current text. '
+          + 'Only when reporting that one displayed option cannot work, also send its routeRef as reportedRouteRef.',
         input: {
           idempotencyKey,
           expectedRevision: view.revision,

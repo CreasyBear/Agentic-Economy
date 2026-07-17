@@ -15,6 +15,7 @@ import type { CustomerRoutePlan } from '@/modules/customer-request/agent-contrac
 import { projectCustomerRequestProblemTracking } from '@/modules/customer-request/problem-tracking'
 import {
   compileCustomerRequest,
+  routeChoiceSignature,
   writableCustomerRequestV2Aggregate,
   type CompileCustomerRequestResult,
   type CustomerRequestV2Aggregate,
@@ -443,6 +444,7 @@ const customerView = v.object({
       v.literal('maximum_total_cost_exceeded'),
       v.literal('no_current_business'),
       v.literal('route_composition_unavailable'),
+      v.literal('reported_option_unavailable'),
     ),
     preservedRequest: v.literal(true),
     authorityCreatedForThisRevision: v.literal(false),
@@ -675,6 +677,7 @@ export const refine = action({
     requestRef: v.string(), expectedRevision: v.number(), idempotencyKey: v.string(), message: v.string(),
     mode: v.optional(v.union(v.literal('append'), v.literal('replace'))),
     replacesPriorStatement: v.optional(v.string()),
+    reportedRouteRef: v.optional(v.string()),
     serviceAuth: v.optional(serviceAssertion),
   },
   returns: actionResult,
@@ -686,10 +689,12 @@ export const refine = action({
       ...(args.replacesPriorStatement === undefined ? {} : {
         replacesPriorStatement: args.replacesPriorStatement,
       }),
+      ...(args.reportedRouteRef === undefined ? {} : { reportedRouteRef: args.reportedRouteRef }),
     }
     const caller = await resolveRequestCaller(ctx, 'refine', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    if (args.mode === 'replace' && args.replacesPriorStatement !== undefined) {
+    if (args.mode === 'replace'
+      && (args.replacesPriorStatement !== undefined || args.reportedRouteRef !== undefined)) {
       return { kind: 'refused', reason: 'invalid_amendment' }
     }
     const commandKey = namespacedKey(caller.principalId, 'refine', args.requestRef, args.idempotencyKey)
@@ -747,6 +752,60 @@ export const refine = action({
       requestRef: args.requestRef, revision: args.expectedRevision,
       summary: 'AE could not verify the current options. Try this request again.',
     }))
+    const routeExclusions = [...(current.aggregate.snapshot.routeExclusions ?? [])]
+    if (args.reportedRouteRef !== undefined) {
+      const generation = await loadCurrentRouteGeneration(ctx, current)
+      const route = generation?.routes.find((candidate) => (
+        customerRouteRef(generation.generationRef, candidate.routePlanId) === args.reportedRouteRef
+      ))
+      if (generation === undefined || route === undefined) {
+        return { kind: 'refused', reason: 'invalid_amendment' }
+      }
+      routeExclusions.push({
+        choiceSignature: routeChoiceSignature(route),
+        reportedRouteRef: args.reportedRouteRef,
+        reportedGenerationRef: generation.generationRef,
+        reason: args.message.trim(),
+        recordedAtRevision: args.expectedRevision + 1,
+      })
+      const graph = await loadRequestGraph(ctx, current.aggregate.snapshot.networkId)
+      if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
+      const reboundFacts = rebindStoredFacts(current.aggregate.snapshot.facts, graph.models)
+      const selections = current.aggregate.plan.actions.flatMap((action) => {
+        const model = graph.models.find((candidate) => (
+          sameCapabilityContractRef(candidate.contractRef, action.contractRef)
+        ))
+        if (model === undefined || model.selectionKey !== action.selectionKey
+          || model.semanticDigest !== action.semanticDigest) return []
+        return [{
+          selectionKey: model.selectionKey,
+          contractRef: model.contractRef,
+          facts: reboundFacts.filter((fact) => fact.selectionKey === model.selectionKey
+            && sameCapabilityContractRef(fact.contractRef, model.contractRef)),
+        }]
+      })
+      if (selections.length !== current.aggregate.plan.actions.length) return writableView(projectNeedsAttention({
+        requestRef: args.requestRef,
+        revision: args.expectedRevision,
+        summary: 'The registered options changed. Review the Request before continuing.',
+      }))
+      return await compileCommit(ctx, {
+        commandKey,
+        commandDigest,
+        requestId: args.requestRef,
+        expectedRevision: args.expectedRevision,
+        expectedRouteGeneration,
+        principalId: caller.principalId,
+        delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
+        intent: current.aggregate.snapshot.intent,
+        networkId: current.aggregate.snapshot.networkId,
+        priorFacts: reboundFacts,
+        routeExclusions,
+        proposal: { kind: 'capability_candidates', selections },
+        interpreterId: 'customer:reported-option-unavailable',
+        graph,
+      })
+    }
     return await interpretCompileCommit(ctx, {
       commandKey,
       commandDigest,
@@ -767,6 +826,7 @@ export const refine = action({
       } : {}),
       networkId: current.aggregate.snapshot.networkId,
       priorFacts: current.aggregate.snapshot.facts,
+      routeExclusions,
       replaceCustomerRequestLiteral: true,
     })
   },
@@ -2374,6 +2434,7 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   amendment?: CustomerRequestAmendment
   networkId: string
   priorFacts: StoredAggregate['snapshot']['facts']
+  routeExclusions?: StoredAggregate['snapshot']['routeExclusions']
   replaceCustomerRequestLiteral?: boolean
   durableShell?: boolean
 }>): Promise<ActionResult> {
@@ -2452,6 +2513,7 @@ type CompileCommitInput = Readonly<{
   intent: string
   networkId: string
   priorFacts: readonly RequestFact[]
+  routeExclusions?: StoredAggregate['snapshot']['routeExclusions']
   proposal: CustomerRequestSemanticProposal
   interpreterId: string
   graph: RequestGraph
@@ -2468,6 +2530,7 @@ function compileProposal(input: CompileCommitInput) {
     intent: input.intent,
     networkId: input.networkId,
     priorFacts: input.priorFacts,
+    ...(input.routeExclusions === undefined ? {} : { routeExclusions: input.routeExclusions }),
     proposal: input.proposal,
     interpreterId: input.interpreterId,
     bindings: input.graph.bindings,
@@ -2833,6 +2896,21 @@ async function loadCurrentRouteGenerationNumber(
     generationRef: current.routeGenerationRef,
   })
   return result.kind === 'found' ? result.routeGeneration.generation : undefined
+}
+
+async function loadCurrentRouteGeneration(
+  ctx: ActionCtx,
+  current: Extract<StoredAggregateResult, { kind: 'current' }>,
+): Promise<StoredRouteGeneration | undefined> {
+  if (current.routeGenerationRef === undefined) return undefined
+  const result: Readonly<
+    | { kind: 'found'; routeGeneration: StoredRouteGeneration }
+    | { kind: 'not_found' }
+  > = await ctx.runQuery(internal.customerRequestV2.getRoutePlanGeneration, {
+    requestId: current.aggregate.snapshot.requestId,
+    generationRef: current.routeGenerationRef,
+  })
+  return result.kind === 'found' ? result.routeGeneration : undefined
 }
 
 async function prepareCurrentAction(
@@ -3533,6 +3611,7 @@ function projectStoredAggregate(
     evaluation: aggregate.evaluation,
     outcome: aggregate.outcome,
     actionCount: aggregate.plan.actions.length,
+    reportedOptionFailure: (aggregate.snapshot.routeExclusions?.length ?? 0) > 0,
     ...(routeGenerationRef === undefined ? {} : { routeGenerationRef }),
   }))
 }

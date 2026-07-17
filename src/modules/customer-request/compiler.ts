@@ -49,8 +49,17 @@ export type CustomerRequestV2Snapshot = Readonly<{
   intent: string
   networkId: string
   facts: readonly RequestFact[]
+  routeExclusions?: readonly CustomerReportedRouteExclusion[]
   snapshotDigest: string
   recordedAt: number
+}>
+
+export type CustomerReportedRouteExclusion = Readonly<{
+  choiceSignature: string
+  reportedRouteRef: string
+  reportedGenerationRef: string
+  reason: string
+  recordedAtRevision: number
 }>
 
 export type CustomerRequestV2PlanRevision = Readonly<{
@@ -162,6 +171,7 @@ export type CompileCustomerRequestCommand = Readonly<{
   intent: string
   networkId: string
   priorFacts?: readonly RequestFact[]
+  routeExclusions?: readonly CustomerReportedRouteExclusion[]
   proposal: CustomerRequestSemanticProposal
   interpreterId: string
   bindings: readonly RegisteredEvaluationBinding[]
@@ -272,6 +282,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     intent: command.intent,
     networkId: command.networkId,
     facts,
+    ...(command.routeExclusions === undefined || command.routeExclusions.length === 0
+      ? {}
+      : { routeExclusions: command.routeExclusions }),
   }
   const snapshot: CustomerRequestV2Snapshot = Object.freeze({
     ...snapshotMaterial,
@@ -297,6 +310,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
       maximumTotalCost: maximumTotalCostCriterion.value,
     }),
     customerFactRequiresEvidence: derivedCriteria.some(({ impact }) => impact === 'uncertainty'),
+    ...(command.routeExclusions === undefined ? {} : {
+      excludedChoiceSignatures: command.routeExclusions.map(({ choiceSignature }) => choiceSignature),
+    }),
   })
   if (routes === undefined) return { kind: 'refused', reason: 'capability_graph_invalid' }
   const planMaterial = {
@@ -400,11 +416,15 @@ export function writableCustomerRequestV2Aggregate(aggregate: CustomerRequestV2A
     nextRequirement,
     ...evaluationRequired
   } = aggregate.evaluation
+  const { routeExclusions, ...snapshotRequired } = aggregate.snapshot
   return {
     aggregateVersion: aggregate.aggregateVersion,
     snapshot: {
-      ...aggregate.snapshot,
+      ...snapshotRequired,
       facts: aggregate.snapshot.facts.map(writableFact),
+      ...(routeExclusions === undefined ? {} : {
+        routeExclusions: routeExclusions.map((exclusion) => ({ ...exclusion })),
+      }),
     },
     evaluation: {
       ...evaluationRequired,
@@ -478,6 +498,7 @@ export function compileRoutePlans(input: Readonly<{
   objectiveEvidenceRef?: string
   maximumTotalCost?: Readonly<{ currency: string; amountMinor: number }>
   customerFactRequiresEvidence: boolean
+  excludedChoiceSignatures?: readonly string[]
 }>): readonly CustomerRequestRoutePlan[] | undefined {
   if (input.actions.length === 0) return Object.freeze([])
   const choices = input.actions.map((action) => input.candidates.filter(
@@ -566,9 +587,11 @@ export function compileRoutePlans(input: Readonly<{
     }
     return [Object.freeze({ routePlanId: `route:${canonicalDigest(core as StableHashValue)}`, ...core })]
   })
+  const excludedChoiceSignatures = new Set(input.excludedChoiceSignatures ?? [])
+  const eligibleDrafts = drafts.filter((route) => !excludedChoiceSignatures.has(routeChoiceSignature(route)))
   const admittedDrafts = input.maximumTotalCost === undefined
-    ? drafts
-    : drafts.filter((route) => route.maximumTotalCost.kind === 'known'
+    ? eligibleDrafts
+    : eligibleDrafts.filter((route) => route.maximumTotalCost.kind === 'known'
       && route.maximumTotalCost.currency === input.maximumTotalCost?.currency
       && route.maximumTotalCost.amountMinor <= input.maximumTotalCost.amountMinor)
   const ranking = canRankByLowestMaximumPrice(admittedDrafts)
@@ -607,6 +630,30 @@ export function compileRoutePlans(input: Readonly<{
     }
     return Object.freeze({ ...material, routeDigest: canonicalDigest(material as StableHashValue) })
   }))
+}
+
+export function routeChoiceSignature(
+  route: Readonly<{ steps: readonly Readonly<{
+    businessId: string
+    offeringId: string
+    bindingId: string
+    contractRef: CapabilityContractRef
+    offeringRegistrationHash: string
+    bindingRegistrationHash: string
+  }>[] }>,
+): string {
+  const supplyIdentities = route.steps.map((step) => ({
+    businessId: step.businessId,
+    offeringId: step.offeringId,
+    bindingId: step.bindingId,
+    contractRef: step.contractRef,
+    offeringRegistrationHash: step.offeringRegistrationHash,
+    bindingRegistrationHash: step.bindingRegistrationHash,
+  }))
+  supplyIdentities.sort((left, right) => (
+    canonicalDigest(left as StableHashValue).localeCompare(canonicalDigest(right as StableHashValue))
+  ))
+  return canonicalDigest(supplyIdentities as StableHashValue)
 }
 
 type RouteCandidate = RequestEvaluation['candidates'][number] & Required<Pick<

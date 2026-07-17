@@ -12,7 +12,7 @@ import {
   requestRegistrySnapshotDigest,
   type RegisteredSupplyPrice,
 } from '@/modules/customer-request/evaluation'
-import { compileCustomerRequest } from '@/modules/customer-request/compiler'
+import { compileCustomerRequest, routeChoiceSignature } from '@/modules/customer-request/compiler'
 import { projectCustomerRequest, projectRequestEvaluation } from '@/modules/customer-request/customer-projection'
 import {
   routePlanGenerationIsInternallyConsistent,
@@ -32,6 +32,24 @@ import {
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
 
 describe('V2 Request semantics', () => {
+  it('identifies one exact registered supply choice independently of incidental step enumeration', () => {
+    const first = {
+      businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one',
+      contractRef: { capabilityId: 'capability:one', version: 1, contractDigest: 'sha256:one' },
+      offeringRegistrationHash: 'sha256:offering-one', bindingRegistrationHash: 'sha256:binding-one',
+    }
+    const second = {
+      businessId: 'business:two', offeringId: 'offering:two', bindingId: 'binding:two',
+      contractRef: { capabilityId: 'capability:two', version: 1, contractDigest: 'sha256:two' },
+      offeringRegistrationHash: 'sha256:offering-two', bindingRegistrationHash: 'sha256:binding-two',
+    }
+
+    expect(routeChoiceSignature({ steps: [first, second] }))
+      .toBe(routeChoiceSignature({ steps: [second, first] }))
+    expect(routeChoiceSignature({ steps: [first] }))
+      .not.toBe(routeChoiceSignature({ steps: [second] }))
+  })
+
   it('resolves an amendment into exact source statements without retaining a superseded assertion', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:canonical-amendment',

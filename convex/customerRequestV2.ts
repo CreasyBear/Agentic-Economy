@@ -1055,6 +1055,18 @@ export function aggregateIsInternallyConsistent(aggregate: Aggregate, expectedRe
     && aggregate.plan.registrySnapshotDigest === aggregate.evaluation.registrySnapshotDigest
     && outcomeIsConsistent
     && aggregate.snapshot.facts.length <= 128
+    && (aggregate.snapshot.routeExclusions?.length ?? 0) <= 256
+    && (aggregate.snapshot.routeExclusions ?? []).every((exclusion) => (
+      exclusion.choiceSignature.startsWith('sha256:')
+      && exclusion.reportedRouteRef.length > 0
+      && exclusion.reportedRouteRef.length <= 300
+      && exclusion.reportedGenerationRef.length > 0
+      && exclusion.reportedGenerationRef.length <= 300
+      && exclusion.reason.trim().length > 0
+      && exclusion.reason.length <= 2_000
+      && exclusion.recordedAtRevision >= 2
+      && exclusion.recordedAtRevision <= aggregate.snapshot.revision
+    ))
     && aggregate.evaluation.facts.length <= 128
     && aggregate.plan.actions.length <= 64
     && aggregate.evaluation.candidates.length <= 256
@@ -1071,6 +1083,9 @@ export function aggregateIsInternallyConsistent(aggregate: Aggregate, expectedRe
       intent: aggregate.snapshot.intent,
       networkId: aggregate.snapshot.networkId,
       facts: aggregate.snapshot.facts,
+      ...(aggregate.snapshot.routeExclusions === undefined
+        ? {}
+        : { routeExclusions: aggregate.snapshot.routeExclusions }),
     } as StableHashValue) === aggregate.snapshot.snapshotDigest
     && planAuthorityIsConsistent(aggregate)
     && completionAuthorityIsConsistent(aggregate)
@@ -1316,6 +1331,9 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     })(),
     customerFactRequiresEvidence: deriveCustomerMaterialConstraints(aggregate.snapshot.intent)
       .some(({ impact }) => impact === 'uncertainty'),
+    ...(aggregate.snapshot.routeExclusions === undefined ? {} : {
+      excludedChoiceSignatures: aggregate.snapshot.routeExclusions.map(({ choiceSignature }) => choiceSignature),
+    }),
   })
   const unknownCostFailsClosed = routeGeneration === undefined
     && aggregate.outcome === 'unsupported'

@@ -52,6 +52,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
   const [state, setState] = useState<WorkspaceState>({ kind: 'idle' })
   const [turns, setTurns] = useState<readonly ConversationTurn[]>([])
   const [editingRevision, setEditingRevision] = useState<number | undefined>()
+  const [routeFeedback, setRouteFeedback] = useState('')
   const requestIdentityRef = useRef<BrowserRequestIdentity | undefined>(undefined)
   const replacementCommandRef = useRef<ReplacementCommandIdentity | undefined>(undefined)
   const submittingRef = useRef(false)
@@ -124,9 +125,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
       }
-      const response = replacing
-        ? await fetch(endpoint, requestInit)
-        : await fetchBrowserRequestWithInterpreterRecovery(endpoint, requestInit)
+      const response = await fetchBrowserRequestWithInterpreterRecovery(endpoint, requestInit)
       const result: SubmitResponse = await response.json()
       if (!response.ok || !('kind' in result) || result.kind !== 'request') {
         setState(errorState(response.status, 'AE could not start this request.'))
@@ -166,11 +165,47 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
   }
 
   function reviewRoute(projection: CustomerRequestView, routeRef: string) {
+    setRouteFeedback('')
     setState({ kind: 'reviewing', projection, routeRef })
   }
 
   function leaveRouteReview(projection: CustomerRequestView) {
+    setRouteFeedback('')
     setState({ kind: 'request', projection })
+  }
+
+  async function reportRouteUnavailable(projection: CustomerRequestView, routeRef: string) {
+    const message = routeFeedback.trim()
+    if (message.length === 0) return
+    setState({ kind: 'submitting' })
+    try {
+      const response = await fetchBrowserRequestWithInterpreterRecovery(
+        `/api/requests/${encodeURIComponent(projection.requestRef)}/messages`,
+        {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: `report-option:${projection.requestRef}:${projection.revision}:${crypto.randomUUID()}`,
+          expectedRevision: projection.revision,
+          message,
+          reportedRouteRef: routeRef,
+        }),
+        },
+      )
+      const result: SubmitResponse = await response.json()
+      if (!response.ok || !('kind' in result) || result.kind !== 'request') {
+        setState(errorState(response.status, 'AE could not record why this option does not work. Nothing was confirmed or shared.'))
+        return
+      }
+      setRouteFeedback('')
+      setTurns((current) => [...current, { speaker: 'customer', text: message }])
+      setState({ kind: 'request', projection: result })
+    } catch {
+      setState({
+        kind: 'error',
+        message: 'AE could not be reached. The option remains unconfirmed and nothing was shared.',
+        authenticationRequired: false,
+      })
+    }
   }
 
   async function continueRequest(projection: CustomerRequestView) {
@@ -182,9 +217,8 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
     setAnswer('')
     try {
       const isContractFact = clarification.kind === 'contract_fact'
-      const response = await fetch(
-        `/api/requests/${encodeURIComponent(projection.requestRef)}/${isContractFact ? 'facts' : 'messages'}`,
-        {
+      const endpoint = `/api/requests/${encodeURIComponent(projection.requestRef)}/${isContractFact ? 'facts' : 'messages'}`
+      const requestInit = {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(isContractFact
             ? {
@@ -198,8 +232,10 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
                 expectedRevision: projection.revision,
                 message,
               }),
-        },
-      )
+        }
+      const response = isContractFact
+        ? await fetch(endpoint, requestInit)
+        : await fetchBrowserRequestWithInterpreterRecovery(endpoint, requestInit)
       const result: SubmitResponse = await response.json()
       if (!response.ok || !('kind' in result) || result.kind !== 'request') {
         setState(errorState(response.status, 'AE could not add that answer to this request.'))
@@ -364,13 +400,13 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
         </form>
         <Text type="supporting" color="secondary" className="text-center">No budget or full specification required. Keep contact, payment, and account details until AE asks for them.</Text>
         {editingRevision !== undefined ? <Text type="supporting" color="secondary">Editing revision {editingRevision} of this Request.</Text> : null}
-        {state.kind === 'error' ? <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : null}
-      </section> : <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} />}
+        {state.kind === 'error' ? <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} /> : null}
+      </section> : <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} />}
     </main>
   )
 }
 
-function RequestResult({ state, compare, reviewRoute, leaveRouteReview, confirmRoute, actOnRoute, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; reviewRoute: (projection: CustomerRequestView, routeRef: string) => void; leaveRouteReview: (projection: CustomerRequestView) => void; confirmRoute: (projection: CustomerRequestView, routeRef: string) => Promise<void>; actOnRoute: (projection: CustomerRequestView, operation: 'run' | 'cancellation') => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; turns: readonly ConversationTurn[] }) {
+function RequestResult({ state, compare, reviewRoute, leaveRouteReview, reportRouteUnavailable, confirmRoute, actOnRoute, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, routeFeedback, setRouteFeedback, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; reviewRoute: (projection: CustomerRequestView, routeRef: string) => void; leaveRouteReview: (projection: CustomerRequestView) => void; reportRouteUnavailable: (projection: CustomerRequestView, routeRef: string) => Promise<void>; confirmRoute: (projection: CustomerRequestView, routeRef: string) => Promise<void>; actOnRoute: (projection: CustomerRequestView, operation: 'run' | 'cancellation') => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; routeFeedback: string; setRouteFeedback: (feedback: string) => void; turns: readonly ConversationTurn[] }) {
   if (state.kind === 'error') return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-4"><Heading level={2}>Request unavailable</Heading><Text color="secondary">{state.message}</Text>{state.authenticationRequired ? <Button label="Sign in to continue" href="/sign-in" variant="primary" /> : null}</div></Card>
   if (state.kind === 'conflict') return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite">
     <div className="grid gap-4">
@@ -385,7 +421,7 @@ function RequestResult({ state, compare, reviewRoute, leaveRouteReview, confirmR
     return <RouteConfirmationCard projection={state.projection} turns={turns} start={() => actOnRoute(state.projection, 'run')} edit={() => edit(state.projection)} restart={restart} />
   }
   if (state.kind === 'reviewing') {
-    return <RouteReviewCard projection={state.projection} routeRef={state.routeRef} turns={turns} confirm={() => confirmRoute(state.projection, state.routeRef)} decline={() => leaveRouteReview(state.projection)} edit={() => edit(state.projection)} restart={restart} />
+    return <RouteReviewCard projection={state.projection} routeRef={state.routeRef} turns={turns} confirm={() => confirmRoute(state.projection, state.routeRef)} reportUnavailable={() => reportRouteUnavailable(state.projection, state.routeRef)} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} decline={() => leaveRouteReview(state.projection)} edit={() => edit(state.projection)} restart={restart} />
   }
   if (state.kind === 'request' && state.projection.decision !== undefined) {
     return <RouteDecisionCard projection={state.projection} turns={turns} review={(routeRef) => reviewRoute(state.projection, routeRef)} check={() => compare(state.projection)} edit={() => edit(state.projection)} restart={restart} />
@@ -551,11 +587,14 @@ function repeatPermissionEligible(route: CustomerRoute): boolean {
     && route.effects.every((effect) => effect.kind === 'information_shared')
 }
 
-function RouteReviewCard({ projection, routeRef, turns, confirm, decline, edit, restart }: {
+function RouteReviewCard({ projection, routeRef, turns, confirm, reportUnavailable, routeFeedback, setRouteFeedback, decline, edit, restart }: {
   projection: CustomerRequestView
   routeRef: string
   turns: readonly ConversationTurn[]
   confirm: () => Promise<void>
+  reportUnavailable: () => Promise<void>
+  routeFeedback: string
+  setRouteFeedback: (feedback: string) => void
   decline: () => void
   edit: () => void
   restart: () => void
@@ -602,6 +641,26 @@ function RouteReviewCard({ projection, routeRef, turns, confirm, decline, edit, 
           <Heading level={3}>What confirming means</Heading>
           <Text color="secondary">Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.</Text>
           <Text type="supporting" color="secondary">{actions.start.summary}</Text>
+        </div>
+        <div className="grid gap-3 rounded-md border border-border bg-surface p-4">
+          <Heading level={3}>This option does not work?</Heading>
+          <Text color="secondary">Tell AE what makes this exact option unsuitable. AE will keep this Request and look for a different current option. Nothing will be confirmed or shared.</Text>
+          <label htmlFor="route-feedback" className="text-sm font-semibold">Why does this option not work?</label>
+          <textarea
+            id="route-feedback"
+            value={routeFeedback}
+            onChange={(event) => setRouteFeedback(event.target.value)}
+            rows={3}
+            maxLength={2_000}
+            required
+            className="min-h-20 resize-y rounded-md border border-border bg-card px-3 py-2 text-primary outline-none focus:ring-2 focus:ring-accent"
+          />
+          <Button
+            label="Find another option"
+            variant="secondary"
+            isDisabled={routeFeedback.trim().length === 0}
+            clickAction={() => void reportUnavailable()}
+          />
         </div>
         <div className="flex flex-wrap gap-3">
           <Button label="Confirm this choice" variant="primary" clickAction={confirm} />

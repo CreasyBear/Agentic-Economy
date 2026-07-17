@@ -142,6 +142,7 @@ export function projectCustomerRequest(result: CompileCustomerRequestResult): Cu
     evaluation: result.aggregate.evaluation,
     outcome: result.aggregate.outcome,
     actionCount: result.aggregate.plan.actions.length,
+    reportedOptionFailure: (result.aggregate.snapshot.routeExclusions?.length ?? 0) > 0,
     ...(result.routeGeneration === undefined
       ? {}
       : { routeGenerationRef: result.routeGeneration.generationRef }),
@@ -153,6 +154,7 @@ export function projectRequestEvaluation(input: Readonly<{
   evaluation: RequestEvaluationProjectionInput
   outcome?: 'plan_ready' | 'needs_information' | 'unsupported'
   actionCount?: number
+  reportedOptionFailure?: boolean
   routeGenerationRef?: string
 }>): CustomerRequestView {
   const criteria = projectCustomerCriteria(input.evaluation.criteria)
@@ -164,6 +166,20 @@ export function projectRequestEvaluation(input: Readonly<{
   const providerDataSharingProhibited = input.evaluation.criteria.some((criterion) => (
     criterion.inputKey === CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY && criterion.value === false
   ))
+  if (input.outcome === 'unsupported' && input.reportedOptionFailure === true) return requestView({
+    ...routeGeneration,
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'unsupported',
+    summary: input.snapshot.intent,
+    nextAction: 'revise_request',
+    criteria,
+    dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
+    unsupportedRecovery: unsupportedRecovery(
+      'reported_option_unavailable',
+      'Change what matters, or wait for different registered options while keeping this Request and its history.',
+    ),
+  })
   if (input.evaluation.posture === 'unsupported' && input.actionCount === 0) return requestView({
     ...routeGeneration,
     requestRef: input.snapshot.requestId,

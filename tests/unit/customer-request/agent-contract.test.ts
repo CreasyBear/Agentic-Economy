@@ -26,6 +26,22 @@ describe('Customer Request agent contract', () => {
       mode: 'replace',
       replacesPriorStatement: 'An old statement.',
     }).success).toBe(false)
+    expect(customerRequestMessageInputSchema.parse({
+      idempotencyKey: 'report:one',
+      expectedRevision: 2,
+      message: 'This exact option cannot meet the deadline.',
+      reportedRouteRef: 'choice:generation%3Atwo:route%3Aone',
+    })).toMatchObject({
+      mode: 'append',
+      reportedRouteRef: 'choice:generation%3Atwo:route%3Aone',
+    })
+    expect(customerRequestMessageInputSchema.safeParse({
+      idempotencyKey: 'replace:route',
+      expectedRevision: 2,
+      message: 'A complete replacement Request.',
+      mode: 'replace',
+      reportedRouteRef: 'choice:generation%3Atwo:route%3Aone',
+    }).success).toBe(false)
   })
 
   it('owns the exact typed-fact wire shape used by the handler and external agent', () => {

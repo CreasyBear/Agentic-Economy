@@ -265,6 +265,149 @@ describe('current V2 Customer Request application path', () => {
     expect(persisted.legacyPreparations).toEqual([])
   })
 
+  it('does not return an unchanged option after the customer reports that exact option cannot work', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (input === undefined) throw new Error('sandbox request input missing')
+    const modelResponse = (content: unknown) => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(content) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    const selected = {
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: input.key, value: 'Find an option before the hard deadline.' }],
+      }],
+    }
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(modelResponse(selected))
+      .mockRejectedValue(new Error('reported option feedback must not require model reinterpretation')))
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:reported-option-failure',
+      requestId: 'request:v2:reported-option-failure',
+      delegatedAgentId: 'agent:reported-option-failure',
+      customerJob: 'Find an option before the hard deadline.',
+      routing: { networkId: 'ae:public' },
+    })
+    if (submitted.kind !== 'request') throw new Error('reported-option Request missing')
+    await observeSandboxPublications(backend)
+    const decision = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: submitted.requestRef,
+      revision: submitted.revision,
+      idempotencyKey: 'prepare:v2:reported-option-failure',
+    })
+    if (decision.kind !== 'request' || decision.state !== 'routes_ready') {
+      throw new Error(`reported-option route missing: ${JSON.stringify(decision)}`)
+    }
+    const rejectedRoute = decision.decision?.routes[0]
+    if (rejectedRoute === undefined) throw new Error('reported-option route choice missing')
+    const command = {
+      requestRef: decision.requestRef,
+      expectedRevision: decision.revision,
+      idempotencyKey: 'refine:v2:reported-option-failure',
+      message: 'This option cannot meet the hard deadline. Exclude it.',
+      reportedRouteRef: rejectedRoute.routeRef,
+    }
+
+    const refined = await customer.action(api.customerRequestApplication.refine, command)
+
+    expect(refined).toMatchObject({
+      kind: 'request',
+      requestRef: decision.requestRef,
+      revision: 2,
+      state: 'ready_to_compare',
+      nextAction: 'prepare_options',
+      summary: 'Find an option before the hard deadline.',
+    })
+    if (refined.kind !== 'request') throw new Error('reported-option refinement missing')
+    await expect(customer.action(api.customerRequestApplication.refine, command)).resolves.toEqual(refined)
+    const replacement = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: refined.requestRef,
+      revision: refined.revision,
+      idempotencyKey: 'prepare:v2:reported-option-replacement',
+    })
+    expect(replacement).toMatchObject({
+      kind: 'request',
+      state: 'routes_ready',
+      revision: 2,
+    })
+    if (replacement.kind !== 'request') throw new Error('reported-option replacement missing')
+    expect(replacement.confirmation).toBeUndefined()
+    expect(replacement.decision?.routes).toHaveLength(1)
+    expect(replacement.decision?.routes.map(({ routeRef }) => routeRef)).not.toContain(rejectedRoute.routeRef)
+    expect(replacement.decision?.routes[0]?.businesses.map(({ businessRef }) => businessRef))
+      .not.toEqual(rejectedRoute.businesses.map(({ businessRef }) => businessRef))
+    await expect(customer.action(api.customerRequestApplication.refine, {
+      requestRef: replacement.requestRef,
+      expectedRevision: replacement.revision,
+      idempotencyKey: 'refine:v2:reported-option-stale',
+      message: 'The earlier option still cannot work.',
+      reportedRouteRef: rejectedRoute.routeRef,
+    })).resolves.toEqual({
+      kind: 'refused',
+      reason: 'invalid_amendment',
+    })
+    await expect(customer.action(api.customerRequestApplication.refine, {
+      requestRef: replacement.requestRef,
+      expectedRevision: replacement.revision,
+      idempotencyKey: 'refine:v2:reported-option-foreign',
+      message: 'This option cannot work.',
+      reportedRouteRef: 'choice:foreign-generation:foreign-route',
+    })).resolves.toEqual({
+      kind: 'refused',
+      reason: 'invalid_amendment',
+    })
+    const remainingRoute = replacement.decision?.routes[0]
+    if (remainingRoute === undefined) throw new Error('reported-option remaining route missing')
+    const noAlternative = await customer.action(api.customerRequestApplication.refine, {
+      requestRef: replacement.requestRef,
+      expectedRevision: replacement.revision,
+      idempotencyKey: 'refine:v2:reported-option-no-alternative',
+      message: 'This replacement also cannot meet the hard deadline.',
+      reportedRouteRef: remainingRoute.routeRef,
+    })
+    expect(noAlternative).toMatchObject({
+      kind: 'request',
+      requestRef: replacement.requestRef,
+      revision: 3,
+      state: 'unsupported',
+      nextAction: 'revise_request',
+      unsupportedRecovery: {
+        reason: 'reported_option_unavailable',
+        preservedRequest: true,
+        authorityCreatedForThisRevision: false,
+        businessContactedForThisRevision: false,
+      },
+    })
+    if (noAlternative.kind !== 'request') throw new Error('reported-option unsupported recovery missing')
+    expect(noAlternative.confirmation).toBeUndefined()
+    expect(noAlternative.decision).toBeUndefined()
+    const persisted = await backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestV2Revisions')
+        .withIndex('by_requestId_and_requestRevision', (query) => (
+          query.eq('requestId', refined.requestRef).eq('requestRevision', 3)
+        )).unique()
+    ))
+    expect(persisted?.aggregate.snapshot.routeExclusions).toMatchObject([
+      {
+        reportedRouteRef: rejectedRoute.routeRef,
+        reason: command.message,
+        recordedAtRevision: 2,
+      },
+      {
+        reportedRouteRef: remainingRoute.routeRef,
+        reason: 'This replacement also cannot meet the hard deadline.',
+        recordedAtRevision: 3,
+      },
+    ])
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('asks once for a registered procurement specification and continues the same Request after the answer', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
