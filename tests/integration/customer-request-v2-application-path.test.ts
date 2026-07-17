@@ -118,6 +118,12 @@ describe('current V2 Customer Request application path', () => {
       kind: 'request', requestRef: 'request:v2:application', revision: 1,
       state: 'ready_to_compare', nextAction: 'prepare_options',
     })
+    await backend.run(async (ctx) => {
+      const shell = await ctx.db.query('customerRequestV2SubmissionShells')
+        .withIndex('by_requestId', (query) => query.eq('requestId', 'request:v2:application')).unique()
+      if (shell === null) throw new Error('submission shell missing')
+      await ctx.db.delete(shell._id)
+    })
     vi.stubEnv('OPENROUTER_API_KEY', '')
     const replayedSubmit = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:1', requestId: 'request:v2:application',
@@ -127,6 +133,7 @@ describe('current V2 Customer Request application path', () => {
     expect(replayedSubmit).toEqual(submitted)
     expect(JSON.stringify(replayedSubmit)).toBe(JSON.stringify(submitted))
     expect(generate).toHaveBeenCalledTimes(1)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: 'request:v2:application',
     })).resolves.toMatchObject({
@@ -1234,6 +1241,84 @@ describe('current V2 Customer Request application path', () => {
       reason: 'idempotency_key_reused',
     })
     expect(generate).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('durable Customer Request submission recovery', () => {
+  beforeEach(() => vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', identity.issuer))
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+  })
+
+  it('saves and resumes an idempotent Request shell before interpretation, then completes it after recovery', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const customer = backend.withIdentity(identity)
+    const command = {
+      compilationKey: 'submit:v2:interpreter-recovery',
+      requestId: 'request:v2:interpreter-recovery',
+      delegatedAgentId: 'agent:external:v2',
+      customerJob: 'Compare labelled sandbox options for an accessible office relocation.',
+      routing: { networkId: 'ae:public' },
+    }
+
+    const unavailable = await customer.action(api.customerRequestApplication.submit, command)
+    expect(unavailable).toMatchObject({
+      kind: 'request',
+      requestRef: command.requestId,
+      revision: 0,
+      state: 'needs_attention',
+      nextAction: 'retry',
+    })
+    await expect(backend.query(internal.customerRequestV2.getSubmissionShell, {
+      requestId: command.requestId,
+      principalId,
+    })).resolves.toMatchObject({ kind: 'found' })
+    await expect(customer.action(api.customerRequestApplication.submit, command)).resolves.toEqual(unavailable)
+    const resumedShell = await customer.action(api.customerRequestApplication.resume, {
+      requestRef: command.requestId,
+    })
+    expect(resumedShell).toMatchObject({
+      ...unavailable,
+      recovery: {
+        state: 'restored',
+        restoredAt: expect.any(Number),
+        workRestarted: false,
+      },
+    })
+    await expect(customer.action(api.customerRequestApplication.submit, {
+      ...command,
+      customerJob: 'Changed payload under the same command key.',
+    })).resolves.toEqual({
+      kind: 'conflict',
+      requestRef: command.requestId,
+      reason: 'idempotency_key_reused',
+    })
+
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (input === undefined) throw new Error('sandbox request input missing')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: model.selectionKey,
+          facts: [{ inputKey: input.key, value: command.customerJob }],
+        }],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+
+    await expect(customer.action(api.customerRequestApplication.submit, command)).resolves.toMatchObject({
+      kind: 'request',
+      requestRef: command.requestId,
+      revision: 1,
+      state: 'ready_to_compare',
+      nextAction: 'prepare_options',
+    })
   })
 })
 

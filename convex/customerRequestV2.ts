@@ -64,6 +64,21 @@ const commitResult = v.union(
   v.object({ kind: v.literal('aggregate_invalid') }),
   v.object({ kind: v.literal('context_stale') }),
 )
+const submissionShell = v.object({
+  commandKey: v.string(), commandDigest: v.string(),
+  requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(),
+  intent: v.string(), networkId: v.string(), createdAt: v.number(),
+})
+const reserveSubmissionResult = v.union(
+  v.object({ kind: v.literal('stored'), requestId: v.string() }),
+  v.object({ kind: v.literal('replayed'), requestId: v.string() }),
+  v.object({ kind: v.literal('identity_conflict') }),
+  v.object({ kind: v.literal('command_conflict') }),
+)
+const submissionShellResult = v.union(
+  v.object({ kind: v.literal('found'), shell: submissionShell }),
+  v.object({ kind: v.literal('not_found') }),
+)
 
 const currentAggregateResult = v.union(
   v.object({
@@ -142,6 +157,61 @@ const generationRefreshReplayResult = v.union(
   v.object({ kind: v.literal('command_conflict') }),
   generationRefreshResult,
 )
+
+export const reserveSubmission = internalMutation({
+  args: submissionShell,
+  returns: reserveSubmissionResult,
+  handler: async (ctx, args) => {
+    const priorCommand = await ctx.db.query('customerRequestV2SubmissionShells')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
+    if (priorCommand !== null) {
+      return priorCommand.commandDigest === args.commandDigest
+        && priorCommand.requestId === args.requestId
+        && priorCommand.principalId === args.principalId
+        && priorCommand.delegatedAgentId === args.delegatedAgentId
+        && priorCommand.intent === args.intent
+        && priorCommand.networkId === args.networkId
+        ? { kind: 'replayed' as const, requestId: args.requestId }
+        : { kind: 'command_conflict' as const }
+    }
+    const priorRequest = await ctx.db.query('customerRequestV2SubmissionShells')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (priorRequest !== null) {
+      return priorRequest.principalId === args.principalId
+        && priorRequest.delegatedAgentId === args.delegatedAgentId
+        ? { kind: 'command_conflict' as const }
+        : { kind: 'identity_conflict' as const }
+    }
+    const head = await ctx.db.query('customerRequestV2Heads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (head !== null) {
+      return head.principalId === args.principalId && head.delegatedAgentId === args.delegatedAgentId
+        ? { kind: 'command_conflict' as const }
+        : { kind: 'identity_conflict' as const }
+    }
+    await ctx.db.insert('customerRequestV2SubmissionShells', args)
+    return { kind: 'stored' as const, requestId: args.requestId }
+  },
+})
+
+export const getSubmissionShell = internalQuery({
+  args: { requestId: v.string(), principalId: v.string() },
+  returns: submissionShellResult,
+  handler: async (ctx, args) => {
+    const shell = await ctx.db.query('customerRequestV2SubmissionShells')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (shell === null || shell.principalId !== args.principalId) return { kind: 'not_found' as const }
+    return {
+      kind: 'found' as const,
+      shell: {
+        commandKey: shell.commandKey, commandDigest: shell.commandDigest,
+        requestId: shell.requestId, principalId: shell.principalId,
+        delegatedAgentId: shell.delegatedAgentId, intent: shell.intent,
+        networkId: shell.networkId, createdAt: shell.createdAt,
+      },
+    }
+  },
+})
 
 export const commitAggregate = internalMutation({
   args: {

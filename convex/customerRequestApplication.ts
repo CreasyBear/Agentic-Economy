@@ -615,9 +615,34 @@ export const submit = action({
     }
     const caller = await resolveRequestCaller(ctx, 'submit', command, args.serviceAuth, args.delegatedAgentId)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const commandKey = namespacedKey(caller.principalId, 'submit', args.requestId, args.compilationKey)
+    const commandDigest = canonicalDigest(command)
+    const committedReplay = await replayCommittedCommand(ctx, {
+      commandKey,
+      commandDigest,
+      requestId: args.requestId,
+      principalId: caller.principalId,
+    })
+    if (committedReplay !== undefined) return committedReplay
+    const reservation = await ctx.runMutation(internal.customerRequestV2.reserveSubmission, {
+      commandKey,
+      commandDigest,
+      requestId: args.requestId,
+      principalId: caller.principalId,
+      delegatedAgentId: caller.delegatedAgentId,
+      intent: args.customerJob,
+      networkId: args.routing.networkId,
+      createdAt: Date.now(),
+    })
+    if (reservation.kind === 'identity_conflict') return {
+      kind: 'conflict', requestRef: args.requestId, reason: 'identity_changed',
+    }
+    if (reservation.kind === 'command_conflict') return {
+      kind: 'conflict', requestRef: args.requestId, reason: 'idempotency_key_reused',
+    }
     return await interpretCompileCommit(ctx, {
-      commandKey: namespacedKey(caller.principalId, 'submit', args.requestId, args.compilationKey),
-      commandDigest: canonicalDigest(command),
+      commandKey,
+      commandDigest,
       requestId: args.requestId,
       expectedRevision: args.expectedRevision ?? 0,
       expectedRouteGeneration: 0,
@@ -626,6 +651,7 @@ export const submit = action({
       intent: args.customerJob,
       networkId: args.routing.networkId,
       priorFacts: [],
+      durableShell: true,
     })
   },
 })
@@ -836,7 +862,16 @@ async function resumeRequest(
       requestRef: args.requestRef, revision: 0,
       summary: 'This earlier request used a retired contract format. Start a new request to continue.',
     }))
-    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+    if (current.kind !== 'current') {
+      const shell = await ctx.runQuery(internal.customerRequestV2.getSubmissionShell, {
+        requestId: args.requestRef,
+        principalId: caller.principalId,
+      })
+      return shell.kind === 'found'
+        ? durableSubmissionShellView(shell.shell.requestId)
+        : { kind: 'refused', reason: 'request_not_found' }
+    }
+    if (current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
     }
     const currentRun = await ctx.runQuery(internal.customerRequestRouteExecution.getCurrent, {
@@ -2326,14 +2361,19 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   networkId: string
   priorFacts: StoredAggregate['snapshot']['facts']
   replaceCustomerRequestLiteral?: boolean
+  durableShell?: boolean
 }>): Promise<ActionResult> {
   const replay = await replayCommittedCommand(ctx, input)
   if (replay !== undefined) return replay
   const interpreter = createConfiguredRequestInterpreter()
-  if (interpreter === undefined) return { kind: 'refused', reason: 'interpreter_unavailable' }
+  if (interpreter === undefined) return input.durableShell === true
+    ? durableSubmissionShellView(input.requestId)
+    : { kind: 'refused', reason: 'interpreter_unavailable' }
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const graph = await loadRequestGraph(ctx, input.networkId)
-    if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
+    if (graph.kind !== 'available') return input.durableShell === true
+      ? durableSubmissionShellView(input.requestId)
+      : { kind: 'refused', reason: 'capabilities_unavailable' }
     const priorFacts = rebindStoredFacts(input.priorFacts, graph.models).filter((fact) => (
       input.replaceCustomerRequestLiteral !== true
       || fact.source.kind !== 'customer'
@@ -2349,7 +2389,9 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
     } catch (error) {
       console.error('customer_request_semantic_interpretation_failed', interpreterFailureCode(error))
       if (attempt === 0) continue
-      return { kind: 'refused', reason: 'interpreter_unavailable' }
+      return input.durableShell === true
+        ? durableSubmissionShellView(input.requestId)
+        : { kind: 'refused', reason: 'interpreter_unavailable' }
     }
     const compilationInput: CompileCommitInput = {
       ...input,
@@ -2367,6 +2409,14 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   return writableView(projectNeedsAttention({
     requestRef: input.requestId, revision: input.expectedRevision,
     summary: 'The request could not be interpreted safely.',
+  }))
+}
+
+function durableSubmissionShellView(requestRef: string): ActionResult {
+  return writableView(projectNeedsAttention({
+    requestRef,
+    revision: 0,
+    summary: 'AE saved this Request but could not interpret it yet. Try again.',
   }))
 }
 

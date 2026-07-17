@@ -24,6 +24,53 @@ const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
 const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
 
 describe('atomic V2 Customer Request aggregate persistence', () => {
+  it('reserves one inspectable Request shell before interpretation and rejects key or identity drift', async () => {
+    const backend = convexTest(schema, modules)
+    const command = {
+      commandKey: 'principal:one:submit:request:shell:command:one',
+      commandDigest: canonicalDigest({ request: 'Coordinate an accessible office relocation.' }),
+      principalId: 'principal:one',
+      delegatedAgentId: 'agent:one',
+      requestId: 'request:shell',
+      intent: 'Coordinate an accessible office relocation.',
+      networkId: 'ae:public',
+      createdAt: 1_700_000_000_000,
+    }
+
+    await expect(backend.mutation(internal.customerRequestV2.reserveSubmission, command))
+      .resolves.toEqual({ kind: 'stored', requestId: 'request:shell' })
+    await expect(backend.mutation(internal.customerRequestV2.reserveSubmission, command))
+      .resolves.toEqual({ kind: 'replayed', requestId: 'request:shell' })
+    await expect(backend.query(internal.customerRequestV2.getSubmissionShell, {
+      requestId: 'request:shell',
+      principalId: 'principal:one',
+    })).resolves.toMatchObject({
+      kind: 'found',
+      shell: {
+        requestId: 'request:shell',
+        principalId: 'principal:one',
+        delegatedAgentId: 'agent:one',
+        intent: 'Coordinate an accessible office relocation.',
+        networkId: 'ae:public',
+      },
+    })
+    await expect(backend.mutation(internal.customerRequestV2.reserveSubmission, {
+      ...command,
+      commandDigest: canonicalDigest({ request: 'Changed payload.' }),
+    })).resolves.toEqual({ kind: 'command_conflict' })
+    await expect(backend.mutation(internal.customerRequestV2.reserveSubmission, {
+      ...command,
+      commandKey: 'principal:two:submit:request:shell:command:two',
+      commandDigest: canonicalDigest({ request: 'A different caller.' }),
+      principalId: 'principal:two',
+      delegatedAgentId: 'agent:two',
+    })).resolves.toEqual({ kind: 'identity_conflict' })
+    await expect(backend.query(internal.customerRequestV2.getSubmissionShell, {
+      requestId: 'request:shell',
+      principalId: 'principal:two',
+    })).resolves.toEqual({ kind: 'not_found' })
+  })
+
   it('commits snapshot, evaluation, exact plan authority and idempotency receipt together', async () => {
     const backend = convexTest(schema, modules)
     const { aggregate, routeGeneration } = await compiledAggregate(backend)

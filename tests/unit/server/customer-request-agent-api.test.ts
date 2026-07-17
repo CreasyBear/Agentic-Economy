@@ -192,11 +192,11 @@ describe('agent-native customer Request API', () => {
     })
   })
 
-  it('gives a cold agent a safe resume action after a transient write conflict', async () => {
+  it('gives a cold agent only a safe resume action for a durable pre-interpretation shell', async () => {
     const callAction = vi.fn(async () => ({
-      kind: 'request' as const, requestRef: 'request:agent:retry', revision: 2,
+      kind: 'request' as const, requestRef: 'request:agent:retry', revision: 0,
       state: 'needs_attention' as const,
-      summary: 'The request changed before it could be recorded. Try again.',
+      summary: 'AE saved this Request but could not interpret it yet. Try again.',
       nextAction: 'retry' as const, missingFields: [], criteria: [], options: [],
     }))
     const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
@@ -211,6 +211,7 @@ describe('agent-native customer Request API', () => {
       href: `/api/v1/requests/${encodeURIComponent('request:agent:retry')}`,
       summary: 'Resume this Request, then follow the latest safe action.',
     })
+    expect(body.navigation.actions).toHaveLength(1)
   })
 
   it('gives a cold agent the same partial progress and no-retry recovery state as the human view', async () => {

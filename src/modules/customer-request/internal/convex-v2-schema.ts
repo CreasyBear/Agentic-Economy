@@ -731,6 +731,14 @@ export const customerRequestV2Tables = {
     currentAggregateDigest: v.string(), createdAt: v.number(), updatedAt: v.number(),
   }).index('by_requestId', ['requestId']),
 
+  customerRequestV2SubmissionShells: defineTable({
+    commandKey: v.string(), commandDigest: v.string(),
+    requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(),
+    intent: v.string(), networkId: v.string(), createdAt: v.number(),
+  })
+    .index('by_commandKey', ['commandKey'])
+    .index('by_requestId', ['requestId']),
+
   customerRequestV2Revisions: defineTable({
     requestId: v.string(), requestRevision: v.number(), aggregate: customerRequestV2StoredAggregateValue,
   }).index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),

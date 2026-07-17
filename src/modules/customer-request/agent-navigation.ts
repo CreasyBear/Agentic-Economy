@@ -124,15 +124,6 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
       }
     }
   } else if (view.state === 'needs_attention' || view.state === 'outcome_unknown' || view.state === 'failed') {
-    if (view.state === 'needs_attention' && view.nextAction === 'retry') {
-      actions.push({
-        relation: 'prepare_options', method: 'POST', href: `${current}/options`,
-        summary: view.decision?.outcome.kind === 'routes_expired'
-          ? 'Prepare a new current choice because the previous options expired.'
-          : 'Try preparing current options again.',
-        input: { idempotencyKey, revision: view.revision },
-      })
-    }
     if (view.state !== 'failed') {
       actions.push({
         relation: 'inspect_progress', method: 'GET', href: current,
@@ -145,23 +136,34 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
         input: { idempotencyKey, expectedRevision: view.revision, message: '<natural-language change>' },
       })
     }
-    actions.push(
-      {
-        relation: 'inspect_evidence', method: 'GET', href: `${current}/evidence`,
-        summary: 'Inspect the evidence AE currently holds for this Request.',
-      },
-      {
-        relation: 'report_problem', method: 'POST', href: `${current}/problems`,
-        summary: 'Report a problem against this Request for review.',
-        input: {
-          idempotencyKey,
-          category: '<incorrect_result | unexpected_cost | duplicate_charge_or_effect | privacy_concern | could_not_stop | other>',
-          summary: '<problem summary>', affectedStep: '<step number from evidence>',
-          evidenceReceiptRefs: [],
-          visibility: 'customer_and_ae_only',
+    if (view.state === 'needs_attention' && view.nextAction === 'retry' && view.revision > 0) {
+      actions.push({
+        relation: 'prepare_options', method: 'POST', href: `${current}/options`,
+        summary: view.decision?.outcome.kind === 'routes_expired'
+          ? 'Prepare a new current choice because the previous options expired.'
+          : 'Try preparing current options again.',
+        input: { idempotencyKey, revision: view.revision },
+      })
+    }
+    if (view.revision > 0) {
+      actions.push(
+        {
+          relation: 'inspect_evidence', method: 'GET', href: `${current}/evidence`,
+          summary: 'Inspect the evidence AE currently holds for this Request.',
         },
-      },
-    )
+        {
+          relation: 'report_problem', method: 'POST', href: `${current}/problems`,
+          summary: 'Report a problem against this Request for review.',
+          input: {
+            idempotencyKey,
+            category: '<incorrect_result | unexpected_cost | duplicate_charge_or_effect | privacy_concern | could_not_stop | other>',
+            summary: '<problem summary>', affectedStep: '<step number from evidence>',
+            evidenceReceiptRefs: [],
+            visibility: 'customer_and_ae_only',
+          },
+        },
+      )
+    }
   }
 
   return customerRequestAgentNavigationSchema.parse({ current, actions })
