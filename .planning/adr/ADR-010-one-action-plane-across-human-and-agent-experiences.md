@@ -216,3 +216,7 @@ supporting evidence is:
 - [capability-to-composable-work crosswalk](../research/2026-07-17-capability-to-composable-work-crosswalk.md);
 - [production agent execution patterns](../research/2026-07-17-production-agent-execution-patterns.md);
 - [ADR-009](./ADR-009-partial-entry-without-request-ownership.md).
+
+Implementation specification:
+
+- [Action Invocation engineering specification](../specs/ACTION-INVOCATION-ENGINEERING-SPEC.md).

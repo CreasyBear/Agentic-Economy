@@ -16,6 +16,10 @@ _Avoid_: Imported fact, confirmed external state
 A versioned composition of independently meaningful tasks, their declared dependencies, branches and completion conditions. A person or agent may complete one task, continue progressively, or ask AE to coordinate the remaining Bundle. A Bundle does not own a separate authority, attempt, evidence or recovery lifecycle.
 _Avoid_: Wedge-specific engine, mandatory end-to-end journey
 
+**Action Invocation**:
+The durable reference for one independently resumable use of one registered action and action version. It may stand alone or belong to a Customer Request or Bundle. It preserves control and continuity while the action-specific record remains authoritative for business facts and results. An Action Invocation is not authority.
+_Avoid_: Universal task, Economic Operation, synthetic Customer Request
+
 **Workflow Cohort**:
 A labelled set of Customer Requests that exercise the same economic job and completion boundary across varied customers, businesses, capability chains, authority decisions, and recovery conditions. A cohort is an evaluation class, not a kernel or product branch.
 _Avoid_: Vertical mode, hard-coded journey, persona

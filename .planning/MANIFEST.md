@@ -17,6 +17,7 @@
 - `records/KNOWLEDGE-INDEX.md` — concise map of current, target, accepted, observed, hypothetical, and unknown project knowledge.
 - `records/SOURCE-REGISTER.md` — primary external sources, evidence cutoffs, and refresh triggers.
 - `records/RESEARCH-QUEUE.md` — prioritized unresolved questions tied to blocked decisions and hypotheses.
+- `specs/ACTION-INVOCATION-ENGINEERING-SPEC.md` — proposed implementation contract for ADR-009 and ADR-010.
 - `REQUIREMENTS.md` — active requirements baseline.
 - `../PRODUCT.md` — current product evidence and target product contract.
 - `../DESIGN.md` — visual and human-interface authority.

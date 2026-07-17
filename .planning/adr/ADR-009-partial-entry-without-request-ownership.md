@@ -237,3 +237,7 @@ result of this proposed ADR.
 Additional production-pattern evidence:
 
 - [Production agent execution patterns](../research/2026-07-17-production-agent-execution-patterns.md).
+
+Implementation specification:
+
+- [Action Invocation engineering specification](../specs/ACTION-INVOCATION-ENGINEERING-SPEC.md).
