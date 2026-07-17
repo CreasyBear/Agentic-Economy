@@ -64,6 +64,35 @@ RouteMandate remain valid for complete AE-generated routes. This ADR does not
 authorize weakening or replacing them before task-level evidence earns a
 generalized mandate.
 
+## Product journey and composition
+
+Partial entry is the beginning of the product journey, not a lesser version of
+the full route.
+
+AE should first help the customer or calling agent complete the task they
+recognize: find suitable businesses, obtain quotes, compare options, send an
+approved instruction, inspect the result or recover from a problem. After each
+result, AE may show the useful next tasks and offer to coordinate them.
+
+For example:
+
+> Quotes received → compare them → approve one option → send the order → track
+> acknowledgement → inspect completion.
+
+The customer may stop after any completed task, continue task by task, hand the
+result to another system, or ask AE to coordinate the remaining route. Previous
+work must remain usable whichever choice they make.
+
+A full-route experience is therefore a customer-facing composition of
+understandable tasks, decisions and handoffs. It must not expose an internal
+dependency graph as the product, and it must not require the customer to specify
+the entire project before receiving value.
+
+Composition must preserve the identity and evidence of each constituent task.
+The route may explain dependencies, propose what happens next and track overall
+progress. It may not silently combine approvals, infer authority for later
+tasks, or describe the route as complete when one task remains unresolved.
+
 ## Considered options
 
 **Keep Customer Request as the universal parent.** Rejected as the target
@@ -100,7 +129,12 @@ This ADR may move from proposed to accepted only when evals demonstrate that:
    declared dependencies;
 7. the direct-booking negative control is not burdened with unnecessary
    orchestration;
-8. no domain nouns enter the neutral contracts.
+8. a customer or cold agent can stop after one task and later continue from its
+   durable result without reconstructing the prior conversation;
+9. the full-route projection explains completed, current, optional and blocked
+   tasks without exposing kernel machinery;
+10. approval of one task is never treated as authority for a later task;
+11. no domain nouns enter the neutral contracts.
 
 Failure of these gates requires narrowing or superseding this ADR rather than
 loosening the current guardrails.
@@ -124,6 +158,11 @@ Retry policy follows the consequence of the task: computation may repeat;
 communication creates a new attributable attempt; a possibly completed external
 effect must be reconciled before retry unless the provider contract guarantees
 safe idempotent replay.
+
+The product may progressively reveal a complete route, but the engineering
+model must not depend on the customer selecting that route upfront. Route
+coordination is earned through composition of useful tasks rather than imposed
+as the entry contract.
 
 Imported facts, offers and commitments remain claims made by their named source.
 AE owns admission decisions, authority reservations, attempt records, transport

@@ -13,7 +13,7 @@ A fact, offer, commitment, status or other assertion supplied by a caller about 
 _Avoid_: Imported fact, confirmed external state
 
 **Bundle**:
-A versioned composition of independently meaningful tasks, their declared dependencies, branches and completion conditions. A Bundle coordinates tasks but does not own a separate authority, attempt, evidence or recovery lifecycle.
+A versioned composition of independently meaningful tasks, their declared dependencies, branches and completion conditions. A person or agent may complete one task, continue progressively, or ask AE to coordinate the remaining Bundle. A Bundle does not own a separate authority, attempt, evidence or recovery lifecycle.
 _Avoid_: Wedge-specific engine, mandatory end-to-end journey
 
 **Workflow Cohort**:
