@@ -205,7 +205,8 @@ const customerRouteCommercialInfluence = v.union(
 const customerRouteComparisonEvidence = v.object({
   outcomeRef: v.string(),
   outcomeFit: v.union(v.literal('same_promised_result'), v.literal('different_promised_result')),
-  completeness: v.literal('complete'), hardConstraints: v.literal('satisfied'),
+  completeness: v.literal('complete'),
+  hardConstraints: v.union(v.literal('satisfied'), v.literal('not_evaluated')),
   maximumCost: customerRouteMaximumCost,
   dataExposureCount: v.number(), irreversibleEffectCount: v.number(), uncertaintyCount: v.number(),
   duration: v.literal('not_declared'),

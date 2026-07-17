@@ -161,6 +161,20 @@ describe('RoutePlan customer projection', () => {
     })
   })
 
+  it('fails closed when a historical route has no constraint-evaluation evidence', () => {
+    const historical = changed(route({ amountMinor: 900, routePlanId: 'route:historical' }), (value) => {
+      Reflect.deleteProperty(value.comparison, 'hardConstraints')
+    })
+    const decision = projectCustomerRoutePlanDecision({
+      current: generation(1, [historical]),
+      businessNames: { 'business:one': 'North Star Services' },
+      capabilitySemantics,
+      now: 10_000,
+    })
+
+    expect(decision.routes[0]?.comparison.hardConstraints).toBe('not_evaluated')
+  })
+
   it.each([
     ['commercial influence', (routes: CustomerRequestRoutePlan[]) => {
       routes[0] = changed(routes[0]!, (value) => {

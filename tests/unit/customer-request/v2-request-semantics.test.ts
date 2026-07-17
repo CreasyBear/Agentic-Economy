@@ -1019,6 +1019,7 @@ describe('V2 Request semantics', () => {
       { kind: 'known', currency: 'AUD', amountMinor: 500 },
     ])
     for (const [index, route] of result.routeGeneration.routes.entries()) {
+      expect(route.comparison.hardConstraints).toBe('not_evaluated')
       expect(route.comparison.ordering).toEqual({
         kind: 'ranked', objective: 'lowest_maximum_price', position: index + 1,
         evidenceRef: expect.any(String),

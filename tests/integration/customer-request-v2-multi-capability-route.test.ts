@@ -190,7 +190,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestRevision: 1, authority: 'proposal_only',
       maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_000 },
       comparison: {
-        fit: 'all_steps_viable', completeness: 'complete', hardConstraints: 'satisfied',
+        fit: 'all_steps_viable', completeness: 'complete', hardConstraints: 'not_evaluated',
         dataExposureCount: 2, irreversibleEffectCount: 2, evidenceRequirementCount: 2,
         duration: 'not_declared', recovery: 'reconcile_required',
         freshnessValidUntil: expect.any(Number), outcomeSignature: expect.stringMatching(/^sha256:/u),

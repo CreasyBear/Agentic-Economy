@@ -499,7 +499,9 @@ function RouteDecisionCard({ projection, turns, review, check, edit, restart }: 
           </div>
           <div className="grid gap-2">
             <Text weight="semibold">Why it fits</Text>
-            <Text color="secondary">It covers the requested result and every constraint AE could check.</Text>
+            <Text color="secondary">{route.comparison.hardConstraints === 'satisfied'
+              ? 'It covers the requested result and every constraint AE could verify.'
+              : 'The registered steps can return the stated result. AE has not independently verified every detail in your Request.'}</Text>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-secondary">
             <span>{route.dataUse.recipientCount} information {route.dataUse.recipientCount === 1 ? 'recipient' : 'recipients'}</span>

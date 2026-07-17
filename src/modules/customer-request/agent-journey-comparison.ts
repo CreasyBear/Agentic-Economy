@@ -37,7 +37,7 @@ type AeJourney = Readonly<{
     integrationBurden: Readonly<{ requestCalls: number; clarifications: number }>
     turns: Readonly<{ total: number }>
     elapsedMs: number
-    hardConstraintAccuracy: Readonly<{ state: 'satisfied' }>
+    hardConstraintAccuracy: Readonly<{ state: 'satisfied' | 'not_evaluated' }>
     totalCostAccuracy: Readonly<{ state: 'exact'; total: Money } | { state: 'unavailable' }>
     recovery: Readonly<{ state: 'durable'; resumed: boolean; postures: readonly ('retry_safe' | 'reconcile_required')[] }>
     interruptionRecovery?: Readonly<{

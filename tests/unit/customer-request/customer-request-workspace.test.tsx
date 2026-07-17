@@ -568,7 +568,10 @@ describe('customer Request workspace', () => {
           cancellation: { kind: 'unavailable', summary: 'The businesses do not publish a cancellation path for this option.' },
           validUntil: Date.now() + 60_000,
           fallback: { available: false, alternatives: [] }, uncertainty: [],
-          comparison: routeComparison('route:opaque', 'current', 1_400, 2, 1, 'reconcile_required'),
+          comparison: {
+            ...routeComparison('route:opaque', 'current', 1_400, 2, 1, 'reconcile_required'),
+            hardConstraints: 'not_evaluated' as const,
+          },
           steps: [
             { step: 1, business: { businessRef: 'business:one', name: 'North Star Services' }, after: [] },
             { step: 2, business: { businessRef: 'business:two', name: 'City Ledger' }, after: [1] },
@@ -639,7 +642,7 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('What matters changed. Before: Meeting time: 15:00. Now: Meeting time: 09:00.')).toBeTruthy()
     expect(screen.getByText('The maximum for Prepare a governed result changed from $16.00 to $14.00.')).toBeTruthy()
     expect(screen.getByText('Businesses changed. Before: Prepare a governed result: North Star Services. Now: Prepare a governed result: North Star Services and City Ledger.')).toBeTruthy()
-    expect(screen.getByText('It covers the requested result and every constraint AE could check.')).toBeTruthy()
+    expect(screen.getByText('The registered steps can return the stated result. AE has not independently verified every detail in your Request.')).toBeTruthy()
     expect(screen.getByText('2 information recipients')).toBeTruthy()
     expect(screen.getByText('1 irreversible effect')).toBeTruthy()
     expect(screen.getByText(/Fields: Request \(public\)/).closest('details')?.hasAttribute('open')).toBe(false)

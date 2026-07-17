@@ -56,7 +56,7 @@ type ProjectionRoute = Readonly<{
   fallbacks: Readonly<{ alternatives: readonly Readonly<{ alternativeRouteRef: string }>[] }>
   comparison: Readonly<{
     outcomeSignature?: string
-    hardConstraints?: 'satisfied'
+    hardConstraints?: 'satisfied' | 'not_evaluated'
     duration?: 'not_declared'
     recovery?: 'retry_safe' | 'reconcile_required'
     freshnessValidUntil?: number
@@ -238,7 +238,7 @@ function projectRoute(
       outcomeRef,
       outcomeFit,
       completeness: 'complete' as const,
-      hardConstraints: route.comparison.hardConstraints ?? 'satisfied' as const,
+      hardConstraints: route.comparison.hardConstraints ?? 'not_evaluated' as const,
       maximumCost: Object.freeze({ ...route.maximumTotalCost }),
       dataExposureCount: recipients.length,
       irreversibleEffectCount: effects.filter(({ reversibility }) => reversibility === 'irreversible').length,

@@ -606,7 +606,7 @@ const routePlanV2Value = v.object({
     // Historical generations remain readable; new compilation and every customer projection use the truthful current label.
     trust: v.union(v.literal('registered_current_option'), v.literal('registered_live_supply')),
     outcomeSignature: v.optional(v.string()),
-    hardConstraints: v.optional(v.literal('satisfied')),
+    hardConstraints: v.optional(v.union(v.literal('satisfied'), v.literal('not_evaluated'))),
     duration: v.optional(v.literal('not_declared')),
     recovery: v.optional(v.union(v.literal('retry_safe'), v.literal('reconcile_required'))),
     freshnessValidUntil: v.optional(v.number()),

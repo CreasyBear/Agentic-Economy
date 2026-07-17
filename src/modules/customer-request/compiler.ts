@@ -125,7 +125,7 @@ export type CustomerRequestRoutePlan = Readonly<{
     trust: 'registered_current_option'
     /** Optional only for immutable generations compiled before recommendation integrity was source-owned. */
     outcomeSignature?: string
-    hardConstraints?: 'satisfied'
+    hardConstraints?: 'satisfied' | 'not_evaluated'
     duration?: 'not_declared'
     recovery?: 'retry_safe' | 'reconcile_required'
     freshnessValidUntil?: number
@@ -541,7 +541,7 @@ export function compileRoutePlans(input: Readonly<{
           fromStep, toStep, semanticIdentity, schemaIdentity,
         })),
       } as StableHashValue),
-      hardConstraints: 'satisfied' as const,
+      hardConstraints: 'not_evaluated' as const,
       duration: 'not_declared' as const,
       recovery: steps.some(({ recovery }) => recovery.recovery === 'reconcile_required')
         ? 'reconcile_required' as const

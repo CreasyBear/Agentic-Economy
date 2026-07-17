@@ -329,7 +329,7 @@ const customerRouteCommercialInfluenceSchema = z.union([
 const customerRouteComparisonEvidenceSchema = z.object({
   outcomeRef: z.string(),
   outcomeFit: z.enum(['same_promised_result', 'different_promised_result']),
-  completeness: z.literal('complete'), hardConstraints: z.literal('satisfied'),
+  completeness: z.literal('complete'), hardConstraints: z.enum(['satisfied', 'not_evaluated']),
   maximumCost: customerRouteMaximumCostSchema,
   dataExposureCount: safeNonnegativeInteger, irreversibleEffectCount: safeNonnegativeInteger,
   uncertaintyCount: safeNonnegativeInteger, duration: z.literal('not_declared'),
