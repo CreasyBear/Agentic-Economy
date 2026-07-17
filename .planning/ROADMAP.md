@@ -13,12 +13,12 @@ A phase does not exist for narrative, protocol completeness, marketplace surface
 | Decision | Door | Phase | Rule |
 |---|---|---:|---|
 | Fresh repo over backup | One-way | 0 | Backup is source mine only. |
-| Launch ICP = AU urgent/local services | Two-way after Phase 1 | 1 | Start narrow; expand only if fields/copy still fit unchanged. |
-| Convex source of truth | One-way for M1 | 1 | No planning/runtime or UI-authority state. |
-| AE-hosted fallback UCP | One-way for Phase 1 copy | 1 | Do not claim standard business-origin UCP. |
-| Lifecycle moat as descriptor contract | One-way | 1 | Keep primitives now; no runtime engine. |
-| Admin authority source-owned | One-way | 1 | No env-only admin authority. |
-| Search adapter | Two-way | 1 | Convex first; external search only after evidence. |
+| Launch ICP = AU urgent/local services | Two-way after Phase 1 
+| Convex source of truth | One-way for M1 
+| AE-hosted fallback UCP | One-way for Phase 1 copy 
+| Lifecycle moat as descriptor contract | One-way 
+| Admin authority source-owned | One-way 
+| Search adapter | Two-way 
 | Money rails | One-way later | 5 | Requires decision record before code. |
 | Handshake Protocol Kernel posture | One-way for public positioning | 4/6 | Future protected-action clearance should be HSK-shaped internally; do not expose HSK as a public AE surface or dependency until a phase gate needs it. |
 | Agentic business action receipts | One-way for the Phase 6 spike; per-slug two-way within the admitted set | 6 | A closed, typed, schema-validated set of software-scoped receipt-backed business operations. Each slug is individually admitted through ADR-005 D1's per-slug checklist. No generic `executeAction`, no arbitrary/caller-supplied slugs, no runtime/wallet/marketplace/provider authority. |
@@ -259,3 +259,16 @@ Stop if a PR introduces:
 8. no-overclaim copy checks,
 9. bloat cuts compared with backup,
 10. deployment/readback evidence.
+
+### Phase 1: Action invocation decomposition
+
+**Goal:** Make ADR-009/010 partial-entry + one-action-plane decomposition buildable: concrete seam, first standalone action, persistence, per-action authority, and executable acceptance gates — design only, no source.
+**Requirements**: ADR-009 (partial entry without Request ownership, 11 acceptance gates), ADR-010 (one action plane, 10 acceptance gates), and `.planning/specs/ACTION-INVOCATION-ENGINEERING-SPEC.md` (§1-12, GitHub #193) are locked inputs.
+**Depends on:** customer-product-frontier frontier (wayfinder map #112) — this phase reframes the Request-owned lifecycle that frontier built into independently-authorized action invocations.
+**Boundary:** Design/planning phase only. Produces GSD planning artifacts (SPEC/RESEARCH/PLAN + pattern map) under `.planning/`. No `src/**`, `convex/**`, or test edits. Does not change ADR status, supersede an ADR, or close #193. Stops at plan-checker green; source implementation is a separate, explicitly-authorized execute-phase.
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 1 to break down)
+
