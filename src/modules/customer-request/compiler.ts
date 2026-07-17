@@ -23,6 +23,7 @@ import {
 } from './evaluation'
 import {
   deriveCustomerDecisionPreference,
+  deriveCustomerMaterialConstraints,
   deriveCustomerMaximumTotalCostCriterion,
   deriveCustomerMaximumResponseTimeCriterion,
   deriveCustomerProviderDataSharingCriterion,
@@ -199,7 +200,10 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
   const maximumTotalCostCriterion = deriveCustomerMaximumTotalCostCriterion(command.intent)
   const maximumResponseTimeCriterion = deriveCustomerMaximumResponseTimeCriterion(command.intent)
   const providerDataSharingCriterion = deriveCustomerProviderDataSharingCriterion(command.intent)
-  const derivedCriteria = [maximumTotalCostCriterion, maximumResponseTimeCriterion, providerDataSharingCriterion]
+  const derivedCriteria = [
+    ...deriveCustomerMaterialConstraints(command.intent),
+    maximumTotalCostCriterion, maximumResponseTimeCriterion, providerDataSharingCriterion,
+  ]
     .filter((criterion): criterion is NonNullable<typeof criterion> => criterion !== undefined)
   const baseActions = selected.map((selection, index): ProposedRequestAction => {
     const model = resolveExactModel(models, selection.contractRef)

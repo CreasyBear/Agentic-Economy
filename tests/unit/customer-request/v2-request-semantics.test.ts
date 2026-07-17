@@ -24,6 +24,7 @@ import {
   bindCustomerCapabilityDescriptor,
   createJsonCustomerRequestSemanticInterpreter,
   deriveCustomerDecisionPreference,
+  deriveCustomerMaterialConstraints,
   deriveCustomerMaximumTotalCostCriterion,
   deriveCustomerMaximumResponseTimeCriterion,
   deriveCustomerProviderDataSharingCriterion,
@@ -31,6 +32,74 @@ import {
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
 
 describe('V2 Request semantics', () => {
+  it('extracts explicit material constraints without itinerary-specific kernel rules', () => {
+    expect(deriveCustomerMaterialConstraints(
+      'Plan a work trip for two travellers. A wheelchair-accessible hotel and ground transport are mandatory. '
+      + 'Arrival by 09:00 on 21 July is immovable. Passport details are uncertain and unavailable today. '
+      + 'Maximum total budget is AUD 4,000. Do not book, pay, or contact providers.',
+    )).toEqual([
+      expect.objectContaining({
+        label: 'Must preserve',
+        value: 'A wheelchair-accessible hotel and ground transport are mandatory.',
+        basis: 'extracted_from_request',
+      }),
+      expect.objectContaining({
+        label: 'Must preserve', value: 'Arrival by 09:00 on 21 July is immovable.',
+      }),
+      expect.objectContaining({
+        label: 'Known uncertainty', value: 'Passport details are uncertain and unavailable today.',
+        impact: 'uncertainty',
+      }),
+      expect.objectContaining({
+        label: 'Must not happen', value: 'Do not book, pay, or contact providers.',
+        impact: 'authority_boundary',
+      }),
+    ])
+  })
+
+  it('does not treat an ordinary statement of need as a hard constraint', () => {
+    expect(deriveCustomerMaterialConstraints(
+      'I need help planning a work trip for two travellers.',
+    )).toEqual([])
+  })
+
+  it('persists extracted material constraints while keeping route satisfaction unproven', () => {
+    const model = compositionLookupModel()
+    const requestInput = requiredInput(model, 'request')
+    const intent = 'Prepare a result. Wheelchair accessibility is mandatory.'
+    const result = compileCustomerRequest({
+      requestId: 'request:material-constraint', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test', intent,
+      networkId: 'ae:public', interpreterId: 'interpreter:test', now: 10_000,
+      proposal: { kind: 'capability_candidates', selections: [{
+        selectionKey: model.selectionKey, contractRef: model.contractRef,
+        facts: [{
+          contractRef: model.contractRef, selectionKey: model.selectionKey,
+          inputKey: requestInput.key, inputPointer: requestInput.inputPointer,
+          schemaIdentity: requestInput.schemaIdentity, value: intent,
+          source: { kind: 'customer', assertionRef: 'assertion:request' },
+        }],
+      }] },
+      bindings: [supply('binding:material-constraint', model)], models: [model],
+    })
+
+    expect(result).toMatchObject({
+      kind: 'compiled',
+      aggregate: { evaluation: { criteria: expect.arrayContaining([expect.objectContaining({
+        label: 'Must preserve', value: 'Wheelchair accessibility is mandatory.',
+      })]) } },
+      routeGeneration: { routes: [expect.objectContaining({
+        comparison: expect.objectContaining({ hardConstraints: 'not_evaluated' }),
+      })] },
+    })
+    expect(projectCustomerRequest(result)).toMatchObject({
+      criteria: expect.arrayContaining([expect.objectContaining({
+        label: 'Must preserve', value: 'Wheelchair accessibility is mandatory.',
+        basis: 'extracted_from_request',
+      })]),
+    })
+  })
+
   it('distinguishes a clear unsupported operation from missing intent', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:unsupported-operation',

@@ -161,6 +161,7 @@ const EXPLICIT_PRICE_PRIORITY_VERSION = 'customer-request-price-priority:v1'
 const EXPLICIT_MAXIMUM_TOTAL_COST_VERSION = 'customer-request-maximum-total-cost:v1'
 const EXPLICIT_PROVIDER_DATA_SHARING_VERSION = 'customer-request-provider-data-sharing:v1'
 const EXPLICIT_MAXIMUM_RESPONSE_TIME_VERSION = 'customer-request-maximum-response-time:v1'
+const MATERIAL_CONSTRAINT_EXTRACTION_VERSION = 'customer-request-material-constraint:v1'
 const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
   name: 'customer_request_semantic_proposal',
   strict: true,
@@ -474,6 +475,44 @@ export function deriveCustomerDecisionPreference(customerJob: string): CustomerR
 export type CustomerMaximumTotalCostCriterion = UnderstoodCriterion & Readonly<{
   value: Readonly<{ currency: string; amountMinor: number }>
 }>
+
+export function deriveCustomerMaterialConstraints(customerJob: string): readonly UnderstoodCriterion[] {
+  const sentences = customerJob.normalize('NFKC').match(/[^.!?\n]+[.!?]?/gu) ?? []
+  const constraints: UnderstoodCriterion[] = []
+  for (const candidate of sentences) {
+    const value = candidate.trim().replace(/\s+/gu, ' ')
+    if (value.length === 0 || value.length > 500) continue
+    const normalized = value.toLocaleLowerCase('en')
+    const label = /\b(?:uncertain|unavailable|unknown|not\s+known|needs?\s+confirmation)\b/u.test(normalized)
+      ? 'Known uncertainty'
+      : /^(?:do\s+not|don't|never)\b/u.test(normalized) || /\bwithout\b/u.test(normalized)
+        ? 'Must not happen'
+        : /\b(?:must|mandatory|required|requires?|requiring|immovable|non-negotiable)\b/u.test(normalized)
+          ? 'Must preserve'
+          : undefined
+    if (label === undefined) continue
+    if (deriveCustomerMaximumTotalCostCriterion(value) !== undefined
+      || deriveCustomerMaximumResponseTimeCriterion(value) !== undefined
+      || deriveCustomerProviderDataSharingCriterion(value) !== undefined) continue
+    const inputKey = 'customer:material-constraint' as CapabilityInputKey
+    const inputPointer = '/customerConstraints/material'
+    const basis = 'extracted_from_request' as const
+    const impact = label === 'Known uncertainty'
+      ? 'uncertainty' as const
+      : label === 'Must not happen'
+        ? 'authority_boundary' as const
+        : 'eligibility_and_comparison' as const
+    constraints.push(Object.freeze({
+      inputKey, inputPointer, label, value, basis, impact,
+      criterionDigest: canonicalDigest({
+        inputKey, inputPointer, label, value, basis, impact,
+        version: MATERIAL_CONSTRAINT_EXTRACTION_VERSION,
+      }),
+    }))
+    if (constraints.length === 16) break
+  }
+  return Object.freeze(constraints)
+}
 
 export function deriveCustomerMaximumTotalCostCriterion(customerJob: string): CustomerMaximumTotalCostCriterion | undefined {
   const normalized = customerJob.normalize('NFKC')

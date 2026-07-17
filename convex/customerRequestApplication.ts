@@ -411,7 +411,9 @@ const customerView = v.object({
   criteria: v.array(v.object({
     label: v.string(), value: v.any(), // runtime-validated JsonValue boundary
     basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
-    impact: v.literal('eligibility_and_comparison'),
+    impact: v.union(
+      v.literal('eligibility_and_comparison'), v.literal('uncertainty'), v.literal('authority_boundary'),
+    ),
   })),
   disclosureReview: v.optional(v.object({
     purpose: v.string(), maximumRecipients: v.number(),

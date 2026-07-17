@@ -48,7 +48,7 @@ export type CustomerCriterion = Readonly<{
   label: string
   value: JsonValue
   basis: 'customer_provided' | 'extracted_from_request'
-  impact: 'eligibility_and_comparison'
+  impact: 'eligibility_and_comparison' | 'uncertainty' | 'authority_boundary'
 }>
 
 export function projectCustomerCriteria(
@@ -57,18 +57,19 @@ export function projectCustomerCriteria(
     label: string
     value: JsonValue
     basis: 'customer_provided' | 'extracted_from_request'
+    impact?: CustomerCriterion['impact']
   }>[],
 ): readonly CustomerCriterion[] {
   const seen = new Set<string>()
-  return Object.freeze(criteria.flatMap(({ label, value, basis }) => {
-    const identity = stableStringify({ label, value, basis })
+  return Object.freeze(criteria.flatMap(({ label, value, basis, impact = 'eligibility_and_comparison' }) => {
+    const identity = stableStringify({ label, value, basis, impact })
     if (seen.has(identity)) return []
     seen.add(identity)
     return [Object.freeze({
       label,
       value: structuredClone(value),
       basis,
-      impact: 'eligibility_and_comparison' as const,
+      impact,
     })]
   }))
 }
@@ -92,6 +93,7 @@ type RequestEvaluationProjectionInput = Readonly<{
     label: string
     value: JsonValue
     basis: 'customer_provided' | 'extracted_from_request'
+    impact?: CustomerCriterion['impact']
   }>[]
   posture: 'needs_information' | 'progress_available' | 'unsupported'
   nextRequirement?: Readonly<

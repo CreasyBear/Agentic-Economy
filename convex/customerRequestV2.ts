@@ -26,6 +26,7 @@ import {
 } from '@/modules/customer-request/compiler'
 import {
   deriveCustomerDecisionPreference,
+  deriveCustomerMaterialConstraints,
   deriveCustomerMaximumTotalCostCriterion,
   deriveCustomerMaximumResponseTimeCriterion,
   deriveCustomerProviderDataSharingCriterion,
@@ -1211,6 +1212,7 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
         })(),
         ...(() => {
           const criteria = [
+            ...deriveCustomerMaterialConstraints(aggregate.snapshot.intent),
             deriveCustomerMaximumTotalCostCriterion(aggregate.snapshot.intent),
             deriveCustomerMaximumResponseTimeCriterion(aggregate.snapshot.intent),
             deriveCustomerProviderDataSharingCriterion(aggregate.snapshot.intent),

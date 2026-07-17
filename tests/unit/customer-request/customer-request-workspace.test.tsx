@@ -210,6 +210,27 @@ describe('customer Request workspace', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/messages', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('distinguishes fit constraints, unresolved uncertainty, and authority boundaries', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'uuid-material-criteria' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:material-criteria', revision: 1,
+      state: 'ready_to_compare', summary: 'Plan an accessible trip', nextAction: 'prepare_options',
+      missingFields: [], options: [], criteria: [
+        { label: 'Must preserve', value: 'Accessible transport is mandatory.', basis: 'extracted_from_request', impact: 'eligibility_and_comparison' },
+        { label: 'Known uncertainty', value: 'Passport details are unavailable.', basis: 'extracted_from_request', impact: 'uncertainty' },
+        { label: 'Must not happen', value: 'Do not contact providers.', basis: 'extracted_from_request', impact: 'authority_boundary' },
+      ],
+    })))
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Plan an accessible trip' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
+
+    expect(await screen.findByText(/Used to decide which options fit and how they compare\./u)).toBeTruthy()
+    expect(screen.getByText(/AE will keep this uncertainty visible until evidence resolves it\./u)).toBeTruthy()
+    expect(screen.getByText(/This Request does not grant permission to cross this boundary\./u)).toBeTruthy()
+  })
+
   it('lets a customer answer an exact business question in their own words', async () => {
     let sequence = 0
     vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })

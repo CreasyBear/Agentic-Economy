@@ -601,7 +601,7 @@ export const customerRequestViewSchema = z.strictObject({
   criteria: z.array(z.object({
     label: z.string(), value: customerRequestJsonValueSchema,
     basis: z.enum(['customer_provided', 'extracted_from_request']),
-    impact: z.literal('eligibility_and_comparison'),
+    impact: z.enum(['eligibility_and_comparison', 'uncertainty', 'authority_boundary']),
   }).strict()).optional(),
   disclosureReview: z.object({
     purpose: z.string(), maximumRecipients: safeNonnegativeInteger,

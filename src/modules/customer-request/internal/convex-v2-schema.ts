@@ -482,7 +482,11 @@ const informationRequirementV2Value = v.union(
 const criterionV2Value = v.object({
   inputKey: v.string(), inputPointer: v.string(), label: v.string(),
   value: v.any(), // runtime-validated JsonValue boundary
-  basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')), criterionDigest: v.string(),
+  basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
+  impact: v.optional(v.union(
+    v.literal('eligibility_and_comparison'), v.literal('uncertainty'), v.literal('authority_boundary'),
+  )),
+  criterionDigest: v.string(),
 })
 const disclosureV2Value = v.object({
   maximumRecipients: v.number(), purposes: v.array(v.string()),

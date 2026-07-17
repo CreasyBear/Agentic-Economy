@@ -129,6 +129,7 @@ export type UnderstoodCriterion = Readonly<{
   label: string
   value: JsonValue
   basis: 'customer_provided' | 'extracted_from_request'
+  impact?: 'eligibility_and_comparison' | 'uncertainty' | 'authority_boundary'
   criterionDigest: string
 }>
 
