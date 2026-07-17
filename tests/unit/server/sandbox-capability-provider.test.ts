@@ -253,6 +253,86 @@ describe('sandbox capability provider', () => {
       .toMatch(/^sandbox-workflow:procurement-recommendation:/u)
   })
 
+  it.each([
+    {
+      cohort: 'procurement',
+      steps: [
+        ['procurement-brief', 'request', 'requirementsBrief'],
+        ['supplier-options', 'requirementsBrief', 'supplierOptionSet'],
+        ['procurement-recommendation', 'supplierOptionSet', 'recommendation'],
+      ],
+      firstInput: { packageDimensions: '300 × 200 × 150 mm internal' },
+    },
+    {
+      cohort: 'itinerary',
+      steps: [
+        ['trip-constraints', 'request', 'tripBrief'],
+        ['itinerary-builder', 'tripBrief', 'itineraryDraft'],
+        ['itinerary-readiness', 'itineraryDraft', 'readinessChecklist'],
+      ],
+      firstInput: {},
+    },
+    {
+      cohort: 'journey-management',
+      steps: [
+        ['journey-case', 'request', 'serviceCase'],
+        ['milestone-plan', 'serviceCase', 'milestonePlan'],
+        ['progress-synthesis', 'milestonePlan', 'progressSummary'],
+      ],
+      firstInput: {},
+    },
+    {
+      cohort: 'recurring-operations',
+      steps: [
+        ['operations-schedule', 'request', 'operatingSchedule'],
+        ['task-batch', 'operatingSchedule', 'taskBatch'],
+        ['task-reconciliation', 'taskBatch', 'reconciliation'],
+      ],
+      firstInput: {},
+    },
+    {
+      cohort: 'exception-coordination',
+      steps: [
+        ['incident-assessment', 'request', 'incidentAssessment'],
+        ['recovery-options', 'incidentAssessment', 'recoveryOptionSet'],
+        ['recovery-plan', 'recoveryOptionSet', 'recoveryPlan'],
+      ],
+      firstInput: {},
+    },
+  ] as const)('lets the terminal $cohort business definitely deny a bounded propagated scenario without replay drift', async ({
+    steps,
+    firstInput,
+  }) => {
+    let propagated = `${'Customer constraint. '.repeat(80)}Use the Provider Denial Scenario.`
+    for (const [providerKey, inputField, outputField] of steps.slice(0, -1)) {
+      const response = await workflowCall(providerKey, {
+        [inputField]: propagated,
+        ...(inputField === 'request' ? firstInput : {}),
+      })
+      expect(response.status).toBe(200)
+      propagated = (await response.json() as Record<string, string>)[outputField] ?? ''
+      expect(propagated).toContain('[sandbox-scenario:provider_denied]')
+    }
+
+    const [providerKey, inputField] = steps.at(-1) ?? []
+    expect(providerKey).toBeDefined()
+    expect(inputField).toBeDefined()
+    const denied = await workflowCall(providerKey ?? '', { [inputField ?? '']: propagated })
+    const replay = await workflowCall(providerKey ?? '', { [inputField ?? '']: propagated })
+
+    expect(denied.status).toBe(409)
+    expect(replay.status).toBe(409)
+    expect(denied.headers.get('Provider-Receipt'))
+      .toMatch(new RegExp(`^sandbox-workflow-denial:${providerKey}:`, 'u'))
+    const deniedBody = await denied.json()
+    expect(deniedBody).toEqual({
+      kind: 'refused',
+      reason: 'sandbox_provider_declined',
+    })
+    await expect(replay.json()).resolves.toEqual(deniedBody)
+    expect(replay.headers.get('Provider-Receipt')).toBe(denied.headers.get('Provider-Receipt'))
+  })
+
   it('refuses a procurement brief without three positive unit-bearing dimensions', async () => {
     for (const packageDimensions of [undefined, ' ', '300 × 200 × 150', '300 mm × 200 mm']) {
       const response = await workflowCall('procurement-brief', {

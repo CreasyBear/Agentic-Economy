@@ -20,6 +20,7 @@ const MALFORMED_EVIDENCE_REQUEST_PHRASE = 'leave the quote evidence malformed'
 const MALFORMED_EVIDENCE_REFERENCE_PREFIX = 'sandbox-service:malformed-evidence:'
 const PROVIDER_DENIAL_REQUEST_PHRASE = 'provider denial scenario'
 const PROVIDER_DENIAL_REFERENCE_PREFIX = 'sandbox-service:provider-denial:'
+const WORKFLOW_PROVIDER_DENIAL_MARKER = '[sandbox-scenario:provider_denied]'
 const PARTIAL_RESULT_REQUEST_PHRASE = 'only a partial result is available'
 const PARTIAL_RESULT_REFERENCE_PREFIX = 'sandbox-service:partial-result:'
 const CANCEL_AFTER_CURRENT_REQUEST_PHRASE = 'pause the first step for cancellation'
@@ -184,35 +185,67 @@ export async function handleSandboxWorkflowProviderRequest(
     inputField: profile.inputField,
     input,
   }).slice(7, 31)
+  const providerDenialScenario = hasWorkflowProviderDenialScenario(input)
+  if (
+    profile.completionEvidence
+    && providerDenialScenario
+  ) {
+    return json(
+      { kind: 'refused', reason: 'sandbox_provider_declined' },
+      409,
+      { 'Provider-Receipt': `sandbox-workflow-denial:${providerKey}:${digest}` },
+    )
+  }
   return json(
-    { [profile.outputField]: sandboxWorkflowOutput(providerKey, workflowInputSummary(input), digest) },
+    {
+      [profile.outputField]: sandboxWorkflowOutput(
+        providerKey,
+        workflowInputSummary(input),
+        digest,
+        providerDenialScenario,
+      ),
+    },
     200,
     { 'Provider-Receipt': `sandbox-workflow:${providerKey}:${digest}` },
   )
 }
 
-function sandboxWorkflowOutput(providerKey: string, input: string, digest: string): string {
+function sandboxWorkflowOutput(
+  providerKey: string,
+  input: string,
+  digest: string,
+  providerDenialScenario: boolean,
+): string {
   const prefix = `sandbox-${providerKey}:${digest}`
+  const scenarioMarker = providerDenialScenario ? `${WORKFLOW_PROVIDER_DENIAL_MARKER} ` : ''
   const boundedInput = input.replace(/\s+/gu, ' ').trim().slice(0, 600)
   if (providerKey === 'trip-constraints') {
-    return `${prefix}: Trip brief preserves the stated dates, budget, accessibility, mobility, weather, and availability constraints. Customer request: ${boundedInput}`
+    return `${prefix}: ${scenarioMarker}Trip brief preserves the stated dates, budget, accessibility, mobility, weather, and availability constraints. Customer request: ${boundedInput}`
   }
   if (providerKey === 'itinerary-builder') {
-    return `${prefix}: Four-day Perth itinerary draft with one accessible activity per day and a weather fallback for every weather-sensitive day. Estimated activities remain planning estimates. Trip brief: ${boundedInput}`
+    return `${prefix}: ${scenarioMarker}Four-day Perth itinerary draft with one accessible activity per day and a weather fallback for every weather-sensitive day. Estimated activities remain planning estimates. Trip brief: ${boundedInput}`
   }
   if (providerKey === 'itinerary-readiness') {
-    return `${prefix}: Readiness checklist: activity availability remains unknown until confirmed; recheck mobility requirements before choosing each activity; verify weather and use the documented fallback where needed. No reservation, ticket, or payment has occurred. Draft reviewed: ${boundedInput}`
+    return `${prefix}: ${scenarioMarker}Readiness checklist: activity availability remains unknown until confirmed; recheck mobility requirements before choosing each activity; verify weather and use the documented fallback where needed. No reservation, ticket, or payment has occurred. Draft reviewed: ${boundedInput}`
   }
   if (providerKey === 'journey-case') {
-    return `${prefix}: Resumable service case records the requested office move, overdue milestones, current ownership, ownership changes, blockers, and the last confirmed update. Customer request: ${boundedInput}`
+    return `${prefix}: ${scenarioMarker}Resumable service case records the requested office move, overdue milestones, current ownership, ownership changes, blockers, and the last confirmed update. Customer request: ${boundedInput}`
   }
   if (providerKey === 'milestone-plan') {
-    return `${prefix}: Milestone plan marks overdue or blocked work explicitly and assigns who owes the next update for each unresolved milestone. Service case: ${boundedInput}`
+    return `${prefix}: ${scenarioMarker}Milestone plan marks overdue or blocked work explicitly and assigns who owes the next update for each unresolved milestone. Service case: ${boundedInput}`
   }
   if (providerKey === 'progress-synthesis') {
-    return `${prefix}: Resumable progress summary preserves completed, blocked, overdue, and ownership-changed milestones plus the next update owner. No physical move, dispatch, or third-party task has occurred. Milestone plan: ${boundedInput}`
+    return `${prefix}: ${scenarioMarker}Resumable progress summary preserves completed, blocked, overdue, and ownership-changed milestones plus the next update owner. No physical move, dispatch, or third-party task has occurred. Milestone plan: ${boundedInput}`
   }
-  return `${prefix}:${boundedInput}`
+  return `${prefix}:${scenarioMarker}${boundedInput}`
+}
+
+function hasWorkflowProviderDenialScenario(input: Readonly<Record<string, string>>): boolean {
+  return Object.values(input).some((value) => {
+    const normalized = value.toLowerCase()
+    return normalized.includes(PROVIDER_DENIAL_REQUEST_PHRASE)
+      || normalized.includes(WORKFLOW_PROVIDER_DENIAL_MARKER)
+  })
 }
 
 export async function handleSandboxCapabilityRequest(request: Request, options: HandlerOptions = {}): Promise<Response> {
