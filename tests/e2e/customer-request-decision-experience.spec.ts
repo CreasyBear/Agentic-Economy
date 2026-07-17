@@ -4,6 +4,7 @@ import type { CustomerRequestRepeatPermission } from '@/modules/customer-request
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 
 test('choice review is legible and authority-free until explicit confirmation', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   let confirmations = 0
   const preview = decisionView()
   await page.route('**/api/requests', async (route) => await route.fulfill({ json: preview }))
@@ -28,12 +29,26 @@ test('choice review is legible and authority-free until explicit confirmation', 
   await expect(page.getByRole('heading', { name: 'Review before you confirm' })).toBeVisible()
   await expect(page.getByText(/Fields: Request \(public\)/)).toBeVisible()
   await expect(page.getByText('Choice code quote:decision')).toBeVisible()
+  await expect(page.getByText('Confirm before')).toBeVisible()
+  await expect(page.getByText('What remains uncertain')).toBeVisible()
+  await expect(page.getByText('Completion timing has not been declared.')).toBeVisible()
+  await expect(page.getByText('Commercial relationships')).toBeVisible()
+  await expect(page.getByText('No registered commercial relationship affects this option.')).toBeVisible()
+  await expect(page.getByText('If something goes wrong')).toBeVisible()
+  await expect(page.getByText('No alternative way is currently declared.')).toBeVisible()
+  await expect(page.getByText('Cancellation', { exact: true })).toBeVisible()
+  await expect(page.getByText('No cancellation path is published.')).toBeVisible()
+  await expect(page.getByText('Evidence expected')).toBeVisible()
+  await expect(page.getByText('Result reference', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'What confirming means' })).toBeVisible()
   await expect(page.getByText('Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.')).toBeVisible()
   await expect(page.getByText('Starting uses that confirmation to contact the listed businesses and begin the work.')).toBeVisible()
   await expect(page.getByText('What starting could change')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Change this Request' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Decline this choice' })).toBeVisible()
+  expect(await page.locator('main').innerText()).not.toMatch(
+    /\b(?:RoutePlan|graph|capability|binding|mandate|transport|MCP|x402|schema choreography)\b/iu,
+  )
   expect(confirmations).toBe(0)
 
   await page.getByRole('button', { name: 'Decline this choice' }).click()
