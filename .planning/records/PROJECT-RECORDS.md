@@ -1,0 +1,59 @@
+# Project records
+
+**Owner:** Founder
+**Last reviewed:** 2026-07-15
+**Next field review:** 2026-08-15
+
+This is the project ledger for decisions, research provenance, hypotheses,
+unknowns, owners, and review dates. `PRODUCT.md` remains the authority for what
+is current and what is target. A row here cannot make a product claim current.
+
+## Decisions
+
+| ID | Status | Decision | Authority | Evidence | Revisit trigger |
+|---|---|---|---|---|---|
+| D-001 | ACCEPTED | Calling agents own the conversation; AE is a model-neutral service they can call. | `PRODUCT.md` target users and surfaces | Registered-action and cross-surface evals | A dominant agent surface cannot use an open HTTPS or tool integration without caller-specific product semantics |
+| D-002 | ACCEPTED | AE owns the canonical meaning, currency, admission, eligibility, and comparable evidence for business capabilities. It may evaluate an explicit supported customer objective against that evidence, but otherwise leaves options unranked for the person and calling agent to judge. External tool and commerce standards remain adapters. | `PRODUCT.md` target contract and product rules | Production Customer Request compiler, evaluator and option projection | Source begins inferring unstated customer priorities, ranking incomparable outcomes, or requiring caller-specific capability meaning; or an adopted standard provides equivalent cross-business comparability with accountable currency |
+| D-003 | ACCEPTED | Public positioning leads with the person's need, suitable businesses, comparison, and supported next step—not routing or protocol language. | `PRODUCT.md`; `DESIGN.md` | Current public-copy guardrails and evals | User research shows the ordinary-language framing causes a material misunderstanding |
+| D-004 | ACCEPTED | Payment must not influence organic admission or comparison. | `PRODUCT.md` product rules | Neutrality evals required before monetization | Revisit only through a superseding ADR before any pricing or ranking experiment |
+| D-005 | ACCEPTED | Prove depth in one request family before broad supply expansion or major-platform partnership claims. | This project record | [Workflow substitution candidate review](../research/2026-07-17-workflow-substitution-candidate-review.md) | A broad source supplies current comparable capability data with lower acquisition and maintenance cost |
+| D-006 | PROPOSED | Let people and agents complete independently useful tasks with business information and capabilities, then progressively compose those results into a full route; do not require a synthetic end-to-end Customer Request or introduce a universal task schema. | [ADR-009](../adr/ADR-009-partial-entry-without-request-ownership.md); target sections of `PRODUCT.md` and `DESIGN.md` | [Capability-to-composable-work crosswalk](../research/2026-07-17-capability-to-composable-work-crosswalk.md); [partial-entry premortem](../research/2026-07-17-partial-entry-premortem.md); [lifecycle crosswalk](../research/2026-07-17-partial-entry-lifecycle-crosswalk.md) | Evals fail to show independently useful customer work, portable continuation, trust parity, or lower-cost composition across contrasting tasks |
+| D-007 | PROPOSED | AE's embedded agent and external calling agents use the same registered actions and authoritative work records; conversation and task-shaped UI are host projections, and parity is judged by semantic outcome rather than identical presentation. | [ADR-010](../adr/ADR-010-one-action-plane-across-human-and-agent-experiences.md) | [ADR-010 inverse premortem](../research/2026-07-17-adr-010-inverse-premortem.md); [conversational agentic workspace patterns](../research/2026-07-17-conversational-agentic-workspace-patterns.md) | Cross-surface evals require duplicated business rules, produce different authority/evidence/recovery meaning, or fail to reduce human effort without greater error or operator burden |
+| D-008 | ACCEPTED | Build AE as a differentiated local coordination platform that can use global agent, tool, payment and checkout rails without conceding business meaning, local supply relationships, comparison, continuity or multi-provider coordination to those platforms. | `PRODUCT.md` vision and product rule 14 | Product boundary review against the target supply model, partial-entry model and external-standards adapter decision D-002 | A global platform provides current local supply, accountable cross-business comparison and recoverable multi-provider coordination without requiring AE-owned product semantics or relationships |
+
+## Hypotheses
+
+`PROPOSED` means untested. `ACTIVE` means the named experiment is running.
+`SUPPORTED` and `REFUTED` require linked evidence. `STALE` is automatic after
+the review date if no evidence exists.
+
+| ID | Status | Hypothesis | Test / baseline | Falsifier | Owner | Review by |
+|---|---|---|---|---|---|---|
+| H-001 | PROPOSED | Calling agents will choose AE when its comparisons contain fewer unsupported claims and more useful next steps than web search and marketplaces. | 100-request benchmark against agent web search, general search, and the strongest relevant marketplace | AE does not materially improve unsupported-claim rate or caller-rated usefulness | Product | 2026-08-15 |
+| H-002 | PROPOSED | Businesses will maintain capability information in exchange for better-fit agent referrals while retaining the customer relationship. | Recruit one business cohort and measure completion, correction, and 30-day maintenance | Fewer than 25% complete and maintain the material fields without paid exposure | GTM | 2026-08-15 |
+| H-003 | PROPOSED | Twenty to fifty genuinely comparable businesses in one request family create more caller value than broad shallow inventory. | Dense cohort versus broad-catalog baseline on identical requests | Dense coverage does not improve suitable-candidate recall, clarification burden, or comparison usefulness | Product | 2026-08-15 |
+| H-004 | PROPOSED | “Make what your business can do clear to every agent” recruits businesses better than marketplace language. | Randomized founder-led outreach scripts with the same offer and audience | Capability-centered language does not improve qualified response or completion | GTM | 2026-08-15 |
+| H-005 | PROPOSED | A public request benchmark and casebook earn higher-quality agent integrations than consumer advertising. | Compare builder conversations and enabled integrations from casebook distribution against paid/rented consumer traffic | Casebook produces no stronger integration intent or use | GTM | 2026-09-15 |
+| H-006 | PROPOSED | One source-owned capability representation can serve HTTPS, ChatGPT, Claude, Hermes, and future callers without caller-specific business logic. | Contract adapters plus parity tests over the same fixtures | Any caller requires different capability meaning or comparison semantics | Engineering | 2026-08-15 |
+| H-007 | PROPOSED | Precise ordinary-language tool metadata can make supported AE comparisons reliably selectable without causing adjacent or unsupported requests to call AE. | At least 50 direct, indirect, negative, ambiguous, missing-fact, and unsupported prompts across ChatGPT/API models, Claude, and Hermes | Below 95% direct selection or above 2% false-positive selection after two metadata revisions | Engineering | 2026-08-15 |
+| H-008 | PROPOSED | Anonymous public comparison followed by scoped authentication only for private continuity or writes improves adoption without unacceptable abuse or privacy risk. | Compare first-use completion and abuse between anonymous-first and account-link-first cohorts | No material activation improvement or unacceptable abuse/data risk | Product + Security | 2026-09-15 |
+
+## Research index
+
+| ID | Status | Maturity | Document | Decision impact | Review by |
+|---|---|---|---|---|---|
+| R-012 | ACTIVE | Target product and authority reconciliation | [Capability-to-composable-work crosswalk](../research/2026-07-17-capability-to-composable-work-crosswalk.md) | Proposes D-006 and reconciles ADR-009 with target product and interface authority; changes no current-product claim | 2026-08-17 |
+| R-013 | ACTIVE | External field + target interaction research | [Conversational agentic workspace patterns](../research/2026-07-17-conversational-agentic-workspace-patterns.md) | Supports proposed D-007 and ADR-010; competitor product structures do not prove reliability or AE feasibility | 2026-08-17 |
+| R-014 | ACTIVE | Inverse premortem + acceptance evidence | [ADR-010 inverse premortem](../research/2026-07-17-adr-010-inverse-premortem.md) | Defines success conditions and acceptance gates for proposed D-007 and ADR-010 | 2026-08-17 |
+| R-015 | ACTIVE | Workflow and wedge evaluation | [Workflow substitution candidate review](../research/2026-07-17-workflow-substitution-candidate-review.md) and [Product Foundry program](../research/2026-07-17-product-foundry-primitive-refinery-program.md) | Defines the eval portfolio for D-005 and the evidence required before engineering expansion | 2026-08-17 |
+
+## Open decisions
+
+These are deliberately unresolved:
+
+| Question | Evidence required | Blocking |
+|---|---|---|
+| Which request family should be the first dense proof? | Request corpus, incumbent baseline, recruitable supply, fact-decay study, safe useful next step | Supply recruitment and benchmark design |
+| Who pays without distorting comparison? | Value interviews, cost-to-serve, willingness to pay, neutrality analysis | Pricing and monetization experiments |
+| What makes each business claim current enough to compare? | Per-field decay model, correction behavior, operational source inventory | Admission and comparison policy |
+| Which agent distribution surface should be first? | Integration effort, actual callable behavior, discovery path, early-user access | Packaging after the canonical HTTPS contract |

@@ -44,8 +44,8 @@ named standard exists and a listing meets it — otherwise use "checked",
 
 ## The current safe contract for assistants
 
-An assistant reading AE may: **read**, **compare**, **summarize**, and **route
-to the next step**. It may **send a qualified inquiry** on a person's behalf
+An assistant reading AE may: **read**, **compare**, **summarize**, and **show
+the supported next step**. It may **send a qualified inquiry** on a person's behalf
 when the listing publishes that capability. It may **not** assume booking,
 payment, dispatch, availability, or any fact the listing marks as needing
 confirmation. If a requested action exceeds the safe contract, return the
@@ -134,6 +134,27 @@ shown through truthful content, not a labelled ledger.
 - Keep public human copy free of internal architecture words: `source-owned`,
   `readback`, `manifest`, `capability`, `gateway`, `operator`, `MCP`,
   `OpenAPI`, `callable`, `autonomous`, `agent-native`, `DTO`, `fixture`.
+
+## Project records and research
+
+- Read `.planning/records/README.md` before creating project research,
+  positioning, competitor, GTM, ecosystem, or business-model documents.
+- Start project orientation at `.planning/records/KNOWLEDGE-INDEX.md`; follow
+  links to authority and evidence instead of treating the index as authority.
+- Record material decisions, hypotheses, research status, owners, and review
+  dates in `.planning/records/PROJECT-RECORDS.md`; do not create a competing ledger.
+- Research informs decisions but never overrides `PRODUCT.md`, `DESIGN.md`,
+  source, tests, or intended-surface evidence.
+- New research uses `.planning/records/RESEARCH-RECORD-TEMPLATE.md` and labels
+  observations, inferences, unknowns, and falsifiable hypotheses distinctly.
+- If a conclusion changes a public contract, authority boundary, canonical data
+  model, interoperability posture, or neutrality constraint, write or supersede
+  an ADR. Never rewrite old decisions to make a new direction look inevitable.
+- A missed research or hypothesis review date makes it stale. Stale material may
+  not justify implementation or public claims until reviewed.
+- Update `SOURCE-REGISTER.md` when a material external source is added or
+  changes, and update `RESEARCH-QUEUE.md` when a question starts, closes, or
+  changes the decision it blocks.
 
 <!-- convex-ai-start -->
 

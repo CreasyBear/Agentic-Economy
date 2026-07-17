@@ -114,19 +114,25 @@ verification not supplied
 Implementation must follow:
 
 - `ENGINEERING-STANDARDS.md`
-- `SOURCE-MINING.md`
-- `SECURITY-SPEC.md`
-- `AGENTIC-MARKET-STUDY.md`
 - `AI-SPEC.md`
-- `SEO-AEO-SPEC.md`
-- `GTM-READINESS.md`
-- `design/README.md`
+- `records/README.md`
+- `records/PROJECT-RECORDS.md`
+- `../PRODUCT.md`
 - `../DESIGN.md`
-- `../.impeccable/design.json`
-- `archive/phases/01-ten-star-spine-foundation/01-UI-SPEC.md`
-- `archive/phases/01-ten-star-spine-foundation/PHASE.md`
 
 If these conflict, prefer the more specific spec for that domain and update the docs to remove drift.
+
+## Project records
+
+Project decisions, research provenance, unresolved hypotheses, evidence owners,
+and review dates are recorded in `records/PROJECT-RECORDS.md` under the rules in
+`records/README.md`.
+
+The record ledger does not replace this charter, `STATE.md`, `REQUIREMENTS.md`,
+`PRODUCT.md`, or `DESIGN.md`. It preserves why a decision was made and what
+evidence would reopen it. Research may inform a project decision but cannot
+change current product truth without source and executable evidence through the
+intended surface.
 
 ## System boundary
 
