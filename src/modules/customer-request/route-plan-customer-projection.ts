@@ -768,7 +768,11 @@ function businessName(businessId: string, businessNames: BusinessNames): string 
 }
 
 function readableName(value: string): string {
-  const words = value.replace(/[._-]+/gu, ' ').trim()
+  const words = value
+    .replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
+    .replace(/[._-]+/gu, ' ')
+    .trim()
+    .toLowerCase()
   return words.length === 0 ? 'Named recipient' : `${words[0]?.toUpperCase() ?? ''}${words.slice(1)}`
 }
 

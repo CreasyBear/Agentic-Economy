@@ -275,6 +275,27 @@ describe('sandbox capability provider', () => {
       .toMatch(/^sandbox-workflow:itinerary-readiness:/u)
   })
 
+  it('assembles only the selected typed itinerary components', async () => {
+    const request = 'Preserve the accessible transfer, hotel, and meetings. Remove dinner.'
+    const transfer = await workflowCall('accessible-transfer', { request })
+    const hotel = await workflowCall('accessible-hotel', { request })
+    const meetings = await workflowCall('meeting-schedule', { request })
+    expect([transfer.status, hotel.status, meetings.status]).toEqual([200, 200, 200])
+    const transferPlan = (await transfer.json()).transferPlan
+    const hotelPlan = (await hotel.json()).hotelPlan
+    const meetingSchedule = (await meetings.json()).meetingSchedule
+
+    const itinerary = await workflowCall('itinerary-builder', {
+      tripBrief: 'sandbox-trip-brief', transferPlan, hotelPlan, meetingSchedule,
+    })
+    expect(itinerary.status).toBe(200)
+    const { itineraryDraft } = await itinerary.json() as { itineraryDraft: string }
+    expect(itineraryDraft).toContain('transferPlan')
+    expect(itineraryDraft).toContain('hotelPlan')
+    expect(itineraryDraft).toContain('meetingSchedule')
+    expect(itineraryDraft).not.toContain('dinnerPlan')
+  })
+
   it('keeps itinerary weather, mobility, and unknown availability visible in the final checklist', async () => {
     const constraints = await workflowCall('trip-constraints', {
       request: 'Plan four Perth days. Rain may invalidate one day, mobility needs may change, and activity availability is unknown.',

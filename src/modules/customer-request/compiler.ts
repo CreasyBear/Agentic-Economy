@@ -493,6 +493,15 @@ export function compileRoutePlans(input: Readonly<{
       if (candidate === undefined) throw new Error('customer_request_route_candidate_missing')
       const model = input.models.get(refKey(action.contractRef))
       if (model === undefined) throw new Error('customer_request_route_model_missing')
+      const activeInputPointers = new Set([
+        ...action.inputs.map(({ inputPointer }) => inputPointer),
+        ...action.inputMappings.map(({ target }) => target.inputPointer),
+      ])
+      const dataUse = model.dataUse.filter(({ inputPointer }) => activeInputPointers.has(inputPointer))
+      const activeDataReleaseEffects = new Set(dataUse.map(({ effectId }) => effectId))
+      const effects = model.effects.filter((effect) => (
+        effect.class !== 'data_release' || activeDataReleaseEffects.has(effect.effectId)
+      ))
       return Object.freeze({
         actionId: action.actionId, candidateRef: candidate.candidateRef,
         businessId: candidate.businessId, offeringId: candidate.offeringId, bindingId: candidate.bindingId,
@@ -508,7 +517,7 @@ export function compileRoutePlans(input: Readonly<{
             evidenceRefs: [...candidate.commercialRelationship.evidenceRefs],
           },
         }),
-        dataUse: model.dataUse, effects: model.effects, evidence: model.evidence,
+        dataUse, effects, evidence: model.evidence,
         cancellation: candidate.cancellation,
         recovery: model.lifecycle,
       })
@@ -658,7 +667,7 @@ export function composeRequestActions(
     if (model === undefined) throw new Error('customer_request_selection_model_missing')
     const supplied = new Set(action.inputs.map((fact) => fact.inputKey))
     const mappings: RequestActionInputMapping[] = []
-    for (const target of model.inputs.filter((input) => input.required && !supplied.has(input.key))) {
+    for (const target of model.inputs.filter((input) => !supplied.has(input.key))) {
       const producers = actions.flatMap((sourceAction) => {
         if (sourceAction.actionId === action.actionId) return []
         const sourceModel = resolveExactModel(models, sourceAction.contractRef)

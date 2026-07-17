@@ -162,6 +162,10 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
   })),
   ...[
     ['trip-constraints', 'Trip Constraint Interpreter', 'Structure trip constraints'],
+    ['accessible-transfer', 'Accessible Transfer Planner', 'Plan an accessible airport transfer'],
+    ['accessible-hotel', 'Accessible Hotel Planner', 'Plan accessible accommodation'],
+    ['meeting-schedule', 'Meeting Schedule Planner', 'Plan timed meetings'],
+    ['dinner-plan', 'Dinner Plan Service', 'Plan dinner'],
     ['itinerary-builder', 'Itinerary Assembly Service', 'Build an itinerary'],
     ['itinerary-readiness', 'Travel Readiness Review', 'Review itinerary readiness'],
   ].map(([providerKey, businessName, serviceName]) => ({

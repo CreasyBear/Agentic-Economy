@@ -1,4 +1,5 @@
-import { internalMutation } from './_generated/server'
+import { internalMutation, type MutationCtx } from './_generated/server'
+import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { v } from 'convex/values'
 
@@ -31,6 +32,7 @@ import {
 } from '@/modules/sandbox-supply/public'
 import {
   SANDBOX_WORKFLOW_PROVIDER_PROFILES,
+  historicalItineraryBuilderCapabilityContractDocument,
   sandboxWorkflowCapabilityContractDocument,
   type SandboxWorkflowProviderKey,
 } from '@/modules/sandbox-supply/workflow-cohorts'
@@ -77,8 +79,17 @@ export const seedDevCatalog = internalMutation({
         throw new Error(`sandbox_dev_seed_identity_mismatch:${fixture.requestedSlug}`)
       }
     }
+    const transferredSandboxBusinesses = await Promise.all(sandboxFixtures.map(async (fixture, index) => (
+      await isExactAuthenticatedSandboxOwnerTransfer(
+        ctx.db,
+        fixture,
+        existingSandboxBusinesses[index] ?? null,
+        currentClaimOperations[index] ?? null,
+      )
+    )))
     const replayOrMissingFixtures = sandboxFixtures.filter((_, index) => (
-      existingSandboxBusinesses[index] === null || currentClaimOperations[index] !== null
+      existingSandboxBusinesses[index] === null
+      || (currentClaimOperations[index] !== null && transferredSandboxBusinesses[index] !== true)
     ))
     const registeredSandboxBusinesses = await registerSandboxBusinesses(
       db, replayOrMissingFixtures, seedStartedAt,
@@ -252,6 +263,45 @@ function isSandboxFixture(fixture: DevSeedBusinessFixture): boolean {
   return fixture.requestedSlug.startsWith('sandbox-')
 }
 
+async function isExactAuthenticatedSandboxOwnerTransfer(
+  db: MutationCtx['db'],
+  fixture: DevSeedBusinessFixture,
+  business: Doc<'businesses'> | null,
+  operation: Doc<'operationKeys'> | null,
+): Promise<boolean> {
+  if (business === null || operation === null || business.ownerId === operation.actorRef) return false
+  if (operation.operationName !== 'claimBusiness' || operation.actorKind !== 'owner'
+    || operation.status !== 'succeeded' || operation.sourceHash !== business.sourceHash) return false
+  if (business.name !== fixture.businessName || business.category !== fixture.category
+    || business.suburb !== fixture.suburb || business.stateTerritory !== fixture.stateTerritory
+    || business.claimStatus !== 'published' || business.publicStatus !== 'published') return false
+
+  const [currentOwner, originalOwner, claims, context] = await Promise.all([
+    db.get(business.ownerId as Id<'owners'>),
+    db.get(operation.actorRef as Id<'owners'>),
+    db.query('claims').withIndex('by_business_status', (query) => query.eq('businessId', business._id)).take(2),
+    db.query('businessContexts').withIndex('by_business', (query) => query.eq('businessId', business._id)).unique(),
+  ])
+  const claim = claims[0]
+  const sourceRef = context?.sourceRefs[0]
+  return currentOwner?.clerkUserId.startsWith('user_') === true
+    && originalOwner?.clerkUserId === DEV_SEED_OWNER_CLERK_USER_ID
+    && claims.length === 1
+    && claim?.status === 'published'
+    && claim.ownerId === business.ownerId
+    && claim.submittedFactsHash === business.sourceHash
+    && context?.sourceHash === business.sourceHash
+    && context.category === fixture.category
+    && context.suburb === fixture.suburb
+    && context.stateTerritory === fixture.stateTerritory
+    && context.ownerMessage === fixture.ownerMessage
+    && context.sourceRefs.length === 1
+    && sourceRef?.label === fixture.sourceLabel
+    && sourceRef.evidenceRef === `private:evidence:dev-seed:${fixture.requestedSlug}`
+    && operation.effectRefs[0] === business._id
+    && operation.effectRefs[1] === claim._id
+}
+
 export async function seedSandboxCapabilityPublication(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
   registration: SandboxV2SupplyRegistration | undefined,
@@ -339,7 +389,9 @@ export async function registerSandboxBusinesses(
       operationKey: `seed:claim:${fixture.requestedSlug}`,
       correlationId: `seed:claim:${fixture.requestedSlug}`,
     }, now)
-    if (claim.kind !== 'ok') throw new Error(`sandbox_business_claim_${claim.code}`)
+    if (claim.kind !== 'ok') {
+      throw new Error(`sandbox_business_claim_${claim.code}:${fixture.requestedSlug}:${claim.reason}`)
+    }
 
     const published = await publishBusinessCatalogCommand(db, {
       actor,
@@ -365,7 +417,9 @@ export async function registerSandboxBusinesses(
             },
       }],
     }, now + 500)
-    if (published.kind !== 'ok') throw new Error(`sandbox_business_publish_${published.code}`)
+    if (published.kind !== 'ok') {
+      throw new Error(`sandbox_business_publish_${published.code}:${fixture.requestedSlug}:${published.reason}`)
+    }
     businessIdsBySlug[fixture.requestedSlug] = published.business.businessId
   }
   return { seededSlugs: fixtures.map((fixture) => fixture.requestedSlug), businessIdsBySlug }
@@ -927,6 +981,102 @@ export async function retireSupersededSandboxProcurementSupply(
     retired.push(binding.bindingId)
   }
   return retired
+}
+
+export async function retireSupersededSandboxItineraryBuilderSupply(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  registrations: readonly SandboxV2SupplyRegistration[],
+  retiredAt: number,
+): Promise<string[]> {
+  const profile = SANDBOX_WORKFLOW_PROVIDER_PROFILES['itinerary-builder']
+  if (profile === undefined) throw new Error('sandbox_workflow_provider_unknown:itinerary-builder')
+  if (registrations.every((registration) => registration.slug !== profile.slug)) {
+    throw new Error(`sandbox_workflow_corrected_registration_missing_${profile.slug}`)
+  }
+  const contractRef = encodeCapabilityContractDocument(
+    historicalItineraryBuilderCapabilityContractDocument(),
+  ).contract.ref
+  const historicalOrigin = process.env.AE_SANDBOX_WORKFLOW_ORIGIN?.trim()
+    || process.env.AE_SANDBOX_ROUTE_RESOLVER_ORIGIN?.trim()
+    || process.env.AE_SITE_URL?.trim()
+    || 'https://agentic-economy-phi.vercel.app'
+  const [business, offering, binding] = await Promise.all([
+    db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique(),
+    db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.priorOfferingId)).unique(),
+    db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.priorBindingId)).unique(),
+  ])
+  if (offering === null && binding === null) return []
+  const expectedOfferingRegistrationHash = business === null ? undefined : capabilityOfferingRegistrationHash({
+    offeringId: profile.priorOfferingId,
+    businessId: business._id,
+    networkId: 'ae:public',
+    contractRef,
+    presentation: {
+      label: profile.capabilityName,
+      summary: `Labelled sandbox ${profile.cohortLabel.toLowerCase()} workflow evidence only.`,
+      price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+      materialTerms: [{
+        termId: 'sandbox_only', label: 'Environment',
+        value: 'Sandbox only; no real supplier order, payment, or fulfilment.',
+      }],
+      commercialRelationship: {
+        kind: 'none', summary: 'Sandbox verification has no commercial relationship.',
+        influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+        evidenceRefs: ['seed:sandbox-commercial-neutrality'],
+      },
+    },
+    searchTerms: [profile.cohortLabel, profile.capabilityName, 'workplace catering supplier recommendation'],
+    registrationEvidenceRefs: ['seed:sandbox-labelled-workflow-business'],
+  })
+  if (
+    business === null || offering === null || binding === null
+    || offering.businessId !== business._id
+    || offering.networkId !== 'ae:public'
+    || offering.capabilityId !== contractRef.capabilityId
+    || offering.version !== contractRef.version
+    || offering.contractDigest !== contractRef.contractDigest
+    || offering.registrationHash !== expectedOfferingRegistrationHash
+    || binding.offeringId !== profile.priorOfferingId
+    || binding.networkId !== 'ae:public'
+    || binding.capabilityId !== contractRef.capabilityId
+    || binding.version !== contractRef.version
+    || binding.contractDigest !== contractRef.contractDigest
+    || binding.endpointUrl !== new URL(profile.endpointPath, historicalOrigin).href
+    || binding.credentialRef !== 'env:AE_SANDBOX_PROVIDER_KEY'
+    || binding.adapterId !== 'http-json:v1'
+    || binding.configJson !== '{"method":"POST","requestTimeoutMs":5000}'
+    || binding.configDigest !== canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 })
+    || binding.continuation.kind !== 'single_response'
+    || binding.continuation.evidenceRefs.length !== 1
+    || binding.continuation.evidenceRefs[0] !== 'seed:sandbox-single-response'
+    || binding.cancellation.kind !== 'unsupported'
+    || binding.cancellation.evidenceRefs.length !== 1
+    || binding.cancellation.evidenceRefs[0] !== 'seed:sandbox-no-cancellation'
+    || binding.registrationEvidenceRefs.length !== 1
+    || binding.registrationEvidenceRefs[0] !== 'seed:production-v2-registration-path'
+  ) throw new Error(`sandbox_itinerary_builder_historical_identity_mismatch_${profile.priorBindingId}`)
+  const evidenceRef = 'seed:sandbox-itinerary-builder-contract-replaced'
+  const result = await setCapabilitySupplyEligibilityCommand(db, {
+    actor: { kind: 'system', ref: 'system:dev-seed' },
+    context: {
+      operationKey: `seed:capability-workflow-binding-retire:${profile.priorBindingId}`,
+      correlationId: `seed:capability-supply:${profile.slug}`,
+      reasonCode: 'labelled_sandbox_workflow_contract_replaced', evidenceRefs: [evidenceRef],
+    },
+    eligibility: {
+      offeringId: offering.offeringId, bindingId: binding.bindingId, contractRef,
+      decision: 'revoke',
+      expectedOfferingRegistrationHash: offering.registrationHash,
+      expectedBindingRegistrationHash: binding.registrationHash,
+      admissionEvidenceRefs: [evidenceRef], conformanceEvidenceRefs: [evidenceRef],
+    },
+  }, retiredAt)
+  if (result.kind !== 'ineligible') {
+    throw new Error(`sandbox_itinerary_builder_historical_retirement_${result.kind}`)
+  }
+  return [binding.bindingId]
 }
 
 export async function retireSupersededSandboxV2Supply(

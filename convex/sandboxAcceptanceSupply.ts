@@ -9,6 +9,7 @@ import {
   registerSandboxWorkflowSupplyRegistrations,
   registerSandboxV2SupplyRegistrations,
   retireSandboxV2AcceptanceSupply,
+  retireSupersededSandboxItineraryBuilderSupply,
   retireSupersededSandboxProcurementSupply,
   retireSupersededSandboxRouteSupply,
   retireSupersededSandboxV2Supply,
@@ -122,6 +123,9 @@ export const seedLabelledSandboxSupply = internalMutation({
     await retireSupersededSandboxRouteSupply(ctx.db, routeRegistrations, registeredAt + 3_050)
     await retireSupersededSandboxProcurementSupply(
       ctx.db, workflowRegistrations, registeredAt + 3_075,
+    )
+    await retireSupersededSandboxItineraryBuilderSupply(
+      ctx.db, workflowRegistrations, registeredAt + 3_080,
     )
     const retiredSandboxV2Bindings = args.includeComparisonOptions === false
       ? await retireSandboxV2AcceptanceSupply(ctx.db, registrations, registeredAt + 3_100)

@@ -6,6 +6,8 @@ export type SandboxWorkflowStep = Readonly<{
   outputField: string
   inputSemanticIdentity?: string
   outputSemanticIdentity?: string
+  groundFromRequest?: boolean
+  optionalInputs?: readonly Readonly<{ field: string; semanticIdentity: string }>[]
   completionEvidence: boolean
   amountMinor: number
   recovery: 'retry_safe' | 'reconcile_required'
@@ -42,8 +44,19 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     completionBoundary: 'A coherent itinerary and readiness checklist; no reservation or ticketing.',
     prohibitedClaim: 'Do not claim availability, booking, ticketing, or payment.',
     steps: Object.freeze([
-      step('trip-constraints', 'Trip Constraint Interpreter', 'Structure trip constraints', 'request', 'tripBrief', undefined, 'ae.trip-brief:v1', false, 200, 'retry_safe'),
-      step('itinerary-builder', 'Itinerary Assembly Service', 'Build an itinerary', 'tripBrief', 'itineraryDraft', 'ae.trip-brief:v1', 'ae.itinerary-draft:v1', false, 500, 'retry_safe'),
+      step('trip-constraints', 'Trip Constraint Interpreter', 'Structure trip constraints', 'request', 'tripBrief', undefined, 'ae.trip-brief:v1', false, 200, 'retry_safe', { groundFromRequest: true }),
+      step('accessible-transfer', 'Accessible Transfer Planner', 'Plan an accessible airport transfer', 'request', 'transferPlan', undefined, 'ae.transfer-plan:v1', false, 180, 'retry_safe', { groundFromRequest: true }),
+      step('accessible-hotel', 'Accessible Hotel Planner', 'Plan accessible accommodation', 'request', 'hotelPlan', undefined, 'ae.hotel-plan:v1', false, 220, 'retry_safe', { groundFromRequest: true }),
+      step('meeting-schedule', 'Meeting Schedule Planner', 'Plan timed meetings', 'request', 'meetingSchedule', undefined, 'ae.meeting-schedule:v1', false, 160, 'retry_safe', { groundFromRequest: true }),
+      step('dinner-plan', 'Dinner Plan Service', 'Plan dinner', 'request', 'dinnerPlan', undefined, 'ae.dinner-plan:v1', false, 140, 'retry_safe', { groundFromRequest: true }),
+      step('itinerary-builder', 'Itinerary Assembly Service', 'Build an itinerary', 'tripBrief', 'itineraryDraft', 'ae.trip-brief:v1', 'ae.itinerary-draft:v1', false, 500, 'retry_safe', {
+        optionalInputs: [
+          { field: 'transferPlan', semanticIdentity: 'ae.transfer-plan:v1' },
+          { field: 'hotelPlan', semanticIdentity: 'ae.hotel-plan:v1' },
+          { field: 'meetingSchedule', semanticIdentity: 'ae.meeting-schedule:v1' },
+          { field: 'dinnerPlan', semanticIdentity: 'ae.dinner-plan:v1' },
+        ],
+      }),
       step('itinerary-readiness', 'Travel Readiness Review', 'Review itinerary readiness', 'itineraryDraft', 'readinessChecklist', 'ae.itinerary-draft:v1', undefined, true, 300, 'reconcile_required'),
     ]),
     curveballs: Object.freeze(['weather invalidates one day', 'mobility requirement changes', 'an activity has unknown availability']),
@@ -98,10 +111,11 @@ export const SANDBOX_WORKFLOW_PROVIDER_PROFILES = Object.freeze(Object.fromEntri
       cohortLabel: cohort.label,
       position: position + 1,
       slug: `sandbox-${workflowStep.providerKey}`,
-      priorOfferingId: `offering:sandbox-${workflowStep.providerKey}:v1`,
-      priorBindingId: `binding:sandbox-${workflowStep.providerKey}:http-json:v1`,
-      offeringId: `offering:sandbox-${workflowStep.providerKey}:v2`,
-      bindingId: `binding:sandbox-${workflowStep.providerKey}:http-json:v2`,
+      contractVersion: workflowStep.providerKey === 'itinerary-builder' ? 2 : 1,
+      priorOfferingId: `offering:sandbox-${workflowStep.providerKey}:v${workflowStep.providerKey === 'itinerary-builder' ? 2 : 1}`,
+      priorBindingId: `binding:sandbox-${workflowStep.providerKey}:http-json:v${workflowStep.providerKey === 'itinerary-builder' ? 2 : 1}`,
+      offeringId: `offering:sandbox-${workflowStep.providerKey}:v${workflowStep.providerKey === 'itinerary-builder' ? 3 : 2}`,
+      bindingId: `binding:sandbox-${workflowStep.providerKey}:http-json:v${workflowStep.providerKey === 'itinerary-builder' ? 3 : 2}`,
       endpointPath: `/api/sandbox/providers/workflow?provider=${workflowStep.providerKey}`,
     }),
   ])),
@@ -112,28 +126,51 @@ export type SandboxWorkflowProviderKey = keyof typeof SANDBOX_WORKFLOW_PROVIDER_
 export function sandboxWorkflowCapabilityContractDocument(providerKey: SandboxWorkflowProviderKey) {
   const profile = SANDBOX_WORKFLOW_PROVIDER_PROFILES[providerKey]
   if (profile === undefined) throw new Error(`sandbox_workflow_provider_unknown:${providerKey}`)
+  return workflowCapabilityContractDocument(profile, profile.contractVersion, profile.optionalInputs)
+}
+
+export function historicalItineraryBuilderCapabilityContractDocument() {
+  const profile = SANDBOX_WORKFLOW_PROVIDER_PROFILES['itinerary-builder']
+  if (profile === undefined) throw new Error('sandbox_workflow_provider_unknown:itinerary-builder')
+  return workflowCapabilityContractDocument(profile, 1, undefined)
+}
+
+function workflowCapabilityContractDocument(
+  profile: (typeof SANDBOX_WORKFLOW_PROVIDER_PROFILES)[SandboxWorkflowProviderKey],
+  version: number,
+  optionalInputs: readonly Readonly<{ field: string; semanticIdentity: string }>[] | undefined,
+) {
   const inputPointer = `/${profile.inputField}`
   const outputPointer = `/${profile.outputField}`
   return Object.freeze({
     contractFormat: 'ae.capability-contract:v2' as const,
-    capabilityId: `sandbox.workflow.${providerKey}`,
-    version: 1,
+    capabilityId: `sandbox.workflow.${profile.providerKey}`,
+    version,
     name: profile.capabilityName,
     description: `Return labelled sandbox evidence for the ${profile.cohortLabel.toLowerCase()} workflow.`,
-    inputSchema: workflowSchema(profile.inputField),
+    inputSchema: workflowInputSchema(profile.inputField, optionalInputs),
     outputSchema: workflowSchema(profile.outputField),
     customerAnnotations: Object.freeze([
       Object.freeze({
         annotationId: `${profile.inputField}_input`,
         document: 'input' as const,
         pointer: inputPointer,
-        label: profile.position === 1 ? 'What outcome do you need?' : profile.inputField,
-        role: profile.position === 1 ? 'request' as const : 'constraint' as const,
-        inference: profile.position === 1 ? 'allowed' as const : 'customer_required' as const,
+        label: profile.groundFromRequest === true || profile.position === 1 ? 'What outcome do you need?' : profile.inputField,
+        role: profile.groundFromRequest === true || profile.position === 1 ? 'request' as const : 'constraint' as const,
+        inference: profile.groundFromRequest === true || profile.position === 1 ? 'allowed' as const : 'customer_required' as const,
         ...(profile.inputSemanticIdentity === undefined
           ? {}
           : { semanticIdentity: profile.inputSemanticIdentity }),
       }),
+      ...(optionalInputs ?? []).map((optional) => Object.freeze({
+        annotationId: `${optional.field}_input`,
+        semanticIdentity: optional.semanticIdentity,
+        document: 'input' as const,
+        pointer: `/${optional.field}`,
+        label: optional.field,
+        role: 'constraint' as const,
+        inference: 'customer_required' as const,
+      })),
       Object.freeze({
         annotationId: `${profile.outputField}_output`,
         document: 'output' as const,
@@ -145,20 +182,18 @@ export function sandboxWorkflowCapabilityContractDocument(providerKey: SandboxWo
           : { semanticIdentity: profile.outputSemanticIdentity }),
       }),
     ]),
-    dataUse: Object.freeze([Object.freeze({
-      effectId: `${profile.inputField}_release`,
-      inputPointer,
-      classification: 'public' as const,
-      phase: 'preparation' as const,
-      recipient: Object.freeze({ kind: 'candidate_binding' as const }),
-      purposes: Object.freeze([`prepare_${profile.cohortId}_${profile.outputField}`]),
-    })]),
-    effects: Object.freeze([Object.freeze({
-      effectId: `${profile.inputField}_release`,
-      class: 'data_release' as const,
-      authority: 'explicit' as const,
-      reversibility: 'irreversible' as const,
-    })]),
+    dataUse: Object.freeze([profile.inputField, ...(optionalInputs ?? []).map(({ field }) => field)]
+      .map((field) => Object.freeze({
+        effectId: `${field}_release`, inputPointer: `/${field}`,
+        classification: 'public' as const, phase: 'preparation' as const,
+        recipient: Object.freeze({ kind: 'candidate_binding' as const }),
+        purposes: Object.freeze([`prepare_${profile.cohortId}_${profile.outputField}`]),
+      }))),
+    effects: Object.freeze([profile.inputField, ...(optionalInputs ?? []).map(({ field }) => field)]
+      .map((field) => Object.freeze({
+        effectId: `${field}_release`, class: 'data_release' as const,
+        authority: 'explicit' as const, reversibility: 'irreversible' as const,
+      }))),
     evidence: Object.freeze([Object.freeze({
       evidenceId: profile.outputField,
       outputPointer,
@@ -171,13 +206,20 @@ export function sandboxWorkflowCapabilityContractDocument(providerKey: SandboxWo
   })
 }
 
-function workflowSchema(field: string) {
+function workflowInputSchema(
+  field: string,
+  optionalInputs: readonly Readonly<{ field: string }>[] | undefined,
+) {
+  return workflowSchema(field, optionalInputs?.map((input) => input.field) ?? [])
+}
+
+function workflowSchema(field: string, optionalFields: readonly string[] = []) {
   return Object.freeze({
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     type: 'object',
-    properties: Object.freeze({
-      [field]: Object.freeze({ type: 'string', minLength: 1 }),
-    }),
+    properties: Object.freeze(Object.fromEntries([field, ...optionalFields].map((name) => [
+      name, Object.freeze({ type: 'string', minLength: 1 }),
+    ]))),
     required: Object.freeze([field]),
     additionalProperties: false,
   })
@@ -194,11 +236,14 @@ function step(
   completionEvidence: boolean,
   amountMinor: number,
   recovery: SandboxWorkflowStep['recovery'],
+  options: Readonly<Pick<SandboxWorkflowStep, 'groundFromRequest' | 'optionalInputs'>> = {},
 ): SandboxWorkflowStep {
   return Object.freeze({
     providerKey, businessName, capabilityName, inputField, outputField,
     ...(inputSemanticIdentity === undefined ? {} : { inputSemanticIdentity }),
     ...(outputSemanticIdentity === undefined ? {} : { outputSemanticIdentity }),
+    ...(options.groundFromRequest === undefined ? {} : { groundFromRequest: options.groundFromRequest }),
+    ...(options.optionalInputs === undefined ? {} : { optionalInputs: Object.freeze(options.optionalInputs.map((input) => Object.freeze({ ...input }))) }),
     completionEvidence, amountMinor, recovery,
   })
 }

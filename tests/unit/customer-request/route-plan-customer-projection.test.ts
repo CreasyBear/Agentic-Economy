@@ -476,6 +476,20 @@ describe('RoutePlan customer projection', () => {
     })
   })
 
+  it('renders camel-case registered input pointers as customer-readable field names', () => {
+    const componentInput = changed(route({ amountMinor: 1_200 }), (value) => {
+      value.steps[0]!.dataUse[0]!.inputPointer = '/meetingSchedule'
+    })
+    const decision = projectCustomerRoutePlanDecision({
+      current: generation(1, [componentInput]),
+      businessNames: { 'business:one': 'North Star Services' },
+      capabilitySemantics,
+      now: 10_000,
+    })
+
+    expect(decision.routes[0]?.dataUse.recipients[0]?.fields[0]?.label).toBe('Meeting schedule')
+  })
+
   it('keeps distinct recipients separate when their customer-facing names collide', () => {
     const sameNameBusinesses = changed(route({ amountMinor: 1_200 }), (value) => {
       value.steps.push({

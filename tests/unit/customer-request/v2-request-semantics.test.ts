@@ -74,6 +74,26 @@ describe('V2 Request semantics', () => {
     })
   })
 
+  it('treats named component results as material and later changes as authoritative', async () => {
+    const generateJson = vi.fn().mockResolvedValue({ content: JSON.stringify({
+      kind: 'unsupported_request', reason: 'requested_result_not_available', prompt: '', selections: [],
+    }) })
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:component-amendment',
+      transport: { generateJson }, timeoutMs: 1_000,
+      maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await interpreter.propose({
+      customerJob: 'Prepare A, B, C, and D.\nKeep A, B, and C, but remove D.',
+      capabilities: [],
+    })
+
+    const instruction = generateJson.mock.calls[0]?.[0].systemInstruction as string
+    expect(instruction).toContain('select every capability that directly returns each named component')
+    expect(instruction).toContain('later statements override conflicting earlier statements')
+  })
+
   it('decodes bounded neutral JSON fact values from the strict model envelope', async () => {
     const model = decisionModelWithCommitment()
     const requestInput = requiredInput(model, 'request')
@@ -791,6 +811,57 @@ describe('V2 Request semantics', () => {
     }, 0)).toBe(false)
   })
 
+  it('composes a selected component into one optional registered assembly input', () => {
+    const component = compositionLookupModel('workflow.optional-component')
+    const assembly = compositionOptionalAssemblyModel()
+    const request = requiredInput(component, 'request')
+    const compiled = compileCustomerRequest({
+      requestId: 'request:optional-component', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Include the selected component in the assembled result.', networkId: 'ae:public',
+      proposal: {
+        kind: 'capability_candidates',
+        selections: [
+          {
+            selectionKey: component.selectionKey, contractRef: component.contractRef,
+            facts: [{
+              contractRef: component.contractRef, selectionKey: component.selectionKey,
+              inputKey: request.key, inputPointer: request.inputPointer,
+              schemaIdentity: request.schemaIdentity, value: 'Selected component',
+              source: { kind: 'customer', assertionRef: 'assertion:optional-component' },
+            }],
+          },
+          { selectionKey: assembly.selectionKey, contractRef: assembly.contractRef, facts: [] },
+        ],
+      },
+      interpreterId: 'interpreter:test',
+      bindings: [component, assembly].map((model) => supply(`binding:${model.contractRef.capabilityId}`, model)),
+      models: [component, assembly], now: 10_000,
+    })
+
+    expect(compiled).toMatchObject({
+      kind: 'compiled',
+      aggregate: { outcome: 'plan_ready', plan: { actions: [
+        { contractRef: component.contractRef, dependsOn: [] },
+        {
+          contractRef: assembly.contractRef,
+          dependsOn: [expect.stringMatching(/^action:/u)],
+          inputMappings: [{ semanticIdentity: 'ae.option_id:v1', target: { inputPointer: '/optionalComponent' } }],
+        },
+      ] } },
+      routeGeneration: { routes: [{
+        edges: [{ semanticIdentity: 'ae.option_id:v1' }],
+        steps: [
+          expect.any(Object),
+          {
+            dataUse: [{ inputPointer: '/optionalComponent', effectId: 'component_release' }],
+            effects: [{ effectId: 'component_release', class: 'data_release' }],
+          },
+        ],
+      }] },
+    })
+  })
+
   it('asks for the downstream fact instead of guessing between ambiguous registered producers', () => {
     const firstLookup = compositionLookupModel('catalog.lookup.one')
     const secondLookup = compositionLookupModel('catalog.lookup.two')
@@ -1314,6 +1385,42 @@ function compositionShippingModel(lookup: ReturnType<typeof compositionLookupMod
     ],
     dataUse: [dataUse('option_release', '/optionId')], effects: [dataEffect('option_release')],
     evidence: [{ evidenceId: 'shipping_quote', outputPointer: '/result', purpose: 'completion' }],
+  })))
+}
+
+function compositionOptionalAssemblyModel() {
+  return openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
+    capabilityId: 'workflow.optional-assembly', version: 1,
+    inputSchema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+      properties: {
+        optionalComponent: { type: 'string' }, omittedComponent: { type: 'string' },
+      }, required: [], additionalProperties: false,
+    },
+    outputSchema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+      properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false,
+    },
+    customerAnnotations: [
+      {
+        annotationId: 'optional_component', semanticIdentity: 'ae.option_id:v1',
+        document: 'input', pointer: '/optionalComponent', label: 'Optional component', role: 'constraint',
+      },
+      {
+        annotationId: 'omitted_component', semanticIdentity: 'ae.omitted-component:v1',
+        document: 'input', pointer: '/omittedComponent', label: 'Omitted component', role: 'constraint',
+      },
+      {
+        annotationId: 'result', document: 'output', pointer: '/result',
+        label: 'Assembled result', role: 'completion_evidence',
+      },
+    ],
+    dataUse: [
+      dataUse('component_release', '/optionalComponent'),
+      dataUse('omitted_release', '/omittedComponent'),
+    ],
+    effects: [dataEffect('component_release'), dataEffect('omitted_release')],
+    evidence: [{ evidenceId: 'assembly_complete', outputPointer: '/result', purpose: 'completion' }],
   })))
 }
 

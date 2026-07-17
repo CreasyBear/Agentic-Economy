@@ -24,6 +24,7 @@ import {
 } from '@/modules/sandbox-supply/public'
 import {
   SANDBOX_WORKFLOW_PROVIDER_PROFILES,
+  historicalItineraryBuilderCapabilityContractDocument,
   sandboxWorkflowCapabilityContractDocument,
   type SandboxWorkflowProviderKey,
 } from '@/modules/sandbox-supply/workflow-cohorts'
@@ -60,6 +61,42 @@ describe('labelled sandbox V2 capability supply', () => {
       .filter((claim) => claim.businessId !== undefined
         && labelledBusinesses.some((business) => business._id === claim.businessId))
       .every((claim) => claim.ownerId === owner?._id)).toBe(true)
+  })
+
+  it('reseeds exact labelled sandbox businesses after an authenticated dev-owner transfer', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {
+      ownerClerkUserId: 'user_dev_business_owner',
+    })
+
+    await expect(backend.mutation(internal.devSeed.seedDevCatalog, {})).resolves.toMatchObject({
+      seededSlugs: expect.arrayContaining([
+        'sandbox-route-resolver',
+        'sandbox-accessible-transfer',
+        'sandbox-itinerary-builder',
+      ]),
+    })
+  })
+
+  it('refuses to adopt an authenticated dev-owner transfer when source context diverges', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {
+      ownerClerkUserId: 'user_dev_business_owner',
+    })
+    await backend.run(async (ctx) => {
+      const business = await ctx.db.query('businesses')
+        .withIndex('by_slug', (query) => query.eq('slug', 'sandbox-route-resolver')).unique()
+      if (business === null) throw new Error('sandbox route resolver missing')
+      const context = await ctx.db.query('businessContexts')
+        .withIndex('by_business', (query) => query.eq('businessId', business._id)).unique()
+      if (context === null) throw new Error('sandbox route resolver context missing')
+      await ctx.db.patch(context._id, { ownerMessage: 'Divergent transferred context' })
+    })
+
+    await expect(backend.mutation(internal.devSeed.seedDevCatalog, {}))
+      .rejects.toThrow('sandbox_business_claim_claim_operation_conflict:sandbox-route-resolver')
   })
 
   it('registers and admits the three-business procurement workflow through generic supply commands', async () => {
@@ -99,12 +136,12 @@ describe('labelled sandbox V2 capability supply', () => {
 
     expect(result.sandboxWorkflowBindings).toEqual(expect.arrayContaining([
       'binding:sandbox-trip-constraints:http-json:v2',
-      'binding:sandbox-itinerary-builder:http-json:v2',
+      'binding:sandbox-itinerary-builder:http-json:v3',
       'binding:sandbox-itinerary-readiness:http-json:v2',
     ]))
     expect(result.sandboxWorkflowPublicationRefs).toEqual(expect.arrayContaining([
       'offering:sandbox-trip-constraints:v2',
-      'offering:sandbox-itinerary-builder:v2',
+      'offering:sandbox-itinerary-builder:v3',
       'offering:sandbox-itinerary-readiness:v2',
     ]))
 
@@ -118,7 +155,7 @@ describe('labelled sandbox V2 capability supply', () => {
         || binding.bindingId.includes('sandbox-itinerary-'))
       .map(({ binding }) => binding.bindingId)
       .sort()).toEqual([
-      'binding:sandbox-itinerary-builder:http-json:v2',
+      'binding:sandbox-itinerary-builder:http-json:v3',
       'binding:sandbox-itinerary-readiness:http-json:v2',
       'binding:sandbox-trip-constraints:http-json:v2',
     ])
@@ -199,7 +236,10 @@ describe('labelled sandbox V2 capability supply', () => {
         'sandbox-route-resolver', 'sandbox-route-quoter',
         'sandbox-procurement-brief', 'sandbox-supplier-options',
         'sandbox-procurement-recommendation',
-        'sandbox-trip-constraints', 'sandbox-itinerary-builder',
+        'sandbox-trip-constraints',
+        'sandbox-accessible-transfer', 'sandbox-accessible-hotel',
+        'sandbox-meeting-schedule', 'sandbox-dinner-plan',
+        'sandbox-itinerary-builder',
         'sandbox-itinerary-readiness',
         'sandbox-journey-case', 'sandbox-milestone-plan',
         'sandbox-progress-synthesis',
@@ -222,21 +262,8 @@ describe('labelled sandbox V2 capability supply', () => {
       ],
     })
     const bindings = await backend.run((ctx) => ctx.db.query('capabilityTransportBindings').collect())
-    expect(bindings.map((binding) => binding.credentialRef)).toEqual([
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-      'env:AE_SANDBOX_PROVIDER_KEY',
-    ])
+    expect(bindings).toHaveLength(17)
+    expect(bindings.every(({ credentialRef }) => credentialRef === 'env:AE_SANDBOX_PROVIDER_KEY')).toBe(true)
     expect(bindings.filter(({ bindingId }) => bindingId.startsWith('binding:sandbox-route-')).map((binding) => ({
       bindingId: binding.bindingId, endpointUrl: binding.endpointUrl,
     }))).toEqual([
@@ -251,9 +278,13 @@ describe('labelled sandbox V2 capability supply', () => {
     ])
     const businesses = await backend.run((ctx) => ctx.db.query('businesses').collect())
     expect(businesses.map((business) => business.slug).sort()).toEqual([
+      'sandbox-accessible-hotel',
+      'sandbox-accessible-transfer',
+      'sandbox-dinner-plan',
       'sandbox-itinerary-builder',
       'sandbox-itinerary-readiness',
       'sandbox-journey-case',
+      'sandbox-meeting-schedule',
       'sandbox-milestone-plan',
       'sandbox-option-one',
       'sandbox-option-two',
@@ -308,8 +339,28 @@ describe('labelled sandbox V2 capability supply', () => {
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
-        publicationRef: 'offering:sandbox-itinerary-builder:v2',
-        bindingId: 'binding:sandbox-itinerary-builder:http-json:v2',
+        publicationRef: 'offering:sandbox-accessible-transfer:v2',
+        bindingId: 'binding:sandbox-accessible-transfer:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-accessible-hotel:v2',
+        bindingId: 'binding:sandbox-accessible-hotel:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-meeting-schedule:v2',
+        bindingId: 'binding:sandbox-meeting-schedule:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-dinner-plan:v2',
+        bindingId: 'binding:sandbox-dinner-plan:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-itinerary-builder:v3',
+        bindingId: 'binding:sandbox-itinerary-builder:http-json:v3',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
@@ -351,9 +402,13 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map(({ binding }) => binding.bindingId)).toEqual([
-      'binding:sandbox-itinerary-builder:http-json:v2',
+      'binding:sandbox-accessible-hotel:http-json:v2',
+      'binding:sandbox-accessible-transfer:http-json:v2',
+      'binding:sandbox-dinner-plan:http-json:v2',
+      'binding:sandbox-itinerary-builder:http-json:v3',
       'binding:sandbox-itinerary-readiness:http-json:v2',
       'binding:sandbox-journey-case:http-json:v2',
+      'binding:sandbox-meeting-schedule:http-json:v2',
       'binding:sandbox-milestone-plan:http-json:v2',
       'binding:sandbox-procurement-brief:http-json:v2',
       'binding:sandbox-procurement-recommendation:http-json:v2',
@@ -377,7 +432,7 @@ describe('labelled sandbox V2 capability supply', () => {
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
 
     expect(result.businessIdsBySlug).toMatchObject(existing.businessIdsBySlug)
-    expect(Object.keys(result.businessIdsBySlug)).toHaveLength(13)
+    expect(Object.keys(result.businessIdsBySlug)).toHaveLength(17)
     expect(result.sandboxV2Bindings).toHaveLength(2)
   })
 
@@ -404,7 +459,7 @@ describe('labelled sandbox V2 capability supply', () => {
     ])
   })
 
-  it('publishes thirteen inert businesses through the normal production command planes', async () => {
+  it('publishes seventeen inert businesses through the normal production command planes', async () => {
     const backend = convexTest(schema, modules)
     const first = await backend.mutation(internal.devSeed.seedDevCatalog, {})
     const ownerBeforeReplay = await backend.run((ctx) => (
@@ -496,9 +551,9 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(JSON.stringify({ offerings: state.offerings, bindings: state.bindings })).not.toContain('"operation"')
     expect(state.supplyOperations).toHaveLength(12)
     expect(state.supplyOperations.every((operation) => operation.actorKind === 'system' && operation.status === 'succeeded')).toBe(true)
-    expect(state.catalogOperations).toHaveLength(13)
+    expect(state.catalogOperations).toHaveLength(17)
     expect(state.catalogOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
-    expect(state.claimOperations).toHaveLength(13)
+    expect(state.claimOperations).toHaveLength(17)
     expect(state.claimOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
     expect(state.audits.filter((audit) => (
       audit.eventType.startsWith('capability_')
@@ -514,7 +569,7 @@ describe('labelled sandbox V2 capability supply', () => {
     )
     expect(state.audits.filter((audit) => (
       audit.eventType === 'claim.published' && audit.slug?.startsWith('sandbox-')
-    ))).toHaveLength(13)
+    ))).toHaveLength(17)
 
     const eligible = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
     expect(eligible).toMatchObject({
@@ -742,6 +797,32 @@ describe('labelled sandbox V2 capability supply', () => {
 
     await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
     await expect(readHistoricalProcurementV1Retirement(backend)).resolves.toEqual(afterMigration)
+  })
+
+  it('retires the exact historical itinerary builder before admitting its component-aware generation', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+        fixture.requestedSlug === 'sandbox-itinerary-builder'
+      ))
+      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerHistoricalItineraryBuilderV2Supply(ctx.db)
+    })
+
+    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    const afterMigration = await readHistoricalItineraryBuilderRetirement(backend)
+    expect(afterMigration.bindings).toEqual([{
+      bindingId: 'binding:sandbox-itinerary-builder:http-json:v2',
+      admission: 'not_admitted', conformance: 'not_conformant',
+    }])
+    expect(afterMigration.current).toEqual([{
+      bindingId: 'binding:sandbox-itinerary-builder:http-json:v3',
+      admission: 'admitted', conformance: 'conformant', version: 2,
+    }])
+    expect(afterMigration.operations).toHaveLength(1)
+
+    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    await expect(readHistoricalItineraryBuilderRetirement(backend)).resolves.toEqual(afterMigration)
   })
 
   it('refuses to retire a reserved historical procurement binding at a different provider endpoint', async () => {
@@ -1396,6 +1477,87 @@ async function registerHistoricalProcurementV1Supply(
   }
 }
 
+async function registerHistoricalItineraryBuilderV2Supply(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+): Promise<void> {
+  const profile = SANDBOX_WORKFLOW_PROVIDER_PROFILES['itinerary-builder']
+  if (profile === undefined) throw new Error('historical itinerary builder profile missing')
+  const encoded = encodeCapabilityContractDocument(historicalItineraryBuilderCapabilityContractDocument())
+  const contract = await registerCapabilityContractDocument(db, encoded.documentJson, 2_000)
+  if (contract.kind !== 'registered') throw new Error(`historical itinerary contract failed: ${contract.reason}`)
+  const business = await db.query('businesses')
+    .withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique()
+  if (business === null) throw new Error('historical itinerary business missing')
+  const offering = await registerCapabilityOfferingCommand(db, {
+    actor: { kind: 'system', ref: 'system:migration-test' },
+    context: {
+      operationKey: `test:historical-workflow-offering:${profile.priorOfferingId}`,
+      correlationId: `test:historical-workflow-supply:${profile.slug}`,
+      reasonCode: 'test_historical_workflow_registration',
+      evidenceRefs: ['test:historical-workflow-supply'],
+    },
+    registration: {
+      offeringId: profile.priorOfferingId, businessId: business._id,
+      networkId: 'ae:public', contractRef: contract.ref,
+      presentation: {
+        label: profile.capabilityName,
+        summary: `Labelled sandbox ${profile.cohortLabel.toLowerCase()} workflow evidence only.`,
+        price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+        materialTerms: [{
+          termId: 'sandbox_only', label: 'Environment',
+          value: 'Sandbox only; no real supplier order, payment, or fulfilment.',
+        }],
+        commercialRelationship: {
+          kind: 'none', summary: 'Sandbox verification has no commercial relationship.',
+          influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+          evidenceRefs: ['seed:sandbox-commercial-neutrality'],
+        },
+      },
+      searchTerms: [profile.cohortLabel, profile.capabilityName, 'workplace catering supplier recommendation'],
+      registrationEvidenceRefs: ['seed:sandbox-labelled-workflow-business'],
+    },
+  }, 2_100)
+  if (offering.kind !== 'registered') throw new Error(`historical itinerary offering failed: ${offering.reason}`)
+  const binding = await registerCapabilityBindingCommand(db, {
+    actor: { kind: 'system', ref: 'system:migration-test' },
+    context: {
+      operationKey: `test:historical-workflow-binding:${profile.priorBindingId}`,
+      correlationId: `test:historical-workflow-supply:${profile.slug}`,
+      reasonCode: 'test_historical_workflow_registration',
+      evidenceRefs: ['test:historical-workflow-supply'],
+    },
+    registration: {
+      bindingId: profile.priorBindingId, offeringId: profile.priorOfferingId,
+      networkId: 'ae:public', contractRef: contract.ref,
+      endpointUrl: new URL(profile.endpointPath, 'https://agentic-economy-phi.vercel.app').href,
+      credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+      continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
+      cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
+      adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+      registrationEvidenceRefs: ['seed:production-v2-registration-path'],
+    },
+  }, 2_200)
+  if (binding.kind !== 'registered') throw new Error(`historical itinerary binding failed: ${binding.reason}`)
+  const admitted = await setCapabilitySupplyEligibilityCommand(db, {
+    actor: { kind: 'system', ref: 'system:migration-test' },
+    context: {
+      operationKey: `test:historical-workflow-admission:${profile.priorBindingId}`,
+      correlationId: `test:historical-workflow-supply:${profile.slug}`,
+      reasonCode: 'test_historical_workflow_admission',
+      evidenceRefs: ['test:historical-workflow-supply'],
+    },
+    eligibility: {
+      offeringId: profile.priorOfferingId, bindingId: profile.priorBindingId,
+      contractRef: contract.ref, decision: 'admit',
+      expectedOfferingRegistrationHash: offering.registrationHash,
+      expectedBindingRegistrationHash: binding.registrationHash,
+      admissionEvidenceRefs: ['test:historical-workflow-supply'],
+      conformanceEvidenceRefs: ['test:historical-workflow-supply'],
+    },
+  }, 2_300)
+  if (admitted.kind !== 'eligible') throw new Error(`historical itinerary admission failed: ${admitted.kind}`)
+}
+
 async function readHistoricalRouteV1Retirement(
   backend: ReturnType<typeof convexTest>,
 ) {
@@ -1441,4 +1603,23 @@ async function readHistoricalProcurementV1Retirement(
       && audit.idempotencyKey.startsWith('seed:capability-workflow-binding-retire:')
     )),
   }))
+}
+
+async function readHistoricalItineraryBuilderRetirement(
+  backend: ReturnType<typeof convexTest>,
+) {
+  return backend.run(async (ctx) => {
+    const bindings = await ctx.db.query('capabilityTransportBindings').collect()
+    return {
+      bindings: bindings
+        .filter((binding) => binding.bindingId === 'binding:sandbox-itinerary-builder:http-json:v2')
+        .map(({ bindingId, admission, conformance }) => ({ bindingId, admission, conformance })),
+      current: bindings
+        .filter((binding) => binding.bindingId === 'binding:sandbox-itinerary-builder:http-json:v3')
+        .map(({ bindingId, admission, conformance, version }) => ({ bindingId, admission, conformance, version })),
+      operations: (await ctx.db.query('operationKeys').collect()).filter((operation) => (
+        operation.key === 'seed:capability-workflow-binding-retire:binding:sandbox-itinerary-builder:http-json:v2'
+      )),
+    }
+  })
 }

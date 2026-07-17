@@ -120,7 +120,10 @@ export async function readSandboxWorkflowProviderDiscovery(
       endpoint: endpoint.href,
       authentication: { scheme: 'bearer' },
       maximumCost: money(profile.amountMinor),
-      inputSchema: workflowObjectSchema(profile.inputField),
+      inputSchema: workflowObjectSchema(
+        profile.inputField,
+        profile.optionalInputs?.map(({ field }) => field),
+      ),
       outputSchema: workflowObjectSchema(profile.outputField),
     },
     boundaries: [
@@ -165,7 +168,11 @@ export async function handleSandboxWorkflowProviderRequest(
       providerQuoteExpiresAt: SANDBOX_OFFER_EXPIRES_AT,
     })
   }
-  const input = exactStringField(parsed, profile.inputField)
+  const input = exactWorkflowInput(
+    parsed,
+    profile.inputField,
+    profile.optionalInputs?.map(({ field }) => field) ?? [],
+  )
   if (input === undefined) {
     return json({ kind: 'refused', reason: 'request_invalid' }, 400)
   }
@@ -176,7 +183,7 @@ export async function handleSandboxWorkflowProviderRequest(
     input,
   }).slice(7, 31)
   return json(
-    { [profile.outputField]: sandboxWorkflowOutput(providerKey, input, digest) },
+    { [profile.outputField]: sandboxWorkflowOutput(providerKey, workflowInputSummary(input), digest) },
     200,
     { 'Provider-Receipt': `sandbox-workflow:${providerKey}:${digest}` },
   )
@@ -460,24 +467,40 @@ function workflowProfile(providerKey: string) {
   return SANDBOX_WORKFLOW_PROVIDER_PROFILES[providerKey as SandboxWorkflowProviderKey]
 }
 
-function workflowObjectSchema(field: string) {
+function workflowObjectSchema(field: string, optionalFields: readonly string[] = []) {
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     type: 'object',
-    properties: { [field]: { type: 'string', minLength: 1 } },
+    properties: Object.fromEntries([field, ...optionalFields].map((name) => [
+      name, { type: 'string', minLength: 1 },
+    ])),
     required: [field],
     additionalProperties: false,
   }
 }
 
-function exactStringField(value: unknown, field: string): string | undefined {
+function exactWorkflowInput(
+  value: unknown,
+  requiredField: string,
+  optionalFields: readonly string[],
+): Readonly<Record<string, string>> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
-  const entries = Object.entries(value)
-  const entry = entries[0]
-  return entries.length === 1 && entry?.[0] === field
-    && typeof entry[1] === 'string' && entry[1].length > 0
-    ? entry[1]
-    : undefined
+  const record = value as Record<string, unknown>
+  const allowed = new Set([requiredField, ...optionalFields])
+  if (typeof record[requiredField] !== 'string' || record[requiredField].length === 0
+    || Object.entries(record).some(([field, entry]) => (
+      !allowed.has(field) || typeof entry !== 'string' || entry.length === 0
+    ))) return undefined
+  const input: Record<string, string> = {}
+  for (const [field, entry] of Object.entries(record).sort(([left], [right]) => left.localeCompare(right))) {
+    if (typeof entry !== 'string') return undefined
+    input[field] = entry
+  }
+  return Object.freeze(input)
+}
+
+function workflowInputSummary(input: Readonly<Record<string, string>>): string {
+  return Object.entries(input).map(([field, value]) => `${field}: ${value}`).join(' | ')
 }
 
 function json(body: unknown, status = 200, headers: Readonly<Record<string, string>> = {}): Response {
