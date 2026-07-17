@@ -376,7 +376,7 @@ function SourceStampCard({ updatedAt }: { updatedAt: number }) {
           </Text>
         </div>
         <ul className="grid gap-2" aria-label="Last updated">
-          <li><SourceStamp label="business supplied" updatedAt={updatedAt} /></li>
+          <li><SourceStamp label="published details" updatedAt={updatedAt} /></li>
           <li><SourceStamp label="last checked" updatedAt={updatedAt} /></li>
         </ul>
       </VStack>
@@ -403,7 +403,7 @@ function ReachOutStepsCard({ updatedAt, inquiryAvailable }: { updatedAt: number;
   const steps = [
     {
       title: 'Read the page',
-      stamp: 'business supplied',
+      stamp: 'published details',
       note: 'Services, area, and contact details are on this page.',
       reached: true,
     },
@@ -478,7 +478,7 @@ function WhatTheyOfferCard({
           What they offer
         </Text>
         <Text type="supporting" color="secondary" display="block">
-          Services, area, and hours from {catalog.name}.
+          Published services, area, and hours for {catalog.name}.
         </Text>
       </VStack>
 

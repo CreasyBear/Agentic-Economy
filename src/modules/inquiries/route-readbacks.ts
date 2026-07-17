@@ -456,14 +456,15 @@ export function projectPublicInquiryAvailability(
   catalog: PublicRouteCatalogContract,
   admission: R1TargetAdmission | undefined,
 ): PublicRouteCatalogContract {
-  if (admission?.admitted === true) return catalog
+  const sourceConsistentCatalog = projectSourceConsistentInquiryAvailability(catalog)
+  if (admission?.admitted === true) return sourceConsistentCatalog
 
-  const target = selectPublicInquiryTarget(catalog)
-  if (target === undefined) return catalog
+  const target = selectPublicInquiryTarget(sourceConsistentCatalog)
+  if (target === undefined) return sourceConsistentCatalog
 
   return {
-    ...catalog,
-    services: catalog.services.map((service) => {
+    ...sourceConsistentCatalog,
+    services: sourceConsistentCatalog.services.map((service) => {
       if (service.serviceId !== target.serviceId) return service
       return {
         ...service,
@@ -479,17 +480,59 @@ export function projectPublicInquiryAvailability(
             ? {
                 ...capability,
                 status: 'unavailable' as const,
-                firstRequest: {
-                  mode: 'not_available_yet' as const,
-                  publicDisclosure: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
-                  publicChannel: 'not_available' as const,
-                  noContactReason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
-                  rawContactExcluded: true as const,
-                },
+                reason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+                firstRequest: unavailablePublicFirstRequest(),
               }
             : capability),
       }
     }),
+  }
+}
+
+function projectSourceConsistentInquiryAvailability(
+  catalog: PublicRouteCatalogContract,
+): PublicRouteCatalogContract {
+  return {
+    ...catalog,
+    services: catalog.services.map((service) => {
+      const servicePublishesRequestPath = service.firstRequest.mode !== 'not_available_yet'
+        && service.firstRequest.publicChannel === 'public_business_contact'
+      const capabilities = service.capabilities.map((capability) => {
+        const capabilityPublishesRequestPath = capability.firstRequest.mode !== 'not_available_yet'
+          && capability.firstRequest.publicChannel === 'public_business_contact'
+        if (capability.status !== 'available' || (servicePublishesRequestPath && capabilityPublishesRequestPath)) {
+          return capability
+        }
+        return {
+          ...capability,
+          status: 'unavailable' as const,
+          reason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+          firstRequest: unavailablePublicFirstRequest(),
+        }
+      })
+      const hasAvailableCapability = capabilities.some((capability) => (
+        capability.status === 'available'
+        && capability.firstRequest.mode !== 'not_available_yet'
+        && capability.firstRequest.publicChannel === 'public_business_contact'
+      ))
+      return {
+        ...service,
+        ...(!servicePublishesRequestPath || hasAvailableCapability
+          ? {}
+          : { firstRequest: unavailablePublicFirstRequest() }),
+        capabilities,
+      }
+    }),
+  }
+}
+
+function unavailablePublicFirstRequest(): PublicRouteServiceContract['firstRequest'] {
+  return {
+    mode: 'not_available_yet',
+    publicDisclosure: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+    publicChannel: 'not_available',
+    noContactReason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+    rawContactExcluded: true,
   }
 }
 

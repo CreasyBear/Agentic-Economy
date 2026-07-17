@@ -360,6 +360,57 @@ describe('human inquiry owner inbox slice', () => {
       kind: 'available',
       href: '/plumbing-demo/inquiry',
     })
+    const inconsistentCatalog: PublicRouteCatalogContract = {
+      ...catalog,
+      services: catalog.services.map((service) => ({
+        ...service,
+        firstRequest: {
+          mode: 'not_available_yet',
+          publicDisclosure: 'No public request path.',
+          publicChannel: 'not_available',
+          noContactReason: 'No public request path.',
+          rawContactExcluded: true,
+        },
+        capabilities: service.capabilities.map((capability) => ({
+          ...capability,
+          status: 'available',
+          reason: 'Ready for requests.',
+          firstRequest: {
+            mode: 'not_available_yet',
+            publicDisclosure: 'No public request path.',
+            publicChannel: 'not_available',
+            noContactReason: 'No public request path.',
+            rawContactExcluded: true,
+          },
+        })),
+      })),
+    }
+    const projectedInconsistentCatalog = projectPublicInquiryAvailability(
+      inconsistentCatalog,
+      inquiries.evaluateR1TargetAdmission(eligibleState, target),
+    )
+    expect(projectedInconsistentCatalog.services[0]?.capabilities[0]).toMatchObject({
+      status: 'unavailable',
+      reason: 'This business isn’t receiving inquiries through AE yet.',
+    })
+    const inverseMismatchCatalog: PublicRouteCatalogContract = {
+      ...catalog,
+      services: catalog.services.map((service) => ({
+        ...service,
+        capabilities: service.capabilities.map((capability) => ({
+          ...capability,
+          status: 'unavailable',
+          reason: 'This capability is not available.',
+        })),
+      })),
+    }
+    expect(projectPublicInquiryAvailability(
+      inverseMismatchCatalog,
+      inquiries.evaluateR1TargetAdmission(eligibleState, target),
+    ).services[0]?.firstRequest).toMatchObject({
+      mode: 'not_available_yet',
+      publicChannel: 'not_available',
+    })
     expect(buildPublicInquiryAffordance(catalog)).toEqual({
       kind: 'unavailable',
       label: 'Inquiry unavailable',

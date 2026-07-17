@@ -4,7 +4,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { ListingFirstScreen } from '@/components/ae/listing/AeProviderListingPage'
+import { AeProviderListingPage, ListingFirstScreen } from '@/components/ae/listing/AeProviderListingPage'
 import {
   AE_EXPLAINER_FULL,
   AE_EXPLAINER_NO_PHONE,
@@ -13,7 +13,10 @@ import {
 } from '@/lib/ui/trust-projection'
 import type { PublicRouteCatalogContract, PublicRouteServiceContract } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import type { PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
+import {
+  projectPublicInquiryAvailability,
+  type PublicInquiryAffordance,
+} from '@/modules/inquiries/route-readbacks'
 
 const BUSINESS_ID = brandNonEmpty('business:listing-first-screen', 'BusinessId')
 const SERVICE_ID = brandNonEmpty('service:emergency-plumbing', 'ServiceId')
@@ -42,6 +45,49 @@ const unavailableInquiry: PublicInquiryAffordance = {
 }
 
 describe('ListingFirstScreen', () => {
+  it('does not present catalog capability readiness or provenance beyond the unavailable inquiry path', () => {
+    const catalog = catalogFixture()
+    const service = catalog.services[0]
+    if (service === undefined) throw new Error('listing service fixture missing')
+    const sandboxLikeCatalog: PublicRouteCatalogContract = {
+      ...catalog,
+      services: [{
+        ...service,
+        capabilities: [{
+          serviceId: service.serviceId,
+          kind: 'phone_inquiry',
+          status: 'available',
+          firstRequest: service.firstRequest,
+          callable: false,
+          paymentRequired: false,
+          reason: 'Catalog capability exists without a published inquiry path.',
+        }],
+      }],
+    }
+
+    const projectedCatalog = projectPublicInquiryAvailability(sandboxLikeCatalog, undefined)
+    expect(projectedCatalog.services[0]?.capabilities[0]?.status).toBe('unavailable')
+
+    const markup = renderToStaticMarkup(
+      <AeProviderListingPage
+        catalog={projectedCatalog}
+        inquiryAffordance={unavailableInquiry}
+        agentJsonUrl="/api/businesses/demo-plumbing"
+      />,
+    )
+    const text = fragmentFrom(markup).textContent ?? ''
+
+    expect(text).toContain('Send an inquiry')
+    expect(text).toContain('Not available')
+    expect(text).toContain('This request path is not available yet.')
+    expect(text).toContain('No request path published yet.')
+    expect(text).toContain('published details')
+    expect(text).not.toContain('Ready')
+    expect(text).not.toContain('business supplied')
+    expect(markup).not.toContain('Send inquiry</')
+    expect(markup).not.toContain('href="/demo-plumbing/inquiry"')
+  })
+
   it('puts source-backed trust facts and posture before the available ask action', () => {
     const markup = renderFirstScreen(catalogFixture(), availableInquiry)
 
