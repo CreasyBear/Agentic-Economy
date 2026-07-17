@@ -266,9 +266,10 @@ Stop if a PR introduces:
 **Requirements**: ADR-009 (partial entry without Request ownership, 11 acceptance gates), ADR-010 (one action plane, 10 acceptance gates), and `.planning/specs/ACTION-INVOCATION-ENGINEERING-SPEC.md` (§1-12, GitHub #193) are locked inputs.
 **Depends on:** customer-product-frontier frontier (wayfinder map #112) — this phase reframes the Request-owned lifecycle that frontier built into independently-authorized action invocations.
 **Boundary:** Design/planning phase only. Produces GSD planning artifacts (SPEC/RESEARCH/PLAN + pattern map) under `.planning/`. No `src/**`, `convex/**`, or test edits. Does not change ADR status, supersede an ADR, or close #193. Stops at plan-checker green; source implementation is a separate, explicitly-authorized execute-phase.
-**Plans:** 0 plans
+**Plans:** 1 plan (planned 2026-07-17; design-only, not executed)
+**Status:** Planned — plan-checker green. Deliverables: `01-SPEC.md`, `01-CONTEXT.md`, `01-RESEARCH.md`, `01-PATTERNS.md`, `01-01-PLAN.md`. Stops before execute-phase; source implementation requires separate authorization.
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 1 to break down)
+- [ ] 01-01-PLAN.md — Commit one buildable answer per axis (seam / first action / persistence / authority binding / four-dimension state / barrier experiment) + future build backlog (spec §12 steps 1-8). Design-only.
 
