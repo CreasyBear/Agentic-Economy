@@ -33,10 +33,10 @@ import {
   loadRequestGraph as loadRequestGraphApplication,
   preparationResultView,
   allowStandingRoute,
+  confirmCustomerRoute,
   inspectStandingRoute,
   listStandingRouteAssistants,
   prepareCompare,
-  projectConfirmedRoute as projectConfirmedRouteApplication,
   projectRoutePlansFromMaterial,
   projectStoredAggregate as projectStoredAggregateApplication,
   projectStoredRouteRun as projectStoredRouteRunApplication,
@@ -65,6 +65,7 @@ import {
 import { internal } from './_generated/api'
 import { action, env, type ActionCtx } from './_generated/server'
 import { compareResumePorts, preparationEgressPorts } from './customerRequestCompareResumePorts'
+import { confirmRoutePorts } from './customerRequestConfirmRoutePorts'
 import { problemRoutePorts } from './customerRequestProblemRoutePorts'
 import { standingRoutePorts } from './customerRequestStandingRoutePorts'
 
@@ -987,68 +988,13 @@ export const confirmRoute = action({
     }
     const caller = await resolveRequestCaller(ctx, 'confirm', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    if (current.aggregate.snapshot.revision !== args.revision) return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
-    }
-    const preview = await projectCurrentRoutePlans(ctx, current.aggregate)
-    if (preview.kind !== 'request' || preview.decision === undefined
-      || preview.decision.outcome.kind !== 'routes_available') return toActionResult(preview)
-    const route = preview.decision.routes.find(({ routeRef }) => routeRef === args.routeRef)
-    if (route === undefined) return toActionResult(preview)
-    if (route.availability !== 'current') return toActionResult(preview)
-    if (route.maximumTotalCost.kind !== 'known') return toActionResult(preview)
-    const routeReadback: Readonly<
-      | { kind: 'found'; routeGeneration: StoredRouteGeneration }
-      | { kind: 'not_found' }
-    > = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanGeneration, {
-      requestId: args.requestRef,
-    })
-    const selectedRoute = routeReadback.kind === 'found'
-      ? routeReadback.routeGeneration.routes.find(({ routePlanId }) => (
-          customerRouteRef(preview.decision?.generationRef ?? '', routePlanId) === args.routeRef
-        ))
-      : undefined
-    if (selectedRoute === undefined) return toActionResult(await projectCurrentRoutePlans(ctx, current.aggregate))
-    const result = await ctx.runMutation(internal.customerRequestRouteMandate.issue, {
-      requestId: args.requestRef,
-      expectedRequestRevision: args.revision,
-      expectedGenerationRef: preview.decision.generationRef,
-      selectedRoutePlanId: selectedRoute.routePlanId,
-      maximumTotalSpend: {
-        currency: route.maximumTotalCost.currency,
-        amountMinor: route.maximumTotalCost.amountMinor,
-      },
-      expiresAt: route.validUntil,
-      idempotencyKey: args.idempotencyKey,
+    return toActionResult(await confirmCustomerRoute({
+      ...command,
+      principalId: caller.principalId,
       ...(args.serviceAuth === undefined ? {} : {
         serviceAuthorization: { command, assertion: args.serviceAuth },
       }),
-    })
-    if (result.kind === 'issued' || result.kind === 'replayed') {
-      return toActionResult(projectConfirmedRouteApplication(current.aggregate, route, result.mandate))
-    }
-    if (result.kind === 'conflict') {
-      if (result.reason === 'command_changed') return {
-        kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused',
-      }
-      if (result.reason === 'request_revision_changed') return {
-        kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
-      }
-      if (result.reason === 'route_generation_changed') {
-        return toActionResult(await projectCurrentRoutePlans(ctx, current.aggregate))
-      }
-      return { kind: 'conflict', requestRef: args.requestRef, reason: 'options_changed' }
-    }
-    return writableView(projectNeedsAttention({
-      requestRef: args.requestRef, revision: args.revision,
-      summary: result.reason === 'authentication_required'
-        ? 'Sign in again before confirming this choice.'
-        : 'This choice can no longer be confirmed. Review the current options.',
-    }))
+    }, confirmRoutePorts(ctx)))
   },
 })
 

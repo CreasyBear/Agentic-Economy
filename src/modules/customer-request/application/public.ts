@@ -128,6 +128,15 @@ export {
 } from './standing-route'
 
 export {
+  confirmCustomerRoute,
+  type ConfirmRouteInput,
+  type ConfirmRoutePorts,
+  type ConfirmRouteResult,
+  type ConfirmServiceAuthorization,
+  type IssueConfirmMandateResult,
+} from './confirm-route'
+
+export {
   exportRouteEvidence,
   exportRouteProblemForSupport,
   listRouteProblemsForSupport,

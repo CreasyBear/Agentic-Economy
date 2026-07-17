@@ -86,7 +86,8 @@ describe('customer-request problem-route thinness', () => {
       expect(source).not.toMatch(/confirmRoute/)
     }
     expect(convexHost).toMatch(/export const confirmRoute\s*=/)
-    expect(convexHost).toContain('customerRequestRouteMandate.issue')
+    expect(readFileSync('convex/customerRequestConfirmRoutePorts.ts', 'utf8'))
+      .toContain('customerRequestRouteMandate.issue')
   })
 
   it('leaves problem-support decision modules in place', () => {

@@ -83,9 +83,12 @@ describe('customer-request standing-route thinness', () => {
       const source = readFileSync(file, 'utf8')
       expect(source).not.toMatch(/customerRequestRouteMandate/)
       expect(source).not.toMatch(/confirmRoute/)
+      expect(source).not.toMatch(/confirmCustomerRoute/)
+      expect(source).not.toMatch(/issueConfirmMandate/)
     }
     expect(convexHost).toMatch(/export const confirmRoute\s*=/)
-    expect(convexHost).toContain('customerRequestRouteMandate.issue')
+    expect(readFileSync('convex/customerRequestConfirmRoutePorts.ts', 'utf8'))
+      .toContain('customerRequestRouteMandate.issue')
   })
 })
 
