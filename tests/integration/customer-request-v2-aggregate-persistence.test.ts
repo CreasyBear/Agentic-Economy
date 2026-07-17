@@ -109,6 +109,107 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
     expect(persisted).toMatchObject({ heads: [{}], revisions: [{}], commands: [{}] })
   })
 
+  it('admits a conservative route snapshot when the same publication readiness is extended before commit', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    const candidate = aggregate.evaluation.candidates.find(({ publicationRef }) => publicationRef !== undefined)
+    const compiledReadiness = candidate?.readinessValidUntil
+    if (candidate?.publicationRef === undefined || candidate.publicationRevision === undefined
+      || compiledReadiness === undefined) throw new Error('compiled publication readiness missing')
+    const publication = await backend.run(async (ctx) => (
+      await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', candidate.publicationRef!)
+            .eq('revision', candidate.publicationRevision!)
+        )).unique()
+    ))
+    if (publication === null || publication.bindingId !== candidate.bindingId
+      || publication.offeringId !== candidate.offeringId) {
+      throw new Error('exact sandbox candidate publication missing')
+    }
+    const extended = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: publication.publicationRef,
+      expectedRevision: publication.revision,
+      credentialState: 'ready',
+      healthState: 'healthy',
+      validUntil: compiledReadiness + 60_000,
+      operationKey: 'test:extend-readiness-before-commit',
+      correlationId: 'test:extend-readiness-before-commit',
+      reasonCode: 'test_extend_readiness',
+      evidenceRefs: ['test:extended-readiness'],
+    })
+    expect(extended).toMatchObject({
+      kind: 'observed',
+      publicationRef: publication.publicationRef,
+      revision: publication.revision,
+    })
+
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:v2:extended-readiness',
+      commandDigest: canonicalDigest({ command: 'extended-readiness' }),
+      expectedRevision: 0,
+      expectedRouteGeneration: 0,
+      aggregate,
+      routeGeneration,
+    })).resolves.toEqual({
+      kind: 'stored',
+      requestId: aggregate.snapshot.requestId,
+      revision: aggregate.snapshot.revision,
+    })
+    const current = await backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: aggregate.snapshot.requestId,
+    })
+    expect(current).toMatchObject({
+      kind: 'current',
+      routeGenerationRef: routeGeneration.generationRef,
+    })
+    if (current.kind !== 'current') throw new Error('stored aggregate missing')
+    expect(current.aggregate.evaluation.candidates.find(({ publicationRef }) => (
+      publicationRef === publication.publicationRef
+    ))?.readinessValidUntil).toBe(compiledReadiness)
+  })
+
+  it('rejects a route snapshot when publication readiness shortens before commit', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    const candidate = aggregate.evaluation.candidates.find(({ publicationRef }) => publicationRef !== undefined)
+    const compiledReadiness = candidate?.readinessValidUntil
+    if (candidate?.publicationRef === undefined || candidate.publicationRevision === undefined
+      || compiledReadiness === undefined) throw new Error('compiled publication readiness missing')
+    const publication = await backend.run(async (ctx) => (
+      await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', candidate.publicationRef!)
+            .eq('revision', candidate.publicationRevision!)
+        )).unique()
+    ))
+    if (publication === null || publication.bindingId !== candidate.bindingId
+      || publication.offeringId !== candidate.offeringId) {
+      throw new Error('exact sandbox candidate publication missing')
+    }
+    const shortened = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: publication.publicationRef,
+      expectedRevision: publication.revision,
+      credentialState: 'ready',
+      healthState: 'healthy',
+      validUntil: compiledReadiness - 60_000,
+      operationKey: 'test:shorten-readiness-before-commit',
+      correlationId: 'test:shorten-readiness-before-commit',
+      reasonCode: 'test_shorten_readiness',
+      evidenceRefs: ['test:shortened-readiness'],
+    })
+    expect(shortened).toMatchObject({ kind: 'observed' })
+
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:v2:shortened-readiness',
+      commandDigest: canonicalDigest({ command: 'shortened-readiness' }),
+      expectedRevision: 0,
+      expectedRouteGeneration: 0,
+      aggregate,
+      routeGeneration,
+    })).resolves.toEqual({ kind: 'aggregate_invalid' })
+  })
+
   it('replays a pre-#172 detached generation while refusing the same cancellation omission as a new write', async () => {
     const backend = convexTest(schema, modules)
     const { aggregate, routeGeneration } = await compiledAggregate(backend)

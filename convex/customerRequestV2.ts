@@ -1313,11 +1313,12 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
         resolveModel,
       })
   if (evaluation.candidates.some((candidate) => candidate.viability.kind === 'incompatible')) return 'invalid'
-  if (canonicalDigest(evaluation as StableHashValue) !== canonicalDigest(aggregate.evaluation as StableHashValue)) return 'invalid'
+  const storedEvaluation = domainAggregate(aggregate).evaluation
+  if (!evaluationMatchesConservativeReadinessSnapshot(evaluation, storedEvaluation)) return 'invalid'
   const routes = compileRoutePlans({
     requestId: aggregate.snapshot.requestId, requestRevision: aggregate.snapshot.revision,
     registrySnapshotDigest: aggregate.evaluation.registrySnapshotDigest,
-    actions, candidates: evaluation.candidates, now: aggregate.snapshot.recordedAt,
+    actions, candidates: storedEvaluation.candidates, now: aggregate.snapshot.recordedAt,
     models,
     ...(evaluation.decisionPreference === undefined ? {} : { objective: evaluation.decisionPreference.objective }),
     ...(evaluation.decisionPreference === undefined ? {} : {
@@ -1340,10 +1341,46 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     && routes !== undefined
     && routes.length > 0
     && routes.some((route) => route.maximumTotalCost.kind !== 'known')
-  return routes !== undefined
-    && (unknownCostFailsClosed
-      || canonicalDigest(routes as StableHashValue) === canonicalDigest(routeGeneration?.routes ?? [] as StableHashValue))
-    ? 'current' : 'invalid'
+  if (routes === undefined) return 'invalid'
+  if (!unknownCostFailsClosed
+    && canonicalDigest(routes as StableHashValue) !== canonicalDigest(routeGeneration?.routes ?? [] as StableHashValue)) return 'invalid'
+  return 'current'
+}
+
+function evaluationMatchesConservativeReadinessSnapshot(
+  current: CustomerRequestV2Aggregate['evaluation'],
+  stored: CustomerRequestV2Aggregate['evaluation'],
+): boolean {
+  if (current.candidates.length !== stored.candidates.length) return false
+  const storedCandidates = new Map(stored.candidates.map((candidate) => [
+    candidate.candidateRef,
+    candidate,
+  ]))
+  const normalizedCandidates = current.candidates.flatMap((candidate) => {
+    const prior = storedCandidates.get(candidate.candidateRef)
+    if (prior === undefined) return []
+    const currentReadiness = candidate.readinessValidUntil
+    const storedReadiness = prior.readinessValidUntil
+    if ((currentReadiness === undefined) !== (storedReadiness === undefined)
+      || (currentReadiness !== undefined && storedReadiness !== undefined
+        && currentReadiness < storedReadiness)) return []
+    return [{
+      ...candidate,
+      ...(storedReadiness === undefined
+        ? {}
+        : { readinessValidUntil: storedReadiness }),
+    }]
+  })
+  if (normalizedCandidates.length !== current.candidates.length) return false
+  const { evaluationDigest: _currentDigest, candidates: _currentCandidates, ...currentMaterial } = current
+  const { evaluationDigest: _storedDigest, candidates: _storedCandidates, ...storedMaterial } = stored
+  return canonicalDigest({
+    ...currentMaterial,
+    candidates: normalizedCandidates,
+  } as StableHashValue) === canonicalDigest({
+    ...storedMaterial,
+    candidates: stored.candidates,
+  } as StableHashValue)
 }
 
 function rebindAggregateFacts(
