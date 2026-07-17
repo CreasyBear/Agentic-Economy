@@ -279,9 +279,10 @@ Plans:
 **Requirements**: ADR-010 (one action plane across human and agent experiences, 10 acceptance gates) is the locked input; ADR-009 + `.planning/specs/ACTION-INVOCATION-ENGINEERING-SPEC.md` (#193) and Phase 1's Action Invocation interface are locked upstream context.
 **Depends on:** Phase 1 (action-invocation-decomposition) — this phase consumes the Action Invocation interface/state model Phase 1 designs and does not re-decide seam/persistence/authority.
 **Boundary:** Design/planning phase only. Produces GSD planning artifacts (SPEC/CONTEXT/RESEARCH/PLAN + pattern map) under `.planning/`. No `src/**`, `convex/**`, or test edits. Does not change ADR status, supersede an ADR, or close #193. Stops at plan-checker green; source implementation is a separate, explicitly-authorized execute-phase.
-**Plans:** 0 plans
+**Plans:** 1 plan (planned 2026-07-17; design-only, not executed)
+**Status:** Planned — plan artifacts written. Deliverables: `02-SPEC.md`, `02-CONTEXT.md`, `02-RESEARCH.md`, `02-PATTERNS.md`, `02-01-PLAN.md`. Stops before execute-phase; source implementation requires separate authorization.
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 2 to break down)
+- [ ] 02-01-PLAN.md — Commit one buildable answer per axis (semantic-parity contract / host-adapter boundary / structured non-visual equivalent / generative-UI families / reconstruct-from-records / parity eval) + ADR-010 10-gate→test table + future build backlog. Design-only.
 
