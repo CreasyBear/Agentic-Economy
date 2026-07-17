@@ -54,6 +54,56 @@ semantic representation for callers that cannot render it. A host limitation
 may reduce presentation or make a task unsupported; it may not silently change
 business meaning.
 
+## Selected engineering architecture under evaluation
+
+The registered action definition is the single engineering interface consumed
+by every host. For consequential actions it declares:
+
+- input and structured result schemas;
+- read-only, communication or external-effect classification;
+- material fields and preparation rules;
+- authority and data-use requirements;
+- idempotency and retry/reconciliation class;
+- expected evidence, structured failure and unknown-effect outcomes;
+- safe continuations and invalidation conditions.
+
+The embedded agent, external-agent adapter and human UI call the same
+source-owned action implementation. Host adapters may translate conversation,
+transport and rendering. They may not implement eligibility, preparation,
+authority, execution, retry, evidence or recovery rules.
+
+One prepared Action Invocation may enter an `awaiting_authority` control state.
+That state contains an opaque authority reference bound to:
+
+- `invocationRef` and invocation version;
+- registered action and version;
+- prepared-input digest;
+- principal, target and consequence summary;
+- spend and data-use limits where applicable;
+- expiry and allowed decisions.
+
+Approval or rejection produces an attributable authority decision addressed by
+that reference. It does not edit a chat message into permission. A material
+input, target, action-version or freshness change invalidates the reference and
+requires preparation again.
+
+The durable state model separates:
+
+```text
+desired state       what the authorized caller currently asks AE to do
+observed resolution what AE or the provider has attributable evidence happened
+freshness           whether the observation is current and reachable
+```
+
+Conversation state and component-local state are disposable host caches. They
+may retain transport cursors, presentation preferences and a pending interaction,
+but the current view must be reconstructable from Action Invocation, authority,
+attempt, evidence and result records without replaying the transcript.
+
+Every rich projection has a structured non-visual equivalent addressed to the
+same invocation and version. A UI decision and an external-agent decision resume
+the same paused invocation; neither host recomputes its business inputs.
+
 ## Interaction boundary
 
 The agent may gather and prepare without repeatedly interrupting the person when
@@ -164,4 +214,5 @@ supporting evidence is:
 - [ADR-010 inverse premortem](../research/2026-07-17-adr-010-inverse-premortem.md);
 - [conversational agentic workspace patterns](../research/2026-07-17-conversational-agentic-workspace-patterns.md);
 - [capability-to-composable-work crosswalk](../research/2026-07-17-capability-to-composable-work-crosswalk.md);
+- [production agent execution patterns](../research/2026-07-17-production-agent-execution-patterns.md);
 - [ADR-009](./ADR-009-partial-entry-without-request-ownership.md).

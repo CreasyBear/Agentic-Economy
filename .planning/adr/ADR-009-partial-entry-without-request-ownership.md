@@ -22,6 +22,57 @@ descriptive language for the unit a caller is trying to complete. Evals must
 first establish whether different tasks share enough implementation structure
 to justify any common type.
 
+## Selected engineering architecture under evaluation
+
+AE will evaluate **Action Invocation** as the narrow durable control record for
+one independently resumable call to one registered action and action version.
+It is an engineering execution record, not a universal business-task schema.
+It does not contain wedge meaning, replace the action-specific result, or imply
+that every read-only call must be persisted.
+
+An Action Invocation has:
+
+- a stable `invocationRef`;
+- the registered action identifier and immutable action version;
+- caller, principal, ownership scope and optional parent Request or bundle
+  reference;
+- an immutable prepared-input digest and material input provenance;
+- desired state, observed resolution and freshness/reachability as separate
+  values;
+- the current invocation version and effect generation;
+- expected evidence and the action-declared retry/reconciliation class;
+- references to authority, attempts, observations, results and allowed
+  continuations.
+
+An external-effect attempt has its own `attemptRef`, idempotency identity and
+generation. A lease prevents simultaneous workers from owning the same attempt.
+A generation fence prevents a late worker, cancellation or provider observation
+from overwriting newer state. State changes use compare-and-swap against the
+expected invocation version or generation.
+
+Existing Action Attempt, authority, evidence and reconciliation machinery
+remains authoritative. The first implementation question is whether Action
+Invocation can be expressed by generalizing an existing source-owned record.
+A new table is permitted only when the source map and eval traces show that an
+existing record would mix incompatible meanings or force optional Request
+lineage back into the design.
+
+Customer Request becomes an orchestrating client of Action Invocations. A
+complete route or bundle stores invocation and result references plus declared
+dependencies and completion conditions. It does not copy constituent status,
+inherit their authority, or implement another attempt and recovery lifecycle.
+
+Lineage is discriminated rather than weakened:
+
+```text
+request_owned(requestRef, revision)
+standalone(callerRef, principalRef)
+bundle_owned(bundleRef, nodeRef)
+```
+
+Existing Request-owned traces remain valid. Fields on existing records do not
+become broadly optional as a migration shortcut.
+
 This direction is proposed because the neutral engine is internally
 compositional while current durable lineage is Request-owned. Action preparation
 requires Request, revision, plan and action lineage; structured quote
@@ -159,6 +210,17 @@ communication creates a new attributable attempt; a possibly completed external
 effect must be reconciled before retry unless the provider contract guarantees
 safe idempotent replay.
 
+Registered actions therefore declare one of three retry classes:
+
+```text
+replayable
+attributable_retry
+reconcile_before_retry
+```
+
+The worker may implement backoff and delivery, but it may not choose the retry
+class or convert an unknown external effect into failure.
+
 The product may progressively reveal a complete route, but the engineering
 model must not depend on the customer selecting that route upfront. Route
 coordination is earned through composition of useful tasks rather than imposed
@@ -171,3 +233,7 @@ or verified work completed elsewhere.
 
 No current product claim, public endpoint or production capability changes as a
 result of this proposed ADR.
+
+Additional production-pattern evidence:
+
+- [Production agent execution patterns](../research/2026-07-17-production-agent-execution-patterns.md).

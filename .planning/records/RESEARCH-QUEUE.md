@@ -12,6 +12,7 @@
 | P1 | Q-005 | Who can pay without changing admission or comparison? | D-004 | Willingness to pay, value received, unit economics, neutrality failure analysis | QUEUED | — |
 | P1 | Q-006 | What benchmark best demonstrates that AE improves a calling agent's answer? | H-001; H-005 | Request corpus design, adjudication rubric, baselines, agent restatement evaluation | QUEUED | — |
 | P1 | Q-007 | Which distribution surface should AE package first after the canonical contract? | D-001; H-006 | Current platform access, user concentration, review friction, observability, integration effort | UNBLOCKED FOR PRODUCT-SPECIFIC COMPARISON | — |
+| P0 | Q-009 | Can one Action Invocation control record support standalone and Request-owned work without duplicating authority, attempts, evidence or recovery? | D-006; D-007; ADR-009; ADR-010 | Cross-surface approval, interrupted-effect recovery, generation-race and reference-only composition evals | ARCHITECTURE SELECTED; EVALS REQUIRED | [Production agent execution patterns](../research/2026-07-17-production-agent-execution-patterns.md) |
 
 ## Queue rule
 

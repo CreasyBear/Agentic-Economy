@@ -46,6 +46,7 @@ the review date if no evidence exists.
 | R-013 | ACTIVE | External field + target interaction research | [Conversational agentic workspace patterns](../research/2026-07-17-conversational-agentic-workspace-patterns.md) | Supports proposed D-007 and ADR-010; competitor product structures do not prove reliability or AE feasibility | 2026-08-17 |
 | R-014 | ACTIVE | Inverse premortem + acceptance evidence | [ADR-010 inverse premortem](../research/2026-07-17-adr-010-inverse-premortem.md) | Defines success conditions and acceptance gates for proposed D-007 and ADR-010 | 2026-08-17 |
 | R-015 | ACTIVE | Workflow and wedge evaluation | [Workflow substitution candidate review](../research/2026-07-17-workflow-substitution-candidate-review.md) and [Product Foundry program](../research/2026-07-17-product-foundry-primitive-refinery-program.md) | Defines the eval portfolio for D-005 and the evidence required before engineering expansion | 2026-08-17 |
+| R-016 | ACTIVE | Production engineering pattern review | [Production agent execution patterns](../research/2026-07-17-production-agent-execution-patterns.md) | Selects the Action Invocation architecture under evaluation for D-006, D-007, ADR-009 and ADR-010 | 2026-08-17 |
 
 ## Open decisions
 
