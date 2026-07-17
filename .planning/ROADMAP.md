@@ -273,3 +273,15 @@ Plans:
 
 - [ ] 01-01-PLAN.md — Commit one buildable answer per axis (seam / first action / persistence / authority binding / four-dimension state / barrier experiment) + future build backlog (spec §12 steps 1-8). Design-only.
 
+### Phase 2: One action plane cross-surface parity
+
+**Goal:** Make ADR-010 buildable: one registered action drives the embedded AE agent and at least one external-agent surface with proven semantic outcome parity, a structured non-visual equivalent for every rich projection, host-adapter boundary enforcement, reconstruction-from-records, and the six generative-UI projection families — design only, no source.
+**Requirements**: ADR-010 (one action plane across human and agent experiences, 10 acceptance gates) is the locked input; ADR-009 + `.planning/specs/ACTION-INVOCATION-ENGINEERING-SPEC.md` (#193) and Phase 1's Action Invocation interface are locked upstream context.
+**Depends on:** Phase 1 (action-invocation-decomposition) — this phase consumes the Action Invocation interface/state model Phase 1 designs and does not re-decide seam/persistence/authority.
+**Boundary:** Design/planning phase only. Produces GSD planning artifacts (SPEC/CONTEXT/RESEARCH/PLAN + pattern map) under `.planning/`. No `src/**`, `convex/**`, or test edits. Does not change ADR status, supersede an ADR, or close #193. Stops at plan-checker green; source implementation is a separate, explicitly-authorized execute-phase.
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 2 to break down)
+
