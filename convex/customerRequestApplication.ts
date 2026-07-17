@@ -5,11 +5,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { projectCustomerRequestProblemTracking } from '@/modules/customer-request/problem-tracking'
 import {
   routeChoiceSignature,
-  writableCustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
-import {
-  writableCustomerRequestRoutePlanGeneration,
-} from '@/modules/customer-request/route-plan-generation'
 import {
   customerRouteRef,
 } from '@/modules/customer-request/route-plan-customer-projection'
@@ -32,37 +28,33 @@ import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-reques
 import {
   bindRequirementAnswer,
   compileCommit as compileCommitApplication,
-  createConfiguredRequestInterpreter,
-  durableSubmissionShellView,
   interpretCompileCommit as interpretCompileCommitApplication,
-  interpreterFailureCode,
   loadRequestGraph as loadRequestGraphApplication,
   parseCustomerRouteResult,
   preparationResultView,
+  prepareCompare,
   projectConfirmedRoute as projectConfirmedRouteApplication,
   projectRoutePlansFromMaterial,
   projectStoredAggregate as projectStoredAggregateApplication,
-  projectStoredPreparation,
   projectStoredRouteRun as projectStoredRouteRunApplication,
-  proposeThenCompile,
   rebindStoredFacts,
   recoverUnresolvedEgress as recoverUnresolvedEgressApplication,
   replayCommittedCommand as replayCommittedCommandApplication,
-  resumePreparationEgress as resumePreparationEgressApplication,
+  resumeCustomerRequest,
   runPreparationEgress as runPreparationEgressApplication,
-  storedGenerationRepresentsAggregate,
   type CommandReplayResult,
   type CompileCommitInput,
   type CustomerRequestActionResult,
   type EligibleSupplyResult,
   type ExactContractResult,
-  type PreparationEgressPorts,
+  type PreparationMutationResult,
   type RequestGraph,
   type RoutePlanProjectionMaterial,
 } from '@/modules/customer-request/application/public'
 
 import { internal } from './_generated/api'
 import { action, env, type ActionCtx } from './_generated/server'
+import { compareResumePorts, preparationEgressPorts } from './customerRequestCompareResumePorts'
 
 const MAX_INTERPRETER_DESCRIPTOR_BYTES = 512_000
 const MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES = 256_000
@@ -935,113 +927,13 @@ async function resumeRequest(
   args: Readonly<{ requestRef: string; serviceAuth?: Infer<typeof serviceAssertion> }>,
   authenticatedCaller?: RequestCaller,
 ): Promise<ActionResult> {
-    const caller = authenticatedCaller
-      ?? await resolveRequestCaller(ctx, 'resume', { requestRef: args.requestRef }, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind === 'needs_attention') return writableView(projectNeedsAttention({
-      requestRef: args.requestRef, revision: 0,
-      summary: 'This earlier request used a retired contract format. Start a new request to continue.',
-    }))
-    if (current.kind !== 'current') {
-      const shell = await ctx.runQuery(internal.customerRequestV2.getSubmissionShell, {
-        requestId: args.requestRef,
-        principalId: caller.principalId,
-      })
-      return shell.kind === 'found'
-        ? toActionResult(durableSubmissionShellView(shell.shell.requestId))
-        : { kind: 'refused', reason: 'request_not_found' }
-    }
-    if (current.aggregate.snapshot.principalId !== caller.principalId) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    const currentRun = await ctx.runQuery(internal.customerRequestRouteExecution.getCurrent, {
-      requestId: args.requestRef,
-    })
-    if (currentRun.kind === 'found') {
-      return toActionResult(projectStoredRouteRunApplication(current.aggregate, currentRun.run))
-    }
-    const currentMandate = await ctx.runQuery(internal.customerRequestRouteMandate.getCurrentForPrincipal, {
-      requestId: args.requestRef, principalId: caller.principalId,
-    })
-    if (currentMandate.kind === 'active') {
-      const preview = await projectCurrentRoutePlans(ctx, current.aggregate)
-      if (preview.kind === 'request' && preview.decision !== undefined) {
-        const route = preview.decision.routes.find(({ routeRef }) => (
-          routeRef === customerRouteRef(
-            currentMandate.mandate.route.generationRef,
-            currentMandate.mandate.route.routePlanId,
-          )
-        ))
-        if (route !== undefined) {
-          return toActionResult(projectConfirmedRouteApplication(
-            current.aggregate, route, currentMandate.mandate,
-          ))
-        }
-      }
-    }
-    if (current.aggregate.outcome !== 'plan_ready') {
-      return toActionResult(projectStoredAggregateApplication(current.aggregate, undefined))
-    }
-    if (current.routeGenerationRef !== undefined) {
-      const routeReadback: Readonly<
-        | { kind: 'found'; routeGeneration: StoredRouteGeneration }
-        | { kind: 'not_found' }
-      > = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanGeneration, {
-        requestId: current.aggregate.snapshot.requestId,
-      })
-      if (routeReadback.kind !== 'found') return writableView(projectNeedsAttention({
-        requestRef: args.requestRef, revision: current.aggregate.snapshot.revision,
-        summary: 'AE could not verify the current options. Try this request again.',
-      }))
-      const generationRepresentsStoredPlan = storedGenerationRepresentsAggregate(
-        routeReadback.routeGeneration, current.aggregate,
-      )
-      if (!generationRepresentsStoredPlan) return await projectCurrentRoutePlans(ctx, current.aggregate)
-    }
-    const recoveryBlock = await recoverUnresolvedEgress(ctx, current.aggregate)
-    if (recoveryBlock !== undefined) return recoveryBlock
-    if (current.aggregate.plan.actions.length === 1) {
-      const action = current.aggregate.plan.actions[0]
-      if (action !== undefined) {
-        const preparation: PreparationResumeResult = await ctx.runQuery(
-          internal.customerRequestV2Preparation.resume,
-          {
-            requestId: args.requestRef,
-            requestRevision: current.aggregate.snapshot.revision,
-            actionId: action.actionId,
-            principalId: caller.principalId,
-          },
-        )
-        if (preparation.kind === 'current') {
-          if (preparation.preparation.kind === 'ready_for_routing') {
-            const egress: {
-              operationCount: number
-              states: Array<{ operationRef: string; state: 'allocated' | 'dispatching' | 'released' | 'not_released' | 'uncertain' }>
-            } = await ctx.runQuery(
-              internal.customerRequestV2PreparationEgressState.status,
-              { preparationRef: preparation.preparation.preparationRef, principalId: caller.principalId },
-            )
-            if (egress.operationCount > 0) {
-              return toActionResult(await resumePreparationEgressApplication(
-                current.aggregate,
-                preparation.preparation,
-                preparationEgressPorts(ctx),
-              ))
-            }
-          }
-          return toActionResult(projectStoredPreparation(current.aggregate, preparation.preparation))
-        }
-        if (preparation.kind === 'stale') return writableView(projectNeedsAttention({
-          requestRef: args.requestRef,
-          revision: current.aggregate.snapshot.revision,
-          summary: 'The registered options changed. Review this request again.',
-        }))
-      }
-    }
-    return current.routeGenerationRef === undefined
-      ? toActionResult(projectStoredAggregateApplication(current.aggregate, undefined))
-      : await projectCurrentRoutePlans(ctx, current.aggregate)
+  const caller = authenticatedCaller
+    ?? await resolveRequestCaller(ctx, 'resume', { requestRef: args.requestRef }, args.serviceAuth)
+  if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+  return toActionResult(await resumeCustomerRequest(
+    { requestRef: args.requestRef, principalId: caller.principalId },
+    compareResumePorts(ctx),
+  ))
 }
 
 export const compare = action({
@@ -1050,7 +942,24 @@ export const compare = action({
     serviceAuth: v.optional(serviceAssertion),
   },
   returns: actionResult,
-  handler: async (ctx, args): Promise<ActionResult> => await prepareCurrentAction(ctx, args),
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const command = {
+      requestRef: args.requestRef,
+      revision: args.revision,
+      idempotencyKey: args.idempotencyKey,
+    }
+    const caller = await resolveRequestCaller(ctx, 'compare', command, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    return toActionResult(await prepareCompare({
+      requestRef: args.requestRef,
+      revision: args.revision,
+      idempotencyKey: args.idempotencyKey,
+      principalId: caller.principalId,
+      compareCommandKey: namespacedKey(caller.principalId, 'compare', args.requestRef, args.idempotencyKey),
+      egressCommandKey: namespacedKey(caller.principalId, 'egress', args.requestRef, args.idempotencyKey),
+      commandDigest: canonicalDigest(command),
+    }, compareResumePorts(ctx)))
+  },
 })
 
 export const confirmRoute = action({
@@ -1075,11 +984,11 @@ export const confirmRoute = action({
     }
     const preview = await projectCurrentRoutePlans(ctx, current.aggregate)
     if (preview.kind !== 'request' || preview.decision === undefined
-      || preview.decision.outcome.kind !== 'routes_available') return preview
+      || preview.decision.outcome.kind !== 'routes_available') return toActionResult(preview)
     const route = preview.decision.routes.find(({ routeRef }) => routeRef === args.routeRef)
-    if (route === undefined) return preview
-    if (route.availability !== 'current') return preview
-    if (route.maximumTotalCost.kind !== 'known') return preview
+    if (route === undefined) return toActionResult(preview)
+    if (route.availability !== 'current') return toActionResult(preview)
+    if (route.maximumTotalCost.kind !== 'known') return toActionResult(preview)
     const routeReadback: Readonly<
       | { kind: 'found'; routeGeneration: StoredRouteGeneration }
       | { kind: 'not_found' }
@@ -1091,7 +1000,7 @@ export const confirmRoute = action({
           customerRouteRef(preview.decision?.generationRef ?? '', routePlanId) === args.routeRef
         ))
       : undefined
-    if (selectedRoute === undefined) return await projectCurrentRoutePlans(ctx, current.aggregate)
+    if (selectedRoute === undefined) return toActionResult(await projectCurrentRoutePlans(ctx, current.aggregate))
     const result = await ctx.runMutation(internal.customerRequestRouteMandate.issue, {
       requestId: args.requestRef,
       expectedRequestRevision: args.revision,
@@ -1118,7 +1027,7 @@ export const confirmRoute = action({
         kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
       }
       if (result.reason === 'route_generation_changed') {
-        return await projectCurrentRoutePlans(ctx, current.aggregate)
+        return toActionResult(await projectCurrentRoutePlans(ctx, current.aggregate))
       }
       return { kind: 'conflict', requestRef: args.requestRef, reason: 'options_changed' }
     }
@@ -1321,9 +1230,9 @@ export const useRepeatRoute = action({
       return { kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed' }
     }
     const preview = await projectCurrentRoutePlans(ctx, current.aggregate)
-    if (preview.kind !== 'request' || preview.decision?.outcome.kind !== 'routes_available') return preview
+    if (preview.kind !== 'request' || preview.decision?.outcome.kind !== 'routes_available') return toActionResult(preview)
     const displayedRoute = preview.decision.routes.find(({ routeRef }) => routeRef === args.routeRef)
-    if (displayedRoute?.availability !== 'current') return preview
+    if (displayedRoute?.availability !== 'current') return toActionResult(preview)
     const routeReadback: Readonly<
       | { kind: 'found'; routeGeneration: StoredRouteGeneration }
       | { kind: 'not_found' }
@@ -1335,7 +1244,7 @@ export const useRepeatRoute = action({
           customerRouteRef(preview.decision?.generationRef ?? '', routePlanId) === args.routeRef
         ))
       : undefined
-    if (selectedRoute === undefined) return preview
+    if (selectedRoute === undefined) return toActionResult(preview)
     const permission = await ctx.runQuery(
       internal.customerRequestStandingRoutePolicy.resolvePermission,
       {
@@ -2526,21 +2435,6 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
   })
 }
 
-type GenerationRefreshResult = Readonly<
-  | { kind: 'unchanged'; routeGeneration: StoredRouteGeneration }
-  | { kind: 'superseded'; routeGeneration: StoredRouteGeneration }
-  | { kind: 'needs_information'; aggregate: StoredAggregate }
-  | { kind: 'unsupported'; aggregate: StoredAggregate }
-  | {
-      kind: 'retryable'
-      reason: 'current_supply_unavailable' | 'interpreter_unavailable' | 'interpretation_unusable' | 'context_changed'
-    }
-  | {
-      kind: 'request_conflict' | 'route_generation_conflict' | 'identity_conflict'
-        | 'command_conflict' | 'candidate_invalid' | 'context_stale'
-    }
->
-type GenerationRefreshReplayResult = GenerationRefreshResult | Readonly<{ kind: 'not_found' }>
 type StoredAggregateResult = Readonly<
   | {
       kind: 'current'; aggregate: StoredAggregate
@@ -2552,21 +2446,11 @@ type StoredAggregateResult = Readonly<
 type StoredAggregate = Infer<typeof customerRequestV2AggregateValue>
 type StoredRouteGeneration = Infer<typeof routePlanGenerationV2Value>
 type StoredPreparation = Infer<typeof durableActionPreparationV2Value>
-type PreparationMutationResult = Readonly<
-  | { kind: 'stored' | 'replayed'; preparation: StoredPreparation }
-  | { kind: 'conflict'; reason: 'revision_changed' | 'idempotency_key_reused' }
-  | { kind: 'needs_attention'; reason: 'capability_graph_changed' | 'historical_request_resubmit_required' | 'preparation_recipient_unsupported' }
-  | { kind: 'refused'; reason: 'request_not_found' | 'action_not_found' | 'request_not_ready' | 'authority_reference_invalid' | 'authority_invalid' }
->
-type PreparationResumeResult = Readonly<
-  | { kind: 'current'; preparation: StoredPreparation }
-  | { kind: 'not_found' | 'stale' }
->
 
 async function projectCurrentRoutePlans(
   ctx: ActionCtx,
   aggregate: StoredAggregate,
-): Promise<ActionResult> {
+): Promise<CustomerRequestActionResult> {
   let material: RoutePlanProjectionMaterial
   try {
     material = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanProjectionMaterial, {
@@ -2574,20 +2458,20 @@ async function projectCurrentRoutePlans(
     }) as RoutePlanProjectionMaterial
   } catch (error) {
     console.error('customer_request_route_plan_projection_failed', error)
-    return writableView(projectNeedsAttention({
+    return projectNeedsAttention({
       requestRef: aggregate.snapshot.requestId,
       revision: aggregate.snapshot.revision,
       summary: 'AE could not verify the current ways forward. Try this request again.',
-    }))
+    })
   }
-  return toActionResult(projectRoutePlansFromMaterial(
+  return projectRoutePlansFromMaterial(
     aggregate,
     material,
     Date.now(),
     (error) => {
       console.error('customer_request_route_plan_projection_invalid', error)
     },
-  ))
+  )
 }
 
 async function loadCurrent(ctx: ActionCtx, requestId: string): Promise<StoredAggregateResult> {
@@ -2622,305 +2506,6 @@ async function loadCurrentRouteGeneration(
     generationRef: current.routeGenerationRef,
   })
   return result.kind === 'found' ? result.routeGeneration : undefined
-}
-
-async function prepareCurrentAction(
-  ctx: ActionCtx,
-  args: Readonly<{
-    requestRef: string
-    revision: number
-    idempotencyKey: string
-    serviceAuth?: Infer<typeof serviceAssertion>
-  }>,
-): Promise<ActionResult> {
-  const command = {
-    requestRef: args.requestRef,
-    revision: args.revision,
-    idempotencyKey: args.idempotencyKey,
-  }
-  const caller = await resolveRequestCaller(ctx, 'compare', command, args.serviceAuth)
-  if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-  const current = await loadCurrent(ctx, args.requestRef)
-  if (current.kind === 'needs_attention') return writableView(projectNeedsAttention({
-    requestRef: args.requestRef, revision: 0,
-    summary: 'This earlier request used a retired contract format. Start a new request to continue.',
-  }))
-  if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
-    return { kind: 'refused', reason: 'request_not_found' }
-  }
-  if (current.aggregate.snapshot.revision !== args.revision) return {
-    kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
-  }
-  if (current.routeGenerationRef !== undefined) {
-    const routeReadback: Readonly<
-      | { kind: 'found'; routeGeneration: StoredRouteGeneration }
-      | { kind: 'not_found' }
-    > = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanGeneration, {
-      requestId: current.aggregate.snapshot.requestId,
-    })
-    if (routeReadback.kind !== 'found') return writableView(projectNeedsAttention({
-      requestRef: args.requestRef,
-      revision: args.revision,
-      summary: 'AE could not verify the current options. Try this request again.',
-    }))
-    const routes = routeReadback.routeGeneration.routes
-    const graph = await loadRequestGraph(ctx, current.aggregate.snapshot.networkId)
-    const routesAreCurrent = graph.kind === 'available'
-      && graph.registrySnapshotDigest === routeReadback.routeGeneration.registrySnapshotDigest
-      && routes.every((route) => route.expiresAt > Date.now())
-      && routes.every((route) => route.steps.every((step) => graph.bindings.some((binding) => (
-        binding.businessId === step.businessId
-        && binding.offeringId === step.offeringId
-        && binding.bindingId === step.bindingId
-        && sameCapabilityContractRef(binding.contractRef, step.contractRef)
-        && binding.offeringRegistrationHash === step.offeringRegistrationHash
-        && binding.bindingRegistrationHash === step.bindingRegistrationHash
-        && binding.publicationRef === step.publicationRef
-        && binding.publicationRevision === step.publicationRevision
-        && binding.readinessValidUntil !== undefined
-        && binding.readinessValidUntil >= route.expiresAt
-        && binding.price !== undefined
-        && canonicalDigest(binding.price) === canonicalDigest(step.price)
-      ))))
-    if (!routesAreCurrent) {
-      if (graph.kind !== 'available') return await persistRetryableRouteRefresh(
-        ctx, args, caller, current, routeReadback.routeGeneration, 'current_supply_unavailable',
-      )
-      const transientBindingUnavailable = routes.some((route) => route.steps.some((step) => (
-        graph.bindings.some((binding) => (
-          binding.businessId === step.businessId
-          && binding.offeringId === step.offeringId
-          && binding.bindingId === step.bindingId
-          && sameCapabilityContractRef(binding.contractRef, step.contractRef)
-          && (binding.publicationRef === undefined
-            || binding.readinessValidUntil === undefined
-            || binding.readinessValidUntil <= Date.now())
-        ))
-      )))
-      if (transientBindingUnavailable) return await persistRetryableRouteRefresh(
-        ctx, args, caller, current, routeReadback.routeGeneration, 'current_supply_unavailable',
-      )
-      return await refreshCurrentRouteGeneration(
-        ctx, args, caller, current, graph, routeReadback.routeGeneration,
-      )
-    }
-    return await projectCurrentRoutePlans(ctx, current.aggregate)
-  } else if (current.aggregate.plan.actions.length !== 1 || current.aggregate.plan.actions[0] === undefined) {
-    return writableView(projectNeedsAttention({
-      requestRef: args.requestRef,
-      revision: args.revision,
-      summary: 'AE could not verify the current options. Try this request again.',
-    }))
-  }
-  const action = current.aggregate.plan.actions[0]
-  const result: PreparationMutationResult = await ctx.runMutation(internal.customerRequestV2Preparation.prepare, {
-    commandKey: namespacedKey(caller.principalId, 'compare', args.requestRef, args.idempotencyKey),
-    commandDigest: canonicalDigest(command),
-    principalId: caller.principalId,
-    requestId: args.requestRef,
-    expectedRevision: args.revision,
-    actionId: action.actionId,
-    now: Date.now(),
-  })
-  if ((result.kind === 'stored' || result.kind === 'replayed') && result.preparation.kind === 'ready_for_routing') {
-    return await runPreparationEgress(ctx, current.aggregate, result.preparation, {
-      principalId: caller.principalId,
-      commandKey: namespacedKey(caller.principalId, 'egress', args.requestRef, args.idempotencyKey),
-      commandDigest: canonicalDigest({
-        requestRef: args.requestRef, revision: args.revision,
-        preparationRef: result.preparation.preparationRef, idempotencyKey: args.idempotencyKey,
-      }),
-    })
-  }
-  return toActionResult(preparationResultView(current.aggregate, result, args.requestRef, args.revision))
-}
-
-async function refreshCurrentRouteGeneration(
-  ctx: ActionCtx,
-  args: Readonly<{ requestRef: string; revision: number; idempotencyKey: string }>,
-  caller: Readonly<{ principalId: string }>,
-  current: Extract<StoredAggregateResult, { kind: 'current' }>,
-  graph: RequestGraph,
-  currentGeneration: StoredRouteGeneration,
-): Promise<ActionResult> {
-  const { commandKey, commandDigest } = routeRefreshCommand(args, caller.principalId)
-  const replay: GenerationRefreshReplayResult = await ctx.runQuery(
-    internal.customerRequestV2.getRoutePlanGenerationRefreshReplay,
-    { commandKey, commandDigest, principalId: caller.principalId, requestId: args.requestRef },
-  )
-  if (replay.kind !== 'not_found') return await generationRefreshResultView(ctx, current.aggregate, replay)
-
-  const interpreter = createConfiguredRequestInterpreter({
-    maximumDescriptorBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
-    ...(env.OPENROUTER_API_KEY === undefined ? {} : { openRouterApiKey: env.OPENROUTER_API_KEY }),
-    ...(env.AE_CUSTOMER_REQUEST_MODEL === undefined ? {} : { modelName: env.AE_CUSTOMER_REQUEST_MODEL }),
-    ...(env.AE_SITE_URL === undefined ? {} : { siteUrl: env.AE_SITE_URL }),
-  })
-  if (interpreter === undefined) return await persistRetryableRouteRefresh(
-    ctx, args, caller, current, currentGeneration, 'interpreter_unavailable',
-  )
-  const priorFacts = rebindStoredFacts(current.aggregate.snapshot.facts, graph.models)
-  const now = Date.now()
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const step = await proposeThenCompile({
-      intent: current.aggregate.snapshot.intent,
-      priorFacts,
-      graph,
-      compileBase: {
-        commandKey,
-        commandDigest,
-        requestId: args.requestRef,
-        expectedRevision: args.revision - 1,
-        expectedRouteGeneration: currentGeneration.generation,
-        principalId: caller.principalId,
-        delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
-        networkId: current.aggregate.snapshot.networkId,
-        now,
-      },
-    }, interpreter)
-    if (step.kind === 'propose_failed') {
-      console.error('customer_request_route_refresh_interpretation_failed', interpreterFailureCode(step.error))
-      return await persistRetryableRouteRefresh(
-        ctx, args, caller, current, currentGeneration, 'interpreter_unavailable',
-      )
-    }
-    if (step.kind === 'refused') {
-      if (step.reason === 'capability_graph_invalid') continue
-      return await persistRetryableRouteRefresh(
-        ctx, args, caller, current, currentGeneration, 'interpretation_unusable',
-      )
-    }
-    const result: GenerationRefreshResult = await ctx.runMutation(
-      internal.customerRequestV2.refreshRoutePlanGeneration,
-      {
-        commandKey, commandDigest, principalId: caller.principalId, requestId: args.requestRef,
-        expectedRequestRevision: args.revision,
-        expectedGeneration: currentGeneration.generation,
-        expectedGenerationRef: currentGeneration.generationRef,
-        ...(current.currentDecisionCommandKey === undefined
-          ? {}
-          : { expectedDecisionCommandKey: current.currentDecisionCommandKey }),
-        candidateAggregate: writableCustomerRequestV2Aggregate(step.preview.aggregate),
-        ...(step.preview.routeGeneration === undefined ? {} : {
-          candidateRouteGeneration: writableCustomerRequestRoutePlanGeneration(step.preview.routeGeneration),
-        }),
-      },
-    )
-    return result.kind === 'context_stale'
-      ? await persistRetryableRouteRefresh(
-          ctx, args, caller, current, currentGeneration, 'context_changed',
-        )
-      : await generationRefreshResultView(ctx, current.aggregate, result)
-  }
-  return await persistRetryableRouteRefresh(
-    ctx, args, caller, current, currentGeneration, 'context_changed',
-  )
-}
-
-
-
-type RouteRefreshRetryReason = Extract<GenerationRefreshResult, { kind: 'retryable' }>['reason']
-
-function routeRefreshCommand(
-  args: Readonly<{ requestRef: string; revision: number; idempotencyKey: string }>,
-  principalId: string,
-) {
-  return {
-    commandKey: namespacedKey(principalId, 'route-refresh', args.requestRef, args.idempotencyKey),
-    commandDigest: canonicalDigest({
-      requestRef: args.requestRef, revision: args.revision, idempotencyKey: args.idempotencyKey,
-    }),
-  }
-}
-
-async function persistRetryableRouteRefresh(
-  ctx: ActionCtx,
-  args: Readonly<{ requestRef: string; revision: number; idempotencyKey: string }>,
-  caller: Readonly<{ principalId: string }>,
-  current: Extract<StoredAggregateResult, { kind: 'current' }>,
-  currentGeneration: StoredRouteGeneration,
-  reason: RouteRefreshRetryReason,
-): Promise<ActionResult> {
-  const result: GenerationRefreshResult = await ctx.runMutation(
-    internal.customerRequestV2.recordRoutePlanGenerationRetry,
-    {
-      ...routeRefreshCommand(args, caller.principalId),
-      principalId: caller.principalId, requestId: args.requestRef,
-      expectedRequestRevision: args.revision,
-      expectedGeneration: currentGeneration.generation,
-      expectedGenerationRef: currentGeneration.generationRef,
-      ...(current.currentDecisionCommandKey === undefined
-        ? {}
-        : { expectedDecisionCommandKey: current.currentDecisionCommandKey }),
-      reason, recordedAt: Date.now(),
-    },
-  )
-  return await generationRefreshResultView(ctx, current.aggregate, result)
-}
-
-async function generationRefreshResultView(
-  ctx: ActionCtx,
-  current: StoredAggregate,
-  result: Exclude<GenerationRefreshReplayResult, { kind: 'not_found' }>,
-): Promise<ActionResult> {
-  if (result.kind === 'command_conflict') return {
-    kind: 'conflict', requestRef: current.snapshot.requestId, reason: 'idempotency_key_reused',
-  }
-  if (result.kind === 'request_conflict') return {
-    kind: 'conflict', requestRef: current.snapshot.requestId, reason: 'revision_changed',
-  }
-  if (result.kind === 'route_generation_conflict') return {
-    kind: 'conflict', requestRef: current.snapshot.requestId, reason: 'options_changed',
-  }
-  if (result.kind === 'identity_conflict') return {
-    kind: 'conflict', requestRef: current.snapshot.requestId, reason: 'identity_changed',
-  }
-  if (result.kind === 'candidate_invalid' || result.kind === 'context_stale') {
-    return writableView(projectNeedsAttention({
-      requestRef: current.snapshot.requestId, revision: current.snapshot.revision,
-      summary: 'AE could not refresh the available options. Try again.',
-    }))
-  }
-  if (result.kind === 'retryable') return writableView(projectNeedsAttention({
-    requestRef: current.snapshot.requestId, revision: current.snapshot.revision,
-    summary: 'AE could not refresh the available options. Try again.',
-  }))
-  if (result.kind === 'needs_information' || result.kind === 'unsupported') {
-    if (result.kind === 'needs_information') {
-      return toActionResult(projectStoredAggregateApplication(result.aggregate, undefined))
-    }
-    return writableView({
-      kind: 'request', requestRef: result.aggregate.snapshot.requestId,
-      revision: result.aggregate.snapshot.revision, state: 'unsupported',
-      summary: 'No business on AE can support this request right now.',
-      nextAction: 'revise_request', missingFields: [],
-      criteria: projectCustomerCriteria(result.aggregate.evaluation.criteria),
-      options: [],
-    })
-  }
-  if (result.kind !== 'unchanged' && result.kind !== 'superseded') {
-    return writableView(projectNeedsAttention({
-      requestRef: current.snapshot.requestId, revision: current.snapshot.revision,
-      summary: 'AE could not refresh the available options. Try again.',
-    }))
-  }
-  return await projectCurrentRoutePlans(ctx, current)
-}
-
-function preparationEgressPorts(ctx: ActionCtx): PreparationEgressPorts {
-  return {
-    runEgress: (input) => ctx.runAction(internal.customerRequestV2PreparationEgress.run, input),
-    resumeEgress: (input) => ctx.runAction(internal.customerRequestV2PreparationEgress.resume, input),
-    resumeRequestEgress: (input) => ctx.runAction(
-      internal.customerRequestV2PreparationEgress.resumeRequest, input,
-    ),
-    preparationMaterialDigest: (input) => ctx.runQuery(
-      internal.customerRequestV2PreparedAction.preparationMaterialDigest, input,
-    ),
-    preparePreparedAction: (input) => ctx.runMutation(
-      internal.customerRequestV2PreparedAction.prepare, input,
-    ),
-  }
 }
 
 async function runPreparationEgress(
