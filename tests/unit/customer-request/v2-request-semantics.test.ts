@@ -432,6 +432,41 @@ describe('V2 Request semantics', () => {
     expect(evaluation.nextRequirement).toBeUndefined()
   })
 
+  it('shows one customer criterion when the same request literal feeds multiple businesses', () => {
+    const first = openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({ version: 1 })))
+    const second = openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({ version: 2 })))
+    const firstRequest = requiredInput(first, 'request')
+    const secondRequest = requiredInput(second, 'request')
+    const request = 'Preserve the accessible hotel and ground transport.'
+    const evaluation = evaluateCustomerRequestSnapshot({
+      requestId: 'request:shared-literal', requestRevision: 2, intent: request,
+      registrySnapshotDigest: 'sha256:graph',
+      facts: [
+        {
+          contractRef: first.contractRef, selectionKey: first.selectionKey,
+          inputKey: firstRequest.key, inputPointer: firstRequest.inputPointer,
+          schemaIdentity: firstRequest.schemaIdentity, value: request,
+          source: { kind: 'customer', assertionRef: 'assertion:shared-request' },
+        },
+        {
+          contractRef: second.contractRef, selectionKey: second.selectionKey,
+          inputKey: secondRequest.key, inputPointer: secondRequest.inputPointer,
+          schemaIdentity: secondRequest.schemaIdentity, value: request,
+          source: { kind: 'customer', assertionRef: 'assertion:shared-request' },
+        },
+      ],
+      candidates: [
+        { ...supply('binding:shared-literal:first', first), model: first },
+        { ...supply('binding:shared-literal:second', second), model: second },
+      ],
+    })
+
+    expect(evaluation.candidates).toHaveLength(2)
+    expect(evaluation.criteria).toEqual([
+      expect.objectContaining({ label: 'Request', value: request, basis: 'customer_provided' }),
+    ])
+  })
+
   it('asks the missing question that makes the most registered options decidable first', () => {
     const first = decisionModelWithCommitment()
     const second = openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({

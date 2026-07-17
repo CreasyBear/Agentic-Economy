@@ -504,7 +504,7 @@ function chooseNextRequirement(candidates: readonly RequestEvaluationCandidate[]
 function projectUnderstoodCriteria(
   facts: readonly RequestFact[], candidates: readonly RequestEvaluationCandidateInput[],
 ): readonly UnderstoodCriterion[] {
-  return Object.freeze(facts.flatMap((fact) => {
+  const criteria = facts.flatMap((fact) => {
     const model = candidates.find((candidate) => (
       candidate.model.selectionKey === fact.selectionKey
       && sameCapabilityContractRef(candidate.model.contractRef, fact.contractRef)
@@ -527,7 +527,21 @@ function projectUnderstoodCriteria(
         label: semantic.label, value: fact.value, basis,
       }),
     })]
-  }).sort((left, right) => left.label.localeCompare(right.label) || left.inputPointer.localeCompare(right.inputPointer)))
+  }).sort((left, right) => (
+    left.label.localeCompare(right.label)
+    || left.inputPointer.localeCompare(right.inputPointer)
+    || left.criterionDigest.localeCompare(right.criterionDigest)
+  ))
+  const customerSemantics = new Map<string, UnderstoodCriterion>()
+  for (const criterion of criteria) {
+    const key = canonicalDigest({
+      label: criterion.label,
+      value: criterion.value,
+      basis: criterion.basis,
+    } as StableHashValue)
+    if (!customerSemantics.has(key)) customerSemantics.set(key, criterion)
+  }
+  return Object.freeze([...customerSemantics.values()])
 }
 
 function projectPreparationDisclosure(
