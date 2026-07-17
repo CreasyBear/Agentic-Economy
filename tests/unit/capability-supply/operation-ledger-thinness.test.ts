@@ -64,13 +64,22 @@ describe('capability-supply operation-ledger thinness', () => {
   })
 
   it('does not merge ledger into offering/binding folders', () => {
-    for (const folder of ['offering', 'binding', 'eligibility', 'quarantine', 'publication', 'shared']) {
+    for (const folder of ['offering', 'binding', 'eligibility', 'quarantine', 'shared']) {
       for (const file of listTsFiles(join('src/modules/capability-supply/internal', folder))) {
         const source = readFileSync(file, 'utf8')
         expect(source).not.toMatch(/\bbeginOperation\b/)
         expect(source).not.toMatch(/\bensureSupplyAudit\b/)
         expect(source).not.toMatch(/registerCapabilityOfferingCommand/)
       }
+    }
+  })
+
+  it('publication may compose ledger without relocating helpers', () => {
+    for (const file of listTsFiles(join('src/modules/capability-supply/internal', 'publication'))) {
+      const source = readFileSync(file, 'utf8')
+      expect(source).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+beginOperation\b/)
+      expect(source).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+ensureSupplyAudit\b/)
+      expect(source).not.toMatch(/registerCapabilityOfferingCommand/)
     }
   })
 })

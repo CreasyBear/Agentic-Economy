@@ -10,7 +10,6 @@ import {
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
   admitRegisteredTransport,
-  normalizeCapabilityPublication,
   type CapabilityOfferingRegistration,
   type CapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
@@ -34,22 +33,17 @@ import {
   writablePresentation,
 } from '@/modules/capability-supply/internal/offering'
 import {
-  beginOperation,
-  ensureSupplyAudit,
   registerCapabilityBindingCommand as runRegisterBindingCommand,
   registerCapabilityOfferingCommand as runRegisterOfferingCommand,
   quarantineCapabilityBindingCommand as runQuarantineCommand,
-  replayOperationResult,
   setCapabilitySupplyEligibilityCommand as runSetEligibilityCommand,
-  succeedOperation,
   type OperationLedgerPorts,
 } from '@/modules/capability-supply/internal/operation-ledger'
 import {
-  INITIAL_PUBLICATION_LIFECYCLE,
-  decodeConvexPublicationSource,
-  isDirectPublicationSource,
   publicationLifecycle,
   publicationProjection,
+  publishCapabilityCommand,
+  refreshCapabilityCommand,
 } from '@/modules/capability-supply/internal/publication'
 import {
   bindingObservedRowDigest,
@@ -62,21 +56,19 @@ import {
   type SupplyCommandActor,
 } from '@/modules/capability-supply/internal/shared'
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
-import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { type StableHashValue } from '@/modules/common/stable-hash'
 
 import type { Doc, Id } from './_generated/dataModel'
-import { internal } from './_generated/api'
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
 import {
   getActiveExactCapabilityContract,
   getExactRegisteredCapabilityContract,
-  registerCapabilityContractDocument,
 } from './capabilityContractDocuments'
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
 import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
+import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
 
 const contractRefValue = v.object({
   capabilityId: v.string(),
@@ -377,173 +369,19 @@ export const publishCapability = mutation({
     if (!await ownsPublishedBusiness(ctx, args.businessId)) {
       return { kind: 'refused' as const, reason: 'authorization_denied' as const }
     }
-    let importInput: Parameters<typeof normalizeCapabilityPublication>[0]
-    if (isDirectPublicationSource(args.source)) {
-      if (args.offering === undefined || args.binding === undefined) {
-        return { kind: 'refused' as const, reason: 'source_invalid' as const }
-      }
-      importInput = {
-        kind: 'ae_envelope', documentJson: args.source.documentJson,
-        offering: args.offering, binding: args.binding, evidenceRefs: args.evidenceRefs,
-      }
-    } else {
-      importInput = decodeConvexPublicationSource(args.source) as Parameters<typeof normalizeCapabilityPublication>[0]
-    }
-    let normalized
-    try {
-      normalized = normalizeCapabilityPublication(importInput)
-    } catch {
-      return { kind: 'refused' as const, reason: 'source_invalid' as const }
-    }
-    if (normalized === undefined || normalized.kind === 'refused') {
-      return { kind: 'refused' as const, reason: 'source_invalid' as const }
-    }
-    const draft = normalized.draft
-    let encoded
-    try {
-      encoded = encodeCapabilityContractDocumentJson(draft.documentJson)
-    } catch (error) {
-      return {
-        kind: 'refused' as const,
-        reason: error instanceof Error && error.message === 'capability_contract_too_large'
-          ? 'contract_too_large' as const
-          : 'contract_invalid' as const,
-      }
-    }
-    const offering = {
-      ...draft.offering,
-      businessId: args.businessId,
-      contractRef: encoded.contract.ref,
-    }
-    const binding = {
-      ...draft.binding,
-      offeringId: draft.offering.offeringId,
-      networkId: draft.offering.networkId,
-      contractRef: encoded.contract.ref,
-    }
-    try {
-      defineCapabilityOfferingRegistration(offering)
-    } catch {
-      return { kind: 'refused' as const, reason: 'offering_invalid' as const }
-    }
-    let admittedTransport: ReturnType<typeof admitRegisteredTransport>
-    try {
-      const definedBinding = defineCapabilityTransportBindingRegistration(binding)
-      admittedTransport = admitRegisteredTransport(transportAdmissionInput(definedBinding))
-      if (admittedTransport.kind === 'refused') return admittedTransport
-    } catch {
-      return { kind: 'refused' as const, reason: 'binding_invalid' as const }
-    }
-
-    const now = Date.now()
-    const existingContract = await ctx.db.query('capabilityContractDocuments')
-      .withIndex('by_capabilityId_and_version', (index) => (
-        index.eq('capabilityId', encoded.contract.ref.capabilityId).eq('version', encoded.contract.ref.version)
-      )).unique()
-    if (existingContract !== null && existingContract.contractDigest !== encoded.contract.ref.contractDigest) {
-      return { kind: 'refused' as const, reason: 'contract_identity_conflict' as const }
-    }
-    const definedOffering = defineCapabilityOfferingRegistration(offering)
-    const offeringHash = capabilityOfferingRegistrationHash(definedOffering)
-    const existingOffering = await ctx.db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (index) => index.eq('offeringId', definedOffering.offeringId)).unique()
-    if (existingOffering !== null) {
-      if (!offeringIntegrityIsValid(existingOffering)) {
-        return { kind: 'refused' as const, reason: 'offering_integrity_failure' as const }
-      }
-      if (existingOffering.registrationHash !== offeringHash) {
-        return { kind: 'refused' as const, reason: 'offering_identity_conflict' as const }
-      }
-    }
-    const definedBinding = defineCapabilityTransportBindingRegistration(binding)
-    if (admittedTransport.kind !== 'admitted') throw new Error('capability_publication_admission_invariant')
-    const bindingHash = capabilityBindingRegistrationHash(definedBinding, admittedTransport.transport)
-    const existingBinding = await ctx.db.query('capabilityTransportBindings')
-      .withIndex('by_bindingId', (index) => index.eq('bindingId', definedBinding.bindingId)).unique()
-    if (existingBinding !== null) {
-      if (!bindingIntegrityIsValid(existingBinding)) {
-        return { kind: 'refused' as const, reason: 'binding_integrity_failure' as const }
-      }
-      if (existingBinding.registrationHash !== bindingHash) {
-        return { kind: 'refused' as const, reason: 'binding_identity_conflict' as const }
-      }
-    }
-    const existingPublication = await ctx.db.query('capabilityPublications')
-      .withIndex('by_publicationRef_and_revision', (index) => (
-        index.eq('publicationRef', draft.offering.offeringId).eq('revision', 1)
-      )).unique()
-    if (existingPublication !== null && (
-      existingPublication.sourceDigest !== draft.source.descriptorDigest
-      || existingPublication.offeringId !== draft.offering.offeringId
-      || existingPublication.bindingId !== draft.binding.bindingId
-    )) {
-      return { kind: 'refused' as const, reason: 'offering_identity_conflict' as const }
-    }
-    const expected = publicationProjection(encoded.contract.ref, draft.offering.offeringId, draft.binding.bindingId)
     const actor = { kind: 'owner' as const, ref: (await ctx.auth.getUserIdentity())!.subject }
-    const ports = portsFor(ctx.db)
-    const operation = await beginOperation(
-      ports,
+    return await publishCapabilityCommand({
+      businessId: args.businessId,
+      source: args.source,
+      offering: args.offering,
+      binding: args.binding,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      reasonCode: args.reasonCode,
+      evidenceRefs: args.evidenceRefs,
       actor,
-      'publishCapability',
-      args,
-      { businessId: args.businessId, source: draft.source, offering: draft.offering, binding: draft.binding },
-      now,
-    )
-    if (operation.kind === 'conflict') {
-      return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
-    }
-    if (operation.kind === 'replay') return replayOperationResult(operation, expected)
-    const contractResult = await registerCapabilityContractDocument(ctx.db, encoded.documentJson, now)
-    if (contractResult.kind === 'refused') throw new Error(`capability_publication_contract_${contractResult.reason}`)
-    const offeringResult = await registerCapabilityOffering(ctx.db, offering, now)
-    if (offeringResult.kind === 'refused') throw new Error(`capability_publication_offering_${offeringResult.reason}`)
-    const bindingResult = await registerCapabilityTransportBinding(ctx.db, binding, now)
-    if (bindingResult.kind === 'refused') throw new Error(`capability_publication_binding_${bindingResult.reason}`)
-    if (existingPublication === null) {
-      await ctx.db.insert('capabilityPublications', {
-        publicationRef: draft.offering.offeringId,
-        revision: 1,
-        businessId: args.businessId,
-        networkId: draft.offering.networkId,
-        sourceKind: draft.source.kind,
-        sourceDigest: draft.source.descriptorDigest,
-        ...encoded.contract.ref,
-        offeringId: draft.offering.offeringId,
-        bindingId: draft.binding.bindingId,
-        disposition: 'current',
-        credentialState: 'unobserved',
-        healthState: 'unobserved',
-        readinessEvidenceRefs: [],
-        registrationEvidenceRefs: [...args.evidenceRefs],
-        createdAt: now,
-        updatedAt: now,
-      })
-    }
-    const auditId = await ensureSupplyAudit(ports, {
-      eventType: 'capability_publication.published',
-      action: 'publish_capability',
-      targetType: 'capability_publication',
-      targetRef: draft.offering.offeringId,
-      actor,
-      context: args,
-      payload: {
-        businessId: args.businessId,
-        sourceKind: draft.source.kind,
-        sourceDigest: draft.source.descriptorDigest,
-        contractRef: encoded.contract.ref,
-        offeringId: draft.offering.offeringId,
-        bindingId: draft.binding.bindingId,
-      },
-      beforeState: 'absent',
-      afterState: 'inactive',
-      createdAt: now,
-    })
-    await succeedOperation(ports, operation.operationId, expected, [auditId], now)
-    await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-      publicationRef: draft.offering.offeringId, expectedRevision: 1,
-    })
-    return expected
+      now: Date.now(),
+    }, publicationPorts(ctx))
   },
 })
 
@@ -815,140 +653,28 @@ export const refreshCapability = mutation({
     if (!validRegistrationContext(args)) {
       return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
     }
-    const publication = await ctx.db.query('capabilityPublications')
-      .withIndex('by_publicationRef_and_revision', (index) => (
-        index.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)
-      )).unique()
-    if (publication === null) return { kind: 'refused' as const, reason: 'publication_not_found' as const }
-    if (!await ownsPublishedBusiness(ctx, publication.businessId)) {
+    const ports = publicationPorts(ctx)
+    const publication = await ports.loadPublicationAtRevision(
+      args.publicationRef,
+      args.expectedRevision,
+    )
+    if (publication === null) {
+      return { kind: 'refused' as const, reason: 'publication_not_found' as const }
+    }
+    if (!await ownsPublishedBusiness(ctx, publication.businessId as Id<'businesses'>)) {
       return { kind: 'refused' as const, reason: 'authorization_denied' as const }
     }
-    if (publication.disposition !== 'current') {
-      return { kind: 'refused' as const, reason: 'revision_changed' as const }
-    }
-    let importInput: Parameters<typeof normalizeCapabilityPublication>[0]
-    if (isDirectPublicationSource(args.source)) {
-      if (args.offering === undefined || args.binding === undefined) {
-        return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
-      }
-      importInput = {
-        kind: 'ae_envelope', documentJson: args.source.documentJson,
-        offering: args.offering, binding: args.binding, evidenceRefs: args.evidenceRefs,
-      }
-    } else {
-      importInput = decodeConvexPublicationSource(args.source) as Parameters<typeof normalizeCapabilityPublication>[0]
-    }
-    let normalized
-    try {
-      normalized = normalizeCapabilityPublication(importInput)
-    } catch {
-      return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
-    }
-    if (normalized === undefined || normalized.kind === 'refused') {
-      return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
-    }
-    const draft = normalized.draft
-    let encoded
-    try {
-      encoded = encodeCapabilityContractDocumentJson(draft.documentJson)
-    } catch {
-      return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
-    }
-    const repeatsExactContract = encoded.contract.ref.version === publication.version
-      && encoded.contract.ref.contractDigest === publication.contractDigest
-    if (encoded.contract.ref.capabilityId !== publication.capabilityId
-      || encoded.contract.ref.version < publication.version
-      || (encoded.contract.ref.version === publication.version && !repeatsExactContract)) {
-      return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
-    }
-    const previousContract = await getExactRegisteredCapabilityContract(ctx.db, contractRefFromRow(publication))
-    if (previousContract.kind !== 'found') throw new Error('capability_publication_contract_integrity_failure')
-    const compatible = canonicalDigest({
-      inputSchema: previousContract.contract.inputSchema,
-      outputSchema: previousContract.contract.outputSchema,
-      customerAnnotations: previousContract.contract.customerAnnotations,
-      dataUse: previousContract.contract.dataUse,
-      effects: previousContract.contract.effects,
-      evidence: previousContract.contract.evidence,
-      lifecycle: previousContract.contract.lifecycle,
-    } as StableHashValue) === canonicalDigest({
-      inputSchema: encoded.contract.inputSchema,
-      outputSchema: encoded.contract.outputSchema,
-      customerAnnotations: encoded.contract.customerAnnotations,
-      dataUse: encoded.contract.dataUse,
-      effects: encoded.contract.effects,
-      evidence: encoded.contract.evidence,
-      lifecycle: encoded.contract.lifecycle,
-    } as StableHashValue)
-    const now = Date.now()
-    const revision = publication.revision + 1
-    const [currentOffering, currentBinding] = await Promise.all([
-      ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique(),
-      ctx.db.query('capabilityTransportBindings')
-        .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique(),
-    ])
-    if (currentOffering === null || currentBinding === null) {
-      throw new Error('capability_publication_supply_integrity_failure')
-    }
-    const revoked = await setCapabilitySupplyEligibility(ctx.db, {
-      offeringId: currentOffering.offeringId,
-      bindingId: currentBinding.bindingId,
-      contractRef: contractRefFromRow(publication),
-      decision: 'revoke',
-      expectedOfferingRegistrationHash: currentOffering.registrationHash,
-      expectedBindingRegistrationHash: currentBinding.registrationHash,
-      admissionEvidenceRefs: args.evidenceRefs,
-      conformanceEvidenceRefs: args.evidenceRefs,
-    }, now)
-    if (revoked.kind === 'refused') throw new Error(`capability_publication_refresh_${revoked.reason}`)
-    await ctx.db.patch(publication._id, { disposition: 'superseded', updatedAt: now })
-    if (!compatible) {
-      await ctx.db.insert('capabilityPublications', {
-        publicationRef: publication.publicationRef, revision, businessId: publication.businessId,
-        networkId: draft.offering.networkId, sourceKind: draft.source.kind,
-        sourceDigest: draft.source.descriptorDigest, ...encoded.contract.ref,
-        offeringId: draft.offering.offeringId, bindingId: draft.binding.bindingId,
-        disposition: 'incompatible', supersedesRevision: publication.revision,
-        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
-        registrationEvidenceRefs: [...args.evidenceRefs], createdAt: now, updatedAt: now,
-      })
-      return {
-        kind: 'refreshed' as const, publicationRef: publication.publicationRef, revision,
-        disposition: 'incompatible' as const,
-        lifecycle: { state: 'incompatible' as const, reasons: ['incompatible_revision' as const] },
-      }
-    }
-    const contractResult = await registerCapabilityContractDocument(ctx.db, encoded.documentJson, now)
-    if (contractResult.kind === 'refused') throw new Error(`capability_publication_refresh_${contractResult.reason}`)
-    const nextOffering = {
-      ...draft.offering, businessId: publication.businessId, contractRef: encoded.contract.ref,
-    }
-    const nextBinding = {
-      ...draft.binding, offeringId: draft.offering.offeringId,
-      networkId: draft.offering.networkId, contractRef: encoded.contract.ref,
-    }
-    const offeringResult = await registerCapabilityOffering(ctx.db, nextOffering, now)
-    if (offeringResult.kind === 'refused') throw new Error(`capability_publication_refresh_${offeringResult.reason}`)
-    const bindingResult = await registerCapabilityTransportBinding(ctx.db, nextBinding, now)
-    if (bindingResult.kind === 'refused') throw new Error(`capability_publication_refresh_${bindingResult.reason}`)
-    await ctx.db.insert('capabilityPublications', {
-      publicationRef: publication.publicationRef, revision, businessId: publication.businessId,
-      networkId: draft.offering.networkId, sourceKind: draft.source.kind,
-      sourceDigest: draft.source.descriptorDigest, ...encoded.contract.ref,
-      offeringId: draft.offering.offeringId, bindingId: draft.binding.bindingId,
-      disposition: 'current', supersedesRevision: publication.revision,
-      credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
-      registrationEvidenceRefs: [...args.evidenceRefs], createdAt: now, updatedAt: now,
-    })
-    await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-      publicationRef: publication.publicationRef, expectedRevision: revision,
-    })
-    return {
-      kind: 'refreshed' as const, publicationRef: publication.publicationRef, revision,
-      disposition: 'current' as const,
-      lifecycle: INITIAL_PUBLICATION_LIFECYCLE,
-    }
+    return await refreshCapabilityCommand({
+      publication,
+      source: args.source,
+      offering: args.offering,
+      binding: args.binding,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      reasonCode: args.reasonCode,
+      evidenceRefs: args.evidenceRefs,
+      now: Date.now(),
+    }, ports)
   },
 })
 
@@ -1474,5 +1200,13 @@ function portsFor(db: MutationCtx['db']): OperationLedgerPorts {
     registerOffering: (registration, now) => registerCapabilityOffering(db, registration, now),
     registerBinding: (registration, now) => registerCapabilityTransportBinding(db, registration, now),
     setEligibility: (eligibility, now) => setCapabilitySupplyEligibility(db, eligibility, now),
+  })
+}
+
+function publicationPorts(ctx: MutationCtx) {
+  return capabilitySupplyPublicationPorts(ctx, {
+    registerOffering: (registration, now) => registerCapabilityOffering(ctx.db, registration, now),
+    registerBinding: (registration, now) => registerCapabilityTransportBinding(ctx.db, registration, now),
+    setEligibility: (eligibility, now) => setCapabilitySupplyEligibility(ctx.db, eligibility, now),
   })
 }

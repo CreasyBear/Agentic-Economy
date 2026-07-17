@@ -58,9 +58,8 @@ describe('capability-supply convex host thinness', () => {
       'publicationLifecycle',
       'bindingObservedRowDigest',
       'offeringIntegrityIsValid',
-      'beginOperation',
-      'ensureSupplyAudit',
-      'replayOperationResult',
+      'publishCapabilityCommand',
+      'refreshCapabilityCommand',
     ]) {
       expect(convexHost).toContain(symbol)
     }
@@ -87,6 +86,17 @@ describe('capability-supply convex host thinness', () => {
     expect(convexHost).not.toMatch(/reason: 'eligible_supply_limit_exceeded' as const/)
     expect(convexHost).not.toMatch(/reason: 'supply_integrity_failure' as const/)
     expect(convexHost).not.toMatch(/bindings\.length > input\.limit/)
+  })
+
+  it('delegates publish/refresh via publication ports while keeping thin wrappers', () => {
+    expect(convexHost).toContain('capabilitySupplyPublicationPorts')
+    expect(convexHost).toContain('publishCapabilityCommand')
+    expect(convexHost).toContain('refreshCapabilityCommand')
+    expect(convexHost).toMatch(/function publicationPorts\s*\(/)
+    expect(convexHost).toMatch(/export const publishCapability\s*=/)
+    expect(convexHost).toMatch(/export const refreshCapability\s*=/)
+    expect(convexHost).not.toMatch(/normalizeCapabilityPublication/)
+    expect(convexHost).not.toMatch(/encodeCapabilityContractDocumentJson/)
   })
 })
 
