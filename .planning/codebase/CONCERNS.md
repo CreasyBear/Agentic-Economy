@@ -1,338 +1,197 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-07-14
-**Mapped Commit:** `f6d7744`
-**Scope:** Current source at the mapped commit. Findings labelled **verified defect** are directly established by source or an executable check. Findings labelled **risk** need runtime evidence before being called a defect.
-
-## Product-Critical Diagnosis
-
-**The customer is using two different products, and the neutral engine is not the primary one:**
-- Status: **Verified disconnect.**
-- Evidence: `/` renders `AeHomeComposer` in `src/routes/index.tsx`. It submits to `/api/answer/turn` through `src/components/ae/chat/AeHomeComposer.tsx` and `src/components/ae/chat/answer-stream.ts`. The Answer Thread agent exposes only `registry.search` and `registry.detail` through `src/modules/answer-thread/answer-thread.schema.ts`, `src/modules/answer-thread/internal/intent-router.ts`, and `src/modules/answer-thread/internal/answer-tool-registry.ts`.
-- Separate path: The neutral Request application is mounted only at `/engine` by `src/routes/engine.tsx`, uses `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, and calls `/api/requests`.
-- Customer impact: Work on capability contracts, candidate composition, RoutePlans, mandates, and execution cannot change the homepage query experience. The homepage remains an LLM-assisted registry search even when the neutral engine becomes substantially more capable.
-- Required correction: Choose one customer Request lifecycle. The homepage composer must submit into the canonical Request application, or the Answer Thread must become a presentation adapter over that application. Do not maintain two intent interpreters, two persistence models, two recovery models, and two customer histories.
-
-**The public `/engine` promise is open, but the first real action is authentication-gated:**
-- Status: **Verified defect.**
-- Evidence: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` presents “Start with whatever you know” and calls `/api/requests` before showing any sign-in requirement. `src/lib/server/customer-request-api.ts` calls authenticated Convex transport, and `src/lib/server/convex-source.ts` rejects a missing Clerk token.
-- Hosted reproduction on 2026-07-14: `GET https://agentic-economy-phi.vercel.app/engine` returned `200`; an anonymous valid `POST /api/requests` returned `401 {"error":"missing_auth"}`.
-- Customer impact: “Explore” is a dead end for a signed-out customer. The user gives AE their request before learning that sign-in is mandatory.
-- Required correction: Implement the anonymous Request boundary tracked by the product roadmap, or move sign-in before submission with explicit value and return-to-request continuity. The entered request and opaque identity must survive authentication.
-
-**RoutePlans are durable internal objects but are absent from the customer wire contract:**
-- Status: **Verified disconnect in committed source.**
-- Evidence: `src/modules/customer-request/compiler.ts` now builds `CustomerRequestRoutePlan[]`, and `src/modules/customer-request/internal/convex-v2-schema.ts` plus `convex/customerRequestV2.ts` persist and validate them. `src/modules/customer-request/customer-projection.ts` projects only snapshot/evaluation fields. `src/modules/customer-request/agent-contract.ts` has no RoutePlan field. `convex/customerRequestApplication.ts` serializes no RoutePlan in `customerView`. `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` cannot render one.
-- Customer impact: A major engine capability can pass compilation and persistence tests while producing exactly the same customer experience as before.
-- Required correction: Add a customer-semantic route decision projection with outcome, steps, total cost, data use, effects, evidence, uncertainty, expiry, alternatives, and recovery. Keep internal identifiers backstage, but do not discard the decision object itself.
-
-**The Request application still rejects multi-capability preparation:**
-- Status: **Verified defect relative to the RoutePlan objective.**
-- Evidence: `convex/customerRequestApplication.ts` gates preparation with `current.aggregate.plan.actions.length !== 1` and returns “This request needs an action choice before AE can prepare it.” Resume, provider-status readback, and preparation readback also run only when `actions.length === 1`.
-- Customer impact: A two-step RoutePlan can be compiled and stored but cannot be prepared through the production Request application. No customer action exists to make the missing “action choice.”
-- Required correction: Preparation must select an exact RoutePlan, not a single action. Composite authority, per-step execution, cumulative controls, and recovery must all bind to that selected route.
-
-**The hosted `options_ready` result is not usable in the human UI:**
-- Status: **Verified defect.**
-- Evidence: `projectPreparedAction` in `convex/customerRequestApplication.ts` returns `state: 'options_ready'`, `options: []`, and a populated `preparedAction`. `RequestResult` in `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` sends every `options_ready` projection to `OptionsCard`. `OptionsCard` reads only `projection.options` and `optionSet`; it never reads `preparedAction`.
-- Symptom: The production prepared-action shape renders as “0 registered options found” with no business card, terms, data use, effects, alternatives, or route-confirmation control.
-- Required correction: Render the prepared decision explicitly. Shared route confirmation must be designed as the future boundary that issues an exact RouteMandate; there is no current approval endpoint to connect. Add a production-shape UI test, not another hand-authored option-set response.
-
-**RouteMandate exists, but shared confirmation and downstream enforcement are future work:**
-- Status: **Verified integration boundary.**
-- Evidence: `src/modules/customer-request/route-mandate.ts` defines exact route-, principal-, spend-, data-, effect-, evidence-, and expiry-bound authority. `convex/customerRequestRouteMandate.ts` durably issues, verifies, reads, and revokes mandates, and `convex/_generated/api.d.ts` includes the RouteMandate modules but none of the retired approval/execution modules. These Convex operations are internal and `convex/customerRequestApplication.ts` does not call them. `src/routeTree.gen.ts` contains preparation authorization routes but no approval or attempt routes.
-- Retirement evidence: `tests/imports/customer-request-source-completeness.test.ts` requires the former prepared-action approval, ActionAttempt, provider release, provider outcome, and reconciliation routes and modules to be absent from production. Their historical V2 authority tables remain only in `src/modules/customer-request/internal/convex-v2-schema.ts`, and the same guard rejects any production runtime reference to those tables.
-- Customer impact: Neither the human nor external-agent Request surface can express one shared confirmation that creates and returns the exact RouteMandate. A stored mandate is also not an execution admission: no current downstream boundary consumes it to reserve or enforce cumulative spend and data budgets before effects.
-- Required correction: Treat shared route confirmation and downstream admission/budget enforcement as future work. Add one confirmation contract used by both caller surfaces, then make every effectful adapter admit only an active exact mandate with atomic cumulative spend/data/effect controls. Do not revive the retired V2 ApprovalGrant or ActionAttempt stacks.
-
-**Editing an existing Request cannot work against the real application:**
-- Status: **Verified defect.**
-- Evidence: `edit()` in `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` resubmits `/api/requests` with `expectedRevision` set to the current nonzero revision. `submit` in `convex/customerRequestApplication.ts` immediately returns `revision_changed` whenever `expectedRevision !== undefined && expectedRevision !== 0`.
-- Test blind spot: `tests/unit/customer-request/customer-request-workspace.test.tsx` mocks revision 2 success and therefore proves only the component’s desired behavior, not application compatibility.
-- Required correction: Add a real revise operation or make submit support revisioned replacement under the same principal and Request identity; prove it through handler-to-Convex integration.
-
-**A registered business listing is not executable supply:**
-- Status: **Verified architectural boundary; current product coverage is unproven.**
-- Evidence: Homepage search reads public catalog actions in `src/modules/registry/registry.actions.ts`. The Request graph reads only eligible, current capability publications from `convex/capabilitySupply.ts` through `loadRequestGraph` in `convex/customerRequestApplication.ts`. No bridge treats a catalog service as a capability binding.
-- Impact: “We have registered businesses” does not mean the engine can answer a query about them. A business needs an active exact contract, offering, transport binding, eligibility decision, current publication, credential readiness, and health readiness.
-- Current source evidence: The only production seed path found for the Request graph is the two labelled sandbox businesses in `convex/sandboxAcceptanceSupply.ts`, `convex/devSeed.ts`, and `src/modules/sandbox-supply/public.ts`. This does not prove the hosted graph contains no other supply, but no source-controlled evidence establishes useful real supply.
-- Required correction: Measure and expose supply coverage by customer job. Do not call catalog rows “connected businesses” unless their published capability bindings are currently eligible and reachable.
-
-## Known Bugs
-
-**The homepage query accepts work, then hides a persistence failure behind a spinner:**
-- Status: **Verified hosted defect on 2026-07-14.**
-- Trigger: Open `/`, submit `I need an electrician in Fremantle tomorrow to fix a circuit that keeps tripping`.
-- Result: `POST /api/answer/turn` returns HTTP 200 and emits a `thread` event, then emits `answer_turn_persist_failed`. The emitted thread returns `404 thread_not_found`. `AeHomeComposer` discards all frames, treats the completed transport as success, and polls the missing thread up to 40 times before showing a generic error.
-- Customer impact: The primary public ask surface appears frozen at “Starting your thread”; the real failure is neither immediate nor explained.
-- Test gap: `tests/unit/chat/home-landing-submit.test.tsx` proves only that one fetch starts and accepts an empty successful stream. It does not assert a thread event, persistence readback, streamed error, navigation, or recovery.
-- Required correction: Make persistence failure observable and fail immediately on streamed error, then prove the actual hosted persistence path. This still does not make Answer Thread the neutral Request engine.
-
-**Anonymous `/engine` query submission fails after accepting the query:**
-- Status: **Verified defect.**
-- Trigger: Open `/engine` signed out, enter any non-empty request, choose “Explore.”
-- Result: Hosted API returns `401 missing_auth`; UI replaces the experience with “Sign in to continue.”
-- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, `src/lib/server/customer-request-api.ts`, `src/lib/server/convex-source.ts`.
-- Fix: Preserve the request through an explicit auth transition or allow bounded anonymous exploration before durable/private continuation.
-
-**Request revision from the UI always conflicts:**
-- Status: **Verified defect.**
-- Trigger: Reach any Request projection, choose “Edit this Request,” change the text, and resubmit.
-- Root cause: The UI uses submit with a nonzero `expectedRevision`; the Convex action accepts only revision zero.
-- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, `convex/customerRequestApplication.ts`.
-- Fix: Implement and call a dedicated revision command with the same durable identity and idempotency guarantees.
-
-**Prepared decision renders as zero options:**
-- Status: **Verified defect by production-shape code path.**
-- Trigger: Reach the `projectPreparedAction` result after provider preparation.
-- Root cause: `preparedAction` exists in the wire schema but is ignored by `OptionsCard`.
-- Files: `convex/customerRequestApplication.ts`, `src/modules/customer-request/agent-contract.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
-- Fix: Add a prepared-decision component and assert the actual projection shape. Keep future RouteMandate confirmation separate from the retired prepared-action approval contract.
-
-**Public agent instructions contain duplicate step numbers:**
-- Status: **Verified defect.**
-- Evidence: `src/modules/discovery/internal/agent-skill.ts` has two step 8 entries; `src/modules/discovery/internal/discovery-files.ts` has two step 6 entries.
-- Impact: External agents receive an ambiguous lifecycle recipe at the canonical discovery surface.
-- Fix: Generate numbering from one structured sequence and add an ordered-sequence assertion.
+**Analysis Date:** 2026-07-17
+**Inspected Revision:** `3aa46069a00724679020f7f3cb338cc4ee177591`
 
 ## Tech Debt
 
-**Two customer-intent stacks own overlapping semantics:**
-- Issue: Answer Thread owns conversational search, follow-ups, frozen evidence, registry tools, and public thread history; Customer Request owns semantic interpretation, clarification, capability selection, preparation, authority, and action recovery.
-- Files: `src/modules/answer-thread/`, `src/modules/answer/`, `convex/answerThreads.ts`, `src/modules/customer-request/`, `convex/customerRequestApplication.ts`, `convex/customerRequestV2.ts`.
-- Impact: A customer can ask the same words at `/` and `/engine` and enter unrelated state machines with different capabilities, privacy, identities, and recovery.
-- Fix approach: Make one Request aggregate canonical. Conversation should be a view and input adapter, not a competing domain.
+**Oversized source-of-truth modules:**
+- Issue: Several domain and persistence modules combine validators, authorization, commands, projections, repair paths, and adapters in one file. The largest current files are `convex/customerRequestApplication.ts` (3,864 lines), `convex/inquiries.ts` (3,443), `convex/customerRequestRouteExecution.ts` (2,975), `convex/capabilitySupply.ts` (2,486), and `src/modules/inquiries/internal/commands.ts` (2,143).
+- Files: `convex/customerRequestApplication.ts`, `convex/inquiries.ts`, `convex/customerRequestRouteExecution.ts`, `convex/capabilitySupply.ts`, `src/modules/inquiries/internal/commands.ts`
+- Impact: Review scope is broad, authorization and integrity checks are easy to miss during changes, and merge conflicts concentrate in high-churn files.
+- Fix approach: Split by cohesive command/read-model seam while preserving existing public Convex function names and `src/modules/*/public.ts` entrypoints. Keep shared invariants in one internal helper rather than duplicating them across extracted files.
 
-**Customer contract, Convex return validators, persistence validators, and UI shapes are manually duplicated:**
-- Issue: Request state and option shapes are repeated in `src/modules/customer-request/agent-contract.ts`, `convex/customerRequestApplication.ts`, `src/modules/customer-request/internal/convex-v2-schema.ts`, and component-local response unions.
-- Impact: Internal RoutePlans can be added to persistence without reaching the agent contract or UI. A compile-time green in one layer does not prove end-to-end parity.
-- Fix approach: Derive adapters from one owned domain contract where possible; otherwise add exact round-trip contract tests from compiled aggregate to HTTP JSON to rendered state.
+**Legacy Answer Thread remains beside the canonical Customer Request:**
+- Issue: A large independent Answer Thread orchestration stack still owns conversation state and recommendation behavior while the repository contract requires customer conversation to compile into and resume the canonical Customer Request.
+- Files: `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/answer-thread/internal/answer-turn-finalization.ts`, `convex/answerThreads.ts`, `src/modules/customer-request/compiler.ts`, `convex/customerRequestApplication.ts`
+- Impact: Two customer intent/history/recovery paths can drift in semantics, authority, and UI behavior. New work can accidentally deepen the path marked for migration rather than the canonical Request.
+- Fix approach: Route new customer-conversation behavior through Customer Request APIs; treat Answer Thread as migration-only, inventory its remaining callers, and retire each duplicated state transition only after surface parity is proven.
 
-**“Source completeness” currently proves presence more strongly than connectivity:**
-- Issue: `tests/imports/customer-request-source-completeness.test.ts` verifies canonical files exist, checks import and retirement boundaries, proves the old approval/execution stack is unreachable, and inspects workflow text. It does not prove the homepage uses Customer Request, a human can confirm a RoutePlan into a RouteMandate, or a multi-step RoutePlan reaches the wire/UI.
-- Impact: The gate can pass while the product remains visibly unchanged or unusable.
-- Fix approach: Retain ownership scans, but rename their claim narrowly and add executable vertical gates for the customer lifecycle.
+**Convex environment access is not centralized or typed:**
+- Issue: Current Convex source reads `process.env` directly in many runtime files instead of declaring and consuming typed application environment variables.
+- Files: `convex/auth.config.ts`, `convex/authz.ts`, `convex/devSeed.ts`, `convex/discovery.ts`, `convex/inquiries.ts`, `convex/notificationOutbox.ts`, `convex/security.ts`, `convex/customerRequestRouteTransportWorker.ts`
+- Impact: Required configuration is discoverable only by search, misspellings are runtime failures, and test/runtime behavior can diverge.
+- Fix approach: Declare supported keys in `convex/convex.config.ts` and access them through the generated environment contract. Keep secret values out of source and preserve typed proof-gap/refusal behavior for absent keys.
 
-**Large central modules increase integration risk:**
-- Issue: `convex/inquiries.ts` is about 2,979 lines, `convex/capabilitySupply.ts` 2,402, `src/modules/answer-thread/internal/turn-orchestrator.ts` 1,819, `src/modules/routing-kernel/internal/kernel.ts` 1,766, and `convex/customerRequestApplication.ts` 1,596 in the current tree.
-- Impact: Authority, validation, persistence, projection, and orchestration changes collide in the same files, increasing the chance that independently correct slices break one another at integration time.
-- Fix approach: Split by durable command/query and domain responsibility while preserving public entrypoints and behavioral tests.
+**Broad dynamic persistence helpers bypass table-specific types:**
+- Issue: Reconstruction and migration helpers accept arbitrary table names and `Record<string, unknown>` rows, then perform scans and field-name comparisons at runtime.
+- Files: `convex/source_state.ts`, `convex/notificationOutbox.ts`, `convex/inquiries.ts`, `convex/observability.ts`
+- Impact: Schema changes can compile while breaking repair/readback code, and generic helpers make indexed access difficult.
+- Fix approach: Replace generic table-name helpers with table-specific functions using `Doc<>` and `Id<>`; add indexes for lookup keys and keep reconstruction adapters explicit.
 
-**RouteMandate maturity can be overstated from internal source alone:**
-- Issue: `src/modules/customer-request/route-mandate.ts` and `convex/customerRequestRouteMandate.ts` establish exact domain and durable lifecycle contracts, but no shared confirmation surface or downstream admission consumer is wired through `convex/customerRequestApplication.ts`. `AGENTS.md` therefore remains correct that AE does not publicly book, charge, dispatch, or auto-fulfil.
-- Impact: Contributors can mistake a durable internal authority object for customer-reachable execution or revive retired approval/attempt terminology around it.
-- Fix approach: Keep current public truth, internal RouteMandate capability, and target execution architecture explicitly separate. Claims must follow customer-surface and downstream enforcement evidence, not schema or module presence.
+## Known Bugs
 
-**Release/support commands still depend on `.mjs` proof utilities:**
-- Issue: `package.json` invokes `.mjs` files for provider readiness, retirement, edge and historical proof helpers even though current runtime ownership is TypeScript.
-- Impact: Supporting evidence can be mistaken for product completion, and the repository’s stated “no .mjs/.mts ownership” rule is easy to blur.
-- Fix approach: Keep product semantics in TypeScript and classify every remaining `.mjs` command as support-only or migrate it. No support command may be the only proof of runtime behavior.
+**The current import/source-completeness gate is not green:**
+- Symptoms: `npm run test:imports` fails four assertions in `tests/imports/customer-request-source-completeness.test.ts`: shared projection usage, fixture/durable discovery alignment, hosted proof revision binding, and canonical Request wire-contract consumption.
+- Current boundary: `npm run typecheck` passes. The failures were observed in the current dirty checkout and may be stale structural assertions or incomplete source/test synchronization; they do not by themselves establish a customer-facing runtime defect.
+- Impact: The branch does not currently satisfy its own clean source-completeness gate, so exact-revision release or completion claims are blocked until each assertion is reconciled against the intended contract.
+- Fix approach: Review the four failing expectations against the current source-owned seams, update implementation or guards deliberately, then rerun the complete `test:imports` command before hosted proof.
 
-## Security and Privacy Considerations
+**No confirmed reproducible source bug found by static scan:**
+- Symptoms: Not detected in the current source-only review.
+- Files: `src/`, `convex/`, `tests/`
+- Trigger: Not applicable.
+- Workaround: Do not convert static risk findings into bug claims; reproduce through the intended surface before filing a confirmed bug.
 
-**Customer requests are sent to OpenRouter before any visible data-use review:**
-- Status: **Verified disclosure gap; legal impact requires review.**
-- Risk: `src/modules/customer-request/openrouter-transport.ts` sends the complete `customerJob` and all public capability descriptors to `https://openrouter.ai/api/v1/chat/completions`. The first customer-visible disclosure review in `AeCustomerRequestWorkspace` is framed only as sharing with businesses.
-- Public mismatch: `src/routes/privacy.tsx` says asking AE uses a browser session marker but does not disclose the external model processor or explain request-content handling.
-- Current mitigation: Payload and response sizes are bounded, temperature is zero, descriptors are treated as untrusted data, and a timeout is enforced.
-- Recommendation: Add truthful processor disclosure and data-minimization policy before collection; define retention/provider-routing controls; redact or classify sensitive intent before third-party interpretation where required.
+## Security Considerations
 
-**Public Answer Threads are bearer-link records with no automatic expiry:**
-- Risk: `AeHomeComposer` tells customers that anyone with the thread link can open it and that it has no automatic expiry. Customer queries can contain sensitive needs or locations.
-- Files: `src/components/ae/chat/AeHomeComposer.tsx`, `src/routes/t.$threadId.tsx`, `src/modules/answer-thread/internal/public-projection.ts`.
-- Current mitigation: The disclosure is visible and recent-thread removal is local.
-- Recommendation: Add data minimization, deletion/expiry controls, non-enumerable identifiers, and tests that private inquiry/contact material never enters public projections.
+**Public Convex functions create a large authorization review surface:**
+- Risk: `convex/customerRequestApplication.ts` exposes many public `action` functions, and `convex/capabilitySupply.ts` exposes public queries/mutations. A missed `resolveRequestCaller`, ownership check, or `resolveAdminAuthority` check would be internet-reachable.
+- Files: `convex/customerRequestApplication.ts`, `convex/capabilitySupply.ts`, `convex/capabilityContractDocuments.ts`, `convex/routingKernelV1History.ts`, `convex/authz.ts`
+- Current mitigation: Customer Request actions call `resolveRequestCaller`; capability-supply owner/admin writes visibly check ownership or `resolveAdminAuthority`; argument and return validators are present.
+- Recommendations: Prefer `internalAction`/`internalMutation`/`internalQuery` for functions not intentionally public, maintain an automated inventory of public Convex exports, and add negative authorization tests for every public write and sensitive read.
 
-**Capability publication and readiness control what the engine may contact:**
-- Risk: A compromised owner/admin path can publish endpoints, bind credentials, or influence eligibility/readiness.
-- Files: `convex/capabilitySupply.ts`, `convex/capabilitySupplyReadiness.ts`, `src/modules/capability-supply/`, `src/modules/capability-contract/`.
-- Current mitigation: Exact contract refs, registration hashes, eligibility hashes, owner/admin authority, readiness probes, audit records, HTTPS/public-target checks, and fail-closed integrity validation exist.
-- Recommendation: Preserve server-derived identity, credential indirection, SSRF defenses, revision-bound probes, auditability, and quarantine. Exercise cross-owner and changed-target attacks in durable integration tests.
+**Dynamic `v.any()` boundaries defer validation into handlers:**
+- Risk: Several internet-facing arguments and returned records accept arbitrary Convex values before runtime normalization, including customer facts, capability documents, adapter configuration, and support export rows.
+- Files: `convex/customerRequestApplication.ts`, `convex/customerRequestRouteExecution.ts`, `convex/capabilitySupply.ts`
+- Current mitigation: Comments identify runtime-validated JSON boundaries; handlers normalize capability publications and bind Customer Request facts against the current requirement.
+- Recommendations: Replace `v.any()` with recursive JSON or discriminated validators where practical; enforce explicit byte/depth/key limits before hashing, storing, logging, or forwarding dynamic data; add adversarial oversized/nested input tests.
 
-**External agent authority is strong but operationally brittle:**
-- Risk: `/api/v1/requests` requires Clerk API-key auth, the `customer_requests:create` scope, and an HMAC service assertion using `AE_CONVEX_SERVER_FUNCTION_TOKEN`.
-- Files: `src/lib/server/customer-request-agent-auth.ts`, `src/lib/server/customer-request-agent-api.ts`, `src/modules/customer-request/service-auth-envelope.ts`, `convex/customerRequestApplication.ts`.
-- Current mitigation: Principal, owner, credential, scope, operation, command, timestamp, and signature are bound; agent principals are recorded before use.
-- Recommendation: Add key rotation, replay-window observability, revocation tests, and explicit error telemetry without leaking secret or assertion material.
+**Authentication bypass flag has broad test usage:**
+- Risk: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` intentionally bypasses Clerk for local tests. Misconfiguration outside local development could undermine owner-surface authentication.
+- Files: `src/routes/__root.tsx`, `src/lib/server/local-e2e-bypass.ts`, `src/routes/_operator/owner.inquiries.$threadId.tsx`, `tests/integration/registry-api.test.ts`
+- Current mitigation: `src/routes/__root.tsx` throws when the flag is enabled in a production build, and `src/lib/server/local-e2e-bypass.ts` rejects production runtime use.
+- Recommendations: Keep the double fail-closed guard, include it in release configuration tests, and never reuse this flag for hosted smoke or customer evidence.
 
-**No Request-specific cost/abuse limiter was found:**
-- Status: **Risk.**
-- Risk: Each authenticated submit/refine can make a paid external model call and load up to 64 capabilities. No Request-path rate or spend limiter appears in `src/lib/server/customer-request-*`, `convex/customerRequestApplication.ts`, or `src/modules/customer-request/`.
-- Recommendation: Add durable per-principal and per-credential quotas, concurrency limits, model-cost telemetry, and retry-after semantics before broad access.
+**Agent identity standard and trust list are intentionally narrow:**
+- Risk: Web Bot Auth support depends on an early package and draft ecosystem; widening accepted signature agents or weakening covered-component/age checks would change the trust boundary.
+- Files: `src/modules/clearance/internal/web-bot-auth.ts`, `src/routes/api.agent.tools.ts`, `package.json`
+- Current mitigation: Signed identity is separated from authorization, writes require clearance, and the default signature-agent list is pinned.
+- Recommendations: Pin and review `web-bot-auth` upgrades, test every typed verification refusal, and require an explicit trust decision plus hosted interoperability proof before widening accepted agents.
 
 ## Performance Bottlenecks
 
-**Every interpretation rebuilds and retransmits the capability descriptor set:**
-- Problem: `loadRequestGraph` in `convex/customerRequestApplication.ts` reads eligible supply, then performs a serial internal query for every unique exact contract, projects schemas, and sends the descriptor payload to OpenRouter.
-- Bounds: Eligible supply is limited to 64; projected descriptors are capped at 512,000 bytes; OpenRouter timeout is 20 seconds; request body cap is 1,000,000 bytes.
-- Measurement: No hosted p50/p95 stage timing or cache-hit metric was found.
-- Improvement path: Cache immutable exact-contract descriptors by digest, parallelize bounded independent reads where Convex permits, retrieve candidates before LLM interpretation, and instrument graph-load/model/compile stages separately.
+**Unbounded Convex collections in operational paths:**
+- Problem: Many queries use `.collect()` and only filter, find, or slice in memory. Examples include Answer Thread history, discovery/catalog status, registry projections, notification reconstruction, and generic source-state reads.
+- Files: `convex/answerThreads.ts`, `convex/discovery.ts`, `convex/catalog.ts`, `convex/registry.ts`, `convex/notificationOutbox.ts`, `convex/source_state.ts`, `convex/inquiries.ts`, `convex/observability.ts`
+- Cause: Some paths enforce a small logical limit after collection, while reconstruction helpers query whole tables by dynamic name.
+- Improvement path: Add indexes for every lookup tuple, use `.unique()`, `.first()`, `.take(n)`, or pagination at the database boundary, and batch maintenance work. Do not use `.collect().length` for counts; maintain counters where exact scalable counts are required.
 
-**RoutePlan enumeration is Cartesian:**
-- Problem: `compileRoutePlans` in `src/modules/customer-request/compiler.ts` multiplies candidate choices across actions and refuses once combinations exceed 256.
-- Impact: A modest graph such as five actions with four candidates each produces 1,024 combinations and becomes `capability_graph_invalid` rather than yielding bounded best routes.
-- Improvement path: Use incremental constrained search with deterministic top-k pruning based on fit, cost, data exposure, consequence, trust, liveness, and evidence. Preserve completeness/uncertainty truth when pruning.
+**Route-problem reconstruction loads entire related sets:**
+- Problem: Support reconstruction collects all Request revisions, reservations, and step attempts for a run before selecting the required records.
+- Files: `convex/customerRequestRouteExecution.ts`
+- Cause: `reconstructRouteProblem`-adjacent code uses broad indexed `.collect()` calls and then searches in memory.
+- Improvement path: Query exact composite keys for the required revision and attempt, paginate genuinely list-shaped support data, and cap exported evidence explicitly.
 
-**Homepage thread creation can issue 40 readback polls:**
-- Problem: `promoteReadableThread` in `src/components/ae/chat/AeHomeComposer.tsx` polls every 250 ms for up to 40 attempts after the stream yields a thread.
-- Impact: Up to ten seconds and forty HTTP reads per submission when projection lag or failure occurs.
-- Improvement path: Make the stream’s committed-thread event authoritative, use backoff, or subscribe to durable availability.
+**Capability graph compatibility is quadratic:**
+- Problem: Graph construction compares every published node with every other node to derive schema-compatible edges.
+- Files: `convex/capabilitySupply.ts`
+- Cause: Nested loops compare output and input schema digests for all node pairs.
+- Improvement path: Bucket nodes by input schema digest and join output digests to matching buckets; retain deterministic edge ordering and graph-digest tests.
 
-**Broad Convex collection remains common:**
-- Risk: Static inspection found about 50 `.collect()` calls in `convex/`, including registry, discovery, inquiry, notification, observability, and compatibility paths.
-- Measurement: No production cardinality or scan budget was found.
-- Improvement path: Audit public/request-critical paths for indexed pagination and bounded retention; record scanned-row counts before choosing thresholds.
+**Large client workspace concentrates render and state cost:**
+- Problem: The Customer Request workspace is a 1,594-line React component coordinating many lifecycle states and UI regions.
+- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`
+- Cause: Projection interpretation, callbacks, conditional panels, and presentation are colocated.
+- Improvement path: Extract stable view-model hooks and Astryx-backed sections at existing semantic seams; measure renders and preserve customer-surface lifecycle tests during each split.
 
 ## Fragile Areas
 
-**RoutePlan schema evolution across four layers:**
-- Why fragile: Compiler types, writable conversion, Convex table validators, Convex action return validators, agent Zod schemas, and UI projections must change together.
-- Files: `src/modules/customer-request/compiler.ts`, `src/modules/customer-request/internal/convex-v2-schema.ts`, `convex/customerRequestV2.ts`, `convex/customerRequestApplication.ts`, `src/modules/customer-request/agent-contract.ts`, `src/modules/customer-request/customer-projection.ts`.
-- Current failure mode: Current source persists routes but drops them from public projections.
-- Safe modification: Add a versioned customer route projection and a round-trip contract test before extending preparation or UI.
+**Customer Request execution and recovery:**
+- Files: `convex/customerRequestApplication.ts`, `convex/customerRequestRouteExecution.ts`, `convex/customerRequestV2Preparation.ts`, `src/modules/customer-request/hosted-agent-journey.ts`
+- Why fragile: Optimistic revisions, idempotency, mandate state, dispatch outbox state, cancellation, partial/unknown outcomes, evidence, and recovery are coupled across several large modules.
+- Safe modification: Preserve typed refusal/integrity outcomes, replay keys, revision guards, and single-Request resume behavior. Exercise happy path, failure, cancellation, interruption, and recovery through the real public Request surface.
+- Test coverage: Source and integration coverage is substantial, but hosted tests require credentials/deployment and are not implied by a passing local suite.
 
-**Client-only Request identity and recovery:**
-- Why fragile: `requestRef`, `agentRef`, current revision, turns, and pending answer live only in React state in `AeCustomerRequestWorkspace`.
-- Common failures: Reload, sign-in navigation, new tab, crash, or copied URL loses the Request reference even though a durable GET resume endpoint exists.
-- Safe modification: Put an opaque Request reference in a private route/URL or authenticated request index and restore from durable state. Never place private facts in the URL.
+**Inquiry delivery, receipts, and support reconstruction:**
+- Files: `convex/inquiries.ts`, `src/modules/inquiries/internal/commands.ts`, `src/modules/inquiries/inquiry.functions.ts`, `convex/notificationOutbox.ts`, `src/lib/server/notification-provider.ts`
+- Why fragile: Admission, owner/customer authorization, encrypted receipts, webhook reconciliation, provider dispatch, replay, and support readbacks cross module and runtime boundaries.
+- Safe modification: Change one source-owned operation at a time; preserve idempotency and redaction; test provider failure, duplicate webhook, replay, and customer/owner access separately.
+- Test coverage: Provider and deployed smoke suites exist but require external configuration; local mocks do not prove provider delivery.
 
-**Capability supply freshness can invalidate requests globally:**
-- Why fragile: Registry snapshot digests include publication revision, readiness expiry, offering hash, binding hash, and price. `convex/customerRequestV2.ts` revalidates the entire aggregate against current supply.
-- Common failures: A readiness refresh or price/publication revision can make a durable Request stale before the customer acts.
-- Safe modification: Define which changes invalidate discovery, preparation, RouteMandate confirmation, and future downstream admission separately. Preserve the prior plan as expired evidence rather than collapsing to a generic retry.
+**Discovery/catalog projection consistency:**
+- Files: `convex/registry.ts`, `convex/catalog.ts`, `convex/discovery.ts`, `src/modules/discovery/developer-discovery.ts`, `src/routes/llms[.]txt.ts`
+- Why fragile: Human registry, JSON, agent tools, discovery documents, and index status must remain consistent while publication and suppression state changes.
+- Safe modification: Update the canonical registry projection and regenerate/verify all intended surfaces; keep public copy within the safe assistant contract.
+- Test coverage: Contract and integration tests cover source parity, but current hosted indexing and useful real supply still require readback evidence.
 
-**Provider preparation and RouteMandate authority are disconnected boundaries:**
-- Why fragile: Checks for exactly one action remain distributed through resume, authorization, comparison, preparation, and prepared-action construction in `convex/customerRequestApplication.ts` and `convex/customerRequestV2Preparation*`. The separate exact RouteMandate lifecycle is not called by that application.
-- Common failure: Removing one preparation guard can create partial multi-step behavior, while wiring issuance directly can bypass shared confirmation or leave downstream spend/data budgets unenforced.
-- Safe modification: Project and select the exact RoutePlan first, add one shared confirmation command that issues its mandate, then introduce a separate fail-closed admission boundary before any effect. Migrate each stage with executable invariants.
-
-**Cross-cutting product slices share integration seams:**
-- Why fragile: Capability supply, multi-capability compilation, governed inquiry sends, provider adapters, routes, tests, and planning authority converge on a small set of Request and Convex modules.
-- Impact: A broad change can combine individually incomplete contracts or obscure which slice established a behavior.
-- Safe modification: Keep changes ticket-scoped, preserve unrelated state, and verify the combined tree before integration. Never infer release readiness from a focused green test.
+**Generated route tree:**
+- Files: `src/routeTree.gen.ts`, `src/routes/`
+- Why fragile: The 2,238-line generated tree mirrors file-based routes and should not be hand-edited.
+- Safe modification: Change route source files and regenerate through the configured TanStack/Vite workflow.
+- Test coverage: Build and route-boundary tests detect much drift; hosted route reachability remains a separate gate.
 
 ## Scaling Limits
 
-**Request graph enumeration:**
-- Current capacity: At most 64 eligible supplies in `loadRequestGraph`; descriptor payload at most 512 KiB.
-- Limit behavior: Excess supply or descriptor size returns `capabilities_unavailable`, surfaced to the human UI as a generic failure.
-- Scaling path: Paginated/retrieval-led candidate selection plus explicit coverage evidence.
+**Answer Thread turn history:**
+- Current capacity: Write paths enforce 25 turns per thread; admin viewer limits normalize to at most 250 rows.
+- Limit: Several write/read operations collect all thread turns before enforcing or projecting limits.
+- Scaling path: Use bounded indexed reads, store or transactionally maintain turn count, and keep canonical Customer Request migration ahead of extending Answer Thread capacity.
 
-**Route alternatives:**
-- Current capacity: 256 full Cartesian RoutePlans.
-- Limit behavior: Exceeding the cap returns an invalid graph rather than a bounded ranked subset.
-- Scaling path: Deterministic top-k graph search with declared pruning and uncertainty.
+**Convex transaction/document limits:**
+- Current capacity: Convex values and transactions are bounded; exact production row volume was not established by this source scan.
+- Limit: Whole-table reconstruction helpers and unbounded arrays can hit read/write or document limits as operational history grows.
+- Scaling path: Normalize growing child collections into indexed tables, paginate reads, and schedule bounded maintenance batches.
 
-**Durable aggregate size:**
-- Current capacity: Customer Request aggregate is capped at 700,000 serialized bytes in `src/modules/customer-request/compiler.ts` and `convex/customerRequestV2.ts`.
-- Limit behavior: Compilation or integrity validation refuses the aggregate.
-- Scaling path: Store immutable graph/contract references separately from request-specific state and keep the Request aggregate compact.
-
-**No global Request throughput budget:**
-- Current capacity: Undefined; external-model calls are gated by authentication but not by a source-owned per-principal quota.
-- Symptoms at limit: OpenRouter cost spikes, 20-second request stalls, provider rate limits, and Convex action pressure.
-- Scaling path: Durable quotas, admission control, stage-level timeouts, and cost/latency SLOs.
+**Registered capability graph:**
+- Current capacity: No explicit source-owned maximum node count was detected for graph construction.
+- Limit: Pairwise compatibility edge generation grows as O(n^2), and returned arrays remain subject to Convex value limits.
+- Scaling path: Add admitted-supply page limits, digest-indexed joins, and explicit graph-size refusal/proof-gap states.
 
 ## Dependencies at Risk
 
-**OpenRouter is a hard availability dependency for every new or refined Request:**
-- Risk: Missing `OPENROUTER_API_KEY`, provider errors, invalid JSON, or a 20-second timeout returns `interpreter_unavailable`.
-- Files: `convex/customerRequestApplication.ts`, `src/modules/customer-request/openrouter-transport.ts`, `src/modules/customer-request/semantic-interpreter.ts`.
-- Impact: Deterministic contracts, registered supply, and the compiler remain unusable when one model broker is unavailable.
-- Mitigation path: Add an owned interpreter port with provider failover and a bounded deterministic path for exact structured requests. Do not fall back to keyword logic that can create authority or capabilities.
+**`web-bot-auth` 0.1.3:**
+- Risk: The identity implementation sits on an early-version package and evolving Web Bot Auth drafts.
+- Impact: Signature parsing, required coverage, directory resolution, or interoperability can change underneath a security-critical boundary.
+- Migration plan: Pin upgrades, compare upstream specification changes, run known-good and refusal-vector tests, then prove against an intended hosted caller before adoption.
 
-**Clerk, Convex, Vercel, and deployment revision must all agree:**
-- Risk: Human Request calls require Clerk-to-Convex JWT; external agents require Clerk API keys plus the service HMAC; hosted proof requires exact Vercel and Convex revision readback.
-- Impact: Configuration drift presents as generic request unavailability.
-- Mitigation path: Keep exact-revision readback, add customer-readable dependency status, and distinguish auth, graph, interpreter, and provider failures in operator telemetry.
-
-**Pinned nightly Nitro and fast-moving UI/runtime packages:**
-- Risk: `package.json` aliases `nitro` to a dated nightly and uses fast-moving TanStack Start/Router/AI, React 19, Convex, and Astryx packages.
-- Impact: SSR, streaming, route generation, headers, authentication propagation, or presentation can regress.
-- Mitigation path: Pin exact runtime dependencies, upgrade one subsystem at a time, and run authenticated browser plus hosted Request gates.
+**Fast-moving framework stack:**
+- Risk: `convex` 1.42.0, `@tanstack/react-start` 1.168.26, Vite 8.1.0, React 19.2.7, and Clerk integration evolve quickly.
+- Impact: Generated types, server/client boundaries, auth propagation, and build behavior can shift during routine upgrades.
+- Migration plan: Upgrade one platform seam at a time; run Convex codegen, typecheck, import/contract gates, build, browser tests, and hosted auth readback.
 
 ## Missing Critical Features
 
-**One canonical customer front door:**
-- Missing: The homepage query and `/engine` Request lifecycle are not connected.
-- Blocks: The neutral engine changing the product customers actually use.
-- Required proof: Submit on `/`, resume the same Request, and observe the same state through human and external-agent surfaces.
+**Source, product authority, and deployed evidence are out of sync:**
+- Problem: This branch is 140 commits ahead of deployed `origin/main` (`a91a37a3d8da09546994e70af92d6e532a4471e6`) and now exposes the Request workspace at `/`, redirects `/engine`, and contains customer-facing confirm, run, cancellation, problem, evidence, recovery, and repeat-permission paths. `PRODUCT.md` still labels its current-evidence section `2026-07-14` and describes several of those surfaces as unavailable.
+- Evidence boundary: The newer branch source and local tests do not establish hosted reachability, useful real supply, successful external fulfilment, or customer value. The last successful kernel release gate found during this refresh covers deployed `main`, not this inspected revision.
+- Blocks: Treating either `PRODUCT.md` or the local branch alone as confirmed-current product truth; closing the product map or making public market claims without exact-revision deployment and intended-surface readback.
+- Fix approach: Reconcile `PRODUCT.md` against the branch only after the intended human and external-agent surfaces pass exact-revision hosted proof; keep unproven operations in the substrate/target category and record the proof boundary explicitly.
 
-**Customer-semantic RoutePlan projection and selection:**
-- Missing: RoutePlans do not cross the HTTP/UI boundary.
-- Blocks: Legible comparison, exact mandate, multi-step preparation, and route recovery.
-- Required proof: A two-step plan displayed without protocol choreography, with declared cost, data use, effects, evidence, expiry, alternatives, and uncertainty.
+**Customer-visible target lifecycle is not fully proven:**
+- Problem: The target Request -> RoutePlan -> Approve -> Run -> Inspect lifecycle guides implementation, but current customer reachability remains narrower and source objects do not prove production operation.
+- Blocks: Public claims of customer-visible multi-capability choice, mandate, composite execution, useful real supply, or successful external fulfilment.
 
-**Shared RouteMandate confirmation and downstream admission:**
-- Present but below the product boundary: Exact RouteMandate compilation, durable issuance/revocation/history, and invalidation on Request or route-generation change exist in `src/modules/customer-request/route-mandate.ts`, `convex/customerRequestRouteMandate.ts`, and `convex/customerRequestRouteMandateLifecycle.ts`.
-- Missing: Human and external-agent surfaces do not share a confirmation command, and no production admission layer consumes an active mandate to enforce cumulative spend, data, and effect scope. The historical V2 ApprovalGrant, ActionAttempt, provider-release, outcome, and reconciliation tables are schema-only and intentionally unreachable from production.
-- Blocks: A route-bound authority decision becoming safe effectful execution rather than a durable internal object.
-- Required proof: The same exact-route confirmation and mandate readback through human and agent surfaces, followed by atomic admission that enforces route expiry, cumulative spend/data/effect scope, idempotency, and fail-closed recovery without reviving retired V2 authority modules.
-
-**Useful registered capability supply:**
-- Missing evidence: Source-controlled hosted proof registers two labelled sandbox businesses for `sandbox.reference.lookup`; it does not prove a customer-relevant business category is reachable.
-- Blocks: Honest “real business options” claims for arbitrary customer queries.
-- Required proof: At least two dissimilar useful capabilities and businesses registered through the normal publication path, with hosted readiness and query coverage. Sandbox remains clearly labelled.
-
-**Human confirmation and durable recovery journey:**
-- Missing: The workspace cannot review and confirm an exact RoutePlan into a RouteMandate, and durable Request identity is not recoverable after navigation. Retired approval and attempt controls should remain absent.
-- Blocks: A shared stop-and-return authority contract for external agents and customers.
-- Required proof: Browser-based route review, exact confirmation, mandate readback/revocation, reload/resume, and later downstream admission states against production-shaped projections.
-
-**Generic transport execution for composite steps:**
-- Missing: Capability publication/readiness recognizes AE envelope, OpenAPI HTTP, MCP, and x402, but the current customer Request preparation/execution path is not proven across composite generic adapters.
-- Blocks: Neutrality beyond registration and compilation.
-- Required proof: Substitute dissimilar businesses and transports with registration/config-only changes and no kernel, caller prompt, Request API, or UI changes.
+**Production fulfilment proof remains environment-dependent:**
+- Problem: Source includes hosted smoke and provider tests, but credentials, deployment revision, admitted live supply, and external provider state are outside a static repository scan.
+- Blocks: Treating local/source green gates as evidence of booking, payment, dispatch, availability, customer value, or production fulfilment.
 
 ## Test Coverage Gaps
 
-**Browser tests do not submit a real Request:**
-- What's tested: `tests/e2e/a11y/engine-product-a11y.spec.ts` loads `/engine`, fills the textarea, checks the absence of a budget field, and focuses “Explore.”
-- What's missing: Clicking Explore, authentication transition, clarification, disclosure, options, prepared action, exact-route confirmation, RouteMandate readback/revocation, and reload/resume. Downstream run/admission coverage remains future work.
-- Priority: Critical.
+**Hosted authenticated Customer Request lifecycle:**
+- What's not tested: `npm run test:release:source` cannot establish the deployed revision, Clerk temporary-key path, human browser lifecycle, interruption/recovery, or useful admitted supply.
+- Files: `tools/release/verify-customer-request-release-credential.ts`, `tools/release/customer-request-production-credential.ts`, `tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts`, `src/modules/customer-request/hosted-agent-journey.ts`
+- Risk: A source-green release can remain unusable through the intended hosted human or agent surface.
+- Priority: High
 
-**Workspace tests mock desired responses instead of traversing production handlers:**
-- What's tested: `tests/unit/customer-request/customer-request-workspace.test.tsx` supplies hand-authored `fetch` responses.
-- Blind spots: It mocks revision editing as successful despite the real Convex conflict and mocks `options_ready` with option arrays rather than the real `preparedAction` shape.
-- Priority: Critical.
+**Scale behavior of reconstruction and projection queries:**
+- What's not tested: No evidence was found here of load tests at realistic table sizes for whole-table `.collect()` paths, capability graph construction, or support exports.
+- Files: `convex/notificationOutbox.ts`, `convex/source_state.ts`, `convex/inquiries.ts`, `convex/capabilitySupply.ts`, `convex/customerRequestRouteExecution.ts`
+- Risk: Transaction/read limits or latency failures appear only after operational history grows.
+- Priority: High
 
-**Hosted cold-agent proof is intentionally narrow:**
-- What's tested: `.github/workflows/kernel-release-gate.yml` seeds exactly two labelled sandbox businesses and asks “Find the cheapest labelled sandbox option,” with a scripted fallback fact. `src/modules/customer-request/hosted-agent-journey.ts` drives the API directly.
-- What's missing: Arbitrary customer query coverage, real supply, homepage parity, browser interaction, route display, and composite execution.
-- Priority: Critical before customer-value claims; the existing proof remains valid as sandbox contract proof.
+**Adversarial dynamic-value boundaries:**
+- What's not tested: Static scanning cannot establish exhaustive depth, size, unusual-value, and key-count coverage for every `v.any()` input/output path.
+- Files: `convex/customerRequestApplication.ts`, `convex/customerRequestRouteExecution.ts`, `convex/capabilitySupply.ts`
+- Risk: Oversized or malformed values can cause expensive validation, storage failures, or inconsistent refusal behavior.
+- Priority: Medium
 
-**Multi-capability integration does not cross the product boundary:**
-- What's tested: `tests/integration/customer-request-v2-multi-capability-route.test.ts` directly constructs two contracts, compiles, commits, and reads back a RoutePlan.
-- What's missing: Natural-language interpreter, public API, customer projection, UI, shared exact-route confirmation, RouteMandate readback, downstream admission, generic transport invocation, and recovery.
-- Current state: The focused compiler and application proof still stops below HTTP projection and UI. Separate RouteMandate tests prove internal authority semantics, not shared confirmation or execution admission.
-- Priority: Critical for the RoutePlan frontier.
-
-**Release source gate omits browser behavior:**
-- Evidence: `test:release:source` in `package.json` runs lint, typecheck, unit/integration/type/import/copy/SEO/UI-contract tests and build, but not `test:e2e` or `test:a11y`.
-- Risk: A green source release can ship a visually present but nonfunctional customer journey.
-- Priority: High; add a small authenticated and anonymous Request browser contract to release qualification.
-
-**No performance or cost budgets cover Request interpretation:**
-- Missing: Graph load time, descriptor count/bytes, OpenRouter latency/cost, compile time, route count, durable action latency, and concurrent idempotency SLOs.
-- Risk: The engine can become expensive or time out before functional tests fail.
-- Priority: High before broad agent access.
-
-**Privacy disclosure parity is untested:**
-- Missing: A test that all external processors and recipients used by Ask/Request flows appear in current public privacy copy and authority reviews.
-- Risk: Source adds a new external model or provider while human disclosure remains stale.
-- Priority: High.
-
-## Overclaim Guardrails
-
-- A clean compiler or persistence test does not prove a customer can see, choose, approve, or run a RoutePlan.
-- Exact-revision hosted sandbox proof does not prove useful real supply or customer value.
-- A catalog listing is not an eligible capability publication.
-- `options_ready` is not product completion while the real prepared-action projection renders as zero options.
-- “External agent journey” describes direct API traversal; it does not prove human UI parity.
-- “Source complete” must not mean files and validators exist; the vertical customer journey must be executable.
-- Do not claim the engine supports a query merely because OpenRouter can interpret it. The graph must contain useful eligible supply and return a legible customer decision.
+**External notification delivery and webhook behavior:**
+- What's not tested: Provider mocks do not prove real Resend/Novu acceptance, webhook authenticity, bounce/complaint handling, or deployed secret/config correctness.
+- Files: `tests/deploy-smoke/phase2-resend-dispatch-smoke.spec.ts`, `tests/deploy-smoke/phase2-novu-dispatch-smoke.spec.ts`, `src/routes/api.notification.resend-webhook.ts`, `convex/notificationOutbox.ts`
+- Risk: An inquiry can be accepted locally while the customer or owner never receives a usable external notification.
+- Priority: High
 
 ---
 
-*Concerns audit: 2026-07-14*
-*Update as verified defects are fixed, dirty-tree blockers are integrated, or hosted evidence changes.*
+*Concerns audit: 2026-07-17*

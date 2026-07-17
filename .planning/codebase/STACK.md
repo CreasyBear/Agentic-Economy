@@ -1,105 +1,97 @@
 # Technology Stack
 
-**Analysis Date:** 2026-07-14
+**Analysis Date:** 2026-07-17
+**Inspected Revision:** `3aa46069a00724679020f7f3cb338cc4ee177591`
 
 ## Languages
 
 **Primary:**
-- TypeScript 6.0.3 - application, server, Convex, release tooling, and tests under `src/`, `convex/`, `tools/`, and `tests/`.
-- TSX with React 19.2.7 - file routes and UI under `src/routes/` and `src/components/`.
+- TypeScript 6.0.3 in strict mode - application, Convex backend, tests, tools, and Worker examples (`src/`, `convex/`, `tests/`, `tools/`, `examples/routing-edge/src/`).
+- TSX with React 19.2.7 - routes and UI (`src/routes/`, `src/components/`).
 
 **Secondary:**
-- CSS with Tailwind 4.3.1 - global style entrypoint and limited layout utilities in `src/styles/globals.css` and `src/styles/`.
-- JavaScript ESM (`.mjs`) - release checks and standalone routing examples under `tools/release/` and `examples/`; do not place canonical product behavior here.
-- JSON, JSONC, and YAML - package, TypeScript, Wrangler, Promptfoo, and GitHub Actions configuration.
-- Generated JavaScript and declarations - Convex client/server bindings in `convex/_generated/` and TanStack route output in `src/routeTree.gen.ts`.
+- JavaScript ESM (`.mjs`) - hosted routing, deploy, and readiness tools (`examples/routing-provider/`, `examples/routing-agent-bridge/`).
+- JSON/JSONC/YAML - package, deployment, Worker, evaluation, and CI configuration.
 
 ## Runtime
 
 **Environment:**
-- Browser runtime for React human surfaces in `src/routes/`.
-- Node.js 20 Vercel serverless runtime, pinned by Nitro in `vite.config.ts`.
-- Node.js 22 in the source/release workflow in `.github/workflows/kernel-release-gate.yml`.
-- Convex Cloud runtime for durable queries, mutations, actions, schedules, and cron in `convex/`.
-- Cloudflare Workers only for standalone examples in `examples/routing-edge/` and `examples/routing-agent-directory/`; these are not the canonical application runtime.
+- Node.js 22 in CI and the standalone provider; Vercel server output pins Node.js 20.x (`.github/workflows/kernel-release-gate.yml`, `examples/routing-provider/package.json`, `vite.config.ts`).
+- Browser for React, Cloudflare Workers for routing examples, and Convex managed runtime for data/functions.
 
 **Package Manager:**
-- npm 11.5.1, declared by `packageManager` in `package.json`.
-- Lockfile: `package-lock.json` is present and is the install authority used by `npm ci`.
-- An untracked `pnpm-lock.yaml` is present; do not treat it as package authority while `package.json` declares npm.
+- npm 11.5.1, pinned in `package.json` and CI.
+- Lockfile: `package-lock.json` present; use `npm ci`.
 
 ## Frameworks
 
 **Core:**
-- TanStack Start 1.168.26 - full-stack server handlers, middleware, SSR, and hydration configured by `src/start.ts` and `vite.config.ts`.
-- TanStack Router 1.170.16 - file routes under `src/routes/` and generated route tree at `src/routeTree.gen.ts`.
-- React and React DOM 19.2.7 - browser and SSR component runtime.
-- Convex 1.42.0 - durable data and backend functions in `convex/`, with the composed schema in `convex/schema.ts`.
-- Astryx `@astryxdesign/core` and `@astryxdesign/theme-neutral` 0.1.2 - primary UI component and theme system, initialized in `src/routes/__root.tsx`.
-- Tailwind CSS 4.3.1 - layout glue compiled through `@tailwindcss/vite` in `vite.config.ts`.
+- TanStack Start 1.168.26 - full-stack React and server functions (`src/routes/`, `src/start.ts`).
+- TanStack React Router 1.170.16 - file-based routing; generated tree at `src/routeTree.gen.ts`.
+- React/React DOM 19.2.7 - UI runtime.
+- Convex 1.42.0 - source database, functions, HTTP router, and crons (`convex/`).
+- Nitro nightly 3.0.1 - Vercel Node server output (`vite.config.ts`).
+
+**UI:**
+- Astryx core/theme-neutral 0.1.2 - required design system; read `DESIGN.md` before UI changes.
+- Tailwind CSS 4.3.1 - layout glue through `@tailwindcss/vite`, not a competing component system.
+- TanStack Table 8.21.3, Lucide React 1.21.x, Motion 12.42.x - tables, icons, motion.
+
+**Validation and contracts:**
+- Zod 4.4.3 - runtime and action schemas.
+- AJV 8.20.0 and `@cfworker/json-schema` 4.1.1 - JSON Schema validation.
+- `@tanstack/ai` 0.38.x - action-to-agent JSON Schema (`src/modules/common/action.ts`).
 
 **Testing:**
-- Vitest 4.1.9 - unit, integration, type, import, copy, SEO, UI-contract, and evaluation suites configured by `vitest.config.ts`.
-- Playwright 1.61.1 - local E2E/accessibility and hosted smoke suites configured by `playwright.config.ts` and `playwright.deploy-smoke.config.ts`.
-- Testing Library 16.3.2, jest-dom 6.9.1, and jsdom 29.1.1 - React component testing.
-- `convex-test` 0.0.54 - Convex function tests.
-- Promptfoo 0.121.17 - answer behavior evaluation configured under `eval/`.
+- Vitest 4.1.9 with jsdom 29.1.1 - unit, integration, type, import, copy, SEO, and UI-contract suites.
+- Playwright 1.61.1 - E2E, accessibility, deploy smoke, and authenticated lifecycle checks.
+- Testing Library React 16.3.2/jest-dom 6.9.1, `convex-test` 0.0.54, Edge Runtime VM 5.x.
+- Promptfoo 0.121.x - answer evaluation (`eval/answer/`).
 
 **Build/Dev:**
-- Vite 8.1.0 - development server and production build in `vite.config.ts`.
-- Nitro nightly 3.0.1 - TanStack Start Vercel server output.
-- TypeScript `tsc --noEmit` - strict static checking configured by `tsconfig.json`.
-- oxlint 1.73.0 - warning-denying lint gate over `src`, `convex`, `tests`, `tools`, and `examples`.
-- React Doctor 0.7.7 - local React diagnostics through the `doctor` script in `package.json`.
-- Wrangler 4.110.0 - types and dry-run deployment checks for `examples/routing-edge/`.
+- Vite 8.1.0 with React plugin 6.0.3 - dev and build (`vite.config.ts`).
+- TypeScript 6.0.3 - strict no-emit checking (`tsconfig.json`).
+- oxlint 1.73.x - repository linting; tsx 4.20.x - TypeScript tools.
+- Wrangler 4.110.x - Worker typecheck and dry-run deploy.
 
 ## Key Dependencies
 
 **Critical:**
-- `@clerk/tanstack-react-start` 1.4.9 - human sessions, operator-route protection, and scoped external-agent API-key authentication in `src/start.ts` and `src/lib/server/customer-request-agent-auth.ts`.
-- `zod` 4.4.3 - HTTP, provider, configuration, and domain-boundary validation across `src/modules/`, `src/routes/`, and `tools/release/`.
-- `@tanstack/ai` 0.38.x - structured AI message types used by answer and harness code.
-- `ajv` 8.20.0 and `@cfworker/json-schema` 4.1.1 - supported capability-contract JSON Schema validation in `src/modules/capability-contract/`.
-- `undici` 7.28.0 - guarded provider-readiness HTTP egress in `convex/capabilitySupplyReadiness.ts`.
-- `@noble/curves` 1.9.1 and `@noble/hashes` 1.8.0 - portable cryptographic operations in trust and evidence modules.
-- `web-bot-auth` 0.1.3 and `http-message-sig` 0.2.x - signature-directory and retired routing/example identity support; do not use them as the current Request-agent authentication authority.
+- `@clerk/tanstack-react-start` 1.4.9 - sessions, owner/operator auth, and external-agent credentials.
+- `convex` 1.42.0 - persistence and server execution; read `convex/_generated/ai/guidelines.md` before Convex changes.
+- `web-bot-auth` 0.1.3 and `http-message-sig` 0.2.x - signed agent identity and example clients.
+- `@noble/hashes` 1.8.0 / `@noble/curves` 1.9.1 - hashes, HMAC/HKDF, Ed25519, receipts, authority integrity.
+- `undici` 7.28.0 - guarded outbound networking.
+- `@x402/*` 2.18.0 and `viem` 2.55.2 - scoped payment-signing adapter (`src/modules/capability-supply/internal/x402-payment-signer.ts`), not evidence of public payment capability.
 
 **Infrastructure:**
-- `@sentry/react`, `@sentry/node`, and `@sentry/vite-plugin` - optional client/server exception capture and source-map upload in `src/lib/observability/` and `vite.config.ts`.
-- `posthog-js` and `posthog-node` - optional browser/server funnel analytics in `src/lib/observability/`.
-- `@tanstack/react-table` 8.21.x - operator-facing table behavior.
-- `motion` 12.42.x - reduced-motion-aware animation components in `src/components/`.
-- `lucide-react` 1.21.x - interface icons.
+- Sentry Node/React 10.63.x and Vite plugin 5.3.x - sanitized telemetry/source maps (`src/lib/observability/`).
+- PostHog JS 1.398.x / Node 5.39.x - optional client/server analytics.
 
 ## Configuration
 
 **Environment:**
-- Environment values are read through guarded readers in `src/lib/`, `src/modules/`, `convex/`, and `tools/release/`; never infer provider availability from a variable name.
-- Clerk and Convex are required for authenticated human and external Request paths; source references include `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`, `VITE_CONVEX_URL`, and `CONVEX_URL`.
-- OpenRouter is required for AI-backed Request interpretation and search-answer synthesis through `OPENROUTER_API_KEY`; model selection is bounded in `src/modules/customer-request/openrouter-transport.ts` and `src/modules/answer/internal/llm-config.ts`.
-- `.env.example` and `.env.local` exist. Their contents are not part of this map and do not prove deployed configuration.
+- `.env.development.local`, `.env.local`, and `.env.example` exist; contents were not read.
+- Browser-safe values use `VITE_*`; server/Convex secrets use provider or `AE_*` names. Enforce provider-secret boundaries with `tests/unit/security/provider-secret-surface.test.ts`.
+- Convex and Vercel environments deploy separately; CI checks required production Convex execution settings.
 
 **Build:**
-- `vite.config.ts` configures TanStack Start, Nitro/Vercel Node output, React, Tailwind, Astryx SSR bundling, local `/SKILL.md` compatibility, and conditional Sentry upload.
-- `tsconfig.json` targets ES2022 with strict mode, exact optional properties, unchecked indexed access, unknown catch variables, and bundler resolution.
-- `vitest.config.ts`, `playwright.config.ts`, and `playwright.deploy-smoke.config.ts` define local and hosted verification surfaces.
-- `.github/workflows/kernel-release-gate.yml` is the canonical source/release pipeline. The untracked `.github/workflows/react-doctor.yml` is not established repository authority.
+- `vite.config.ts` composes TanStack Start, Nitro/Vercel, React, Tailwind, and optional Sentry upload.
+- `tsconfig.json` targets ES2022 with strict optional/index/catch rules and bundler resolution.
+- `vitest.config.ts`, `playwright.config.ts`, and deploy-smoke configs define verification.
+- Worker deployments use `examples/routing-edge/wrangler.jsonc` and `examples/routing-agent-directory/wrangler.jsonc`.
 
 ## Platform Requirements
 
 **Development:**
-- Use Node.js 22 to match CI tooling and npm 11.5.1 with `npm ci`.
-- Use `npm run dev` for the Vite server on `127.0.0.1:3000`.
-- Configure Clerk, Convex, and OpenRouter for the full authenticated Request flow; optional integrations degrade or refuse according to their source-owned guards.
-- Install Playwright browser binaries for E2E suites and use Wrangler only for the standalone routing-edge check.
-- Run `npm run typecheck`, `npm run check:convex-codegen`, focused tests, import/copy/UI gates, and `npm run build` for touched interfaces.
+- Use Node.js 22 and npm 11.5.1; run `npm ci`, then `npm run dev` on loopback port 3000.
+- Convex and Clerk configuration are required for authenticated/source-backed paths.
+- Use `npm run test:release:source` for the complete source gate; prefer focused scripts while iterating.
 
 **Production:**
-- Vercel Node serverless hosts TanStack Start output defined in `vite.config.ts`.
-- Convex Cloud hosts durable state and backend functions defined in `convex/`.
-- GitHub Actions deploys exact source through `tools/release/deploy-customer-request-git-source.ts` and the Convex CLI in `.github/workflows/kernel-release-gate.yml`.
-- Current production claims require executable proof through the intended route or machine surface; source configuration, schemas, tests, examples, and sandbox supply alone are not production evidence.
+- Vercel Node serverless web app, Convex data/functions/HTTP/crons, and optional independent Cloudflare Worker routing examples.
+- Hosted claims require the exact-revision deploy and authenticated readback in `.github/workflows/kernel-release-gate.yml`; local build success is not hosted proof.
 
 ---
 
-*Stack analysis: 2026-07-14*
+*Stack analysis: 2026-07-17*
