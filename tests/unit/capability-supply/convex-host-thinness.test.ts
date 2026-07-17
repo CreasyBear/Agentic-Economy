@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
 const internalRoot = 'src/modules/capability-supply/internal'
-const movedFolders = ['offering', 'binding', 'eligibility', 'quarantine', 'publication', 'shared'] as const
+const movedFolders = ['offering', 'binding', 'eligibility', 'quarantine', 'publication', 'shared', 'operation-ledger'] as const
 
 const movedSymbols = [
   'desiredEligibility',
@@ -24,6 +24,17 @@ const movedSymbols = [
   'writablePresentation',
   'transportAdmissionInput',
   'offeringStatusAfterBindingQuarantine',
+  'beginOperation',
+  'failOperation',
+  'succeedOperation',
+  'replayOperationResult',
+  'ensureSupplyAudit',
+  'verifyReplayAudits',
+  'recoverOfferingReplay',
+  'recoverBindingReplay',
+  'replayQuarantineBinding',
+  'trustedQuarantineParent',
+  'isTrustedQuarantineParent',
 ] as const
 
 describe('capability-supply convex host thinness', () => {
@@ -41,13 +52,15 @@ describe('capability-supply convex host thinness', () => {
     expect(convexHost).toContain("from '@/modules/capability-supply/internal/quarantine'")
     expect(convexHost).toContain("from '@/modules/capability-supply/internal/publication'")
     expect(convexHost).toContain("from '@/modules/capability-supply/internal/shared'")
+    expect(convexHost).toContain("from '@/modules/capability-supply/internal/operation-ledger'")
     for (const symbol of [
       'desiredEligibility',
       'publicationLifecycle',
       'bindingObservedRowDigest',
       'offeringIntegrityIsValid',
-      'quarantineBindingAudit',
-      'supplyAuditEventId',
+      'beginOperation',
+      'ensureSupplyAudit',
+      'replayOperationResult',
     ]) {
       expect(convexHost).toContain(symbol)
     }

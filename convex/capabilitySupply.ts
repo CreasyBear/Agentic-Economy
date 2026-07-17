@@ -16,20 +16,16 @@ import {
 } from '@/modules/capability-supply/public'
 import {
   bindingIntegrityIsValid,
-  bindingRegistrationAudit,
   transportAdmissionInput,
 } from '@/modules/capability-supply/internal/binding'
 import {
   bindingEligibilityIsValid,
   compareStableIdentifier,
   desiredEligibility,
-  eligibilityPublicResult,
-  eligibilityReplayAudits,
   eligibleBindingProjection,
   eligibleOfferingProjection,
   offeringEligibilityIsValid,
   validEligibilityInput,
-  type DesiredEligibility,
   type EligibilityInput,
 } from '@/modules/capability-supply/internal/eligibility'
 import {
@@ -37,6 +33,17 @@ import {
   offeringIntegrityIsValid,
   writablePresentation,
 } from '@/modules/capability-supply/internal/offering'
+import {
+  beginOperation,
+  ensureSupplyAudit,
+  registerCapabilityBindingCommand as runRegisterBindingCommand,
+  registerCapabilityOfferingCommand as runRegisterOfferingCommand,
+  quarantineCapabilityBindingCommand as runQuarantineCommand,
+  replayOperationResult,
+  setCapabilitySupplyEligibilityCommand as runSetEligibilityCommand,
+  succeedOperation,
+  type OperationLedgerPorts,
+} from '@/modules/capability-supply/internal/operation-ledger'
 import {
   INITIAL_PUBLICATION_LIFECYCLE,
   decodeConvexPublicationSource,
@@ -46,30 +53,18 @@ import {
 } from '@/modules/capability-supply/internal/publication'
 import {
   bindingObservedRowDigest,
-  offeringStatusAfterBindingQuarantine,
-  quarantineBindingAudit,
-  quarantineParentAudit,
-  quarantineParentUpdatedDisposition,
-  validQuarantineAuditPayload,
-  type QuarantineParentDisposition,
 } from '@/modules/capability-supply/internal/quarantine'
 import {
   MAX_CONTEXT_VALUE_LENGTH,
   boundedTrimmed,
-  storedAuditMatches,
-  storedSupplyAuditEffectRef,
-  supplyAuditEffectRef,
-  supplyAuditEventId,
-  validCommandEnvelope,
   validRegistrationContext,
   type RegistrationContext,
-  type SupplyAuditInput,
   type SupplyCommandActor,
 } from '@/modules/capability-supply/internal/shared'
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
-import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
-import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { type StableHashValue } from '@/modules/common/stable-hash'
 
 import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
@@ -80,6 +75,7 @@ import {
   getExactRegisteredCapabilityContract,
   registerCapabilityContractDocument,
 } from './capabilityContractDocuments'
+import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
 
 const MAX_ELIGIBLE_SUPPLY = 256
 const contractRefValue = v.object({
@@ -485,8 +481,9 @@ export const publishCapability = mutation({
     }
     const expected = publicationProjection(encoded.contract.ref, draft.offering.offeringId, draft.binding.bindingId)
     const actor = { kind: 'owner' as const, ref: (await ctx.auth.getUserIdentity())!.subject }
+    const ports = portsFor(ctx.db)
     const operation = await beginOperation(
-      ctx.db,
+      ports,
       actor,
       'publishCapability',
       args,
@@ -523,7 +520,7 @@ export const publishCapability = mutation({
         updatedAt: now,
       })
     }
-    const auditId = await ensureSupplyAudit(ctx.db, {
+    const auditId = await ensureSupplyAudit(ports, {
       eventType: 'capability_publication.published',
       action: 'publish_capability',
       targetType: 'capability_publication',
@@ -542,7 +539,7 @@ export const publishCapability = mutation({
       afterState: 'inactive',
       createdAt: now,
     })
-    await succeedOperation(ctx.db, operation.operationId, expected, [auditId], now)
+    await succeedOperation(ports, operation.operationId, expected, [auditId], now)
     await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
       publicationRef: draft.offering.offeringId, expectedRevision: 1,
     })
@@ -1175,48 +1172,7 @@ export async function registerCapabilityOfferingCommand(
   command: Readonly<{ actor: SupplyCommandActor; registration: unknown; context: RegistrationContext }>,
   now: number,
 ) {
-  if (!validCommandEnvelope(command.actor, command.context)) {
-    return { kind: 'refused' as const, reason: 'registration_context_invalid' as const }
-  }
-  let registration: CapabilityOfferingRegistration
-  try {
-    registration = defineCapabilityOfferingRegistration(command.registration)
-  } catch {
-    return { kind: 'refused' as const, reason: 'offering_invalid' as const }
-  }
-  const expectedResult = {
-    kind: 'registered' as const,
-    offeringId: registration.offeringId,
-    registrationHash: capabilityOfferingRegistrationHash(registration),
-  }
-  const audit = {
-    eventType: 'capability_offering.registered' as const,
-    action: 'register_offering' as const,
-    targetType: 'capability_offering' as const,
-    targetRef: expectedResult.offeringId,
-    actor: command.actor,
-    context: command.context,
-    payload: { offeringId: expectedResult.offeringId, registrationHash: expectedResult.registrationHash },
-    beforeState: 'absent',
-    afterState: 'inactive',
-    createdAt: now,
-  }
-  const operation = await beginOperation(
-    db, command.actor, 'registerCapabilityOffering', command.context, { registration }, now,
-  )
-  if (operation.kind === 'conflict') return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
-  if (operation.kind === 'replay') {
-    await verifyReplayAudits(db, operation, [{ audit, allowedBeforeStates: ['absent'] }])
-    return await recoverOfferingReplay(db, registration, operation)
-  }
-  const result = await registerCapabilityOffering(db, registration, now)
-  if (result.kind === 'refused') {
-    await failOperation(db, operation.operationId, result.reason, now)
-    return result
-  }
-  const auditId = await ensureSupplyAudit(db, audit)
-  await succeedOperation(db, operation.operationId, expectedResult, [auditId], now)
-  return expectedResult
+  return runRegisterOfferingCommand(portsFor(db), command, now)
 }
 
 export async function registerCapabilityBindingCommand(
@@ -1224,45 +1180,7 @@ export async function registerCapabilityBindingCommand(
   command: Readonly<{ actor: SupplyCommandActor; registration: unknown; context: RegistrationContext }>,
   now: number,
 ) {
-  if (!validCommandEnvelope(command.actor, command.context)) {
-    return { kind: 'refused' as const, reason: 'registration_context_invalid' as const }
-  }
-  let registration: CapabilityTransportBindingRegistration
-  try {
-    registration = defineCapabilityTransportBindingRegistration(command.registration)
-  } catch {
-    return { kind: 'refused' as const, reason: 'binding_invalid' as const }
-  }
-  const operation = await beginOperation(db, command.actor, 'registerCapabilityTransportBinding', command.context, {
-    registration,
-  }, now)
-  if (operation.kind === 'conflict') return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
-  if (operation.kind === 'replay') {
-    const recovered = await recoverBindingReplay(db, registration, operation)
-    const audit = bindingRegistrationAudit(command.actor, command.context, registration.offeringId, recovered, now)
-    await verifyReplayAudits(db, operation, [{ audit, allowedBeforeStates: ['absent'] }])
-    return recovered
-  }
-  const admitted = admitRegisteredTransport(transportAdmissionInput(registration))
-  if (admitted.kind === 'refused') {
-    await failOperation(db, operation.operationId, admitted.reason, now)
-    return admitted
-  }
-  const expectedResult = {
-    kind: 'registered' as const,
-    bindingId: registration.bindingId,
-    registrationHash: capabilityBindingRegistrationHash(registration, admitted.transport),
-  }
-  const result = await registerCapabilityTransportBinding(db, registration, now)
-  if (result.kind === 'refused') {
-    await failOperation(db, operation.operationId, result.reason, now)
-    return result
-  }
-  const auditId = await ensureSupplyAudit(db, bindingRegistrationAudit(
-    command.actor, command.context, registration.offeringId, expectedResult, now,
-  ))
-  await succeedOperation(db, operation.operationId, expectedResult, [auditId], now)
-  return expectedResult
+  return runRegisterBindingCommand(portsFor(db), command, now)
 }
 
 export async function setCapabilitySupplyEligibilityCommand(
@@ -1270,56 +1188,7 @@ export async function setCapabilitySupplyEligibilityCommand(
   command: Readonly<{ actor: SupplyCommandActor; eligibility: EligibilityInput; context: RegistrationContext }>,
   now: number,
 ) {
-  if (!validCommandEnvelope(command.actor, command.context) || !validEligibilityInput(command.eligibility)) {
-    return { kind: 'refused' as const, reason: 'registration_context_invalid' as const }
-  }
-  const operation = await beginOperation(
-    db, command.actor, 'setCapabilitySupplyEligibility', command.context,
-    command.eligibility as StableHashValue, now,
-  )
-  if (operation.kind === 'conflict') return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
-  if (operation.kind === 'replay') {
-    const desired = await recoverEligibilityReplayDesired(db, operation, command)
-    const expectedResult = eligibilityPublicResult(command.eligibility, desired)
-    await verifyReplayAudits(db, operation, eligibilityReplayAudits(command, desired, now))
-    return replayOperationResult(operation, expectedResult)
-  }
-  const result = await setCapabilitySupplyEligibility(db, command.eligibility, now)
-  if (result.kind === 'refused') {
-    await failOperation(db, operation.operationId, result.reason, now)
-    return result
-  }
-  const desired = desiredEligibility(command.eligibility.decision, result.transition.offeringAfter)
-  const expectedResult = eligibilityPublicResult(command.eligibility, desired)
-  const offeringAuditId = await ensureSupplyAudit(db, {
-    eventType: 'capability_supply.eligibility_changed', targetType: 'capability_offering',
-    action: 'set_eligibility',
-    targetRef: result.offeringId, actor: command.actor, context: command.context,
-    payload: {
-      offeringId: result.offeringId,
-      registrationHash: command.eligibility.expectedOfferingRegistrationHash,
-      eligibilityHash: result.offeringEligibilityHash,
-    },
-    beforeState: result.transition.offeringBefore,
-    afterState: result.transition.offeringAfter,
-    createdAt: now,
-  })
-  const bindingAuditId = await ensureSupplyAudit(db, {
-    eventType: 'capability_supply.eligibility_changed', targetType: 'capability_binding',
-    action: 'set_eligibility',
-    targetRef: result.bindingId, actor: command.actor, context: command.context,
-    payload: {
-      offeringId: result.offeringId,
-      bindingId: result.bindingId,
-      registrationHash: command.eligibility.expectedBindingRegistrationHash,
-      eligibilityHash: result.bindingEligibilityHash,
-    },
-    beforeState: result.transition.bindingBefore,
-    afterState: result.transition.bindingAfter,
-    createdAt: now,
-  })
-  await succeedOperation(db, operation.operationId, expectedResult, [offeringAuditId, bindingAuditId], now)
-  return expectedResult
+  return runSetEligibilityCommand(portsFor(db), command, now)
 }
 
 export async function quarantineCapabilityBindingCommand(
@@ -1332,69 +1201,7 @@ export async function quarantineCapabilityBindingCommand(
   }>,
   now: number,
 ) {
-  if (
-    !validCommandEnvelope(command.actor, command.context)
-    || !boundedTrimmed(command.bindingId, MAX_CONTEXT_VALUE_LENGTH)
-    || !isCanonicalDigest(command.expectedObservedRowDigest)
-  ) {
-    return { kind: 'refused' as const, reason: 'registration_context_invalid' as const }
-  }
-  const operation = await beginOperation(db, command.actor, 'quarantineCapabilityBinding', command.context, {
-    bindingId: command.bindingId, expectedObservedRowDigest: command.expectedObservedRowDigest,
-  }, now)
-  if (operation.kind === 'conflict') return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
-  if (operation.kind === 'replay') return await replayQuarantineBinding(db, operation, command, now)
-  const binding = await db.query('capabilityTransportBindings')
-    .withIndex('by_bindingId', (index) => index.eq('bindingId', command.bindingId)).unique()
-  if (binding === null) {
-    if (operation.kind === 'ready') await failOperation(db, operation.operationId, 'binding_not_found', now)
-    return { kind: 'refused' as const, reason: 'binding_not_found' as const }
-  }
-  if (bindingObservedRowDigest(binding) !== command.expectedObservedRowDigest) {
-    await failOperation(db, operation.operationId, 'observed_row_changed', now)
-    return { kind: 'refused' as const, reason: 'observed_row_changed' as const }
-  }
-  const eligibilityHash = capabilityBindingEligibilityHash({
-    bindingId: binding.bindingId, registrationHash: binding.registrationHash,
-    admission: 'not_admitted', conformance: 'not_conformant',
-    admissionEvidenceRefs: command.context.evidenceRefs,
-    conformanceEvidenceRefs: command.context.evidenceRefs,
-  })
-  const parent = await trustedQuarantineParent(db, binding)
-  let parentAuditId: string | undefined
-  let parentDisposition: QuarantineParentDisposition = { kind: 'unresolved' }
-  if (parent !== null) {
-    const siblings = await db.query('capabilityTransportBindings')
-      .withIndex('by_offeringId_and_admission_and_conformance', (index) => (
-        index.eq('offeringId', parent.offeringId).eq('admission', 'admitted').eq('conformance', 'conformant')
-      )).take(2)
-    const status = offeringStatusAfterBindingQuarantine(
-      siblings.some((candidate) => candidate.bindingId !== binding.bindingId),
-    )
-    const parentEligibilityHash = capabilityOfferingEligibilityHash({
-      offeringId: parent.offeringId, registrationHash: parent.registrationHash,
-      status, admissionEvidenceRefs: command.context.evidenceRefs,
-    })
-    await db.patch(parent._id, {
-      status, admissionEvidenceRefs: [...command.context.evidenceRefs],
-      eligibilityHash: parentEligibilityHash, updatedAt: now,
-    })
-    parentDisposition = quarantineParentUpdatedDisposition(parent, status, parentEligibilityHash)
-    parentAuditId = await ensureSupplyAudit(db, quarantineParentAudit(
-      command, parent, parentDisposition, now,
-    ))
-  }
-  await db.patch(binding._id, {
-    admission: 'not_admitted', conformance: 'not_conformant',
-    admissionEvidenceRefs: [...command.context.evidenceRefs],
-    conformanceEvidenceRefs: [...command.context.evidenceRefs], eligibilityHash, updatedAt: now,
-  })
-  const result = { kind: 'quarantined' as const, bindingId: binding.bindingId, eligibilityHash }
-  const auditId = await ensureSupplyAudit(db, quarantineBindingAudit(
-    command, binding, eligibilityHash, parentDisposition, now,
-  ))
-  await succeedOperation(db, operation.operationId, result, [auditId, ...(parentAuditId === undefined ? [] : [parentAuditId])], now)
-  return result
+  return runQuarantineCommand(portsFor(db), command, now)
 }
 
 export async function registerCapabilityOffering(
@@ -1714,38 +1521,6 @@ export async function getEligibleExactCapabilitySupply(
   return { kind: 'available' as const, offering, binding, business, contract }
 }
 
-async function recoverBindingReplay(
-  db: QueryCtx['db'], registration: CapabilityTransportBindingRegistration,
-  replay: Readonly<{ resultHash: string | undefined }>,
-) {
-  const binding = await db.query('capabilityTransportBindings')
-    .withIndex('by_bindingId', (query) => query.eq('bindingId', registration.bindingId)).unique()
-  if (binding === null || !bindingIntegrityIsValid(binding)) {
-    throw new Error('capability_supply_operation_integrity_failure')
-  }
-  return replayOperationResult(replay, {
-    kind: 'registered' as const,
-    bindingId: binding.bindingId,
-    registrationHash: binding.registrationHash,
-  })
-}
-
-async function recoverOfferingReplay(
-  db: QueryCtx['db'], registration: CapabilityOfferingRegistration,
-  replay: Readonly<{ resultHash: string | undefined }>,
-) {
-  const offering = await db.query('capabilityOfferings')
-    .withIndex('by_offeringId', (query) => query.eq('offeringId', registration.offeringId)).unique()
-  if (offering === null || !offeringIntegrityIsValid(offering)) {
-    throw new Error('capability_supply_operation_integrity_failure')
-  }
-  return replayOperationResult(replay, {
-    kind: 'registered' as const,
-    offeringId: offering.offeringId,
-    registrationHash: offering.registrationHash,
-  })
-}
-
 async function ownsPublishedBusiness(
   ctx: Pick<MutationCtx | QueryCtx, 'auth' | 'db'>,
   businessId: Id<'businesses'>,
@@ -1781,205 +1556,10 @@ async function resolveExactContract(db: QueryCtx['db'], ref: ContractRef) {
   }
 }
 
-async function beginOperation(
-  db: MutationCtx['db'], actor: SupplyCommandActor, operationName: string,
-  context: RegistrationContext, requestMaterial: StableHashValue, now: number,
-) {
-  const requestHash = canonicalDigest({
-    requestMaterial, correlationId: context.correlationId,
-    reasonCode: context.reasonCode, evidenceRefs: context.evidenceRefs,
+function portsFor(db: MutationCtx['db']): OperationLedgerPorts {
+  return capabilitySupplyOperationPorts(db, {
+    registerOffering: (registration, now) => registerCapabilityOffering(db, registration, now),
+    registerBinding: (registration, now) => registerCapabilityTransportBinding(db, registration, now),
+    setEligibility: (eligibility, now) => setCapabilitySupplyEligibility(db, eligibility, now),
   })
-  const existing = await db.query('operationKeys')
-    .withIndex('by_actor_operation_key', (query) => (
-      query.eq('actorRef', actor.ref).eq('operationName', operationName).eq('key', context.operationKey)
-    )).unique()
-  if (existing !== null) {
-    if (existing.requestHash !== requestHash || existing.status === 'in_progress') return { kind: 'conflict' as const }
-    if (existing.status === 'succeeded') {
-      return { kind: 'replay' as const, resultHash: existing.resultHash, effectRefs: existing.effectRefs }
-    }
-    if (existing.status === 'failed_terminal') {
-      await db.patch(existing._id, { status: 'in_progress', updatedAt: now })
-    }
-    return { kind: 'ready' as const, operationId: existing._id }
-  }
-  const operationId = await db.insert('operationKeys', {
-    scope: 'capability_supply', actorKind: actor.kind, actorRef: actor.ref, operationName,
-    key: context.operationKey, requestHash, status: 'in_progress', effectRefs: [],
-    createdAt: now, updatedAt: now,
-  })
-  return { kind: 'ready' as const, operationId }
-}
-
-function replayOperationResult<T extends StableHashValue>(
-  replay: Readonly<{ resultHash: string | undefined }>, expected: T,
-): T {
-  if (replay.resultHash !== canonicalDigest(expected)) {
-    throw new Error('capability_supply_operation_integrity_failure')
-  }
-  return expected
-}
-
-async function failOperation(
-  db: MutationCtx['db'], operationId: Id<'operationKeys'>, reason: string, now: number,
-) {
-  await db.patch(operationId, {
-    status: 'failed_terminal', resultHash: canonicalDigest({ reason }), updatedAt: now,
-  })
-}
-
-async function succeedOperation(
-  db: MutationCtx['db'], operationId: Id<'operationKeys'>,
-  result: StableHashValue, effectRefs: readonly string[], now: number,
-) {
-  await db.patch(operationId, {
-    status: 'succeeded', resultHash: canonicalDigest(result), effectRefs: [...effectRefs], updatedAt: now,
-  })
-}
-
-async function trustedQuarantineParent(
-  db: QueryCtx['db'], binding: Doc<'capabilityTransportBindings'>,
-): Promise<Doc<'capabilityOfferings'> | null> {
-  const offering = await db.query('capabilityOfferings')
-    .withIndex('by_offeringId', (index) => index.eq('offeringId', binding.offeringId)).unique()
-  if (
-    offering === null
-    || !offeringIntegrityIsValid(offering)
-    || offering.networkId !== binding.networkId
-    || !sameCapabilityContractRef(contractRefFromRow(offering), contractRefFromRow(binding))
-  ) return null
-  return offering
-}
-
-async function replayQuarantineBinding(
-  db: QueryCtx['db'],
-  replay: Readonly<{ resultHash: string | undefined; effectRefs: readonly string[] }>,
-  command: Readonly<{
-    actor: SupplyCommandActor
-    bindingId: string
-    expectedObservedRowDigest: string
-    context: RegistrationContext
-  }>,
-  now: number,
-) {
-  const eventId = supplyAuditEventId({
-    eventType: 'capability_binding.quarantined', targetType: 'capability_binding',
-    action: 'quarantine_binding',
-    targetRef: command.bindingId, actor: command.actor, context: command.context,
-    payload: {}, beforeState: '', afterState: '', createdAt: 0,
-  })
-  const stored = await db.query('auditEvents').withIndex('by_eventId', (index) => index.eq('eventId', eventId)).unique()
-  if (stored === null) throw new Error('capability_supply_operation_integrity_failure')
-  let payload: unknown
-  try {
-    payload = JSON.parse(stored.redactedPayloadJson ?? '')
-  } catch {
-    throw new Error('capability_supply_operation_integrity_failure')
-  }
-  if (!validQuarantineAuditPayload(payload, command)) {
-    throw new Error('capability_supply_operation_integrity_failure')
-  }
-  const result = { kind: 'quarantined' as const, bindingId: command.bindingId, eligibilityHash: payload.eligibilityHash }
-  const expectations: Array<Readonly<{ audit: SupplyAuditInput; allowedBeforeStates: readonly string[] }>> = [{
-    audit: {
-      eventType: 'capability_binding.quarantined', targetType: 'capability_binding',
-      action: 'quarantine_binding',
-      targetRef: command.bindingId, actor: command.actor, context: command.context,
-      payload: {
-        bindingId: payload.bindingId,
-        observedRowDigest: payload.observedRowDigest,
-        eligibilityHash: payload.eligibilityHash,
-        parent: payload.parent,
-      }, beforeState: '',
-      afterState: 'not_admitted:not_conformant', createdAt: now,
-    },
-    allowedBeforeStates: [
-      'admitted:conformant', 'admitted:not_conformant', 'not_admitted:conformant', 'not_admitted:not_conformant',
-    ],
-  }]
-  if (payload.parent.kind === 'updated') {
-    expectations.push({
-      audit: {
-        eventType: 'capability_supply.eligibility_changed', targetType: 'capability_offering',
-        action: 'quarantine_binding',
-        targetRef: payload.parent.offeringId, actor: command.actor, context: command.context,
-        payload: {
-          offeringId: payload.parent.offeringId, registrationHash: payload.parent.registrationHash,
-          eligibilityHash: payload.parent.eligibilityHash,
-        },
-        beforeState: '', afterState: payload.parent.status, createdAt: now,
-      },
-      allowedBeforeStates: ['active', 'inactive'],
-    })
-  }
-  await verifyReplayAudits(db, replay, expectations)
-  return replayOperationResult(replay, result)
-}
-
-async function recoverEligibilityReplayDesired(
-  db: QueryCtx['db'],
-  replay: Readonly<{ effectRefs: readonly string[] }>,
-  command: Readonly<{ actor: SupplyCommandActor; eligibility: EligibilityInput; context: RegistrationContext }>,
-): Promise<DesiredEligibility> {
-  if (replay.effectRefs.length !== 2) throw new Error('capability_supply_operation_integrity_failure')
-  const eventId = supplyAuditEventId({
-    eventType: 'capability_supply.eligibility_changed', targetType: 'capability_offering',
-    action: 'set_eligibility',
-    targetRef: command.eligibility.offeringId, actor: command.actor, context: command.context,
-    payload: {}, beforeState: '', afterState: '', createdAt: 0,
-  })
-  const audit = await db.query('auditEvents').withIndex('by_eventId', (query) => query.eq('eventId', eventId)).unique()
-  if (audit === null || (audit.afterState !== 'active' && audit.afterState !== 'inactive')) {
-    throw new Error('capability_supply_operation_integrity_failure')
-  }
-  if (command.eligibility.decision === 'admit' && audit.afterState !== 'active') {
-    throw new Error('capability_supply_operation_integrity_failure')
-  }
-  return desiredEligibility(command.eligibility.decision, audit.afterState)
-}
-
-async function verifyReplayAudits(
-  db: QueryCtx['db'],
-  replay: Readonly<{ effectRefs: readonly string[] }>,
-  expectations: readonly Readonly<{ audit: SupplyAuditInput; allowedBeforeStates: readonly string[] }>[],
-): Promise<void> {
-  if (replay.effectRefs.length !== expectations.length) {
-    throw new Error('capability_supply_operation_integrity_failure')
-  }
-  for (const [index, expectation] of expectations.entries()) {
-    const eventId = supplyAuditEventId(expectation.audit)
-    const existing = await db.query('auditEvents').withIndex('by_eventId', (query) => query.eq('eventId', eventId)).unique()
-    if (
-      existing === null
-      || replay.effectRefs[index] !== storedSupplyAuditEffectRef(existing)
-      || !storedAuditMatches(existing, expectation.audit, expectation.allowedBeforeStates)
-    ) {
-      throw new Error('capability_supply_operation_integrity_failure')
-    }
-  }
-}
-
-async function ensureSupplyAudit(
-  db: MutationCtx['db'],
-  input: SupplyAuditInput,
-): Promise<string> {
-  const eventId = supplyAuditEventId(input)
-  const redactedPayloadJson = stableStringify(input.payload)
-  const payloadHash = canonicalDigest(input.payload)
-  const existing = await db.query('auditEvents').withIndex('by_eventId', (query) => query.eq('eventId', eventId)).unique()
-  if (existing !== null) {
-    if (!storedAuditMatches(existing, input, [input.beforeState])) {
-      throw new Error('capability_supply_audit_integrity_failure')
-    }
-    return storedSupplyAuditEffectRef(existing)
-  }
-  await db.insert('auditEvents', {
-    eventId, eventType: input.eventType, actorKind: input.actor.kind, actorRef: input.actor.ref,
-    targetType: input.targetType, targetRef: input.targetRef,
-    beforeState: input.beforeState, afterState: input.afterState,
-    idempotencyKey: input.context.operationKey, correlationId: input.context.correlationId,
-    reasonCode: input.context.reasonCode, evidenceRefs: [...input.context.evidenceRefs],
-    redactedPayloadJson, payloadHash, createdAt: input.createdAt,
-  })
-  return supplyAuditEffectRef(input)
 }

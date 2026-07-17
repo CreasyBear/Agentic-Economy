@@ -16,6 +16,7 @@ const deepenedFolders = [
   'src/modules/capability-supply/internal/quarantine',
   'src/modules/capability-supply/internal/publication',
   'src/modules/capability-supply/internal/shared',
+  'src/modules/capability-supply/internal/operation-ledger',
 ] as const
 
 describe('capability supply boundaries', () => {
