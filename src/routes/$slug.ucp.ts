@@ -6,6 +6,7 @@ import { readPublicCatalogDiscoveryManifest } from '@/modules/discovery/discover
 import {
   readFixtureCatalogDiscoveryManifest,
 } from '@/modules/discovery/public'
+import { projectCurrentDiscoveryInquiryAvailability } from '@/modules/registry/public-inquiry-projection'
 import type {
   DiscoveryManifestContract,
 } from '@/modules/discovery/public'
@@ -38,7 +39,8 @@ export async function handleDurableUcpManifestRequest(request: Request, slug: st
     )
   }
 
-  return discoveryJsonResponse(toPublicUcpManifest(result.manifest))
+  const currentManifest = await projectCurrentDiscoveryInquiryAvailability(result.manifest)
+  return discoveryJsonResponse(toPublicUcpManifest(currentManifest))
 }
 
 export function handleUcpManifestRequest(request: Request, slug: string): Response {
@@ -66,4 +68,3 @@ function toPublicUcpManifest(manifest: DiscoveryManifestContract): PublicUcpMani
   const { businessId: _businessId, sourceHash: _sourceHash, ...publicManifest } = manifest
   return publicManifest
 }
-

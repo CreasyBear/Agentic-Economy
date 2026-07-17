@@ -1,4 +1,9 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
+import type {
+  DiscoveryManifestCapabilityContract,
+  DiscoveryManifestContract,
+} from '@/modules/discovery/public'
 import { PUBLIC_INQUIRY_UNAVAILABLE_REASON } from '@/modules/inquiries/public-copy'
 import type {
   PublicBusinessCatalogApiDto,
@@ -98,6 +103,47 @@ export async function projectCurrentPublicInquiryPage(
   }
 }
 
+export async function projectCurrentDiscoveryInquiryAvailability(
+  manifest: DiscoveryManifestContract,
+  dependencies: ProjectionDependencies = defaultDependencies,
+): Promise<DiscoveryManifestContract> {
+  const targets = manifest.services.flatMap((service) => service.capabilities.flatMap(
+    (capability): InquiryAvailabilityTarget[] => {
+      const capabilityKind = inquiryCapabilityKind(capability.firstRequest.mode)
+      return capabilityKind === undefined ? [] : [{
+        businessSlug: manifest.slug,
+        serviceSlug: service.slug,
+        capabilityKind,
+      }]
+    },
+  ))
+  if (targets.length === 0) return manifest
+  const availability = await dependencies.readAvailability(targets)
+  const admitted = admittedAvailabilityKeys(availability)
+  const services = manifest.services.map((service) => ({
+    ...service,
+    capabilities: service.capabilities.map((capability) => {
+      const capabilityKind = inquiryCapabilityKind(capability.firstRequest.mode)
+      if (capabilityKind === undefined || admitted.has(availabilityKey({
+        businessSlug: manifest.slug,
+        serviceSlug: service.slug,
+        capabilityKind,
+      }))) return capability
+      return unavailableManifestCapability(capability)
+    }),
+  }))
+  const unchanged = services.length === manifest.services.length && services.every((service, serviceIndex) => {
+    const currentCapabilities = manifest.services[serviceIndex]?.capabilities
+    return currentCapabilities !== undefined
+      && service.capabilities.length === currentCapabilities.length
+      && service.capabilities.every(
+        (capability, capabilityIndex) => capability === currentCapabilities[capabilityIndex],
+      )
+  })
+  if (unchanged) return manifest
+  return rebindDiscoveryManifest(manifest, services)
+}
+
 function availabilityKey(target: InquiryAvailabilityTarget): string {
   return `${target.businessSlug}\u0000${target.serviceSlug}\u0000${target.capabilityKind}`
 }
@@ -147,4 +193,42 @@ function unavailableService(
         ? { ...capability, status: 'unavailable' as const }
         : capability),
   }
+}
+
+function unavailableManifestCapability(
+  capability: DiscoveryManifestCapabilityContract,
+): DiscoveryManifestCapabilityContract {
+  return {
+    ...capability,
+    status: 'unavailable',
+    firstRequest: {
+      mode: 'not_available_yet',
+      publicDisclosure: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+      publicChannel: 'not_available',
+      noContactReason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+    },
+  }
+}
+
+function rebindDiscoveryManifest(
+  manifest: DiscoveryManifestContract,
+  services: DiscoveryManifestContract['services'],
+): DiscoveryManifestContract {
+  const {
+    bodyHash: _bodyHash,
+    generatedHash: _generatedHash,
+    generatedAt,
+    urlHash: _urlHash,
+    ...currentBody
+  } = manifest
+  const body = { ...currentBody, services }
+  const bodyHash = stableHash(body as StableHashValue)
+  const urlHash = stableHash({ urls: manifest.routes.map(({ url }) => url) })
+  const generatedHash = stableHash({
+    bodyHash,
+    sourceHash: manifest.sourceHash,
+    sourceVersion: manifest.sourceVersion,
+    urlHash,
+  })
+  return { ...body, generatedHash, bodyHash, urlHash, generatedAt }
 }
