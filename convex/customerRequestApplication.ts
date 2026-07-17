@@ -16,8 +16,6 @@ import {
 import {
   customerRequestV2AggregateValue,
   durableActionPreparationV2Value,
-  preparedActionRecoveryReasonV2Value,
-  preparedActionV2Value,
   routePlanGenerationV2Value,
 } from '@/modules/customer-request/runtime'
 import {
@@ -40,19 +38,25 @@ import {
   interpreterFailureCode,
   loadRequestGraph as loadRequestGraphApplication,
   parseCustomerRouteResult,
+  preparationResultView,
   projectConfirmedRoute as projectConfirmedRouteApplication,
   projectRoutePlansFromMaterial,
   projectStoredAggregate as projectStoredAggregateApplication,
+  projectStoredPreparation,
   projectStoredRouteRun as projectStoredRouteRunApplication,
   proposeThenCompile,
   rebindStoredFacts,
+  recoverUnresolvedEgress as recoverUnresolvedEgressApplication,
   replayCommittedCommand as replayCommittedCommandApplication,
+  resumePreparationEgress as resumePreparationEgressApplication,
+  runPreparationEgress as runPreparationEgressApplication,
   storedGenerationRepresentsAggregate,
   type CommandReplayResult,
   type CompileCommitInput,
   type CustomerRequestActionResult,
   type EligibleSupplyResult,
   type ExactContractResult,
+  type PreparationEgressPorts,
   type RequestGraph,
   type RoutePlanProjectionMaterial,
 } from '@/modules/customer-request/application/public'
@@ -1019,25 +1023,14 @@ async function resumeRequest(
               { preparationRef: preparation.preparation.preparationRef, principalId: caller.principalId },
             )
             if (egress.operationCount > 0) {
-              const resumed: {
-                kind: 'completed' | 'needs_attention'
-                states?: Array<{
-                  operationRef: string; state: 'released' | 'not_released' | 'uncertain' | 'in_flight'
-                }>
-              } = await ctx.runAction(internal.customerRequestV2PreparationEgress.resume, {
-                preparationRef: preparation.preparation.preparationRef, principalId: caller.principalId,
-              })
-              if (resumed.kind !== 'completed' || resumed.states === undefined) return writableView(projectNeedsAttention({
-                requestRef: current.aggregate.snapshot.requestId, revision: current.aggregate.snapshot.revision,
-                summary: 'The registered options or permission changed. Review this request again.',
-              }))
-              if (resumed.states.some(({ state }) => state === 'uncertain' || state === 'in_flight')) {
-                return projectEgressCustomerState(current.aggregate, preparation.preparation, resumed.states)
-              }
-              return await resolvePreparedAction(ctx, current.aggregate, preparation.preparation)
+              return toActionResult(await resumePreparationEgressApplication(
+                current.aggregate,
+                preparation.preparation,
+                preparationEgressPorts(ctx),
+              ))
             }
           }
-          return projectStoredPreparation(current.aggregate, preparation.preparation)
+          return toActionResult(projectStoredPreparation(current.aggregate, preparation.preparation))
         }
         if (preparation.kind === 'stale') return writableView(projectNeedsAttention({
           requestRef: args.requestRef,
@@ -2436,7 +2429,7 @@ export const authorizePreparation = action({
         }),
       })
     }
-    return preparationResultView(current.aggregate, result, args.requestRef, args.revision)
+    return toActionResult(preparationResultView(current.aggregate, result, args.requestRef, args.revision))
   },
 })
 
@@ -2568,11 +2561,6 @@ type PreparationMutationResult = Readonly<
 type PreparationResumeResult = Readonly<
   | { kind: 'current'; preparation: StoredPreparation }
   | { kind: 'not_found' | 'stale' }
->
-type PreparedActionMutationResult = Readonly<
-  | { kind: 'prepared'; preparedAction: Infer<typeof preparedActionV2Value> }
-  | { kind: 'not_prepared'; reason: Infer<typeof preparedActionRecoveryReasonV2Value>; recoveryRef: string }
-  | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'prepared_action_material_changed' }
 >
 
 async function projectCurrentRoutePlans(
@@ -2744,7 +2732,7 @@ async function prepareCurrentAction(
       }),
     })
   }
-  return preparationResultView(current.aggregate, result, args.requestRef, args.revision)
+  return toActionResult(preparationResultView(current.aggregate, result, args.requestRef, args.revision))
 }
 
 async function refreshCurrentRouteGeneration(
@@ -2919,334 +2907,41 @@ async function generationRefreshResultView(
   return await projectCurrentRoutePlans(ctx, current)
 }
 
+function preparationEgressPorts(ctx: ActionCtx): PreparationEgressPorts {
+  return {
+    runEgress: (input) => ctx.runAction(internal.customerRequestV2PreparationEgress.run, input),
+    resumeEgress: (input) => ctx.runAction(internal.customerRequestV2PreparationEgress.resume, input),
+    resumeRequestEgress: (input) => ctx.runAction(
+      internal.customerRequestV2PreparationEgress.resumeRequest, input,
+    ),
+    preparationMaterialDigest: (input) => ctx.runQuery(
+      internal.customerRequestV2PreparedAction.preparationMaterialDigest, input,
+    ),
+    preparePreparedAction: (input) => ctx.runMutation(
+      internal.customerRequestV2PreparedAction.prepare, input,
+    ),
+  }
+}
+
 async function runPreparationEgress(
   ctx: ActionCtx,
   aggregate: StoredAggregate,
   preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
   command: Readonly<{ principalId: string; commandKey: string; commandDigest: string }>,
 ): Promise<ActionResult> {
-  const result: {
-    kind: 'completed' | 'conflict' | 'needs_attention'
-    states?: Array<{ operationRef: string; state: 'released' | 'not_released' | 'uncertain' | 'in_flight' }>
-  } = await ctx.runAction(
-    internal.customerRequestV2PreparationEgress.run,
-    {
-      ...command, preparationRef: preparation.preparationRef, now: Date.now(),
-    },
-  )
-  if (result.kind !== 'completed') return writableView(projectNeedsAttention({
-    requestRef: aggregate.snapshot.requestId,
-    revision: aggregate.snapshot.revision,
-    summary: result.kind === 'conflict'
-      ? 'This preparation command was already used for a different request.'
-      : 'The registered options or permission changed. Review this request again.',
-  }))
-  if (result.states === undefined) return writableView(projectNeedsAttention({
-    requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
-    summary: 'AE could not read the business response state. Review this request again.',
-  }))
-  if (result.states.some(({ state }) => state === 'uncertain' || state === 'in_flight')) {
-    return projectEgressCustomerState(aggregate, preparation, result.states)
-  }
-  return await resolvePreparedAction(ctx, aggregate, preparation)
-}
-
-async function resolvePreparedAction(
-  ctx: ActionCtx,
-  aggregate: StoredAggregate,
-  preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
-): Promise<ActionResult> {
-  const preparationMaterialDigest: string = await ctx.runQuery(
-    internal.customerRequestV2PreparedAction.preparationMaterialDigest,
-    { preparationRef: preparation.preparationRef, principalId: aggregate.snapshot.principalId },
-  )
-  const commandMaterial = {
-    requestRef: aggregate.snapshot.requestId,
-    requestRevision: aggregate.snapshot.revision,
-    preparationRef: preparation.preparationRef,
-    preparationDigest: preparation.preparationDigest,
-    preparationMaterialDigest,
-  }
-  const result: PreparedActionMutationResult = await ctx.runMutation(
-    internal.customerRequestV2PreparedAction.prepare,
-    {
-      commandKey: namespacedKey(
-        aggregate.snapshot.principalId, 'prepared-action', aggregate.snapshot.requestId,
-        `${preparation.preparationRef}:${preparationMaterialDigest}`,
-      ),
-      commandDigest: canonicalDigest(commandMaterial),
-      principalId: aggregate.snapshot.principalId,
-      preparationRef: preparation.preparationRef,
-      preparationMaterialDigest,
-      now: Date.now(),
-    },
-  )
-  if (result.kind === 'prepared') {
-    return projectPreparedAction(aggregate, preparation, result.preparedAction)
-  }
-  const base = {
-    kind: 'request' as const,
-    requestRef: aggregate.snapshot.requestId,
-    revision: aggregate.snapshot.revision,
-    missingFields: [],
-    criteria: [...projectCustomerCriteria(aggregate.evaluation.criteria)],
-    preparationRef: preparation.preparationRef,
-    options: [],
-  }
-  if (result.kind === 'conflict') return writableView({
-    ...base,
-    state: 'needs_attention', nextAction: 'revise_request',
-    summary: 'A business option changed after it was prepared. Review the request before choosing.',
-  })
-  if (result.reason === 'options_pending' || result.reason === 'disclosure_uncertain') return writableView({
-    ...base,
-    state: 'preparing_options', nextAction: 'wait',
-    summary: 'AE is still checking the businesses already contacted. It will not send the request again.',
-  })
-  if (result.reason === 'selection_required' || result.reason === 'comparison_unavailable'
-    || result.reason === 'commercial_influence_blocks_selection') return writableView({
-    ...base,
-    state: 'needs_attention', nextAction: 'revise_request',
-    summary: 'AE received options but cannot choose between them from the customer’s stated priorities.',
-  })
-  return writableView({
-    ...base,
-    state: 'needs_attention', nextAction: 'revise_request',
-    summary: preparedActionFailureSummary(result.reason),
-  })
-}
-
-function preparedActionFailureSummary(
-  reason: Extract<PreparedActionMutationResult, { kind: 'not_prepared' }>['reason'],
-): string {
-  switch (reason) {
-    case 'options_pending':
-    case 'disclosure_uncertain':
-      return 'AE is still checking the businesses already contacted. It will not send the request again.'
-    case 'disclosure_not_released':
-      return 'AE did not send the request to the business. Check the business connection before trying again.'
-    case 'provider_response_invalid':
-      return 'A business returned an incomplete response. Refresh the request before choosing.'
-    case 'provider_echo_mismatch':
-      return 'A business response did not match the option requested. Refresh before choosing.'
-    case 'provider_assertion_expired':
-      return 'The available business options expired. Refresh the request before choosing.'
-    case 'provider_evidence_invalid':
-      return 'A business response was missing the evidence needed to compare it safely.'
-    case 'commercial_terms_unavailable':
-      return 'A business option was missing the price or terms needed for a safe choice.'
-    case 'selection_required':
-    case 'comparison_unavailable':
-    case 'commercial_influence_blocks_selection':
-      return 'AE received options but cannot choose between them from the customer’s stated priorities.'
-    case 'prepared_action_too_large':
-      return 'The business responses were too large to compare safely. Narrow the request and try again.'
-    case 'capability_authority_changed':
-    case 'capability_graph_changed':
-      return 'The available business options changed. Refresh the request before choosing.'
-    default: {
-      const exhaustive: never = reason
-      return exhaustive
-    }
-  }
-}
-
-function projectPreparedAction(
-  aggregate: StoredAggregate,
-  preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
-  action: Infer<typeof preparedActionV2Value>,
-): ActionResult {
-  return {
-    kind: 'request',
-    requestRef: aggregate.snapshot.requestId,
-    revision: aggregate.snapshot.revision,
-    state: 'options_ready',
-    summary: `${action.business.name} can provide ${action.offering.label}.`,
-    nextAction: 'inspect_options',
-    missingFields: [],
-    criteria: [...projectCustomerCriteria(aggregate.evaluation.criteria)],
-    preparationRef: preparation.preparationRef,
-    options: [],
-    preparedAction: {
-      actionRef: action.preparedActionRef,
-      businessName: action.business.name,
-      offeringLabel: action.offering.label,
-      summary: action.offering.summary,
-      price: {
-        currency: action.price.currency,
-        minimumAmountMinor: action.price.minimumAmountMinor,
-        maximumAmountMinor: action.price.maximumAmountMinor,
-      },
-      materialTerms: action.materialTerms.map(({ label, value }) => ({ label, value })),
-      cancellation: { kind: action.cancellation.kind === 'adapter_managed' ? 'available' : 'unsupported' },
-      validUntil: action.expiresAt,
-      selection: {
-        basis: action.comparison.kind,
-        alternativeCount: action.alternatives.length,
-        unavailableCount: action.fallbacks.length,
-        commercialInfluence: action.comparison.kind === 'lowest_maximum_price'
-          ? action.comparison.commercialInfluence
-          : action.commercialRelationship.kind === 'none' ? 'none' : 'disclosed',
-      },
-      dataUse: {
-        categories: preparation.disclosureReview.categories.map(({ label, classification }) => ({ label, classification })),
-        purposes: [...preparation.disclosureReview.purposes],
-      },
-      effects: preparation.disclosureReview.effectRequirements.map(({ class: effectClass, reversibility }) => ({
-        class: effectClass, reversibility,
-      })),
-      alternatives: action.alternatives.map((alternative) => ({
-        businessName: alternative.business.name,
-        price: {
-          currency: alternative.price.currency,
-          minimumAmountMinor: alternative.price.minimumAmountMinor,
-          maximumAmountMinor: alternative.price.maximumAmountMinor,
-        },
-        validUntil: alternative.expiresAt,
-      })),
-    },
-  }
+  return toActionResult(await runPreparationEgressApplication(
+    aggregate, preparation, command, preparationEgressPorts(ctx),
+  ))
 }
 
 async function recoverUnresolvedEgress(
   ctx: ActionCtx,
   aggregate: StoredAggregate,
 ): Promise<ActionResult | undefined> {
-  const recovered: {
-    kind: 'completed' | 'needs_attention'
-    states?: Array<{
-      operationRef: string
-      requestRevision: number
-      state: 'released' | 'not_released' | 'uncertain' | 'in_flight'
-    }>
-    operations?: Array<{ operationRef: string; requestRevision: number }>
-  } = await ctx.runAction(internal.customerRequestV2PreparationEgress.resumeRequest, {
-    requestId: aggregate.snapshot.requestId, principalId: aggregate.snapshot.principalId,
-  })
-  const base = {
-    kind: 'request' as const, requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
-    state: 'needs_attention' as const, missingFields: [],
-    criteria: projectCustomerCriteria(aggregate.evaluation.criteria),
-    options: [],
-  }
-  if (recovered.kind === 'needs_attention') return writableView({
-    ...base, nextAction: 'wait',
-    summary: 'AE cannot safely continue while checking an earlier business contact.',
-  })
-  const states = recovered.states ?? []
-  if (states.some(({ state }) => state === 'uncertain' || state === 'in_flight')) return writableView({
-    ...base, nextAction: 'wait',
-    summary: 'AE is still checking whether a business received this request. It will not send it again while checking.',
-  })
-  if (states.some(({ requestRevision }) => requestRevision !== aggregate.snapshot.revision)) return writableView({
-    ...base, nextAction: 'revise_request',
-    summary: 'AE recovered an earlier business contact. Review the current request before continuing.',
-  })
-  return undefined
-}
-
-function projectEgressCustomerState(
-  aggregate: StoredAggregate,
-  preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
-  states: readonly Readonly<{ state: 'released' | 'not_released' | 'uncertain' | 'in_flight' }>[],
-): ActionResult {
-  const base = {
-    kind: 'request', requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
-    missingFields: [], criteria: projectCustomerCriteria(aggregate.evaluation.criteria),
-    preparationRef: preparation.preparationRef, options: [],
-  } as const
-  if (states.some(({ state }) => state === 'uncertain')) return writableView({
-    ...base, state: 'needs_attention', nextAction: 'wait',
-    summary: 'AE cannot yet confirm whether every business received the request. It will not send it again while checking.',
-  })
-  if (states.some(({ state }) => state === 'in_flight')) return writableView({
-    ...base, state: 'preparing_options', nextAction: 'wait',
-    summary: 'AE is waiting for businesses that are already processing the request.',
-  })
-  if (states.length > 0 && states.every(({ state }) => state === 'not_released')) return writableView({
-    ...base, state: 'needs_attention', nextAction: 'revise_request',
-    summary: 'No business received the request. Review the available businesses before trying another route.',
-  })
-  return writableView({ ...base, state: 'preparing_options', summary: aggregate.snapshot.intent, nextAction: 'wait' })
-}
-
-function preparationResultView(
-  aggregate: StoredAggregate,
-  result: PreparationMutationResult,
-  requestRef: string,
-  revision: number,
-): ActionResult {
-  if (result.kind === 'conflict') return {
-    kind: 'conflict', requestRef,
-    reason: result.reason === 'revision_changed' ? 'revision_changed' : 'idempotency_key_reused',
-  }
-  if (result.kind === 'needs_attention') return writableView(projectNeedsAttention({
-    requestRef,
-    revision,
-    summary: result.reason === 'historical_request_resubmit_required'
-      ? 'This earlier request used a retired contract format. Start a new request to continue.'
-      : result.reason === 'preparation_recipient_unsupported'
-        ? 'AE cannot safely compare these options before you choose which business may receive your information.'
-      : 'The registered options changed. Review this request again.',
-  }))
-  if (result.kind === 'refused') {
-    if (result.reason === 'request_not_found') return { kind: 'refused', reason: 'request_not_found' }
-    return writableView(projectNeedsAttention({
-      requestRef,
-      revision,
-      summary: result.reason === 'authority_reference_invalid' || result.reason === 'authority_invalid'
-        ? 'That permission no longer matches this request. Review the disclosure again.'
-        : 'This request cannot be prepared from its current action.',
-    }))
-  }
-  return projectStoredPreparation(aggregate, result.preparation)
-}
-
-function projectStoredPreparation(aggregate: StoredAggregate, preparation: StoredPreparation): ActionResult {
-  const criteria = projectCustomerCriteria(aggregate.evaluation.criteria)
-  const base = {
-    kind: 'request' as const,
-    requestRef: aggregate.snapshot.requestId,
-    revision: aggregate.snapshot.revision,
-    summary: aggregate.snapshot.intent,
-    criteria,
-    preparationRef: preparation.preparationRef,
-    options: [],
-  }
-  if (preparation.kind === 'needs_information') return writableView({
-    ...base,
-    state: 'needs_information',
-    nextAction: 'provide_information',
-    missingFields: preparation.missing.map((item) => ({
-      field: item.inputKey,
-      label: item.label,
-      explanation: 'This answer is needed before AE can prepare matching options.',
-    })),
-  })
-  const disclosureReview = {
-    purpose: customerPurposeLabel(preparation.disclosureReview.purposes[0] ?? 'prepare_options'),
-    maximumRecipients: preparation.disclosureReview.limits.maximumRecipients,
-    categories: preparation.disclosureReview.categories.map(({ label, classification }) => ({ label, classification })),
-  }
-  if (preparation.kind === 'needs_authority') return writableView({
-    ...base,
-    state: 'needs_authorization',
-    nextAction: 'review_disclosure',
-    missingFields: [],
-    disclosureReview,
-  })
-  return writableView({
-    ...base,
-    state: 'ready_to_compare',
-    nextAction: 'prepare_options',
-    missingFields: [],
-    disclosureReview,
-  })
-}
-
-function customerPurposeLabel(value: string): string {
-  const words = value.replace(/[_-]+/g, ' ').trim()
-  return `${words.at(0)?.toUpperCase() ?? ''}${words.slice(1)}`
+  const result = await recoverUnresolvedEgressApplication(
+    aggregate, preparationEgressPorts(ctx),
+  )
+  return result === undefined ? undefined : toActionResult(result)
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {

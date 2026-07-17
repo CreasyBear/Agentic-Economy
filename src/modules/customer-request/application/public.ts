@@ -58,3 +58,28 @@ export {
   type RoutePlanProjectionMaterial,
   type StoredRouteRunProjection,
 } from './route-plan-projection'
+
+export {
+  customerPurposeLabel,
+  preparationResultView,
+  preparedActionFailureSummary,
+  projectEgressCustomerState,
+  projectPreparedAction,
+  projectStoredPreparation,
+  recoverUnresolvedEgress,
+  resolvePreparedAction,
+  resumePreparationEgress,
+  runPreparationEgress,
+  type EgressReleaseState,
+  type EgressResumeResult,
+  type EgressRunResult,
+  type PreparationEgressAggregate,
+  type PreparationEgressCommand,
+  type PreparationEgressPorts,
+  type PreparationMutationResult,
+  type PreparedActionMutationResult,
+  type PreparedActionRecoveryReason,
+  type ReadyForRoutingPreparation,
+  type ResumeRequestEgressResult,
+  type StoredPreparation,
+} from './preparation-egress'
