@@ -1,106 +1,145 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-07-17
-**Inspected Revision:** `3aa46069a00724679020f7f3cb338cc4ee177591`
+**Analysis Date:** 2026-07-17  
+**Inspected revision:** `7deffac41e103ee619ce099db531fc2127ba9985`  
+**last_mapped_commit:** `7deffac41e103ee619ce099db531fc2127ba9985`
 
 ## Naming Patterns
 
 **Files:**
-- Use kebab-case for domain implementation and test files: `src/modules/customer-request/route-mandate-admission.ts`, `tests/unit/customer-request/route-mandate-admission.test.ts`.
-- Use `<module>.actions.ts` for assistant-callable operations and `<module>.functions.ts` for server functions: `src/modules/demand/demand.actions.ts`, `src/modules/demand/demand.functions.ts`.
-- Use `public.ts` as the supported module boundary and `internal/` for private implementation: `src/modules/registry/public.ts`, `src/modules/registry/internal/search-documents.ts`.
-- Follow TanStack file-route names in `src/routes/`; `$parameter` marks a route parameter, `[.]` escapes a literal dot, and `_operator/` groups authenticated operator routes: `src/routes/api.requests.$requestRef.ts`, `src/routes/llms[.]txt.ts`, `src/routes/_operator/owner.inquiries.tsx`.
-- Use PascalCase for React component files, including the existing `Ae*` components: `src/components/ae/chat/AeQueryPanel.tsx`. Do not add or extend bespoke `Ae*` presentation primitives; new UI uses Astryx components under the constraints in `DESIGN.md` and `.agents/skills/ae-design-system/SKILL.md`.
+- Domain modules: kebab-case directories under `src/modules/<domain>/` (e.g. `customer-request`, `routing-kernel`)
+- Domain seams: `<domain>.actions.ts`, `<domain>.functions.ts`, `public.ts`, `internal/*.ts`
+- React components: PascalCase `.tsx` (e.g. `AeQueryPanel.tsx`, `RouteProgressBar.tsx`)
+- Routes: TanStack file routes under `src/routes/` (dots for nested segments, e.g. `api.businesses.$slug.ts`)
+- Tests: kebab-case with suffix — `*.test.ts` / `*.test.tsx` (Vitest), `*.spec.ts` (Playwright)
+- Prefer kebab-case helpers (`search-documents.ts`, `source-write-admission.ts`); avoid inventing new `Ae*` presentation shells
 
 **Functions:**
-- Use camelCase verbs that state the operation: `compileCustomerRequest`, `deriveRouteStepAuthority`, `buildRegistrySearchDocumentsForCatalog` in `src/modules/customer-request/compiler.ts`, `src/modules/customer-request/route-mandate-admission.ts`, and `src/modules/registry/internal/search-documents.ts`.
-- Prefix constructors/projections with `create`, `build`, `derive`, `resolve`, `read`, `list`, or `get`; prefix admission and authorization checks with `admit`, `require`, or `assert`: `src/modules/security/public.ts`.
-- Name React components and route components in PascalCase: `src/components/ae/chat/AeHomeComposer.tsx`, `src/routes/index.tsx`.
+- camelCase for all functions (`searchPublicBusinessCatalog`, `defineAction`, `buildRegistrySearchDocumentsForCatalog`)
+- No `async` prefix; async is expressed by return type
+- Server/source adapters: `*Server`, `*ThroughSource` (e.g. in `<domain>.functions.ts`)
+- Event handlers in UI: descriptive verbs (`onSubmit`, inline `() => undefined` in tests)
 
 **Variables:**
-- Use camelCase for values and UPPER_SNAKE_CASE for stable exported constants: `DEV_SEED_BUSINESS_COUNT` in `src/modules/dev/internal/dev-seed-fixture.ts`.
-- Give identifiers semantic suffixes such as `Ref`, `Id`, `Digest`, `At`, `State`, `Input`, `Result`, and `Readback`: `src/modules/registry/public.ts`.
-- Use `readonly` arrays and `as const` for closed vocabularies: `IndexStatusValues` in `src/modules/registry/public.ts`.
+- camelCase for locals and parameters
+- UPPER_SNAKE_CASE for exported const arrays/enums of literals (`IndexStatusValues`, `PublicQuietAgentToolIds`)
+- No underscore private prefix in TypeScript; keep helpers file-private by omitting exports
 
 **Types:**
-- Use PascalCase nouns and suffix boundary types with `Input`, `Command`, `Result`, `Contract`, `Record`, `State`, `Snapshot`, `Readback`, or `Adapter`: `src/modules/catalog/public.ts`, `src/modules/security/public.ts`.
-- Derive literal unions from exported value arrays where runtime enumeration is needed: `RegistryProjectionStatusValues` and `RegistryProjectionStatus` in `src/modules/registry/public.ts`.
-- Prefer discriminated unions keyed by `kind` for state and failure outcomes: `src/modules/customer-request/`, `src/modules/security/public.ts`.
+- PascalCase, no `I` prefix (`ActionDefinition`, `PublicBusinessCatalogApiDto`)
+- Discriminated unions via `kind` string literals (`kind: 'ok' | 'error' | 'found' | 'denied'`)
+- Status/result fields: const array + derived union (`export const XValues = [...] as const; export type X = (typeof XValues)[number]`)
+- Branded IDs from `src/modules/common/ids.ts` (`BusinessId`, `Slug`, `brandNonEmpty`) — do not use bare strings for domain IDs at module boundaries
+- Zod schemas live in module validators / function files; keep `.strict()` on action input/output objects
 
 ## Code Style
 
 **Formatting:**
-- No repository Prettier or Biome configuration is present. Match the live TypeScript style: two-space indentation, single quotes, no semicolons, trailing commas in multiline literals, and compact braces; examples are `vitest.config.ts` and `src/modules/common/runtime-id.ts`.
-- Keep JSX readable and use parentheses for multiline returns: `src/components/ae/chat/AeQueryPanel.tsx`.
-- Do not hand-edit generated files under `convex/_generated/` or `src/routeTree.gen.ts`; generated files are excluded or separately checked by `tsconfig.json` and `package.json`.
+- No Prettier config; format to match surrounding files
+- Single quotes for strings
+- Semicolons required
+- Trailing commas in multiline lists/objects
+- 2-space indentation
+- Prefer explicit spreads over optional-property assignment under `exactOptionalPropertyTypes` (see `tsconfig.json`)
 
 **Linting:**
-- Run `npm run lint`; it executes `oxlint src convex tests tools examples --deny-warnings` from `package.json`.
-- Treat TypeScript as a quality gate: `tsconfig.json` enables `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, and `noImplicitOverride`.
-- Run `npm run test:ts-standards` for source-scanned standards and `npm run test:imports` for architectural boundaries; implementations live in `tests/imports/ts-standards.test.ts` and the other files under `tests/imports/`.
+- Oxlint via `.oxlintrc.json`; run `npm run lint` (`oxlint src convex tests tools examples --deny-warnings`)
+- TypeScript: `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride`
+- Executable TS standards scan: `npm run test:ts-standards` — rejects `any`, `as unknown as`, non-null assertions (`!`), `v.any()` outside documented boundaries, broad `status: string`, hard-coded CSRF literals, `VITE_AE_SOURCE_WRITE_SECRET`
+
+**Typecheck:**
+- `npm run typecheck` (`tsc --noEmit`) before yielding TypeScript changes
 
 ## Import Organization
 
 **Order:**
-1. Import third-party runtime dependencies first: `vitest`, `react`, `@tanstack/*`, `convex/*`.
-2. Import project modules through `@/` when crossing module or directory boundaries: `@/modules/customer-request/compiler` in `convex/customerRequestRouteMandate.test.ts`.
-3. Import same-directory files relatively, especially Convex generated references and schema: `./_generated/api`, `./schema` in `convex/customerRequestRouteMandate.test.ts`.
-4. Put `import type` declarations alongside their source group and use type-only imports when no runtime value is required: `src/modules/actions/index.ts`.
+1. External packages (`vitest`, `react`, `zod`, `convex-test`, `@playwright/test`)
+2. Path-aliased internals (`@/modules/...`, `@/lib/...`, `@/components/...`, `@/routes/...`)
+3. Relative imports (`./internal/...`, `../../convex/...`)
+4. Prefer `import type { ... }` for type-only imports
+
+**Grouping:**
+- Blank line between external and internal groups
+- Keep imports at file top — no inline imports in function bodies (except documented lazy client loaders such as PostHog/Sentry)
 
 **Path Aliases:**
-- Use `@/*` or `~/*` for `src/*`; both are declared in `tsconfig.json`.
-- Prefer `@/` in current source. Route aliases for owner/admin/developer routes are also declared in `tsconfig.json`.
-- Do not import another module's private implementation. Use its `public.ts` boundary; this is enforced by `tests/imports/private-imports.test.ts` and module-specific boundary tests under `tests/imports/`.
+- `@/*` and `~/*` → `src/*` (`tsconfig.json`)
+- Operator route aliases: `@/routes/owner.*`, `@/routes/admin.*`, `@/routes/developers.discovery`
+- Cross-module imports must use `src/modules/<domain>/public.ts` (or `<domain>.functions.ts` / actions) — never another module's `internal/`
+- Routes must not import `modules/*/internal/*` (`tests/imports/route-boundary.test.ts`, `tests/imports/private-imports.test.ts`)
 
 ## Error Handling
 
 **Patterns:**
-- Return typed discriminated results for expected domain outcomes instead of throwing: `{ kind: 'refused', reason: ... }`, `{ kind: 'conflict', reason: ... }`, and `{ kind: 'unavailable', reason: ... }` are asserted throughout `tests/integration/` and `convex/customerRequestRouteMandate.test.ts`.
-- Throw `Error` only for violated programmer invariants, impossible fixture states, or boundary parse failures that cannot produce a valid domain result: `convex/customerRequestRouteMandate.test.ts`, `src/routes/api.requests.ts`.
-- Parse untrusted inputs at the boundary with Zod or explicit validators, and keep server-owned values out of client payloads: `src/modules/demand/demand.functions.ts`, `src/modules/catalog/internal/validators.ts`.
-- For Convex functions, declare validators for every public and internal function and use generated `api`/`internal` references according to `convex/_generated/ai/guidelines.md`.
+- Domain outcomes: discriminated results via `src/modules/common/result.ts` (`ok` / `error` with `kind`, `code`, `retryable`) or module-specific `kind` unions (`found` / `not_found`, `denied`)
+- Invariants and adapter failures: `throw new Error('...', { cause })` at boundaries
+- Catch variables are `unknown`; narrow before use
+- Do not use non-null assertions; use explicit undefined checks and throw, or early return
+
+**Error Types:**
+- Prefer typed `code` strings over free-form messages for expected failures
+- Redact user-visible error text (`redactedMessage` / `redactedError` patterns on public paths)
+- Source writes go through `SourceWriteAdmission` — never hard-code CSRF tokens or expose write secrets with a `VITE_` prefix
 
 ## Logging
 
-**Framework:** Sentry, PostHog, and controlled console output.
+**Framework:**
+- Product telemetry: Sentry (`src/lib/observability/sentry.client.ts`, `sentry.server.ts`) and PostHog (`posthog.client.ts`, `posthog.server.ts`)
+- Funnel/product events via observability module seams — not ad-hoc `console.log` in product paths
+- `console.warn` appears only at operational hold points (e.g. notification dispatch); do not add new console logging as the default
 
 **Patterns:**
-- Use source-owned observability records for product events and readback: `src/modules/observability/`, `convex/observability.ts`.
-- Use Sentry for captured runtime errors and PostHog for funnel/product telemetry through adapters in `src/modules/observability/`; avoid scattering vendor calls through domain modules.
-- Reserve `console.error`, `console.warn`, or `console.log` for server/tool diagnostics and scripts; never make console output the only evidence for a durable operation. Release and development proof belongs in `tools/release/`, `tools/dev/`, or persisted readback.
-- Never log secrets, credentials, full authorization headers, or sensitive customer input; redaction behavior is tested in `tests/unit/observability/audit-redaction.test.ts`.
+- Capture exceptions at error boundaries (`AeObservabilityErrorBoundary`, `Sentry.captureException`)
+- Sanitize telemetry payloads before send
+- Never log secrets, raw contact fields, or source-write keys
 
 ## Comments
 
 **When to Comment:**
-- Comment architectural intent, authority boundaries, protocol constraints, or non-obvious invariants—not line-by-line mechanics. The registry contract comment in `src/modules/actions/index.ts` is the model.
-- Keep public contract caveats adjacent to the action or boundary they constrain: action `summary` and `boundaries` live in `src/modules/*/<module>.actions.ts`.
-- Use file-level comments for environment annotations in tests, such as `@vitest-environment jsdom` in `tests/unit/chat/home-landing-submit.test.tsx`.
+- Explain boundary honesty, trust axis, and refusal rules on actions (`summary` / `boundaries` are part of the contract)
+- Document documented exceptions (e.g. allowed `v.any()` JSON boundaries in contract scans)
+- Prefer why over what; avoid narrating obvious control flow
 
 **JSDoc/TSDoc:**
-- Use sparingly for exported registries, public abstractions, or constraints that types cannot express: `src/modules/actions/index.ts`.
-- Prefer precise types and named discriminated unions over prose documentation for routine functions: `src/modules/registry/public.ts`.
+- Module-level and public-API blocks on action contracts (`src/modules/common/action.ts`) and public barrels
+- Not required on every private helper
+
+**TODO Comments:**
+- Rare; prefer a tracked issue or phase plan over long-lived TODOs in source
 
 ## Function Design
 
-**Size:** Keep pure domain decisions small and extract projections, admission checks, normalization, and persistence adapters into named functions. Large workflows compose those functions in module seams such as `src/modules/customer-request/` and `convex/customerRequestV2.ts`.
+**Size:**
+- Keep handlers thin; put domain logic in `internal/` and call through `public.ts` / `*ThroughSource`
+- One abstraction level per function; extract factories in tests rather than deepening production helpers
 
-**Parameters:** Use one typed object for multi-field inputs and explicit options/adapters for dependencies. Use `readonly` inputs where mutation is not intended: `SyncCatalogProjectionInput` and `SyncCatalogProjectionOptions` in `src/modules/registry/public.ts`.
+**Parameters:**
+- Prefer options objects for multi-field inputs
+- Under `exactOptionalPropertyTypes`, omit absent fields with conditional spreads:
+  `...(value === undefined ? {} : { value })`
 
-**Return Values:** Return exact domain values or `kind`-discriminated unions. Preserve idempotent states such as `issued`/`replayed` and distinguish refusal, conflict, absence, and unavailable states: `convex/customerRequestRouteMandate.test.ts`.
+**Return Values:**
+- Explicit returns; early guard clauses for missing state
+- Exhaustive switches: assign `const _exhaustive: never = discriminant` in `default` (see `src/lib/ui/status-presentation.ts`, `src/lib/operator/navigation.ts`)
 
 ## Module Design
 
 **Exports:**
-- Export the supported contract from `src/modules/<module>/public.ts`; keep helpers in `internal/`: `src/modules/catalog/public.ts`, `src/modules/catalog/internal/validators.ts`.
-- Define assistant-callable operations with `defineAction` in `<module>.actions.ts`, include honest `summary`, `boundaries`, schema, and surfaces, then register explicitly in `src/modules/actions/index.ts`.
-- Keep owner/admin/webhook writes behind authenticated route, server-function, signature, or source-write admission seams rather than adding them to external agent tools: `src/modules/actions/index.ts`.
+- Named exports preferred
+- `public.ts` re-exports clean names; import internals as `*Impl` then `export const x = xImpl`
+- Register actions explicitly in `src/modules/actions/index.ts` — side-effect-only imports do not register under production bundling
 
 **Barrel Files:**
-- Use deliberate module boundary barrels named `public.ts`, not broad directory-wide `index.ts` barrels: `src/modules/notification-outbox/public.ts`.
-- `src/modules/actions/index.ts` is the explicit central action registry and must import every action directly so bundlers cannot tree-shake registration.
-- Follow project authority: `PRODUCT.md` governs claims and target/current separation; `DESIGN.md` governs UI; `AGENTS.md` governs safe assistant actions and public vocabulary.
+- `public.ts` is the cross-module seam; `internal/` is private to the module
+- Actions: `defineAction` in `<domain>.actions.ts`; schemas/runners from `<domain>.functions.ts` only
+- UI: prefer `@astryxdesign/core` + `@astryxdesign/theme-neutral`; Tailwind for layout; tokens in `src/styles/tokens.css`
+- Do not extend bespoke `Ae*` presentation systems for new visuals — re-skin onto Astryx when touching UI
+
+**Public copy:**
+- Boundary-honest nouns/verbs; no booking/payment/dispatch overclaims
+- No internal vocabulary on human surfaces (`source-owned`, `readback`, `MCP`, `capability`, etc.) — enforce via `npm run test:copy`
 
 ---
 
-*Convention analysis: 2026-07-17*
+*Convention analysis: 2026-07-17*  
+*Update when patterns change*

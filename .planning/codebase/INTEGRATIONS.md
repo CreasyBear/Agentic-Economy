@@ -1,111 +1,161 @@
 # External Integrations
 
-**Analysis Date:** 2026-07-17
-**Inspected Revision:** `3aa46069a00724679020f7f3cb338cc4ee177591`
+**Analysis Date:** 2026-07-17  
+**Inspected revision / last_mapped_commit:** `7deffac41e103ee619ce099db531fc2127ba9985`
 
 ## APIs & External Services
 
-**Data and compute:**
-- Convex - canonical database, functions, HTTP actions, and crons.
-  - SDK/Client: `convex`; adapter `src/lib/server/convex-source.ts`, backend `convex/`.
-  - Auth/config: `VITE_CONVEX_URL`, `CONVEX_URL`, deploy-only `CONVEX_DEPLOY_KEY`.
+**Payment Processing:**
+- Stripe / Autumn — Documented in `.env.example` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `AUTUMN_*`) and treated as provider secrets that must not be reused as AE source-write keys (`src/modules/security/source-write-admission.ts`). Production host commentary pins Autumn `api.useautumn.com` and Stripe `api.stripe.com`.
+  - SDK/Client: No `stripe` or Autumn npm SDK in `package.json`; no `src/modules/billing/` or `src/modules/business-action/` trees in this revision
+  - Auth: Server-only env vars listed above
+  - Status: Env + deploy-smoke residue (`tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`) remain; live checkout/webhook route modules are not present in source at this commit
+- x402 (EVM) — Capability-supply transport may create `PAYMENT-SIGNATURE` headers for HTTP 402 challenges
+  - SDK/Client: `@x402/core`, `@x402/evm`, `@x402/extensions`, `viem` via `src/modules/capability-supply/internal/x402-payment-signer.ts`
+  - Auth: Caller-supplied EVM private key credential on the signature request (not a global env API key)
+  - Scope: Transport helper only; not a public booking/payment product surface
 
-**Authentication and identity:**
-- Clerk - human sessions, owner/operator authorization, and temporary external-agent API credentials.
-  - SDK/Client: `@clerk/tanstack-react-start`; `src/start.ts`, `src/lib/server/customer-request-agent-auth.ts`.
-  - Auth/config: `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`, Clerk public configuration; release tools use `AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID`/`AE_CUSTOMER_REQUEST_CLERK_SUBJECT`.
-- Web Bot Auth / HTTP Message Signatures - signed caller attribution.
-  - SDK/Client: `web-bot-auth`, `http-message-sig`, `@noble/hashes`.
-  - Config: JWK/directory values including `AE_WBA_DIRECTORY_PUBLIC_JWK_JSON`, `AGENT_PUBLIC_JWK_BASE64URL`; identity never authorizes a verb by itself.
+**Email/SMS / Notifications:**
+- Resend — Transactional email dispatch and delivery webhooks
+  - Client: Raw `fetch` in `src/lib/server/notification-provider.ts` (default host `https://api.resend.com`)
+  - Auth: `RESEND_API_KEY`, `RESEND_FROM`, optional `RESEND_API_BASE_URL`, `RESEND_WEBHOOK_SECRET`
+  - Routes: `POST /api/notification/resend-dispatch` (`src/routes/api.notification.resend-dispatch.ts`), `POST /api/notification/resend-webhook` (`src/routes/api.notification.resend-webhook.ts`)
+  - Outbox gate: `AE_NOTIFICATION_OUTBOX_SECRET` for system admission into Convex outbox mutations
+- Novu — Workflow-triggered owner/customer inquiry notifications
+  - Client: Raw `fetch` in `src/lib/server/notification-provider.ts` (default host `https://api.novu.co`)
+  - Auth: `NOVU_SECRET_KEY`, optional `NOVU_API_BASE_URL`, workflow ids `NOVU_WORKFLOW_INQUIRY_OWNER` / `NOVU_WORKFLOW_INQUIRY_CUSTOMER`
+  - Route: `POST /api/notification/novu-dispatch` (`src/routes/api.notification.novu-dispatch.ts`)
 
-**AI inference:**
-- OpenRouter - optional Customer Request interpretation/evaluation.
-  - SDK/Client: direct fetch in `src/modules/customer-request/openrouter-transport.ts`.
-  - Auth/config: `OPENROUTER_API_KEY`, `AE_LLM_MODEL`/`AE_LLM_MODELS`, optional `AE_OPENROUTER_API_BASE_URL`, `AE_SITE_URL`.
+**LLM / AI:**
+- OpenRouter — Chat completions and model listing for the answer tool-use agent and related paths
+  - Integration: `fetch` to `https://openrouter.ai/api/v1/chat/completions` and `/api/v1/models`
+  - Auth: `OPENROUTER_API_KEY` (server-only); model via `AE_LLM_MODEL` (default `deepseek/deepseek-v4-flash`); optional `AE_OPENROUTER_API_BASE_URL`, `AE_LLM_MODELS`
+  - Code: `src/modules/answer/internal/answer-tool-use-agent.ts`, `llm-config.ts`, `openrouter-models.ts`, `src/modules/customer-request/openrouter-transport.ts`, follow-up chips under `src/modules/answer-thread/`
+  - Gates: `AE_ANSWER_EVAL_PASSED=1` unlocks LLM follow-up chips after eval; TanStack AI used for tool JSON Schema (`@tanstack/ai`), not as the model provider
 
-**Notifications:**
-- Resend - inquiry email delivery and signed delivery-event ingestion.
-  - Client: `src/lib/server/notification-provider.ts`; routes `src/routes/api.notification.resend-dispatch.ts` and `src/routes/api.notification.resend-webhook.ts`.
-  - Auth: server-only API key/from/webhook secret; internal dispatch uses `AE_NOTIFICATION_OUTBOX_SECRET`.
-- Novu - notification workflows with transaction/message readback.
-  - Client: `src/lib/server/notification-provider.ts`; route `src/routes/api.notification.novu-dispatch.ts`.
-  - Auth: server-only secret/workflow identifiers plus `AE_NOTIFICATION_OUTBOX_SECRET`.
+**Search:**
+- Meilisearch — Optional generated search mirror; Convex remains catalog source of truth
+  - Integration: HTTP port in `src/modules/registry/internal/catalog-search-port.ts`
+  - Auth: `MEILISEARCH_HOST`, `MEILISEARCH_ADMIN_KEY`, index `AE_SEARCH_INDEX_UID` (default `registry-search-documents`)
+  - Backend mode: `AE_SEARCH_BACKEND` = `convex` | `dual` | `meilisearch`; timeout `AE_SEARCH_TIMEOUT_MS`
 
-**Observability:**
-- PostHog - optional pseudonymous funnel/product events via `posthog-js` and `posthog-node` (`src/lib/observability/`).
-- Sentry - optional sanitized exceptions/traces/source maps via `@sentry/react`, `@sentry/node`, and Vite plugin; build auth uses `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, optional `SENTRY_RELEASE`.
+**Maps:**
+- Google Maps Embed — Optional generative/location map iframes
+  - Client: `VITE_GOOGLE_MAPS_API_KEY` in `src/components/ae/artifacts/AeGenerativeMap.tsx`
+  - CSP allowlist includes `maps.googleapis.com` / `maps.google.com` in `src/lib/http/security-headers.ts`
 
-**Maps and interoperability:**
-- Google Maps - browser map integration configured by `VITE_GOOGLE_MAPS_API_KEY`; restrict this browser-visible key at Google.
-- External capability endpoints - guarded outbound calls from `convex/customerRequestV2PreparationEgress.ts`, `convex/customerRequestRouteTransportWorker.ts`, and `convex/capabilitySupplyReadiness.ts`; configure `AE_ROUTE_*`, `AE_SANDBOX_*`, and `AE_ROUTING_*`.
-- Shippo/EasyPost - conformance-provider example gateways in `examples/routing-provider/lib/`; not evidence of production fulfilment.
-- x402/EVM - narrowly scoped payment-required signing in `src/modules/capability-supply/internal/x402-payment-signer.ts`; not evidence AE publicly charges.
+**Agent identity / HTTP signatures:**
+- Web Bot Auth — Verify signed agent callers
+  - SDK: `web-bot-auth` (+ noble hashes/curves) in `src/modules/routing-kernel/caller-identity.ts`
+  - Config: `AE_WBA_SIGNATURE_AGENT_ALLOWLIST`, `AE_WBA_DIRECTORY_PUBLIC_JWK_JSON`, `AE_AGENT_PUBLIC_INQUIRY_ADMISSION_PRINCIPALS`; public JWKS at `GET /.well-known/http-message-signatures-directory`
+  - Dev-only smoke: `AE_DEV_WBA_SMOKE_*` (ignored in production)
+
+**External APIs (product HTTP surfaces AE exposes):**
+- Public catalog: `GET /api/businesses`, `/api/businesses/search`, `/api/businesses/$slug`
+- Customer Request APIs: `/api/requests*`, `/api/v1/requests*` (authenticated agent/human lifecycle)
+- Answer: `/api/answer/turn`, threads, follow-up chips
+- Discovery: `/api/discovery/schema`, examples, fixtures; `/llms.txt`, `/SKILL.md`, `/$slug/ucp`
+- Sandbox providers: `/api/sandbox/providers/route-resolver|route-quoter|workflow` (also mirrored on Convex HTTP in `convex/http.ts`)
+- Observability funnel write: `POST /api/observability/funnel`
 
 ## Data Storage
 
 **Databases:**
-- Convex document database is canonical.
-  - Connection: `VITE_CONVEX_URL`/`CONVEX_URL`.
-  - Client: generated API and `ConvexHttpClient`; schema assembled at `convex/schema.ts`.
+- Convex — Primary application database and backend execution
+  - Connection: `VITE_CONVEX_URL` (client + `ConvexHttpClient` in `src/lib/server/convex-source.ts`); deploy key `CONVEX_DEPLOY_KEY` in CI
+  - Client: `convex` package; authenticated clients attach Clerk JWT (`template` for Convex)
+  - Schema: Composition root `convex/schema.ts` importing module-owned `*Tables` fragments under `src/modules/*/internal/`
+  - Auth config: `convex/auth.config.ts` requires `CLERK_JWT_ISSUER_DOMAIN`
 
 **File Storage:**
-- No production object-storage integration detected. `output/`, reports, and proof artifacts are development/evidence files.
+- Not detected as a dedicated object store (no S3/Supabase Storage client in dependencies). Static/build assets ship with the Vercel deployment; catalog/media facts live as Convex documents / published URLs.
 
 **Caching:**
-- No Redis/external cache detected. Do not assume cross-instance cache semantics.
+- None as a standalone Redis/Memcached service. Search mirror (Meilisearch) and CDN/hosting caches are the external accelerators when configured.
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- Clerk handles interactive and API-key-backed principals (`src/start.ts`, `src/lib/server/claim-owner-session.ts`).
-- Web Bot Auth verifies signed external caller identity (`src/modules/routing-kernel/caller-identity.ts`).
-- AE-native HMAC/HKDF and Ed25519 helpers bind source writes, inquiry access, preparation authority, receipts, and attestations (`src/modules/security/`, `src/modules/common/`).
+- Clerk — Human sign-in/sign-up and session middleware
+  - Implementation: `@clerk/tanstack-react-start` (`ClerkProvider` in `src/routes/__root.tsx`, `clerkMiddleware` in `src/start.ts`, routes `sign-in.$`, `sign-up.$`)
+  - Keys: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
+  - Convex bridge: JWT issuer domain `CLERK_JWT_ISSUER_DOMAIN`, applicationID `convex`
+  - Server lookups: Clerk Backend API `https://api.clerk.com/v1` for owner delivery addresses (`notification-provider.ts`)
+  - Local E2E bypass: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true` (non-production only; `src/lib/server/local-e2e-bypass.ts`)
+
+**OAuth Integrations:**
+- Configured inside the Clerk dashboard (not hard-coded provider clients in-repo). Use Clerk’s connected social providers as configured for the instance.
+
+**Source-write admission:**
+- AE HMAC source-write trust envelope (`AE_SOURCE_WRITE_SECRET` / per-family `AE_SOURCE_WRITE_KEY_*`) gates Convex writes from server routes — independent of Clerk and provider secrets (`src/lib/server/source-write-admission.ts`, `src/modules/security/source-write-admission.ts`)
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- Sentry is optional and disabled without configuration; events are sanitized in `src/lib/observability/sentry.server.ts` and client equivalent.
+- Sentry — Client (`@sentry/react` / `src/lib/observability/sentry.client.ts`) and server (`@sentry/node` / `sentry.server.ts`)
+  - DSN: `VITE_SENTRY_DSN` / `SENTRY_DSN`; env/release via `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE` (falls back to `VERCEL_GIT_COMMIT_SHA` / `GITHUB_SHA`)
+  - Build upload: `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` enable Vite plugin
+  - Kill switch: `VITE_AE_DISABLE_OBSERVABILITY` / `AE_DISABLE_OBSERVABILITY`
+
+**Analytics:**
+- PostHog — Funnel/product analytics
+  - Client: `posthog-js` (`VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, optional `VITE_POSTHOG_APP_URL`)
+  - Server: `posthog-node` (`POSTHOG_KEY`, `POSTHOG_HOST`)
+  - Funnel sync to Convex may be disabled with `AE_DISABLE_PUBLIC_FUNNEL_SOURCE_SYNC`
 
 **Logs:**
-- Operational/audit records and platform logs are primary; provider failures are redacted before persistence (`src/modules/observability/`, `convex/observability.ts`, `convex/notificationOutbox.ts`).
-- Worker examples enable Cloudflare logs/traces in their Wrangler configs; PostHog provides optional product events.
+- Vercel / hosting platform stdout for the web app
+- Cloudflare Workers observability enabled in `examples/routing-edge/wrangler.jsonc` (logs + sampled traces)
+- Convex dashboard logs for backend functions
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Vercel hosts the Nitro/TanStack Node app; Convex hosts data/functions/HTTP; Cloudflare Workers host routing-edge/signature-directory examples.
-- The standalone provider example has `examples/routing-provider/vercel.json`.
+- Vercel — Primary web/app host (Nitro Vercel Node preset in `vite.config.ts`)
+  - Deploy: GitHub Actions hosted-proof job on `main` using `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, automation bypass secret
+  - Companion: Convex production deploy in the same workflow
+- Cloudflare Workers — Optional routing edge (`examples/routing-edge/`, secret `AE_EDGE_ORIGIN_HMAC_KEY`, vars `AE_ROUTING_ORIGIN`, etc.); public base URL advertised via `AE_ROUTING_PUBLIC_BASE_URL`
 
 **CI Pipeline:**
-- `.github/workflows/kernel-release-gate.yml` runs the source contract, exact-revision Vercel + Convex deploy, and authenticated hosted readback on `main`.
-- `.github/workflows/react-doctor.yml` is advisory.
-- `tools/release/deploy-customer-request-git-source.ts` calls Vercel APIs and release tools call Clerk/deployed AE surfaces.
+- GitHub Actions
+  - `.github/workflows/kernel-release-gate.yml` — `npm run test:release:source` on PR/push; hosted production deploy + Customer Request smoke on `main`
+  - `.github/workflows/react-doctor.yml` — React Doctor checks
+  - Secrets: Clerk, Vercel, Convex deploy key, Customer Request smoke subject/instance ids (GitHub environment `production`)
 
 ## Environment Configuration
 
-**Required env-var families:**
-- Core: Convex URL(s), Clerk public configuration, `CLERK_SECRET_KEY` for protected server paths.
-- Production routing: `AE_ROUTE_CALL_SIGNING_SECRET`, `AE_ROUTE_CALL_SIGNING_KEY_ID`, `AE_SANDBOX_PROVIDER_KEY`, `AE_SITE_URL` (CI-gated).
-- Protected records/writes: `AE_SOURCE_WRITE_SECRET`, `AE_INQUIRY_ACCESS_SECRET`, `AE_INQUIRY_RECEIPT_KEK`, `AE_GOVERNED_SEND_INTEGRITY_SECRET`, `AE_NOTIFICATION_OUTBOX_SECRET` as required by the path.
-- Optional: OpenRouter, Resend, Novu, PostHog, Sentry, and Google Maps variables when enabled.
-- Release: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `VERCEL_AUTOMATION_BYPASS_SECRET`, `CONVEX_DEPLOY_KEY`.
+**Development:**
+- Required for a working local stack: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`, `VITE_CONVEX_URL`, plus source-write keys (or `AE_SOURCE_WRITE_SECRET` derivation in non-prod)
+- Secrets location: `.env.example` as the name catalog; real values in gitignored `.env.local` / `.env.development.local` / host dashboards
+- Optional: `OPENROUTER_API_KEY` for answer LLM path; Resend/Novu for notification smokes; Meilisearch for dual search; `VITE_GOOGLE_MAPS_API_KEY` for maps
+- Mock/stub: Sandbox capability providers (`AE_SANDBOX_PROVIDER_KEY`); non-prod provider base URL overrides allowed by `resolveProviderApiBaseUrl` (`src/modules/security/provider-api-base-url.ts`)
 
-**Secrets location:**
-- `.env.development.local` and `.env.local` exist but were not read; `.env.example` documents names.
-- Production secrets are split between Vercel/GitHub environment secrets and Convex environment variables. Never put secrets in `VITE_*` unless intentionally public.
+**Staging:**
+- Routing-edge example defaults to a staging Convex `.site` origin in `wrangler.jsonc` vars
+- Use separate Clerk/Convex/Vercel projects or env slots; keep provider secrets out of `VITE_*`
+
+**Production:**
+- Secrets management: Vercel project env, Convex prod env (`npx convex env`), Cloudflare Worker secrets, GitHub Actions environment secrets
+- Release gate refuses missing Convex execution settings (`AE_ROUTE_CALL_SIGNING_*`, `AE_SANDBOX_PROVIDER_KEY`, `AE_SITE_URL`)
+- Canonical public URL: `AE_CANONICAL_BASE_URL`, `AE_CANONICAL_HOST_ALLOWLIST`; optional CSP report-only `AE_CSP_REPORT_ONLY`
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- Resend delivery events enter `src/routes/api.notification.resend-webhook.ts`, require signature validation, and persist redacted webhook records.
-- Convex HTTP routes are registered in `convex/http.ts`.
-- The quiet agent door is `GET/POST /api/agent/tools` at `src/routes/api.agent.tools.ts`; only registered and allowlisted actions reach it.
+- Resend — `POST /api/notification/resend-webhook`
+  - Verification: HMAC headers via `verifyResendWebhook` in `src/lib/server/notification-provider.ts` using `RESEND_WEBHOOK_SECRET`
+  - Effect: Admitted webhook ingested into Convex notification outbox with idempotent operation keys
+- Stripe / Autumn webhooks — Env names `STRIPE_WEBHOOK_SECRET` / `AUTUMN_WEBHOOK_SECRET` documented; no matching `src/routes/api.*webhook*` handlers for those providers in this revision
 
 **Outgoing:**
-- Notification dispatch calls Resend/Novu; interpretation calls OpenRouter when configured.
-- Request execution calls admitted capability endpoints via guarded transports and records inspectable state.
-- Release automation calls Vercel and Clerk APIs; PostHog/Sentry receive sanitized telemetry only when configured.
+- Resend send API / Novu trigger API — From dispatch routes after outbox admission
+- OpenRouter chat/models — From answer and customer-request transport paths
+- Meilisearch index/search HTTP — When search backend is `dual` or `meilisearch`
+- Clerk Backend API — Owner email resolution for notifications
+- Convex HTTP sandbox provider callbacks — Edge/origin integrations using signing secrets (`AE_ROUTE_CALL_SIGNING_*`)
+- PostHog / Sentry — Telemetry egress when observability is enabled
 
 ---
 
-*Integration audit: 2026-07-17*
+*Integration audit: 2026-07-17*  
+*Update when adding/removing external services*
