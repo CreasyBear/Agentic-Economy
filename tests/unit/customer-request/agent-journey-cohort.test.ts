@@ -58,8 +58,16 @@ function cohort() {
       effects: ['information_shared:irreversible'],
     },
     providerOutputs: [
-      { provider: 'Sandbox Resolver', digest: 'sha256:' + 'a'.repeat(64) },
-      { provider: 'Sandbox Quoter', digest: 'sha256:' + 'b'.repeat(64) },
+      {
+        provider: 'Sandbox Resolver',
+        endpoint: 'https://providers.example/resolve',
+        digest: 'sha256:' + 'a'.repeat(64),
+      },
+      {
+        provider: 'Sandbox Quoter',
+        endpoint: 'https://providers.example/quote',
+        digest: 'sha256:' + 'b'.repeat(64),
+      },
     ],
     providerInputs: [
       { provider: 'Sandbox Resolver', directFields: ['request'], aeFieldRefs: ['field:request'] },

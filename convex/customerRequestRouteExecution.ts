@@ -2248,6 +2248,7 @@ export const exportCustomerEvidence = internalQuery({
       generatedAt: v.number(), resultJson: v.optional(v.string()),
       steps: v.array(v.object({
         step: v.number(), state: exportedStepState, observedAt: v.number(),
+        business: v.string(), providerOrigin: v.string(), outputDigest: v.optional(v.string()),
         evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
       })),
       problems: v.array(v.object({
@@ -2319,6 +2320,19 @@ export const exportCustomerEvidence = internalQuery({
       || attempts.some((attempt) => !routeAttemptIntegrityValid(attempt))) {
       throw new Error('customer_request_route_run_attempt_integrity_failure')
     }
+    const bindings = await Promise.all(attempts.map(async (attempt) => (
+      await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', attempt.grant.step.bindingId))
+        .unique()
+    )))
+    if (bindings.some((binding, index) => {
+      const attempt = attempts[index]
+      return binding === null || attempt === undefined
+        || binding.offeringId !== attempt.grant.step.offeringId
+        || binding.registrationHash !== attempt.grant.step.bindingRegistrationHash
+    })) {
+      throw new Error('customer_request_route_run_binding_integrity_failure')
+    }
     const problems = await ctx.db.query('customerRequestRouteProblemReports')
       .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).take(101)
     if (problems.length > 100 || problems.some((problem) => problem.principalId !== args.principalId)) {
@@ -2331,8 +2345,13 @@ export const exportCustomerEvidence = internalQuery({
     return {
       kind: 'found' as const, state: run.state, generatedAt: Date.now(),
       ...(run.resultJson === undefined ? {} : { resultJson: run.resultJson }),
-      steps: attempts.sort((left, right) => left.position - right.position).map((attempt) => ({
+      steps: attempts.map((attempt, index) => ({ attempt, binding: bindings[index] }))
+        .sort((left, right) => left.attempt.position - right.attempt.position)
+        .map(({ attempt, binding }) => ({
         step: attempt.position, state: exportState(attempt.state), observedAt: attempt.updatedAt,
+        business: run.businesses?.[attempt.position - 1]?.name ?? `Business step ${attempt.position}`,
+        providerOrigin: new URL(binding!.endpointUrl).origin,
+        ...(attempt.outputDigest === undefined ? {} : { outputDigest: attempt.outputDigest }),
         evidence: (attempt.evidence ?? []).map((item, index) => ({
           receiptRef: `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
           label: `Result evidence ${index + 1}`,

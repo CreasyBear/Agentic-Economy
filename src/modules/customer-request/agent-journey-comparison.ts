@@ -67,8 +67,18 @@ type AeJourney = Readonly<{
       providerFields?: readonly Readonly<{ business: string; fields: readonly string[] }>[]
     }>
     evidenceIntegrity?: Readonly<
-      { state: 'verified'; resultDigest: string; steps: readonly Readonly<{ step: number; receiptRefs: readonly string[] }>[] }
-      | { state: 'not_applicable' }
+      {
+        state: 'verified'
+        resultDigest: string
+        steps: readonly Readonly<{
+          step: number
+          business: string
+          providerOrigin: string
+          outputDigest: string
+          receiptRefs: readonly string[]
+        }>[]
+      }
+      | { state: 'not_applicable' | 'not_proven' }
     >
     resultIntegrity: Readonly<
       { state: 'verified'; digest: string }
@@ -90,6 +100,7 @@ type ComparisonFailure =
   | 'predeclared_gain_unsupported' | 'cohort_input_not_proven' | 'cohort_input_mismatch'
   | 'ae_available_facts_mismatch' | 'direct_least_data_mismatch' | 'direct_provider_outputs_mismatch'
   | 'ae_authority_scope_mismatch' | 'ae_least_data_mismatch' | 'ae_evidence_integrity_not_proven'
+  | 'ae_provider_execution_mismatch'
   | 'request_mismatch' | 'provider_set_mismatch'
   | 'direct_baseline_ineligible'
   | 'direct_incomplete' | 'ae_incomplete'
@@ -135,6 +146,8 @@ export function compareAgentJourneys(input: Readonly<{
   if (ae.measurements.evidenceIntegrity?.state !== 'verified'
     || ae.measurements.evidenceIntegrity.resultDigest !== ae.final.resultDigest) {
     failures.push('ae_evidence_integrity_not_proven')
+  } else if (!aeProviderExecutionMatches(cohort, ae.measurements.evidenceIntegrity.steps)) {
+    failures.push('ae_provider_execution_mismatch')
   }
   if (direct.jobDigest !== canonicalDigest(ae.input.request)) failures.push('request_mismatch')
   if (!sameStringSet(direct.invocations.map(({ business }) => business), ae.final.selectedBusinesses)) {
@@ -258,6 +271,25 @@ function aeLeastDataMatches(
       business: provider, fields: aeFieldRefs,
     })).sort(byBusiness),
     providerFields.map(({ business, fields }) => ({ business, fields: [...fields].sort() })).sort(byBusiness),
+  )
+}
+
+function aeProviderExecutionMatches(
+  cohort: FrozenAgentJourneyCohort,
+  steps: readonly Readonly<{ business: string; providerOrigin: string; outputDigest: string }>[],
+) {
+  const expected = cohort.input.providerOutputs.map(({ provider, endpoint, digest }) => ({
+    business: provider,
+    outputDigest: digest,
+    providerOrigin: new URL(endpoint).origin,
+  }))
+  return sameDigest(
+    expected.map(({ business, outputDigest, providerOrigin }) => ({
+      business, outputDigest, providerOrigin,
+    })).sort(byBusiness),
+    steps.map(({ business, outputDigest, providerOrigin }) => ({
+      business, outputDigest, providerOrigin,
+    })).sort(byBusiness),
   )
 }
 

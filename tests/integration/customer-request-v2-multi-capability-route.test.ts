@@ -1213,7 +1213,22 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(evidence).toMatchObject({
       kind: 'evidence', state: 'outcome_unknown',
-      steps: [{ step: 1, state: 'completed' }, { step: 2, state: 'outcome_unknown' }],
+      steps: [
+        {
+          step: 1,
+          state: 'completed',
+          business: 'Route admission-resolver',
+          providerOrigin: 'https://admission-resolver.example.test',
+          outputDigest: canonicalDigest({ serviceReference: 'sandbox-service:partial' }),
+        },
+        {
+          step: 2,
+          state: 'outcome_unknown',
+          business: 'Route admission-quoter',
+          providerOrigin: 'https://admission-quoter.example.test',
+          outputDigest: canonicalDigest({ quoteReference: 'sandbox-partial-quote:one' }),
+        },
+      ],
       result: {
         kind: 'partial_result',
         output: { quoteReference: 'sandbox-partial-quote:one' },

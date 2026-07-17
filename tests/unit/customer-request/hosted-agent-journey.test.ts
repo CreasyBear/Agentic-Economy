@@ -450,8 +450,20 @@ describe('hosted Customer Request journey', () => {
       {
         kind: 'evidence', requestRef: 'request:cold', state: 'completed', generatedAt: 9_100,
         steps: [
-          { step: 1, state: 'completed', observedAt: 9_050, evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }] },
-          { step: 2, state: 'completed', observedAt: 9_100, evidence: [{ receiptRef: 'receipt:two', label: 'Quote reference' }] },
+          {
+            step: 1, state: 'completed', observedAt: 9_050,
+            business: 'Sandbox Route Resolver',
+            providerOrigin: 'https://providers.example',
+            outputDigest: 'sha256:' + 'a'.repeat(64),
+            evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }],
+          },
+          {
+            step: 2, state: 'completed', observedAt: 9_100,
+            business: 'Sandbox Route Quoter',
+            providerOrigin: 'https://providers.example',
+            outputDigest: 'sha256:' + 'b'.repeat(64),
+            evidence: [{ receiptRef: 'receipt:two', label: 'Quote reference' }],
+          },
         ],
         result: { quoteReference: 'sandbox-quote:complete' },
       },
@@ -519,8 +531,20 @@ describe('hosted Customer Request journey', () => {
         state: 'verified',
         resultDigest: expect.stringMatching(/^sha256:/u),
         steps: [
-          { step: 1, receiptRefs: ['receipt:one'] },
-          { step: 2, receiptRefs: ['receipt:two'] },
+          {
+            step: 1,
+            business: 'Sandbox Route Resolver',
+            providerOrigin: 'https://providers.example',
+            outputDigest: 'sha256:' + 'a'.repeat(64),
+            receiptRefs: ['receipt:one'],
+          },
+          {
+            step: 2,
+            business: 'Sandbox Route Quoter',
+            providerOrigin: 'https://providers.example',
+            outputDigest: 'sha256:' + 'b'.repeat(64),
+            receiptRefs: ['receipt:two'],
+          },
         ],
       },
       resultIntegrity: { state: 'verified', digest: expect.stringMatching(/^sha256:/) },

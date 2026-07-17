@@ -178,8 +178,8 @@ function comparisonCohort(
       },
     ],
     providerOutputs: [
-      { provider: 'Resolver', digest: 'sha256:' + 'a'.repeat(64) },
-      { provider: 'Quoter', digest: 'sha256:' + 'b'.repeat(64) },
+      { provider: 'Resolver', endpoint: providerOrigins[0]!, digest: 'sha256:' + 'a'.repeat(64) },
+      { provider: 'Quoter', endpoint: providerOrigins[1]!, digest: 'sha256:' + 'b'.repeat(64) },
     ],
     resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1',
   } as const

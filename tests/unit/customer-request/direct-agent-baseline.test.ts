@@ -269,10 +269,12 @@ function baselineCohort() {
     providerOutputs: [
       {
         provider: 'Sandbox Route Resolver',
+        endpoint: 'https://agentic-economy-phi.vercel.app/api/sandbox/providers/route-resolver',
         digest: canonicalDigest({ serviceReference: 'sandbox-service:one' }),
       },
       {
         provider: 'Sandbox Route Quoter',
+        endpoint: 'https://agentic-economy-phi.vercel.app/api/sandbox/providers/route-quoter',
         digest: canonicalDigest({ quoteReference: 'sandbox-quote:one' }),
       },
     ],

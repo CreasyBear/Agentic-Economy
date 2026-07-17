@@ -2202,7 +2202,11 @@ const evidenceExport = v.object({
       v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
       v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
     ),
-    observedAt: v.number(), evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+    observedAt: v.number(),
+    business: v.string(),
+    providerOrigin: v.string(),
+    outputDigest: v.optional(v.string()),
+    evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
   })),
   problems: v.array(v.object({
     reportRef: v.string(),
@@ -2290,6 +2294,9 @@ export const exportRouteEvidence = action({
             step: number
             state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'failed' | 'outcome_unknown' | 'cancelled'
             observedAt: number
+            business: string
+            providerOrigin: string
+            outputDigest?: string
             evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
           }>[]
           problems: readonly Readonly<{

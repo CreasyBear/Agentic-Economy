@@ -23,8 +23,16 @@ const cohort = freezeAgentJourneyCohort({
     },
   ],
   providerOutputs: [
-    { provider: 'Sandbox Resolver', digest: 'sha256:' + 'a'.repeat(64) },
-    { provider: 'Sandbox Quoter', digest: 'sha256:' + 'b'.repeat(64) },
+    {
+      provider: 'Sandbox Resolver',
+      endpoint: 'https://providers.example/resolver',
+      digest: 'sha256:' + 'a'.repeat(64),
+    },
+    {
+      provider: 'Sandbox Quoter',
+      endpoint: 'https://providers.example/quoter',
+      digest: 'sha256:' + 'b'.repeat(64),
+    },
   ],
   resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1',
 })
@@ -91,8 +99,20 @@ const ae = {
       state: 'verified' as const,
       resultDigest: 'sha256:result',
       steps: [
-        { step: 1, receiptRefs: ['receipt:resolver'] },
-        { step: 2, receiptRefs: ['receipt:quoter'] },
+        {
+          step: 1,
+          business: 'Sandbox Resolver',
+          providerOrigin: 'https://providers.example',
+          outputDigest: 'sha256:' + 'a'.repeat(64),
+          receiptRefs: ['receipt:resolver'],
+        },
+        {
+          step: 2,
+          business: 'Sandbox Quoter',
+          providerOrigin: 'https://providers.example',
+          outputDigest: 'sha256:' + 'b'.repeat(64),
+          receiptRefs: ['receipt:quoter'],
+        },
       ],
     },
     resultIntegrity: { state: 'verified' as const, digest: 'sha256:result' },
@@ -138,8 +158,20 @@ describe('agent journey comparison', () => {
           state: 'verified',
           resultDigest: 'sha256:result',
           steps: [
-            { step: 1, receiptRefs: ['receipt:resolver'] },
-            { step: 2, receiptRefs: ['receipt:quoter'] },
+            {
+              step: 1,
+              business: 'Sandbox Resolver',
+              providerOrigin: 'https://providers.example',
+              outputDigest: 'sha256:' + 'a'.repeat(64),
+              receiptRefs: ['receipt:resolver'],
+            },
+            {
+              step: 2,
+              business: 'Sandbox Quoter',
+              providerOrigin: 'https://providers.example',
+              outputDigest: 'sha256:' + 'b'.repeat(64),
+              receiptRefs: ['receipt:quoter'],
+            },
           ],
         },
         resultIntegrity: { state: 'verified', digest: 'sha256:result' },
@@ -361,5 +393,32 @@ describe('agent journey comparison', () => {
     })
 
     expect(proof.failures).toContain('ae_evidence_integrity_not_proven')
+  })
+
+  it('fails closed when AE executed a different endpoint or received a different provider output', () => {
+    const proof = compareAgentJourneys({
+      cohort,
+      direct,
+      ae: {
+        ...ae,
+        measurements: {
+          ...ae.measurements,
+          evidenceIntegrity: {
+            ...ae.measurements.evidenceIntegrity,
+            steps: ae.measurements.evidenceIntegrity.steps.map((step) => (
+              step.step === 2
+                ? {
+                    ...step,
+                    providerOrigin: 'https://substituted.example',
+                    outputDigest: 'sha256:' + 'f'.repeat(64),
+                  }
+                : step
+            )),
+          },
+        },
+      },
+    })
+
+    expect(proof.failures).toContain('ae_provider_execution_mismatch')
   })
 })

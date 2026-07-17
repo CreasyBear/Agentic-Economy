@@ -271,8 +271,15 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
         resultDigest: z.string().startsWith('sha256:'),
         steps: z.array(z.strictObject({
           step: z.number().int().positive(),
+          business: z.string(),
+          providerOrigin: z.url(),
+          outputDigest: z.string().startsWith('sha256:'),
           receiptRefs: z.array(z.string()),
         })),
+      }),
+      z.strictObject({
+        state: z.literal('not_proven'),
+        reason: z.literal('step_execution_identity_unavailable'),
       }),
       z.strictObject({ state: z.literal('not_applicable') }),
     ]),
@@ -1873,6 +1880,9 @@ function journeyMeasurements(
   evidence?: Readonly<{
     steps: readonly Readonly<{
       step: number
+      business?: string | undefined
+      providerOrigin?: string | undefined
+      outputDigest?: string | undefined
       evidence: readonly Readonly<{ receiptRef: string }>[]
     }>[]
   }>,
@@ -1926,11 +1936,18 @@ function journeyMeasurements(
     },
     evidenceIntegrity: resultDigest === undefined || evidence === undefined
       ? { state: 'not_applicable' as const }
+      : evidence.steps.some(({ business, providerOrigin, outputDigest }) => (
+          business === undefined || providerOrigin === undefined || outputDigest === undefined
+        ))
+        ? { state: 'not_proven' as const, reason: 'step_execution_identity_unavailable' as const }
       : {
           state: 'verified' as const,
           resultDigest,
-          steps: evidence.steps.map(({ step, evidence: receipts }) => ({
+          steps: evidence.steps.map(({ step, business, providerOrigin, outputDigest, evidence: receipts }) => ({
             step,
+            business: business!,
+            providerOrigin: providerOrigin!,
+            outputDigest: outputDigest!,
             receiptRefs: receipts.map(({ receiptRef }) => receiptRef).sort(),
           })),
         },

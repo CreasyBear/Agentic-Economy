@@ -285,8 +285,16 @@ function developmentComparisonCohort() {
       },
     ],
     providerOutputs: [
-      { provider: 'Sandbox Route Resolver', digest: 'sha256:' + 'a'.repeat(64) },
-      { provider: 'Sandbox Route Quoter', digest: 'sha256:' + 'b'.repeat(64) },
+      {
+        provider: 'Sandbox Route Resolver',
+        endpoint: 'https://loyal-peacock-107.convex.site/api/sandbox/providers/route-resolver',
+        digest: 'sha256:' + 'a'.repeat(64),
+      },
+      {
+        provider: 'Sandbox Route Quoter',
+        endpoint: 'https://loyal-peacock-107.convex.site/api/sandbox/providers/route-quoter',
+        digest: 'sha256:' + 'b'.repeat(64),
+      },
     ],
     resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1',
   } as const

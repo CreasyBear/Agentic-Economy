@@ -25,6 +25,7 @@ const agentJourneyCohortInputSchema = z.strictObject({
   })).min(2),
   providerOutputs: z.array(z.strictObject({
     provider: z.string().min(1),
+    endpoint: z.url(),
     digest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
   })).min(2),
   resultUsabilityRubric: z.literal('customer_result_and_schema_valid_evidence:v1'),
@@ -45,7 +46,7 @@ export type AgentJourneyCohortInput = Readonly<{
     directFields: readonly string[]
     aeFieldRefs: readonly string[]
   }>[]
-  providerOutputs: readonly Readonly<{ provider: string; digest: string }>[]
+  providerOutputs: readonly Readonly<{ provider: string; endpoint: string; digest: string }>[]
   resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1'
 }>
 
@@ -70,7 +71,9 @@ export function freezeAgentJourneyCohort(input: AgentJourneyCohortInput) {
       aeFieldRefs: sortedUnique(aeFieldRefs),
     })).sort((left, right) => left.provider.localeCompare(right.provider)),
     providerOutputs: input.providerOutputs.map((output) => ({ ...output }))
-      .sort((left, right) => left.provider.localeCompare(right.provider) || left.digest.localeCompare(right.digest)),
+      .sort((left, right) => left.provider.localeCompare(right.provider)
+        || left.endpoint.localeCompare(right.endpoint)
+        || left.digest.localeCompare(right.digest)),
     resultUsabilityRubric: input.resultUsabilityRubric,
   } satisfies StableHashValue
   return deepFreeze({

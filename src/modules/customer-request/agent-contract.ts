@@ -219,6 +219,9 @@ export const customerRequestEvidenceExportSchema = z.strictObject({
       'completed', 'failed', 'outcome_unknown', 'cancelled',
     ]),
     observedAt: safeNonnegativeInteger,
+    business: z.string().optional(),
+    providerOrigin: z.url().optional(),
+    outputDigest: z.string().startsWith('sha256:').optional(),
     evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
   })),
   problems: z.array(customerRequestProblemProjectionSchema.extend({
