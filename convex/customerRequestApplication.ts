@@ -2,7 +2,6 @@ import { v, type Infer } from 'convex/values'
 
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { projectCustomerRequestProblemTracking } from '@/modules/customer-request/problem-tracking'
 import {
   routeChoiceSignature,
 } from '@/modules/customer-request/compiler'
@@ -27,9 +26,11 @@ import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-reques
 import {
   bindRequirementAnswer,
   compileCommit as compileCommitApplication,
+  exportRouteEvidence as exportRouteEvidenceApplication,
+  exportRouteProblemForSupport as exportRouteProblemForSupportApplication,
   interpretCompileCommit as interpretCompileCommitApplication,
+  listRouteProblemsForSupport as listRouteProblemsForSupportApplication,
   loadRequestGraph as loadRequestGraphApplication,
-  parseCustomerRouteResult,
   preparationResultView,
   allowStandingRoute,
   inspectStandingRoute,
@@ -39,13 +40,18 @@ import {
   projectRoutePlansFromMaterial,
   projectStoredAggregate as projectStoredAggregateApplication,
   projectStoredRouteRun as projectStoredRouteRunApplication,
+  readRouteProblemForBusiness as readRouteProblemForBusinessApplication,
   rebindStoredFacts,
+  recordRouteProblemBusinessReport as recordRouteProblemBusinessReportApplication,
   recoverUnresolvedEgress as recoverUnresolvedEgressApplication,
+  replyRouteProblem as replyRouteProblemApplication,
   replayCommittedCommand as replayCommittedCommandApplication,
+  reportRouteProblem as reportRouteProblemApplication,
   resumeCustomerRequest,
   revokeStandingRoute,
   runPreparationEgress as runPreparationEgressApplication,
   applyStandingRoute,
+  updateRouteProblemStatus as updateRouteProblemStatusApplication,
   type CommandReplayResult,
   type CompileCommitInput,
   type CustomerRequestActionResult,
@@ -59,6 +65,7 @@ import {
 import { internal } from './_generated/api'
 import { action, env, type ActionCtx } from './_generated/server'
 import { compareResumePorts, preparationEgressPorts } from './customerRequestCompareResumePorts'
+import { problemRoutePorts } from './customerRequestProblemRoutePorts'
 import { standingRoutePorts } from './customerRequestStandingRoutePorts'
 
 const MAX_INTERPRETER_DESCRIPTOR_BYTES = 512_000
@@ -1347,52 +1354,10 @@ export const reportRouteProblem = action({
     }
     const caller = await resolveRequestCaller(ctx, 'report', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
-      return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    }
-    const result: Readonly<
-      | {
-          kind: 'reported'; reportRef: string; reportedAt: number
-          affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
-          visibility: 'customer_and_ae_only' | 'share_with_affected_business'
-          evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
-        }
-      | {
-          kind: 'replayed'; reportRef: string; reportedAt: number
-          affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
-          visibility: 'customer_and_ae_only' | 'share_with_affected_business'
-          evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
-        }
-      | { kind: 'conflict' }
-      | { kind: 'refused'; reason: 'request_not_found' | 'evidence_not_found' }
-    > = await ctx.runMutation(internal.customerRequestRouteExecution.reportProblem, {
-      requestId: args.requestRef, idempotencyKey: args.idempotencyKey,
-      category: args.category, summary: args.summary, principalId: caller.principalId,
-      ...(args.affectedStep === undefined ? {} : { affectedStep: args.affectedStep }),
-      evidenceReceiptRefs: args.evidenceReceiptRefs ?? [],
-      visibility: args.visibility ?? 'customer_and_ae_only',
-    })
-    if (result.kind === 'conflict') return {
-      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'idempotency_key_reused' as const,
-    }
-    if (result.kind === 'refused') return {
-      kind: 'refused' as const,
-      reason: result.reason === 'evidence_not_found' ? 'evidence_not_found' as const : 'request_not_found' as const,
-    }
-    const tracking = projectCustomerRequestProblemTracking(result.reportedAt, result.reportedAt)
-    return {
-      kind: 'problem_reported' as const, requestRef: args.requestRef,
-      reportRef: result.reportRef, state: 'received' as const, reportedAt: result.reportedAt,
-      problem: {
-        category: args.category, claimSource: 'customer' as const, causality: 'unknown' as const,
-        resolution: 'not_adjudicated' as const, nextAction: 'await_status_update' as const,
-        nextActor: 'ae' as const, nextUpdateDueAt: tracking.nextUpdateDueAt ?? result.reportedAt,
-        decisionAuthority: tracking.decisionAuthority,
-        visibility: result.visibility, evidence: result.evidence.map((item) => ({ ...item })),
-        affected: { ...result.affected },
-      },
-    }
+    return await reportRouteProblemApplication({
+      ...command,
+      principalId: caller.principalId,
+    }, problemRoutePorts(ctx)) as ProblemActionResult
   },
 })
 
@@ -1477,7 +1442,7 @@ export const readRouteProblemForBusiness = action({
   args: { reportRef: v.string() },
   returns: businessProblemViewActionResult,
   handler: async (ctx, args): Promise<BusinessProblemViewActionResult> => (
-    await ctx.runQuery(internal.customerRequestRouteExecution.readProblemForBusiness, args)
+    await readRouteProblemForBusinessApplication(args, problemRoutePorts(ctx)) as BusinessProblemViewActionResult
   ),
 })
 
@@ -1494,52 +1459,9 @@ export const recordRouteProblemBusinessReport = action({
     evidenceReceiptRefs: v.optional(v.array(v.string())),
   },
   returns: businessProblemReportActionResult,
-  handler: async (ctx, args): Promise<BusinessProblemReportActionResult> => {
-    const result: Readonly<
-      | {
-          kind: 'recorded' | 'replayed'
-          statementRef: string
-          reportRef: string
-          business: string
-          causalityPosition: 'supports' | 'disputes' | 'uncertain'
-          statement: string
-          evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
-          recordedAt: number
-        }
-      | { kind: 'conflict' }
-      | {
-          kind: 'refused'
-          reason:
-            | 'authentication_required'
-            | 'authority_denied'
-            | 'report_not_found'
-            | 'sharing_not_authorized'
-            | 'evidence_not_found'
-            | 'invalid_report'
-        }
-    > = await ctx.runMutation(
-      internal.customerRequestRouteExecution.recordProblemBusinessReport,
-      { ...args, evidenceReceiptRefs: args.evidenceReceiptRefs ?? [] },
-    )
-    if (result.kind === 'conflict') {
-      return { kind: 'conflict', reason: 'idempotency_key_reused' }
-    }
-    if (result.kind === 'refused') return result
-    return {
-      kind: 'business_report_recorded',
-      statementRef: result.statementRef,
-      reportRef: result.reportRef,
-      business: result.business,
-      claimSource: 'business',
-      causalityPosition: result.causalityPosition,
-      causality: 'unknown',
-      resolution: 'not_adjudicated',
-      decisionAuthority: 'not_assigned',
-      statement: result.statement,
-      evidence: result.evidence.map((item) => ({ ...item })),
-      recordedAt: result.recordedAt,
-    }
-  },
+  handler: async (ctx, args): Promise<BusinessProblemReportActionResult> => (
+    await recordRouteProblemBusinessReportApplication(args, problemRoutePorts(ctx)) as BusinessProblemReportActionResult
+  ),
 })
 
 export const updateRouteProblemStatus = action({
@@ -1551,43 +1473,9 @@ export const updateRouteProblemStatus = action({
     publicMessage: v.string(),
   },
   returns: problemStatusChangeResult,
-  handler: async (ctx, args): Promise<ProblemStatusChangeResult> => {
-    const result: Readonly<
-      | {
-          kind: 'updated'
-          reportRef: string
-          version: number
-          state: 'investigating' | 'waiting_for_customer' | 'closed'
-          recordedAt: number
-        }
-      | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'stale_version' }
-      | {
-          kind: 'refused'
-          reason: 'authentication_required' | 'authority_denied' | 'report_not_found' | 'invalid_update'
-        }
-    > = await ctx.runMutation(internal.customerRequestRouteExecution.updateProblemStatus, args)
-    if (result.kind === 'conflict') {
-      return { kind: 'conflict', reportRef: args.reportRef, reason: result.reason }
-    }
-    if (result.kind === 'refused') return result
-    const tracking = projectCustomerRequestProblemTracking(
-      result.recordedAt,
-      result.recordedAt,
-      { state: result.state, recordedAt: result.recordedAt },
-    )
-    if (tracking.nextAction === 'check_status') throw new Error('problem_status_projection_integrity_failure')
-    return {
-      kind: 'problem_status_updated',
-      reportRef: result.reportRef,
-      version: result.version,
-      state: result.state,
-      nextAction: tracking.nextAction,
-      nextActor: tracking.nextActor,
-      ...(tracking.nextUpdateDueAt === undefined ? {} : { nextUpdateDueAt: tracking.nextUpdateDueAt }),
-      decisionAuthority: tracking.decisionAuthority,
-      recordedAt: result.recordedAt,
-    }
-  },
+  handler: async (ctx, args): Promise<ProblemStatusChangeResult> => (
+    await updateRouteProblemStatusApplication(args, problemRoutePorts(ctx)) as ProblemStatusChangeResult
+  ),
 })
 
 export const replyRouteProblem = action({
@@ -1610,52 +1498,10 @@ export const replyRouteProblem = action({
     }
     const caller = await resolveRequestCaller(ctx, 'report', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    const result: Readonly<
-      | {
-          kind: 'updated'
-          reportRef: string
-          version: number
-          state: 'investigating' | 'waiting_for_customer' | 'closed'
-          recordedAt: number
-        }
-      | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'stale_version' }
-      | {
-          kind: 'refused'
-          reason: 'authentication_required' | 'authority_denied' | 'report_not_found' | 'invalid_update'
-        }
-    > = await ctx.runMutation(internal.customerRequestRouteExecution.replyProblem, {
-      requestId: args.requestRef,
-      reportRef: args.reportRef,
+    return await replyRouteProblemApplication({
+      ...command,
       principalId: caller.principalId,
-      expectedVersion: args.expectedVersion,
-      idempotencyKey: args.idempotencyKey,
-      message: args.message,
-    })
-    if (result.kind === 'conflict') {
-      return { kind: 'conflict', reportRef: args.reportRef, reason: result.reason }
-    }
-    if (result.kind === 'refused') return result
-    const tracking = projectCustomerRequestProblemTracking(
-      result.recordedAt,
-      result.recordedAt,
-      { state: result.state, recordedAt: result.recordedAt },
-    )
-    if (tracking.nextAction === 'check_status') throw new Error('problem_status_projection_integrity_failure')
-    return {
-      kind: 'problem_reply_recorded',
-      reportRef: result.reportRef,
-      version: result.version,
-      state: result.state,
-      nextAction: tracking.nextAction,
-      nextActor: tracking.nextActor,
-      ...(tracking.nextUpdateDueAt === undefined ? {} : { nextUpdateDueAt: tracking.nextUpdateDueAt }),
-      decisionAuthority: tracking.decisionAuthority,
-      recordedAt: result.recordedAt,
-    }
+    }, problemRoutePorts(ctx)) as ProblemStatusChangeResult
   },
 })
 
@@ -1703,11 +1549,11 @@ type SupportProblemListResult = Infer<typeof supportProblemListResult>
 export const listRouteProblemsForSupport = action({
   args: { limit: v.optional(v.number()) },
   returns: supportProblemListResult,
-  handler: async (ctx, args): Promise<SupportProblemListResult> => {
-    return await ctx.runQuery(internal.customerRequestRouteExecution.listProblemsForSupport, {
+  handler: async (ctx, args): Promise<SupportProblemListResult> => (
+    await listRouteProblemsForSupportApplication({
       limit: args.limit ?? 50,
-    })
-  },
+    }, problemRoutePorts(ctx)) as SupportProblemListResult
+  ),
 })
 
 const supportProblemExportResult = v.union(
@@ -1859,12 +1705,9 @@ type SupportProblemExportResult = Infer<typeof supportProblemExportResult>
 export const exportRouteProblemForSupport = action({
   args: { reportRef: v.string() },
   returns: supportProblemExportResult,
-  handler: async (ctx, args): Promise<SupportProblemExportResult> => {
-    return await ctx.runQuery(
-      internal.customerRequestRouteExecution.exportProblemForSupport,
-      args,
-    )
-  },
+  handler: async (ctx, args): Promise<SupportProblemExportResult> => (
+    await exportRouteProblemForSupportApplication(args, problemRoutePorts(ctx)) as SupportProblemExportResult
+  ),
 })
 
 const evidenceExport = v.object({
@@ -1957,87 +1800,10 @@ export const exportRouteEvidence = action({
     const command = { requestRef: args.requestRef }
     const caller = await resolveRequestCaller(ctx, 'evidence', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
-      return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    }
-    const exported: Readonly<
-      | { kind: 'none' }
-      | {
-          kind: 'found'
-          state: 'queued' | 'running' | 'outcome_unknown' | 'completed' | 'failed' | 'cancelled'
-          generatedAt: number
-          resultJson?: string
-          steps: readonly Readonly<{
-            step: number
-            state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'failed' | 'outcome_unknown' | 'cancelled'
-            observedAt: number
-            business: string
-            providerOrigin: string
-            outputDigest?: string
-            evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
-          }>[]
-          problems: readonly Readonly<{
-            reportRef: string
-            version: number
-            state: 'received' | 'update_due' | 'investigating' | 'waiting_for_customer' | 'closed'
-            category:
-              | 'incorrect_result'
-              | 'unexpected_cost'
-              | 'duplicate_charge_or_effect'
-              | 'privacy_concern'
-              | 'could_not_stop'
-              | 'other'
-            summary: string
-            claimSource: 'customer'
-            causality: 'unknown'
-            resolution: 'not_adjudicated'
-            nextAction: 'await_status_update' | 'check_status' | 'provide_information' | 'none'
-            nextActor: 'ae' | 'customer' | 'none'
-            nextUpdateDueAt?: number
-            decisionAuthority: 'not_assigned'
-            visibility: 'customer_and_ae_only' | 'share_with_affected_business'
-            evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
-            reportedAt: number
-            affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
-            claims: readonly Readonly<{
-              claimSource: 'customer' | 'business'
-              causalityPosition: 'reported_problem' | 'supports' | 'disputes' | 'uncertain'
-              statement: string
-              business?: string
-              evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
-              recordedAt: number
-            }>[]
-            history: readonly Readonly<{
-              version: number
-              state: 'received' | 'investigating' | 'waiting_for_customer' | 'closed'
-              source: 'customer' | 'ae_support'
-              message: string
-              recordedAt: number
-            }>[]
-          }>[]
-        }
-    > = await ctx.runQuery(internal.customerRequestRouteExecution.exportCustomerEvidence, {
-      requestId: args.requestRef, principalId: caller.principalId,
-    })
-    if (exported.kind === 'none') return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    const result = exported.resultJson === undefined ? undefined : parseCustomerRouteResult(exported.resultJson)
-    return {
-      kind: 'evidence' as const, requestRef: args.requestRef, state: exported.state,
-      generatedAt: exported.generatedAt, steps: exported.steps.map((step) => ({
-        ...step, evidence: step.evidence.map((item) => ({ ...item })),
-      })),
-      problems: exported.problems.map((problem) => ({
-        ...problem, affected: { ...problem.affected },
-        evidence: problem.evidence.map((item) => ({ ...item })),
-        claims: problem.claims.map((claim) => ({
-          ...claim,
-          evidence: claim.evidence.map((item) => ({ ...item })),
-        })),
-        history: problem.history.map((item) => ({ ...item })),
-      })),
-      ...(result === undefined ? {} : { result }),
-    }
+    return await exportRouteEvidenceApplication({
+      requestRef: args.requestRef,
+      principalId: caller.principalId,
+    }, problemRoutePorts(ctx)) as EvidenceActionResult
   },
 })
 
