@@ -231,11 +231,10 @@ describe('CustomerRequest source completeness', () => {
     const fixtureDiscovery = readFileSync('src/modules/discovery/internal/discovery-files.ts', 'utf8')
     const durableDiscovery = readFileSync('convex/discovery.ts', 'utf8')
     const publicComprehension = readFileSync('src/modules/customer-request/public-comprehension.ts', 'utf8')
+    const requestSchema = readFileSync('src/modules/customer-request/public-contract-schema.ts', 'utf8')
     const requiredMarkers = [
-      '/api/v1/requests',
       'customer_requests:create',
-      'needs_information | ready_to_compare | routes_ready | route_confirmed | in_progress',
-      '/confirmation', '/run', '/evidence', '/problems', '/cancellation',
+      'schema=',
     ]
 
     for (const marker of requiredMarkers) {
@@ -244,6 +243,14 @@ describe('CustomerRequest source completeness', () => {
     }
     expect(fixtureDiscovery).toContain('CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES')
     expect(durableDiscovery).toContain('CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES')
+    for (const source of [fixtureDiscovery, durableDiscovery]) {
+      expect(source).toContain('CUSTOMER_REQUEST_AGENT_ENTRYPOINT')
+      expect(source).toContain('CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES')
+      expect(source).toContain('CUSTOMER_REQUEST_STATE_VALUES')
+    }
+    for (const marker of ['/confirmation', '/run', '/evidence', '/problems', '/cancellation']) {
+      expect(requestSchema, `Request schema missing ${marker}`).toContain(marker)
+    }
     expect(publicComprehension).toContain('labelled AE sandbox businesses')
     expect(publicComprehension).toContain('Starting it is a separate decision')
     expect(`${fixtureDiscovery}\n${durableDiscovery}`).not.toMatch(/Advanced routing kernel:|\.well-known\/ae-routing|\/v1\/route|\/mcp/)

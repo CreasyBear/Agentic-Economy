@@ -66,6 +66,7 @@ import { Route as OperatorAdminInquiriesRouteImport } from './routes/_operator/a
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
 import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
+import { Route as ApiV1RequestsSchemaRouteImport } from './routes/api.v1.requests.schema'
 import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.requests.$requestRef'
 import { Route as ApiSandboxProvidersWorkflowRouteImport } from './routes/api.sandbox.providers.workflow'
 import { Route as ApiSandboxProvidersRouteResolverRouteImport } from './routes/api.sandbox.providers.route-resolver'
@@ -395,6 +396,11 @@ const OperatorAdminAuditEventsRoute =
     path: '/admin/audit-events',
     getParentRoute: () => OperatorRoute,
   } as any)
+const ApiV1RequestsSchemaRoute = ApiV1RequestsSchemaRouteImport.update({
+  id: '/schema',
+  path: '/schema',
+  getParentRoute: () => ApiV1RequestsRoute,
+} as any)
 const ApiV1RequestsRequestRefRoute = ApiV1RequestsRequestRefRouteImport.update({
   id: '/$requestRef',
   path: '/$requestRef',
@@ -687,6 +693,7 @@ export interface FileRoutesByFullPath {
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
+  '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -780,6 +787,7 @@ export interface FileRoutesByTo {
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
+  '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -875,6 +883,7 @@ export interface FileRoutesById {
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
+  '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -970,6 +979,7 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
     | '/api/v1/requests/$requestRef'
+    | '/api/v1/requests/schema'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1063,6 +1073,7 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
     | '/api/v1/requests/$requestRef'
+    | '/api/v1/requests/schema'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1157,6 +1168,7 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
     | '/api/v1/requests/$requestRef'
+    | '/api/v1/requests/schema'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1620,6 +1632,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/audit-events'
       preLoaderRoute: typeof OperatorAdminAuditEventsRouteImport
       parentRoute: typeof OperatorRoute
+    }
+    '/api/v1/requests/schema': {
+      id: '/api/v1/requests/schema'
+      path: '/schema'
+      fullPath: '/api/v1/requests/schema'
+      preLoaderRoute: typeof ApiV1RequestsSchemaRouteImport
+      parentRoute: typeof ApiV1RequestsRoute
     }
     '/api/v1/requests/$requestRef': {
       id: '/api/v1/requests/$requestRef'
@@ -2169,10 +2188,12 @@ const ApiV1RequestsRequestRefRouteWithChildren =
 
 interface ApiV1RequestsRouteChildren {
   ApiV1RequestsRequestRefRoute: typeof ApiV1RequestsRequestRefRouteWithChildren
+  ApiV1RequestsSchemaRoute: typeof ApiV1RequestsSchemaRoute
 }
 
 const ApiV1RequestsRouteChildren: ApiV1RequestsRouteChildren = {
   ApiV1RequestsRequestRefRoute: ApiV1RequestsRequestRefRouteWithChildren,
+  ApiV1RequestsSchemaRoute: ApiV1RequestsSchemaRoute,
 }
 
 const ApiV1RequestsRouteWithChildren = ApiV1RequestsRoute._addFileChildren(

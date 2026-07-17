@@ -8,6 +8,11 @@ import type { RuntimeDocument, RuntimeMutationCtx, RuntimeReader, RuntimeWriter 
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { BusinessMutationActor } from '../src/modules/business/public'
 import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '../src/modules/customer-request/public-comprehension'
+import {
+  CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
+  CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES,
+  CUSTOMER_REQUEST_STATE_VALUES,
+} from '../src/modules/customer-request/agent-contract'
 
 const routeResult = v.object({
   kind: v.union(v.literal('business_page'), v.literal('ucp_manifest'), v.literal('api_detail')),
@@ -751,7 +756,8 @@ const publicSurfacePaths = [
   '/privacy/remove-business',
   '/api/businesses',
   '/api/businesses/search?q=',
-  '/api/v1/requests',
+  CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path,
+  CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath,
 ] as const
 
 function buildLlmsTxtFromCatalogs(
@@ -785,14 +791,15 @@ function buildLlmsTxtFromCatalogs(
     `- ${canonicalBaseUrl}/SKILL.md`,
     '',
     'Customer Request API:',
-    `- submit=${canonicalBaseUrl}/api/v1/requests`,
+    `- schema=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}`,
+    `- submit=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}`,
     '- continue=follow exactly one matching navigation.actions relation from the latest response',
-    '- relations=answer_clarification | prepare_options | change_request | confirm_option | start_confirmed_option | inspect_progress | inspect_evidence | report_problem | cancel',
+    `- relations=${CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES.join(' | ')}`,
     '- auth=Bearer AE API key with customer_requests:create',
-    '- lifecycle=needs_information | ready_to_compare | routes_ready | route_confirmed | in_progress | needs_attention | outcome_unknown | completed | failed | cancelled',
+    `- lifecycle=${CUSTOMER_REQUEST_STATE_VALUES.join(' | ')}`,
     '',
     'Request recipe:',
-    '1. POST a natural-language request to /api/v1/requests with one opaque requestRef.',
+    `1. Read ${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}, then POST a natural-language request to ${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path} with one opaque requestRef.`,
     '2. Continue only through the method, href, and input template advertised by one matching navigation.actions relation.',
     '3. Never construct a later path, sequence, business, step, limit, recipient, purpose, effect, or authority field.',
     '4. Stop if a needed relation is missing, duplicated, changes origin, crosses into another Request, or asks for authority AE did not display.',

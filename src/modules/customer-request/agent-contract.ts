@@ -2,11 +2,21 @@ import { z } from 'zod'
 
 export const CUSTOMER_REQUEST_AGENT_SCOPE = 'customer_requests:create' as const
 export const CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE = 'customer_requests:standing_authority' as const
+export const CUSTOMER_REQUEST_CONTRACT_SCHEMA_PATH = '/api/v1/requests/schema' as const
+export const CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES = [
+  'answer_clarification', 'prepare_options', 'change_request', 'confirm_option', 'start_confirmed_option',
+  'inspect_progress', 'inspect_evidence', 'cancel', 'stop_after_current', 'report_problem',
+] as const
+export const CUSTOMER_REQUEST_STATE_VALUES = [
+  'needs_information', 'ready_to_compare', 'routes_ready', 'route_confirmed', 'in_progress', 'preparing_options', 'options_ready', 'no_options',
+  'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed', 'cancelled',
+] as const
 
 export const CUSTOMER_REQUEST_AGENT_ENTRYPOINT = Object.freeze({
   contract: 'Customer Request V2' as const,
   method: 'POST' as const,
   path: '/api/v1/requests' as const,
+  schemaPath: CUSTOMER_REQUEST_CONTRACT_SCHEMA_PATH,
   authentication: 'clerk_api_key' as const,
   requiredScope: CUSTOMER_REQUEST_AGENT_SCOPE,
 })
@@ -570,10 +580,7 @@ const customerRequestAgentNavigationInputValueSchema = z.union([
 export const customerRequestAgentNavigationSchema = z.strictObject({
   current: z.string(),
   actions: z.array(z.strictObject({
-    relation: z.enum([
-      'answer_clarification', 'prepare_options', 'change_request', 'confirm_option', 'start_confirmed_option',
-      'inspect_progress', 'inspect_evidence', 'cancel', 'stop_after_current', 'report_problem',
-    ]),
+    relation: z.enum(CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES),
     method: z.enum(['GET', 'POST']),
     href: z.string(),
     summary: z.string(),
@@ -584,10 +591,7 @@ export const customerRequestAgentNavigationSchema = z.strictObject({
 export const customerRequestViewSchema = z.strictObject({
   kind: z.literal('request'), requestRef: z.string(), revision: safeNonnegativeInteger,
   routeGenerationRef: z.string().optional(),
-  state: z.enum([
-    'needs_information', 'ready_to_compare', 'routes_ready', 'route_confirmed', 'in_progress', 'preparing_options', 'options_ready', 'no_options',
-    'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed', 'cancelled',
-  ]),
+  state: z.enum(CUSTOMER_REQUEST_STATE_VALUES),
   summary: z.string(),
   nextAction: z.enum([
     'provide_information', 'prepare_options', 'inspect_routes', 'inspect_confirmation', 'wait', 'inspect_options', 'revise_request',

@@ -41,6 +41,7 @@ const customerRequestReleaseReadbackSchema = z.strictObject({
     contract: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.contract),
     method: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.method),
     path: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path),
+    schemaPath: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath),
     authentication: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication),
     requiredScope: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope),
   }),
@@ -168,6 +169,7 @@ export function verifyCustomerRequestHostedRevision(options: Readonly<{
     || options.readback.requestEntrypoint.contract !== CUSTOMER_REQUEST_AGENT_ENTRYPOINT.contract
     || options.readback.requestEntrypoint.method !== CUSTOMER_REQUEST_AGENT_ENTRYPOINT.method
     || options.readback.requestEntrypoint.path !== CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path
+    || options.readback.requestEntrypoint.schemaPath !== CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath
     || options.readback.requestEntrypoint.authentication !== CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication
     || options.readback.requestEntrypoint.requiredScope !== CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope
   ) throw new Error('hosted_release_entrypoint_mismatch')

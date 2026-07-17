@@ -1,4 +1,5 @@
 import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
+import { CUSTOMER_REQUEST_AGENT_ENTRYPOINT } from '@/modules/customer-request/agent-contract'
 
 export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: string; routingBaseUrl?: string }): string {
   const base = trimTrailingSlash(options.canonicalBaseUrl)
@@ -21,15 +22,16 @@ export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: strin
     '## Start once, then follow the response',
     '',
     `1. Read \`GET ${base}/llms.txt\` for the current public surface index.`,
-    '2. Obtain an AE API key with `customer_requests:create` and send it as a Bearer token.',
-    `3. \`POST ${base}/api/v1/requests\` with an idempotency key, opaque request reference, and natural-language request. Known facts are optional; no budget or full specification is required to start.`,
-    '4. After that first response, follow only one matching entry from `navigation.actions`. Use its `method` and `href`; treat its `input` as a template and replace placeholders only with the customer answer or values already displayed by AE.',
-    '5. Never construct a later path or expected sequence. Stop if the needed relation is missing, duplicated, changes origin, or asks for authority material that AE did not display.',
-    '6. For `answer_clarification`, send a natural-language answer or the one requested typed value according to `clarification.answerKind`.',
-    '7. On `routes_ready`, show the result, businesses, maximum cost, data use, effects, evidence, expiry, cancellation, and fallback. Never infer selection.',
-    '8. After explicit customer approval, follow `confirm_option` with only the displayed `routeRef`, current revision, and a stable idempotency key. Confirmation does not start work.',
-    '9. Follow `start_confirmed_option` only within that authority. Do not construct businesses, steps, costs, limits, recipients, purposes, effects, or authority fields.',
-    '10. Use the advertised `inspect_progress`, `inspect_evidence`, `report_problem`, or `cancel` relation when present. Resume the same Request; do not create a replacement or unsafe retry.',
+    `2. Read \`GET ${base}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}\` for the canonical input, result, lifecycle, and navigation contract.`,
+    '3. Obtain an AE API key with `customer_requests:create` and send it as a Bearer token.',
+    `4. \`POST ${base}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}\` with an idempotency key, opaque request reference, and natural-language request. Known facts are optional; no budget or full specification is required to start.`,
+    '5. After that first response, follow only one matching entry from `navigation.actions`. Use its `method` and `href`; treat its `input` as a template and replace placeholders only with the customer answer or values already displayed by AE.',
+    '6. Never construct a later path or expected sequence. Stop if the needed relation is missing, duplicated, changes origin, or asks for authority material that AE did not display.',
+    '7. For `answer_clarification`, send a natural-language answer or the one requested typed value according to `clarification.answerKind`.',
+    '8. On `routes_ready`, show the result, businesses, maximum cost, data use, effects, evidence, expiry, cancellation, and fallback. Never infer selection.',
+    '9. After explicit customer approval, follow `confirm_option` with only the displayed `routeRef`, current revision, and a stable idempotency key. Confirmation does not start work.',
+    '10. Follow `start_confirmed_option` only within that authority. Do not construct businesses, steps, costs, limits, recipients, purposes, effects, or authority fields.',
+    '11. Use the advertised `inspect_progress`, `inspect_evidence`, `report_problem`, or `cancel` relation when present. Resume the same Request; do not create a replacement or unsafe retry.',
     '',
     `Browse without a search query: \`GET ${base}/api/businesses\` (list) or`,
     `\`GET ${base}/api/businesses/search?q=\`.`,

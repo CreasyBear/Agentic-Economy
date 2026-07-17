@@ -21,6 +21,7 @@ function readback(sourceRevision = revision): Record<string, unknown> {
       contract: 'Customer Request V2',
       method: 'POST',
       path: '/api/v1/requests',
+      schemaPath: '/api/v1/requests/schema',
       authentication: 'clerk_api_key',
       requiredScope: 'customer_requests:create',
     },
