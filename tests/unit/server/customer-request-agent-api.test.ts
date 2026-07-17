@@ -101,12 +101,18 @@ describe('agent-native customer Request API', () => {
       summary: 'Fremantle for lunch', nextAction: 'prepare_options' as const, missingFields: [], options: [],
     }))
     const response = await handleAgentCustomerRequestMessagePost(request('/api/v1/requests/request:1/messages', {
-      idempotencyKey: 'message:1', expectedRevision: 1, message: 'Somewhere relaxed for lunch.',
+      idempotencyKey: 'message:1',
+      expectedRevision: 1,
+      message: 'Arrival before 09:00 is now immovable.',
+      replacesPriorStatement: 'Arrival before 08:00 is immovable.',
     }), 'request:1', { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
     expect(response.status).toBe(200)
     const [name, calledArgs] = callAction.mock.calls[0] ?? []
     expect(name).toBe('customerRequestApplication:refine')
     const { serviceAuth, ...command } = calledArgs ?? {}
+    expect(command).toMatchObject({
+      replacesPriorStatement: 'Arrival before 08:00 is immovable.',
+    })
     await expect(verifyCustomerRequestServiceAssertion({
       key, operation: 'refine', command: command as never, assertion: serviceAuth as never, now: 1_001,
     })).resolves.toBe(true)

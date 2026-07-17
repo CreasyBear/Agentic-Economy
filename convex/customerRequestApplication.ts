@@ -53,6 +53,7 @@ import {
 import {
   bindCustomerCapabilityDescriptor,
   createJsonCustomerRequestSemanticInterpreter,
+  type CustomerRequestAmendment,
   type CustomerRequestSemanticProposal,
 } from '@/modules/customer-request/semantic-interpreter'
 import { createOpenRouterCustomerRequestSemanticTransport } from '@/modules/customer-request/openrouter-transport'
@@ -537,7 +538,7 @@ const conflict = v.object({
 const refusedReason = v.union(
   v.literal('authentication_required'), v.literal('request_not_found'),
   v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable'),
-  v.literal('evidence_not_found'),
+  v.literal('evidence_not_found'), v.literal('invalid_amendment'),
 )
 const actionResult = v.union(customerView, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
 type ActionResult = Infer<typeof actionResult>
@@ -633,6 +634,7 @@ export const refine = action({
   args: {
     requestRef: v.string(), expectedRevision: v.number(), idempotencyKey: v.string(), message: v.string(),
     mode: v.optional(v.union(v.literal('append'), v.literal('replace'))),
+    replacesPriorStatement: v.optional(v.string()),
     serviceAuth: v.optional(serviceAssertion),
   },
   returns: actionResult,
@@ -641,9 +643,15 @@ export const refine = action({
       requestRef: args.requestRef, expectedRevision: args.expectedRevision,
       idempotencyKey: args.idempotencyKey, message: args.message,
       ...(args.mode === undefined ? {} : { mode: args.mode }),
+      ...(args.replacesPriorStatement === undefined ? {} : {
+        replacesPriorStatement: args.replacesPriorStatement,
+      }),
     }
     const caller = await resolveRequestCaller(ctx, 'refine', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    if (args.mode === 'replace' && args.replacesPriorStatement !== undefined) {
+      return { kind: 'refused', reason: 'invalid_amendment' }
+    }
     const commandKey = namespacedKey(caller.principalId, 'refine', args.requestRef, args.idempotencyKey)
     const commandDigest = canonicalDigest(command)
     const replay = await replayCommittedCommand(ctx, {
@@ -708,6 +716,15 @@ export const refine = action({
       principalId: caller.principalId,
       delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
       intent,
+      ...(mode === 'append' ? {
+        amendment: {
+          priorCustomerJob: current.aggregate.snapshot.intent,
+          message: args.message.trim(),
+          ...(args.replacesPriorStatement === undefined ? {} : {
+            replacesPriorStatement: args.replacesPriorStatement.trim(),
+          }),
+        },
+      } : {}),
       networkId: current.aggregate.snapshot.networkId,
       priorFacts: current.aggregate.snapshot.facts,
       replaceCustomerRequestLiteral: true,
@@ -2305,6 +2322,7 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   principalId: string
   delegatedAgentId: string
   intent: string
+  amendment?: CustomerRequestAmendment
   networkId: string
   priorFacts: StoredAggregate['snapshot']['facts']
   replaceCustomerRequestLiteral?: boolean
@@ -2323,14 +2341,20 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
     ))
     let proposal: CustomerRequestSemanticProposal
     try {
-      proposal = await interpreter.propose({ customerJob: input.intent, capabilities: graph.descriptors })
+      proposal = await interpreter.propose({
+        customerJob: input.intent,
+        ...(input.amendment === undefined ? {} : { amendment: input.amendment }),
+        capabilities: graph.descriptors,
+      })
     } catch (error) {
       console.error('customer_request_semantic_interpretation_failed', interpreterFailureCode(error))
       if (attempt === 0) continue
       return { kind: 'refused', reason: 'interpreter_unavailable' }
     }
     const compilationInput: CompileCommitInput = {
-      ...input, priorFacts, proposal, interpreterId: interpreter.interpreterId, graph,
+      ...input,
+      intent: proposal.canonicalCustomerJob ?? input.intent,
+      priorFacts, proposal, interpreterId: interpreter.interpreterId, graph,
     }
     const preview = compileProposal(compilationInput)
     if (preview.kind === 'compiled') {

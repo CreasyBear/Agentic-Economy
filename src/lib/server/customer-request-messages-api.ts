@@ -8,7 +8,8 @@ const bodySchema = customerRequestMessageInputSchema
 
 export type MessageResult = CustomerRequestProjection | CustomerRequestView | Readonly<{
   kind: 'refused'
-  reason: 'authentication_required' | 'request_not_found' | 'interpreter_unavailable' | 'capabilities_unavailable'
+  reason: 'authentication_required' | 'request_not_found' | 'interpreter_unavailable'
+    | 'capabilities_unavailable' | 'invalid_amendment'
 }>
 
 const refineAction = sourceAction<Record<string, unknown>, MessageResult>('customerRequestApplication:refine')
@@ -35,7 +36,13 @@ export async function handleCustomerRequestMessagePost(
       }),
     )
     if (result.kind === 'refused') {
-      const status = result.reason === 'authentication_required' ? 401 : result.reason === 'request_not_found' ? 404 : 503
+      const status = result.reason === 'authentication_required'
+        ? 401
+        : result.reason === 'request_not_found'
+          ? 404
+          : result.reason === 'invalid_amendment'
+            ? 400
+            : 503
       return response(result, status)
     }
     if (result.kind === 'conflict') return response(result, 409)

@@ -2900,7 +2900,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     if (route === undefined) throw new Error('public submit route missing')
     expect(persisted.aggregate.plan.interpretationEvidence).toMatchObject({
       kind: 'model_output',
-      systemInstructionVersion: 'customer-request-semantic:v9',
+      systemInstructionVersion: 'customer-request-semantic:v12',
     })
     expect(route).toMatchObject({ authority: 'proposal_only', requestRevision: 1 })
     expect(route.steps.map((step) => ({

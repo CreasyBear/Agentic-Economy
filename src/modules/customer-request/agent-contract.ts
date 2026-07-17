@@ -46,7 +46,16 @@ export const customerRequestSubmitInputSchema = z.object({
 export const customerRequestMessageInputSchema = z.object({
   idempotencyKey: boundedText(200), expectedRevision: safePositiveInteger,
   message: boundedText(2_000), mode: z.enum(['append', 'replace']).default('append'),
-}).strict()
+  replacesPriorStatement: boundedText(2_000).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.mode === 'replace' && value.replacesPriorStatement !== undefined) {
+    context.addIssue({
+      code: 'custom',
+      path: ['replacesPriorStatement'],
+      message: 'replacesPriorStatement is only valid for append amendments',
+    })
+  }
+})
 
 export const customerRequestFactInputSchema = z.object({
   idempotencyKey: boundedText(200), expectedRevision: safePositiveInteger,
@@ -746,7 +755,7 @@ export const customerRequestRefusalSchema = z.object({
   kind: z.literal('refused'),
   reason: z.enum([
     'authentication_required', 'request_not_found', 'interpreter_unavailable', 'capabilities_unavailable',
-    'evidence_not_found',
+    'evidence_not_found', 'invalid_amendment',
   ]),
 }).strict()
 

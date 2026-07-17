@@ -2,11 +2,31 @@ import { describe, expect, it } from 'vitest'
 
 import {
   customerRequestFactInputSchema,
+  customerRequestMessageInputSchema,
   customerRequestViewSchema,
 } from '@/modules/customer-request/agent-contract'
 import { projectRequestEvaluation } from '@/modules/customer-request/customer-projection'
 
 describe('Customer Request agent contract', () => {
+  it('requires an exact source-owned replacement target for append supersession only', () => {
+    expect(customerRequestMessageInputSchema.parse({
+      idempotencyKey: 'amend:one',
+      expectedRevision: 1,
+      message: 'Arrival before 09:00 is now immovable.',
+      replacesPriorStatement: 'Arrival before 08:00 is immovable.',
+    })).toMatchObject({
+      mode: 'append',
+      replacesPriorStatement: 'Arrival before 08:00 is immovable.',
+    })
+    expect(customerRequestMessageInputSchema.safeParse({
+      idempotencyKey: 'replace:one',
+      expectedRevision: 1,
+      message: 'A complete replacement Request.',
+      mode: 'replace',
+      replacesPriorStatement: 'An old statement.',
+    }).success).toBe(false)
+  })
+
   it('owns the exact typed-fact wire shape used by the handler and external agent', () => {
     expect(customerRequestFactInputSchema.parse({
       idempotencyKey: 'fact:one', expectedRevision: 1,

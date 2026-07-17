@@ -51,8 +51,15 @@ export type CustomerCapabilityDescriptor = Readonly<{
   evidence: readonly CustomerEvidenceDescriptor[]
 }>
 
+export type CustomerRequestAmendment = Readonly<{
+  priorCustomerJob: string
+  message: string
+  replacesPriorStatement?: string
+}>
+
 export type CustomerRequestSemanticInterpreterPayload = Readonly<{
   customerJob: string
+  amendment?: CustomerRequestAmendment
   capabilities: readonly CustomerCapabilityDescriptor[]
 }>
 
@@ -72,6 +79,7 @@ export type CustomerRequestInterpretationEvidence = Readonly<{
 export type CustomerRequestCapabilityProposal = Readonly<{
   kind: 'capability_candidates'
   selections: readonly ResolvedCapabilitySelection[]
+  canonicalCustomerJob?: string
   interpretationEvidence?: CustomerRequestInterpretationEvidence
   decisionPreference?: Readonly<{
     objective: 'lowest_maximum_price'
@@ -83,12 +91,14 @@ export type CustomerRequestCapabilityProposal = Readonly<{
 export type CustomerRequestIntentDirectionProposal = Readonly<{
   kind: 'needs_intent_direction'
   prompt: string
+  canonicalCustomerJob?: string
   interpretationEvidence?: CustomerRequestInterpretationEvidence
 }>
 
 export type CustomerRequestUnsupportedProposal = Readonly<{
   kind: 'unsupported_request'
   reason: 'requested_result_not_available'
+  canonicalCustomerJob?: string
   interpretationEvidence?: CustomerRequestInterpretationEvidence
 }>
 
@@ -116,8 +126,18 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
   z.array(jsonValueSchema).max(256), z.record(z.string(), jsonValueSchema),
 ]))
 const identifier = z.string().trim().min(1).max(300)
+const canonicalStatementSchema = z.strictObject({
+  source: z.enum(['prior', 'amendment']),
+  quote: z.string().trim().min(1).max(2_000),
+})
+const supersededStatementSchema = z.strictObject({
+  priorQuote: z.string().trim().min(1).max(2_000),
+  amendmentQuote: z.string().trim().min(1).max(2_000),
+})
 const capabilityProposalSchema = z.strictObject({
   kind: z.literal('capability_candidates'),
+  canonicalStatements: z.array(canonicalStatementSchema).max(64),
+  supersededStatements: z.array(supersededStatementSchema).max(64),
   selections: z.array(z.strictObject({
     selectionKey: identifier,
     facts: z.array(z.strictObject({ inputKey: identifier, value: jsonValueSchema })).max(128),
@@ -126,10 +146,14 @@ const capabilityProposalSchema = z.strictObject({
 const intentDirectionProposalSchema = z.strictObject({
   kind: z.literal('needs_intent_direction'),
   prompt: z.string().trim().min(1).max(240),
+  canonicalStatements: z.array(canonicalStatementSchema).max(64),
+  supersededStatements: z.array(supersededStatementSchema).max(64),
 })
 const unsupportedProposalSchema = z.strictObject({
   kind: z.literal('unsupported_request'),
   reason: z.literal('requested_result_not_available'),
+  canonicalStatements: z.array(canonicalStatementSchema).max(64),
+  supersededStatements: z.array(supersededStatementSchema).max(64),
 })
 const proposalSchema = z.union([capabilityProposalSchema, intentDirectionProposalSchema, unsupportedProposalSchema])
 
@@ -141,6 +165,11 @@ const SYSTEM_INSTRUCTION = [
   'When the customer asks for an assembled result plus separately named component results, select every capability that directly returns each named component as well as the assembled result.',
   'Do not collapse separately named component results into an assembly capability merely because the assembly returns the overall result.',
   'The customer request may contain chronological refinements on separate lines: later statements override conflicting earlier statements, while earlier non-conflicting requirements remain in force.',
+  'When amendment context is present, return canonicalStatements containing only exact complete statements from amendment.priorCustomerJob or amendment.message.',
+  'Label each exact quote with source=prior or source=amendment. Keep every non-conflicting prior statement, omit only superseded statements, include the amendment statement, and never paraphrase or invent.',
+  'Only when amendment.replacesPriorStatement is present, omit that exact prior statement and add one supersededStatements entry with the same exact priorQuote and the exact amendmentQuote that replaces it. Preserve every other prior statement.',
+  'Never omit or supersede a prior authority or provider-data-sharing boundary in append mode; preserve it unless the caller submits a complete replacement Request through the separate replacement command.',
+  'When amendment context is absent, return canonicalStatements=[] and supersededStatements=[].',
   'A missing input is not a reason to substitute an upstream capability for the requested result; select the requested result and omit the missing fact so AE can resolve a registered dependency or ask the customer.',
   'Dependency rule: if capability B returns the requested result and needs an output from capability A, select B; never return only A for a request for B.',
   'Bind an explicitly stated value only to an opaque inputKey supplied under that selected capability.',
@@ -156,7 +185,7 @@ const SYSTEM_INSTRUCTION = [
   'Before returning, verify that at least one selected capability directly returns the result the customer requested; never prefer a merely fillable prerequisite over the requested result.',
   'Return one JSON object only.',
 ].join(' ')
-const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v9'
+const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v12'
 const EXPLICIT_PRICE_PRIORITY_VERSION = 'customer-request-price-priority:v1'
 const EXPLICIT_MAXIMUM_TOTAL_COST_VERSION = 'customer-request-maximum-total-cost:v1'
 const EXPLICIT_PROVIDER_DATA_SHARING_VERSION = 'customer-request-provider-data-sharing:v1'
@@ -171,6 +200,28 @@ const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
       kind: { type: 'string', enum: ['needs_intent_direction', 'unsupported_request', 'capability_candidates'] },
       reason: { type: 'string', enum: ['', 'requested_result_not_available'] },
       prompt: { type: 'string', maxLength: 240 },
+      canonicalStatements: {
+        type: 'array', maxItems: 64,
+        items: {
+          type: 'object', additionalProperties: false,
+          properties: {
+            source: { type: 'string', enum: ['prior', 'amendment'] },
+            quote: { type: 'string', minLength: 1, maxLength: 2_000 },
+          },
+          required: ['source', 'quote'],
+        },
+      },
+      supersededStatements: {
+        type: 'array', maxItems: 64,
+        items: {
+          type: 'object', additionalProperties: false,
+          properties: {
+            priorQuote: { type: 'string', minLength: 1, maxLength: 2_000 },
+            amendmentQuote: { type: 'string', minLength: 1, maxLength: 2_000 },
+          },
+          required: ['priorQuote', 'amendmentQuote'],
+        },
+      },
       selections: {
         type: 'array', maxItems: 64,
         items: {
@@ -193,7 +244,7 @@ const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
         },
       },
     },
-    required: ['kind', 'reason', 'prompt', 'selections'],
+    required: ['kind', 'reason', 'prompt', 'canonicalStatements', 'supersededStatements', 'selections'],
   },
 })
 
@@ -217,6 +268,15 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
       try {
         const publicPayload: CustomerRequestSemanticInterpreterPayload = {
           customerJob: payload.customerJob,
+          ...(payload.amendment === undefined ? {} : {
+            amendment: {
+              priorCustomerJob: payload.amendment.priorCustomerJob,
+              message: payload.amendment.message,
+              ...(payload.amendment.replacesPriorStatement === undefined ? {} : {
+                replacesPriorStatement: payload.amendment.replacesPriorStatement,
+              }),
+            },
+          }),
           capabilities: payload.capabilities.map(publicDescriptor),
         }
         if (new TextEncoder().encode(JSON.stringify(publicPayload)).byteLength > input.maximumPayloadBytes) {
@@ -252,10 +312,17 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
           }),
           outputDigest: canonicalDigest(parsed.data),
         })
+        const canonicalCustomerJob = resolveCanonicalCustomerJob(
+          parsed.data.canonicalStatements,
+          parsed.data.supersededStatements,
+          payload.amendment,
+        )
+        const effectiveCustomerJob = canonicalCustomerJob ?? payload.customerJob
         if (parsed.data.kind === 'needs_intent_direction') {
           return Object.freeze({
             kind: 'needs_intent_direction' as const,
-            prompt: customerIntentDirectionPrompt(payload.customerJob),
+            prompt: customerIntentDirectionPrompt(effectiveCustomerJob),
+            ...(canonicalCustomerJob === undefined ? {} : { canonicalCustomerJob }),
             interpretationEvidence,
           })
         }
@@ -263,6 +330,7 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
           return Object.freeze({
             kind: 'unsupported_request' as const,
             reason: parsed.data.reason,
+            ...(canonicalCustomerJob === undefined ? {} : { canonicalCustomerJob }),
             interpretationEvidence,
           })
         }
@@ -292,7 +360,7 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
                 kind: 'agent_inference' as const,
                 inferenceRef: `inference:${canonicalDigest({
                   interpreterId: input.interpreterId,
-                  customerJob: payload.customerJob,
+                  customerJob: effectiveCustomerJob,
                   selectionKey: descriptor.selectionKey,
                   inputKey: inputDescriptor.inputKey,
                   value: fact.value,
@@ -308,13 +376,14 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
           })]
         }).sort((left, right) => left.selectionKey.localeCompare(right.selectionKey))
         const completedSelections = completeRegisteredDependencies({
-          selections, capabilities: payload.capabilities, customerJob: payload.customerJob,
+          selections, capabilities: payload.capabilities, customerJob: effectiveCustomerJob,
           interpreterId: input.interpreterId, interpretationEvidence,
         })
-        const decisionPreference = deriveCustomerDecisionPreference(payload.customerJob)
+        const decisionPreference = deriveCustomerDecisionPreference(effectiveCustomerJob)
         return Object.freeze({
           kind: 'capability_candidates' as const,
           selections: completedSelections,
+          ...(canonicalCustomerJob === undefined ? {} : { canonicalCustomerJob }),
           interpretationEvidence,
           ...(decisionPreference === undefined ? {} : { decisionPreference }),
         })
@@ -338,14 +407,154 @@ function normalizeSemanticProposal(value: unknown): unknown {
   if (proposal.kind === 'capability_candidates' && Array.isArray(proposal.selections)) {
     return {
       kind: proposal.kind,
+      canonicalStatements: Array.isArray(proposal.canonicalStatements) ? proposal.canonicalStatements : [],
+      supersededStatements: Array.isArray(proposal.supersededStatements) ? proposal.supersededStatements : [],
       selections: proposal.selections.map(normalizeSemanticSelection),
     }
   }
   return proposal.kind === 'needs_intent_direction' && typeof proposal.prompt === 'string'
-    ? { kind: proposal.kind, prompt: proposal.prompt }
+    ? {
+        kind: proposal.kind,
+        prompt: proposal.prompt,
+        canonicalStatements: Array.isArray(proposal.canonicalStatements) ? proposal.canonicalStatements : [],
+        supersededStatements: Array.isArray(proposal.supersededStatements) ? proposal.supersededStatements : [],
+      }
     : proposal.kind === 'unsupported_request' && proposal.reason === 'requested_result_not_available'
-      ? { kind: proposal.kind, reason: proposal.reason }
+      ? {
+          kind: proposal.kind,
+          reason: proposal.reason,
+          canonicalStatements: Array.isArray(proposal.canonicalStatements) ? proposal.canonicalStatements : [],
+          supersededStatements: Array.isArray(proposal.supersededStatements) ? proposal.supersededStatements : [],
+        }
     : value
+}
+
+function resolveCanonicalCustomerJob(
+  statements: readonly Readonly<{ source: 'prior' | 'amendment'; quote: string }>[],
+  supersededStatements: readonly Readonly<{ priorQuote: string; amendmentQuote: string }>[],
+  amendment: CustomerRequestSemanticInterpreterInput['amendment'],
+): string | undefined {
+  if (amendment === undefined) {
+    if (statements.length !== 0 || supersededStatements.length !== 0) {
+      throw new Error('customer_request_semantic_amendment_source_invalid')
+    }
+    return undefined
+  }
+  if (statements.length === 0 || !statements.some(({ source }) => source === 'amendment')) {
+    throw new Error('customer_request_semantic_amendment_source_invalid')
+  }
+  const sourceStatements = {
+    prior: exactCustomerStatements(amendment.priorCustomerJob),
+    amendment: exactCustomerStatements(amendment.message),
+  }
+  const seen = new Set<string>()
+  const resolved = statements.flatMap(({ source, quote }) => {
+    const exact = sourceStatements[source].get(normalizeCustomerStatement(quote))
+    if (exact === undefined || seen.has(exact)) {
+      if (exact === undefined) throw new Error('customer_request_semantic_amendment_source_invalid')
+      return []
+    }
+    seen.add(exact)
+    return [exact]
+  })
+  if (resolved.length === 0) throw new Error('customer_request_semantic_amendment_source_invalid')
+  const resolvedStatements = new Set(resolved.map(normalizeCustomerStatement))
+  const omittedAmendmentStatements = [...sourceStatements.amendment.values()]
+    .filter((statement) => !resolvedStatements.has(normalizeCustomerStatement(statement)))
+  if (omittedAmendmentStatements.length !== 0) {
+    throw new Error('customer_request_semantic_amendment_statement_omitted')
+  }
+  const protectedAuthorityStatements = [...sourceStatements.prior.values()].filter((statement) => (
+    deriveCustomerMaterialConstraints(statement).some(({ impact }) => impact === 'authority_boundary')
+    || deriveCustomerProviderDataSharingCriterion(statement) !== undefined
+  ))
+  if (protectedAuthorityStatements.some((statement) => !resolvedStatements.has(normalizeCustomerStatement(statement)))) {
+    throw new Error('customer_request_semantic_amendment_authority_removed')
+  }
+  const explicitReplacementTarget = amendment.replacesPriorStatement === undefined
+    ? undefined
+    : sourceStatements.prior.get(normalizeCustomerStatement(amendment.replacesPriorStatement))
+  if (amendment.replacesPriorStatement !== undefined && explicitReplacementTarget === undefined) {
+    throw new Error('customer_request_semantic_amendment_replacement_target_invalid')
+  }
+  const accountedPriorStatements = new Set<string>()
+  for (const { priorQuote, amendmentQuote } of supersededStatements) {
+    const exactPrior = sourceStatements.prior.get(normalizeCustomerStatement(priorQuote))
+    const exactAmendment = sourceStatements.amendment.get(normalizeCustomerStatement(amendmentQuote))
+    if (
+      exactPrior === undefined
+      || exactAmendment === undefined
+      || resolvedStatements.has(normalizeCustomerStatement(exactPrior))
+      || !resolvedStatements.has(normalizeCustomerStatement(exactAmendment))
+      || accountedPriorStatements.has(normalizeCustomerStatement(exactPrior))
+      || explicitReplacementTarget === undefined
+      || normalizeCustomerStatement(exactPrior) !== normalizeCustomerStatement(explicitReplacementTarget)
+    ) {
+      throw new Error('customer_request_semantic_amendment_supersession_invalid')
+    }
+    accountedPriorStatements.add(normalizeCustomerStatement(exactPrior))
+  }
+  if (
+    explicitReplacementTarget !== undefined
+    && !accountedPriorStatements.has(normalizeCustomerStatement(explicitReplacementTarget))
+  ) {
+    throw new Error('customer_request_semantic_amendment_replacement_target_unresolved')
+  }
+  const omittedPriorStatements = [...sourceStatements.prior.values()]
+    .filter((statement) => !resolvedStatements.has(normalizeCustomerStatement(statement)))
+  if (omittedPriorStatements.some(
+    (statement) => !accountedPriorStatements.has(normalizeCustomerStatement(statement)),
+  )) {
+    throw new Error('customer_request_semantic_amendment_omission_unaccounted')
+  }
+  return resolved.join('\n')
+}
+
+function exactCustomerStatements(value: string): ReadonlyMap<string, string> {
+  return new Map(segmentCustomerStatements(value).flatMap((statement) => {
+    const exact = statement.trim().replace(/\s+/gu, ' ')
+    return exact.length === 0 ? [] : [[normalizeCustomerStatement(exact), exact]]
+  }))
+}
+
+const CUSTOMER_STATEMENT_ABBREVIATIONS = Object.freeze([
+  'dr.', 'mr.', 'mrs.', 'ms.', 'prof.', 'sr.', 'jr.', 'st.', 'vs.', 'etc.', 'e.g.', 'i.e.',
+])
+
+function segmentCustomerStatements(value: string): readonly string[] {
+  const normalized = value.normalize('NFKC')
+  const statements: string[] = []
+  let start = 0
+  const push = (end: number) => {
+    const statement = normalized.slice(start, end).trim()
+    if (statement.length !== 0) statements.push(statement)
+  }
+  for (let index = 0; index < normalized.length; index += 1) {
+    const character = normalized[index]
+    if (character === '\n') {
+      push(index)
+      start = index + 1
+      continue
+    }
+    if (character !== '.' && character !== '!' && character !== '?') continue
+    const following = normalized[index + 1]
+    if (following !== undefined && !/\s/u.test(following)) continue
+    if (character === '.' && isCustomerStatementAbbreviation(normalized.slice(start, index + 1))) continue
+    push(index + 1)
+    start = index + 1
+  }
+  push(normalized.length)
+  return statements
+}
+
+function isCustomerStatementAbbreviation(value: string): boolean {
+  const trimmed = value.trimEnd().toLocaleLowerCase('en')
+  if (CUSTOMER_STATEMENT_ABBREVIATIONS.some((abbreviation) => trimmed.endsWith(abbreviation))) return true
+  return /(?:^|\s)(?:\p{L}\.){1,4}$/u.test(trimmed)
+}
+
+function normalizeCustomerStatement(value: string): string {
+  return value.normalize('NFKC').trim().replace(/\s+/gu, ' ')
 }
 
 function normalizeSemanticSelection(value: unknown): unknown {
@@ -387,6 +596,7 @@ export type ServerCapabilityDescriptor = CustomerCapabilityDescriptor & Readonly
 
 export type CustomerRequestSemanticInterpreterInput = Readonly<{
   customerJob: string
+  amendment?: CustomerRequestAmendment
   capabilities: readonly ServerCapabilityDescriptor[]
 }>
 

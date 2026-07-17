@@ -53,8 +53,13 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
     actions.push(
       {
         relation: 'change_request', method: 'POST', href: `${current}/messages`,
-        summary: 'Change what matters and prepare a new current choice without confirming this one.',
-        input: { idempotencyKey, expectedRevision: view.revision, message: '<natural-language change>' },
+        summary: 'Change what matters and prepare a new current choice without confirming this one. '
+          + 'To replace one statement, also send replacesPriorStatement with its exact current text.',
+        input: {
+          idempotencyKey,
+          expectedRevision: view.revision,
+          message: '<natural-language change>',
+        },
       },
       {
         relation: 'confirm_option', method: 'POST', href: `${current}/confirmation`,
@@ -70,9 +75,12 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
   } else if (view.state === 'unsupported') {
     actions.push({
       relation: 'change_request', method: 'POST', href: `${current}/messages`,
-      summary: 'Change the request in ordinary language and keep working from the same Request.',
+      summary: 'Change the request in ordinary language and keep working from the same Request. '
+        + 'To replace one statement, also send replacesPriorStatement with its exact current text.',
       input: {
-        idempotencyKey, expectedRevision: view.revision, message: '<natural-language change>',
+        idempotencyKey,
+        expectedRevision: view.revision,
+        message: '<natural-language change>',
       },
     })
   } else if (view.state === 'in_progress' || view.state === 'preparing_options') {

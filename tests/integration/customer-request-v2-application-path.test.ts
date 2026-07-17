@@ -393,12 +393,22 @@ describe('current V2 Customer Request application path', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({
+    const modelResponse = (content: unknown) => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(content) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(modelResponse({
         kind: 'capability_candidates',
         selections: [{ selectionKey: model.selectionKey, facts: [{ inputKey: input.key, value: 'Find an option' }] }],
-      }) } }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+      }))
+      .mockResolvedValueOnce(modelResponse({
+        kind: 'capability_candidates',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Find an option' },
+          { source: 'amendment', quote: 'Prefer the cheapest suitable option.' },
+        ],
+        selections: [{ selectionKey: model.selectionKey, facts: [{ inputKey: input.key, value: 'Find an option' }] }],
+      })))
     const key = 'external-agent-service-key-that-is-long-enough'
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', key)
@@ -975,9 +985,19 @@ describe('current V2 Customer Request application path', () => {
     await admitSandboxSupply(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify(response) } }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    const modelResponse = (content: unknown) => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(content) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(modelResponse(response))
+      .mockResolvedValueOnce(modelResponse({
+        ...response,
+        canonicalStatements: [
+          { source: 'prior', quote: 'Find an option' },
+          { source: 'amendment', quote: 'Prefer the clearest result.' },
+        ],
+      }))
+      .mockResolvedValueOnce(modelResponse(response)))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
     const submitted = await customer.action(api.customerRequestApplication.submit, {
@@ -1013,6 +1033,79 @@ describe('current V2 Customer Request application path', () => {
     }))
   })
 
+  it('stores one canonical current Request when an amendment supersedes a material assertion', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const response = { kind: 'capability_candidates', selections: [{ selectionKey: model.selectionKey, facts: [] }] }
+    const modelResponse = (content: unknown) => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(content) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    const generate = vi.fn()
+      .mockResolvedValueOnce(modelResponse(response))
+      .mockResolvedValueOnce(modelResponse({
+        ...response,
+        canonicalStatements: [
+          { source: 'prior', quote: 'Find an option.' },
+          { source: 'prior', quote: 'Wheelchair accessibility is mandatory.' },
+          { source: 'prior', quote: 'Passport validity is unknown.' },
+          { source: 'amendment', quote: 'Arrival before 09:00 is now immovable.' },
+        ],
+        supersededStatements: [{
+          priorQuote: 'Arrival before 08:00 is immovable.',
+          amendmentQuote: 'Arrival before 09:00 is now immovable.',
+        }],
+      }))
+    vi.stubGlobal('fetch', generate)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:canonical-amendment',
+      requestId: 'request:v2:canonical-amendment',
+      delegatedAgentId: 'agent:canonical-amendment',
+      customerJob: 'Find an option. Arrival before 08:00 is immovable. '
+        + 'Wheelchair accessibility is mandatory. Passport validity is unknown.',
+      routing: { networkId: 'ae:public' },
+    })
+    if (submitted.kind !== 'request') throw new Error('submitted request missing')
+    const command = {
+      requestRef: submitted.requestRef,
+      expectedRevision: submitted.revision,
+      idempotencyKey: 'refine:v2:canonical-amendment',
+      message: 'Arrival before 09:00 is now immovable.',
+      replacesPriorStatement: 'Arrival before 08:00 is immovable.',
+    }
+
+    const refined = await customer.action(api.customerRequestApplication.refine, command)
+
+    expect(refined).toMatchObject({
+      kind: 'request',
+      revision: 2,
+      summary: 'Find an option.\nWheelchair accessibility is mandatory.\n'
+        + 'Passport validity is unknown.\nArrival before 09:00 is now immovable.',
+      criteria: expect.arrayContaining([
+        expect.objectContaining({ label: 'Must preserve', value: 'Wheelchair accessibility is mandatory.' }),
+        expect.objectContaining({ label: 'Known uncertainty', value: 'Passport validity is unknown.' }),
+        expect.objectContaining({ label: 'Must preserve', value: 'Arrival before 09:00 is now immovable.' }),
+      ]),
+    })
+    if (refined.kind !== 'request') throw new Error('refined request missing')
+    expect(refined.criteria).not.toContainEqual(expect.objectContaining({
+      value: 'Arrival before 08:00 is immovable.',
+    }))
+    await expect(customer.action(api.customerRequestApplication.refine, command)).resolves.toEqual(refined)
+    await expect(customer.action(api.customerRequestApplication.refine, {
+      requestRef: submitted.requestRef,
+      expectedRevision: refined.revision,
+      idempotencyKey: 'replace:v2:canonical-amendment:invalid-target',
+      message: 'A complete replacement Request.',
+      mode: 'replace',
+      replacesPriorStatement: 'Arrival before 09:00 is now immovable.',
+    })).resolves.toEqual({ kind: 'refused', reason: 'invalid_amendment' })
+    expect(generate).toHaveBeenCalledTimes(2)
+  })
+
   it('replays an exact committed refinement before rejecting its stale expected revision', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
@@ -1034,6 +1127,10 @@ describe('current V2 Customer Request application path', () => {
         choices: [{ message: { content: JSON.stringify({
           kind: 'unsupported_request',
           reason: 'requested_result_not_available',
+          canonicalStatements: [
+            { source: 'prior', quote: 'Find an option' },
+            { source: 'amendment', quote: 'Tighten the hard total budget to AUD 1.' },
+          ],
         }) } }],
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', generate)

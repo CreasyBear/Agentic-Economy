@@ -32,6 +32,281 @@ import {
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
 
 describe('V2 Request semantics', () => {
+  it('resolves an amendment into exact source statements without retaining a superseded assertion', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:canonical-amendment',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Wheelchair accessibility is mandatory.' },
+          { source: 'prior', quote: 'Passport validity is unknown.' },
+          { source: 'amendment', quote: 'Arrival before 09:00 is now immovable.' },
+        ],
+        supersededStatements: [{
+          priorQuote: 'Arrival before 08:00 is immovable.',
+          amendmentQuote: 'Arrival before 09:00 is now immovable.',
+        }],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Arrival before 08:00 is immovable. Wheelchair accessibility is mandatory. '
+        + 'Passport validity is unknown.\nArrival before 09:00 is now immovable.',
+      amendment: {
+        priorCustomerJob: 'Arrival before 08:00 is immovable. Wheelchair accessibility is mandatory. '
+          + 'Passport validity is unknown.',
+        message: 'Arrival before 09:00 is now immovable.',
+        replacesPriorStatement: 'Arrival before 08:00 is immovable.',
+      },
+      capabilities: [],
+    })).resolves.toMatchObject({
+      canonicalCustomerJob: 'Wheelchair accessibility is mandatory.\n'
+        + 'Passport validity is unknown.\nArrival before 09:00 is now immovable.',
+    })
+  })
+
+  it('rejects a canonical amendment statement that the customer did not provide', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:fabricated-amendment',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'amendment', quote: 'The customer approved provider contact.' },
+        ],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Do not contact providers.\nChange the arrival time to 09:00.',
+      amendment: {
+        priorCustomerJob: 'Do not contact providers.',
+        message: 'Change the arrival time to 09:00.',
+      },
+      capabilities: [],
+    })).rejects.toThrow('customer_request_semantic_amendment_source_invalid')
+  })
+
+  it('rejects an append amendment that silently drops a prior authority boundary', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:dropped-authority-boundary',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Find an accessible itinerary.' },
+          { source: 'amendment', quote: 'Move arrival to 09:00.' },
+        ],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Find an accessible itinerary. Do not contact providers.\nMove arrival to 09:00.',
+      amendment: {
+        priorCustomerJob: 'Find an accessible itinerary. Do not contact providers.',
+        message: 'Move arrival to 09:00.',
+      },
+      capabilities: [],
+    })).rejects.toThrow('customer_request_semantic_amendment_authority_removed')
+  })
+
+  it('rejects an append amendment that silently drops any prior customer statement', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:dropped-customer-requirement',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Find an accessible itinerary.' },
+          { source: 'amendment', quote: 'Move arrival to 09:00.' },
+        ],
+        supersededStatements: [],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Find an accessible itinerary. Wheelchair assistance is mandatory.\nMove arrival to 09:00.',
+      amendment: {
+        priorCustomerJob: 'Find an accessible itinerary. Wheelchair assistance is mandatory.',
+        message: 'Move arrival to 09:00.',
+      },
+      capabilities: [],
+    })).rejects.toThrow('customer_request_semantic_amendment_omission_unaccounted')
+  })
+
+  it('rejects a source-exact supersession between unrelated customer statements', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:unrelated-supersession',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Find an accessible itinerary.' },
+          { source: 'amendment', quote: 'Move arrival to 09:00.' },
+        ],
+        supersededStatements: [{
+          priorQuote: 'Wheelchair assistance is mandatory.',
+          amendmentQuote: 'Move arrival to 09:00.',
+        }],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Find an accessible itinerary. Wheelchair assistance is mandatory.\nMove arrival to 09:00.',
+      amendment: {
+        priorCustomerJob: 'Find an accessible itinerary. Wheelchair assistance is mandatory.',
+        message: 'Move arrival to 09:00.',
+      },
+      capabilities: [],
+    })).rejects.toThrow('customer_request_semantic_amendment_supersession_invalid')
+  })
+
+  it('rejects a replacement target that is not an exact prior customer statement', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:invalid-replacement-target',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Find an accessible itinerary.' },
+          { source: 'amendment', quote: 'Move arrival to 09:00.' },
+        ],
+        supersededStatements: [{
+          priorQuote: 'Wheelchair assistance is mandatory.',
+          amendmentQuote: 'Move arrival to 09:00.',
+        }],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Find an accessible itinerary. Wheelchair assistance is mandatory.\nMove arrival to 09:00.',
+      amendment: {
+        priorCustomerJob: 'Find an accessible itinerary. Wheelchair assistance is mandatory.',
+        message: 'Move arrival to 09:00.',
+        replacesPriorStatement: 'A statement the customer never made.',
+      },
+      capabilities: [],
+    })).rejects.toThrow('customer_request_semantic_amendment_replacement_target_invalid')
+  })
+
+  it('rejects a replacement target the semantic proposal leaves unresolved', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:unresolved-replacement-target',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Arrival before 08:00 is immovable.' },
+          { source: 'amendment', quote: 'Arrival before 09:00 is now immovable.' },
+        ],
+        supersededStatements: [],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Arrival before 08:00 is immovable.\nArrival before 09:00 is now immovable.',
+      amendment: {
+        priorCustomerJob: 'Arrival before 08:00 is immovable.',
+        message: 'Arrival before 09:00 is now immovable.',
+        replacesPriorStatement: 'Arrival before 08:00 is immovable.',
+      },
+      capabilities: [],
+    })).rejects.toThrow('customer_request_semantic_amendment_replacement_target_unresolved')
+  })
+
+  it('rejects a claimed supersession that shares an entity but changes a different property', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:shared-entity-unrelated-property',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Find an accessible itinerary.' },
+          { source: 'amendment', quote: 'Set the hotel check-in to 15:00 now.' },
+        ],
+        supersededStatements: [{
+          priorQuote: 'The hotel must be wheelchair accessible.',
+          amendmentQuote: 'Set the hotel check-in to 15:00 now.',
+        }],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Find an accessible itinerary. The hotel must be wheelchair accessible.\n'
+        + 'Set the hotel check-in to 15:00 now.',
+      amendment: {
+        priorCustomerJob: 'Find an accessible itinerary. The hotel must be wheelchair accessible.',
+        message: 'Set the hotel check-in to 15:00 now.',
+      },
+      capabilities: [],
+    })).rejects.toThrow('customer_request_semantic_amendment_supersession_invalid')
+  })
+
+  it('rejects a multi-statement amendment when any new statement is omitted', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:dropped-amendment-statement',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Find an accessible itinerary.' },
+          { source: 'amendment', quote: 'Move arrival to 09:00.' },
+        ],
+        supersededStatements: [],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Find an accessible itinerary.\nMove arrival to 09:00. Keep the hotel under AUD 500.',
+      amendment: {
+        priorCustomerJob: 'Find an accessible itinerary.',
+        message: 'Move arrival to 09:00. Keep the hotel under AUD 500.',
+      },
+      capabilities: [],
+    })).rejects.toThrow('customer_request_semantic_amendment_statement_omitted')
+  })
+
+  it('preserves decimal prices, email addresses, URLs, abbreviations, and initials as exact statements', async () => {
+    const priorCustomerJob = 'Keep the total under AUD 1,000.50. Email ops@example.com. '
+      + 'Use https://example.com/path. Dr. J. Chen must approve.'
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:punctuation-safe-amendment',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request',
+        reason: 'requested_result_not_available',
+        canonicalStatements: [
+          { source: 'prior', quote: 'Keep the total under AUD 1,000.50.' },
+          { source: 'prior', quote: 'Email ops@example.com.' },
+          { source: 'prior', quote: 'Use https://example.com/path.' },
+          { source: 'prior', quote: 'Dr. J. Chen must approve.' },
+          { source: 'amendment', quote: 'Move arrival to 09:00.' },
+        ],
+        supersededStatements: [],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: `${priorCustomerJob}\nMove arrival to 09:00.`,
+      amendment: { priorCustomerJob, message: 'Move arrival to 09:00.' },
+      capabilities: [],
+    })).resolves.toMatchObject({
+      canonicalCustomerJob: 'Keep the total under AUD 1,000.50.\n'
+        + 'Email ops@example.com.\nUse https://example.com/path.\n'
+        + 'Dr. J. Chen must approve.\nMove arrival to 09:00.',
+    })
+  })
+
   it('extracts explicit material constraints without itinerary-specific kernel rules', () => {
     expect(deriveCustomerMaterialConstraints(
       'Plan a work trip for two travellers. A wheelchair-accessible hotel and ground transport are mandatory. '
