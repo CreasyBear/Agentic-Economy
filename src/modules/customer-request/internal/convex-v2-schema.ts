@@ -597,7 +597,9 @@ const routePlanV2Value = v.object({
     v.object({ kind: v.literal('known'), currency: v.string(), amountMinor: v.number() }),
     v.object({ kind: v.literal('requires_preparation') }),
   ),
-  expiresAt: v.number(), uncertainty: v.array(v.literal('cost_requires_preparation')),
+  expiresAt: v.number(), uncertainty: v.array(v.union(
+    v.literal('cost_requires_preparation'), v.literal('customer_fact_requires_evidence'),
+  )),
   fallbacks: v.object({
     ordering: v.literal('unranked'),
     alternatives: v.array(v.object({

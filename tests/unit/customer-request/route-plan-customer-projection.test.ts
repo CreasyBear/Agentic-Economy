@@ -115,6 +115,31 @@ describe('RoutePlan customer projection', () => {
     }).success).toBe(true)
   })
 
+  it('projects unresolved customer facts into the route and binds them into the quote', () => {
+    const certainRoute = route({ amountMinor: 1_200 })
+    const uncertainRoute = changed(certainRoute, (value) => {
+      value.uncertainty = ['customer_fact_requires_evidence']
+    })
+    const certain = projectCustomerRoutePlanDecision({
+      current: generation(1, [certainRoute]),
+      businessNames: { 'business:one': 'North Star Services' },
+      capabilitySemantics,
+      now: 10_000,
+    }).routes[0]!
+    const uncertain = projectCustomerRoutePlanDecision({
+      current: generation(1, [uncertainRoute]),
+      businessNames: { 'business:one': 'North Star Services' },
+      capabilitySemantics,
+      now: 10_000,
+    }).routes[0]!
+
+    expect(uncertain).toMatchObject({
+      uncertainty: ['customer_fact_needs_evidence'],
+      comparison: { uncertaintyCount: 1 },
+    })
+    expect(uncertain.quoteDigest).not.toBe(certain.quoteDigest)
+  })
+
   it('recommends a unique price leader only from fresh substitutable routes and explicit customer evidence', () => {
     const lower = route({ amountMinor: 900, routePlanId: 'route:lower' })
     const higher = changed(route({ amountMinor: 1_200, routePlanId: 'route:higher' }), (value) => {

@@ -66,7 +66,7 @@ describe('V2 Request semantics', () => {
   it('persists extracted material constraints while keeping route satisfaction unproven', () => {
     const model = compositionLookupModel()
     const requestInput = requiredInput(model, 'request')
-    const intent = 'Prepare a result. Wheelchair accessibility is mandatory.'
+    const intent = 'Prepare a result. Wheelchair accessibility is mandatory. Passport validity is unknown.'
     const result = compileCustomerRequest({
       requestId: 'request:material-constraint', expectedRevision: 0,
       principalId: 'principal:test', delegatedAgentId: 'agent:test', intent,
@@ -89,6 +89,7 @@ describe('V2 Request semantics', () => {
         label: 'Must preserve', value: 'Wheelchair accessibility is mandatory.',
       })]) } },
       routeGeneration: { routes: [expect.objectContaining({
+        uncertainty: ['customer_fact_requires_evidence'],
         comparison: expect.objectContaining({ hardConstraints: 'not_evaluated' }),
       })] },
     })
@@ -96,6 +97,9 @@ describe('V2 Request semantics', () => {
       criteria: expect.arrayContaining([expect.objectContaining({
         label: 'Must preserve', value: 'Wheelchair accessibility is mandatory.',
         basis: 'extracted_from_request',
+      }), expect.objectContaining({
+        label: 'Known uncertainty', value: 'Passport validity is unknown.',
+        impact: 'uncertainty',
       })]),
     })
   })

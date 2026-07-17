@@ -1244,6 +1244,8 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
         maximumTotalCost: criterion.value,
       }
     })(),
+    customerFactRequiresEvidence: deriveCustomerMaterialConstraints(aggregate.snapshot.intent)
+      .some(({ impact }) => impact === 'uncertainty'),
   })
   const unknownCostFailsClosed = routeGeneration === undefined
     && aggregate.outcome === 'unsupported'

@@ -235,7 +235,9 @@ const customerRoute = v.object({
       routeRef: v.string(), when: v.literal('route_unavailable_before_confirmation'),
     })),
   }),
-  uncertainty: v.array(v.literal('price_needs_confirmation')),
+  uncertainty: v.array(v.union(
+    v.literal('price_needs_confirmation'), v.literal('customer_fact_needs_evidence'),
+  )),
   comparison: customerRouteComparisonEvidence,
   steps: v.optional(v.array(v.object({
     step: v.number(), business: customerBusiness, after: v.array(v.number()),
@@ -291,10 +293,14 @@ const customerRouteDecisionChange = v.union(
   v.object({
     kind: v.literal('uncertainty'),
     before: v.array(v.object({
-      resultRef: v.string(), uncertainty: v.array(v.literal('price_needs_confirmation')),
+      resultRef: v.string(), uncertainty: v.array(v.union(
+        v.literal('price_needs_confirmation'), v.literal('customer_fact_needs_evidence'),
+      )),
     })),
     after: v.array(v.object({
-      resultRef: v.string(), uncertainty: v.array(v.literal('price_needs_confirmation')),
+      resultRef: v.string(), uncertainty: v.array(v.union(
+        v.literal('price_needs_confirmation'), v.literal('customer_fact_needs_evidence'),
+      )),
     })),
   }),
   v.object({

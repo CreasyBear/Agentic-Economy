@@ -588,10 +588,12 @@ describe('customer Request workspace', () => {
           ],
           cancellation: { kind: 'unavailable', summary: 'The businesses do not publish a cancellation path for this option.' },
           validUntil: Date.now() + 60_000,
-          fallback: { available: false, alternatives: [] }, uncertainty: [],
+          fallback: { available: false, alternatives: [] },
+          uncertainty: ['customer_fact_needs_evidence'],
           comparison: {
             ...routeComparison('route:opaque', 'current', 1_400, 2, 1, 'reconcile_required'),
             hardConstraints: 'not_evaluated' as const,
+            uncertaintyCount: 1,
           },
           steps: [
             { step: 1, business: { businessRef: 'business:one', name: 'North Star Services' }, after: [] },
@@ -671,7 +673,7 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByText('Important details'))
     expect(screen.getByText(/Fields: Request \(public\)/)).toBeTruthy()
     expect(screen.getByText(/Information would be shared/)).toBeTruthy()
-    expect(screen.getByText('No uncertainty is declared for this way forward.')).toBeTruthy()
+    expect(screen.getByText('A fact you marked as uncertain still needs evidence')).toBeTruthy()
     expect(screen.getByText('The businesses do not publish a cancellation path for this option.')).toBeTruthy()
     fireEvent.click(screen.getByText('How this would work'))
     expect(screen.getByText('City Ledger will follow step 1.')).toBeTruthy()

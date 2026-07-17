@@ -52,7 +52,7 @@ type ProjectionRoute = Readonly<{
     | Readonly<{ kind: 'known'; currency: string; amountMinor: number }>
     | Readonly<{ kind: 'requires_preparation' }>
   expiresAt: number
-  uncertainty: readonly unknown[]
+  uncertainty: readonly ('cost_requires_preparation' | 'customer_fact_requires_evidence')[]
   fallbacks: Readonly<{ alternatives: readonly Readonly<{ alternativeRouteRef: string }>[] }>
   comparison: Readonly<{
     outcomeSignature?: string
@@ -200,6 +200,7 @@ function projectRoute(
     cancellation,
     validUntil: freshnessValidUntil,
     fallbacks: route.fallbacks,
+    uncertainty: route.uncertainty,
   } as StableHashValue)
   return Object.freeze({
     routeRef,
@@ -233,7 +234,7 @@ function projectRoute(
         })
       })),
     }),
-    uncertainty: Object.freeze(route.uncertainty.map(() => 'price_needs_confirmation' as const)),
+    uncertainty: Object.freeze(route.uncertainty.map(projectRouteUncertainty)),
     comparison: Object.freeze({
       outcomeRef,
       outcomeFit,
@@ -617,9 +618,17 @@ function evidenceSnapshot(routes: readonly Route[]) {
   }))
 }
 
+function projectRouteUncertainty(
+  uncertainty: Route['uncertainty'][number],
+): 'price_needs_confirmation' | 'customer_fact_needs_evidence' {
+  return uncertainty === 'cost_requires_preparation'
+    ? 'price_needs_confirmation'
+    : 'customer_fact_needs_evidence'
+}
+
 function uncertaintySnapshot(routes: readonly Route[]) {
   return keyedByResult(routes, (route) => ({
-    uncertainty: route.uncertainty.map(() => 'price_needs_confirmation' as const),
+    uncertainty: route.uncertainty.map(projectRouteUncertainty),
   }))
 }
 

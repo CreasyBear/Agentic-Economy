@@ -109,7 +109,7 @@ export type CustomerRequestRoutePlan = Readonly<{
     | Readonly<{ kind: 'known'; currency: string; amountMinor: number }>
     | Readonly<{ kind: 'requires_preparation' }>
   expiresAt: number
-  uncertainty: readonly ('cost_requires_preparation')[]
+  uncertainty: readonly ('cost_requires_preparation' | 'customer_fact_requires_evidence')[]
   fallbacks: Readonly<{
     ordering: 'unranked'
     alternatives: readonly Readonly<{
@@ -296,6 +296,7 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     ...(maximumTotalCostCriterion === undefined ? {} : {
       maximumTotalCost: maximumTotalCostCriterion.value,
     }),
+    customerFactRequiresEvidence: derivedCriteria.some(({ impact }) => impact === 'uncertainty'),
   })
   if (routes === undefined) return { kind: 'refused', reason: 'capability_graph_invalid' }
   const planMaterial = {
@@ -476,6 +477,7 @@ export function compileRoutePlans(input: Readonly<{
   objective?: 'lowest_maximum_price'
   objectiveEvidenceRef?: string
   maximumTotalCost?: Readonly<{ currency: string; amountMinor: number }>
+  customerFactRequiresEvidence: boolean
 }>): readonly CustomerRequestRoutePlan[] | undefined {
   if (input.actions.length === 0) return Object.freeze([])
   const choices = input.actions.map((action) => input.candidates.filter(
@@ -556,7 +558,10 @@ export function compileRoutePlans(input: Readonly<{
       requestId: input.requestId, requestRevision: input.requestRevision,
       registrySnapshotDigest: input.registrySnapshotDigest, steps, edges,
       maximumTotalCost: cost, expiresAt,
-      uncertainty: cost.kind === 'requires_preparation' ? ['cost_requires_preparation' as const] : [],
+      uncertainty: [
+        ...(cost.kind === 'requires_preparation' ? ['cost_requires_preparation' as const] : []),
+        ...(input.customerFactRequiresEvidence ? ['customer_fact_requires_evidence' as const] : []),
+      ],
       comparison, authority: 'proposal_only' as const,
     }
     return [Object.freeze({ routePlanId: `route:${canonicalDigest(core as StableHashValue)}`, ...core })]

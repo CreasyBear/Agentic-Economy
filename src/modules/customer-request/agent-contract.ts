@@ -362,7 +362,7 @@ const customerRoutePlanSchema = z.object({
   }).strict(),
   validUntil: safePositiveInteger,
   fallback: customerRouteFallbackSchema,
-  uncertainty: z.array(z.literal('price_needs_confirmation')),
+  uncertainty: z.array(z.enum(['price_needs_confirmation', 'customer_fact_needs_evidence'])),
   comparison: customerRouteComparisonEvidenceSchema,
   steps: z.array(z.object({
     step: safePositiveInteger, business: customerBusinessSchema, after: z.array(safePositiveInteger),
@@ -437,10 +437,14 @@ const customerRouteDecisionChangeSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('uncertainty'),
     before: z.array(z.object({
-      resultRef: z.string(), uncertainty: z.array(z.literal('price_needs_confirmation')),
+      resultRef: z.string(), uncertainty: z.array(z.enum([
+        'price_needs_confirmation', 'customer_fact_needs_evidence',
+      ])),
     }).strict()),
     after: z.array(z.object({
-      resultRef: z.string(), uncertainty: z.array(z.literal('price_needs_confirmation')),
+      resultRef: z.string(), uncertainty: z.array(z.enum([
+        'price_needs_confirmation', 'customer_fact_needs_evidence',
+      ])),
     }).strict()),
   }).strict(),
   z.object({

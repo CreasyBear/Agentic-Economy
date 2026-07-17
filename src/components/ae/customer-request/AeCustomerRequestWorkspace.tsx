@@ -996,7 +996,10 @@ function evidenceList(
 }
 
 function uncertaintyList(
-  routes: readonly { resultRef: string; uncertainty: readonly 'price_needs_confirmation'[] }[],
+  routes: readonly {
+    resultRef: string
+    uncertainty: readonly ('price_needs_confirmation' | 'customer_fact_needs_evidence')[]
+  }[],
   names: ReadonlyMap<string, string>,
 ): string {
   return routes.map(({ resultRef, uncertainty }) => `${resultName(resultRef, names)}: ${uncertainty
@@ -1053,8 +1056,12 @@ function reversibilityLabel(value: 'not_applicable' | 'reversible' | 'conditiona
   return 'cannot be reversed automatically'
 }
 
-function uncertaintyLabel(value: 'price_needs_confirmation'): string {
-  return value === 'price_needs_confirmation' ? 'Price needs confirmation' : value
+function uncertaintyLabel(
+  value: 'price_needs_confirmation' | 'customer_fact_needs_evidence',
+): string {
+  return value === 'price_needs_confirmation'
+    ? 'Price needs confirmation'
+    : 'A fact you marked as uncertain still needs evidence'
 }
 
 function businessList(names: readonly string[]): string {
