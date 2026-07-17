@@ -20,7 +20,7 @@ const proof = hostedCustomerRequestJourneyProofSchema.parse({
     verification: 'local_checkout_and_named_dev_deployment',
   },
   observedAt: '2026-07-16T00:00:00.000Z',
-  input: { request: 'Resolve and quote.', facts: [], messages: [] },
+  input: { request: 'Resolve and quote.', availableFacts: [], facts: [], messages: [] },
   observedStates: ['routes_ready', 'route_confirmed', 'completed'],
   authorityStops: ['route_confirmation'],
   final: {
@@ -50,6 +50,19 @@ const proof = hostedCustomerRequestJourneyProofSchema.parse({
       state: 'verified',
       recipients: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
       purposes: ['resolve_sandbox_service_reference', 'prepare_sandbox_service_quote'],
+      effects: ['information_shared:irreversible'],
+      providerFields: [
+        { business: 'Sandbox Route Resolver', fields: ['field:request'] },
+        { business: 'Sandbox Route Quoter', fields: ['field:service-reference'] },
+      ],
+    },
+    evidenceIntegrity: {
+      state: 'verified',
+      resultDigest: 'sha256:result',
+      steps: [
+        { step: 1, receiptRefs: ['receipt:resolver'] },
+        { step: 2, receiptRefs: ['receipt:quoter'] },
+      ],
     },
     resultIntegrity: { state: 'verified', digest: 'sha256:result' },
     controlIntegrity: {

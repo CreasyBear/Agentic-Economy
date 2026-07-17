@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { FrozenAgentJourneyCohort } from '@/modules/customer-request/agent-journey-cohort'
 
 type Money = Readonly<{ currency: string; amountMinor: number }>
 
@@ -18,6 +19,11 @@ type DirectJourney = Readonly<{
   totalCostAccuracy: Readonly<{ state: 'exact'; total: Money } | { state: 'unavailable'; total?: Money }>
   recovery: Readonly<{ state: 'unsupported' }>
   resultUsability: Readonly<{ state: 'usable' | 'unusable' | 'partial' }>
+  disclosureLedger?: readonly Readonly<{
+    business: string
+    sentFields: readonly string[]
+    outputDigest: string
+  }>[]
   invocations: readonly Readonly<{ business: string }>[]
   claimBoundary: 'labelled_sandbox_direct_baseline_not_real_supply_or_customer_value'
 }>
@@ -26,7 +32,10 @@ type AeJourney = Readonly<{
   kind: 'cold_external_agent_journey'
   cohortInputDigest?: string
   sandbox: true
-  input: Readonly<{ request: string }>
+  input: Readonly<{
+    request: string
+    availableFacts?: readonly Readonly<{ requirementKey: string; valueDigest: string }>[]
+  }>
   final: Readonly<{
     state: 'completed' | 'failed' | 'cancelled' | 'outcome_unknown'
     runState: 'completed' | 'in_progress' | 'failed' | 'cancelled' | 'outcome_unknown'
@@ -54,7 +63,13 @@ type AeJourney = Readonly<{
       state: 'verified' | 'not_proven'
       recipients: readonly string[]
       purposes: readonly string[]
+      effects?: readonly string[]
+      providerFields?: readonly Readonly<{ business: string; fields: readonly string[] }>[]
     }>
+    evidenceIntegrity?: Readonly<
+      { state: 'verified'; resultDigest: string; steps: readonly Readonly<{ step: number; receiptRefs: readonly string[] }>[] }
+      | { state: 'not_applicable' }
+    >
     resultIntegrity: Readonly<
       { state: 'verified'; digest: string }
       | { state: 'not_applicable' | 'not_proven' }
@@ -73,6 +88,8 @@ type AeJourney = Readonly<{
 
 type ComparisonFailure =
   | 'predeclared_gain_unsupported' | 'cohort_input_not_proven' | 'cohort_input_mismatch'
+  | 'ae_available_facts_mismatch' | 'direct_least_data_mismatch' | 'direct_provider_outputs_mismatch'
+  | 'ae_authority_scope_mismatch' | 'ae_least_data_mismatch' | 'ae_evidence_integrity_not_proven'
   | 'request_mismatch' | 'provider_set_mismatch'
   | 'direct_baseline_ineligible'
   | 'direct_incomplete' | 'ae_incomplete'
@@ -86,14 +103,38 @@ type ComparisonFailure =
   | 'ae_result_integrity_not_proven'
   | 'ae_control_integrity_not_proven'
 
-export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae: AeJourney }>) {
-  const { direct, ae } = input
+export function compareAgentJourneys(input: Readonly<{
+  direct: DirectJourney
+  ae: AeJourney
+  cohort: FrozenAgentJourneyCohort
+}>) {
+  const { direct, ae, cohort } = input
   const failures: ComparisonFailure[] = []
   if (direct.predeclaredGain !== 'recoverable_progress') failures.push('predeclared_gain_unsupported')
   if (direct.cohortInputDigest === undefined || ae.cohortInputDigest === undefined) {
     failures.push('cohort_input_not_proven')
-  } else if (direct.cohortInputDigest !== ae.cohortInputDigest) {
+  } else if (direct.cohortInputDigest !== ae.cohortInputDigest
+    || direct.cohortInputDigest !== cohort.digest) {
     failures.push('cohort_input_mismatch')
+  }
+  if (!sameDigest(expectedAvailableFacts(cohort), ae.input.availableFacts ?? [])) {
+    failures.push('ae_available_facts_mismatch')
+  }
+  if (!directLeastDataMatches(cohort, direct.disclosureLedger ?? [])) {
+    failures.push('direct_least_data_mismatch')
+  }
+  if (!directOutputsMatch(cohort, direct.disclosureLedger ?? [])) {
+    failures.push('direct_provider_outputs_mismatch')
+  }
+  if (!aeAuthorityMatches(cohort, ae.measurements.disclosureIntegrity)) {
+    failures.push('ae_authority_scope_mismatch')
+  }
+  if (!aeLeastDataMatches(cohort, ae.measurements.disclosureIntegrity.providerFields ?? [])) {
+    failures.push('ae_least_data_mismatch')
+  }
+  if (ae.measurements.evidenceIntegrity?.state !== 'verified'
+    || ae.measurements.evidenceIntegrity.resultDigest !== ae.final.resultDigest) {
+    failures.push('ae_evidence_integrity_not_proven')
   }
   if (direct.jobDigest !== canonicalDigest(ae.input.request)) failures.push('request_mismatch')
   if (!sameStringSet(direct.invocations.map(({ business }) => business), ae.final.selectedBusinesses)) {
@@ -160,11 +201,72 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
       },
       replaySafety: { aeExecutionStart: ae.measurements.replaySafety.executionStart },
       disclosureIntegrity: ae.measurements.disclosureIntegrity,
+      evidenceIntegrity: ae.measurements.evidenceIntegrity,
       resultIntegrity: ae.measurements.resultIntegrity,
       controlIntegrity: ae.measurements.controlIntegrity,
     },
     claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value' as const,
   }
+}
+
+function expectedAvailableFacts(cohort: FrozenAgentJourneyCohort) {
+  return Object.entries(cohort.input.customerAnswers)
+    .map(([requirementKey, value]) => ({ requirementKey, valueDigest: canonicalDigest(value) }))
+    .sort((left, right) => left.requirementKey.localeCompare(right.requirementKey))
+}
+
+function directLeastDataMatches(
+  cohort: FrozenAgentJourneyCohort,
+  ledger: readonly Readonly<{ business: string; sentFields: readonly string[] }>[],
+) {
+  return sameDigest(
+    cohort.input.providerInputs.map(({ provider, directFields }) => ({
+      business: provider, sentFields: directFields,
+    })).sort(byBusiness),
+    ledger.map(({ business, sentFields }) => ({ business, sentFields: [...sentFields].sort() })).sort(byBusiness),
+  )
+}
+
+function directOutputsMatch(
+  cohort: FrozenAgentJourneyCohort,
+  ledger: readonly Readonly<{ business: string; outputDigest: string }>[],
+) {
+  return sameDigest(
+    cohort.input.providerOutputs.map(({ provider, digest }) => ({ business: provider, outputDigest: digest }))
+      .sort(byBusiness),
+    ledger.map(({ business, outputDigest }) => ({ business, outputDigest })).sort(byBusiness),
+  )
+}
+
+function aeAuthorityMatches(
+  cohort: FrozenAgentJourneyCohort,
+  disclosure: AeJourney['measurements']['disclosureIntegrity'],
+) {
+  return sameDigest(cohort.input.authorityScope, {
+    recipients: [...disclosure.recipients].sort(),
+    purposes: [...disclosure.purposes].sort(),
+    effects: [...(disclosure.effects ?? [])].sort(),
+  })
+}
+
+function aeLeastDataMatches(
+  cohort: FrozenAgentJourneyCohort,
+  providerFields: readonly Readonly<{ business: string; fields: readonly string[] }>[],
+) {
+  return sameDigest(
+    cohort.input.providerInputs.map(({ provider, aeFieldRefs }) => ({
+      business: provider, fields: aeFieldRefs,
+    })).sort(byBusiness),
+    providerFields.map(({ business, fields }) => ({ business, fields: [...fields].sort() })).sort(byBusiness),
+  )
+}
+
+function byBusiness(left: { business: string }, right: { business: string }) {
+  return left.business.localeCompare(right.business)
+}
+
+function sameDigest(left: Parameters<typeof canonicalDigest>[0], right: Parameters<typeof canonicalDigest>[0]) {
+  return canonicalDigest(left) === canonicalDigest(right)
 }
 
 function validControlMutations(

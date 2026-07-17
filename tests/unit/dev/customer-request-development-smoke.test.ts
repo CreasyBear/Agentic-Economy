@@ -270,11 +270,19 @@ function developmentComparisonCohort() {
     authorityScope: {
       recipients: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
       purposes: ['resolve_sandbox_service_reference', 'prepare_sandbox_service_quote'],
-      effects: ['prepare_quote'],
+      effects: ['information_shared:irreversible'],
     },
     providerInputs: [
-      { provider: 'Sandbox Route Resolver', fields: ['request'] },
-      { provider: 'Sandbox Route Quoter', fields: ['serviceReference'] },
+      {
+        provider: 'Sandbox Route Resolver',
+        directFields: ['request'],
+        aeFieldRefs: ['field:request'],
+      },
+      {
+        provider: 'Sandbox Route Quoter',
+        directFields: ['serviceReference'],
+        aeFieldRefs: ['field:service-reference'],
+      },
     ],
     providerOutputs: [
       { provider: 'Sandbox Route Resolver', digest: 'sha256:' + 'a'.repeat(64) },

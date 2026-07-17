@@ -1,11 +1,37 @@
 import { describe, expect, it } from 'vitest'
 
 import { compareAgentJourneys } from '@/modules/customer-request/agent-journey-comparison'
+import { freezeAgentJourneyCohort } from '@/modules/customer-request/agent-journey-cohort'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+
+const cohort = freezeAgentJourneyCohort({
+  request: 'Find the cheapest labelled sandbox option.',
+  customerAnswers: {},
+  providerOrigins: ['https://providers.example/resolver', 'https://providers.example/quoter'],
+  maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+  authorityScope: {
+    recipients: ['Sandbox Resolver', 'Sandbox Quoter'],
+    purposes: ['prepare_quote', 'resolve_request'],
+    effects: ['information_shared:irreversible'],
+  },
+  providerInputs: [
+    { provider: 'Sandbox Resolver', directFields: ['request'], aeFieldRefs: ['field:request'] },
+    {
+      provider: 'Sandbox Quoter',
+      directFields: ['serviceReference'],
+      aeFieldRefs: ['field:service-reference'],
+    },
+  ],
+  providerOutputs: [
+    { provider: 'Sandbox Resolver', digest: 'sha256:' + 'a'.repeat(64) },
+    { provider: 'Sandbox Quoter', digest: 'sha256:' + 'b'.repeat(64) },
+  ],
+  resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1',
+})
 
 const direct = {
   kind: 'frozen_direct_agent_baseline' as const,
-  cohortInputDigest: 'sha256:' + 'c'.repeat(64),
+  cohortInputDigest: cohort.digest,
   jobDigest: canonicalDigest('Find the cheapest labelled sandbox option.'),
   predeclaredGain: 'recoverable_progress',
   comparisonEligibility: { state: 'eligible' as const },
@@ -15,14 +41,24 @@ const direct = {
   hardConstraintAccuracy: { state: 'satisfied' as const },
   totalCostAccuracy: { state: 'exact' as const, total: { currency: 'AUD', amountMinor: 1_000 } },
   recovery: { state: 'unsupported' as const }, resultUsability: { state: 'usable' as const },
+  disclosureLedger: [
+    {
+      business: 'Sandbox Resolver', sentFields: ['request'],
+      outputDigest: 'sha256:' + 'a'.repeat(64),
+    },
+    {
+      business: 'Sandbox Quoter', sentFields: ['serviceReference'],
+      outputDigest: 'sha256:' + 'b'.repeat(64),
+    },
+  ],
   invocations: [{ business: 'Sandbox Resolver' }, { business: 'Sandbox Quoter' }],
   claimBoundary: 'labelled_sandbox_direct_baseline_not_real_supply_or_customer_value' as const,
 }
 
 const ae = {
   kind: 'cold_external_agent_journey' as const, sandbox: true as const,
-  cohortInputDigest: 'sha256:' + 'c'.repeat(64),
-  input: { request: 'Find the cheapest labelled sandbox option.' },
+  cohortInputDigest: cohort.digest,
+  input: { request: 'Find the cheapest labelled sandbox option.', availableFacts: [] },
   final: {
     state: 'completed' as const, runState: 'completed' as const, evidenceState: 'completed' as const,
     resumedState: 'completed' as const, selectedBusinesses: ['Sandbox Resolver', 'Sandbox Quoter'],
@@ -45,6 +81,19 @@ const ae = {
       state: 'verified' as const,
       recipients: ['Sandbox Quoter', 'Sandbox Resolver'],
       purposes: ['prepare_quote', 'resolve_request'],
+      effects: ['information_shared:irreversible'],
+      providerFields: [
+        { business: 'Sandbox Quoter', fields: ['field:service-reference'] },
+        { business: 'Sandbox Resolver', fields: ['field:request'] },
+      ],
+    },
+    evidenceIntegrity: {
+      state: 'verified' as const,
+      resultDigest: 'sha256:result',
+      steps: [
+        { step: 1, receiptRefs: ['receipt:resolver'] },
+        { step: 2, receiptRefs: ['receipt:quoter'] },
+      ],
     },
     resultIntegrity: { state: 'verified' as const, digest: 'sha256:result' },
     controlIntegrity: {
@@ -62,7 +111,7 @@ const ae = {
 
 describe('agent journey comparison', () => {
   it('passes the predeclared recovery gain only when both journeys clear zero-tolerance gates', () => {
-    expect(compareAgentJourneys({ direct, ae })).toEqual(expect.objectContaining({
+    expect(compareAgentJourneys({ direct, ae, cohort })).toEqual(expect.objectContaining({
       verdict: 'pass_for_declared_class', predeclaredGain: 'recoverable_progress', failures: [],
       measurements: expect.objectContaining({
         completion: { direct: 'completed', ae: 'completed' },
@@ -79,6 +128,19 @@ describe('agent journey comparison', () => {
           state: 'verified',
           recipients: ['Sandbox Quoter', 'Sandbox Resolver'],
           purposes: ['prepare_quote', 'resolve_request'],
+          effects: ['information_shared:irreversible'],
+          providerFields: [
+            { business: 'Sandbox Quoter', fields: ['field:service-reference'] },
+            { business: 'Sandbox Resolver', fields: ['field:request'] },
+          ],
+        },
+        evidenceIntegrity: {
+          state: 'verified',
+          resultDigest: 'sha256:result',
+          steps: [
+            { step: 1, receiptRefs: ['receipt:resolver'] },
+            { step: 2, receiptRefs: ['receipt:quoter'] },
+          ],
         },
         resultIntegrity: { state: 'verified', digest: 'sha256:result' },
         controlIntegrity: {
@@ -97,6 +159,7 @@ describe('agent journey comparison', () => {
 
   it('fails closed when the direct baseline is comparison-ineligible', () => {
     const proof = compareAgentJourneys({
+      cohort,
       direct: { ...direct, comparisonEligibility: { state: 'ineligible' as const } }, ae,
     })
     expect(proof.verdict).toBe('fail_for_declared_class')
@@ -105,6 +168,7 @@ describe('agent journey comparison', () => {
 
   it('does not award recovery when any completion, constraint, cost, or usability gate fails', () => {
     const proof = compareAgentJourneys({
+      cohort,
       direct: { ...direct, resultUsability: { state: 'partial' as const } },
       ae: { ...ae, measurements: { ...ae.measurements, totalCostAccuracy: { state: 'unavailable' as const } } },
     })
@@ -114,6 +178,7 @@ describe('agent journey comparison', () => {
 
   it('fails the zero-tolerance gate when the effect-start command was not replay-proven', () => {
     const proof = compareAgentJourneys({
+      cohort,
       direct,
       ae: {
         ...ae,
@@ -129,6 +194,7 @@ describe('agent journey comparison', () => {
 
   it('fails the zero-tolerance gate when post-start interruption recovery is not proven', () => {
     const proof = compareAgentJourneys({
+      cohort,
       direct,
       ae: {
         ...ae,
@@ -141,6 +207,7 @@ describe('agent journey comparison', () => {
 
   it('fails the zero-tolerance gate when recipient disclosure integrity was not proven', () => {
     const proof = compareAgentJourneys({
+      cohort,
       direct,
       ae: {
         ...ae,
@@ -160,6 +227,7 @@ describe('agent journey comparison', () => {
 
   it('fails the zero-tolerance gate when completed result integrity was not proven', () => {
     const proof = compareAgentJourneys({
+      cohort,
       direct,
       ae: {
         ...ae,
@@ -175,6 +243,7 @@ describe('agent journey comparison', () => {
 
   it('fails the zero-tolerance gate when workflow mutations are not proven operator-free', () => {
     const proof = compareAgentJourneys({
+      cohort,
       direct,
       ae: {
         ...ae,
@@ -194,6 +263,7 @@ describe('agent journey comparison', () => {
 
   it('rejects a replay label unless the same mutation path was already called', () => {
     const proof = compareAgentJourneys({
+      cohort,
       direct,
       ae: {
         ...ae,
@@ -214,21 +284,27 @@ describe('agent journey comparison', () => {
   })
 
   it('fails closed for an unrecognized predeclared gain', () => {
-    const proof = compareAgentJourneys({ direct: { ...direct, predeclaredGain: 'faster' }, ae })
+    const proof = compareAgentJourneys({ direct: { ...direct, predeclaredGain: 'faster' }, ae, cohort })
     expect(proof.verdict).toBe('fail_for_declared_class')
     expect(proof.failures).toContain('predeclared_gain_unsupported')
   })
 
   it('fails closed when the job or provider set differs between paths', () => {
     const proof = compareAgentJourneys({
+      cohort,
       direct,
-      ae: { ...ae, input: { request: 'A different job.' }, final: { ...ae.final, selectedBusinesses: ['Sandbox Quoter'] } },
+      ae: {
+        ...ae,
+        input: { request: 'A different job.', availableFacts: [] },
+        final: { ...ae.final, selectedBusinesses: ['Sandbox Quoter'] },
+      },
     })
     expect(proof.failures).toEqual(expect.arrayContaining(['request_mismatch', 'provider_set_mismatch']))
   })
 
   it('fails closed when both paths are not independently bound to the same frozen cohort inputs', () => {
     const proof = compareAgentJourneys({
+      cohort,
       direct: { ...direct, cohortInputDigest: 'sha256:' + 'a'.repeat(64) },
       ae: { ...ae, cohortInputDigest: 'sha256:' + 'b'.repeat(64) },
     })
@@ -239,9 +315,51 @@ describe('agent journey comparison', () => {
 
   it('fails closed when either path omits its frozen cohort-input proof', () => {
     const { cohortInputDigest: _directDigest, ...directWithoutDigest } = direct
-    const proof = compareAgentJourneys({ direct: directWithoutDigest, ae })
+    const proof = compareAgentJourneys({ direct: directWithoutDigest, ae, cohort })
 
     expect(proof.verdict).toBe('fail_for_declared_class')
     expect(proof.failures).toContain('cohort_input_not_proven')
+  })
+
+  it('fails closed when AE did not observe the cohort facts or material authority scope', () => {
+    const proof = compareAgentJourneys({
+      cohort,
+      direct,
+      ae: {
+        ...ae,
+        input: {
+          ...ae.input,
+          availableFacts: [{ requirementKey: 'undeclared', valueDigest: canonicalDigest(true) }],
+        },
+        measurements: {
+          ...ae.measurements,
+          disclosureIntegrity: {
+            ...ae.measurements.disclosureIntegrity,
+            effects: [],
+          },
+        },
+      },
+    })
+
+    expect(proof.failures).toEqual(expect.arrayContaining([
+      'ae_available_facts_mismatch',
+      'ae_authority_scope_mismatch',
+    ]))
+  })
+
+  it('fails closed when AE lacks schema-valid step evidence for its completed result', () => {
+    const proof = compareAgentJourneys({
+      cohort,
+      direct,
+      ae: {
+        ...ae,
+        measurements: {
+          ...ae.measurements,
+          evidenceIntegrity: { state: 'not_applicable' as const },
+        },
+      },
+    })
+
+    expect(proof.failures).toContain('ae_evidence_integrity_not_proven')
   })
 })

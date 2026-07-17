@@ -466,7 +466,8 @@ describe('hosted Customer Request journey', () => {
       expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
       agent: { name: 'cold-external-agent', version: '2.0.0' },
       scenario: {
-        request: 'Resolve a labelled sandbox service and prepare its quote', facts: {}, messages: [],
+        request: 'Resolve a labelled sandbox service and prepare its quote',
+        facts: { passengers: 2 }, messages: [],
         finish: 'complete',
         expectedRoute: {
           stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
@@ -486,6 +487,9 @@ describe('hosted Customer Request journey', () => {
       stepCount: 2, runState: 'completed', evidenceState: 'completed',
       problemState: 'not_reported', resumedState: 'completed', resultDigest: expect.stringMatching(/^sha256:/),
     })
+    expect(proof.input.availableFacts).toEqual([
+      { requirementKey: 'passengers', valueDigest: expect.stringMatching(/^sha256:/u) },
+    ])
     expect(proof.measurements).toEqual({
       integrationBurden: { requestCalls: 7, clarifications: 0 },
       turns: { total: 7 }, elapsedMs: 0,
@@ -505,6 +509,19 @@ describe('hosted Customer Request journey', () => {
         state: 'verified',
         recipients: ['Sandbox Route Quoter', 'Sandbox Route Resolver'],
         purposes: ['prepare_sandbox_service_quote', 'resolve_sandbox_service_reference'],
+        effects: ['information_shared:irreversible'],
+        providerFields: [
+          { business: 'Sandbox Route Quoter', fields: ['field:service-reference'] },
+          { business: 'Sandbox Route Resolver', fields: ['field:request'] },
+        ],
+      },
+      evidenceIntegrity: {
+        state: 'verified',
+        resultDigest: expect.stringMatching(/^sha256:/u),
+        steps: [
+          { step: 1, receiptRefs: ['receipt:one'] },
+          { step: 2, receiptRefs: ['receipt:two'] },
+        ],
       },
       resultIntegrity: { state: 'verified', digest: expect.stringMatching(/^sha256:/) },
       controlIntegrity: {

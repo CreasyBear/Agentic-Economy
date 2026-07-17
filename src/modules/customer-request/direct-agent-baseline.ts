@@ -315,7 +315,8 @@ function cohortProviderContractsMatch(
 ): boolean {
   const discoveredInputs = discoveries.map(({ business, operation }) => ({
     provider: business.name,
-    fields: [...operation.inputSchema.required].sort(),
+    directFields: [...operation.inputSchema.required].sort(),
+    aeFieldRefs: cohort.providerInputs.find(({ provider }) => provider === business.name)?.aeFieldRefs ?? [],
   })).sort((left, right) => left.provider.localeCompare(right.provider))
   const declaredOutputs = cohort.providerOutputs.map(({ provider }) => provider).sort()
   const discoveredProviders = discoveries.map(({ business }) => business.name).sort()

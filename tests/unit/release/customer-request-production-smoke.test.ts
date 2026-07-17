@@ -167,11 +167,15 @@ function comparisonCohort(
     authorityScope: {
       recipients: ['Resolver', 'Quoter'],
       purposes: ['resolve', 'quote'],
-      effects: ['prepare_quote'],
+      effects: ['information_shared:irreversible'],
     },
     providerInputs: [
-      { provider: 'Resolver', fields: ['request'] },
-      { provider: 'Quoter', fields: ['serviceReference'] },
+      { provider: 'Resolver', directFields: ['request'], aeFieldRefs: ['field:request'] },
+      {
+        provider: 'Quoter',
+        directFields: ['serviceReference'],
+        aeFieldRefs: ['field:service-reference'],
+      },
     ],
     providerOutputs: [
       { provider: 'Resolver', digest: 'sha256:' + 'a'.repeat(64) },

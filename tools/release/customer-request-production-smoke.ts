@@ -145,7 +145,7 @@ export async function runCustomerRequestProductionSmoke(
     ...proof,
     cohortInputDigest: aeCohort.digest,
   } as Parameters<typeof compareAgentJourneys>[0]['ae']
-  const comparison = compareAgentJourneys({ direct, ae: terminalProof })
+  const comparison = compareAgentJourneys({ direct, ae: terminalProof, cohort: aeCohort })
   process.stdout.write(`${JSON.stringify(comparison)}\n`)
   if (comparison.verdict !== 'pass_for_declared_class') {
     throw new Error(`customer_request_comparison_failed:${comparison.failures.join(',')}`)

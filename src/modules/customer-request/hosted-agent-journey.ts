@@ -141,6 +141,7 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
   observedAt: z.iso.datetime(),
   input: z.object({
     request: z.string(),
+    availableFacts: z.array(z.strictObject({ requirementKey: z.string(), valueDigest: z.string() })),
     facts: z.array(z.strictObject({ requirementKey: z.string(), valueDigest: z.string() })),
     messages: z.array(z.strictObject({ index: z.number().int().nonnegative(), valueDigest: z.string() })),
   }).strict(),
@@ -258,7 +259,23 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
       state: z.literal('verified'),
       recipients: z.array(z.string()),
       purposes: z.array(z.string()),
+      effects: z.array(z.string()),
+      providerFields: z.array(z.strictObject({
+        business: z.string(),
+        fields: z.array(z.string()),
+      })),
     }),
+    evidenceIntegrity: z.discriminatedUnion('state', [
+      z.strictObject({
+        state: z.literal('verified'),
+        resultDigest: z.string().startsWith('sha256:'),
+        steps: z.array(z.strictObject({
+          step: z.number().int().positive(),
+          receiptRefs: z.array(z.string()),
+        })),
+      }),
+      z.strictObject({ state: z.literal('not_applicable') }),
+    ]),
     resultIntegrity: z.discriminatedUnion('state', [
       z.strictObject({ state: z.literal('verified'), digest: z.string().startsWith('sha256:') }),
       z.strictObject({ state: z.literal('not_applicable') }),
@@ -524,7 +541,7 @@ export async function runHostedCustomerRequestJourney(
           kind: 'cold_external_agent_journey', agent: input.agent,
           release: journeyReleaseProjection(input, release),
           observedAt: new Date((input.now ?? Date.now)()).toISOString(),
-          input: { request: input.scenario.request, facts: consumedFacts, messages: consumedMessages },
+          input: journeyProofInput(runtimeInput, consumedFacts, consumedMessages),
           observedStates: states, authorityStops,
           final: {
             requestRef, revision: resumed.revision, state: resumed.state, selectedBusiness, selectedBusinesses,
@@ -796,11 +813,7 @@ async function adapterCancellationHostedJourney(input: Readonly<{
     agent: input.input.agent,
     release: journeyReleaseProjection(input.input, input.release),
     observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
-    input: {
-      request: input.input.scenario.request,
-      facts: input.consumedFacts,
-      messages: input.consumedMessages,
-    },
+    input: journeyProofInput(input.input, input.consumedFacts, input.consumedMessages),
     observedStates: input.states,
     authorityStops: input.authorityStops,
     final: {
@@ -930,11 +943,7 @@ async function cancelAfterCurrentHostedJourney(input: Readonly<{
     kind: 'cold_external_agent_journey', agent: input.input.agent,
     release: journeyReleaseProjection(input.input, input.release),
     observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
-    input: {
-      request: input.input.scenario.request,
-      facts: input.consumedFacts,
-      messages: input.consumedMessages,
-    },
+    input: journeyProofInput(input.input, input.consumedFacts, input.consumedMessages),
     observedStates: input.states,
     authorityStops: input.authorityStops,
     final: {
@@ -1025,7 +1034,7 @@ async function partialResultHostedJourney(
     kind: 'cold_external_agent_journey', agent: input.input.agent,
     release: journeyReleaseProjection(input.input, input.release),
     observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
-    input: { request: input.input.scenario.request, facts: input.consumedFacts, messages: input.consumedMessages },
+    input: journeyProofInput(input.input, input.consumedFacts, input.consumedMessages),
     observedStates: input.states, authorityStops: input.authorityStops,
     final: {
       requestRef: input.requestRef, revision: resumed.revision,
@@ -1102,7 +1111,7 @@ async function providerDeniedHostedJourney(input: Readonly<{
     kind: 'cold_external_agent_journey', agent: input.input.agent,
     release: journeyReleaseProjection(input.input, input.release),
     observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
-    input: { request: input.input.scenario.request, facts: input.consumedFacts, messages: input.consumedMessages },
+    input: journeyProofInput(input.input, input.consumedFacts, input.consumedMessages),
     observedStates: input.states, authorityStops: input.authorityStops,
     final: {
       requestRef: input.requestRef, revision: resumed.revision,
@@ -1178,7 +1187,7 @@ async function outcomeUnknownHostedJourney(input: Readonly<{
     kind: 'cold_external_agent_journey', agent: input.input.agent,
     release: journeyReleaseProjection(input.input, input.release),
     observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
-    input: { request: input.input.scenario.request, facts: input.consumedFacts, messages: input.consumedMessages },
+    input: journeyProofInput(input.input, input.consumedFacts, input.consumedMessages),
     observedStates: input.states, authorityStops: input.authorityStops,
     final: {
       requestRef: input.requestRef, revision: resumed.revision,
@@ -1262,11 +1271,7 @@ async function completeHostedJourney(input: Readonly<{
     kind: 'cold_external_agent_journey', agent: input.input.agent,
     release: journeyReleaseProjection(input.input, input.release),
     observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
-    input: {
-      request: input.input.scenario.request,
-      facts: input.consumedFacts,
-      messages: input.consumedMessages,
-    },
+    input: journeyProofInput(input.input, input.consumedFacts, input.consumedMessages),
     observedStates: input.states, authorityStops: input.authorityStops,
     final: {
       requestRef: input.requestRef, revision: resumed.revision,
@@ -1276,7 +1281,7 @@ async function completeHostedJourney(input: Readonly<{
       problemState: 'not_reported', resumedState: resumed.state,
       resultDigest: evidenceResultDigest,
     },
-    measurements: journeyMeasurements(input.input, input.route, true, true, evidenceResultDigest),
+    measurements: journeyMeasurements(input.input, input.route, true, true, evidenceResultDigest, evidence),
     sandbox: true,
     claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
   })
@@ -1865,6 +1870,12 @@ function journeyMeasurements(
   resultUsable: boolean,
   resumed: boolean,
   resultDigest?: string,
+  evidence?: Readonly<{
+    steps: readonly Readonly<{
+      step: number
+      evidence: readonly Readonly<{ receiptRef: string }>[]
+    }>[]
+  }>,
 ) {
   const totalCostAccuracy = route.maximumTotalCost.kind === 'known'
     ? {
@@ -1907,7 +1918,22 @@ function journeyMeasurements(
       state: 'verified' as const,
       recipients: route.dataUse.recipients.map(({ name }) => name).sort(),
       purposes: [...route.dataUse.purposes].sort(),
+      effects: route.effects.map(({ kind, reversibility }) => `${kind}:${reversibility}`).sort(),
+      providerFields: route.dataUse.recipients.map(({ name, fields }) => ({
+        business: name,
+        fields: fields.map(({ fieldRef }) => fieldRef).sort(),
+      })).sort((left, right) => left.business.localeCompare(right.business)),
     },
+    evidenceIntegrity: resultDigest === undefined || evidence === undefined
+      ? { state: 'not_applicable' as const }
+      : {
+          state: 'verified' as const,
+          resultDigest,
+          steps: evidence.steps.map(({ step, evidence: receipts }) => ({
+            step,
+            receiptRefs: receipts.map(({ receiptRef }) => receiptRef).sort(),
+          })),
+        },
     resultIntegrity: resultDigest === undefined
       ? { state: 'not_applicable' as const }
       : { state: 'verified' as const, digest: resultDigest },
@@ -1916,6 +1942,21 @@ function journeyMeasurements(
       operatorInterventions: 0 as const,
       mutations: input.metrics.mutations,
     },
+  }
+}
+
+function journeyProofInput(
+  input: HostedCustomerRequestJourneyRuntimeInput,
+  consumedFacts: readonly Readonly<{ requirementKey: string; valueDigest: string }>[],
+  consumedMessages: readonly Readonly<{ index: number; valueDigest: string }>[],
+) {
+  return {
+    request: input.scenario.request,
+    availableFacts: Object.entries(input.scenario.facts)
+      .map(([requirementKey, value]) => ({ requirementKey, valueDigest: digestInput(value) }))
+      .sort((left, right) => left.requirementKey.localeCompare(right.requirementKey)),
+    facts: consumedFacts,
+    messages: consumedMessages,
   }
 }
 

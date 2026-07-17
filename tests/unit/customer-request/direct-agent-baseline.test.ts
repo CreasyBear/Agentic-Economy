@@ -119,8 +119,16 @@ describe('frozen direct-agent baseline', () => {
       cohort: {
         ...cohort,
         providerInputs: [
-          { provider: 'Sandbox Route Resolver', fields: ['request', 'passengers'] },
-          { provider: 'Sandbox Route Quoter', fields: ['serviceReference'] },
+          {
+            provider: 'Sandbox Route Resolver',
+            directFields: ['request', 'passengers'],
+            aeFieldRefs: ['field:request'],
+          },
+          {
+            provider: 'Sandbox Route Quoter',
+            directFields: ['serviceReference'],
+            aeFieldRefs: ['field:service-reference'],
+          },
         ],
       },
       fetch,
@@ -244,11 +252,19 @@ function baselineCohort() {
     authorityScope: {
       recipients: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
       purposes: ['prepare_quote', 'resolve_request'],
-      effects: ['prepare_quote'],
+      effects: ['information_shared:irreversible'],
     },
     providerInputs: [
-      { provider: 'Sandbox Route Resolver', fields: ['request'] },
-      { provider: 'Sandbox Route Quoter', fields: ['serviceReference'] },
+      {
+        provider: 'Sandbox Route Resolver',
+        directFields: ['request'],
+        aeFieldRefs: ['field:request'],
+      },
+      {
+        provider: 'Sandbox Route Quoter',
+        directFields: ['serviceReference'],
+        aeFieldRefs: ['field:service-reference'],
+      },
     ],
     providerOutputs: [
       {

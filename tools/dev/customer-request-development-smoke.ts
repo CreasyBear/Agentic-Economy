@@ -218,7 +218,7 @@ export async function runCustomerRequestDevelopmentSmoke(
     ...proof,
     cohortInputDigest: aeCohort.digest,
   } as Parameters<typeof compareAgentJourneys>[0]['ae']
-  const comparison = compareAgentJourneys({ direct, ae: terminalProof })
+  const comparison = compareAgentJourneys({ direct, ae: terminalProof, cohort: aeCohort })
   const combined = {
     kind: 'development_customer_request_comparison' as const,
     release: { revision: config.sourceRevision, deploymentId: config.convexDeployment },

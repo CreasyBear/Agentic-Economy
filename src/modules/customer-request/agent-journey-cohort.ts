@@ -20,7 +20,8 @@ const agentJourneyCohortInputSchema = z.strictObject({
   }),
   providerInputs: z.array(z.strictObject({
     provider: z.string().min(1),
-    fields: z.array(z.string().min(1)).min(1),
+    directFields: z.array(z.string().min(1)).min(1),
+    aeFieldRefs: z.array(z.string().min(1)).min(1),
   })).min(2),
   providerOutputs: z.array(z.strictObject({
     provider: z.string().min(1),
@@ -39,7 +40,11 @@ export type AgentJourneyCohortInput = Readonly<{
     purposes: readonly string[]
     effects: readonly string[]
   }>
-  providerInputs: readonly Readonly<{ provider: string; fields: readonly string[] }>[]
+  providerInputs: readonly Readonly<{
+    provider: string
+    directFields: readonly string[]
+    aeFieldRefs: readonly string[]
+  }>[]
   providerOutputs: readonly Readonly<{ provider: string; digest: string }>[]
   resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1'
 }>
@@ -59,9 +64,10 @@ export function freezeAgentJourneyCohort(input: AgentJourneyCohortInput) {
       purposes: sortedUnique(input.authorityScope.purposes),
       effects: sortedUnique(input.authorityScope.effects),
     },
-    providerInputs: input.providerInputs.map(({ provider, fields }) => ({
+    providerInputs: input.providerInputs.map(({ provider, directFields, aeFieldRefs }) => ({
       provider,
-      fields: sortedUnique(fields),
+      directFields: sortedUnique(directFields),
+      aeFieldRefs: sortedUnique(aeFieldRefs),
     })).sort((left, right) => left.provider.localeCompare(right.provider)),
     providerOutputs: input.providerOutputs.map((output) => ({ ...output }))
       .sort((left, right) => left.provider.localeCompare(right.provider) || left.digest.localeCompare(right.digest)),
@@ -73,6 +79,8 @@ export function freezeAgentJourneyCohort(input: AgentJourneyCohortInput) {
     digest: canonicalDigest(normalized),
   })
 }
+
+export type FrozenAgentJourneyCohort = ReturnType<typeof freezeAgentJourneyCohort>
 
 function sortedUnique(values: readonly string[]): readonly string[] {
   return [...new Set(values)].sort()

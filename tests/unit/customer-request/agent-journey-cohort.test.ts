@@ -55,15 +55,19 @@ function cohort() {
     authorityScope: {
       recipients: ['Sandbox Resolver', 'Sandbox Quoter'],
       purposes: ['resolve_request', 'prepare_quote'],
-      effects: ['prepare_quote'],
+      effects: ['information_shared:irreversible'],
     },
     providerOutputs: [
       { provider: 'Sandbox Resolver', digest: 'sha256:' + 'a'.repeat(64) },
       { provider: 'Sandbox Quoter', digest: 'sha256:' + 'b'.repeat(64) },
     ],
     providerInputs: [
-      { provider: 'Sandbox Resolver', fields: ['request'] },
-      { provider: 'Sandbox Quoter', fields: ['serviceReference'] },
+      { provider: 'Sandbox Resolver', directFields: ['request'], aeFieldRefs: ['field:request'] },
+      {
+        provider: 'Sandbox Quoter',
+        directFields: ['serviceReference'],
+        aeFieldRefs: ['field:service-reference'],
+      },
     ],
     resultUsabilityRubric: 'customer_result_and_schema_valid_evidence:v1',
   } as const
