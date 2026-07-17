@@ -27,6 +27,7 @@ const DEFAULT_RECIPIENTS = [
 
 export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
   baseUrl: string
+  trustedDevelopmentOrigin?: string
   clerkSecretKey: string
   clerkInstanceId: string
   clerkSubject: string
@@ -76,12 +77,17 @@ export function customerRequestDevelopmentSmokeConfig(
   const journeyKeyring = env.AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY === undefined
     ? undefined
     : resolveCustomerRequestJourneyKeyring(env)
+  const trustedDevelopmentOrigin = resolveTrustedDevelopmentOrigin(
+    baseUrl,
+    env.AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN,
+  )
   const repeatPermission = env.AE_CUSTOMER_REQUEST_REPEAT_PERMISSION === 'true'
   if (repeatPermission && shared.finish !== 'complete') {
     throw new Error('Repeat-permission development proof requires AE_CUSTOMER_REQUEST_FINISH=complete')
   }
   return {
     baseUrl,
+    ...(trustedDevelopmentOrigin === undefined ? {} : { trustedDevelopmentOrigin }),
     clerkSecretKey: required(env.CLERK_SECRET_KEY, 'CLERK_SECRET_KEY'),
     clerkInstanceId: required(env.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID, 'AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID'),
     clerkSubject: required(env.AE_CUSTOMER_REQUEST_CLERK_SUBJECT, 'AE_CUSTOMER_REQUEST_CLERK_SUBJECT'),
@@ -143,6 +149,9 @@ export async function runCustomerRequestDevelopmentSmoke(
       signed = await runSignedHostedCustomerRequestJourney({
         environment: 'development',
         baseUrl: config.baseUrl,
+        ...(config.trustedDevelopmentOrigin === undefined
+          ? {}
+          : { trustedDevelopmentOrigin: config.trustedDevelopmentOrigin }),
         agentApiKey,
         expectedRevision: config.sourceRevision,
         expectedDeploymentId: config.convexDeployment,
@@ -224,6 +233,34 @@ function normalizeConvexDevelopmentDeployment(value: string): string {
 function validateSourceRevision(value: string): string {
   if (!/^[a-f0-9]{40}$/u.test(value)) throw new Error('development source revision must be an exact Git commit')
   return value
+}
+
+function resolveTrustedDevelopmentOrigin(baseUrl: string, value: string | undefined): string | undefined {
+  let base: URL
+  try {
+    base = new URL(baseUrl)
+  } catch {
+    throw new Error('AE_CUSTOMER_REQUEST_BASE_URL must be an exact origin')
+  }
+  if (base.protocol !== 'https:') return undefined
+  const isExactBaseOrigin = base.username === '' && base.password === ''
+    && base.pathname.replace(/\/+$/u, '') === '' && base.search === '' && base.hash === ''
+    && baseUrl === base.origin
+  if (!isExactBaseOrigin) throw new Error('AE_CUSTOMER_REQUEST_BASE_URL must be an exact HTTPS origin')
+  const trusted = required(value, 'AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN').replace(/\/+$/u, '')
+  let trustedUrl: URL
+  try {
+    trustedUrl = new URL(trusted)
+  } catch {
+    throw new Error('AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN must be an exact HTTPS origin')
+  }
+  const isExactOrigin = trustedUrl.protocol === 'https:' && trustedUrl.username === ''
+    && trustedUrl.password === '' && trustedUrl.pathname.replace(/\/+$/u, '') === ''
+    && trustedUrl.search === '' && trustedUrl.hash === ''
+  if (!isExactOrigin || trustedUrl.origin !== base.origin || trusted !== base.origin) {
+    throw new Error('AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN must exactly match AE_CUSTOMER_REQUEST_BASE_URL')
+  }
+  return trusted
 }
 
 function required(value: string | undefined, name: string): string {

@@ -36,6 +36,132 @@ describe('hosted Customer Request journey', () => {
       environment: 'development', baseUrl: 'http://127.0.0.1:4319',
       verification: 'local_checkout_and_named_dev_deployment',
     })
+    expect(proof.measurements.discovery).toEqual({
+      state: 'not_proven',
+      reason: 'verification_override',
+    })
+  })
+
+  it('runs against an exact explicitly trusted HTTPS development origin without promoting it to production', async () => {
+    const responses = completeJourneyResponses()
+    const proof = await runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'https://jc-mbp.tail4d4766.ts.net',
+      trustedDevelopmentOrigin: 'https://jc-mbp.tail4d4766.ts.net',
+      agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40),
+      expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'cold-external-agent', version: 'development-v1' },
+      scenario: {
+        request: 'Complete sandbox request', facts: {}, messages: [], finish: 'complete',
+      },
+      sandbox: true,
+      fetch: vi.fn(async () => {
+        const next = responses.shift()
+        return next === undefined ? Response.json({ error: 'unexpected' }, { status: 500 }) : Response.json(next)
+      }),
+      verifyRelease: async () => ({
+        kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+      sleep: async () => undefined,
+    })
+
+    expect(proof.release).toEqual({
+      revision: 'a'.repeat(40),
+      deploymentId: 'convex:loyal-peacock-107',
+      environment: 'development',
+      baseUrl: 'https://jc-mbp.tail4d4766.ts.net',
+      verification: 'local_checkout_and_named_dev_deployment',
+    })
+  })
+
+  it('refuses an untrusted HTTPS development origin before credentials can leave the process', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+    const verifyRelease = vi.fn(async () => ({
+      kind: 'verified' as const,
+      revision: 'a'.repeat(40),
+      deploymentId: 'convex:loyal-peacock-107',
+    }))
+
+    await expect(runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'https://attacker.example',
+      agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40),
+      expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'cold-external-agent', version: 'development-v1' },
+      scenario: { request: 'Complete sandbox request', facts: {}, messages: [] },
+      sandbox: true,
+      fetch,
+      verifyRelease,
+    })).rejects.toThrow('hosted_journey_base_url_not_development')
+
+    expect(verifyRelease).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('records the public discovery path and uses the discovered Request operation', async () => {
+    const responses = completeJourneyResponses()
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = new URL(input.toString())
+      const requestHeaders = new Headers(init?.headers)
+      if (url.pathname === '/' && init?.method === undefined) {
+        return new Response('<a href="/llms.txt">Assistants</a>')
+      }
+      if (url.pathname === '/llms.txt') {
+        return new Response([
+          'Assistant setup:',
+          '- https://jc-mbp.tail4d4766.ts.net/SKILL.md',
+          'Customer Request API:',
+          '- submit=https://jc-mbp.tail4d4766.ts.net/api/v1/requests-cold',
+        ].join('\n'))
+      }
+      if (url.pathname === '/SKILL.md') {
+        return new Response([
+          '/api/v1/requests',
+          'customer_requests:create',
+          'navigation.actions',
+          'routes_ready',
+          'route_confirmed',
+        ].join('\n'))
+      }
+      if (url.pathname === '/api/v1/requests-cold' && !requestHeaders.has('Authorization')) {
+        return Response.json(
+          { kind: 'refused', reason: 'authentication_required' },
+          { status: 401 },
+        )
+      }
+      const next = responses.shift()
+      return next === undefined ? Response.json({ error: 'unexpected' }, { status: 500 }) : Response.json(next)
+    })
+
+    const proof = await runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'https://jc-mbp.tail4d4766.ts.net',
+      trustedDevelopmentOrigin: 'https://jc-mbp.tail4d4766.ts.net',
+      agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40),
+      expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'cold-external-agent', version: 'development-v1' },
+      scenario: {
+        request: 'Complete sandbox request', facts: {}, messages: [], finish: 'complete',
+      },
+      sandbox: true,
+      fetch,
+      verifyRelease: async () => ({
+        kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      }),
+      sleep: async () => undefined,
+    })
+
+    expect(proof.measurements.discovery).toEqual({
+      state: 'verified',
+      paths: ['/', '/llms.txt', '/SKILL.md'],
+      requestOperation: { method: 'POST', path: '/api/v1/requests-cold' },
+      anonymousRefusal: 'authentication_required',
+    })
   })
 
   it('creates, replays, uses, resumes, and withdraws repeat permission through the agent surface', async () => {
@@ -189,6 +315,51 @@ describe('hosted Customer Request journey', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('discovers the assistant journey from the public origin before using any private path', async () => {
+    const paths: string[] = []
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = new URL(input.toString())
+      paths.push(url.pathname)
+      if (url.pathname === '/') {
+        return new Response(
+          '<html><body><a href="/llms.txt">Assistants</a></body></html>',
+          { headers: { 'Content-Type': 'text/html' } },
+        )
+      }
+      if (url.pathname === '/llms.txt') {
+        return new Response([
+          'Assistant setup:',
+          '- https://agentic-economy-phi.vercel.app/SKILL.md',
+          'Customer Request API:',
+          '- submit=https://agentic-economy-phi.vercel.app/api/v1/requests',
+        ].join('\n'))
+      }
+      if (url.pathname === '/SKILL.md') {
+        return new Response([
+          '/api/v1/requests',
+          'customer_requests:create',
+          'navigation.actions',
+          'routes_ready',
+          'route_confirmed',
+        ].join('\n'))
+      }
+      if (url.pathname === '/api/v1/requests' && init?.method === 'POST') {
+        return Response.json(
+          { kind: 'refused', reason: 'authentication_required' },
+          { status: 401 },
+        )
+      }
+      return Response.json({ reason: 'not_found' }, { status: 404 })
+    })
+
+    await verifyHostedCustomerRequestFrontDoor({
+      baseUrl: 'https://agentic-economy-phi.vercel.app',
+      fetch,
+    })
+
+    expect(paths).toEqual(['/', '/llms.txt', '/SKILL.md', '/api/v1/requests'])
+  })
+
   it('does not demand a redundant fact when the initial Request is already sufficient', async () => {
     const responses = [
       routesReadyView(),
@@ -329,6 +500,7 @@ describe('hosted Customer Request journey', () => {
       },
       resultUsability: { state: 'usable' },
       replaySafety: { executionStart: 'same_request_monotonic_progress' },
+      discovery: { state: 'not_proven', reason: 'verification_override' },
       disclosureIntegrity: {
         state: 'verified',
         recipients: ['Sandbox Route Quoter', 'Sandbox Route Resolver'],

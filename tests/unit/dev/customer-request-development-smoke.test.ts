@@ -24,6 +24,52 @@ describe('customer Request development smoke configuration', () => {
     })
   })
 
+  it('binds a public HTTPS development journey to a separately trusted exact origin', () => {
+    expect(customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_BASE_URL: 'https://jc-mbp.tail4d4766.ts.net/',
+      AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN: 'https://jc-mbp.tail4d4766.ts.net',
+    }, 'a'.repeat(40))).toMatchObject({
+      baseUrl: 'https://jc-mbp.tail4d4766.ts.net',
+      trustedDevelopmentOrigin: 'https://jc-mbp.tail4d4766.ts.net',
+      convexDeployment: 'convex:loyal-peacock-107',
+      sourceRevision: 'a'.repeat(40),
+    })
+  })
+
+  it.each([
+    [undefined, 'AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN is required'],
+    ['https://attacker.example', 'must exactly match AE_CUSTOMER_REQUEST_BASE_URL'],
+    ['https://user@jc-mbp.tail4d4766.ts.net', 'must exactly match AE_CUSTOMER_REQUEST_BASE_URL'],
+    ['https://jc-mbp.tail4d4766.ts.net/private', 'must exactly match AE_CUSTOMER_REQUEST_BASE_URL'],
+  ])('refuses an HTTPS development journey without the same exact trusted origin', (
+    trustedDevelopmentOrigin,
+    expected,
+  ) => {
+    expect(() => customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_BASE_URL: 'https://jc-mbp.tail4d4766.ts.net',
+      AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN: trustedDevelopmentOrigin,
+    }, 'a'.repeat(40))).toThrow(expected)
+  })
+
+  it('refuses a non-origin HTTPS development base before creating journey credentials', () => {
+    expect(() => customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_BASE_URL: 'https://jc-mbp.tail4d4766.ts.net/private',
+      AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN: 'https://jc-mbp.tail4d4766.ts.net',
+    }, 'a'.repeat(40))).toThrow('AE_CUSTOMER_REQUEST_BASE_URL must be an exact HTTPS origin')
+  })
+
   it('rejects production or ambiguous Convex deployment coordinates', () => {
     expect(() => customerRequestDevelopmentSmokeConfig({
       CLERK_SECRET_KEY: 'sk_test',

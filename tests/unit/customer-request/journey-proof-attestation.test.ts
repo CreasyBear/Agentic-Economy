@@ -45,6 +45,7 @@ const proof = hostedCustomerRequestJourneyProofSchema.parse({
     recovery: { state: 'durable', resumed: true, postures: ['retry_safe'] },
     resultUsability: { state: 'usable' },
     replaySafety: { executionStart: 'same_request_monotonic_progress' },
+    discovery: { state: 'not_proven', reason: 'verification_override' },
     disclosureIntegrity: {
       state: 'verified',
       recipients: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],

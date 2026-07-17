@@ -10,7 +10,13 @@ afterEach(() => vi.restoreAllMocks())
 describe('customer Request production smoke entrypoint', () => {
   it('keeps the script as a credential-free front-door wrapper in preflight mode', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(new Response('/api/v1/requests navigation.actions customer_requests:create routes_ready route_confirmed'))
+      .mockResolvedValueOnce(new Response('<a href="/llms.txt">Assistants</a>'))
+      .mockResolvedValueOnce(new Response([
+        'Assistant setup:',
+        '- https://agentic-economy-phi.vercel.app/SKILL.md',
+        'Customer Request API:',
+        '- submit=https://agentic-economy-phi.vercel.app/api/v1/requests',
+      ].join('\n')))
       .mockResolvedValueOnce(new Response('/api/v1/requests navigation.actions customer_requests:create routes_ready route_confirmed'))
       .mockResolvedValueOnce(Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401 }))
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
@@ -20,7 +26,7 @@ describe('customer Request production smoke entrypoint', () => {
       preflightOnly: true, requestText: 'Find a sandbox option.',
     })).resolves.toBeUndefined()
 
-    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(fetch).toHaveBeenCalledTimes(4)
     expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('front_door_only'))
   })
 

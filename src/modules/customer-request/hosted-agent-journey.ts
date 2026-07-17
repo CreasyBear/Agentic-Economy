@@ -18,10 +18,19 @@ import {
 } from './agent-contract'
 
 type ReleaseVerification = Readonly<{ kind: 'verified'; revision: string; deploymentId: string }>
+type JourneyDiscovery = Readonly<{
+  state: 'verified'
+  paths: readonly string[]
+  requestOperation: Readonly<{ method: 'POST'; path: string }>
+}>
+type JourneyDiscoveryMeasurement =
+  | (JourneyDiscovery & Readonly<{ anonymousRefusal: 'authentication_required' }>)
+  | Readonly<{ state: 'not_proven'; reason: 'verification_override' }>
 
 export type HostedCustomerRequestJourneyInput = Readonly<{
   environment?: 'production' | 'development'
   baseUrl: string
+  trustedDevelopmentOrigin?: string
   agentApiKey: string
   expectedRevision: string
   expectedDeploymentId: string
@@ -51,7 +60,7 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
   now?: () => number
   sleep?: (milliseconds: number) => Promise<void>
   verifyRelease: () => Promise<ReleaseVerification>
-  verifyDiscovery?: () => Promise<void>
+  verifyDiscovery?: () => Promise<JourneyDiscovery | void>
   verifyAnonymousRefusal?: () => Promise<void>
 }>
 
@@ -60,6 +69,7 @@ type JourneyMetrics = {
   requestCalls: number
   clarifications: number
   executionStartReplay: 'not_proven' | 'same_request_monotonic_progress'
+  discovery: JourneyDiscoveryMeasurement
   interruptionRecovery?: Readonly<{
     state: 'verified'
     requestRef: string
@@ -109,6 +119,7 @@ type MutationSource = 'declared_request' | 'observed_navigation' | 'automatic_re
 
 type HostedCustomerRequestJourneyRuntimeInput = HostedCustomerRequestJourneyInput & Readonly<{
   metrics: JourneyMetrics
+  requestEntrypointPath: string
 }>
 
 const journeyReleaseSchema = z.discriminatedUnion('environment', [
@@ -118,7 +129,7 @@ const journeyReleaseSchema = z.discriminatedUnion('environment', [
   }),
   z.strictObject({
     revision: z.string().regex(/^[a-f0-9]{40}$/u), deploymentId: z.string().startsWith('convex:'),
-    environment: z.literal('development'), baseUrl: z.url().startsWith('http://'),
+    environment: z.literal('development'), baseUrl: z.url(),
     verification: z.literal('local_checkout_and_named_dev_deployment'),
   }),
 ])
@@ -192,6 +203,21 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
     replaySafety: z.strictObject({
       executionStart: z.enum(['not_proven', 'same_request_monotonic_progress']),
     }),
+    discovery: z.discriminatedUnion('state', [
+      z.strictObject({
+        state: z.literal('verified'),
+        paths: z.array(z.string().startsWith('/')).min(3),
+        requestOperation: z.strictObject({
+          method: z.literal('POST'),
+          path: z.string().startsWith('/api/v1/requests'),
+        }),
+        anonymousRefusal: z.literal('authentication_required'),
+      }),
+      z.strictObject({
+        state: z.literal('not_proven'),
+        reason: z.literal('verification_override'),
+      }),
+    ]),
     staleOptionRecovery: z.strictObject({
       state: z.literal('verified'),
       expiredGenerationRef: z.string(),
@@ -255,20 +281,27 @@ export type HostedCustomerRequestJourneyProof = Readonly<z.infer<typeof hostedCu
 export async function runHostedCustomerRequestJourney(
   input: HostedCustomerRequestJourneyInput,
 ): Promise<HostedCustomerRequestJourneyProof> {
-  assertJourneyBaseUrl(input.baseUrl, journeyEnvironment(input))
+  assertJourneyBaseUrl(input.baseUrl, journeyEnvironment(input), input.trustedDevelopmentOrigin)
   const metrics: JourneyMetrics = {
     startedAt: (input.now ?? Date.now)(), requestCalls: 0, clarifications: 0,
     executionStartReplay: 'not_proven', mutations: [],
+    discovery: { state: 'not_proven', reason: 'verification_override' },
   }
-  const runtimeInput: HostedCustomerRequestJourneyRuntimeInput = { ...input, metrics }
   const release = await input.verifyRelease()
   if (release.revision !== input.expectedRevision || release.deploymentId !== input.expectedDeploymentId) {
     throw new Error('hosted_journey_release_mismatch')
   }
-  await Promise.all([
-    (input.verifyDiscovery ?? (() => proveDiscovery(input)))(),
-    (input.verifyAnonymousRefusal ?? (() => proveAnonymousRefusal(input)))(),
-  ])
+  const discovery = await (input.verifyDiscovery ?? (() => proveDiscovery(input)))()
+  const requestEntrypointPath = discovery?.requestOperation.path ?? '/api/v1/requests'
+  await (input.verifyAnonymousRefusal ?? (() => proveAnonymousRefusal(input, requestEntrypointPath)))()
+  if (discovery !== undefined) {
+    metrics.discovery = { ...discovery, anonymousRefusal: 'authentication_required' }
+  }
+  const runtimeInput: HostedCustomerRequestJourneyRuntimeInput = {
+    ...input,
+    metrics,
+    requestEntrypointPath,
+  }
 
   const nonce = randomUUID()
   const requestRef = `acceptance:${nonce}`
@@ -282,7 +315,7 @@ export async function runHostedCustomerRequestJourney(
   })
   let view = await submitWithInterpreterRecovery(runtimeInput, submit)
   const replay = await callAgent(
-    runtimeInput, '/api/v1/requests', 'POST', submit, [200], 'automatic_replay',
+    runtimeInput, requestEntrypointPath, 'POST', submit, [200], 'automatic_replay',
   )
   if (JSON.stringify(view) !== JSON.stringify(replay)) throw new Error('hosted_journey_submit_replay_changed')
   observe(states, view)
@@ -1638,24 +1671,66 @@ async function callAgentProblem(
   return result
 }
 
-async function proveDiscovery(input: HostedCustomerRequestJourneyInput): Promise<void> {
-  const [llms, skill] = await Promise.all(['/llms.txt', '/SKILL.md'].map(async (path) => {
-    const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
-      headers: headers(input),
-    })
-    if (!response.ok) throw new Error(`hosted_journey_discovery_unavailable:${path}:${response.status}`)
-    return await response.text()
-  }))
+async function proveDiscovery(input: HostedCustomerRequestJourneyInput): Promise<JourneyDiscovery> {
+  const baseUrl = normalizedBaseUrl(input.baseUrl)
+  const home = await fetchDiscoveryText(input, new URL('/', baseUrl))
+  const assistantIndex = discoverHomeAssistantIndex(home, baseUrl)
+  const llms = await fetchDiscoveryText(input, assistantIndex)
+  const assistantSkill = discoverAssistantSetup(llms, baseUrl)
+  const skill = await fetchDiscoveryText(input, assistantSkill)
+  const requestEntrypoint = discoverRequestEntrypoint(llms, baseUrl)
   const discovery = `${llms}\n${skill}`
   for (const marker of [
     '/api/v1/requests', CUSTOMER_REQUEST_AGENT_SCOPE, 'navigation.actions', 'routes_ready', 'route_confirmed',
   ]) {
     if (!discovery.includes(marker)) throw new Error(`hosted_journey_discovery_missing:${marker}`)
   }
+  return {
+    state: 'verified',
+    paths: ['/', assistantIndex.pathname, assistantSkill.pathname],
+    requestOperation: { method: 'POST', path: requestEntrypoint.pathname },
+  }
 }
 
-async function proveAnonymousRefusal(input: HostedCustomerRequestJourneyInput): Promise<void> {
-  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}/api/v1/requests`, {
+async function fetchDiscoveryText(input: HostedCustomerRequestJourneyInput, url: URL): Promise<string> {
+  const response = await (input.fetch ?? fetch)(url, { headers: headers(input) })
+  if (!response.ok) {
+    throw new Error(`hosted_journey_discovery_unavailable:${url.pathname}:${response.status}`)
+  }
+  return await response.text()
+}
+
+function discoverHomeAssistantIndex(html: string, baseUrl: string): URL {
+  const link = /<a\b[^>]*\bhref=(?:"([^"]+)"|'([^']+)')[^>]*>\s*Assistants\s*<\/a>/iu.exec(html)
+  return exactSameOriginDiscoveryUrl(link?.[1] ?? link?.[2], baseUrl, 'assistant_index')
+}
+
+function discoverAssistantSetup(llms: string, baseUrl: string): URL {
+  const section = /(?:^|\n)Assistant setup:\s*\n-\s*(https?:\/\/[^\s]+)/iu.exec(llms)
+  return exactSameOriginDiscoveryUrl(section?.[1], baseUrl, 'assistant_setup')
+}
+
+function discoverRequestEntrypoint(llms: string, baseUrl: string): URL {
+  const operation = /(?:^|\n)-\s*submit=(https?:\/\/[^\s]+)/iu.exec(llms)
+  return exactSameOriginDiscoveryUrl(operation?.[1], baseUrl, 'request_entrypoint')
+}
+
+function exactSameOriginDiscoveryUrl(value: string | undefined, baseUrl: string, relation: string): URL {
+  if (value === undefined) throw new Error(`hosted_journey_discovery_missing:${relation}`)
+  const base = new URL(baseUrl)
+  const resolved = new URL(value, base)
+  if (resolved.origin !== base.origin || resolved.username !== '' || resolved.password !== ''
+    || resolved.search !== '' || resolved.hash !== '') {
+    throw new Error(`hosted_journey_discovery_unsafe:${relation}`)
+  }
+  return resolved
+}
+
+async function proveAnonymousRefusal(
+  input: HostedCustomerRequestJourneyInput,
+  requestEntrypointPath = '/api/v1/requests',
+): Promise<void> {
+  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${requestEntrypointPath}`, {
     method: 'POST', headers: headers(input), body: '{}',
   })
   const value: unknown = await response.json()
@@ -1698,7 +1773,11 @@ function journeyReleaseProjection(
     : { ...base, environment: 'production' }
 }
 
-function assertJourneyBaseUrl(value: string, environment: 'production' | 'development'): void {
+function assertJourneyBaseUrl(
+  value: string,
+  environment: 'production' | 'development',
+  trustedDevelopmentOrigin?: string,
+): void {
   if (environment === 'production') {
     assertProductionBaseUrl(value)
     return
@@ -1709,9 +1788,14 @@ function assertJourneyBaseUrl(value: string, environment: 'production' | 'develo
   } catch {
     throw new Error('hosted_journey_base_url_invalid')
   }
-  if (url.protocol !== 'http:' || (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost')
-    || url.username !== '' || url.password !== '' || url.pathname.replace(/\/+$/u, '') !== ''
-    || url.search !== '' || url.hash !== '') {
+  const isOrigin = url.username === '' && url.password === ''
+    && url.pathname.replace(/\/+$/u, '') === '' && url.search === '' && url.hash === ''
+  const isLoopback = url.protocol === 'http:'
+    && (url.hostname === '127.0.0.1' || url.hostname === 'localhost')
+  const isExplicitTrustedHttps = url.protocol === 'https:'
+    && trustedDevelopmentOrigin !== undefined
+    && normalizedBaseUrl(trustedDevelopmentOrigin) === normalizedBaseUrl(value)
+  if (!isOrigin || (!isLoopback && !isExplicitTrustedHttps)) {
     throw new Error('hosted_journey_base_url_not_development')
   }
 }
@@ -1759,13 +1843,13 @@ async function submitWithInterpreterRecovery(
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       return await callAgent(
-        input, '/api/v1/requests', 'POST', submit, [200],
+        input, input.requestEntrypointPath, 'POST', submit, [200],
         attempt === 1 ? 'declared_request' : 'automatic_replay',
       )
     } catch (error) {
       const retryable = error instanceof HostedJourneyResponseError
         && error.method === 'POST'
-        && error.path === '/api/v1/requests'
+        && error.path === input.requestEntrypointPath
         && error.status === 503
         && (error.reason === 'interpreter_unavailable' || error.reason === 'request_unavailable')
       if (!retryable || attempt === 3) throw error
@@ -1806,6 +1890,7 @@ function journeyMeasurements(
       : { interruptionRecovery: input.metrics.interruptionRecovery }),
     resultUsability: { state: resultUsable ? 'usable' as const : 'unusable' as const },
     replaySafety: { executionStart: input.metrics.executionStartReplay },
+    discovery: input.metrics.discovery,
     ...(input.metrics.staleOptionRecovery === undefined
       ? {}
       : { staleOptionRecovery: input.metrics.staleOptionRecovery }),
