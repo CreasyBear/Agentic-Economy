@@ -247,18 +247,17 @@ test('partial progress remains legible when a later business result is unknown',
 
 test('returning customer resumes the same uncertain Request without restarting work', async ({ page }) => {
   const methods: string[] = []
-  await page.addInitScript(() => {
-    window.localStorage.setItem(
-      'ae.customer-request.active:v1',
-      JSON.stringify({ requestRef: 'request:partial-unknown' }),
-    )
-  })
+  await page.goto('/')
+  await page.evaluate(() => window.localStorage.setItem(
+    'ae.customer-request.active:v1',
+    JSON.stringify({ requestRef: 'request:partial-unknown' }),
+  ))
   await page.route('**/api/requests/**', async (route) => {
     methods.push(route.request().method())
     await route.fulfill({ json: unknownOutcomeView() })
   })
 
-  await page.goto('/')
+  await page.reload()
 
   await expect(page.getByText('Still confirming', { exact: true })).toBeVisible()
   await expect(page.getByText('1 of 2 business steps completed.')).toBeVisible()
