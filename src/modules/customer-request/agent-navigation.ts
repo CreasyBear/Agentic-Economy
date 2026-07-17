@@ -75,8 +75,8 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
   } else if (view.state === 'unsupported') {
     actions.push({
       relation: 'change_request', method: 'POST', href: `${current}/messages`,
-      summary: 'Change the request in ordinary language and keep working from the same Request. '
-        + 'To replace one statement, also send replacesPriorStatement with its exact current text.',
+      summary: view.unsupportedRecovery?.nextStep.summary
+        ?? 'Change the request in ordinary language and keep working from the same Request.',
       input: {
         idempotencyKey,
         expectedRevision: view.revision,

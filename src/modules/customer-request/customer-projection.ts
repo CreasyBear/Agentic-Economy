@@ -113,8 +113,21 @@ type RequestEvaluationProjectionInput = Readonly<{
 const UNSUPPORTED_REQUEST_DATA_HANDLING = Object.freeze({
   requestStorage: 'saved_for_revision' as const,
   businessSharing: 'not_shared' as const,
-  explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+  explanation: 'AE saved this revision so you can change it. No information from this revision was sent to a business.',
 })
+
+function unsupportedRecovery(
+  reason: NonNullable<CustomerRequestView['unsupportedRecovery']>['reason'],
+  summary: string,
+): NonNullable<CustomerRequestView['unsupportedRecovery']> {
+  return Object.freeze({
+    reason,
+    preservedRequest: true,
+    authorityCreatedForThisRevision: false,
+    businessContactedForThisRevision: false,
+    nextStep: Object.freeze({ kind: 'change_request' as const, summary }),
+  })
+}
 
 export function projectCustomerRequest(result: CompileCustomerRequestResult): CustomerRequestProjection {
   if (result.kind === 'refused') return requestView({
@@ -160,6 +173,10 @@ export function projectRequestEvaluation(input: Readonly<{
     nextAction: 'revise_request',
     criteria,
     dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
+    unsupportedRecovery: unsupportedRecovery(
+      'requested_result_not_available',
+      'Change the outcome you want while keeping this Request and its history.',
+    ),
   })
   if (input.outcome === 'unsupported' && providerDataSharingProhibited) return requestView({
     ...routeGeneration,
@@ -170,6 +187,10 @@ export function projectRequestEvaluation(input: Readonly<{
     nextAction: 'revise_request',
     criteria,
     dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
+    unsupportedRecovery: unsupportedRecovery(
+      'provider_data_sharing_prohibited',
+      'Allow the minimum stated business sharing, or ask for a public-information-only outcome.',
+    ),
   })
   if (input.outcome === 'unsupported' && maximumResponseTimeMs !== undefined) return requestView({
     ...routeGeneration,
@@ -180,6 +201,10 @@ export function projectRequestEvaluation(input: Readonly<{
     nextAction: 'revise_request',
     criteria,
     dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
+    unsupportedRecovery: unsupportedRecovery(
+      'maximum_response_time_unproven',
+      'Relax or remove the response-time limit, or ask for a different outcome.',
+    ),
   })
   if (input.outcome === 'unsupported' && maximumTotalCost !== undefined) return requestView({
     ...routeGeneration,
@@ -190,6 +215,10 @@ export function projectRequestEvaluation(input: Readonly<{
     nextAction: 'revise_request',
     criteria,
     dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
+    unsupportedRecovery: unsupportedRecovery(
+      'maximum_total_cost_exceeded',
+      'Raise or remove the maximum total, or ask for a different outcome.',
+    ),
   })
   if (input.evaluation.posture === 'unsupported') return requestView({
     ...routeGeneration,
@@ -200,6 +229,10 @@ export function projectRequestEvaluation(input: Readonly<{
     nextAction: 'revise_request',
     criteria,
     dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
+    unsupportedRecovery: unsupportedRecovery(
+      'no_current_business',
+      'Change the location, timing, or outcome while keeping this Request and its history.',
+    ),
   })
   if (input.evaluation.nextRequirement !== undefined) return requestView({
     ...routeGeneration,
@@ -246,6 +279,10 @@ export function projectRequestEvaluation(input: Readonly<{
     nextAction: 'revise_request',
     criteria,
     dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
+    unsupportedRecovery: unsupportedRecovery(
+      'route_composition_unavailable',
+      'Ask for fewer connected outcomes, or change the location or timing while keeping this Request.',
+    ),
   })
   return requestView({
     ...routeGeneration,
@@ -713,6 +750,7 @@ function requestView(input: Readonly<{
   criteria?: readonly CustomerCriterion[]
   disclosureReview?: CustomerRequestView['disclosureReview']
   dataHandling?: CustomerRequestView['dataHandling']
+  unsupportedRecovery?: CustomerRequestView['unsupportedRecovery']
   preparationRef?: string
   options?: readonly CustomerOption[]
   optionSet?: CustomerOptionSet
@@ -736,6 +774,12 @@ function requestView(input: Readonly<{
     missingFields: Object.freeze((input.missingFields ?? []).map((field) => Object.freeze({ ...field }))),
     criteria: Object.freeze((input.criteria ?? []).map((criterion) => Object.freeze({ ...criterion }))),
     ...(input.dataHandling === undefined ? {} : { dataHandling: Object.freeze({ ...input.dataHandling }) }),
+    ...(input.unsupportedRecovery === undefined ? {} : {
+      unsupportedRecovery: Object.freeze({
+        ...input.unsupportedRecovery,
+        nextStep: Object.freeze({ ...input.unsupportedRecovery.nextStep }),
+      }),
+    }),
     ...(input.disclosureReview === undefined ? {} : { disclosureReview: Object.freeze({
       ...input.disclosureReview,
       categories: Object.freeze(input.disclosureReview.categories.map((category) => Object.freeze({ ...category }))),

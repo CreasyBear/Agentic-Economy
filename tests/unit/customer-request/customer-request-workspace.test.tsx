@@ -347,7 +347,17 @@ describe('customer Request workspace', () => {
       dataHandling: {
         requestStorage: 'saved_for_revision',
         businessSharing: 'not_shared',
-        explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+        explanation: 'AE saved this revision so you can change it. No information from this revision was sent to a business.',
+      },
+      unsupportedRecovery: {
+        reason: 'no_current_business',
+        preservedRequest: true,
+        authorityCreatedForThisRevision: false,
+        businessContactedForThisRevision: false,
+        nextStep: {
+          kind: 'change_request',
+          summary: 'Change the location, timing, or outcome while keeping this Request and its history.',
+        },
       },
     })))
     render(<AeCustomerRequestWorkspace />)
@@ -361,7 +371,10 @@ describe('customer Request workspace', () => {
       name: 'No business on AE can support this request right now.',
     })).toBeTruthy()
     expect(screen.getByText(
-      'AE saved this Request so you can revise it. No information was sent to a business.',
+      'AE saved this revision so you can change it. No information from this revision was sent to a business.',
+    )).toBeTruthy()
+    expect(screen.getByText(
+      'Change the location, timing, or outcome while keeping this Request and its history.',
     )).toBeTruthy()
     expect(screen.queryByText(/redact|delete/iu)).toBeNull()
   })

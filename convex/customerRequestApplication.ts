@@ -435,6 +435,20 @@ const customerView = v.object({
     businessSharing: v.literal('not_shared'),
     explanation: v.string(),
   })),
+  unsupportedRecovery: v.optional(v.object({
+    reason: v.union(
+      v.literal('requested_result_not_available'),
+      v.literal('provider_data_sharing_prohibited'),
+      v.literal('maximum_response_time_unproven'),
+      v.literal('maximum_total_cost_exceeded'),
+      v.literal('no_current_business'),
+      v.literal('route_composition_unavailable'),
+    ),
+    preservedRequest: v.literal(true),
+    authorityCreatedForThisRevision: v.literal(false),
+    businessContactedForThisRevision: v.literal(false),
+    nextStep: v.object({ kind: v.literal('change_request'), summary: v.string() }),
+  })),
   preparationRef: v.optional(v.string()),
   clarification: v.optional(v.union(
     v.object({ kind: v.literal('intent_direction'), prompt: v.string(), answerKind: v.literal('natural_language') }),
@@ -3681,7 +3695,7 @@ function isPartialRouteResult(result: JsonValue | undefined): result is JsonValu
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
   const {
-    disclosureReview, dataHandling, optionSet, clarification, preparedAction,
+    disclosureReview, dataHandling, unsupportedRecovery, optionSet, clarification, preparedAction,
     businesses, action, progress, activity, recovery, decision, confirmation,
   } = view
   return {
@@ -3698,6 +3712,12 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
       },
     }),
     ...(dataHandling === undefined ? {} : { dataHandling: { ...dataHandling } }),
+    ...(unsupportedRecovery === undefined ? {} : {
+      unsupportedRecovery: {
+        ...unsupportedRecovery,
+        nextStep: { ...unsupportedRecovery.nextStep },
+      },
+    }),
     ...(clarification === undefined ? {} : { clarification: { ...clarification } }),
     ...(preparedAction === undefined ? {} : { preparedAction: {
       ...preparedAction,

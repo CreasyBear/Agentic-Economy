@@ -74,7 +74,17 @@ describe('current V2 Customer Request application path', () => {
       dataHandling: {
         requestStorage: 'saved_for_revision',
         businessSharing: 'not_shared',
-        explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+        explanation: 'AE saved this revision so you can change it. No information from this revision was sent to a business.',
+      },
+      unsupportedRecovery: {
+        reason: 'requested_result_not_available',
+        preservedRequest: true,
+        authorityCreatedForThisRevision: false,
+        businessContactedForThisRevision: false,
+        nextStep: {
+          kind: 'change_request',
+          summary: 'Change the outcome you want while keeping this Request and its history.',
+        },
       },
     })
     await expect(customer.action(api.customerRequestApplication.resume, {

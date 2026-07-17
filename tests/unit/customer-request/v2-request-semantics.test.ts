@@ -405,6 +405,16 @@ describe('V2 Request semantics', () => {
     expect(compiled).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { actions: [] } } })
     expect(projectCustomerRequest(compiled)).toMatchObject({
       state: 'unsupported', summary: 'AE cannot perform the requested operation.', nextAction: 'revise_request',
+      unsupportedRecovery: {
+        reason: 'requested_result_not_available',
+        preservedRequest: true,
+        authorityCreatedForThisRevision: false,
+        businessContactedForThisRevision: false,
+        nextStep: {
+          kind: 'change_request',
+          summary: 'Change the outcome you want while keeping this Request and its history.',
+        },
+      },
     })
   })
 
@@ -1425,6 +1435,13 @@ describe('V2 Request semantics', () => {
     expect(projectCustomerRequest(result)).toMatchObject({
       state: 'unsupported', summary: 'No current option stays within your AUD 5.00 maximum.',
       nextAction: 'revise_request',
+      unsupportedRecovery: {
+        reason: 'maximum_total_cost_exceeded',
+        nextStep: {
+          kind: 'change_request',
+          summary: 'Raise or remove the maximum total, or ask for a different outcome.',
+        },
+      },
     })
   })
 
@@ -1473,10 +1490,17 @@ describe('V2 Request semantics', () => {
       state: 'unsupported',
       summary: 'Available options require sharing information with a business, which you asked AE not to do.',
       nextAction: 'revise_request',
+      unsupportedRecovery: {
+        reason: 'provider_data_sharing_prohibited',
+        nextStep: {
+          kind: 'change_request',
+          summary: 'Allow the minimum stated business sharing, or ask for a public-information-only outcome.',
+        },
+      },
       dataHandling: {
         requestStorage: 'saved_for_revision',
         businessSharing: 'not_shared',
-        explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+        explanation: 'AE saved this revision so you can change it. No information from this revision was sent to a business.',
       },
     })
   })
@@ -1517,6 +1541,13 @@ describe('V2 Request semantics', () => {
       state: 'unsupported',
       summary: 'No current option declares a response time within 50 milliseconds.',
       nextAction: 'revise_request',
+      unsupportedRecovery: {
+        reason: 'maximum_response_time_unproven',
+        nextStep: {
+          kind: 'change_request',
+          summary: 'Relax or remove the response-time limit, or ask for a different outcome.',
+        },
+      },
     })
   })
 

@@ -356,7 +356,7 @@ describe('hosted Customer Request journey', () => {
       dataHandling: {
         requestStorage: 'saved_for_revision',
         businessSharing: 'not_shared',
-        explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+        explanation: 'AE saved this revision so you can change it. No information from this revision was sent to a business.',
       },
     })
     const responses = [

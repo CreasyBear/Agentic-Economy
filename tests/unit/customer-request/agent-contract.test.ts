@@ -6,6 +6,7 @@ import {
   customerRequestViewSchema,
 } from '@/modules/customer-request/agent-contract'
 import { projectRequestEvaluation } from '@/modules/customer-request/customer-projection'
+import { projectCustomerRequestAgentNavigation } from '@/modules/customer-request/agent-navigation'
 
 describe('Customer Request agent contract', () => {
   it('requires an exact source-owned replacement target for append supersession only', () => {
@@ -70,8 +71,29 @@ describe('Customer Request agent contract', () => {
     expect(customerRequestViewSchema.parse(view).dataHandling).toEqual({
       requestStorage: 'saved_for_revision',
       businessSharing: 'not_shared',
-      explanation: 'AE saved this Request so you can revise it. No information was sent to a business.',
+      explanation: 'AE saved this revision so you can change it. No information from this revision was sent to a business.',
     })
+    expect(customerRequestViewSchema.parse(view).unsupportedRecovery).toEqual({
+      reason: 'requested_result_not_available',
+      preservedRequest: true,
+      authorityCreatedForThisRevision: false,
+      businessContactedForThisRevision: false,
+      nextStep: {
+        kind: 'change_request',
+        summary: 'Change the outcome you want while keeping this Request and its history.',
+      },
+    })
+    expect(projectCustomerRequestAgentNavigation(view).actions).toEqual([{
+      relation: 'change_request',
+      method: 'POST',
+      href: '/api/v1/requests/request%3Aunsupported-private-context/messages',
+      summary: 'Change the outcome you want while keeping this Request and its history.',
+      input: {
+        idempotencyKey: '<unique string>',
+        expectedRevision: 1,
+        message: '<natural-language change>',
+      },
+    }])
   })
 
   it('accepts a truthful durable-state restoration receipt on a resumed Request', () => {

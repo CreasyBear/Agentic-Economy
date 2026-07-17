@@ -601,6 +601,24 @@ export const customerRequestAgentNavigationSchema = z.strictObject({
   })),
 })
 
+const customerUnsupportedRecoverySchema = z.strictObject({
+  reason: z.enum([
+    'requested_result_not_available',
+    'provider_data_sharing_prohibited',
+    'maximum_response_time_unproven',
+    'maximum_total_cost_exceeded',
+    'no_current_business',
+    'route_composition_unavailable',
+  ]),
+  preservedRequest: z.literal(true),
+  authorityCreatedForThisRevision: z.literal(false),
+  businessContactedForThisRevision: z.literal(false),
+  nextStep: z.strictObject({
+    kind: z.literal('change_request'),
+    summary: z.string(),
+  }),
+})
+
 export const customerRequestViewSchema = z.strictObject({
   kind: z.literal('request'), requestRef: z.string(), revision: safeNonnegativeInteger,
   routeGenerationRef: z.string().optional(),
@@ -627,6 +645,7 @@ export const customerRequestViewSchema = z.strictObject({
     businessSharing: z.literal('not_shared'),
     explanation: z.string(),
   }).strict().optional(),
+  unsupportedRecovery: customerUnsupportedRecoverySchema.optional(),
   preparationRef: z.string().optional(),
   clarification: z.union([
     z.object({
