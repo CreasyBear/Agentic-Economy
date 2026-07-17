@@ -123,6 +123,7 @@ export async function runFrozenDirectAgentBaseline(input: FrozenDirectAgentBasel
       }, discoveries, total, constraint, invocations.length + 1, schemaMappings, invocations)
     }
     Object.assign(available, output)
+    const sentFieldSet = new Set(provider.operation.inputSchema.required)
     const inputDigest = canonicalDigest(body as StableHashValue)
     const outputDigest = canonicalDigest(output as StableHashValue)
     const declaredOutput = cohort?.input.providerOutputs.find(
@@ -139,7 +140,7 @@ export async function runFrozenDirectAgentBaseline(input: FrozenDirectAgentBasel
       business: provider.business.name, endpoint: provider.operation.endpoint,
       inputFields: provider.operation.inputSchema.required, output, inputDigest, outputDigest,
       withheldCustomerFields: Object.keys(customerAnswers)
-        .filter((field) => !provider.operation.inputSchema.required.includes(field))
+        .filter((field) => !sentFieldSet.has(field))
         .sort(),
       ...(receipt === undefined ? {} : { receipt }),
     })

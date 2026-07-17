@@ -212,7 +212,7 @@ export async function runCustomerRequestDevelopmentSmoke(
     throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
   }
   const aeCohort = freezeAgentJourneyCohort(parseAgentJourneyCohortInput(
-    JSON.parse(JSON.stringify(config.directBaseline.cohort)),
+    structuredClone(config.directBaseline.cohort),
   ))
   const terminalProof = {
     ...proof,
