@@ -11,6 +11,7 @@ import {
 } from '@/modules/customer-request/agent-contract'
 import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
+import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
 import { CustomerRequestRepeatPermissionControl } from './CustomerRequestRepeatPermissionControl'
 
 type SubmitResponse = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: string }> | Readonly<{ error: string }>
@@ -322,8 +323,11 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
       {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-3 text-center">
         <Text className="text-sm font-semibold text-accent">Ask AE</Text>
         <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">What do you need to make happen?</Heading>
-        <Text type="large" color="secondary">Start with the outcome in your own words. AE asks only for details that change the decision, then shows the available ways forward.</Text>
-        <Text type="supporting" color="secondary">Nothing is confirmed, shared, or started until you decide.</Text>
+        <Text type="large" color="secondary">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation}</Text>
+        <Text color="secondary">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.examples}</Text>
+        <Text type="supporting" color="secondary">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.support}</Text>
+        <Text type="supporting" color="secondary">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.sandboxBoundary}</Text>
+        <Text type="supporting" color="secondary">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority}</Text>
         <Link href="/for-agents" className="mx-auto min-h-11 py-2 font-semibold">Use AE with your AI</Link>
       </header> : null}
 

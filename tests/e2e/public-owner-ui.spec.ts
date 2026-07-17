@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs'
 
 import { expect, test, type Page } from '@playwright/test'
 import { LOCAL_E2E_BUSINESS_FIXTURES } from '../../src/lib/dev/local-e2e-business-fixtures'
+import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '../../src/modules/customer-request/public-comprehension'
 
 const demoBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.requestedSlug === 'plumbing-demo')
 if (demoBusiness === undefined) {
@@ -27,7 +28,9 @@ test.describe('public owner routes', () => {
     await expect(page.getByRole('heading', { name: 'What do you need to make happen?' })).toBeVisible()
     await expect(page.getByLabel('What are you looking for?')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Start my Request' })).toBeDisabled()
-    await expect(page.getByText('Nothing is confirmed, shared, or started until you decide.')).toBeVisible()
+    for (const statement of CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES) {
+      await expect(page.getByText(statement, { exact: true })).toBeVisible()
+    }
     await expect(page.getByText('Your agent knows who to call.')).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Activity' })).toHaveCount(0)
     const agentSetup = page.getByRole('link', { name: 'Use AE with your AI' })

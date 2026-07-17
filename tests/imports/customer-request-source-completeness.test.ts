@@ -230,12 +230,11 @@ describe('CustomerRequest source completeness', () => {
   it('keeps fixture and durable discovery aligned on the agent request contract', () => {
     const fixtureDiscovery = readFileSync('src/modules/discovery/internal/discovery-files.ts', 'utf8')
     const durableDiscovery = readFileSync('convex/discovery.ts', 'utf8')
+    const publicComprehension = readFileSync('src/modules/customer-request/public-comprehension.ts', 'utf8')
     const requiredMarkers = [
       '/api/v1/requests',
       'customer_requests:create',
       'needs_information | ready_to_compare | routes_ready | route_confirmed | in_progress',
-      'Use AE when a customer needs to compare available business options before deciding what happens next.',
-      'Nothing is confirmed, shared, or started until the customer explicitly decides.',
       '/confirmation', '/run', '/evidence', '/problems', '/cancellation',
     ]
 
@@ -243,6 +242,10 @@ describe('CustomerRequest source completeness', () => {
       expect(fixtureDiscovery, `fixture discovery missing ${marker}`).toContain(marker)
       expect(durableDiscovery, `durable discovery missing ${marker}`).toContain(marker)
     }
+    expect(fixtureDiscovery).toContain('CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES')
+    expect(durableDiscovery).toContain('CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES')
+    expect(publicComprehension).toContain('labelled AE sandbox businesses')
+    expect(publicComprehension).toContain('Starting it is a separate decision')
     expect(`${fixtureDiscovery}\n${durableDiscovery}`).not.toMatch(/Advanced routing kernel:|\.well-known\/ae-routing|\/v1\/route|\/mcp/)
   })
 

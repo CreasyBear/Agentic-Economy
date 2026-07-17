@@ -10,6 +10,7 @@ import {
   createDefaultDiscoverySourceState,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
+import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
 import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
@@ -52,9 +53,9 @@ describe('discovery files', () => {
     expect(result.body).toContain('publicStatus=published')
     expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route|\/mcp/)
     expect(result.body).toContain('https://ae.example/api/v1/requests')
-    expect(result.body).toContain('Use AE when a customer needs to compare available business options before deciding what happens next.')
-    expect(result.body).toContain('Start with the outcome in the customer’s own words.')
-    expect(result.body).toContain('Nothing is confirmed, shared, or started until the customer explicitly decides.')
+    for (const statement of CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES) {
+      expect(result.body).toContain(statement)
+    }
     expect(result.body).toContain('Human entry=https://ae.example/')
     expect(result.body).toContain('https://ae.example/for-agents')
     expect(result.body).toContain('needs_information | ready_to_compare | routes_ready | route_confirmed | in_progress')

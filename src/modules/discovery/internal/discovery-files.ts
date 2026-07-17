@@ -1,6 +1,7 @@
 import { getPublicBusinessCatalog } from '@/modules/catalog/public'
 import type { PublicCatalogContract } from '@/modules/catalog/public'
 import type { BuildDiscoveryFileOptions, DiscoveryFileBuildResult, DiscoverySourceState } from '@/modules/discovery/public'
+import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
 import { readCatalogHealth } from '@/modules/registry/public'
 import { readDiscoveryHealth } from './manifest-attempts'
 
@@ -54,9 +55,7 @@ export function buildLlmsTxt(
     '# Agentic Economy',
     '',
     'Customer journey:',
-    '- Use AE when a customer needs to compare available business options before deciding what happens next.',
-    '- Start with the outcome in the customer’s own words. AE asks only for details that change the decision.',
-    '- Nothing is confirmed, shared, or started until the customer explicitly decides.',
+    ...CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES.map((line) => `- ${line}`),
     `- Human entry=${canonicalBaseUrl}/`,
     '',
     'Public surfaces:',

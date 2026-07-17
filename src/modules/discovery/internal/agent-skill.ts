@@ -1,3 +1,5 @@
+import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
+
 export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: string; routingBaseUrl?: string }): string {
   const base = trimTrailingSlash(options.canonicalBaseUrl)
   return [
@@ -8,9 +10,12 @@ export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: strin
     '',
     '## What AE is',
     '',
+    ...CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES,
+    '',
     'Give AE a natural-language request. AE asks for decision-changing information, checks',
     'connected registered businesses, and returns supported options. It can start the exact option a customer',
-    'explicitly confirms, then expose progress, evidence, problem reporting, and safe cancellation. Never infer',
+    'explicitly confirms, then expose progress, evidence, problem reporting, and safe cancellation.',
+    'Never infer',
     'booking, payment, dispatch, or fulfilment beyond the exact state AE returns.',
     '',
     '## Start once, then follow the response',

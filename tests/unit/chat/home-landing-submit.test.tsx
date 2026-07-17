@@ -4,6 +4,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
 
 const routeState = vi.hoisted(() => {
   const state = {
@@ -64,10 +65,20 @@ describe('Request-first home', () => {
     renderHomeRoute()
 
     expect(screen.getByRole('heading', { level: 1, name: 'What do you need to make happen?' })).toBeTruthy()
-    expect(screen.getByText(/Start with the outcome in your own words/)).toBeTruthy()
-    expect(screen.getByText(/Nothing is confirmed, shared, or started until you decide/)).toBeTruthy()
+    expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation)).toBeTruthy()
+    expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority)).toBeTruthy()
     expect(screen.queryByText('Your agent knows who to call.')).toBeNull()
     expect(screen.getByRole('link', { name: 'Use AE with your AI' }).getAttribute('href')).toBe('/for-agents')
+  })
+
+  it('lets a cold customer recognize workflow-shaped requests and both authority stops', () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>())
+
+    renderHomeRoute()
+
+    for (const statement of Object.values(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION)) {
+      expect(screen.getByText(statement)).toBeTruthy()
+    }
   })
 
   it('adopts a valid q as an editable Request draft without submitting it', () => {

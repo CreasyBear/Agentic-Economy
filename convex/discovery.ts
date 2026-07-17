@@ -7,6 +7,7 @@ import { runtimeMutationCtx, runtimeReader } from './source_state'
 import type { RuntimeDocument, RuntimeMutationCtx, RuntimeReader, RuntimeWriter } from './source_state'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { BusinessMutationActor } from '../src/modules/business/public'
+import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '../src/modules/customer-request/public-comprehension'
 
 const routeResult = v.object({
   kind: v.union(v.literal('business_page'), v.literal('ucp_manifest'), v.literal('api_detail')),
@@ -774,9 +775,7 @@ function buildLlmsTxtFromCatalogs(
     '# Agentic Economy',
     '',
     'Customer journey:',
-    '- Use AE when a customer needs to compare available business options before deciding what happens next.',
-    '- Start with the outcome in the customer’s own words. AE asks only for details that change the decision.',
-    '- Nothing is confirmed, shared, or started until the customer explicitly decides.',
+    ...CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES.map((line) => `- ${line}`),
     `- Human entry=${canonicalBaseUrl}/`,
     '',
     'Public surfaces:',

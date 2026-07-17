@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
+import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
 import { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
 
 describe('public agent skill', () => {
@@ -11,6 +12,9 @@ describe('public agent skill', () => {
     expect(body).toContain('customer_requests:create')
     expect(body).toContain('navigation.actions')
     expect(body).toContain('routes_ready')
+    for (const statement of CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES) {
+      expect(body).toContain(statement)
+    }
     expect(body).not.toMatch(/\/messages|\/facts|\/confirmation|\/run|\/evidence|\/problems|\/cancellation/u)
     expect(body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route|\/mcp/)
     expect(body).toMatch(/listings are supply facts, not routing or execution authority/i)
