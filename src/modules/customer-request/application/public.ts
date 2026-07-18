@@ -157,6 +157,12 @@ export {
 } from './provide-facts'
 
 export {
+  toActionResult,
+  withRestoredRequest,
+  writableView,
+} from './action-projection'
+
+export {
   authorizePreparation,
   type AuthorizePreparationApprovalActor,
   type AuthorizePreparationInput,

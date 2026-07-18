@@ -28,7 +28,7 @@ describe('customer-request authorize-preparation thinness', () => {
 
     const authorizeStart = convexHost.indexOf('export const authorizePreparation = action({')
     expect(authorizeStart).toBeGreaterThanOrEqual(0)
-    const authorizeEnd = convexHost.indexOf('\nfunction toActionResult', authorizeStart)
+    const authorizeEnd = convexHost.indexOf('\nasync function interpretCompileCommit', authorizeStart)
     expect(authorizeEnd).toBeGreaterThan(authorizeStart)
     const authorizeBody = convexHost.slice(authorizeStart, authorizeEnd)
     expect(authorizeBody).toContain('authorizePreparationApplication')
