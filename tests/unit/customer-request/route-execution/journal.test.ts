@@ -2,8 +2,22 @@ import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
+  canPreReleaseCancel,
+  canRequestAdapterCancellation,
+  cancelCommandArgsConflict,
+  cancelDisposition,
+  cancelPriorCommandConflicts,
+  cancelReplayKind,
+  cancelRunHeadIntegrityValid,
+  cancelRunNotFound,
   exportState,
+  leaseArgsInvalid,
+  leaseGrantExpired,
+  leasePendingCandidateValid,
   projectCustomerEvidenceExport,
+  recoverDispatchAttemptAligned,
+  recoverDispatchLeaseStillCurrent,
+  recoverExpiredDispatchKind,
   routeAttemptIntegrityValid,
   routeDispatchIntegrityValid,
   routeRunIdentityDigest,
@@ -328,5 +342,176 @@ describe('projectCustomerEvidenceExport', () => {
       principalId: 'principal:1',
       generatedAt: 1,
     })).toThrow('customer_request_route_problem_integrity_failure')
+  })
+})
+
+describe('journal cancel/lease/recover predicates', () => {
+  it('detects cancel refuse and conflict cases', () => {
+    expect(cancelCommandArgsConflict({
+      idempotencyKey: '', principalId: 'p1',
+    })).toBe(true)
+    expect(cancelCommandArgsConflict({
+      idempotencyKey: 'k1', principalId: 'p1',
+    })).toBe(false)
+
+    expect(cancelPriorCommandConflicts({
+      prior: {
+        commandDigest: 'digest-a',
+        principalId: 'p1',
+        requestId: 'r1',
+        mode: 'current_and_downstream',
+      },
+      args: {
+        requestId: 'r1',
+        principalId: 'p1',
+        mode: 'after_current_step',
+      },
+      commandDigest: 'digest-b',
+      historicalDefaultDigest: 'digest-hist',
+    })).toBe(true)
+
+    expect(cancelPriorCommandConflicts({
+      prior: {
+        commandDigest: 'digest-hist',
+        principalId: 'p1',
+        requestId: 'r1',
+      },
+      args: {
+        requestId: 'r1',
+        principalId: 'p1',
+        mode: 'current_and_downstream',
+      },
+      commandDigest: 'digest-full',
+      historicalDefaultDigest: 'digest-hist',
+    })).toBe(false)
+
+    expect(cancelRunNotFound(null, 'p1')).toBe(true)
+    expect(cancelRunNotFound({ principalId: 'other' }, 'p1')).toBe(true)
+    expect(cancelRunNotFound({ principalId: 'p1' }, 'p1')).toBe(false)
+    expect(cancelRunHeadIntegrityValid(null, { currentMandateRef: 'm1' })).toBe(false)
+    expect(cancelRunHeadIntegrityValid(
+      { mandateRef: 'm1' },
+      { currentMandateRef: 'm1' },
+    )).toBe(true)
+  })
+
+  it('decides cancel disposition without patches', () => {
+    expect(canPreReleaseCancel({
+      attemptState: 'queued', outboxState: 'pending',
+    })).toBe(true)
+    expect(canPreReleaseCancel({
+      attemptState: 'dispatched', outboxState: 'delivered',
+    })).toBe(false)
+
+    expect(canRequestAdapterCancellation({
+      canPreReleaseCancel: false,
+      mode: 'current_and_downstream',
+      attemptState: 'accepted',
+      cancellationKind: 'adapter_managed',
+    })).toBe(true)
+    expect(canRequestAdapterCancellation({
+      canPreReleaseCancel: true,
+      mode: 'current_and_downstream',
+      attemptState: 'accepted',
+      cancellationKind: 'adapter_managed',
+    })).toBe(false)
+
+    expect(cancelDisposition({
+      canPreReleaseCancel: true,
+      canRequestAdapterCancellation: false,
+    })).toBe('cancelled')
+    expect(cancelDisposition({
+      canPreReleaseCancel: false,
+      canRequestAdapterCancellation: true,
+    })).toBe('pending')
+    expect(cancelDisposition({
+      canPreReleaseCancel: false,
+      canRequestAdapterCancellation: false,
+    })).toBe('too_late')
+    expect(cancelReplayKind('cancelled')).toBe('replayed')
+    expect(cancelReplayKind('pending')).toBe('pending')
+    expect(cancelReplayKind('too_late')).toBe('too_late')
+  })
+
+  it('validates lease args and pending candidates', () => {
+    expect(leaseArgsInvalid({ workerId: '', leaseDurationMs: 5_000 })).toBe(true)
+    expect(leaseArgsInvalid({ workerId: 'w1', leaseDurationMs: 500 })).toBe(true)
+    expect(leaseArgsInvalid({ workerId: 'w1', leaseDurationMs: 5_000 })).toBe(false)
+    expect(leaseGrantExpired(1_000, 1_000)).toBe(true)
+    expect(leaseGrantExpired(2_000, 1_000)).toBe(false)
+
+    const input = { destination: 'Perth' }
+    const inputJson = JSON.stringify(input)
+    const inputDigest = canonicalDigest(input)
+    const attemptMaterial = {
+      runRef: 'run:1',
+      requestId: 'req:1',
+      mandateRef: 'mandate:1',
+      actionId: 'action:1',
+      position: 1,
+      operationKeyDigest: 'op:1',
+      grantDigest: 'grant:1',
+      inputDigest,
+      createdAt: 1_000,
+    }
+    const attemptDigest = canonicalDigest(attemptMaterial)
+    const attempt: RouteAttemptIntegritySnapshot & { state: 'queued' } = {
+      ...attemptMaterial,
+      grant: { grantDigest: attemptMaterial.grantDigest },
+      attemptDigest,
+      attemptRef: `route-step-attempt:v1:${attemptDigest}`,
+      inputJson,
+      state: 'queued',
+    }
+    const dispatchDigest = canonicalDigest({
+      runRef: attempt.runRef,
+      attemptRef: attempt.attemptRef,
+      operationKeyDigest: attempt.operationKeyDigest,
+      availableAt: 1_000,
+      createdAt: 1_000,
+    })
+    const dispatch: RouteDispatchIntegritySnapshot & {
+      runRef: string
+      operationKeyDigest: string
+    } = {
+      runRef: attempt.runRef,
+      attemptRef: attempt.attemptRef,
+      operationKeyDigest: attempt.operationKeyDigest,
+      createdAt: 1_000,
+      dispatchDigest,
+      dispatchRef: `route-dispatch:v1:${dispatchDigest}`,
+    }
+
+    expect(leasePendingCandidateValid({ attempt, dispatch })).toBe(true)
+    expect(leasePendingCandidateValid({
+      attempt: { ...attempt, state: 'leased' },
+      dispatch,
+    })).toBe(false)
+    expect(leasePendingCandidateValid({ attempt: null, dispatch })).toBe(false)
+  })
+
+  it('classifies recover expired dispatch kinds', () => {
+    expect(recoverDispatchLeaseStillCurrent(null, 1_000)).toBe(true)
+    expect(recoverDispatchLeaseStillCurrent({ leaseExpiresAt: 2_000 }, 1_000)).toBe(true)
+    expect(recoverDispatchLeaseStillCurrent({ leaseExpiresAt: 500 }, 1_000)).toBe(false)
+
+    expect(recoverDispatchAttemptAligned({
+      attempt: null,
+      dispatch: { runRef: 'run:1', operationKeyDigest: 'op:1' },
+    })).toBe(false)
+    expect(recoverDispatchAttemptAligned({
+      attempt: { runRef: 'run:1', operationKeyDigest: 'op:1' },
+      dispatch: { runRef: 'run:1', operationKeyDigest: 'op:1' },
+    })).toBe(true)
+
+    expect(recoverExpiredDispatchKind({
+      dispatchState: 'leased', attemptState: 'leased',
+    })).toBe('requeued')
+    expect(recoverExpiredDispatchKind({
+      dispatchState: 'delivered', attemptState: 'accepted',
+    })).toBe('outcome_unknown')
+    expect(recoverExpiredDispatchKind({
+      dispatchState: 'failed', attemptState: 'failed',
+    })).toBe('unchanged')
   })
 })

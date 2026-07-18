@@ -11,7 +11,21 @@ import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contr
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
 import {
+  canPreReleaseCancel,
+  canRequestAdapterCancellation,
+  cancelCommandArgsConflict,
+  cancelDisposition,
+  cancelPriorCommandConflicts,
+  cancelReplayKind,
+  cancelRunHeadIntegrityValid,
+  cancelRunNotFound,
+  leaseArgsInvalid,
+  leaseGrantExpired,
+  leasePendingCandidateValid,
   projectCustomerEvidenceExport,
+  recoverDispatchAttemptAligned,
+  recoverDispatchLeaseStillCurrent,
+  recoverExpiredDispatchKind,
   routeAttemptIntegrityValid,
   routeDispatchIntegrityValid,
   routeRunIdentityDigest,
@@ -385,7 +399,7 @@ export const cancelCurrent = internalMutation({
   ),
   handler: async (ctx, args) => {
     const now = Date.now()
-    if (args.idempotencyKey.trim().length === 0 || args.principalId.trim().length === 0) {
+    if (cancelCommandArgsConflict(args)) {
       return { kind: 'conflict' as const, reason: 'command_changed' as const }
     }
     const commandKey = `route-cancel-command:v1:${canonicalDigest({
@@ -400,29 +414,23 @@ export const cancelCurrent = internalMutation({
         principalId: args.principalId,
         idempotencyKey: args.idempotencyKey,
       })
-      const digestMatches = prior.commandDigest === commandDigest
-        || (prior.mode === undefined && args.mode === 'current_and_downstream'
-          && prior.commandDigest === historicalDefaultDigest)
-      if (!digestMatches || prior.principalId !== args.principalId
-        || prior.requestId !== args.requestId) {
+      if (cancelPriorCommandConflicts({
+        prior, args, commandDigest, historicalDefaultDigest,
+      })) {
         return { kind: 'conflict' as const, reason: 'command_changed' as const }
       }
       const replayed = await readRunProjection(ctx, prior.runRef)
       if (replayed === null) throw new Error('customer_request_route_cancellation_integrity_failure')
-      return prior.result === 'cancelled'
-        ? { kind: 'replayed' as const, run: replayed }
-        : prior.result === 'pending'
-          ? { kind: 'pending' as const, run: replayed }
-        : { kind: 'too_late' as const, run: replayed }
+      return { kind: cancelReplayKind(prior.result), run: replayed }
     }
     const head = await ctx.db.query('customerRequestRouteRunHeads')
       .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head === null || head.principalId !== args.principalId) {
+    if (cancelRunNotFound(head, args.principalId) || head === null) {
       return { kind: 'refused' as const, reason: 'run_not_found' as const }
     }
     const run = await ctx.db.query('customerRequestRouteRuns')
       .withIndex('by_runRef', (query) => query.eq('runRef', head.currentRunRef)).unique()
-    if (run === null || run.mandateRef !== head.currentMandateRef) {
+    if (!cancelRunHeadIntegrityValid(run, head) || run === null) {
       throw new Error('customer_request_route_run_head_integrity_failure')
     }
     const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
@@ -433,18 +441,21 @@ export const cancelCurrent = internalMutation({
     const outbox = await ctx.db.query('customerRequestRouteDispatchOutbox')
       .withIndex('by_attemptRef', (query) => query.eq('attemptRef', attempt.attemptRef)).unique()
     if (outbox === null) throw new Error('customer_request_route_dispatch_integrity_failure')
-    const canCancel = (attempt.state === 'queued' || attempt.state === 'leased')
-      && (outbox.state === 'pending' || outbox.state === 'leased')
-    const canRequestAdapterCancellation = !canCancel
-      && args.mode === 'current_and_downstream'
-      && attempt.grant.step.cancellation.kind === 'adapter_managed'
-      && (attempt.state === 'dispatched' || attempt.state === 'accepted')
+    const canCancel = canPreReleaseCancel({
+      attemptState: attempt.state, outboxState: outbox.state,
+    })
+    const canRequestCancel = canRequestAdapterCancellation({
+      canPreReleaseCancel: canCancel,
+      mode: args.mode,
+      attemptState: attempt.state,
+      cancellationKind: attempt.grant.step.cancellation.kind,
+    })
     if (canCancel) {
       await ctx.db.patch(attempt._id, { state: 'cancelled', updatedAt: now })
       await ctx.db.patch(outbox._id, { state: 'cancelled', updatedAt: now })
       await ctx.db.patch(run._id, { state: 'cancelled', updatedAt: now })
     }
-    if (canRequestAdapterCancellation) {
+    if (canRequestCancel) {
       const cancellationRef = `route-cancellation:v1:${canonicalDigest({
         runRef: run.runRef,
         attemptRef: attempt.attemptRef,
@@ -469,11 +480,10 @@ export const cancelCurrent = internalMutation({
         })
       }
     }
-    const commandResult = canCancel
-      ? 'cancelled' as const
-      : canRequestAdapterCancellation
-        ? 'pending' as const
-        : 'too_late' as const
+    const commandResult = cancelDisposition({
+      canPreReleaseCancel: canCancel,
+      canRequestAdapterCancellation: canRequestCancel,
+    })
     await ctx.db.insert('customerRequestRouteCancellationCommands', {
       commandKey,
       commandDigest,
@@ -487,11 +497,7 @@ export const cancelCurrent = internalMutation({
     })
     const projection = await readRunProjection(ctx, run.runRef)
     if (projection === null) throw new Error('customer_request_route_run_integrity_failure')
-    return canCancel
-      ? { kind: 'cancelled' as const, run: projection }
-      : canRequestAdapterCancellation
-        ? { kind: 'pending' as const, run: projection }
-      : { kind: 'too_late' as const, run: projection }
+    return { kind: commandResult, run: projection }
   },
 })
 
@@ -515,8 +521,7 @@ export const leaseNextDispatch = internalMutation({
   ),
   handler: async (ctx, args) => {
     const now = Date.now()
-    if (args.workerId.trim().length === 0 || !Number.isSafeInteger(args.leaseDurationMs)
-      || args.leaseDurationMs < 1_000 || args.leaseDurationMs > 60_000) {
+    if (leaseArgsInvalid(args)) {
       return { kind: 'refused' as const, reason: 'lease_invalid' as const }
     }
     const pendingCandidates = await ctx.db.query('customerRequestRouteDispatchOutbox')
@@ -526,13 +531,10 @@ export const leaseNextDispatch = internalMutation({
     for (const pending of pendingCandidates) {
       const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
         .withIndex('by_attemptRef', (query) => query.eq('attemptRef', pending.attemptRef)).unique()
-      if (attempt === null || !routeDispatchIntegrityValid(pending)
-        || !routeAttemptIntegrityValid(attempt)
-        || attempt.runRef !== pending.runRef || attempt.state !== 'queued'
-        || attempt.operationKeyDigest !== pending.operationKeyDigest) {
+      if (!leasePendingCandidateValid({ attempt, dispatch: pending }) || attempt === null) {
         throw new Error('customer_request_route_dispatch_integrity_failure')
       }
-      if (attempt.grant.expiresAt <= now) {
+      if (leaseGrantExpired(attempt.grant.expiresAt, now)) {
         await failExpiredUnreleasedAttempt(ctx, pending, attempt, now)
         continue
       }
@@ -783,7 +785,7 @@ export const recoverExpiredDispatch = internalMutation({
     const now = Date.now()
     const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
       .withIndex('by_dispatchRef', (query) => query.eq('dispatchRef', args.dispatchRef)).unique()
-    if (dispatch === null || dispatch.leaseExpiresAt === undefined || dispatch.leaseExpiresAt > now) {
+    if (recoverDispatchLeaseStillCurrent(dispatch, now) || dispatch === null) {
       return { kind: 'unchanged' as const }
     }
     if (!routeDispatchIntegrityValid(dispatch)) {
@@ -791,11 +793,14 @@ export const recoverExpiredDispatch = internalMutation({
     }
     const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
       .withIndex('by_attemptRef', (query) => query.eq('attemptRef', dispatch.attemptRef)).unique()
-    if (attempt === null || attempt.runRef !== dispatch.runRef
-      || attempt.operationKeyDigest !== dispatch.operationKeyDigest) {
+    if (!recoverDispatchAttemptAligned({ attempt, dispatch }) || attempt === null) {
       throw new Error('customer_request_route_dispatch_integrity_failure')
     }
-    if (dispatch.state === 'leased' && attempt.state === 'leased') {
+    const kind = recoverExpiredDispatchKind({
+      dispatchState: dispatch.state,
+      attemptState: attempt.state,
+    })
+    if (kind === 'requeued') {
       await ctx.db.patch(dispatch._id, {
         state: 'pending', leaseOwner: undefined, leaseExpiresAt: undefined,
         availableAt: now, updatedAt: now,
@@ -806,8 +811,7 @@ export const recoverExpiredDispatch = internalMutation({
       })
       return { kind: 'requeued' as const }
     }
-    if (dispatch.state === 'delivered'
-      && (attempt.state === 'dispatched' || attempt.state === 'accepted')) {
+    if (kind === 'outcome_unknown') {
       const run = await ctx.db.query('customerRequestRouteRuns')
         .withIndex('by_runRef', (query) => query.eq('runRef', attempt.runRef)).unique()
       if (run === null) throw new Error('customer_request_route_run_integrity_failure')

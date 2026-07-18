@@ -25,3 +25,25 @@ export {
   type CustomerEvidenceExportRunState,
   type CustomerEvidenceExportStep,
 } from './export-evidence'
+
+export {
+  canPreReleaseCancel,
+  canRequestAdapterCancellation,
+  cancelCommandArgsConflict,
+  cancelDisposition,
+  cancelPriorCommandConflicts,
+  cancelReplayKind,
+  cancelRunHeadIntegrityValid,
+  cancelRunNotFound,
+  leaseArgsInvalid,
+  leaseGrantExpired,
+  leasePendingCandidateValid,
+  recoverDispatchAttemptAligned,
+  recoverDispatchLeaseStillCurrent,
+  recoverExpiredDispatchKind,
+  type CancelDisposition,
+  type CancelMode,
+  type CancelOutboxState,
+  type CancelReplayKind,
+  type RecoverExpiredDispatchKind,
+} from './decisions'

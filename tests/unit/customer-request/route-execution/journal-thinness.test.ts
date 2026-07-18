@@ -11,8 +11,23 @@ const movedSymbols = [
   'routeAttemptIntegrityValid',
   'routeDispatchIntegrityValid',
   'projectCustomerEvidenceExport',
+  'cancelCommandArgsConflict',
+  'cancelPriorCommandConflicts',
+  'cancelReplayKind',
+  'cancelRunNotFound',
+  'cancelRunHeadIntegrityValid',
+  'canPreReleaseCancel',
+  'canRequestAdapterCancellation',
+  'cancelDisposition',
+  'leaseArgsInvalid',
+  'leasePendingCandidateValid',
+  'leaseGrantExpired',
+  'recoverDispatchLeaseStillCurrent',
+  'recoverDispatchAttemptAligned',
+  'recoverExpiredDispatchKind',
 ] as const
 
+// DEFER: start/lease/outcome machines stay host-exported until a journal write-plan ADR.
 const hostMachines = [
   'startOrResume',
   'leaseNextDispatch',
@@ -54,6 +69,8 @@ describe('customer-request route-execution journal thinness', () => {
       expect(source).not.toMatch(/\bDoc\s*</)
       expect(source).not.toMatch(/\bwritePlan\b/)
       expect(source).not.toMatch(/\bWritePlan\b/)
+      expect(source).not.toMatch(/\bintendedPatches\b/)
+      expect(source).not.toMatch(/\bpatches:\s*\[/)
     }
   })
 
