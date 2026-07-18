@@ -1,6 +1,5 @@
 import { v, type Infer } from 'convex/values'
 
-import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   customerRequestV2AggregateValue,
@@ -13,11 +12,9 @@ import {
 } from '@/modules/customer-request/customer-projection'
 import {
   type CustomerRequestAmendment,
-  type CustomerRequestSemanticProposal,
 } from '@/modules/customer-request/semantic-interpreter'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import {
-  bindRequirementAnswer,
   compileCommit as compileCommitApplication,
   exportRouteEvidence as exportRouteEvidenceApplication,
   exportRouteProblemForSupport as exportRouteProblemForSupportApplication,
@@ -33,8 +30,8 @@ import {
   projectRoutePlansFromMaterial,
   projectStoredAggregate as projectStoredAggregateApplication,
   projectStoredRouteRun as projectStoredRouteRunApplication,
+  provideCustomerRequestFacts,
   readRouteProblemForBusiness as readRouteProblemForBusinessApplication,
-  rebindStoredFacts,
   recordRouteProblemBusinessReport as recordRouteProblemBusinessReportApplication,
   recoverUnresolvedEgress as recoverUnresolvedEgressApplication,
   refineCustomerRequest,
@@ -60,6 +57,7 @@ import { authorizePreparationPorts } from './customerRequestAuthorizePreparation
 import { compareResumePorts, preparationEgressPorts } from './customerRequestCompareResumePorts'
 import { confirmRoutePorts } from './customerRequestConfirmRoutePorts'
 import { problemRoutePorts } from './customerRequestProblemRoutePorts'
+import { provideFactsPorts } from './customerRequestProvideFactsPorts'
 import { refinePorts } from './customerRequestRefinePorts'
 import { standingRoutePorts } from './customerRequestStandingRoutePorts'
 
@@ -717,73 +715,12 @@ export const provideFacts = action({
     }
     const caller = await resolveRequestCaller(ctx, 'facts', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    const commandKey = namespacedKey(caller.principalId, 'facts', args.requestRef, args.idempotencyKey)
-    const commandDigest = canonicalDigest(command)
-    const replay = await replayCommittedCommand(ctx, {
-      commandKey, commandDigest, requestId: args.requestRef, principalId: caller.principalId,
-    })
-    if (replay !== undefined) return replay
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    const recoveryBlock = await recoverUnresolvedEgress(ctx, current.aggregate)
-    if (recoveryBlock !== undefined) return recoveryBlock
-    if (current.aggregate.snapshot.revision !== args.expectedRevision) return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
-    }
-    const requirement = current.aggregate.evaluation.nextRequirement
-    if (requirement?.kind !== 'contract_fact' || requirement.requirementKey !== args.requirementKey) {
-      return writableView(projectNeedsAttention({
-        requestRef: args.requestRef, revision: args.expectedRevision,
-        summary: 'Answer the current question before continuing.',
-      }))
-    }
-    const graph = await loadRequestGraph(ctx, current.aggregate.snapshot.networkId)
-    if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
-    if (graph.registrySnapshotDigest !== current.aggregate.evaluation.registrySnapshotDigest) {
-      return writableView(projectNeedsAttention({
-        requestRef: args.requestRef, revision: args.expectedRevision,
-        summary: 'The available options changed. Review the request again before answering.',
-      }))
-    }
-    const answerFacts = bindRequirementAnswer(requirement, args.value, graph.models, args.expectedRevision + 1)
-    if (answerFacts === undefined) return writableView(projectNeedsAttention({
-      requestRef: args.requestRef, revision: args.expectedRevision,
-      summary: 'That answer does not match the requested information.',
-    }))
-    const selections = current.aggregate.plan.actions.flatMap((action) => {
-      const model = graph.models.find((candidate) => sameCapabilityContractRef(candidate.contractRef, action.contractRef))
-      if (model === undefined || model.selectionKey !== action.selectionKey || model.semanticDigest !== action.semanticDigest) return []
-      return [{
-        selectionKey: model.selectionKey,
-        contractRef: model.contractRef,
-        facts: answerFacts.filter((fact) => fact.selectionKey === model.selectionKey
-          && sameCapabilityContractRef(fact.contractRef, model.contractRef)),
-      }]
-    })
-    const proposal: CustomerRequestSemanticProposal = { kind: 'capability_candidates', selections }
-    const expectedRouteGeneration = await loadCurrentRouteGenerationNumber(ctx, current)
-    if (expectedRouteGeneration === undefined) return writableView(projectNeedsAttention({
-      requestRef: args.requestRef, revision: args.expectedRevision,
-      summary: 'AE could not verify the current options. Try this request again.',
-    }))
-    return await compileCommit(ctx, {
-      commandKey,
-      commandDigest,
-      requestId: args.requestRef,
-      expectedRevision: args.expectedRevision,
-      expectedRouteGeneration,
+    return toActionResult(await provideCustomerRequestFacts({
+      ...command,
+      commandKey: namespacedKey(caller.principalId, 'facts', args.requestRef, args.idempotencyKey),
+      commandDigest: canonicalDigest(command),
       principalId: caller.principalId,
-      delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
-      intent: current.aggregate.snapshot.intent,
-      networkId: current.aggregate.snapshot.networkId,
-      priorFacts: rebindStoredFacts(current.aggregate.snapshot.facts, graph.models),
-      proposal,
-      interpreterId: 'customer:requirement-answer',
-      graph,
-      now: Date.now(),
-    })
+    }, provideFactsPorts(ctx)))
   },
 })
 
