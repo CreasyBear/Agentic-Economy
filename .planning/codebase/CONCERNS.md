@@ -12,7 +12,7 @@ Every **implementation** wave: `engineering-software-architect` → `engineering
 
 Hard bans: no journal `…Start`/`…Lease`/`…Outcome` sibling chops; no `WritePlan` DTOs in pure journal; no reopen of closed Application/supply/predicate deepens; validators stay in Convex forever; ADR-002 governed-send stays inquiry-owned.
 
-Inquiry deepen (23–26) is primary; journal machines blocked until write-plan ADR (Wave 27).
+Inquiry deepen (23–26) is primary; journal machines blocked until Wave 29 (write-plan ADR accepted: `.planning/adr/ADR-011-journal-write-plan-ports.md`).
 
 Fresh line counts (`wc -l` at map time):
 
@@ -33,12 +33,12 @@ Fresh line counts (`wc -l` at map time):
 - Fix approach: Keep Answer Thread read/compare/inquiry-only; route all Request/RoutePlan/authority work through `src/modules/customer-request/`; prove human cutover before collapsing `/engine`.
 
 **God-file Convex residual (post deepen campaign Waves 1–22):**
-- Issue: Campaign closed Application and capabilitySupply as thin registers (auth → module → ports). RouteExecution journal **machines** remain host-owned by design until a write-plan ADR.
+- Issue: Campaign closed Application and capabilitySupply as thin registers (auth → module → ports). RouteExecution journal **machines** remain host-owned until Wave 29 implements ADR-011.
 - Current sizes (verified): `convex/customerRequestApplication.ts` (1749 — **host-done**), `convex/capabilitySupply.ts` (973 — **host-done**; graph/probe residual), `convex/customerRequestRouteExecution.ts` (2463 — integrity digests, evidence export, and cancel/lease/recover **predicates** deepened; start/lease/outcome machines still host).
 - Already deepened (do not re-open as primary): compare-resume, standing-route, problem-route, preparation-egress, interpret-compile, confirm-route, refine, authorize-preparation, provide-facts, action-projection, operation-ledger, eligible inventory, publish/refresh/withdraw, supply writers, journal integrity + evidence + cancel/lease/recover decisions. Locked by thinness tests under `tests/unit/customer-request/application/*-thinness.test.ts`, `tests/unit/capability-supply/*-thinness.test.ts`, `tests/unit/customer-request/route-execution/journal-thinness.test.ts`.
-- **DEFERRED until journal write-plan ADR:** `startOrResume` (`convex/customerRequestRouteExecution.ts:138`, ~249-line export body), `leaseNextDispatch` (`:515`), `recordOutcome` (`:954`) and sibling dispatch mutation sequences. Thinness test `tests/unit/customer-request/route-execution/journal-thinness.test.ts` locks these as host-exported and forbids write-plan DTOs in `src/modules/customer-request/route-execution/journal/`.
-- **Do NOT** shallow-chop journal machines into Convex siblings such as `customerRequestRouteExecutionStart.ts` / `…Lease.ts` / `…Outcome.ts` without a designed write-plan seam. That creates shallow pass-through modules and does not deepen the mutation machines.
-- Fix approach: Journal machines only after an ADR that defines mutation ports without write-plan DTOs leaking into the pure journal module; keep Convex validators in the host forever.
+- **DEFERRED to Wave 29 (ADR-011 accepted):** `startOrResume` (`convex/customerRequestRouteExecution.ts:138`, ~249-line export body), `leaseNextDispatch` (`:515`), `recordOutcome` (`:954`) and sibling dispatch mutation sequences. Thinness test `tests/unit/customer-request/route-execution/journal-thinness.test.ts` locks these as host-exported and forbids write-plan DTOs in `src/modules/customer-request/route-execution/journal/`. See `.planning/adr/ADR-011-journal-write-plan-ports.md`.
+- **Do NOT** shallow-chop journal machines into Convex siblings such as `customerRequestRouteExecutionStart.ts` / `…Lease.ts` / `…Outcome.ts`. ADR-011 forbids that; deepen via mutation ports + `machines/` outside pure `journal/`.
+- Fix approach: Wave 29 deepen per ADR-011 — semantic `JournalMutationPorts`, no `WritePlan`/`intendedPatches` in pure journal; Convex validators stay in the host forever.
 
 **capabilitySupply graph/probe residual (host-done but not empty):**
 - Issue: Publish/refresh/withdraw, eligibility, offerings/bindings, and operation-ledger deepened; graph query and readiness probe still live in the Convex host.
@@ -164,7 +164,7 @@ Fresh line counts (`wc -l` at map time):
 - Risk: `startOrResume` / `leaseNextDispatch` / `recordOutcome` own lease grants, outcomes, and run advancement in one host file; incorrect extract or partial port can desync integrity digests from durable state.
 - Files: `convex/customerRequestRouteExecution.ts`, `src/modules/customer-request/route-execution/journal/`, `convex/customerRequestRouteTransportWorker.ts` (calls `leaseNextDispatch` / `recordOutcome`), `convex/customerRequestApplication.ts` (calls `startOrResume`)
 - Current mitigation: Integrity/decision helpers deepened and locked; thinness test forbids write-plan DTOs in the pure journal module; integration coverage in `tests/integration/customer-request-v2-multi-capability-route.test.ts`.
-- Recommendations: No shallow Convex sibling chops; wait for write-plan ADR; keep machines atomic at the mutation boundary.
+- Recommendations: No shallow Convex sibling chops (ADR-011); Wave 29 deepen via mutation ports; keep machines atomic at the mutation boundary.
 
 ## Performance Bottlenecks
 
@@ -209,7 +209,7 @@ Fresh line counts (`wc -l` at map time):
 - Why fragile: Lease/outcome/start sequencing is correctness-critical; predicates deepened into `src/modules/customer-request/route-execution/journal/` but mutation write plans remain host-local.
 - Files: `convex/customerRequestRouteExecution.ts`, `src/modules/customer-request/route-execution/journal/{integrity,decisions,export-evidence,export-state,index}.ts`, `tests/unit/customer-request/route-execution/journal-thinness.test.ts`
 - Common failures: Shallow sibling file chops that leave write plans duplicated; leaking `WritePlan` / `intendedPatches` into the pure journal module; breaking lease expiry / cancel disposition invariants.
-- Safe modification: Change predicates via journal module + thinness tests; leave `startOrResume` / `leaseNextDispatch` / `recordOutcome` host-exported until write-plan ADR; never invent Convex sibling hosts as a substitute for deepening.
+- Safe modification: Change predicates via journal module + thinness tests; leave `startOrResume` / `leaseNextDispatch` / `recordOutcome` host-exported until Wave 29 implements ADR-011; never invent Convex sibling hosts as a substitute for deepening.
 - Test coverage: Unit thinness + journal tests; heavy integration in `tests/integration/customer-request-v2-multi-capability-route.test.ts`.
 
 **Capability supply quarantine / publication / probe:**
@@ -308,11 +308,11 @@ Fresh line counts (`wc -l` at map time):
 - Blocks: One-action-plane product claims across surfaces.
 - Implementation complexity: Medium — design in `.planning/phases/02-one-action-plane-cross-surface-parity/`; then falsifiable tests.
 
-**Journal write-plan ADR (blocks next deepen of route execution):**
-- Problem: No accepted ADR yet for extracting `startOrResume` / `leaseNextDispatch` / `recordOutcome` write plans behind mutation ports without Convex DTOs in the pure journal module.
-- Current workaround: Machines remain host-exported; predicates/evidence already deepened.
-- Blocks: Safe further reduction of `convex/customerRequestRouteExecution.ts` below the deferred-machine floor.
-- Implementation complexity: High — must preserve lease/outcome atomicity and integrity digests; shallow sibling chops are explicitly out of scope.
+**Journal write-plan ADR (Wave 27 done — unlocks Wave 29 deepen):**
+- Problem: ~~No accepted ADR~~ **Resolved by ADR-011** (`.planning/adr/ADR-011-journal-write-plan-ports.md`) for extracting `startOrResume` / `leaseNextDispatch` / `recordOutcome` behind mutation ports without Convex DTOs in the pure journal module.
+- Current workaround: Machines remain host-exported until Wave 29 implements ADR-011; predicates/evidence already deepened.
+- Blocks: Safe further reduction of `convex/customerRequestRouteExecution.ts` below the deferred-machine floor — **unblocked for Wave 29 only** under ADR-011 constraints.
+- Implementation complexity: High — must preserve lease/outcome atomicity and integrity digests; shallow sibling chops remain explicitly out of scope.
 
 ## Test Coverage Gaps
 
@@ -347,12 +347,12 @@ Fresh line counts (`wc -l` at map time):
 - Priority: High for launch claims
 - Difficulty to test: Needs production or staging catalog evidence, not only `convex/devSeed.ts` / local fixtures.
 
-**Journal machine deepen (blocked):**
-- What's not tested as a deepen seam: Pure write-plan ports for start/lease/outcome (intentionally deferred).
-- Files: `tests/unit/customer-request/route-execution/journal-thinness.test.ts` (locks host export + no write-plan DTOs in journal module)
+**Journal machine deepen (Wave 29 — ADR-011 unlocked):**
+- What's not tested as a deepen seam: Port-backed start/lease/outcome machines (intentionally deferred until Wave 29).
+- Files: `tests/unit/customer-request/route-execution/journal-thinness.test.ts` (locks host export + no write-plan DTOs in journal module); design: `.planning/adr/ADR-011-journal-write-plan-ports.md`
 - Risk: Premature extracts that green thinness tests while breaking mutation atomicity.
-- Priority: High before any journal-machine move; Low until write-plan ADR exists
-- Difficulty to test: Requires ADR + new port fakes; do not add Convex sibling-file “thinness” as a substitute.
+- Priority: High for Wave 29; design gate cleared by ADR-011
+- Difficulty to test: Requires new port fakes per ADR-011; do not add Convex sibling-file “thinness” as a substitute.
 
 ---
 
