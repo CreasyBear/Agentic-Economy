@@ -3,6 +3,7 @@
 **Tracker:** Wayfinder #182  
 **Protocol:** [First-task field-selection protocol](../research/2026-07-18-first-task-field-selection-protocol.md)  
 **Field governance:** [WA consent, privacy, recording, and outreach protocol](../research/2026-07-18-wa-field-study-consent-privacy-recording-protocol.md)  
+**Participant materials:** [Recruitment, notice, consent, session, and withdrawal drafts](./2026-07-18-first-task-participant-materials.md)
 **Field owner:** Unassigned  
 **Status:** Ready for owner assignment; no participants recruited  
 **Evidence class:** External field only when completed from consented real cases  
