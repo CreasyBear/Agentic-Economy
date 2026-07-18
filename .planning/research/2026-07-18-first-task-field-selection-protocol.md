@@ -14,6 +14,9 @@ cohort, and participating business cohort earn an AE implementation test?
 **Supersedes:** None
 **Superseded by:** None
 
+**Execution instrument:** [First-task field evidence workbook](../scopes/2026-07-18-first-task-field-evidence-workbook.md)
+**Field governance:** [WA consent, privacy, recording, and outreach protocol](./2026-07-18-wa-field-study-consent-privacy-recording-protocol.md)
+
 ## Decision this protocol supports
 
 Select one task framed in ordinary human language, one customer/coordinator
@@ -301,6 +304,11 @@ businesses are provisionally selected from the incumbent cases. The comparison
 must use the same task boundary and cannot teach participants hidden workflow
 state.
 
+The provisional selection resolves Wayfinder #182 and earns only the next
+provider-contract and investment-eval gates. It does not claim AE-assisted
+customer value, provider value, operator leverage, or implementation readiness.
+Those claims require the later real comparison and its frozen thresholds.
+
 ## Preregistered decision rules
 
 Thresholds are frozen after the incumbent baseline and before an AE-assisted
@@ -377,12 +385,18 @@ The field owner returns one packet containing:
 12. principal risks and residual unknowns;
 13. field owner and evidence window;
 14. preregistered thresholds and falsifiers; and
-15. recommendation: select, refine, narrow, deliberate service, or stop.
+15. Stage A recommendation: provisionally select, refine the field boundary,
+    reject and test the next candidate, or stop task selection.
 
 The Founder resolves the ticket from that evidence. Agents may prepare,
 instrument, analyze, and challenge the packet; they cannot supply the real
 cases, independent business participation, accountable ownership, or final
 investment judgement.
+
+After a separately authorized real AE-assisted field trial, the same workbook
+records the distinct Stage B decision: invest, refine, narrow, operate
+deliberately as a service, or stop. Stage B cannot be declared from the Stage A
+baseline or interviews.
 
 ## Immediate blocking decision
 
