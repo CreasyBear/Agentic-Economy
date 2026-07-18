@@ -1,27 +1,38 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-07-18  
-**Inspected revision:** `19e988f5` (post god-file deepen campaign Waves 1–22)  
-**last_mapped_commit:** `19e988f5`
+**Inspected revision:** `f56f98a2` (post residual deepen campaign Waves 23–32)  
+**last_mapped_commit:** `f56f98a2`
 
-## Residual campaign Waves 23+ — locked practices
+## Residual campaign Waves 23–32 — CLOSED
 
 Gold pattern: provide-facts (`src/modules/...` ports type + pure fn) → thin `convex/*Ports.ts` → host auth → module → ports. Deletion test must concentrate complexity; Convex sibling chops without ports fail.
 
-Every **implementation** wave: `engineering-software-architect` → `engineering-codebase-onboarding-engineer` → `engineering-backend-architect` → `engineering-minimal-change-engineer` → `engineering-code-reviewer` → `thermo-nuclear-code-quality-review` → commit only after thermo PASS. Design-only ADR waves: architect → onboarding → backend-architect only.
+Every **implementation** wave used: `engineering-software-architect` → onboarding → backend-architect → minimal-change → code-reviewer → thermo-nuclear → commit after PASS. Design-only ADR waves: architect chain only.
 
-Hard bans: no journal `…Start`/`…Lease`/`…Outcome` sibling chops; no `WritePlan` DTOs in pure journal; no reopen of closed Application/supply/predicate deepens; validators stay in Convex forever; ADR-002 governed-send stays inquiry-owned.
+Hard bans still in force: no journal `…Start`/`…Lease`/`…Outcome` sibling chops; no `WritePlan` DTOs in pure journal; no reopen of closed Application/supply/predicate/inquiry-source deepens; validators stay in Convex forever; ADR-002 governed-send stays inquiry-owned.
 
-Inquiry deepen (23–26) is primary; journal machines blocked until Wave 29 (write-plan ADR accepted: `.planning/adr/ADR-011-journal-write-plan-ports.md`).
+| Wave | Outcome |
+|------|---------|
+| 23–26 | Inquiry source-state / notification / serializers / host thinness — **host-done** |
+| 27 | ADR-011 journal write-plan ports — **Accepted** |
+| 28 | Evidence load assembly ports — done |
+| 29 | Journal machines behind ADR-011 — done (integration green) |
+| 30 | capabilitySupply graph/probe ports — done |
+| 31 | hosted-agent-journey kernel + scenarios — done |
+| 32 | catalog-from-rows shared by registry/discovery — done |
 
-Fresh line counts (`wc -l` at map time):
+Fresh line counts (`wc -l` at close):
 
 | File | Lines | Campaign status |
 |------|------:|-----------------|
 | `convex/customerRequestApplication.ts` | 1749 | **host-done** — validators + thin actions |
-| `convex/capabilitySupply.ts` | 973 | **host-done** — graph/probe residual out of campaign |
-| `convex/customerRequestRouteExecution.ts` | 2463 | journal machines **DEFERRED** |
-| `convex/inquiries.ts` | 3443 | Waves 23–26 deepen target |
+| `convex/inquiries.ts` | 1435 | **host-done** — Waves 23–26; validators + thin handlers |
+| `convex/customerRequestRouteExecution.ts` | 1606 | machines deepened (ADR-011); cancel/problem residual |
+| `convex/registry.ts` | 1622 | catalog-from-rows shared (Wave 32); search residual |
+| `convex/discovery.ts` | 1565 | catalog-from-rows shared (Wave 32); manifest residual |
+| `convex/capabilitySupply.ts` | 804 | **host-done** — graph/probe deepened (Wave 30) |
+| `hosted-agent-journey.ts` (re-export) | 8 | split under `hosted-agent-journey/` (Wave 31) |
 
 ## Tech Debt
 
@@ -32,31 +43,24 @@ Fresh line counts (`wc -l` at map time):
 - Impact: New semantics added to Answer Thread create a second intent/history path; assistants and humans can disagree about which surface is canonical; cutover evidence for `/engine` → `/` is still required.
 - Fix approach: Keep Answer Thread read/compare/inquiry-only; route all Request/RoutePlan/authority work through `src/modules/customer-request/`; prove human cutover before collapsing `/engine`.
 
-**God-file Convex residual (post deepen campaign Waves 1–22):**
-- Issue: Campaign closed Application and capabilitySupply as thin registers (auth → module → ports). RouteExecution journal **machines** remain host-owned until Wave 29 implements ADR-011.
-- Current sizes (verified): `convex/customerRequestApplication.ts` (1749 — **host-done**), `convex/capabilitySupply.ts` (973 — **host-done**; graph/probe residual), `convex/customerRequestRouteExecution.ts` (2463 — integrity digests, evidence export, and cancel/lease/recover **predicates** deepened; start/lease/outcome machines still host).
-- Already deepened (do not re-open as primary): compare-resume, standing-route, problem-route, preparation-egress, interpret-compile, confirm-route, refine, authorize-preparation, provide-facts, action-projection, operation-ledger, eligible inventory, publish/refresh/withdraw, supply writers, journal integrity + evidence + cancel/lease/recover decisions. Locked by thinness tests under `tests/unit/customer-request/application/*-thinness.test.ts`, `tests/unit/capability-supply/*-thinness.test.ts`, `tests/unit/customer-request/route-execution/journal-thinness.test.ts`.
-- **DEFERRED to Wave 29 (ADR-011 accepted):** `startOrResume` (`convex/customerRequestRouteExecution.ts:138`, ~249-line export body), `leaseNextDispatch` (`:515`), `recordOutcome` (`:954`) and sibling dispatch mutation sequences. Thinness test `tests/unit/customer-request/route-execution/journal-thinness.test.ts` locks these as host-exported and forbids write-plan DTOs in `src/modules/customer-request/route-execution/journal/`. See `.planning/adr/ADR-011-journal-write-plan-ports.md`.
-- **Do NOT** shallow-chop journal machines into Convex siblings such as `customerRequestRouteExecutionStart.ts` / `…Lease.ts` / `…Outcome.ts`. ADR-011 forbids that; deepen via mutation ports + `machines/` outside pure `journal/`.
-- Fix approach: Wave 29 deepen per ADR-011 — semantic `JournalMutationPorts`, no `WritePlan`/`intendedPatches` in pure journal; Convex validators stay in the host forever.
+**God-file Convex residual (post Waves 1–32):**
+- Issue: Primary deepen campaign closed. Residual host mass is mostly validators + cancel/problem/register surfaces, not undeepened command gods.
+- Current sizes (verified): Application 1749 host-done; inquiries 1435 host-done; RouteExecution 1606 (machines in `route-execution/machines/` + `customerRequestRouteExecutionJournalPorts.ts`); capabilitySupply 804 host-done.
+- Already deepened (do not re-open as primary): Application command set; supply writers/eligibility/publication/ledger/graph-probe; inquiry source-state/notification/serializers; journal integrity/evidence/decisions/machines; evidence-load; hosted-agent-journey scenarios; catalog-from-rows.
+- Locked by thinness tests under `tests/unit/customer-request/application/*-thinness.test.ts`, `tests/unit/capability-supply/*-thinness.test.ts`, `tests/unit/capability-supply/graph-probe-thinness.test.ts`, `tests/unit/inquiries/*-thinness.test.ts`, `tests/unit/customer-request/route-execution/{journal,machines,evidence-load}-thinness.test.ts`.
+- **ADR-011:** `.planning/adr/ADR-011-journal-write-plan-ports.md` — machines use semantic `JournalMutationPorts`; no `WritePlan` in pure `journal/`; no Start/Lease/Outcome sibling chops.
+- Next residual (optional, not campaign-primary): RouteExecution cancel/problem host glue; fat `commitSucceededOutcome` further split; notification outbox share with inquiry bridge; registry/discovery search/manifest leftovers; `customerRequestV2` / `notificationOutbox` / Ae* UI.
 
-**capabilitySupply graph/probe residual (host-done but not empty):**
-- Issue: Publish/refresh/withdraw, eligibility, offerings/bindings, and operation-ledger deepened; graph query and readiness probe still live in the Convex host.
-- Files: `convex/capabilitySupply.ts` — `probeTargetDigest` (`:471`), `readCapabilityProbeTarget` (`:489`), `recordCapabilityProbeResult` (`:532`), `queryCapabilityGraph` (`:648`); module internals under `src/modules/capability-supply/internal/{offering,binding,eligibility,quarantine,publication,shared,operation-ledger}/`; ports in `convex/capabilitySupply*Ports.ts`.
-- Impact: Remaining host logic mixes readiness probing and graph assembly with thin command adapters; easy to “finish” the file with another shallow extract that does not deepen probe/graph semantics.
-- Fix approach: Treat graph/probe as a separate deepen candidate with its own seam (ports + pure projection), not a line-count chop of the host file.
+**capabilitySupply graph/probe (Wave 30 closed):**
+- Deepened behind `src/modules/capability-supply/internal/graph/` + `convex/capabilitySupplyGraphPorts.ts`. HTTP readiness probe remains separate. Do not reopen as a line-count chop.
 
-**`convex/inquiries.ts` still the largest Convex host (outside campaign):**
-- Issue: Inquiry submit/inbox/reply/close/privacy/export still concentrate in one Convex register (3443 lines, 16 exported functions) with thin module imports (~2 module import lines vs large local validators/handlers).
-- Files: `convex/inquiries.ts` (3443), `src/modules/inquiries/inquiry.functions.ts` (1381), `src/modules/inquiries/internal/ledger/commands.ts` (791), `src/modules/inquiries/internal/privacy/commands.ts`, `src/modules/inquiries/internal/commands.ts`
-- Impact: High blast radius for the only public `agentTools` write (`inquiry.submit`); privacy/export/admission changes risk regressions across owner and public paths.
-- Fix approach: Deepen behind `src/modules/inquiries/` seams (ledger/privacy/admission) the same way Customer Request Application was deepened — ports + pure commands, thin Convex register. Do not confuse this with the deferred journal-machine work.
+**`convex/inquiries.ts` (Waves 23–26 host-done):**
+- Source-state ports (`inquirySourceStatePorts`), notification ports (`inquiryNotificationPorts`), serializers (`projections/serialize` + `inquirySerializeOperator`), thinness locks under `tests/unit/inquiries/`. Residual ~1435 is mostly validators + thin handlers. Quiet-door write still high blast radius — change carefully; do not re-inline load/persist.
 
-**Other large residual modules (not campaign-primary):**
-- Issue: Several multi-thousand-line files remain after Waves 1–22 and are easy to mistake for the next “god-file” chop targets.
-- Files: `src/modules/customer-request/hosted-agent-journey.ts` (2045), `convex/registry.ts` (1598), `convex/discovery.ts` (1541), `convex/customerRequestV2.ts` (1492), `convex/notificationOutbox.ts` (1455), `src/modules/discovery/developer-discovery.ts` (1534), `convex/security.ts` (1008), `src/modules/answer-thread/internal/turn-orchestrator.ts` (849)
-- Impact: Parallel complexity outside the closed campaign; unfocused chops here compete with the write-plan ADR for journal machines.
-- Fix approach: Prioritize by product risk (quiet-door writes, route execution machines, inquiry privacy) before size alone.
+**Other large residual modules (post-campaign):**
+- Files: `convex/registry.ts` (1622), `convex/discovery.ts` (1565), `convex/customerRequestV2.ts` (~1492), `convex/notificationOutbox.ts` (~1455), `src/modules/discovery/developer-discovery.ts` (~1534), `convex/security.ts` (~1008), `src/modules/answer-thread/internal/turn-orchestrator.ts` (~849), `src/modules/inquiries/inquiry.functions.ts` (~1381 dual-path).
+- Impact: Size alone is not a deepen warrant; prioritize product risk.
+- Fix approach: Prefer shared catalog-from-rows (done) before further registry/discovery chops; confine local e2e in inquiry.functions; outbox/inquiry bridge convergence is the main inquiry follow-up.
 
 **Legacy Customer Request v1 compiler retained:**
 - Issue: Parallel legacy compilers remain beside the current Customer Request path.
