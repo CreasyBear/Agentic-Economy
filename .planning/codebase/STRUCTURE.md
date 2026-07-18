@@ -1,247 +1,313 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-07-18
-**last_mapped_commit:** 19e988f5
+**Analysis Date:** 2026-07-18  
+**last_mapped_commit:** `5ea44454` (post residual deepen Waves 23–32)
 
 ## Directory Layout
 
 ```
 Agentic-Economy/
-├── src/
-│   ├── routes/              # TanStack file routes (HTTP + pages)
-│   ├── modules/             # Domain modules (primary product logic)
-│   ├── components/          # UI (prefer Astryx; ae/ legacy behavioral)
-│   ├── views/               # Page-level view compositions
-│   ├── lib/                 # Shared non-domain helpers (http, server, ui)
-│   ├── app/                 # App shells / chat landing experiments
-│   ├── server/              # Server bootstrap helpers
-│   ├── styles/              # Global styles / tokens glue
-│   ├── hooks/               # Shared React hooks
-│   ├── router.tsx           # Router factory
-│   └── routeTree.gen.ts     # Generated route tree
-├── convex/                  # Convex adapters, ports, workers, schema root
-│   ├── schema.ts            # Composition root only
-│   ├── *Ports.ts            # Thin port implementations
-│   ├── customerRequestApplication.ts   # ~1749 — thin actions
-│   ├── capabilitySupply.ts             # ~973 — thin supply API
-│   ├── customerRequestRouteExecution.ts # ~2463 — journal (machines deferred)
-│   └── _generated/          # Generated API / data model
-├── tests/                   # unit, integration, e2e, imports, copy, …
-├── examples/                # Routing edge, provider, agent prototypes
-├── eval/                    # Answer / product eval harnesses
-├── tools/                   # Release/dev smoke and verification scripts
-├── scripts/                 # Misc operational scripts
-├── docs/                    # Human architecture / agent docs
-├── .planning/               # ADRs, phases, records, this codebase map
-├── .agents/skills/          # AE project skills (actions, Convex, routing)
-├── public/                  # Static assets
-└── package.json
+├── src/                          # TanStack Start app + domain modules
+│   ├── modules/                  # Domain ownership (primary code home)
+│   ├── routes/                   # File-based routes (public, API, operator)
+│   ├── components/               # UI (ae/* legacy behavioral, astryx/*)
+│   ├── lib/                      # Cross-cutting server/http/ui helpers
+│   ├── hooks/                    # Small React hooks
+│   ├── styles/                   # Global styles
+│   ├── start.ts                  # Start middleware composition
+│   ├── router.tsx                # Router factory
+│   └── routeTree.gen.ts          # Generated route tree
+├── convex/                       # Thin Convex hosts, ports, schema root
+├── tests/                        # unit, integration, e2e, imports, copy, seo
+├── tools/                        # Release/dev smoke and verification scripts
+├── eval/                         # Answer eval suites
+├── examples/                     # Provider / routing examples
+├── docs/                         # Ancillary docs
+├── .planning/                    # Roadmap, ADRs, records, codebase maps
+├── .agents/skills/               # AE-specific agent skills
+├── public/                       # Static assets
+├── PRODUCT.md / DESIGN.md / AGENTS.md
+├── package.json
+├── vite.config.ts
+├── vitest.config.ts
+└── playwright.config.ts
 ```
 
 ## Directory Purposes
 
 **`src/modules/`:**
-- Purpose: All durable domain logic and public operation contracts
-- Contains: per-domain folders with `public.ts`, `*.actions.ts`,
-  `*.functions.ts`, `application/`, `internal/`, optional `route-execution/`
-- Key files: `src/modules/actions/index.ts`,
-  `src/modules/customer-request/application/public.ts`,
-  `src/modules/capability-supply/public.ts`,
-  `src/modules/harness/tool-contract.ts`
-
-**`src/modules/customer-request/`:**
-- Purpose: Customer Request lifecycle — interpret, compile, prepare, confirm,
-  run, problems, standing route
-- Contains:
-  - `application/<slice>/` — deepened use-cases (Waves 1–22)
-  - `route-execution/journal/` — pure journal integrity/decisions/export
-  - `route-execution/problem-support/` — problem decisions/projections
-  - root helpers (`interpreter.ts`, `customer-projection.ts`,
-    `route-mandate*.ts`, `runtime.ts`, …)
-  - `internal/*schema*` — Convex table fragments
-- Key files: `application/public.ts`, `customer-request.actions.ts`,
-  `customer-request.functions.ts`
-
-**`src/modules/capability-supply/`:**
-- Purpose: Routeable supply — binding, offering, eligibility, publication,
-  quarantine, operation ledger, transport admission
-- Contains: `public.ts`, `server.ts`, `route-transport-runtime.ts`,
-  `internal/{binding,offering,eligibility,publication,quarantine,operation-ledger,shared}/`
-- Key files: `internal/eligibility/ports.ts`,
-  `internal/operation-ledger/commands.ts`, `internal/convex-schema.ts`
-
-**`convex/`:**
-- Purpose: Thin runtime adapters after deepen; validators; workers; authz
-- Contains: `*Ports.ts` (~1k lines total across Customer Request + supply
-  ports), domain Convex files, crons, generated code
-- Key files: `schema.ts`, `customerRequestApplication.ts`,
-  `capabilitySupply.ts`, `customerRequestRouteExecution.ts`,
-  `customerRequestV2*.ts`, `customerRequestRouteMandate*.ts`
+- Purpose: All durable domain logic, schemas, actions, and public seams
+- Contains: One folder per domain; `public.ts`, optional `*.actions.ts` / `*.functions.ts`, `internal/`
+- Key files: `src/modules/actions/index.ts`, `src/modules/customer-request/`, `src/modules/inquiries/`, `src/modules/capability-supply/`, `src/modules/catalog/`
 
 **`src/routes/`:**
-- Purpose: File-based routes for pages and JSON APIs
-- Contains: `api.requests*`, `api.v1.requests*`, `api.businesses*`,
-  `api.answer*`, discovery, notification, sandbox, registry pages
-- Key files: `api.requests.ts`, `llms[.]txt.ts`, `__root.tsx`
+- Purpose: URL entry points (pages + API)
+- Contains: TanStack Router file routes; `_operator/` for owner/admin/developer consoles
+- Key files: `src/routes/index.tsx`, `src/routes/registry.tsx`, `src/routes/api.v1.requests*.ts`, `src/routes/llms[.]txt.ts`
+
+**`src/components/`:**
+- Purpose: Presentation
+- Contains: `ae/` product UI, `astryx/` design-system bridges, limited `ai-elements/` / `animate/`
+- Key files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, `src/components/ae/layout/AePublicShell.tsx`
+
+**`src/lib/`:**
+- Purpose: App-level adapters (not domain ownership)
+- Contains: `server/` API helpers, `http/` security/discovery, `observability/`, `ui/` presentation helpers
+- Key files: `src/lib/server/customer-request-api.ts`, `src/lib/server/source-write-admission.ts`, `src/lib/server/convex-source.ts`
+
+**`convex/`:**
+- Purpose: Persistence runtime and thin ports
+- Contains: Function hosts, `*Ports.ts`, workers, `schema.ts`, `http.ts`, `_generated/`
+- Key files: `convex/schema.ts`, `convex/inquiries.ts`, `convex/customerRequestRouteExecution.ts`, `convex/customerRequestRouteExecutionJournalPorts.ts`, `convex/capabilitySupplyGraphPorts.ts`, `convex/inquirySourceStatePorts.ts`
 
 **`tests/`:**
-- Purpose: Executable evidence for modules and adapters
-- Contains: `unit/<domain>/`, `integration/`, `e2e/`, `imports/`,
-  `deploy-smoke/`, `ui-contract/`, `copy/`
-- Key files: `tests/imports/private-imports.test.ts`,
-  `tests/unit/customer-request/`, `tests/unit/capability-supply/`
+- Purpose: Executable evidence for modules, hosts, imports, UI contracts
+- Contains: `unit/`, `integration/`, `e2e/`, `imports/`, `copy/`, `seo/`, `ui-contract/`, `deploy-smoke/`, `types/`
+- Key files: `tests/imports/private-imports.test.ts`, `tests/unit/**/**-thinness.test.ts`
 
 **`.planning/`:**
-- Purpose: Product/planning authority and generated maps
-- Contains: `adr/`, `phases/`, `records/`, `codebase/`, `specs/`
-- Key files: `records/KNOWLEDGE-INDEX.md`, `codebase/ARCHITECTURE.md`
+- Purpose: Product/engineering planning authority companions
+- Contains: ROADMAP, ADRs (`adr/`), records, `codebase/` maps
+- Key files: `.planning/adr/ADR-011-journal-write-plan-ports.md`, `.planning/codebase/ARCHITECTURE.md`
+
+## Module inventory (`src/modules/`)
+
+| Module | Role |
+|--------|------|
+| `actions` | Central action registry only |
+| `answer` / `answer-thread` | Answer synthesis and thread runtime |
+| `business` | Business entity source |
+| `capability-contract` | Contract model / digests |
+| `capability-contract-registry` | Registered contract documents |
+| `capability-supply` | Offerings, bindings, publications, eligibility, graph/probe |
+| `catalog` | Public catalog model + `catalogFromRows` |
+| `common` | Shared action types, ids, digests, results |
+| `customer-request` | Request lifecycle, application, route-execution, hosted journeys |
+| `demand` | Demand capture |
+| `dev` | Dev seed fixtures |
+| `discovery` | Discovery projections / manifests |
+| `governed-action` | Governed action helpers |
+| `harness` | Agent run loop, tool contracts, approval policy |
+| `inquiries` | Qualified inquiry ledger + ports types |
+| `lifecycle` | Lifecycle helpers |
+| `network-guard` | Network guard |
+| `notification-outbox` | Notification dispatch outbox |
+| `observability` | Audit / funnel / operator controls |
+| `product` | Product surface copy/helpers |
+| `provider-integrations` | Provider adapters |
+| `registry` | Public registry search/list/detail |
+| `routing-kernel` | Neutral kernel + retirement |
+| `routing-tracer` | Tracing helpers |
+| `sandbox-supply` | Sandbox acceptance supply |
+| `security` | Admin authority / security tables |
+| `seo` | SEO helpers |
+| `settings` | Owner notification preferences |
+| `storefront` | Storefront draft import |
+
+## Critical post-campaign layouts
+
+### Domain module + thin Convex ports
+
+```
+src/modules/<domain>/
+  public.ts
+  <domain>.actions.ts          # optional
+  <domain>.functions.ts        # optional
+  internal/                    # private; schema + implementation
+convex/
+  <host>.ts                    # thin: validate → ports → module
+  <host>Ports.ts               # MutationCtx/ActionCtx/RuntimeDb → ports
+```
+
+Canonical port adapter files (non-exhaustive):
+
+- `convex/inquirySourceStatePorts.ts`, `convex/inquiryNotificationPorts.ts`
+- `convex/customerRequestRouteExecutionJournalPorts.ts`
+- `convex/customerRequestProvideFactsPorts.ts`, `customerRequestCompareResumePorts.ts`, `customerRequestConfirmRoutePorts.ts`, `customerRequestAuthorizePreparationPorts.ts`, `customerRequestRefinePorts.ts`, `customerRequestProblemRoutePorts.ts`, `customerRequestStandingRoutePorts.ts`, `customerRequestEvidenceLoadPorts.ts`
+- `convex/capabilitySupplyGraphPorts.ts`, `capabilitySupplyWriterPorts.ts`, `capabilitySupplyOperationPorts.ts`, `capabilitySupplyEligiblePorts.ts`, `capabilitySupplyPublicationPorts.ts`
+
+### Inquiry host-done (source-state / notification)
+
+```
+src/modules/inquiries/
+  public.ts
+  internal/ledger/ports.ts          # InquirySourceStatePorts
+  internal/notification-ports.ts    # InquiryNotificationPorts
+  internal/…                        # pure commands / projections
+convex/
+  inquiries.ts                      # host-done orchestration
+  inquirySourceStatePorts.ts
+  inquirySourceStateLoad.ts
+  inquirySourceStatePersist.ts
+  inquiryNotificationPorts.ts
+  inquiryNotificationBridge.ts
+```
+
+### Route-execution machines (ADR-011)
+
+```
+src/modules/customer-request/route-execution/
+  journal/                 # predicates / integrity ONLY
+  machines/
+    ports.ts               # JournalMutationPorts
+    start-or-resume.ts
+    lease-next-dispatch.ts
+    record-outcome.ts
+    types.ts
+    index.ts
+  evidence-load/
+  problem-support/
+convex/
+  customerRequestRouteExecution.ts              # thin internalMutation shells
+  customerRequestRouteExecutionJournalPorts.ts
+```
+
+### capability-supply graph / probe ports
+
+```
+src/modules/capability-supply/internal/graph/
+  ports.ts                 # CapabilityGraphPorts
+  query-graph.ts
+  read-probe-target.ts
+  record-probe-result.ts
+  probe-digest.ts
+  index.ts
+convex/
+  capabilitySupply.ts              # thin wrappers + auth gates
+  capabilitySupplyGraphPorts.ts
+```
+
+### hosted-agent-journey split
+
+```
+src/modules/customer-request/
+  hosted-agent-journey.ts          # re-export barrel
+  hosted-agent-journey/
+    index.ts
+    run.ts
+    happy.ts
+    partial.ts
+    cancel.ts
+    discovery.ts
+    front-door.ts
+    runtime.ts
+    types.ts
+```
+
+### catalog-from-rows (registry + discovery)
+
+```
+src/modules/catalog/
+  public.ts                        # re-exports catalogFromRows
+  internal/catalog-from-rows.ts
+convex/
+  registry.ts                      # calls catalogFromRows
+  discovery.ts                     # calls catalogFromRows
+```
+
+## Customer Request application map
+
+Place new Request use-cases under `src/modules/customer-request/application/<use-case>/` with `index.ts`, command files, and `types.ts` (ports + results). Wire Convex via a matching `convex/customerRequest*Ports.ts` and thin host calls in `convex/customerRequestApplication.ts` / `customerRequestV2*.ts`.
+
+Existing use-case folders:
+
+- `interpret-compile/`, `provide-facts/`, `refine/`, `compare-resume/`
+- `authorize-preparation/`, `confirm-route/`, `preparation-egress/`
+- `standing-route/`, `problem-route/`
+- `route-plan-projection/`, `action-projection/`
 
 ## Key File Locations
 
 **Entry Points:**
-- `src/router.tsx`: App router bootstrap
-- `src/routes/api.requests*.ts` / `api.v1.requests*.ts`: Customer Request HTTP
-- `src/routes/api.businesses*.ts`: Public registry JSON
-- `src/modules/actions/index.ts`: Central action registry
-- `convex/customerRequestApplication.ts`: Customer Request Convex actions
-- `convex/capabilitySupply.ts`: Capability supply Convex API
-- `convex/customerRequestRouteExecution.ts`: Route journal internals
+- `src/start.ts`: App middleware
+- `src/router.tsx`: Router
+- `convex/schema.ts`: Schema composition root
+- `convex/http.ts`: Convex HTTP (sandbox providers + retired v1 routes)
+- `src/modules/actions/index.ts`: Action registry
 
 **Configuration:**
-- `package.json`: scripts and dependencies
-- `vite.config.ts`: Vite / TanStack Start build
-- `tsconfig.json`: TypeScript paths (`@/` → `src/`)
-- `convex/schema.ts`: Schema composition root
-- `convex/auth.config.ts`: Auth provider config (no secrets in docs)
+- `package.json`: Scripts and dependencies
+- `vite.config.ts`: Build/dev
+- `vitest.config.ts`: Unit/integration runner
+- `playwright.config.ts` / `playwright.deploy-smoke.config.ts`: E2E / deploy smoke
+- `tsconfig.json`: Path aliases `@/*` → `src/*`
+- `.env.example`: Env var names (do not commit secrets)
 
-**Core Logic (deepened):**
-- `src/modules/customer-request/application/interpret-compile/`
-- `src/modules/customer-request/application/provide-facts/`
-- `src/modules/customer-request/application/refine/`
-- `src/modules/customer-request/application/compare-resume/`
-- `src/modules/customer-request/application/confirm-route/`
-- `src/modules/customer-request/application/standing-route/`
-- `src/modules/customer-request/application/authorize-preparation/`
-- `src/modules/customer-request/application/preparation-egress/`
-- `src/modules/customer-request/application/problem-route/`
-- `src/modules/customer-request/application/route-plan-projection/`
-- `src/modules/customer-request/application/action-projection/`
-- `src/modules/customer-request/route-execution/journal/`
-- `src/modules/customer-request/route-execution/problem-support/`
-- `src/modules/capability-supply/internal/binding/`
-- `src/modules/capability-supply/internal/offering/`
-- `src/modules/capability-supply/internal/eligibility/`
-- `src/modules/capability-supply/internal/publication/`
-- `src/modules/capability-supply/internal/operation-ledger/`
-- `src/modules/capability-supply/internal/quarantine/`
-
-**Thin Convex ports:**
-- `convex/customerRequestProvideFactsPorts.ts`
-- `convex/customerRequestCompareResumePorts.ts`
-- `convex/customerRequestConfirmRoutePorts.ts`
-- `convex/customerRequestAuthorizePreparationPorts.ts`
-- `convex/customerRequestRefinePorts.ts`
-- `convex/customerRequestStandingRoutePorts.ts`
-- `convex/customerRequestProblemRoutePorts.ts`
-- `convex/capabilitySupplyEligiblePorts.ts`
-- `convex/capabilitySupplyWriterPorts.ts`
-- `convex/capabilitySupplyPublicationPorts.ts`
-- `convex/capabilitySupplyOperationPorts.ts`
+**Core Logic:**
+- `src/modules/customer-request/`: Request → RoutePlan → mandate → run
+- `src/modules/capability-supply/`: Routeable supply graph
+- `src/modules/registry/` + `src/modules/catalog/`: Public discovery inventory
+- `src/modules/inquiries/`: Qualified inquiry
+- `src/modules/harness/`: Agent tool loop / quiet door contracts
 
 **Testing:**
-- `tests/unit/customer-request/` — application composition and projections
-- `tests/unit/capability-supply/` — supply commands and eligibility
-- `tests/integration/` — cross-module / Convex-backed flows
-- `convex/customerRequestRouteMandate.test.ts` — mandate integration suite
+- `tests/unit/<domain>/`: Co-located by domain
+- `tests/unit/**/**-thinness.test.ts`: Host/module deepen locks
+- `tests/imports/`: Boundary and private-import guards
+- `tests/integration/`: Multi-module runtime
+- `tests/e2e/`, `tests/deploy-smoke/`: Browser evidence
 
 ## Naming Conventions
 
 **Files:**
-- `public.ts` — cross-module barrel (required seam)
-- `<domain>.actions.ts` — `ActionDefinition` consts
-- `<domain>.functions.ts` — TanStack server fns + Convex source adapters
-- `internal/*.ts` — private implementation
-- `internal/schema.ts` or `internal/convex-schema.ts` — table fragments
-- `application/<kebab-slice>/` — Customer Request use-case slice
-  (`index.ts`, verb file, `types.ts`)
-- `convex/<camelCase>.ts` — Convex function modules
-- `convex/<name>Ports.ts` — port factories taking `ActionCtx` / `MutationCtx`
-- Route files: TanStack convention `api.requests.$requestRef.facts.ts`
+- Domain public seam: `public.ts`
+- Actions: `<domain>.actions.ts`
+- Server/Convex binding: `<domain>.functions.ts`
+- Convex host: `camelCase.ts` matching domain (`inquiries.ts`, `capabilitySupply.ts`)
+- Ports adapter: `*Ports.ts` (`inquirySourceStatePorts.ts`, `capabilitySupplyGraphPorts.ts`)
+- Schema fragment: `internal/schema.ts` or `internal/convex-schema.ts`
+- Thinness lock: `*-thinness.test.ts`
 
 **Directories:**
-- kebab-case module names: `customer-request`, `capability-supply`,
-  `answer-thread`, `routing-kernel`
-- Application slices: kebab-case verbs/nouns
-  (`interpret-compile`, `provide-facts`, `standing-route`)
-- Capability-supply internals: noun slices
-  (`binding`, `offering`, `eligibility`, `publication`, `operation-ledger`)
+- Modules: kebab-case (`customer-request`, `capability-supply`)
+- Application use-cases: kebab-case folders under `application/`
+- Route-execution: `journal/`, `machines/`, `evidence-load/`, `problem-support/`
 
 **Symbols:**
-- Functions: camelCase (`provideCustomerRequestFacts`,
-  `registerCapabilityOffering`)
-- Types: PascalCase (`ProvideFactsPorts`, `EligibleSupplyPorts`)
-- Action ids: `"<domain>.<verb>"` strings (`registry.search`,
-  customer-request action ids in `customer-request.actions.ts`)
-- Convex indexes: `by_field1_and_field2` field order
+- Port types: `*Ports` (`JournalMutationPorts`, `CapabilityGraphPorts`)
+- Port factories: `*Ports(ctx)` / `*Ports(db)` in Convex
+- Public re-exports: import as `fooImpl`, export as `foo`
 
 ## Where to Add New Code
 
-**New Customer Request use-case / deepen slice:**
-- Primary code: `src/modules/customer-request/application/<slice>/`
-  (`types.ts`, verb module, `index.ts`)
-- Re-export: `src/modules/customer-request/application/public.ts`
-- Convex adapter: keep/extend thin action in
-  `convex/customerRequestApplication.ts`
-- Ports: new or extended `convex/customerRequest<Slice>Ports.ts`
-- Tests: `tests/unit/customer-request/application/`
+**New Feature (domain operation):**
+- Primary code: `src/modules/<domain>/internal/` + export via `public.ts`
+- Actions (if multi-surface): `<domain>.actions.ts` → register in `src/modules/actions/index.ts`
+- Convex: thin host + `*Ports.ts` if persistence needed; table fragment in module schema
+- Tests: `tests/unit/<domain>/`; add thinness test if deepening a host; imports boundary if new public seam
 
-**New capability-supply command or policy:**
-- Implementation: `src/modules/capability-supply/internal/<slice>/`
-- Public surface (if cross-module): `src/modules/capability-supply/public.ts`
-- Convex: call from `convex/capabilitySupply.ts` via
-  `convex/capabilitySupply*Ports.ts`
-- Schema: `src/modules/capability-supply/internal/convex-schema.ts` then
-  ensure spread in `convex/schema.ts`
-- Tests: `tests/unit/capability-supply/`
+**New Customer Request use-case:**
+- Implementation: `src/modules/customer-request/application/<name>/`
+- Ports type: same folder `types.ts`
+- Convex adapter: `convex/customerRequest<Name>Ports.ts`
+- Export: `src/modules/customer-request/application/public.ts`
 
-**New route journal / problem decision (not machines yet):**
-- Pure logic: `src/modules/customer-request/route-execution/journal/` or
-  `problem-support/`
-- Persist/apply: `convex/customerRequestRouteExecution.ts` (machines still
-  deferred here — do not invent a second journal runtime)
+**New route-execution mutation orchestration:**
+- Machine: `src/modules/customer-request/route-execution/machines/`
+- Pure decision: `journal/` only if predicate/integrity (no write-plans)
+- Host: keep `convex/customerRequestRouteExecution.ts` thin; extend `JournalMutationPorts` + `customerRequestRouteExecutionJournalPorts.ts`
+- Lock: extend `tests/unit/customer-request/route-execution/machines-thinness.test.ts`
 
-**New public machine operation (action):**
-- Declare: `src/modules/<domain>/<domain>.actions.ts`
-- Register: import + array entry in `src/modules/actions/index.ts`
-- Quiet door (only if intentional): also
-  `PublicQuietAgentToolIds` in `src/modules/harness/tool-contract.ts`
-- Server adapter: `<domain>.functions.ts`
-- HTTP (if needed): `src/routes/api.*.ts`
+**New UI page:**
+- Route: `src/routes/...`
+- Components: prefer Astryx; behavioral AE under `src/components/ae/`
+- Do not put domain logic in routes — call module functions / actions
 
-**New domain module:**
-- Implementation: `src/modules/<kebab-name>/` with `public.ts`,
-  `internal/`, optional `*.actions.ts` / `*.functions.ts`
-- Schema fragment under `internal/`, spread in `convex/schema.ts`
-- Convex adapter file(s) under `convex/`
-- Tests under `tests/unit/<kebab-name>/`
-- Enforce privacy via existing import tests
+**New assistant-callable tool:**
+- Action with `agentTools` surface
+- Pin id in `src/modules/harness/tool-contract.ts` `PublicQuietAgentToolIds`
+- Never expose owner-only ops on `agentTools`
 
 **Utilities:**
-- Domain-shared: `src/modules/common/`
-- Non-domain HTTP/server glue: `src/lib/http/`, `src/lib/server/`
-- Do not put product orchestration in `src/lib/`
-
-**UI:**
-- Prefer Astryx primitives (`@astryxdesign/*`, `src/components/astryx/`)
-- Views: `src/views/`; routes wire views
-- Do not extend bespoke `Ae*` presentation components for new UI
+- Shared pure helpers: `src/modules/common/`
+- App HTTP/server glue: `src/lib/server/` (not a substitute for domain modules)
 
 ## Special Directories
 
 **`convex/_generated/`:**
-- Purpose: Convex API and data model types
+- Purpose: Convex codegen API/dataModel
 - Generated: Yes
-- Committed: Yes (typical for this repo)
+- Committed: Yes (typical Convex workflow in this repo)
 
 **`src/routeTree.gen.ts`:**
 - Purpose: Generated TanStack route tree
@@ -249,78 +315,20 @@ Agentic-Economy/
 - Committed: Yes
 
 **`src/modules/*/internal/`:**
-- Purpose: Private module implementation
+- Purpose: Private implementation
 - Generated: No
-- Committed: Yes — external modules must not import
+- Committed: Yes — never import from outside the owning module
 
-**`src/modules/customer-request/application/`:**
-- Purpose: Deepened Customer Request orchestration (post Waves 1–22)
-- Generated: No
-- Committed: Yes — import via `application/public.ts` from Convex/tests
-
-**`src/modules/customer-request/route-execution/`:**
-- Purpose: Deepened journal helpers + problem-support; machines deferred in
-  Convex
-- Generated: No
+**`.planning/codebase/`:**
+- Purpose: Architecture maps for GSD plan/execute
+- Generated: No (maintained by map-codebase)
 - Committed: Yes
 
-**`examples/` / `eval/` / `outputs/`:**
-- Purpose: Prototypes, eval suites, simulation artifacts
-- Generated: Partially (outputs)
-- Committed: Examples/eval yes; treat `outputs/` as local artifacts unless
-  explicitly tracked
-
-**`.agents/skills/`:**
-- Purpose: AE skill recipes (actions, Convex guardrails, routing, design)
-- Generated: No
-- Committed: Yes — follow when adding modules or Convex ports
-
-## Module Inventory (top-level under `src/modules/`)
-
-| Module | Role |
-|--------|------|
-| `actions` | Central action registry |
-| `answer` / `answer-thread` | Model answer loop / legacy thread path |
-| `business` | Business entity tables and ops |
-| `capability-contract` | Exact contract decision model |
-| `capability-contract-registry` | Registered contract documents |
-| `capability-supply` | Routeable supply lifecycle |
-| `catalog` | Catalog projection tables |
-| `common` | Digests, action helpers, shared primitives |
-| `customer-request` | Request → route → run application |
-| `demand` | Intent capture (not the neutral compiler) |
-| `dev` | Dev-only helpers |
-| `discovery` | `llms.txt`, discovery projections |
-| `governed-action` | Governed action primitives |
-| `harness` | Tool contracts, run loop, approval policy |
-| `inquiries` | Qualified inquiry write/read |
-| `lifecycle` | Lifecycle helpers |
-| `network-guard` | Network admission helpers |
-| `notification-outbox` | Outbox dispatch tables |
-| `observability` | Funnel / telemetry projections |
-| `product` | Product copy/status helpers |
-| `provider-integrations` | Provider adapters (e.g. shipping) |
-| `registry` | Public business registry search/detail |
-| `routing-kernel` | Neutral routing kernel inventory |
-| `routing-tracer` | Routing trace helpers |
-| `sandbox-supply` | Sandbox provider/supply fixtures |
-| `security` | Security tables / envelopes |
-| `seo` | SEO helpers |
-| `settings` | Owner notification preferences |
-| `storefront` | Storefront draft import |
-
-## Deepen Snapshot (god-file sizes)
-
-| Convex adapter | Approx. lines | Deepened target |
-|----------------|---------------|-----------------|
-| `convex/customerRequestApplication.ts` | ~1749 | `src/modules/customer-request/application/**` |
-| `convex/capabilitySupply.ts` | ~973 | `src/modules/capability-supply/internal/**` |
-| `convex/customerRequestRouteExecution.ts` | ~2463 | `route-execution/journal` + `problem-support`; **journal machines deferred** |
-
-When adding code: prefer the deepened module path. Extend Convex only for
-validators, auth, and port wiring.
+**`outputs/` / `output/` / `.scratch/`:**
+- Purpose: Simulation and local scratch artifacts
+- Generated: Local runs
+- Committed: Generally untracked / not source of truth
 
 ---
 
-*Structure analysis: 2026-07-18*
-*last_mapped_commit: 19e988f5*
+*Structure analysis: 2026-07-18 · last_mapped_commit `5ea44454`*

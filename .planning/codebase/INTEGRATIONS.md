@@ -1,185 +1,177 @@
----
-last_mapped_commit: 19e988f5
----
-
 # External Integrations
 
 **Analysis Date:** 2026-07-18
+**last_mapped_commit:** `5ea44454`
 
 ## APIs & External Services
 
-**Auth / Identity:**
-- Clerk — human sessions, operator UI, Customer Request agent API keys
-  - SDK/Client: `@clerk/tanstack-react-start` (`src/start.ts` middleware, `src/routes/__root.tsx` `ClerkProvider`, `src/lib/server/customer-request-agent-auth.ts`)
-  - Auth: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`
-  - Convex JWT provider wired in `convex/auth.config.ts`
+**Identity / Auth:**
+- Clerk — human sessions, JWT issuer for Convex, API keys for customer-request agents, owner email lookup
+  - SDK/Client: `@clerk/tanstack-react-start` (`clerkMiddleware` in `src/start.ts`, `ClerkProvider` in `src/routes/__root.tsx`, `auth` / `clerkClient` server APIs)
+  - Direct HTTP: `https://api.clerk.com/v1` for owner delivery address (`src/lib/server/notification-provider.ts`)
+  - Auth: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN` (Convex `convex/auth.config.ts`)
 
 **Backend / Data plane:**
-- Convex — source-of-truth database and server functions
-  - SDK/Client: `convex` package; server bridge `ConvexHttpClient` in `src/lib/server/convex-source.ts`
-  - Auth: `VITE_CONVEX_URL`; Clerk JWT to Convex via issuer domain
-  - HTTP router: `convex/http.ts` (sandbox provider routes; retired v1 routing/MCP stubs)
+- Convex — source-owned catalog, inquiries, customer requests, route execution, notification outbox, observability funnel rows, sandbox supply
+  - SDK/Client: `convex` package; server access via `ConvexHttpClient` in `src/lib/server/convex-source.ts`
+  - Auth: Clerk JWT provider domain; server function token / route-call signing secrets in Convex env (`AE_CONVEX_SERVER_FUNCTION_TOKEN`, `AE_ROUTE_CALL_SIGNING_*`)
+  - HTTP surface: `convex/http.ts` (sandbox provider routes + retired v1 routing stubs)
 
 **LLM / Answer:**
-- OpenRouter — chat completions for answer tool-use agent and customer-request transport
-  - Client: raw `fetch` to `https://openrouter.ai/api/v1/chat/completions` (`src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/customer-request/openrouter-transport.ts`, `src/modules/answer-thread/internal/llm-follow-up-chips.ts`)
-  - Model list: `https://openrouter.ai/api/v1/models` (`src/modules/answer/internal/openrouter-models.ts`)
-  - Auth: `OPENROUTER_API_KEY`; model `AE_LLM_MODEL` (default `deepseek/deepseek-v4-flash` in `src/modules/answer/internal/llm-config.ts`)
-  - Convex-side env: `OPENROUTER_API_KEY`, `AE_CUSTOMER_REQUEST_MODEL` (`convex/convex.config.ts`)
+- OpenRouter — chat completions for customer-request interpretation and gated answer features
+  - SDK/Client: raw `fetch` to `https://openrouter.ai/api/v1/chat/completions` (`src/modules/customer-request/openrouter-transport.ts`, `src/modules/answer-thread/internal/llm-follow-up-chips.ts`)
+  - Auth: `OPENROUTER_API_KEY` (also optional Convex env); model via `AE_LLM_MODEL` / `AE_CUSTOMER_REQUEST_MODEL`
+  - Related: `@tanstack/ai` for tool/JSON-schema contracts (not the transport)
 
 **Search mirror:**
-- Meilisearch — optional generated search index (Convex remains source of truth)
-  - Client: raw `fetch` port in `src/modules/registry/internal/catalog-search-port.ts`
+- Meilisearch — generated registry search index; Convex remains source of truth
+  - SDK/Client: raw HTTP in `src/modules/registry/internal/catalog-search-port.ts`
   - Auth: `MEILISEARCH_HOST`, `MEILISEARCH_ADMIN_KEY`
-  - Config: `AE_SEARCH_INDEX_UID`, `AE_SEARCH_BACKEND` (`convex` | `dual` | `meilisearch`), `AE_SEARCH_TIMEOUT_MS`
+  - Rollout: `AE_SEARCH_BACKEND` = `convex` | `dual` | `meilisearch`; index `AE_SEARCH_INDEX_UID` (default `registry-search-documents`)
 
 **Notifications:**
-- Resend — email dispatch + webhook delivery readback
-  - Client: raw `fetch` to `https://api.resend.com` (`src/lib/server/notification-provider.ts`)
-  - Routes: `src/routes/api.notification.resend-dispatch.ts`, `src/routes/api.notification.resend-webhook.ts`
-  - Auth: `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_WEBHOOK_SECRET`, optional `RESEND_API_BASE_URL`
-- Novu — primary inquiry notification workflows
-  - Client: raw `fetch` to `https://api.novu.co` (`src/lib/server/notification-provider.ts`)
-  - Route: `src/routes/api.notification.novu-dispatch.ts`
+- Resend — transactional email dispatch + delivery webhooks
+  - SDK/Client: raw `fetch` to `https://api.resend.com` (`src/lib/server/notification-provider.ts`)
+  - Auth: `RESEND_API_KEY`, `RESEND_FROM`, optional `RESEND_API_BASE_URL`, `RESEND_WEBHOOK_SECRET`
+  - Routes: `POST /api/notification/resend-dispatch` (`src/routes/api.notification.resend-dispatch.ts`), `POST /api/notification/resend-webhook` (`src/routes/api.notification.resend-webhook.ts`)
+- Novu — workflow-triggered inquiry notifications (owner/customer)
+  - SDK/Client: raw `fetch` to `https://api.novu.co` (same notification-provider module)
   - Auth: `NOVU_SECRET_KEY`, `NOVU_WORKFLOW_INQUIRY_OWNER`, `NOVU_WORKFLOW_INQUIRY_CUSTOMER`, optional `NOVU_API_BASE_URL`
-- Notification outbox HMAC — `AE_NOTIFICATION_OUTBOX_SECRET` (dispatch admission)
+  - Route: `POST /api/notification/novu-dispatch` (`src/routes/api.notification.novu-dispatch.ts`)
+- Shared: `AE_NOTIFICATION_OUTBOX_SECRET` for Convex outbox system writes
 
-**Maps (optional client embed):**
-- Google Maps — generative location-map artifacts
-  - Client: `VITE_GOOGLE_MAPS_API_KEY` in `src/components/ae/artifacts/AeGenerativeMap.tsx`
+**Billing / Payments (configured; evidence-gated):**
+- Stripe — secrets and host allowlist declared for PSP calls; no `stripe` npm SDK in `package.json`
+  - Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; production host allowlist documented as `api.stripe.com` in `.env.example`
+  - Admission name checks in `src/modules/security/source-write-admission.ts`
+  - Provider smoke: `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`
+  - Public paid-activation claims remain copy-gated (`src/lib/ui/contract-scans.ts`); do not imply live wallet/checkout in public surfaces
+- Autumn (useautumn) — billing product-ops layer secrets
+  - Env: `AUTUMN_SECRET_KEY`, `AUTUMN_WEBHOOK_SECRET`, `AUTUMN_ENVIRONMENT`, `AUTUMN_PROJECT_ID`, `AUTUMN_API_BASE_URL` (default `https://api.useautumn.com`), `AUTUMN_API_VERSION`, `AUTUMN_PORTAL_RETURN_BASE_URL`
+  - Same source-write secret name allowlist as Stripe
 
-**Agent identity / HTTP signatures:**
-- Web Bot Auth — verify agent HTTP message signatures
-  - Libraries: `web-bot-auth`, `http-message-sig`, `@noble/hashes`
-  - Implementation: `src/modules/routing-kernel/caller-identity.ts`
-  - Public JWKS directory: `src/routes/[.]well-known/http-message-signatures-directory.ts`
-  - Auth/config: `AE_WBA_SIGNATURE_AGENT_ALLOWLIST`, `AE_WBA_DIRECTORY_PUBLIC_JWK_JSON`, `AE_AGENT_PUBLIC_INQUIRY_ADMISSION_PRINCIPALS`
+**Agentic payment rails (capability transport):**
+- x402 (HTTP 402) + EVM exact scheme — payment signature for admitted route transport adapters
+  - Packages: `@x402/core`, `@x402/evm`, `@x402/extensions`, `viem`
+  - Implementation: `src/modules/capability-supply/internal/x402-payment-signer.ts`, runtime in `src/modules/capability-supply/route-transport-runtime.ts`
+  - Not a public customer checkout; used when a binding adapter is `x402-fetch:v2`
 
-**Capability-supply transport payments (route runtime):**
-- x402 (EVM exact scheme) — payment signature headers for protected route calls
-  - Libraries: `@x402/core`, `@x402/evm`, `@x402/extensions`, `viem`
-  - Implementation: `src/modules/capability-supply/internal/x402-payment-signer.ts`
-  - Note: used for capability-supply transport signing; not a public checkout/wallet product surface
+**Maps:**
+- Google Maps Embed — generative location-map artifacts
+  - Client: iframe/embed via `VITE_GOOGLE_MAPS_API_KEY` (`src/components/ae/artifacts/AeGenerativeMap.tsx`)
+  - CSP allows `maps.googleapis.com` / `maps.google.com` (`src/lib/http/security-headers.ts`)
 
-**Shipping quote adapters (provider integrations module):**
-- Shippo — `https://api.goshippo.com` via `createShippoQuoteAdapter` in `src/modules/provider-integrations/shipping/server.ts`
-- EasyPost — `https://api.easypost.com/v2` via `createEasyPostQuoteAdapter` in same file
-  - Auth: API keys passed into adapters (not listed as top-level `.env.example` names)
+**Agent identity (Web Bot Auth):**
+- web-bot-auth verification + JWKS directory fetch from Signature-Agent origins
+  - Packages: `web-bot-auth`, `@noble/hashes`
+  - Code: `src/modules/routing-kernel/caller-identity.ts`
+  - Public JWKS: `GET /.well-known/http-message-signatures-directory` (`src/routes/[.]well-known/http-message-signatures-directory.ts`)
+  - Env: `AE_WBA_SIGNATURE_AGENT_ALLOWLIST`, `AE_WBA_DIRECTORY_PUBLIC_JWK_JSON`, `AE_AGENT_PUBLIC_INQUIRY_ADMISSION_PRINCIPALS`, optional dev smoke keys
 
-**Routing edge:**
-- Cloudflare Workers — public routing edge example
-  - Code: `examples/routing-edge/` (`wrangler.jsonc`, Worker entry `examples/routing-edge/src/index.ts`)
-  - Public base URL env: `AE_ROUTING_PUBLIC_BASE_URL`
-  - Secrets: `AE_EDGE_ORIGIN_HMAC_KEY` (Worker secret)
+**Edge / routing example:**
+- Cloudflare Workers — HMAC-gated edge proxy to Convex HTTP origin
+  - Config: `examples/routing-edge/wrangler.jsonc`
+  - Secret: `AE_EDGE_ORIGIN_HMAC_KEY`; vars `AE_ROUTING_ORIGIN`, `AE_EDGE_ENVIRONMENT`
+  - App pointer: `AE_ROUTING_PUBLIC_BASE_URL` in `.env.example`
 
-**Billing placeholders (env reserved; no active Stripe/Autumn module under `src/modules/` at this commit):**
-- Stripe / Autumn secret names appear in `.env.example` and are treated as forbidden reuse targets in `src/modules/security/source-write-admission.ts` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `AUTUMN_SECRET_KEY`, `AUTUMN_WEBHOOK_SECRET`)
-- Deploy-smoke specs under `tests/deploy-smoke/` reference historical Stripe evidence IDs; do not treat as a live SDK integration (no `stripe` npm package)
+**Provider host policy:**
+- Shared resolver: `src/modules/security/provider-api-base-url.ts` — production HTTPS + allowlisted hosts only; non-prod may use localhost overrides
 
 ## Data Storage
 
 **Databases:**
-- Convex
-  - Connection: `VITE_CONVEX_URL`
-  - Client: Convex React/HTTP clients; schema composed in `convex/schema.ts` from module fragments
-  - Tables owned per module under `src/modules/*/internal/*schema*.ts` and Convex stores
+- Convex (document/reactive backend)
+  - Connection: `VITE_CONVEX_URL` (client); deploy key `CONVEX_DEPLOY_KEY` (CI/release)
+  - Client: Convex generated API under `convex/_generated/`; schema composed in `convex/schema.ts` from module table fragments
+  - No traditional SQL ORM
 
 **File Storage:**
-- Local filesystem only for build artifacts, eval output (`output/`), Playwright reports — no S3/GCS SDK detected
+- Local filesystem / Vercel static assets for brand and built output
+- No dedicated object-store SDK (S3/R2/Blob) detected in application source
 
 **Caching:**
-- None as a dedicated external cache service
-- Meilisearch acts as a search mirror, not a general cache
-- In-process / Convex document state for application data
+- Meilisearch as search mirror (not a general cache)
+- No Redis/Upstash client detected
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- Clerk
-  - Implementation: request middleware `clerkMiddleware()` in `src/start.ts`; UI `ClerkProvider` in `src/routes/__root.tsx`
-  - Operator/owner sessions via Clerk; Convex authenticated calls use Clerk JWT template through `src/lib/server/convex-source.ts`
-  - Customer Request agent API: Clerk API keys with scope check in `src/lib/server/customer-request-agent-auth.ts` (`acceptsToken: 'api_key'`)
-  - Local e2e bypass: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` (`src/lib/server/local-e2e-bypass.ts`, Playwright webServer env)
+- Clerk (primary human auth)
+  - Implementation: request middleware in `src/start.ts`; Convex JWT validation via `CLERK_JWT_ISSUER_DOMAIN` in `convex/auth.config.ts`
+  - Customer Request agents: Clerk API keys via `clerkClient().apiKeys` (`src/lib/server/customer-request-agent-auth.ts`, `src/modules/customer-request/agent-access.functions.ts`)
+  - Local e2e bypass: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` / related helpers in `src/lib/server/local-e2e-bypass.ts`
 
-**Additional admission:**
-- Source-write admission middleware — HMAC/HKDF keyed families (`AE_SOURCE_WRITE_*`) in `src/modules/security/source-write-admission.ts`, wired in `src/start.ts`
-- CSRF middleware for server functions (`createCsrfMiddleware` in `src/start.ts`)
+**Machine / write admission:**
+- Source-write HMAC envelopes (`AE_SOURCE_WRITE_SECRET` + per-family keys) — `src/modules/security/source-write-admission.ts`, middleware in `src/start.ts`
+- Web Bot Auth for signed agent attribution (identity ≠ write authority)
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- Sentry
-  - Client: `src/lib/observability/sentry.client.ts` (`@sentry/react`)
-  - Server: `src/lib/observability/sentry.server.ts` (`@sentry/node`), initialized from `src/start.ts`
-  - Auth/config: `VITE_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, upload via `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN`
+- Sentry — `@sentry/react` client (`src/lib/observability/sentry.client.ts`), `@sentry/node` server (`src/lib/observability/sentry.server.ts`), bootstrapped from `src/start.ts` middleware
+  - Env: `VITE_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`
 
 **Product analytics:**
-- PostHog
-  - Client: `src/lib/observability/posthog.client.ts` (`posthog-js`)
-  - Server: `src/lib/observability/posthog.server.ts` (`posthog-node`)
-  - Funnel API: `src/routes/api.observability.funnel.ts`, `src/modules/observability/`
-  - Auth/config: `VITE_POSTHOG_KEY`, `POSTHOG_KEY`, `VITE_POSTHOG_HOST` / `POSTHOG_HOST` (default `https://us.i.posthog.com`), optional app URLs
-  - Kill switches: `VITE_AE_DISABLE_OBSERVABILITY`, `AE_DISABLE_PUBLIC_FUNNEL_SOURCE_SYNC`
+- PostHog — `posthog-js` client (`src/lib/observability/posthog.client.ts`), `posthog-node` server (`src/lib/observability/posthog.server.ts`)
+  - Env: `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, `POSTHOG_KEY`, `POSTHOG_HOST`, optional app URLs
+  - Kill switch: `VITE_AE_DISABLE_OBSERVABILITY` / `AE_DISABLE_OBSERVABILITY`
+  - Funnel sync brake: `AE_DISABLE_PUBLIC_FUNNEL_SOURCE_SYNC`
+  - HTTP: `src/routes/api.observability.funnel.ts`
 
 **Logs:**
-- Server exceptions captured via Sentry isolation scope in `src/start.ts`
-- Cloudflare Worker observability enabled in `examples/routing-edge/wrangler.jsonc` (logs + sampled traces)
-- No dedicated log aggregation SDK (Datadog/etc.) detected
+- Cloudflare Worker observability (logs/traces) enabled in `examples/routing-edge/wrangler.jsonc`
+- Application logging primarily via structured results + Sentry exceptions (no Datadog/LogDrain SDK detected)
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Vercel — primary app deploy (Nitro `preset: 'vercel'`, Node `nodejs20.x` in `vite.config.ts`)
-- Convex Cloud — backend deploy in release workflow
-- Cloudflare Workers — optional routing edge (`examples/routing-edge/`)
+- Vercel — production app (`agentic-economy-phi.vercel.app`); Nitro `vercel` preset with Node serverless entry
+- Convex Cloud — schema/functions deploy in release gate
+- Cloudflare — optional routing-edge Worker
 
 **CI Pipeline:**
-- GitHub Actions — `.github/workflows/kernel-release-gate.yml`
-  - `source-proof`: Node 22, `npm ci`, `npm run test:release:source`
-  - `hosted-proof` (main only): Vercel deploy + Convex deploy + production Customer Request smoke/readback
-- GitHub Actions — `.github/workflows/react-doctor.yml` (React Doctor)
+- GitHub Actions
+  - `.github/workflows/kernel-release-gate.yml` — `npm run test:release:source` on PR/main; on main: Vercel git-source deploy + Convex deploy + customer-request lifecycle readback
+  - `.github/workflows/react-doctor.yml` — React health checks
+- Release tooling: `tools/release/deploy-customer-request-git-source.ts` (Vercel API `https://api.vercel.com/v13/deployments`), smoke scripts under `tools/release/`, `tools/dev/`
 
 ## Environment Configuration
 
-**Required env vars (critical families — names only; see `.env.example`):**
+**Required env vars (critical families — see `.env.example` for full list):**
 - Clerk: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`
-- Convex: `VITE_CONVEX_URL`
-- Canonical URL: `AE_CANONICAL_BASE_URL`, `AE_CANONICAL_HOST_ALLOWLIST`
+- Convex: `VITE_CONVEX_URL` (+ Convex dashboard secrets for deploy/signing)
 - Source-write: `AE_SOURCE_WRITE_SECRET` and/or per-family `AE_SOURCE_WRITE_KEY_*`
-- Notifications (when dispatch enabled): `RESEND_*`, `NOVU_*`, `AE_NOTIFICATION_OUTBOX_SECRET`
-- LLM (answer tool-use): `OPENROUTER_API_KEY`, optional `AE_LLM_MODEL`, `AE_ANSWER_EVAL_PASSED`
-- Search mirror (when not convex-only): `MEILISEARCH_HOST`, `MEILISEARCH_ADMIN_KEY`, `AE_SEARCH_BACKEND`
-- Observability (optional): `VITE_SENTRY_DSN` / `SENTRY_DSN`, `VITE_POSTHOG_KEY` / `POSTHOG_KEY`
-- WBA (production agent admission): `AE_WBA_*`, `AE_AGENT_PUBLIC_INQUIRY_ADMISSION_PRINCIPALS`
+- Canonical URL: `AE_CANONICAL_BASE_URL`, `AE_CANONICAL_HOST_ALLOWLIST`
+- Notifications (when enabled): Resend/Novu/outbox secrets above
+- Observability (when enabled): Sentry/PostHog keys
+- Optional: OpenRouter, Meilisearch, Stripe/Autumn, Google Maps, WBA allowlist/JWKS
 
 **Secrets location:**
-- Local: `.env.local`, `.env.development.local` (gitignored; never commit)
-- Template: `.env.example`
-- CI/production: GitHub Actions `secrets.*` and Vercel/Convex project env (see `kernel-release-gate.yml`)
-- Cloudflare Worker secrets via Wrangler (`AE_EDGE_ORIGIN_HMAC_KEY`)
+- Local: `.env.local` / `.env.development.local` (gitignored)
+- Template only: `.env.example`
+- CI/production: GitHub Actions secrets / environments; Vercel project env; Convex production env (`npx convex env get/set`)
+- Never commit credential files or quote secret values in docs
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- `POST /api/notification/resend-webhook` — Resend delivery events (`src/routes/api.notification.resend-webhook.ts`); verifies signature via `verifyResendWebhook` in `src/lib/server/notification-provider.ts`, then Convex ingest mutation
-- Stripe/Autumn webhook routes — not present as TanStack routes at this commit; secrets reserved in env/admission only
+- `POST /api/notification/resend-webhook` — Resend delivery events; HMAC verify then Convex `notificationOutbox:ingestNotificationWebhookEvent` (`src/routes/api.notification.resend-webhook.ts`)
+- Stripe/Autumn webhook secrets are configured in env for admission readiness; dedicated live webhook route modules for billing are not present as active `src/routes/api.*.ts` files in this revision (prefer notification + source-write patterns; do not invent endpoints)
 
 **Outgoing:**
-- Resend send API — `src/routes/api.notification.resend-dispatch.ts`
-- Novu workflow trigger + message readback — `src/routes/api.notification.novu-dispatch.ts`
-- OpenRouter chat/completions — answer and customer-request paths
-- Meilisearch index/search/task APIs — `src/modules/registry/internal/catalog-search-port.ts`
-- Clerk Backend API — owner delivery address lookup and API key verification (`src/lib/server/notification-provider.ts`, `src/lib/server/customer-request-agent-auth.ts`)
-- Shippo / EasyPost quote APIs — `src/modules/provider-integrations/shipping/server.ts`
-- PostHog / Sentry — telemetry from client and server observability modules
-- Convex HTTP sandbox providers — mirrored on app routes under `/api/sandbox/providers/*` and Convex `http.ts`
+- Resend send API / Novu trigger + transaction message readback (`src/lib/server/notification-provider.ts`)
+- OpenRouter chat completions
+- Meilisearch index/search/task APIs
+- Clerk user/API-key APIs
+- Capability route transport HTTP/MCP/x402 calls to provider endpoints (runtime in `src/modules/capability-supply/route-transport-runtime.ts`)
+- Vercel Deploy API from release tooling (`tools/release/deploy-customer-request-git-source.ts`)
+- Optional Cloudflare edge → Convex HTTP origin
 
-**Public machine surfaces (app, not third-party):**
-- Customer Request agent API under `/api/v1/requests*` (`src/routes/api.v1.requests*.ts`, handlers in `src/lib/server/customer-request-agent-api`)
-- Registry HTTP: `/api/businesses`, `/api/businesses/search`, `/api/businesses/$slug`
-- Discovery/docs: `/llms.txt`, `/SKILL.md`, `/.well-known/http-message-signatures-directory`
-- Note: `GET/POST /api/agent/tools` is documented in product/AGENTS guidance and ADRs but has no matching route file under `src/routes/` at commit `19e988f5`; current assistant-facing write path is action/`agentJson` surfaces plus Customer Request API
+**Machine-readable AE surfaces (not third-party, but integration-facing):**
+- `GET /llms.txt`, `GET /SKILL.md`, `GET /api/businesses*`, Customer Request HTTP under `/api/requests*` and `/api/v1/requests*`
+- Note: historical `/api/agent/tools` door is documented in planning/AGENTS material; no `src/routes/api.agent.tools.ts` in this mapped revision — use live routes above and `src/modules/actions/index.ts` action registry
 
 ---
 
 *Integration audit: 2026-07-18*
+*last_mapped_commit: 5ea44454*
