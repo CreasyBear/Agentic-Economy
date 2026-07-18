@@ -2,24 +2,29 @@ import type { UserIdentity } from 'convex/server'
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
-import { readActiveAdminMembership, resolveBusinessActor } from './authz'
+import { resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument, RuntimeQuery } from './source_state'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { brandNonEmpty } from '../src/modules/common/ids'
-import { stableHash } from '../src/modules/common/stable-hash'
-import type { RedactedPayload } from '../src/modules/observability/public'
 import {
   mintInquiryCustomerAccessKey,
   resolveInquiryCustomerAccessKeyring,
   type InquiryCustomerAccessGrant,
 } from '../src/modules/inquiries/public'
 import {
+  ingestWebhook as ingestWebhookMachine,
+  markNoRepair as markNoRepairMachine,
+  parseRedactedPayload,
+  retryDispatch as retryDispatchMachine,
+  serializeAttempt,
+  serializeDispatch,
+  serializeReadback,
+} from '../src/modules/notification-outbox/operator'
+import {
   dispatchNotificationOutbox as dispatchNotificationOutboxModule,
   enqueueInquiryNotification as enqueueInquiryNotificationModule,
-  ingestNotificationWebhook as ingestNotificationWebhookModule,
-  markNotificationNoRepair as markNotificationNoRepairModule,
   NotificationAttemptStatusValues,
   NotificationDispatchStatusValues,
   NotificationProviderFamilyValues,
@@ -27,23 +32,21 @@ import {
   NotificationSignatureStatusValues,
   NotificationWebhookEventStatusValues,
   readNotificationDispatchReadback as readNotificationDispatchReadbackModule,
-  retryNotificationDispatch as retryNotificationDispatchModule,
 } from '../src/modules/notification-outbox/public'
 import type {
   DispatchNotificationOutboxResult,
   EnqueueInquiryNotificationResult,
   IngestNotificationWebhookResult,
   MarkNotificationNoRepairResult,
-  NotificationDispatchAttemptRecord,
-  NotificationDispatchReadback,
-  NotificationDispatchRecord,
-  NotificationOperatorAuthority,
   NotificationOutboxSourceState,
   NotificationProviderAdapter,
   NotificationProviderTriggerResult,
-  NotificationWebhookEventRecord,
   RetryNotificationDispatchResult,
 } from '../src/modules/notification-outbox/public'
+import {
+  notificationOutboxOperatorPorts,
+  recordNotificationOperationReconstruction,
+} from './notificationOutboxOperatorPorts'
 import { notificationOutboxSourceStatePorts } from './notificationOutboxSourceStatePorts'
 import { toDispatchRecord } from './notificationOutboxPersistence'
 
@@ -428,44 +431,21 @@ export const ingestNotificationWebhookEvent = mutationGeneric({
     if (access.kind === 'denied') {
       return notificationRuntimeError('notification_system_denied', access.reason)
     }
-
-    const db = runtimeDb(ctx.db)
-    const state = await notificationOutboxSourceStatePorts(db).load()
-    const resolvedDispatchId = args.dispatchId ?? resolveWebhookDispatchId(state, args)
-    const result = ingestNotificationWebhookModule(state, {
-      providerFamily: args.providerFamily,
-      providerEventId: args.providerEventId,
-      logicalObjectKey: args.logicalObjectKey,
-      eventType: args.eventType,
-      signatureStatus: args.signatureStatus,
-      payloadHash: brandNonEmpty(args.payloadHash, 'SourceHash'),
-      redactedPayload: parseRedactedPayload(args.redactedPayloadJson),
-      ...(resolvedDispatchId === undefined ? {} : { dispatchId: brandNonEmpty(resolvedDispatchId, 'NotificationDispatchId') }),
-      operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
-      correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
-      receivedAt: Date.now(),
-    })
-
-    if (result.kind === 'error') {
-      return notificationError(result)
-    }
-
-    await notificationOutboxSourceStatePorts(db).persist(result.state)
-    await recordNotificationOperationReconstruction(db, {
-      code: result.code,
-      webhookEvent: result.webhookEvent,
-      ...(result.dispatch === undefined ? {} : { dispatch: result.dispatch }),
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-      actorKind: 'system',
-      actorRef: 'system:notification-webhook',
-    })
-    return {
-      kind: 'ok' as const,
-      code: result.code,
-      webhookEvent: serializeWebhookEvent(result.webhookEvent),
-      ...(result.dispatch === undefined ? {} : { dispatch: serializeDispatch(result.dispatch) }),
-    }
+    return await ingestWebhookMachine(
+      {
+        providerFamily: args.providerFamily,
+        providerEventId: args.providerEventId,
+        logicalObjectKey: args.logicalObjectKey,
+        eventType: args.eventType,
+        signatureStatus: args.signatureStatus,
+        payloadHash: args.payloadHash,
+        redactedPayloadJson: args.redactedPayloadJson,
+        ...(args.dispatchId === undefined ? {} : { dispatchId: args.dispatchId }),
+        operationKey: args.operationKey,
+        correlationId: args.correlationId,
+      },
+      notificationOutboxOperatorPorts(ctx),
+    )
   },
 })
 
@@ -571,39 +551,15 @@ export const retryNotificationDispatchAsOperator = mutationGeneric({
     if (sourceWrite.kind === 'rejected') {
       return notificationRuntimeError('notification_csrf_rejected', sourceWrite.reason)
     }
-
-    const db = runtimeDb(ctx.db)
-    const [state, authority] = await Promise.all([
-      notificationOutboxSourceStatePorts(db).load(),
-      readCurrentOperatorAuthority(ctx),
-    ])
-    const result = retryNotificationDispatchModule(state, {
-      ...(authority === undefined ? {} : { authority }),
-      dispatchId: brandNonEmpty(args.dispatchId, 'NotificationDispatchId'),
-      operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
-      correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
-      retryAfter: args.retryAfter,
-      now: Date.now(),
-    })
-
-    if (result.kind === 'error') {
-      return notificationError(result)
-    }
-
-    await notificationOutboxSourceStatePorts(db).persist(result.state)
-    await recordNotificationOperationReconstruction(db, {
-      code: result.code,
-      dispatch: result.dispatch,
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-      actorKind: 'admin',
-      actorRef: authority?.actorRef ?? 'admin:missing',
-    })
-    return {
-      kind: 'ok' as const,
-      code: result.code,
-      dispatch: serializeDispatch(result.dispatch),
-    }
+    return await retryDispatchMachine(
+      {
+        dispatchId: args.dispatchId,
+        retryAfter: args.retryAfter,
+        operationKey: args.operationKey,
+        correlationId: args.correlationId,
+      },
+      notificationOutboxOperatorPorts(ctx),
+    )
   },
 })
 
@@ -621,39 +577,15 @@ export const markNotificationDispatchNoRepairAsOperator = mutationGeneric({
     if (sourceWrite.kind === 'rejected') {
       return notificationRuntimeError('notification_csrf_rejected', sourceWrite.reason)
     }
-
-    const db = runtimeDb(ctx.db)
-    const [state, authority] = await Promise.all([
-      notificationOutboxSourceStatePorts(db).load(),
-      readCurrentOperatorAuthority(ctx),
-    ])
-    const result = markNotificationNoRepairModule(state, {
-      ...(authority === undefined ? {} : { authority }),
-      dispatchId: brandNonEmpty(args.dispatchId, 'NotificationDispatchId'),
-      reason: args.reason,
-      operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
-      correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
-      now: Date.now(),
-    })
-
-    if (result.kind === 'error') {
-      return notificationError(result)
-    }
-
-    await notificationOutboxSourceStatePorts(db).persist(result.state)
-    await recordNotificationOperationReconstruction(db, {
-      code: result.code,
-      dispatch: result.dispatch,
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-      actorKind: 'admin',
-      actorRef: authority?.actorRef ?? 'admin:missing',
-    })
-    return {
-      kind: 'ok' as const,
-      code: result.code,
-      dispatch: serializeDispatch(result.dispatch),
-    }
+    return await markNoRepairMachine(
+      {
+        dispatchId: args.dispatchId,
+        reason: args.reason,
+        operationKey: args.operationKey,
+        correlationId: args.correlationId,
+      },
+      notificationOutboxOperatorPorts(ctx),
+    )
   },
 })
 
@@ -674,23 +606,6 @@ async function readCurrentOwner(ctx: RuntimeCtx): Promise<
   return owner === null ? { kind: 'denied', reason: 'owner_not_found' } : { kind: 'allowed', ownerId: owner._id }
 }
 
-async function readCurrentOperatorAuthority(ctx: RuntimeCtx): Promise<NotificationOperatorAuthority | undefined> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (identity === null) {
-    return undefined
-  }
-
-  const membership = await readActiveAdminMembership(runtimeDb(ctx.db), identity)
-  if (membership === undefined) {
-    return undefined
-  }
-
-  return {
-    role: membership.role,
-    actorRef: `admin:${membership.clerkUserId}`,
-  }
-}
-
 async function ownerOwnsDispatchBusiness(db: RuntimeDb, ownerId: string, dispatch: RuntimeDocument): Promise<boolean> {
   const business = await db.get(stringField(dispatch, 'businessId'))
   return business !== null && stringField(business, 'ownerId') === ownerId
@@ -701,343 +616,6 @@ async function readDispatchDocument(db: RuntimeDb, dispatchId: string): Promise<
     .query('notificationDispatches')
     .withIndex('by_dispatchId', (query) => query.eq('dispatchId', dispatchId))
     .unique()
-}
-
-type NotificationReconstructionInput = {
-  code: string
-  dispatch?: NotificationDispatchRecord
-  attempt?: NotificationDispatchAttemptRecord
-  webhookEvent?: NotificationWebhookEventRecord
-  operationKey: string
-  correlationId: string
-  actorKind: 'admin' | 'system'
-  actorRef: string
-}
-
-async function recordNotificationOperationReconstruction(db: RuntimeDb, input: NotificationReconstructionInput): Promise<void> {
-  const targetRef = input.webhookEvent?.webhookEventId ?? input.dispatch?.dispatchId ?? 'notification:unknown'
-  const businessId = input.dispatch?.businessId
-  const requestHash = stableHash({
-    code: input.code,
-    ...(input.dispatch === undefined ? {} : { dispatchId: input.dispatch.dispatchId }),
-    ...(input.attempt === undefined ? {} : { attemptId: input.attempt.attemptId }),
-    ...(input.webhookEvent === undefined ? {} : { webhookEventId: input.webhookEvent.webhookEventId }),
-  })
-  const effectRefs = [
-    `result:${input.code}`,
-    input.dispatch === undefined ? undefined : `dispatch:${input.dispatch.dispatchId}`,
-    input.dispatch === undefined ? undefined : `inquiryThread:${input.dispatch.inquiryThreadId}`,
-    input.dispatch === undefined ? undefined : `inquiryMessage:${input.dispatch.inquiryMessageId}`,
-    input.attempt === undefined ? undefined : `attempt:${input.attempt.attemptId}`,
-    input.webhookEvent === undefined ? undefined : `webhook:${input.webhookEvent.webhookEventId}`,
-  ].filter(isString)
-
-  await upsertByFields(db, 'operationKeys', ['scope', 'key'], {
-    scope: 'notification',
-    actorKind: input.actorKind,
-    actorRef: input.actorRef,
-    operationName: notificationOperationName(input.code),
-    key: input.operationKey,
-    requestHash,
-    sourceHash: targetRef,
-    status: 'succeeded',
-    resultHash: stableHash({ code: input.code, targetRef }),
-    effectRefs,
-    createdAt: notificationReconstructionTime(input),
-    updatedAt: notificationReconstructionTime(input),
-  })
-
-  const reasonCode = notificationReasonCode(input)
-  await upsertNotificationAuditEvent(db, {
-    eventType: notificationAuditEventType(input),
-    targetType: input.webhookEvent === undefined ? 'notification' : 'notification_provider_event',
-    actorKind: input.actorKind,
-    actorRef: input.actorRef,
-    targetRef,
-    ...(businessId === undefined ? {} : { businessId }),
-    operationKey: input.operationKey,
-    correlationId: input.correlationId,
-    beforeState: notificationBeforeState(input),
-    afterState: notificationAfterState(input),
-    ...(reasonCode === undefined ? {} : { reasonCode }),
-    redactedPayload: notificationReconstructionPayload(input),
-    createdAt: notificationReconstructionTime(input),
-  })
-
-  await upsertNotificationFunnelEvent(db, input)
-}
-
-async function upsertNotificationAuditEvent(
-  db: RuntimeDb,
-  input: {
-    eventType: string
-    targetType: 'notification' | 'notification_provider_event'
-    actorKind: 'admin' | 'system'
-    actorRef: string
-    targetRef: string
-    businessId?: string
-    operationKey: string
-    correlationId: string
-    beforeState: string
-    afterState: string
-    reasonCode?: string
-    redactedPayload: RedactedPayload
-    createdAt: number
-  }
-): Promise<void> {
-  await upsertByFields(db, 'auditEvents', ['eventId'], {
-    eventId: `audit:${stableHash({
-      eventType: input.eventType,
-      operationKey: input.operationKey,
-      targetRef: input.targetRef,
-    })}`,
-    eventType: input.eventType,
-    actorKind: input.actorKind,
-    actorRef: input.actorRef,
-    ...(input.businessId === undefined ? {} : { businessId: input.businessId }),
-    targetType: input.targetType,
-    targetRef: input.targetRef,
-    beforeState: input.beforeState,
-    afterState: input.afterState,
-    ...(input.reasonCode === undefined ? {} : { reasonCode: input.reasonCode }),
-    idempotencyKey: input.operationKey,
-    correlationId: input.correlationId,
-    evidenceRefs: [],
-    redactedPayloadJson: JSON.stringify(input.redactedPayload),
-    payloadHash: stableHash(input.redactedPayload),
-    createdAt: input.createdAt,
-  })
-}
-
-async function upsertNotificationFunnelEvent(db: RuntimeDb, input: NotificationReconstructionInput): Promise<void> {
-  const eventType = notificationFunnelEventType(input)
-  if (eventType === undefined || input.dispatch === undefined) {
-    return
-  }
-
-  await upsertByFields(db, 'funnelEvents', ['eventType', 'businessId', 'correlationId', 'createdAt'], {
-    eventType,
-    source: 'notification-outbox',
-    stage: 'published',
-    pseudonymousSessionId: `notification:${input.dispatch.recipientRole}`,
-    businessId: input.dispatch.businessId,
-    redactedPayloadJson: JSON.stringify({
-      dispatchId: input.dispatch.dispatchId,
-      providerFamily: input.dispatch.providerFamily,
-      status: input.dispatch.status,
-    }),
-    consentFlag: true,
-    correlationId: input.correlationId,
-    createdAt: notificationReconstructionTime(input),
-  })
-}
-
-function resolveWebhookDispatchId(state: NotificationOutboxSourceState, args: { logicalObjectKey: string; providerEventId: string }): string | undefined {
-  return state.dispatches.find((dispatch) =>
-    dispatch.dispatchId === args.logicalObjectKey ||
-    dispatch.providerIdempotencyKey === args.logicalObjectKey ||
-    dispatch.resendMessageId === args.logicalObjectKey ||
-    dispatch.novuTransactionId === args.logicalObjectKey ||
-    dispatch.novuWorkflowId === args.logicalObjectKey ||
-    dispatch.novuMessageId === args.logicalObjectKey ||
-    dispatch.novuSubscriberId === args.logicalObjectKey ||
-    dispatch.dispatchId === args.providerEventId ||
-    dispatch.providerIdempotencyKey === args.providerEventId
-  )?.dispatchId
-}
-
-function notificationOperationName(code: string): string {
-  if (code === 'notification_queued' || code === 'notification_enqueue_replayed') {
-    return 'enqueueInquiryNotification'
-  }
-  if (code.startsWith('notification_webhook_')) {
-    return 'ingestNotificationWebhook'
-  }
-  if (code === 'notification_retry_scheduled') {
-    return 'retryNotificationDispatch'
-  }
-  if (code === 'notification_no_repair_marked') {
-    return 'markNotificationNoRepair'
-  }
-  return 'dispatchNotificationOutbox'
-}
-
-function notificationAuditEventType(input: NotificationReconstructionInput): string {
-  if (input.code === 'notification_queued' || input.code === 'notification_enqueue_replayed') return 'notification.queued'
-  if (input.code === 'notification_sent') return 'notification.sent'
-  if (input.code === 'notification_provider_missing' || input.code === 'notification_orchestrator_missing') return 'notification.failed'
-  if (input.code === 'notification_dispatch_failed') return 'notification.failed'
-  if (input.code === 'notification_retry_scheduled') return 'notification.retry_scheduled'
-  if (input.code === 'notification_no_repair_marked') return 'notification.no_repair_marked'
-  if (input.code === 'notification_webhook_duplicate') return 'notification.webhook_duplicate'
-  if (input.code === 'notification_webhook_rejected') return 'notification.webhook_rejected'
-  if (input.code === 'notification_webhook_held') return 'notification.webhook_held'
-  if (input.code === 'notification_webhook_received') return 'notification.webhook_received'
-  return 'notification.triggered'
-}
-
-function notificationBeforeState(input: NotificationReconstructionInput): string {
-  if (input.code === 'notification_queued' || input.code === 'notification_enqueue_replayed') return 'none'
-  if (input.webhookEvent !== undefined) return 'provider_event_received'
-  return 'queued'
-}
-
-function notificationAfterState(input: NotificationReconstructionInput): string {
-  if (input.webhookEvent !== undefined) return input.webhookEvent.status
-  return input.dispatch?.status ?? input.code
-}
-
-function notificationReasonCode(input: NotificationReconstructionInput): string | undefined {
-  return input.webhookEvent?.reason ?? input.dispatch?.lastRedactedError ?? input.attempt?.redactedError
-}
-
-function notificationReconstructionPayload(input: NotificationReconstructionInput): RedactedPayload {
-  return {
-    code: input.code,
-    ...(input.dispatch === undefined
-      ? {}
-      : {
-          dispatchId: input.dispatch.dispatchId,
-          providerFamily: input.dispatch.providerFamily,
-          status: input.dispatch.status,
-          payloadHash: input.dispatch.payloadHash,
-          inquiryThreadId: input.dispatch.inquiryThreadId,
-          inquiryMessageId: input.dispatch.inquiryMessageId,
-        }),
-    ...(input.attempt === undefined
-      ? {}
-      : {
-          attemptId: input.attempt.attemptId,
-          attemptStatus: input.attempt.status,
-          requestPayloadHash: input.attempt.requestPayloadHash,
-        }),
-    ...(input.webhookEvent === undefined
-      ? {}
-      : {
-          webhookEventId: input.webhookEvent.webhookEventId,
-          providerEventId: input.webhookEvent.providerEventId,
-          logicalObjectKey: input.webhookEvent.logicalObjectKey,
-          status: input.webhookEvent.status,
-          signatureStatus: input.webhookEvent.signatureStatus,
-          payloadHash: input.webhookEvent.payloadHash,
-        }),
-  }
-}
-
-function notificationReconstructionTime(input: NotificationReconstructionInput): number {
-  return input.webhookEvent?.receivedAt ?? input.attempt?.completedAt ?? input.attempt?.startedAt ?? input.dispatch?.updatedAt ?? Date.now()
-}
-
-function notificationFunnelEventType(input: NotificationReconstructionInput): 'notification_queued' | 'notification_delivered' | 'notification_failed' | undefined {
-  if (input.code === 'notification_queued') {
-    return 'notification_queued'
-  }
-  const status = input.dispatch?.status
-  if (status === 'delivered' || status === 'sent') {
-    return 'notification_delivered'
-  }
-  if (
-    status === 'failed' ||
-    status === 'provider_missing' ||
-    status === 'orchestrator_missing' ||
-    status === 'bounced' ||
-    status === 'complained' ||
-    status === 'suppressed'
-  ) {
-    return 'notification_failed'
-  }
-  return undefined
-}
-
-async function upsertByFields(
-  db: RuntimeDb,
-  tableName: string,
-  fields: readonly string[],
-  patch: Record<string, unknown>
-): Promise<void> {
-  const existing = (await collect(db, tableName)).find((row) => fields.every((field) => row[field] === patch[field]))
-  if (existing === undefined) {
-    await db.insert(tableName, patch)
-    return
-  }
-
-  await db.patch(existing._id, patch)
-}
-
-async function collect(db: Pick<RuntimeDb, 'query'>, tableName: string): Promise<RuntimeDocument[]> {
-  return db.query(tableName).collect()
-}
-
-function serializeReadback(readback: NotificationDispatchReadback) {
-  return {
-    dispatch: serializeDispatch(readback.dispatch),
-    attempts: readback.attempts.map(serializeAttempt),
-    webhookEvents: readback.webhookEvents.map(serializeWebhookEvent),
-    ownerCanRepair: false as const,
-    operatorNextAction: readback.operatorNextAction,
-  }
-}
-
-function serializeDispatch(dispatch: NotificationDispatchRecord) {
-  return {
-    dispatchId: dispatch.dispatchId,
-    businessId: dispatch.businessId,
-    inquiryThreadId: dispatch.inquiryThreadId,
-    inquiryMessageId: dispatch.inquiryMessageId,
-    recipientRole: dispatch.recipientRole,
-    providerFamily: dispatch.providerFamily,
-    status: dispatch.status,
-    providerIdempotencyKey: dispatch.providerIdempotencyKey,
-    payloadHash: dispatch.payloadHash,
-    ...(dispatch.resendMessageId === undefined ? {} : { resendMessageId: dispatch.resendMessageId }),
-    ...(dispatch.novuTransactionId === undefined ? {} : { novuTransactionId: dispatch.novuTransactionId }),
-    ...(dispatch.novuWorkflowId === undefined ? {} : { novuWorkflowId: dispatch.novuWorkflowId }),
-    ...(dispatch.novuMessageId === undefined ? {} : { novuMessageId: dispatch.novuMessageId }),
-    ...(dispatch.novuSubscriberId === undefined ? {} : { novuSubscriberId: dispatch.novuSubscriberId }),
-    providerMissing: dispatch.providerMissing,
-    orchestratorMissing: dispatch.orchestratorMissing,
-    retryCount: dispatch.retryCount,
-    ...(dispatch.retryAfter === undefined ? {} : { retryAfter: dispatch.retryAfter }),
-    ...(dispatch.lastRedactedError === undefined ? {} : { lastRedactedError: dispatch.lastRedactedError }),
-    operationKey: dispatch.operationKey,
-    correlationId: dispatch.correlationId,
-    createdAt: dispatch.createdAt,
-    updatedAt: dispatch.updatedAt,
-  }
-}
-
-function serializeAttempt(attempt: NotificationDispatchAttemptRecord) {
-  return {
-    attemptId: attempt.attemptId,
-    dispatchId: attempt.dispatchId,
-    providerFamily: attempt.providerFamily,
-    status: attempt.status,
-    providerIdempotencyKey: attempt.providerIdempotencyKey,
-    requestPayloadHash: attempt.requestPayloadHash,
-    ...(attempt.providerResponseHash === undefined ? {} : { providerResponseHash: attempt.providerResponseHash }),
-    ...(attempt.redactedError === undefined ? {} : { redactedError: attempt.redactedError }),
-    ...(attempt.retryAfter === undefined ? {} : { retryAfter: attempt.retryAfter }),
-    startedAt: attempt.startedAt,
-    ...(attempt.completedAt === undefined ? {} : { completedAt: attempt.completedAt }),
-  }
-}
-
-function serializeWebhookEvent(event: NotificationWebhookEventRecord) {
-  return {
-    webhookEventId: event.webhookEventId,
-    providerFamily: event.providerFamily,
-    providerEventId: event.providerEventId,
-    logicalObjectKey: event.logicalObjectKey,
-    ...(event.dispatchId === undefined ? {} : { dispatchId: event.dispatchId }),
-    status: event.status,
-    eventType: event.eventType,
-    signatureStatus: event.signatureStatus,
-    payloadHash: event.payloadHash,
-    ...(event.reason === undefined ? {} : { reason: event.reason }),
-    operationKey: event.operationKey,
-    correlationId: event.correlationId,
-    receivedAt: event.receivedAt,
-  }
 }
 
 function notificationError(
@@ -1216,56 +794,9 @@ function requireNotificationSystemAccess(systemKey: string): { kind: 'allowed' }
   return { kind: 'allowed' }
 }
 
-function parseRedactedPayload(value: string): RedactedPayload {
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return isRedactedPayload(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function isRedactedPayload(value: unknown): value is RedactedPayload {
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return true
-  }
-  if (Array.isArray(value)) {
-    return value.every(isRedactedPayload)
-  }
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  return Object.values(value).every(isRedactedPayload)
-}
-
-function providerFamily(row: RuntimeDocument) {
-  const value = stringField(row, 'providerFamily')
-  return value === 'novu' ? 'novu' : 'resend'
-}
-
-
-function attemptStatus(row: RuntimeDocument) {
-  const value = stringField(row, 'status')
-  return NotificationAttemptStatusValues.find((candidate) => candidate === value) ?? 'pending'
-}
-
-function webhookEventStatus(row: RuntimeDocument) {
-  const value = stringField(row, 'status')
-  return NotificationWebhookEventStatusValues.find((candidate) => candidate === value) ?? 'held_for_operator'
-}
-
-function signatureStatus(row: RuntimeDocument) {
-  return stringField(row, 'signatureStatus') === 'verified' ? 'verified' : 'rejected'
-}
-
 function stringField(row: RuntimeDocument, field: string): string {
   const value = row[field]
   return typeof value === 'string' ? value : ''
-}
-
-function optionalStringField(row: RuntimeDocument, field: string): string | undefined {
-  const value = row[field]
-  return typeof value === 'string' ? value : undefined
 }
 
 function numberField(row: RuntimeDocument, field: string): number {
@@ -1273,15 +804,6 @@ function numberField(row: RuntimeDocument, field: string): number {
   return typeof value === 'number' ? value : 0
 }
 
-function optionalNumberField(row: RuntimeDocument, field: string): number | undefined {
-  const value = row[field]
-  return typeof value === 'number' ? value : undefined
-}
-
 function booleanField(row: RuntimeDocument, field: string): boolean {
   return row[field] === true
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === 'string'
 }
