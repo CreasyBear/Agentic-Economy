@@ -470,6 +470,22 @@ describe('sandbox capability provider', () => {
     await expect(refused.json()).resolves.toEqual({ kind: 'refused', reason: 'request_invalid' })
   })
 
+  it('publishes the externally forwarded HTTPS workflow endpoint in discovery', async () => {
+    const discovery = await readSandboxWorkflowProviderDiscovery(
+      'procurement-brief',
+      new Request(
+        'http://jc-mbp.tail4d4766.ts.net/api/sandbox/providers/workflow?provider=procurement-brief',
+        { headers: { 'X-Forwarded-Proto': 'https' } },
+      ),
+    )
+
+    await expect(discovery.json()).resolves.toMatchObject({
+      operation: {
+        endpoint: 'https://jc-mbp.tail4d4766.ts.net/api/sandbox/providers/workflow?provider=procurement-brief',
+      },
+    })
+  })
+
   it('answers the generic readiness quote with the exact workflow binding identity', async () => {
     const response = await workflowCall('procurement-brief', {
       protocolVersion: 'ae-capability:v1',

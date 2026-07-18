@@ -65,7 +65,7 @@ export async function readSandboxRouteProviderDiscovery(
   request: Request,
 ): Promise<Response> {
   const profile = SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey]
-  const endpoint = new URL(request.url)
+  const endpoint = providerDiscoveryEndpoint(request)
   endpoint.search = ''
   endpoint.hash = ''
   return json({
@@ -108,7 +108,7 @@ export async function readSandboxWorkflowProviderDiscovery(
 ): Promise<Response> {
   const profile = workflowProfile(providerKey)
   if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
-  const endpoint = new URL(request.url)
+  const endpoint = providerDiscoveryEndpoint(request)
   endpoint.searchParams.set('provider', providerKey)
   endpoint.hash = ''
   return json({
@@ -319,6 +319,13 @@ function authenticateSandboxProvider(request: Request, options: HandlerOptions):
     return json({ kind: 'refused', reason: 'authentication_required' }, 401)
   }
   return undefined
+}
+
+function providerDiscoveryEndpoint(request: Request): URL {
+  const endpoint = new URL(request.url)
+  const forwardedProtocol = request.headers.get('X-Forwarded-Proto')?.split(',', 1)[0]?.trim()
+  if (forwardedProtocol === 'https') endpoint.protocol = 'https:'
+  return endpoint
 }
 
 async function routeProviderResponse(

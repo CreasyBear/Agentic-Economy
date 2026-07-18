@@ -40,6 +40,17 @@ describe('customer Request development smoke configuration', () => {
     })
   })
 
+  it('names an exact local Convex development deployment without promoting its evidence class', () => {
+    expect(customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'local:local-agentic-economy',
+    }, 'a'.repeat(40))).toMatchObject({
+      convexDeployment: 'convex:local-agentic-economy',
+    })
+  })
+
   it.each([
     [undefined, 'AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN is required'],
     ['https://attacker.example', 'must exactly match AE_CUSTOMER_REQUEST_BASE_URL'],

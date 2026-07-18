@@ -237,9 +237,10 @@ function currentSourceRevision(): string {
 }
 
 function normalizeConvexDevelopmentDeployment(value: string): string {
-  const match = /^dev:([a-z0-9-]+)$/u.exec(value.trim())
-  if (match?.[1] === undefined) throw new Error('CONVEX_DEPLOYMENT must name an exact dev deployment')
-  return `convex:${match[1]}`
+  const match = /^(?:dev:([a-z0-9-]+)|local:([a-z0-9_-]+))$/u.exec(value.trim())
+  const deploymentName = match?.[1] ?? match?.[2]
+  if (deploymentName === undefined) throw new Error('CONVEX_DEPLOYMENT must name an exact dev deployment')
+  return `convex:${deploymentName}`
 }
 
 function validateSourceRevision(value: string): string {
