@@ -56,6 +56,19 @@ No material below may be used until this table is complete and approved.
 Changing any approved value requires a new material version and review before
 further recruitment or collection.
 
+### Current-source audit
+
+At source revision `08295653`, a scoped search of `PRODUCT.md`, `DESIGN.md`,
+`AGENTS.md`, `src/`, `convex/`, `public/`, and active planning records found no
+authoritative AE legal entity/data controller, privacy contact, privacy policy,
+study complaints route, independent complaints escalation, participant-data
+retention schedule, or approved field-study processor register. Existing
+delivery-complaint and Australian-business fields are unrelated product
+behavior and cannot fill these controls.
+
+These values remain `UNKNOWN`. Do not infer them from the repository owner,
+brand name, hosting accounts, package metadata, or a general support address.
+
 ## 2. Recruitment contact register
 
 Complete the suppression check before contact. Never treat a public address or
