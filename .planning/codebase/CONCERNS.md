@@ -4,6 +4,16 @@
 **Inspected revision:** `19e988f5` (post god-file deepen campaign Waves 1–22)  
 **last_mapped_commit:** `19e988f5`
 
+## Residual campaign Waves 23+ — locked practices
+
+Gold pattern: provide-facts (`src/modules/...` ports type + pure fn) → thin `convex/*Ports.ts` → host auth → module → ports. Deletion test must concentrate complexity; Convex sibling chops without ports fail.
+
+Every **implementation** wave: `engineering-software-architect` → `engineering-codebase-onboarding-engineer` → `engineering-backend-architect` → `engineering-minimal-change-engineer` → `engineering-code-reviewer` → `thermo-nuclear-code-quality-review` → commit only after thermo PASS. Design-only ADR waves: architect → onboarding → backend-architect only.
+
+Hard bans: no journal `…Start`/`…Lease`/`…Outcome` sibling chops; no `WritePlan` DTOs in pure journal; no reopen of closed Application/supply/predicate deepens; validators stay in Convex forever; ADR-002 governed-send stays inquiry-owned.
+
+Inquiry deepen (23–26) is primary; journal machines blocked until write-plan ADR (Wave 27).
+
 Fresh line counts (`wc -l` at map time):
 
 | File | Lines | Campaign status |
@@ -11,7 +21,7 @@ Fresh line counts (`wc -l` at map time):
 | `convex/customerRequestApplication.ts` | 1749 | **host-done** — validators + thin actions |
 | `convex/capabilitySupply.ts` | 973 | **host-done** — graph/probe residual out of campaign |
 | `convex/customerRequestRouteExecution.ts` | 2463 | journal machines **DEFERRED** |
-| `convex/inquiries.ts` | 3443 | outside campaign; still largest Convex host |
+| `convex/inquiries.ts` | 3443 | Waves 23–26 deepen target |
 
 ## Tech Debt
 

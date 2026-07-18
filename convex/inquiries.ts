@@ -5,30 +5,36 @@ import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalMutation } from './_generated/server'
 import { runtimeDb } from './source_state'
-import type { RuntimeDb, RuntimeDocument, RuntimeQuery } from './source_state'
+import type { RuntimeDb, RuntimeDocument } from './source_state'
+import { inquirySourceStatePorts } from './inquirySourceStatePorts'
+import {
+  collect,
+  booleanField,
+  isRecord,
+  numberField,
+  optionalNumberField,
+  optionalStringField,
+  stringArrayField,
+  stringField,
+  upsertByFields,
+} from './inquiryRuntimeDbHelpers'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { brandNonEmpty } from '../src/modules/common/ids'
-import { stableHash, stableStringify } from '../src/modules/common/stable-hash'
+import { stableHash } from '../src/modules/common/stable-hash'
 import { CapabilityKindValues } from '../src/modules/catalog/public'
-import type { BusinessServiceRecord, CapabilityKind, ServiceCapabilityRecord } from '../src/modules/catalog/public'
-import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '../src/modules/business/public'
 import {
   accessIdFromInquiryCustomerAccessKey,
   bindInquiryNotificationDispatches as bindInquiryNotificationDispatchesModule,
-  createEmptyInquirySourceState,
   closeInquiry as closeInquiryModule,
   deleteInquiryPrivateContent as deleteInquiryPrivateContentModule,
-  decryptGovernedSendReceipt,
-  encryptGovernedSendReceipt,
   evaluateR1TargetAdmission,
   InquiryNotificationDispatchProviderValues,
   InquiryNotificationStatusValues,
   InquiryNotificationDispatchStatusValues,
   InquiryPrivacyTombstoneStatusValues,
   InquiryThreadStatusValues,
-  inquiryReceiptKeyRef,
   listOwnerInbox as listOwnerInboxModule,
   markInquiryRead as markInquiryReadModule,
   readInquiryDeliveryReadback as readInquiryDeliveryReadbackModule,
@@ -37,7 +43,6 @@ import {
   readCustomerRecord as readCustomerRecordModule,
   resolveGovernedSendIntegrityKeyring,
   resolveInquiryCustomerAccessKeyring,
-  resolveInquiryReceiptKeyring,
   OwnerInboxBucketValues,
   readOwnerInquiry as readOwnerInquiryModule,
   replyToInquiry as replyToInquiryModule,
@@ -46,24 +51,12 @@ import {
   verifyInquiryCustomerAccess,
 } from '../src/modules/inquiries/public'
 import type {
-  CapabilityLaunchSupportRecord,
   InquiryDeliveryReadback,
-  GovernedSendErasureLineageRecord,
-  GovernedSendIntegrityCommitmentRecord,
-  GovernedSendReceiptRecord,
-  InquiryCustomerAccessGrant,
-  InquiryEncryptedReceiptPayload,
-  InquiryReceiptKeyring,
-  InquiryWrappedReceiptKey,
   InquiryCustomerRecordReadback,
-  InquiryAuditRecord,
   InquiryExportReadback,
-  InquiryFunnelRecord,
   InquiryOperatorAuditRef,
   InquiryOperatorDispatchAttemptRef,
-  InquiryMessageRecord,
   InquiryNotificationDispatchBinding,
-  InquiryNotificationDispatchProvider,
   InquiryNotificationDispatchStatus,
   InquiryNotificationRecord,
   InquiryOperatorReconstructionAllowedReadback,
@@ -72,11 +65,8 @@ import type {
   InquiryOperatorFunnelRef,
   InquiryOperatorWebhookRef,
   InquiryOperatorOperationRef,
-  InquiryOperationRecord,
   InquiryPrivacyTombstoneRecord,
   InquirySourceState,
-  ResolvableOwnerRecipient,
-  InquiryThreadRecord,
   OwnerInboxReadback,
   OwnerInquiryDetailReadback,
 } from '../src/modules/inquiries/public'
@@ -98,7 +88,6 @@ import type {
   NotificationWebhookEventStatus,
 } from '../src/modules/notification-outbox/public'
 import type { RedactedPayload } from '../src/modules/observability/public'
-import type { AbuseRateLimitBucketRecord, SuppressionRuleRecord } from '../src/modules/security/public'
 
 const publicInquiryContact = v.object({
   name: v.optional(v.string()),
@@ -773,7 +762,7 @@ export const submitPublicInquiry = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const state = await loadInquirySourceState(db)
+    const state = await inquirySourceStatePorts(db).load()
     const result = submitInquiryModule(state, {
       target: {
         businessId: brandNonEmpty(args.target.businessId, 'BusinessId'),
@@ -795,13 +784,13 @@ export const submitPublicInquiry = mutationGeneric({
 
     if (result.kind === 'error') {
       if (result.state !== undefined) {
-        await persistInquirySourceState(db, result.state)
+        await inquirySourceStatePorts(db).persist(result.state)
       }
       return summarizeSubmitError(result)
     }
 
     const bridged = await enqueueInquiryNotificationDispatches(db, result.state, result.notification, result.thread.businessId, args.correlationId)
-    await persistInquirySourceState(db, bridged.state)
+    await inquirySourceStatePorts(db).persist(bridged.state)
     return {
       kind: 'ok' as const,
       code: result.code,
@@ -830,7 +819,7 @@ export const listCurrentOwnerInbox = queryGeneric({
       return owner
     }
 
-    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
     return {
       kind: 'allowed' as const,
       inbox: serializeOwnerInbox(listOwnerInboxModule(state, { authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') } })),
@@ -842,7 +831,7 @@ export const readPublicTargetAdmission = queryGeneric({
   args: inquiryTarget,
   returns: r1TargetAdmission,
   handler: async (ctx, args) => {
-    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
     const admission = evaluateR1TargetAdmission(state, {
       businessId: brandNonEmpty(args.businessId, 'BusinessId'),
       serviceId: brandNonEmpty(args.serviceId, 'ServiceId'),
@@ -872,7 +861,7 @@ export const readPublicCatalogInquiryAvailability = queryGeneric({
   returns: v.array(publicCatalogInquiryAvailability),
   handler: async (ctx, args) => {
     if (args.targets.length > 100) throw new Error('public_catalog_inquiry_targets_exceeded')
-    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
     return args.targets.map((target) => {
       const business = state.businesses.find((candidate) => String(candidate.slug) === target.businessSlug)
       const service = business === undefined
@@ -900,7 +889,7 @@ export const readCurrentOwnerTargetAdmission = queryGeneric({
       return { kind: 'error' as const, code: 'owner_not_found' as const, retryable: false, reason: owner.reason }
     }
 
-    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
     const business = state.businesses.find((candidate) => candidate.businessId === args.businessId)
     const service = state.businessServices.find((candidate) =>
       candidate.businessId === args.businessId && candidate.serviceId === args.serviceId)
@@ -963,7 +952,7 @@ export const readOperatorInquiryReconstruction = queryGeneric({
     }
 
     const [state, attempts, webhooks, auditRows, funnelRows, operationRows] = await Promise.all([
-      loadInquirySourceState(db),
+      inquirySourceStatePorts(db).load(),
       collect(db, 'notificationDispatchAttempts'),
       collect(db, 'notificationWebhookEvents'),
       collect(db, 'auditEvents'),
@@ -999,7 +988,7 @@ export const readCurrentOwnerInquiry = queryGeneric({
       }
     }
 
-    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
     const result = readOwnerInquiryModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1027,12 +1016,9 @@ export const readCustomerRecord = queryGeneric({
     const threadId = brandNonEmpty(args.threadId, 'InquiryThreadId')
     const keyring = resolveInquiryCustomerAccessKeyring(process.env)
     const accessId = accessIdFromInquiryCustomerAccessKey(args.accessKey)
-    const grantRow = accessId === undefined
-      ? null
-      : await db.query('inquiryCustomerAccessGrants')
-          .withIndex('by_accessId', (query) => query.eq('accessId', accessId))
-          .unique()
-    const grant = grantRow === null ? undefined : toInquiryCustomerAccessGrant(grantRow)
+    const grant = accessId === undefined
+      ? undefined
+      : await inquirySourceStatePorts(db).loadCustomerAccessGrant(accessId)
     const now = Date.now()
     if (grant === undefined || !verifyInquiryCustomerAccess({
       grant,
@@ -1044,7 +1030,7 @@ export const readCustomerRecord = queryGeneric({
       return { kind: 'error' as const, code: 'inquiry_access_denied' as const, retryable: false, reason: 'Inquiry record was not found for this key.' }
     }
 
-    const state = await loadInquiryCustomerRecordState(db, threadId, grant)
+    const state = await inquirySourceStatePorts(db).loadCustomerRecord(threadId, grant)
     const result = readCustomerRecordModule(state, {
       threadId,
       accessKey: args.accessKey,
@@ -1075,7 +1061,7 @@ export const readCurrentOwnerInquiryDeliveryReadback = queryGeneric({
       return ownerAuthError(owner.reason)
     }
 
-    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
     const result = readInquiryDeliveryReadbackModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1103,7 +1089,7 @@ export const requestCurrentOwnerInquiryExport = queryGeneric({
       return ownerAuthError(owner.reason)
     }
 
-    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
     const result = requestInquiryExportModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1141,7 +1127,7 @@ export const markCurrentOwnerInquiryRead = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const state = await loadInquirySourceState(db)
+    const state = await inquirySourceStatePorts(db).load()
     const result = markInquiryReadModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1154,7 +1140,7 @@ export const markCurrentOwnerInquiryRead = mutationGeneric({
       return ownerMutationError(result)
     }
 
-    await persistInquirySourceState(db, result.state)
+    await inquirySourceStatePorts(db).persist(result.state)
     return ownerMutationOk(result)
   },
 })
@@ -1186,8 +1172,8 @@ export const deleteCurrentOwnerInquiryPrivateContent = mutationGeneric({
     if (ownedThread === null || stringField(ownedThread, 'ownerId') !== owner.ownerId) {
       return { kind: 'error' as const, code: 'inquiry_not_found' as const, retryable: false, reason: 'Inquiry thread was not found for this owner.' }
     }
-    await repairGovernedSendErasureKeys(db, args.threadId)
-    const state = await loadInquirySourceState(db)
+    await inquirySourceStatePorts(db).repairErasureKeys(args.threadId)
+    const state = await inquirySourceStatePorts(db).load()
     const result = deleteInquiryPrivateContentModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1200,7 +1186,7 @@ export const deleteCurrentOwnerInquiryPrivateContent = mutationGeneric({
       return ownerPrivacyError(result)
     }
 
-    await persistInquirySourceState(db, result.state)
+    await inquirySourceStatePorts(db).persist(result.state)
     return {
       kind: 'ok' as const,
       code: result.code,
@@ -1220,7 +1206,7 @@ export const readCurrentOwnerInquiryPrivacyTombstone = queryGeneric({
       return ownerAuthError(owner.reason)
     }
 
-    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const state = await inquirySourceStatePorts(runtimeDb(ctx.db)).load()
     const result = readInquiryPrivacyTombstoneModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1259,7 +1245,7 @@ export const replyToCurrentOwnerInquiry = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const state = await loadInquirySourceState(db)
+    const state = await inquirySourceStatePorts(db).load()
     const result = replyToInquiryModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1274,7 +1260,7 @@ export const replyToCurrentOwnerInquiry = mutationGeneric({
     }
 
     const bridged = await enqueueInquiryNotificationDispatches(db, result.state, result.notification, result.thread.businessId, args.correlationId)
-    await persistInquirySourceState(db, bridged.state)
+    await inquirySourceStatePorts(db).persist(bridged.state)
     return ownerMutationOk(result)
   },
 })
@@ -1300,7 +1286,7 @@ export const closeCurrentOwnerInquiry = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const state = await loadInquirySourceState(db)
+    const state = await inquirySourceStatePorts(db).load()
     const result = closeInquiryModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
       threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
@@ -1313,7 +1299,7 @@ export const closeCurrentOwnerInquiry = mutationGeneric({
       return ownerMutationError(result)
     }
 
-    await persistInquirySourceState(db, result.state)
+    await inquirySourceStatePorts(db).persist(result.state)
     return ownerMutationOk(result)
   },
 })
@@ -1549,862 +1535,6 @@ async function readCurrentOwner(ctx: RuntimeQueryCtx | RuntimeCtx): Promise<
   return owner === null ? { kind: 'denied', reason: 'owner_not_found' } : { kind: 'allowed', ownerId: owner._id }
 }
 
-async function loadInquirySourceState(db: RuntimeDb): Promise<InquirySourceState> {
-  const [
-    businesses,
-    businessServices,
-    serviceCapabilities,
-    suppressionRules,
-    owners,
-    claims,
-    threads,
-    messages,
-    notifications,
-    privacyTombstones,
-    customerAccessGrants,
-    governedSendReceipts,
-    governedSendIntegrityCommitments,
-    governedSendReceiptKeys,
-    governedSendErasureLineage,
-    auditEvents,
-    abuseBuckets,
-    operationKeys,
-    supportRecords,
-  ] = await Promise.all([
-    collect(db, 'businesses'),
-    collect(db, 'businessServices'),
-    collect(db, 'serviceCapabilities'),
-    collect(db, 'suppressionRules'),
-    collect(db, 'owners'),
-    collect(db, 'claims'),
-    collect(db, 'inquiryThreads'),
-    collect(db, 'inquiryMessages'),
-    collect(db, 'inquiryNotifications'),
-    collect(db, 'inquiryPrivacyTombstones'),
-    collect(db, 'inquiryCustomerAccessGrants'),
-    collect(db, 'governedSendReceipts'),
-    collect(db, 'governedSendIntegrityCommitments'),
-    collect(db, 'governedSendReceiptKeys'),
-    collect(db, 'governedSendErasureLineage'),
-    collect(db, 'auditEvents'),
-    collect(db, 'inquiryAbuseBuckets'),
-    collect(db, 'operationKeys'),
-    collect(db, 'capabilityLaunchSupportRecords'),
-  ])
-
-  const inquiryAuditEvents: InquiryAuditRecord[] = []
-  for (const auditEvent of auditEvents) {
-    const record = toInquiryAuditRecord(auditEvent)
-    if (record !== undefined) {
-      inquiryAuditEvents.push(record)
-    }
-  }
-
-  const inquiryOperations: InquiryOperationRecord[] = []
-  for (const operationKey of operationKeys) {
-    if (stringField(operationKey, 'scope') === 'inquiry') {
-      inquiryOperations.push(toInquiryOperationRecord(operationKey))
-    }
-  }
-
-  const capabilityLaunchSupportRecords: CapabilityLaunchSupportRecord[] = []
-  for (const supportRecord of supportRecords) {
-    const record = toCapabilityLaunchSupportRecord(supportRecord)
-    if (record !== undefined) {
-      capabilityLaunchSupportRecords.push(record)
-    }
-  }
-
-  const receiptKeyring = governedSendReceipts.length === 0
-    ? undefined
-    : resolveInquiryReceiptKeyring(process.env)
-  const recoveredReceipts = receiptKeyring === undefined
-    ? []
-    : (await Promise.all(governedSendReceipts.map((receipt) =>
-        toGovernedSendReceiptRecord(
-          receipt,
-          governedSendReceiptKeys,
-          governedSendErasureLineage,
-          receiptKeyring,
-        )
-      ))).filter(isDefined)
-
-  return createEmptyInquirySourceState({
-    businesses: businesses.map(toBusinessRecord),
-    businessServices: businessServices.map(toBusinessServiceRecord),
-    serviceCapabilities: serviceCapabilities.map(toServiceCapabilityRecord),
-    suppressionRules: suppressionRules.map(toSuppressionRuleRecord),
-    owners: owners.map(toBusinessOwnerRecord),
-    claims: claims.map(toClaimRecord),
-    resolvableOwnerRecipients: owners.flatMap(toResolvableOwnerRecipient),
-    threads: threads.map(toInquiryThreadRecord),
-    messages: messages.map(toInquiryMessageRecord),
-    notifications: notifications.map(toInquiryNotificationRecord),
-    customerAccessGrants: customerAccessGrants.map(toInquiryCustomerAccessGrant),
-    privacyTombstones: privacyTombstones.map(toInquiryPrivacyTombstoneRecord),
-    governedSendReceipts: recoveredReceipts,
-    governedSendIntegrityCommitments: governedSendIntegrityCommitments.map(toGovernedSendIntegrityCommitmentRecord),
-    governedSendErasureLineage: governedSendErasureLineage.map(toGovernedSendErasureLineageRecord),
-    auditEvents: inquiryAuditEvents,
-    abuseRateLimitBuckets: abuseBuckets.map(toAbuseRateLimitBucketRecord),
-    operations: inquiryOperations,
-    capabilityLaunchSupportRecords,
-  })
-}
-
-async function loadInquiryCustomerRecordState(
-  db: RuntimeDb,
-  threadId: InquiryThreadRecord['threadId'],
-  grant: InquiryCustomerAccessGrant,
-): Promise<InquirySourceState> {
-  const threadRow = await db.query('inquiryThreads')
-    .withIndex('by_threadId', (query) => query.eq('threadId', threadId))
-    .unique()
-  if (threadRow === null) return createEmptyInquirySourceState({ customerAccessGrants: [grant] })
-
-  const [businessRow, messageRows, notificationRows, tombstoneRows, receiptRows, commitmentRows, lineageRows] = await Promise.all([
-    db.get(stringField(threadRow, 'businessId')),
-    takeRuntimeRows(db.query('inquiryMessages').withIndex('by_thread_createdAt', (query) => query.eq('threadId', threadId)), 200),
-    takeRuntimeRows(db.query('inquiryNotifications').withIndex('by_thread_status', (query) => query.eq('threadId', threadId)), 200),
-    takeRuntimeRows(db.query('inquiryPrivacyTombstones').withIndex('by_thread_status', (query) => query.eq('threadId', threadId)), 20),
-    takeRuntimeRows(db.query('governedSendReceipts').withIndex('by_threadId_and_createdAt', (query) => query.eq('threadId', threadId)), 20),
-    takeRuntimeRows(db.query('governedSendIntegrityCommitments').withIndex('by_threadId', (query) => query.eq('threadId', threadId)), 20),
-    takeRuntimeRows(db.query('governedSendErasureLineage').withIndex('by_thread_destroyedAt', (query) => query.eq('threadId', threadId)), 20),
-  ])
-  const keyRows = (await Promise.all(receiptRows.map((receipt) =>
-    db.query('governedSendReceiptKeys')
-      .withIndex('by_keyRef', (query) => query.eq('keyRef', stringField(receipt, 'keyRef')))
-      .unique()
-  ))).filter((row): row is RuntimeDocument => row !== null)
-  const operationRows = (await Promise.all(receiptRows.map((receipt) =>
-    db.query('operationKeys')
-      .withIndex('by_scope_key', (query) => query.eq('scope', 'inquiry').eq('key', stringField(receipt, 'operationKey')))
-      .unique()
-  ))).filter((row): row is RuntimeDocument => row !== null)
-  const commitments = commitmentRows.map(toGovernedSendIntegrityCommitmentRecord)
-  const [claimRows, serviceRows] = await Promise.all([
-    Promise.all(commitments.map((commitment) => db.get(commitment.targetBinding.claimRef))),
-    Promise.all(commitments.map((commitment) => db.get(String(commitment.targetBinding.serviceId)))),
-  ])
-  const claims = claimRows.filter((row): row is RuntimeDocument => row !== null)
-  const services = serviceRows.filter((row): row is RuntimeDocument => row !== null)
-  const receiptKeyring = receiptRows.length === 0 ? undefined : resolveInquiryReceiptKeyring(process.env)
-  const receipts = receiptKeyring === undefined
-    ? []
-    : (await Promise.all(receiptRows.map((receipt) =>
-        toGovernedSendReceiptRecord(receipt, keyRows, lineageRows, receiptKeyring)
-      ))).filter(isDefined)
-
-  return createEmptyInquirySourceState({
-    businesses: businessRow === null ? [] : [toBusinessRecord(businessRow)],
-    businessServices: services.map(toBusinessServiceRecord),
-    claims: claims.map(toClaimRecord),
-    threads: [toInquiryThreadRecord(threadRow)],
-    messages: messageRows.map(toInquiryMessageRecord),
-    notifications: notificationRows.map(toInquiryNotificationRecord),
-    customerAccessGrants: [grant],
-    privacyTombstones: tombstoneRows.map(toInquiryPrivacyTombstoneRecord),
-    governedSendReceipts: receipts,
-    governedSendIntegrityCommitments: commitments,
-    governedSendErasureLineage: lineageRows.map(toGovernedSendErasureLineageRecord),
-    operations: operationRows.map(toInquiryOperationRecord),
-  })
-}
-
-async function takeRuntimeRows(query: RuntimeQuery, limit: number): Promise<RuntimeDocument[]> {
-  return query.take === undefined ? (await query.collect()).slice(0, limit) : query.take(limit)
-}
-
-async function persistInquirySourceState(db: RuntimeDb, state: InquirySourceState): Promise<void> {
-  for (const bucket of state.abuseRateLimitBuckets.filter((candidate) => candidate.scope === 'inquiry_submit')) {
-    await upsertByFields(db, 'inquiryAbuseBuckets', ['key', 'window'], {
-      key: bucket.key,
-      window: bucket.window,
-      count: bucket.count,
-      state: bucket.state,
-      resetAt: bucket.resetAt,
-      updatedAt: bucket.updatedAt,
-    })
-  }
-
-  for (const thread of state.threads) {
-    await upsertByFields(db, 'inquiryThreads', ['threadId'], {
-      threadId: thread.threadId,
-      businessId: thread.businessId,
-      ownerId: thread.ownerId,
-      serviceId: thread.serviceId,
-      capabilityKind: thread.capabilityKind,
-      status: thread.status,
-      firstMessageId: thread.firstMessageId,
-      sourceHash: thread.sourceHash,
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-      version: thread.version,
-      ...(thread.customerReplyEmail === undefined ? {} : { customerReplyEmail: thread.customerReplyEmail }),
-      ...(thread.readAt === undefined ? {} : { readAt: thread.readAt }),
-      ...(thread.repliedAt === undefined ? {} : { repliedAt: thread.repliedAt }),
-      ...(thread.closedAt === undefined ? {} : { closedAt: thread.closedAt }),
-      ...(thread.origin === undefined ? {} : {
-        originKind: thread.origin.kind,
-        originThreadId: thread.origin.threadId,
-      }),
-    })
-  }
-
-  for (const grant of state.customerAccessGrants) {
-    await upsertByFields(db, 'inquiryCustomerAccessGrants', ['accessId'], {
-      accessId: grant.accessId,
-      threadId: grant.threadId,
-      scope: grant.scope,
-      version: grant.version,
-      verifier: grant.verifier,
-      keyId: grant.keyId,
-      status: grant.status,
-      createdAt: grant.createdAt,
-      expiresAt: grant.expiresAt,
-      ...(grant.revokedAt === undefined ? {} : { revokedAt: grant.revokedAt }),
-    })
-  }
-
-  for (const message of state.messages) {
-    await upsertByFields(db, 'inquiryMessages', ['messageId'], {
-      messageId: message.messageId,
-      threadId: message.threadId,
-      sender: message.sender,
-      body: message.body,
-      bodyHash: message.bodyHash,
-      ...(message.contactHash === undefined ? {} : { contactHash: message.contactHash }),
-      ...(message.redactedContact === undefined ? {} : { redactedContact: redactedJson(message.redactedContact) }),
-      ...(message.privateDeletedAt === undefined ? {} : { privateDeletedAt: message.privateDeletedAt }),
-      createdAt: message.createdAt,
-    })
-  }
-
-  for (const notification of state.notifications) {
-    await upsertByFields(db, 'inquiryNotifications', ['notificationId'], {
-      notificationId: notification.notificationId,
-      threadId: notification.threadId,
-      messageId: notification.messageId,
-      recipientRole: notification.recipientRole,
-      status: notification.status,
-      redactedPayload: redactedJson(notification.redactedPayload),
-      ...(notification.failureCode === undefined ? {} : { failureCode: notification.failureCode }),
-      dispatchBindingsJson: JSON.stringify(notification.dispatchBindings),
-      dispatchIds: notification.dispatchBindings.map((binding) => binding.dispatchId),
-      providerFamilies: notification.dispatchBindings.map((binding) => binding.providerFamily),
-      dispatchStatuses: notification.dispatchBindings.map((binding) => binding.status),
-      createdAt: notification.createdAt,
-      updatedAt: notification.updatedAt,
-    })
-  }
-
-  for (const tombstone of state.privacyTombstones) {
-    await upsertByFields(db, 'inquiryPrivacyTombstones', ['threadId', 'operationKey'], {
-      threadId: tombstone.threadId,
-      businessId: tombstone.businessId,
-      reasonCode: tombstone.reasonCode,
-      status: tombstone.status,
-      operationKey: tombstone.operationKey,
-      correlationId: tombstone.correlationId,
-      createdAt: tombstone.createdAt,
-      ...(tombstone.appliedAt === undefined ? {} : { appliedAt: tombstone.appliedAt }),
-      receiptErasureCount: tombstone.receiptErasureCount,
-      erasureEventIds: [...tombstone.erasureEventIds],
-    })
-  }
-
-  for (const receipt of state.governedSendReceipts) {
-    const lineage = state.governedSendErasureLineage.find(
-      (candidate) => candidate.receiptOperationKey === receipt.operationKey,
-    )
-    await persistGovernedSendReceipt(db, receipt, lineage)
-  }
-
-  for (const commitment of state.governedSendIntegrityCommitments) {
-    await persistGovernedSendIntegrityCommitment(db, commitment)
-  }
-
-  const auditEventsByOperationKey = new Map(
-    state.auditEvents.map((auditEvent) => [auditEvent.operationKey, auditEvent] as const)
-  )
-
-  for (const operation of state.operations) {
-    await upsertInquiryOperation(
-      db,
-      operation,
-      auditEventsByOperationKey.get(operation.operationKey)
-    )
-  }
-
-  for (const auditEvent of state.auditEvents) {
-    await upsertAuditEvent(db, auditEvent)
-  }
-
-  for (const funnelEvent of state.funnelEvents) {
-    await upsertFunnelEvent(db, funnelEvent)
-  }
-}
-
-async function upsertInquiryOperation(
-  db: RuntimeDb,
-  operation: InquiryOperationRecord,
-  auditEvent: InquiryAuditRecord | undefined
-): Promise<void> {
-  await upsertByFields(db, 'operationKeys', ['scope', 'key'], {
-    scope: 'inquiry',
-    actorKind: auditEvent?.actorKind ?? 'system',
-    actorRef: auditEvent?.actorRef ?? 'system:inquiry',
-    operationName: operationNameForResult(operation.resultCode),
-    key: operation.operationKey,
-    requestHash: operation.requestHash,
-    sourceHash: operation.threadId,
-    status: 'succeeded',
-    resultHash: stableHash({ resultCode: operation.resultCode }),
-    effectRefs: [
-      `result:${operation.resultCode}`,
-      ...(operation.threadId === undefined ? [] : [`thread:${operation.threadId}`]),
-      ...(operation.messageId === undefined ? [] : [`message:${operation.messageId}`]),
-      ...(operation.notificationId === undefined ? [] : [`notification:${operation.notificationId}`]),
-    ],
-    createdAt: operation.createdAt,
-    updatedAt: operation.createdAt,
-  })
-}
-async function repairGovernedSendErasureKeys(db: RuntimeDb, threadId: string): Promise<void> {
-  const lineageRows = await takeRuntimeRows(
-    db.query('governedSendErasureLineage').withIndex('by_thread_destroyedAt', (query) => query.eq('threadId', threadId)),
-    20,
-  )
-  for (const lineageRow of lineageRows) {
-    const lineage = toGovernedSendErasureLineageRecord(lineageRow)
-    const receiptLineageRows = lineageRows.filter(
-      (candidate) => stringField(candidate, 'receiptOperationKey') === String(lineage.receiptOperationKey),
-    )
-    if (receiptLineageRows.length !== 1) throw new Error('governed_send_erasure_lineage_duplicate_rows')
-    const keyRows = await takeRuntimeRows(
-      db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', lineage.keyRef)), 2,
-    )
-    if (keyRows.length > 1) throw new Error('governed_send_receipt_key_duplicate_rows')
-    const key = keyRows[0]
-    if (key === undefined) continue
-    const receiptRows = await takeRuntimeRows(
-      db.query('governedSendReceipts').withIndex('by_operationKey', (query) => query.eq('operationKey', lineage.receiptOperationKey)), 2,
-    )
-    if (receiptRows.length !== 1) throw new Error('governed_send_receipt_conflict')
-    const receipt = receiptRows[0]
-    if (receipt === undefined) throw new Error('governed_send_receipt_conflict')
-    await assertGovernedSendLineageAuthority(db, receipt, lineage)
-    if (db.delete === undefined) throw new Error('Runtime database cannot destroy governed-send receipt keys.')
-    await db.delete(key._id)
-  }
-}
-
-async function assertGovernedSendLineageAuthority(
-  db: RuntimeDb,
-  receipt: RuntimeDocument,
-  lineage: GovernedSendErasureLineageRecord,
-): Promise<void> {
-  const tombstoneRows = await takeRuntimeRows(
-    db.query('inquiryPrivacyTombstones').withIndex('by_thread_operationKey', (query) =>
-      query.eq('threadId', lineage.threadId).eq('operationKey', lineage.privacyOperationKey)), 2,
-  )
-  if (tombstoneRows.length !== 1) throw new Error('governed_send_erasure_lineage_conflict')
-  const tombstone = tombstoneRows[0]
-  if (tombstone === undefined) throw new Error('governed_send_erasure_lineage_conflict')
-  const destroyedAt = optionalNumberFromUnknown(tombstone.appliedAt)
-  const erasureEventIds = stringArrayField(tombstone, 'erasureEventIds')
-  if (
-    stringField(tombstone, 'status') !== 'applied' ||
-    new Set(erasureEventIds).size !== erasureEventIds.length ||
-    destroyedAt === undefined ||
-    numberField(tombstone, 'receiptErasureCount') !== erasureEventIds.length ||
-    !erasureEventIds.includes(lineage.erasureEventId)
-  ) {
-    throw new Error('governed_send_erasure_lineage_conflict')
-  }
-  const expectedMaterial = {
-    erasureEventId: `governed-send-erasure:${stableHash({ receiptOperationKey: stringField(receipt, 'operationKey'), privacyOperationKey: lineage.privacyOperationKey, keyRef: stringField(receipt, 'keyRef') })}`,
-    receiptOperationKey: brandNonEmpty(stringField(receipt, 'operationKey'), 'OperationKey'),
-    privacyOperationKey: brandNonEmpty(stringField(tombstone, 'operationKey'), 'OperationKey'),
-    threadId: brandNonEmpty(stringField(receipt, 'threadId'), 'InquiryThreadId'),
-    digest: stringField(receipt, 'digest') as `sha256:${string}`,
-    keyRef: stringField(receipt, 'keyRef'),
-    reasonCode: stringField(tombstone, 'reasonCode'),
-    destroyedAt,
-    priorReceiptCommitment: stableHash({ operationKey: stringField(receipt, 'operationKey'), threadId: stringField(receipt, 'threadId'), digest: stringField(receipt, 'digest'), schemaVersion: numberField(receipt, 'schemaVersion'), recipientRef: stringField(receipt, 'recipientRef'), keyRef: stringField(receipt, 'keyRef') }),
-  }
-  const expected = { ...expectedMaterial, lineageHash: stableHash(expectedMaterial) }
-  if (stableStringify(expected) !== stableStringify(lineage)) throw new Error('governed_send_erasure_lineage_conflict')
-}
-
-async function persistGovernedSendReceipt(
-  db: RuntimeDb,
-  receipt: GovernedSendReceiptRecord,
-  lineage: GovernedSendErasureLineageRecord | undefined,
-): Promise<void> {
-  const existingRows = await takeRuntimeRows(
-    db.query('governedSendReceipts').withIndex('by_operationKey', (query) => query.eq('operationKey', receipt.operationKey)),
-    2,
-  )
-  if (existingRows.length > 1) throw new Error('governed_send_receipt_duplicate_rows')
-  const existing = existingRows[0]
-
-  if (existing === undefined) {
-    if (receipt.retention !== 'recoverable') {
-      throw new Error('Cannot persist erased governed-send metadata without its immutable receipt.')
-    }
-    const encrypted = await encryptGovernedSendReceipt(receipt, resolveInquiryReceiptKeyring(process.env))
-    await db.insert('governedSendReceipts', {
-      ...encrypted.payload,
-      digest: receipt.digest,
-      algorithm: receipt.algorithm,
-      schemaVersion: receipt.schemaVersion,
-      createdAt: receipt.createdAt,
-      operationKey: receipt.operationKey,
-      threadId: receipt.threadId,
-      admissionProof: receipt.admissionProof,
-      recipientRef: receipt.recipientRef,
-    })
-    await db.insert('governedSendReceiptKeys', encrypted.wrappedKey)
-    return
-  }
-
-  if (receipt.retention === 'recoverable') {
-    const keyRows = await takeRuntimeRows(
-      db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', stringField(existing, 'keyRef'))),
-      2,
-    )
-    if (keyRows.length !== 1) throw new Error('governed_send_receipt_conflict')
-    const recovered = await toGovernedSendReceiptRecord(
-      existing,
-      keyRows,
-      [],
-      resolveInquiryReceiptKeyring(process.env),
-    )
-    if (recovered === undefined || stableStringify(recovered) !== stableStringify(receipt)) {
-      throw new Error('governed_send_receipt_conflict')
-    }
-    return
-  }
-  if (lineage === undefined || lineage.keyRef !== stringField(existing, 'keyRef')) {
-    throw new Error('Governed-send erasure lineage does not match the persisted receipt key.')
-  }
-  const { lineageHash, ...lineageMaterial } = lineage
-  if (lineageHash !== stableHash(lineageMaterial)) {
-    throw new Error('governed_send_erasure_lineage_conflict')
-  }
-  await assertGovernedSendLineageAuthority(db, existing, lineage)
-
-  const existingLineageRows = await takeRuntimeRows(
-    db.query('governedSendErasureLineage')
-      .withIndex('by_erasureEventId', (query) => query.eq('erasureEventId', lineage.erasureEventId)),
-    2,
-  )
-  if (existingLineageRows.length > 1) throw new Error('governed_send_erasure_lineage_duplicate_rows')
-  const existingLineage = existingLineageRows[0]
-  if (
-    existingLineage !== undefined &&
-    stableStringify(toGovernedSendErasureLineageRecord(existingLineage)) !== stableStringify(lineage)
-  ) throw new Error('governed_send_erasure_lineage_conflict')
-
-  const wrappedKeyRows = await takeRuntimeRows(
-    db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', lineage.keyRef)),
-    2,
-  )
-  if (wrappedKeyRows.length > 1) throw new Error('governed_send_receipt_key_duplicate_rows')
-  const wrappedKey = wrappedKeyRows[0]
-  if (wrappedKey !== undefined) {
-    if (db.delete === undefined) throw new Error('Runtime database cannot destroy governed-send receipt keys.')
-    await db.delete(wrappedKey._id)
-  }
-  if (existingLineage === undefined) await db.insert('governedSendErasureLineage', { ...lineage })
-}
-
-async function persistGovernedSendIntegrityCommitment(
-  db: RuntimeDb,
-  commitment: GovernedSendIntegrityCommitmentRecord,
-): Promise<void> {
-  const rows = await takeRuntimeRows(
-    db.query('governedSendIntegrityCommitments').withIndex('by_operationKey', (query) => query.eq('operationKey', commitment.operationKey)),
-    2,
-  )
-  if (rows.length > 1) throw new Error('governed_send_commitment_duplicate_rows')
-  const existing = rows[0]
-  if (existing === undefined) {
-    await db.insert('governedSendIntegrityCommitments', { ...commitment })
-    return
-  }
-  if (stableStringify(toGovernedSendIntegrityCommitmentRecord(existing)) !== stableStringify(commitment)) {
-    throw new Error('governed_send_commitment_conflict')
-  }
-}
-
-
-async function upsertAuditEvent(db: RuntimeDb, auditEvent: InquiryAuditRecord): Promise<void> {
-  const eventId = `audit:${stableHash({
-    eventType: auditEvent.eventType,
-    operationKey: auditEvent.operationKey,
-    targetRef: auditEvent.targetRef,
-  })}`
-  await upsertByFields(db, 'auditEvents', ['eventId'], {
-    eventId,
-    eventType: auditEvent.eventType,
-    actorKind: auditEvent.actorKind,
-    actorRef: auditEvent.actorRef,
-    businessId: auditEvent.businessId,
-    targetType: auditEvent.targetType,
-    targetRef: auditEvent.targetRef,
-    beforeState: auditEvent.beforeState,
-    afterState: auditEvent.afterState,
-    idempotencyKey: auditEvent.operationKey,
-    correlationId: auditEvent.correlationId,
-    evidenceRefs: [],
-    redactedPayloadJson: JSON.stringify(auditEvent.redactedPayload),
-    payloadHash: auditEvent.payloadHash,
-    createdAt: auditEvent.createdAt,
-  })
-}
-
-async function upsertFunnelEvent(db: RuntimeDb, funnelEvent: InquiryFunnelRecord): Promise<void> {
-  await upsertByFields(db, 'funnelEvents', ['eventType', 'businessId', 'correlationId', 'createdAt'], {
-    eventType: funnelEvent.eventType,
-    source: 'inquiry',
-    stage: 'published',
-    pseudonymousSessionId: funnelEvent.pseudonymousSessionId,
-    businessId: funnelEvent.businessId,
-    redactedPayloadJson: JSON.stringify(funnelEvent.redactedPayload),
-    consentFlag: true,
-    correlationId: funnelEvent.correlationId,
-    createdAt: funnelEvent.createdAt,
-  })
-}
-
-async function upsertByFields(
-  db: RuntimeDb,
-  tableName: string,
-  fields: readonly string[],
-  patch: Record<string, unknown>
-): Promise<void> {
-  const indexedExisting = await findIndexedUpsertRow(db, tableName, fields, patch)
-  const existing = indexedExisting === undefined
-    ? (await collect(db, tableName)).find((row) => fields.every((field) => row[field] === patch[field]))
-    : indexedExisting
-  if (existing === undefined || existing === null) {
-    await db.insert(tableName, patch)
-    return
-  }
-
-  await db.patch(existing._id, patch)
-}
-
-type ExactUpsertIndex = {
-  kind: 'exact'
-  tableName: string
-  fields: readonly string[]
-  indexName: string
-}
-
-type ScopedUpsertIndex = {
-  kind: 'scoped'
-  tableName: string
-  fields: readonly string[]
-  indexName: string
-  indexFields: readonly string[]
-}
-
-type UpsertIndex = ExactUpsertIndex | ScopedUpsertIndex
-
-const upsertIndexes: readonly UpsertIndex[] = [
-  { kind: 'exact', tableName: 'inquiryAbuseBuckets', fields: ['key', 'window'], indexName: 'by_key_window' },
-  { kind: 'exact', tableName: 'inquiryThreads', fields: ['threadId'], indexName: 'by_threadId' },
-  { kind: 'exact', tableName: 'inquiryMessages', fields: ['messageId'], indexName: 'by_messageId' },
-  { kind: 'exact', tableName: 'inquiryNotifications', fields: ['notificationId'], indexName: 'by_notificationId' },
-  { kind: 'exact', tableName: 'inquiryPrivacyTombstones', fields: ['threadId', 'operationKey'], indexName: 'by_thread_operationKey' },
-  { kind: 'exact', tableName: 'notificationDispatches', fields: ['dispatchId'], indexName: 'by_dispatchId' },
-  { kind: 'scoped', tableName: 'auditEvents', fields: ['eventId'], indexName: 'by_correlationId', indexFields: ['correlationId'] },
-  {
-    kind: 'scoped',
-    tableName: 'funnelEvents',
-    fields: ['eventType', 'businessId', 'correlationId', 'createdAt'],
-    indexName: 'by_business_createdAt',
-    indexFields: ['businessId', 'createdAt'],
-  },
-]
-
-async function findIndexedUpsertRow(
-  db: RuntimeDb,
-  tableName: string,
-  fields: readonly string[],
-  patch: Record<string, unknown>
-): Promise<RuntimeDocument | null | undefined> {
-  const index = upsertIndexes.find((candidate) => candidate.tableName === tableName && sameFields(candidate.fields, fields))
-  if (index === undefined || !indexFieldsPresent(index, patch)) {
-    return undefined
-  }
-
-  const indexFields = index.kind === 'exact' ? index.fields : index.indexFields
-  const query = db.query(tableName).withIndex(index.indexName, (builder) =>
-    indexFields.reduce((next, field) => next.eq(field, patch[field]), builder)
-  )
-
-  if (index.kind === 'exact') {
-    return await query.unique()
-  }
-
-  return (await query.collect()).find((row) => fields.every((field) => row[field] === patch[field])) ?? null
-}
-
-function sameFields(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((field, index) => field === right[index])
-}
-
-function indexFieldsPresent(index: UpsertIndex, patch: Record<string, unknown>): boolean {
-  const indexFields = index.kind === 'exact' ? index.fields : index.indexFields
-  return indexFields.every((field) => patch[field] !== undefined)
-}
-
-async function collect(db: Pick<RuntimeDb, 'query'>, tableName: string): Promise<RuntimeDocument[]> {
-  return db.query(tableName).collect()
-}
-
-function toBusinessRecord(row: RuntimeDocument): BusinessRecord {
-  return {
-    businessId: brandNonEmpty(row._id, 'BusinessId'),
-    ownerId: brandNonEmpty(stringField(row, 'ownerId'), 'OwnerId'),
-    slug: brandNonEmpty(stringField(row, 'slug'), 'Slug'),
-    name: stringField(row, 'name'),
-    normalizedName: stringField(row, 'normalizedName'),
-    category: stringField(row, 'category'),
-    suburb: stringField(row, 'suburb'),
-    stateTerritory: stringField(row, 'stateTerritory'),
-    publicStatus: publicStatus(row),
-    trustTier: trustTier(row),
-    claimStatus: claimStatus(row),
-    sourceHash: brandNonEmpty(stringField(row, 'sourceHash'), 'SourceHash'),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
-  }
-}
-
-function toBusinessOwnerRecord(row: RuntimeDocument): BusinessOwnerRecord {
-  const displayName = optionalStringField(row, 'displayName')
-  const emailHash = optionalStringField(row, 'emailHash')
-  return {
-    ownerId: brandNonEmpty(row._id, 'OwnerId'),
-    clerkUserId: stringField(row, 'clerkUserId'),
-    ...(displayName === undefined ? {} : { displayName }),
-    ...(emailHash === undefined ? {} : { emailHash }),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
-  }
-}
-
-function toClaimRecord(row: RuntimeDocument): ClaimRecord {
-  const businessId = optionalStringField(row, 'businessId')
-  return {
-    claimId: brandNonEmpty(row._id, 'ClaimId'),
-    ownerId: brandNonEmpty(stringField(row, 'ownerId'), 'OwnerId'),
-    ...(businessId === undefined ? {} : { businessId: brandNonEmpty(businessId, 'BusinessId') }),
-    slug: brandNonEmpty(stringField(row, 'slug'), 'Slug'),
-    status: claimRecordStatus(row),
-    submittedFactsHash: brandNonEmpty(stringField(row, 'submittedFactsHash'), 'SourceHash'),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
-  }
-}
-
-function toResolvableOwnerRecipient(row: RuntimeDocument): ResolvableOwnerRecipient[] {
-  const clerkUserId = stringField(row, 'clerkUserId').trim()
-  const emailHash = optionalStringField(row, 'emailHash')?.trim()
-  if (clerkUserId.length === 0 || emailHash === undefined || emailHash.length === 0) return []
-  return [{
-    ownerId: brandNonEmpty(row._id, 'OwnerId'),
-    recipientRef: `clerk-owner-email:${emailHash}`,
-    resolvedAt: numberField(row, 'updatedAt'),
-  }]
-}
-
-function toBusinessServiceRecord(row: RuntimeDocument): BusinessServiceRecord {
-  return {
-    serviceId: brandNonEmpty(row._id, 'ServiceId'),
-    serviceSlug: brandNonEmpty(stringField(row, 'serviceSlug'), 'Slug'),
-    businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
-    name: stringField(row, 'name'),
-    category: stringField(row, 'category'),
-    summary: stringField(row, 'summary'),
-    serviceArea: stringField(row, 'serviceArea'),
-    hoursOrUnknown: stringField(row, 'hoursOrUnknown'),
-    status: businessServiceStatus(row),
-    sortOrder: numberField(row, 'sortOrder'),
-    sourceHash: brandNonEmpty(stringField(row, 'sourceHash'), 'SourceHash'),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
-  }
-}
-
-function toServiceCapabilityRecord(row: RuntimeDocument): ServiceCapabilityRecord {
-  const mode = firstRequestMode(row)
-  const noContactReason = optionalStringField(row, 'noContactReason')
-  return {
-    businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
-    serviceId: brandNonEmpty(stringField(row, 'serviceId'), 'ServiceId'),
-    kind: capabilityKind(row),
-    status: capabilityStatus(row),
-    firstRequest:
-      mode === 'not_available_yet'
-        ? {
-            mode,
-            publicDisclosure: stringField(row, 'publicDisclosure'),
-            publicChannel: publicFirstRequestChannel(row),
-            rawContactExcluded: true,
-            noContactReason: noContactReason ?? 'Not available yet.',
-          }
-        : {
-            mode,
-            publicDisclosure: stringField(row, 'publicDisclosure'),
-            publicChannel: publicFirstRequestChannel(row),
-            rawContactExcluded: true,
-          },
-    callable: false as const,
-    paymentRequired: false as const,
-    ...(optionalStringField(row, 'reason') === undefined ? {} : { reason: stringField(row, 'reason') }),
-    sourceHash: brandNonEmpty(stringField(row, 'sourceHash'), 'SourceHash'),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
-  }
-}
-
-function toSuppressionRuleRecord(row: RuntimeDocument): SuppressionRuleRecord {
-  return {
-    targetType: suppressionTargetType(row),
-    targetRef: stringField(row, 'targetRef'),
-    status: suppressionStatus(row),
-    reasonCode: stringField(row, 'reasonCode'),
-    evidenceRefs: stringArrayField(row, 'evidenceRefs'),
-    createdByAdminRef: stringField(row, 'createdByAdminRef'),
-    createdAt: numberField(row, 'createdAt'),
-    beforePublicStatus: beforePublicStatus(row),
-    beforeClaimStatus: beforeClaimStatus(row),
-    ...(optionalStringField(row, 'liftedByAdminRef') === undefined ? {} : { liftedByAdminRef: stringField(row, 'liftedByAdminRef') }),
-    ...(optionalStringField(row, 'liftedReasonCode') === undefined ? {} : { liftedReasonCode: stringField(row, 'liftedReasonCode') }),
-    ...(arrayField(row, 'liftedEvidenceRefs') === undefined ? {} : { liftedEvidenceRefs: stringArrayField(row, 'liftedEvidenceRefs') }),
-    ...(optionalNumberField(row, 'liftedAt') === undefined ? {} : { liftedAt: numberField(row, 'liftedAt') }),
-  }
-}
-
-function toInquiryThreadRecord(row: RuntimeDocument): InquiryThreadRecord {
-  const origin = inquiryOriginRef(row)
-  return {
-    threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
-    businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
-    ownerId: brandNonEmpty(stringField(row, 'ownerId'), 'OwnerId'),
-    serviceId: brandNonEmpty(stringField(row, 'serviceId'), 'ServiceId'),
-    capabilityKind: capabilityKind(row),
-    status: inquiryThreadStatus(row),
-    firstMessageId: brandNonEmpty(stringField(row, 'firstMessageId'), 'InquiryMessageId'),
-    sourceHash: brandNonEmpty(stringField(row, 'sourceHash'), 'SourceHash'),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
-    version: numberField(row, 'version'),
-    ...(optionalStringField(row, 'customerReplyEmail') === undefined ? {} : { customerReplyEmail: stringField(row, 'customerReplyEmail') }),
-    ...(optionalNumberField(row, 'readAt') === undefined ? {} : { readAt: numberField(row, 'readAt') }),
-    ...(optionalNumberField(row, 'repliedAt') === undefined ? {} : { repliedAt: numberField(row, 'repliedAt') }),
-    ...(optionalNumberField(row, 'closedAt') === undefined ? {} : { closedAt: numberField(row, 'closedAt') }),
-    ...(origin === undefined ? {} : { origin }),
-  }
-}
-
-function toInquiryCustomerAccessGrant(row: RuntimeDocument): InquiryCustomerAccessGrant {
-  const status = stringField(row, 'status') === 'revoked' ? 'revoked' as const : 'active' as const
-  return {
-    accessId: stringField(row, 'accessId'),
-    threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
-    scope: 'customer_record',
-    version: 'inquiry-customer-access:v1',
-    verifier: stringField(row, 'verifier') as `hmac-sha256:${string}`,
-    keyId: stringField(row, 'keyId'),
-    status,
-    createdAt: numberField(row, 'createdAt'),
-    expiresAt: numberField(row, 'expiresAt'),
-    ...(optionalNumberField(row, 'revokedAt') === undefined ? {} : { revokedAt: numberField(row, 'revokedAt') }),
-  }
-}
-
-function inquiryOriginRef(row: RuntimeDocument): InquiryThreadRecord['origin'] | undefined {
-  const kind = optionalStringField(row, 'originKind')
-  const threadId = optionalStringField(row, 'originThreadId')
-  if (kind !== 'answer_thread' || threadId === undefined) {
-    return undefined
-  }
-  return { kind, threadId }
-}
-
-function toInquiryMessageRecord(row: RuntimeDocument): InquiryMessageRecord {
-  const contactHash = optionalStringField(row, 'contactHash')
-  const redactedContact = redactedJsonPayload(row, 'redactedContact')
-  return {
-    messageId: brandNonEmpty(stringField(row, 'messageId'), 'InquiryMessageId'),
-    threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
-    sender: inquiryMessageSender(row),
-    body: stringField(row, 'body'),
-    bodyHash: brandNonEmpty(stringField(row, 'bodyHash'), 'SourceHash'),
-    createdAt: numberField(row, 'createdAt'),
-    ...(contactHash === undefined ? {} : { contactHash: brandNonEmpty(contactHash, 'SourceHash') }),
-    ...(redactedContact === undefined ? {} : { redactedContact }),
-    ...(optionalNumberField(row, 'privateDeletedAt') === undefined ? {} : { privateDeletedAt: numberField(row, 'privateDeletedAt') }),
-  }
-}
-
-function toInquiryNotificationRecord(row: RuntimeDocument): InquiryNotificationRecord {
-  const payload = redactedJsonPayload(row, 'redactedPayload') ?? null
-  const dispatchBindings = inquiryNotificationDispatchBindings(row)
-  return {
-    notificationId: brandNonEmpty(stringField(row, 'notificationId'), 'InquiryNotificationId'),
-    threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
-    messageId: brandNonEmpty(stringField(row, 'messageId'), 'InquiryMessageId'),
-    recipientRole: recipientRole(row),
-    status: inquiryNotificationStatus(row),
-    redactedPayload: payload,
-    payloadHash: brandNonEmpty(redactedJsonHash(row, 'redactedPayload'), 'SourceHash'),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
-    ...(optionalStringField(row, 'failureCode') === undefined ? {} : { failureCode: stringField(row, 'failureCode') }),
-    dispatchBindings,
-  }
-}
-
-function inquiryNotificationDispatchBindings(row: RuntimeDocument): InquiryNotificationDispatchBinding[] {
-  const value = optionalStringField(row, 'dispatchBindingsJson')
-  if (value === undefined) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return Array.isArray(parsed) ? parsed.filter(isInquiryNotificationDispatchBinding) : []
-  } catch {
-    return []
-  }
-}
-
-function isInquiryNotificationDispatchBinding(value: unknown): value is InquiryNotificationDispatchBinding {
-  return (
-    isRecord(value) &&
-    typeof value.dispatchId === 'string' &&
-    (value.providerFamily === 'resend' || value.providerFamily === 'novu') &&
-    typeof value.status === 'string' &&
-    InquiryNotificationDispatchStatusValues.includes(value.status as InquiryNotificationDispatchStatus) &&
-    typeof value.providerIdempotencyKey === 'string' &&
-    typeof value.payloadHash === 'string' &&
-    typeof value.updatedAt === 'number' &&
-    (
-      value.operatorNextAction === 'none' ||
-      value.operatorNextAction === 'retry_available' ||
-      value.operatorNextAction === 'operator_review_required' ||
-      value.operatorNextAction === 'terminal'
-    )
-  )
-}
 
 function toNotificationDispatchRecord(row: RuntimeDocument): NotificationDispatchRecord {
   return {
@@ -2435,287 +1565,6 @@ function toNotificationDispatchRecord(row: RuntimeDocument): NotificationDispatc
   }
 }
 
-function toInquiryPrivacyTombstoneRecord(row: RuntimeDocument): InquiryPrivacyTombstoneRecord {
-  return {
-    threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
-    businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
-    reasonCode: stringField(row, 'reasonCode'),
-    status: inquiryPrivacyTombstoneStatus(row),
-    operationKey: brandNonEmpty(stringField(row, 'operationKey'), 'OperationKey'),
-    correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
-    createdAt: numberField(row, 'createdAt'),
-    ...(optionalNumberField(row, 'appliedAt') === undefined ? {} : { appliedAt: numberField(row, 'appliedAt') }),
-    receiptErasureCount: numberField(row, 'receiptErasureCount'),
-    erasureEventIds: stringArrayField(row, 'erasureEventIds'),
-  }
-}
-
-function toInquiryAuditRecord(row: RuntimeDocument): InquiryAuditRecord | undefined {
-  if (!stringField(row, 'eventType').startsWith('inquiry.') || optionalStringField(row, 'businessId') === undefined) {
-    return undefined
-  }
-
-  return {
-    eventType: inquiryAuditEventType(row),
-    actorKind: auditActorKind(row),
-    actorRef: stringField(row, 'actorRef'),
-    targetType: 'inquiry',
-    targetRef: stringField(row, 'targetRef'),
-    businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
-    operationKey: brandNonEmpty(stringField(row, 'idempotencyKey'), 'OperationKey'),
-    correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
-    ...(optionalStringField(row, 'beforeState') === undefined ? {} : { beforeState: stringField(row, 'beforeState') }),
-    ...(optionalStringField(row, 'afterState') === undefined ? {} : { afterState: stringField(row, 'afterState') }),
-    redactedPayload: parseJson(stringField(row, 'redactedPayloadJson')),
-    payloadHash: brandNonEmpty(stringField(row, 'payloadHash'), 'SourceHash'),
-    createdAt: numberField(row, 'createdAt'),
-  }
-}
-
-function toAbuseRateLimitBucketRecord(row: RuntimeDocument): AbuseRateLimitBucketRecord {
-  return {
-    scope: 'inquiry_submit',
-    key: stringField(row, 'key'),
-    window: stringField(row, 'window'),
-    count: numberField(row, 'count'),
-    state: abuseBucketState(row),
-    resetAt: numberField(row, 'resetAt'),
-    updatedAt: numberField(row, 'updatedAt'),
-  }
-}
-
-function toInquiryOperationRecord(row: RuntimeDocument): InquiryOperationRecord {
-  const effectRefs = stringArrayField(row, 'effectRefs')
-  return {
-    operationKey: brandNonEmpty(stringField(row, 'key'), 'OperationKey'),
-    requestHash: brandNonEmpty(stringField(row, 'requestHash'), 'SourceHash'),
-    resultCode: effectValue(effectRefs, 'result') ?? 'inquiry_submitted',
-    ...(effectValue(effectRefs, 'thread') === undefined ? {} : { threadId: brandNonEmpty(effectValue(effectRefs, 'thread') ?? '', 'InquiryThreadId') }),
-    ...(effectValue(effectRefs, 'message') === undefined ? {} : { messageId: brandNonEmpty(effectValue(effectRefs, 'message') ?? '', 'InquiryMessageId') }),
-    ...(effectValue(effectRefs, 'notification') === undefined ? {} : { notificationId: brandNonEmpty(effectValue(effectRefs, 'notification') ?? '', 'InquiryNotificationId') }),
-    createdAt: numberField(row, 'createdAt'),
-  }
-}
-async function toGovernedSendReceiptRecord(
-  row: RuntimeDocument,
-  keyRows: readonly RuntimeDocument[],
-  lineageRows: readonly RuntimeDocument[],
-  keyring: InquiryReceiptKeyring,
-): Promise<GovernedSendReceiptRecord | undefined> {
-  const proof = isRecord(row.admissionProof) ? row.admissionProof : {}
-  const proofDetail = isRecord(proof.proof) ? proof.proof : {}
-  const destinationVerifiedAt = optionalNumberFromUnknown(proofDetail.destinationVerifiedAt)
-  const operationKey = brandNonEmpty(stringField(row, 'operationKey'), 'OperationKey')
-  const threadId = brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId')
-  const digest = stringField(row, 'digest') as `sha256:${string}`
-  const keyRef = stringField(row, 'keyRef')
-  const base = {
-    digest,
-    algorithm: 'sha256' as const,
-    schemaVersion: numberField(row, 'schemaVersion'),
-    createdAt: numberField(row, 'createdAt'),
-    operationKey,
-    threadId,
-    admissionProof: {
-      version: 'r1-target-admitted:v1' as const,
-      admitted: true as const,
-      proof: {
-        kind: 'claimed_owner' as const,
-        claimRef: stringFromUnknown(proofDetail.claimRef),
-        recipientRef: stringFromUnknown(proofDetail.recipientRef),
-        ...(destinationVerifiedAt === undefined ? {} : { destinationVerifiedAt }),
-      },
-    },
-    recipientRef: stringField(row, 'recipientRef'),
-  }
-  const wrappedKeyRow = keyRows.find((candidate) => stringField(candidate, 'keyRef') === keyRef)
-  const matchingLineageRows = lineageRows.filter(
-    (candidate) => stringField(candidate, 'receiptOperationKey') === String(operationKey),
-  )
-  if (matchingLineageRows.length > 1) return undefined
-  const lineageRow = matchingLineageRows[0]
-  if (wrappedKeyRow === undefined) {
-    if (lineageRow === undefined) return undefined
-    const lineage = toGovernedSendErasureLineageRecord(lineageRow)
-    return {
-      ...base,
-      retention: 'erased',
-      erasedAt: lineage.destroyedAt,
-      erasureEventId: lineage.erasureEventId,
-    }
-  }
-  if (lineageRow !== undefined) return undefined
-
-  const payload: InquiryEncryptedReceiptPayload = {
-    envelopeVersion: 'inquiry-receipt-envelope:v1',
-    keyRef,
-    ciphertextBase64: stringField(row, 'ciphertextBase64'),
-    contentIvBase64: stringField(row, 'contentIvBase64'),
-  }
-  const wrappedKey: InquiryWrappedReceiptKey = {
-    keyRef,
-    receiptOperationKey: stringField(wrappedKeyRow, 'receiptOperationKey'),
-    wrappedKeyBase64: stringField(wrappedKeyRow, 'wrappedKeyBase64'),
-    wrapIvBase64: stringField(wrappedKeyRow, 'wrapIvBase64'),
-    kekKeyId: stringField(wrappedKeyRow, 'kekKeyId'),
-    createdAt: numberField(wrappedKeyRow, 'createdAt'),
-  }
-  try {
-    const canonicalBytesBase64 = await decryptGovernedSendReceipt({ receipt: base, payload, wrappedKey, keyring })
-    return { ...base, retention: 'recoverable', canonicalBytesBase64 }
-  } catch {
-    return undefined
-  }
-}
-
-function toGovernedSendIntegrityCommitmentRecord(
-  row: RuntimeDocument,
-): GovernedSendIntegrityCommitmentRecord {
-  const targetBinding = isRecord(row.targetBinding) ? row.targetBinding : {}
-  return {
-    version: stringField(row, 'version') as 'governed-send-integrity:v1',
-    receiptRef: stringField(row, 'receiptRef'),
-    operationKey: brandNonEmpty(stringField(row, 'operationKey'), 'OperationKey'),
-    threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
-    digest: stringField(row, 'digest') as `sha256:${string}`,
-    keyId: stringField(row, 'keyId'),
-    targetBinding: {
-      businessId: brandNonEmpty(stringFromUnknown(targetBinding.businessId), 'BusinessId'),
-      ownerId: brandNonEmpty(stringFromUnknown(targetBinding.ownerId), 'OwnerId'),
-      serviceId: brandNonEmpty(stringFromUnknown(targetBinding.serviceId), 'ServiceId'),
-      capabilityKind: stringFromUnknown(targetBinding.capabilityKind) as CapabilityKind,
-      claimRef: stringFromUnknown(targetBinding.claimRef),
-      recipientRef: stringFromUnknown(targetBinding.recipientRef),
-    },
-    signature: stringField(row, 'signature') as `hmac-sha256:${string}`,
-    createdAt: numberField(row, 'createdAt'),
-  }
-}
-
-function toGovernedSendErasureLineageRecord(row: RuntimeDocument): GovernedSendErasureLineageRecord {
-  return {
-    erasureEventId: stringField(row, 'erasureEventId'),
-    receiptOperationKey: brandNonEmpty(stringField(row, 'receiptOperationKey'), 'OperationKey'),
-    privacyOperationKey: brandNonEmpty(stringField(row, 'privacyOperationKey'), 'OperationKey'),
-    threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
-    digest: stringField(row, 'digest') as `sha256:${string}`,
-    keyRef: stringField(row, 'keyRef'),
-    reasonCode: stringField(row, 'reasonCode'),
-    destroyedAt: numberField(row, 'destroyedAt'),
-    priorReceiptCommitment: stringField(row, 'priorReceiptCommitment'),
-    lineageHash: stringField(row, 'lineageHash'),
-  }
-}
-
-
-function toCapabilityLaunchSupportRecord(row: RuntimeDocument): CapabilityLaunchSupportRecord | undefined {
-  if (stringField(row, 'capability') !== 'human_inquiry_owner_inbox') {
-    return undefined
-  }
-  const sourceHash = optionalStringField(row, 'sourceHash')
-  const correlationId = optionalStringField(row, 'correlationId')
-  if (sourceHash === undefined || correlationId === undefined) {
-    return undefined
-  }
-
-  return {
-    capability: 'human_inquiry_owner_inbox',
-    primaryOwnerRef: optionalStringField(row, 'primaryOwnerRef') ?? '',
-    primaryAdminOperatorRef: optionalStringField(row, 'primaryAdminOperatorRef') ?? '',
-    backupOwnerRef: optionalStringField(row, 'backupOwnerRef') ?? '',
-    backupAdminOperatorRef: optionalStringField(row, 'backupAdminOperatorRef') ?? '',
-    supportedStage: inquirySupportStage(row),
-    supportedChannels: stringArrayField(row, 'supportedChannels').filter(isInquirySupportChannel),
-    capacityThreshold: supportCapacityThreshold(row),
-    backlogAgeThresholdMs: numberField(row, 'backlogAgeThresholdMs'),
-    phaseIncidentCounts: supportIncidentCounts(row),
-    supportEscalationPath: optionalStringField(row, 'supportEscalationPath') ?? '',
-    claimDisablePath: optionalStringField(row, 'claimDisablePath') ?? '',
-    perChannelKillRules: supportKillRules(row),
-    evidenceRefs: stringArrayField(row, 'evidenceRefs'),
-    sourceHash: brandNonEmpty(sourceHash, 'SourceHash'),
-    correlationId: brandNonEmpty(correlationId, 'CorrelationId'),
-    lastReviewedAt: numberField(row, 'lastReviewedAt'),
-  }
-}
-
-function inquirySupportStage(row: RuntimeDocument): CapabilityLaunchSupportRecord['supportedStage'] {
-  const value = stringField(row, 'supportedStage')
-  return value === 'internal_alpha' || value === 'public_alpha' ? value : 'manual_support'
-}
-
-function isInquirySupportChannel(value: string): value is CapabilityLaunchSupportRecord['supportedChannels'][number] {
-  return (
-    value === 'public_inquiry' ||
-    value === 'owner_inbox' ||
-    value === 'email_notification' ||
-    value === 'provider_readback' ||
-    value === 'operator_readback'
-  )
-}
-
-function supportCapacityThreshold(row: RuntimeDocument): CapabilityLaunchSupportRecord['capacityThreshold'] {
-  const value = parseRecordJson(optionalStringField(row, 'capacityThresholdJson'))
-  return {
-    maxOpenThreads: numberFromRecord(value, 'maxOpenThreads'),
-    maxFailedNotifications: numberFromRecord(value, 'maxFailedNotifications'),
-  }
-}
-
-function supportIncidentCounts(row: RuntimeDocument): CapabilityLaunchSupportRecord['phaseIncidentCounts'] {
-  const value = parseRecordJson(optionalStringField(row, 'phaseIncidentCountsJson'))
-  return {
-    retryExhausted: numberFromRecord(value, 'retryExhausted'),
-    noRepair: numberFromRecord(value, 'noRepair'),
-    unresolvedDeliveryFailures: numberFromRecord(value, 'unresolvedDeliveryFailures'),
-    abuseBlocked: numberFromRecord(value, 'abuseBlocked'),
-    privacyDeletes: numberFromRecord(value, 'privacyDeletes'),
-  }
-}
-
-function supportKillRules(row: RuntimeDocument): CapabilityLaunchSupportRecord['perChannelKillRules'] {
-  const value = optionalStringField(row, 'perChannelKillRulesJson')
-  if (value === undefined) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-    return parsed.filter(isSupportKillRule)
-  } catch {
-    return []
-  }
-}
-
-function isSupportKillRule(value: unknown): value is CapabilityLaunchSupportRecord['perChannelKillRules'][number] {
-  return (
-    isRecord(value) &&
-    typeof value.channel === 'string' &&
-    (isInquirySupportChannel(value.channel) || value.channel === 'public_claim') &&
-    typeof value.trigger === 'string' &&
-    typeof value.action === 'string'
-  )
-}
-
-function parseRecordJson(value: string | undefined): Record<string, unknown> {
-  if (value === undefined) {
-    return {}
-  }
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return isRecord(parsed) ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-function numberFromRecord(record: Record<string, unknown>, field: string): number {
-  const value = record[field]
-  return typeof value === 'number' ? value : 0
-}
 
 function summarizeSubmitError(result: Extract<ReturnType<typeof submitInquiryModule>, { kind: 'error' }>) {
   return {
@@ -2825,40 +1674,6 @@ function inquiryPrivacyCsrfError(reason: string) {
   }
 }
 
-function operationNameForResult(resultCode: string): string {
-  if (resultCode === 'inquiry_read_marked') {
-    return 'markInquiryRead'
-  }
-  if (resultCode === 'inquiry_replied') {
-    return 'replyToInquiry'
-  }
-  if (resultCode === 'inquiry_closed') {
-    return 'closeInquiry'
-  }
-  if (resultCode === 'inquiry_private_content_deleted') {
-    return 'deleteInquiryPrivateContent'
-  }
-  return 'submitInquiry'
-}
-
-function redactedJson(payload: RedactedPayload) {
-  return {
-    json: JSON.stringify(payload),
-    payloadHash: stableHash(payload),
-  }
-}
-
-function redactedJsonPayload(row: RuntimeDocument, field: string): RedactedPayload | undefined {
-  const value = row[field]
-  if (!isRecord(value)) {
-    return undefined
-  }
-  const json = value.json
-  if (typeof json !== 'string') {
-    return undefined
-  }
-  return parseJson(json)
-}
 
 function redactedJsonHash(row: RuntimeDocument, field: string): string {
   const value = row[field]
@@ -2888,39 +1703,6 @@ function isRedactedPayload(value: unknown): value is RedactedPayload {
     return false
   }
   return Object.values(value).every(isRedactedPayload)
-}
-
-function stringField(row: RuntimeDocument, field: string): string {
-  const value = row[field]
-  return typeof value === 'string' ? value : ''
-}
-
-function optionalStringField(row: RuntimeDocument, field: string): string | undefined {
-  const value = row[field]
-  return typeof value === 'string' ? value : undefined
-}
-
-function numberField(row: RuntimeDocument, field: string): number {
-  const value = row[field]
-  return typeof value === 'number' ? value : 0
-}
-
-function optionalNumberField(row: RuntimeDocument, field: string): number | undefined {
-  const value = row[field]
-  return typeof value === 'number' ? value : undefined
-}
-
-function booleanField(row: RuntimeDocument, field: string): boolean {
-  return row[field] === true
-}
-
-function arrayField(row: RuntimeDocument, field: string): unknown[] | undefined {
-  const value = row[field]
-  return Array.isArray(value) ? value : undefined
-}
-
-function stringArrayField(row: RuntimeDocument, field: string): string[] {
-  return (arrayField(row, field) ?? []).filter(isString)
 }
 
 function effectValue(effectRefs: readonly string[], kind: string): string | undefined {
@@ -3280,94 +2062,11 @@ function uniqueOperatorRefs<T>(refs: readonly T[], key: (ref: T) => string): T[]
   })
 }
 
-function publicStatus(row: RuntimeDocument): BusinessRecord['publicStatus'] {
-  const value = stringField(row, 'publicStatus')
-  return value === 'published' || value === 'suppressed' ? value : 'unpublished'
-}
-
-function trustTier(row: RuntimeDocument): BusinessRecord['trustTier'] {
-  const value = stringField(row, 'trustTier')
-  return value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified' ? value : 'claimed'
-}
-
-function claimStatus(row: RuntimeDocument): BusinessRecord['claimStatus'] {
-  const value = stringField(row, 'claimStatus')
-  return value === 'published' || value === 'contested' || value === 'disputed' || value === 'suppressed' || value === 'draft'
-    ? value
-    : 'authenticated'
-}
-
-function claimRecordStatus(row: RuntimeDocument): ClaimRecord['status'] {
-  const value = stringField(row, 'status')
-  return value === 'published' || value === 'contested' || value === 'disputed' || value === 'suppressed' || value === 'draft'
-    ? value
-    : 'authenticated'
-}
-
-function businessServiceStatus(row: RuntimeDocument): BusinessServiceRecord['status'] {
-  const value = stringField(row, 'status')
-  return value === 'published' || value === 'suppressed' ? value : 'draft'
-}
-
-function capabilityKind(row: RuntimeDocument): CapabilityKind {
-  const value = stringField(row, 'kind')
-  return CapabilityKindValues.find((candidate) => candidate === value) ?? 'phone_inquiry'
-}
-
-function capabilityStatus(row: RuntimeDocument): ServiceCapabilityRecord['status'] {
-  const value = stringField(row, 'status')
-  return value === 'available' || value === 'degraded' || value === 'stale' ? value : 'unavailable'
-}
-
-function firstRequestMode(row: RuntimeDocument): ServiceCapabilityRecord['firstRequest']['mode'] {
-  const value = stringField(row, 'firstRequestMode')
-  return value === 'inquiry_available' || value === 'quote_request_available' ? value : 'not_available_yet'
-}
-
-function publicFirstRequestChannel(row: RuntimeDocument): ServiceCapabilityRecord['firstRequest']['publicChannel'] {
-  const value = stringField(row, 'publicChannel')
-  return value === 'public_business_contact' || value === 'ae_status_only' ? value : 'not_available'
-}
-
-function suppressionTargetType(row: RuntimeDocument) {
-  const value = stringField(row, 'targetType')
-  return value === 'service' || value === 'capability' ? value : 'business'
-}
-
-function suppressionStatus(row: RuntimeDocument) {
-  const value = stringField(row, 'status')
-  return value === 'lifted' ? value : 'active'
-}
-
-function beforePublicStatus(row: RuntimeDocument) {
-  const value = stringField(row, 'beforePublicStatus')
-  return value === 'published' || value === 'suppressed' ? value : 'unpublished'
-}
-
-function beforeClaimStatus(row: RuntimeDocument) {
-  const value = stringField(row, 'beforeClaimStatus')
-  return value === 'published' || value === 'contested' || value === 'disputed' || value === 'suppressed' || value === 'draft'
-    ? value
-    : 'authenticated'
-}
-
-function inquiryThreadStatus(row: RuntimeDocument) {
-  const value = stringField(row, 'status')
-  return value === 'read' || value === 'replied' || value === 'closed' ? value : 'unread'
-}
-
-function inquiryMessageSender(row: RuntimeDocument) {
-  return stringField(row, 'sender') === 'owner' ? 'owner' : 'customer'
-}
 
 function recipientRole(row: RuntimeDocument) {
   return stringField(row, 'recipientRole') === 'customer' ? 'customer' : 'owner'
 }
 
-function inquiryNotificationStatus(row: RuntimeDocument) {
-  const value = stringField(row, 'status')
-  return value === 'sent' || value === 'failed' || value === 'held' ? value : 'queued'
-}
 
 function notificationProviderFamily(row: RuntimeDocument): NotificationProviderFamily {
   return stringField(row, 'providerFamily') === 'novu' ? 'novu' : 'resend'
@@ -3390,54 +2089,4 @@ function notificationWebhookEventStatus(row: RuntimeDocument): NotificationWebho
 
 function notificationSignatureStatus(row: RuntimeDocument): NotificationSignatureStatus {
   return stringField(row, 'signatureStatus') === 'verified' ? 'verified' : 'rejected'
-}
-
-function inquiryAuditEventType(row: RuntimeDocument): InquiryAuditRecord['eventType'] {
-  const value = stringField(row, 'eventType')
-  switch (value) {
-    case 'inquiry.rejected':
-    case 'inquiry.rate_limited':
-    case 'inquiry.viewed':
-    case 'inquiry.read_marked':
-    case 'inquiry.replied':
-    case 'inquiry.closed':
-    case 'inquiry.private_content_deleted':
-      return value
-    default:
-      return 'inquiry.submitted'
-  }
-}
-
-function auditActorKind(row: RuntimeDocument): InquiryAuditRecord['actorKind'] {
-  const value = stringField(row, 'actorKind')
-  return value === 'owner' || value === 'system' ? value : 'anonymous'
-}
-
-function inquiryPrivacyTombstoneStatus(row: RuntimeDocument) {
-  const value = stringField(row, 'status')
-  return value === 'requested' || value === 'held' ? value : 'applied'
-}
-
-function abuseBucketState(row: RuntimeDocument) {
-  return stringField(row, 'state') === 'limited' ? 'limited' : 'open'
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function stringFromUnknown(value: unknown): string {
-  return typeof value === 'string' ? value : ''
-}
-
-function optionalNumberFromUnknown(value: unknown): number | undefined {
-  return typeof value === 'number' ? value : undefined
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === 'string'
-}
-
-function isDefined<T>(value: T | undefined): value is T {
-  return value !== undefined
 }
