@@ -181,10 +181,10 @@ Fresh line counts (`wc -l` at close):
 
 **Large Convex mutation/query modules:**
 - Problem: Remaining multi-thousand-line Convex files increase parse/bundle cost and raise risk of rewriting large documents in one mutation.
-- Files: `convex/inquiries.ts` (3443), `convex/customerRequestRouteExecution.ts` (2463, journal machines deferred), `convex/customerRequestApplication.ts` (1749 validators + thin actions — host-done), `convex/capabilitySupply.ts` (973 — host-done; graph/probe residual).
+- Files: `convex/customerRequestApplication.ts` (1749 host-done), `convex/customerRequestRouteExecution.ts` (1606 — machines deepened; cancel/problem residual), `convex/registry.ts` (1622), `convex/discovery.ts` (1565), `convex/inquiries.ts` (1435 host-done), `convex/capabilitySupply.ts` (804 host-done).
 - Measurement: Line counts above; Convex document limit 1 MiB (see `convex/_generated/ai/guidelines.md`).
-- Cause: Unbounded arrays or growing aggregates inside single documents would rewrite whole docs; journal machines still concentrate work.
-- Improvement path: Keep high-churn children in separate tables (schema convention already enforced in `tests/unit/schema/convex-schema.test.ts`); deepen journal machines only behind a write-plan ADR — not via shallow host file splits; profile hot paths under `npm run check:convex-codegen` + integration suites.
+- Cause: Unbounded arrays or growing aggregates inside single documents would rewrite whole docs; residual hosts still concentrate validators + secondary surfaces.
+- Improvement path: Keep high-churn children in separate tables (schema convention already enforced in `tests/unit/schema/convex-schema.test.ts`); deepen cancel/problem or outbox convergence behind ports — not via shallow host file splits; profile hot paths under `npm run check:convex-codegen` + integration suites.
 
 **Customer Request workspace client payload:**
 - Problem: Workspace shell still owns a large interactive surface; likely heavy first paint for `/engine` (panels already split; shell file 413 lines).
@@ -193,12 +193,10 @@ Fresh line counts (`wc -l` at close):
 - Cause: Clarification, options, authority, and recovery still compose a large client surface across panel modules.
 - Improvement path: Lazy-load non-first-paint panels; keep projection families in the customer-request module, not in Convex hosts.
 
-**Hosted agent journey script size:**
-- Problem: `src/modules/customer-request/hosted-agent-journey.ts` (2045) packs sandbox journey orchestration into one module, increasing edit risk and cold-start cost for journey tests.
-- Files: `src/modules/customer-request/hosted-agent-journey.ts`, `tests/unit/customer-request/hosted-agent-journey.test.ts`
-- Measurement: 2045 lines at map time.
-- Cause: Multi-step sandbox journey + assertions co-located for hermetic agent evidence.
-- Improvement path: Split by journey phase behind a small public runner interface; keep Convex hosts out of the journey script.
+**Hosted agent journey script size (Wave 31 closed):**
+- Status: Split under `src/modules/customer-request/hosted-agent-journey/` (kernel + scenario adapters); thin re-export at `hosted-agent-journey.ts` (8 lines). Preserve `claimBoundary` sandbox honesty.
+- Files: `hosted-agent-journey/{run,runtime,types,discovery,happy,cancel,partial,front-door}.ts`, `tests/unit/customer-request/hosted-agent-journey.test.ts`
+- Residual: `runtime.ts` (~683) still the heaviest scenario helper — split further only if journey edits keep colliding.
 
 ## Fragile Areas
 
@@ -209,12 +207,12 @@ Fresh line counts (`wc -l` at close):
 - Safe modification: Follow `.agents/skills/ae-agent-identity-and-mandates/SKILL.md` and `.agents/skills/ae-agent-surfaces/SKILL.md`; extend refusal taxonomies, never booleans; run integration tests for agent tools.
 - Test coverage: Strong unit/integration around admissions; keep replay/nonce tests green on every change.
 
-**Route-execution journal machines (deferred deepen):**
-- Why fragile: Lease/outcome/start sequencing is correctness-critical; predicates deepened into `src/modules/customer-request/route-execution/journal/` but mutation write plans remain host-local.
-- Files: `convex/customerRequestRouteExecution.ts`, `src/modules/customer-request/route-execution/journal/{integrity,decisions,export-evidence,export-state,index}.ts`, `tests/unit/customer-request/route-execution/journal-thinness.test.ts`
-- Common failures: Shallow sibling file chops that leave write plans duplicated; leaking `WritePlan` / `intendedPatches` into the pure journal module; breaking lease expiry / cancel disposition invariants.
-- Safe modification: Change predicates via journal module + thinness tests; leave `startOrResume` / `leaseNextDispatch` / `recordOutcome` host-exported until Wave 29 implements ADR-011; never invent Convex sibling hosts as a substitute for deepening.
-- Test coverage: Unit thinness + journal tests; heavy integration in `tests/integration/customer-request-v2-multi-capability-route.test.ts`.
+**Route-execution journal machines (Wave 29 deepened per ADR-011):**
+- Why fragile: Lease/outcome/start sequencing remains correctness-critical; orchestration now in `route-execution/machines/` with semantic `JournalMutationPorts`, but cancel/problem residual and fat `commitSucceededOutcome` still need care.
+- Files: `convex/customerRequestRouteExecution.ts`, `convex/customerRequestRouteExecutionJournalPorts.ts`, `src/modules/customer-request/route-execution/{journal,machines}/`, thinness tests `journal-thinness` + `machines-thinness`
+- Common failures: Shallow sibling file chops; leaking `WritePlan` / `intendedPatches` into pure `journal/`; breaking lease expiry / cancel disposition invariants; thickening host shells past thinness budgets.
+- Safe modification: Change predicates via journal module; change machine orchestration via `machines/` + ports; keep host `internalMutation` shells thin; never invent Convex sibling Start/Lease/Outcome hosts.
+- Test coverage: Unit thinness + journal/machines tests; heavy integration in `tests/integration/customer-request-v2-multi-capability-route.test.ts`.
 
 **Capability supply quarantine / publication / probe:**
 - Why fragile: Offerings, bindings, eligibility, publication, and readiness must all be current for routeable supply; quarantine and probe transitions are easy to get wrong.
