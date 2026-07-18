@@ -100,8 +100,11 @@ describe('inquiry convex host thinness', () => {
     expect(convexHost).toContain('const submitInquiryResult = v.union(')
     expect(convexHost).toContain('const ownerInboxResult = v.union(')
     expect(throughSource).toContain('submitPublicInquiryThroughSource')
+    expect(throughSource).toContain('resolveInquiryServerBackend')
+    expect(throughSource).toContain('createInquiryServerBackend')
     expect(throughSource).toContain('isLocalE2EAuthBypassEnabled')
-    expect(throughSource).toMatch(/if\s*\(\s*isLocalE2EAuthBypassEnabled\(\)\s*\)/)
+    expect(throughSource).toContain("createInquiryServerBackend(isLocalE2EAuthBypassEnabled() ? 'local-e2e' : 'source')")
+    expect(statSync('src/modules/inquiries/internal/local-e2e-adapter.ts').isFile()).toBe(true)
     expect(localE2eBypass).toContain('export function isLocalE2EAuthBypassEnabled')
   })
 

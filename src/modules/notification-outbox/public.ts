@@ -40,6 +40,7 @@ export type {
   NotificationWebhookEventRecord,
   NotificationWebhookEventStatus,
 } from './internal/schema'
+export type { NotificationOutboxSourceStatePorts } from './internal/source-state-ports'
 export {
   defaultNotificationOperatorControls,
   NotificationAttemptStatusValues,

@@ -70,11 +70,15 @@ describe('inquiry notification bridge thinness', () => {
     }
   })
 
-  it('reuses inquiryRuntimeDbHelpers instead of duplicating upsert helpers', () => {
+  it('reuses inquiryRuntimeDbHelpers and shared outbox persistence', () => {
     expect(bridgeSource).toContain("from './inquiryRuntimeDbHelpers'")
-    expect(bridgeSource).toContain('upsertByFields')
+    expect(bridgeSource).toContain("from './notificationOutboxPersistence'")
+    expect(bridgeSource).toContain('upsertNotificationDispatch')
+    expect(bridgeSource).toContain('toDispatchRecord')
     expect(bridgeSource).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+upsertByFields\b/)
     expect(bridgeSource).not.toMatch(/(?:^|\n)function\s+stringField\b/)
+    expect(bridgeSource).not.toMatch(/(?:^|\n)function\s+toNotificationDispatchRecord\b/)
+    expect(bridgeSource).not.toMatch(/(?:^|\n)async function\s+upsertNotificationDispatchReconstruction\b/)
     expect(helpers).toContain('export async function upsertByFields')
     expect(helpers).toContain('export function stringField')
   })
