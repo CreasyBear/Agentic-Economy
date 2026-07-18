@@ -1,13 +1,5 @@
 import { v, type Infer } from 'convex/values'
 
-import {
-  isBoundedJsonValue,
-  openCapabilityDecisionModel,
-  sameCapabilityContractRef,
-  type CapabilityInputKey,
-  type JsonValue,
-} from '@/modules/capability-contract/public'
-import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
 import {
@@ -25,16 +17,17 @@ import {
   cancelReplayKind,
   cancelRunHeadIntegrityValid,
   cancelRunNotFound,
-  leaseArgsInvalid,
-  leaseGrantExpired,
-  leasePendingCandidateValid,
   recoverDispatchAttemptAligned,
   recoverDispatchLeaseStillCurrent,
   recoverExpiredDispatchKind,
   routeAttemptIntegrityValid,
   routeDispatchIntegrityValid,
-  routeRunIdentityDigest,
 } from '@/modules/customer-request/route-execution/journal'
+import {
+  leaseNextDispatch as leaseNextDispatchMachine,
+  recordOutcome as recordOutcomeMachine,
+  startOrResume as startOrResumeMachine,
+} from '@/modules/customer-request/route-execution/machines'
 import {
   decideBusinessProblemClaim,
   decideCustomerProblemReply,
@@ -45,22 +38,24 @@ import {
 } from '@/modules/customer-request/route-execution/problem-support'
 import { routeStepGrantDigest } from '@/modules/customer-request/route-mandate-admission'
 import { routeStepGrantValue } from '@/modules/customer-request/runtime'
+import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 
-import type { Doc, Id } from './_generated/dataModel'
+import type { Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
-import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { getEligibleExactCapabilitySupply } from './capabilitySupply'
-import { admitRouteStep } from './customerRequestRouteMandateAdmission'
 import {
   readCurrentRouteMandateStateForPrincipal,
 } from './customerRequestRouteMandate'
 import { evidenceLoadPorts } from './customerRequestEvidenceLoadPorts'
+import {
+  journalMutationPorts,
+  markUnknownOutcome,
+  queueNextStep,
+  readRunProjection as readRunProjectionPorts,
+} from './customerRequestRouteExecutionJournalPorts'
 import { runtimeDb } from './source_state'
-
-const MAX_PENDING_DISPATCH_SCAN = 64
-const PRE_RELEASE_CANCELLATION_WINDOW_MS = 1_000
 
 const startCommand = v.object({
   requestId: v.string(),
@@ -140,253 +135,19 @@ const startResult = v.union(
   }),
 )
 
+async function readRunProjection(
+  ctx: MutationCtx | QueryCtx,
+  runRef: string,
+): Promise<Infer<typeof runProjection> | null> {
+  return await readRunProjectionPorts(ctx, runRef) as Infer<typeof runProjection> | null
+}
+
 export const startOrResume = internalMutation({
   args: startCommand.fields,
   returns: startResult,
-  handler: async (ctx, args): Promise<Infer<typeof startResult>> => {
-    if (args.principalId.trim().length === 0 || args.idempotencyKey.trim().length === 0) {
-      return { kind: 'conflict', reason: 'command_changed' }
-    }
-    const now = Date.now()
-    const current = await readCurrentRouteMandateStateForPrincipal(
-      ctx, args.requestId, args.principalId, now,
-    )
-    if (current.kind !== 'active') {
-      return {
-        kind: 'refused',
-        reason: current.kind === 'expired' ? 'confirmation_expired' : 'confirmation_required',
-      }
-    }
-    const mandate = current.mandate
-    const commandKey = `route-run-command:v1:${canonicalDigest({
-      principalId: mandate.principal.principalId,
-      requestId: args.requestId,
-      idempotencyKey: args.idempotencyKey,
-    })}`
-    const commandDigest = canonicalDigest(args)
-    const priorCommand = await ctx.db.query('customerRequestRouteRunCommands')
-      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    if (priorCommand !== null) {
-      if (priorCommand.commandDigest !== commandDigest
-        || priorCommand.principalId !== mandate.principal.principalId
-        || priorCommand.requestId !== args.requestId) {
-        return { kind: 'conflict', reason: 'command_changed' }
-      }
-      const replayed = await readRunProjection(ctx, priorCommand.runRef)
-      if (replayed === null) throw new Error('customer_request_route_run_command_integrity_failure')
-      return { kind: 'replayed', run: replayed }
-    }
-
-    const head = await ctx.db.query('customerRequestRouteRunHeads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head !== null && head.principalId !== mandate.principal.principalId) {
-      throw new Error('customer_request_route_run_head_integrity_failure')
-    }
-    const existing = await ctx.db.query('customerRequestRouteRuns')
-      .withIndex('by_mandateRef', (query) => query.eq('mandateRef', mandate.mandateRef)).unique()
-    if (existing !== null) {
-      if (head !== null && (head.currentRunRef !== existing.runRef
-        || head.currentMandateRef !== mandate.mandateRef)) {
-        throw new Error('customer_request_route_run_head_integrity_failure')
-      }
-      const resumed = await readRunProjection(ctx, existing.runRef)
-      if (resumed === null) throw new Error('customer_request_route_run_integrity_failure')
-      if (head === null) await ctx.db.insert('customerRequestRouteRunHeads', {
-        requestId: args.requestId,
-        principalId: mandate.principal.principalId,
-        currentRunRef: existing.runRef,
-        currentMandateRef: mandate.mandateRef,
-        createdAt: existing.createdAt,
-        updatedAt: now,
-      })
-      await ctx.db.insert('customerRequestRouteRunCommands', {
-        commandKey,
-        commandDigest,
-        principalId: mandate.principal.principalId,
-        requestId: args.requestId,
-        runRef: existing.runRef,
-        committedAt: now,
-      })
-      return { kind: 'resumed', run: resumed }
-    }
-
-    if (head !== null) {
-      const priorRun = await ctx.db.query('customerRequestRouteRuns')
-        .withIndex('by_runRef', (query) => query.eq('runRef', head.currentRunRef)).unique()
-      if (priorRun === null || priorRun.mandateRef !== head.currentMandateRef) {
-        throw new Error('customer_request_route_run_head_integrity_failure')
-      }
-      const priorAttempt = await ctx.db.query('customerRequestRouteStepAttempts')
-        .withIndex('by_runRef_and_position', (query) => (
-          query.eq('runRef', priorRun.runRef).eq('position', priorRun.currentPosition)
-        )).unique()
-      if (priorAttempt === null) throw new Error('customer_request_route_run_attempt_integrity_failure')
-      if (priorAttempt.state === 'dispatched' || priorAttempt.state === 'accepted'
-        || priorAttempt.state === 'outcome_unknown') {
-        return { kind: 'refused', reason: 'route_unavailable' }
-      }
-      if (priorAttempt.state === 'queued' || priorAttempt.state === 'leased') {
-        const priorOutbox = await ctx.db.query('customerRequestRouteDispatchOutbox')
-          .withIndex('by_attemptRef', (query) => query.eq('attemptRef', priorAttempt.attemptRef)).unique()
-        if (priorOutbox === null || (priorOutbox.state !== 'pending' && priorOutbox.state !== 'leased')) {
-          throw new Error('customer_request_route_dispatch_integrity_failure')
-        }
-        await ctx.db.patch(priorAttempt._id, { state: 'cancelled', updatedAt: now })
-        await ctx.db.patch(priorOutbox._id, { state: 'cancelled', updatedAt: now })
-        await ctx.db.patch(priorRun._id, { state: 'cancelled', updatedAt: now })
-      }
-    }
-
-    const orderedSteps = [...mandate.route.steps].sort((left, right) => left.position - right.position)
-    const firstStep = orderedSteps[0]
-    if (firstStep === undefined) return { kind: 'refused', reason: 'route_unavailable' }
-    const businesses = await snapshotRouteBusinesses(ctx, orderedSteps)
-    if (businesses === undefined) return { kind: 'refused', reason: 'route_unavailable' }
-    const firstInput = await materializeStepInput(ctx, {
-      requestId: args.requestId,
-      generationRef: mandate.route.generationRef,
-      routePlanId: mandate.route.routePlanId,
-      routeDigest: mandate.route.routeDigest,
-      position: firstStep.position,
-      actionId: firstStep.actionId,
-      contractRef: firstStep.contractRef,
-      upstreamOutputs: new Map(),
-    })
-    if (firstInput === null) return { kind: 'refused', reason: 'route_unavailable' }
-    const runRef = `route-run:v1:${canonicalDigest({
-      principalId: mandate.principal.principalId,
-      requestId: args.requestId,
-      mandateRef: mandate.mandateRef,
-      mandateDigest: mandate.mandateDigest,
-    })}`
-    const admission = await admitRouteStep(ctx, {
-      requestId: args.requestId,
-      mandateRef: mandate.mandateRef,
-      expectedMandateDigest: mandate.mandateDigest,
-      expectedGenerationRef: mandate.route.generationRef,
-      expectedRoutePlanId: mandate.route.routePlanId,
-      expectedRouteDigest: mandate.route.routeDigest,
-      stepPosition: firstStep.position,
-      expectedActionId: firstStep.actionId,
-      expectedCapabilityId: firstStep.contractRef.capabilityId,
-      expectedCapabilityVersion: firstStep.contractRef.version,
-      expectedCapabilityContractDigest: firstStep.contractRef.contractDigest,
-      idempotencyKey: `run-step:${runRef}:${firstStep.actionId}`,
-    }, args.principalId)
-    if (admission.kind !== 'admitted' && admission.kind !== 'replayed') {
-      return {
-        kind: 'refused',
-        reason: admission.reason === 'mandate_not_current'
-          ? 'confirmation_changed'
-          : 'route_unavailable',
-      }
-    }
-
-    const runMaterial = {
-      principalId: mandate.principal.principalId,
-      requestId: args.requestId,
-      requestRevision: mandate.request.requestRevision,
-      mandateRef: mandate.mandateRef,
-      mandateDigest: mandate.mandateDigest,
-      generationRef: mandate.route.generationRef,
-      routePlanId: mandate.route.routePlanId,
-      routeDigest: mandate.route.routeDigest,
-      businesses,
-      state: 'queued' as const,
-      totalSteps: orderedSteps.length,
-      completedSteps: 0,
-      currentPosition: firstStep.position,
-      createdAt: now,
-      updatedAt: now,
-    }
-    const runDigest = routeRunIdentityDigest({ runRef, ...runMaterial })
-    const inputDigest = canonicalDigest(firstInput)
-    const attemptMaterial = {
-      runRef,
-      requestId: args.requestId,
-      mandateRef: mandate.mandateRef,
-      actionId: firstStep.actionId,
-      position: firstStep.position,
-      operationKeyDigest: admission.grant.operationKeyDigest,
-      grantDigest: admission.grant.grantDigest,
-      inputDigest,
-      createdAt: now,
-    }
-    const attemptDigest = canonicalDigest(attemptMaterial)
-    const attemptRef = `route-step-attempt:v1:${attemptDigest}`
-    const dispatchMaterial = {
-      runRef,
-      attemptRef,
-      operationKeyDigest: admission.grant.operationKeyDigest,
-      availableAt: now,
-      createdAt: now,
-    }
-    const dispatchDigest = canonicalDigest(dispatchMaterial)
-    const dispatchRef = `route-dispatch:v1:${dispatchDigest}`
-
-    await ctx.db.insert('customerRequestRouteRuns', { runRef, runDigest, ...runMaterial })
-    if (head === null) {
-      await ctx.db.insert('customerRequestRouteRunHeads', {
-        requestId: args.requestId,
-        principalId: mandate.principal.principalId,
-        currentRunRef: runRef,
-        currentMandateRef: mandate.mandateRef,
-        createdAt: now,
-        updatedAt: now,
-      })
-    } else {
-      await ctx.db.patch(head._id, {
-        currentRunRef: runRef,
-        currentMandateRef: mandate.mandateRef,
-        updatedAt: now,
-      })
-    }
-    await ctx.db.insert('customerRequestRouteStepAttempts', {
-      attemptRef,
-      attemptDigest,
-      runRef,
-      requestId: args.requestId,
-      mandateRef: mandate.mandateRef,
-      actionId: firstStep.actionId,
-      position: firstStep.position,
-      operationKeyDigest: admission.grant.operationKeyDigest,
-      grant: admission.grant,
-      inputJson: JSON.stringify(firstInput),
-      inputDigest,
-      state: 'queued',
-      createdAt: now,
-      updatedAt: now,
-    })
-    await ctx.db.insert('customerRequestRouteDispatchOutbox', {
-      dispatchRef,
-      dispatchDigest,
-      runRef,
-      attemptRef,
-      operationKeyDigest: admission.grant.operationKeyDigest,
-      state: 'pending',
-      availableAt: now,
-      createdAt: now,
-      updatedAt: now,
-    })
-    await ctx.db.insert('customerRequestRouteRunCommands', {
-      commandKey,
-      commandDigest,
-      principalId: mandate.principal.principalId,
-      requestId: args.requestId,
-      runRef,
-      committedAt: now,
-    })
-    await ctx.scheduler.runAfter(
-      PRE_RELEASE_CANCELLATION_WINDOW_MS,
-      internal.customerRequestRouteTransportWorker.runNext,
-      {
-      workerId: `route-worker:${dispatchRef}`,
-      },
-    )
-    const run = await readRunProjection(ctx, runRef)
-    if (run === null) throw new Error('customer_request_route_run_write_integrity_failure')
-    return { kind: 'started', run }
-  },
+  handler: async (ctx, args): Promise<Infer<typeof startResult>> => (
+    await startOrResumeMachine(args, journalMutationPorts(ctx)) as Infer<typeof startResult>
+  ),
 })
 
 export const cancelCurrent = internalMutation({
@@ -517,84 +278,21 @@ const dispatchLease = v.object({
   leaseExpiresAt: v.number(),
 })
 
+const leaseNextDispatchResult = v.union(
+  v.object({ kind: v.literal('leased'), dispatch: dispatchLease }),
+  v.object({ kind: v.literal('none') }),
+  v.object({ kind: v.literal('refused'), reason: v.literal('lease_invalid') }),
+)
+
 export const leaseNextDispatch = internalMutation({
   args: { workerId: v.string(), leaseDurationMs: v.number() },
-  returns: v.union(
-    v.object({ kind: v.literal('leased'), dispatch: dispatchLease }),
-    v.object({ kind: v.literal('none') }),
-    v.object({ kind: v.literal('refused'), reason: v.literal('lease_invalid') }),
+  returns: leaseNextDispatchResult,
+  handler: async (ctx, args): Promise<Infer<typeof leaseNextDispatchResult>> => (
+    await leaseNextDispatchMachine(args, journalMutationPorts(ctx)) as Infer<
+      typeof leaseNextDispatchResult
+    >
   ),
-  handler: async (ctx, args) => {
-    const now = Date.now()
-    if (leaseArgsInvalid(args)) {
-      return { kind: 'refused' as const, reason: 'lease_invalid' as const }
-    }
-    const pendingCandidates = await ctx.db.query('customerRequestRouteDispatchOutbox')
-      .withIndex('by_state_and_availableAt', (query) => (
-        query.eq('state', 'pending').lte('availableAt', now)
-      )).take(MAX_PENDING_DISPATCH_SCAN)
-    for (const pending of pendingCandidates) {
-      const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', pending.attemptRef)).unique()
-      if (!leasePendingCandidateValid({ attempt, dispatch: pending }) || attempt === null) {
-        throw new Error('customer_request_route_dispatch_integrity_failure')
-      }
-      if (leaseGrantExpired(attempt.grant.expiresAt, now)) {
-        await failExpiredUnreleasedAttempt(ctx, pending, attempt, now)
-        continue
-      }
-      const leaseExpiresAt = now + args.leaseDurationMs
-      await ctx.db.patch(pending._id, {
-        state: 'leased', leaseOwner: args.workerId, leaseExpiresAt, updatedAt: now,
-      })
-      await ctx.db.patch(attempt._id, { state: 'leased', updatedAt: now })
-      await ctx.scheduler.runAfter(args.leaseDurationMs, internal.customerRequestRouteExecution.recoverExpiredDispatch, {
-        dispatchRef: pending.dispatchRef,
-      })
-      return {
-        kind: 'leased' as const,
-        dispatch: {
-          dispatchRef: pending.dispatchRef,
-          attemptRef: attempt.attemptRef,
-          runRef: attempt.runRef,
-          position: attempt.position,
-          operationKeyDigest: attempt.operationKeyDigest,
-          inputJson: attempt.inputJson,
-          grant: attempt.grant,
-          leaseExpiresAt,
-        },
-      }
-    }
-    if (pendingCandidates.length === MAX_PENDING_DISPATCH_SCAN) {
-      await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
-        workerId: `route-worker:expired-dispatch-cleanup:${now}`,
-      })
-    }
-    return { kind: 'none' as const }
-  },
 })
-
-async function failExpiredUnreleasedAttempt(
-  ctx: MutationCtx,
-  dispatch: Doc<'customerRequestRouteDispatchOutbox'>,
-  attempt: Doc<'customerRequestRouteStepAttempts'>,
-  now: number,
-): Promise<void> {
-  const run = await ctx.db.query('customerRequestRouteRuns')
-    .withIndex('by_runRef', (query) => query.eq('runRef', attempt.runRef)).unique()
-  if (run === null || run.mandateRef !== attempt.mandateRef
-    || run.currentPosition !== attempt.position
-    || (run.state !== 'queued' && run.state !== 'running')) {
-    throw new Error('customer_request_route_run_integrity_failure')
-  }
-  const failure: JsonValue = { reason: 'authority_expired_before_release' }
-  await ctx.db.patch(dispatch._id, { state: 'failed', updatedAt: now })
-  await ctx.db.patch(attempt._id, { state: 'failed', updatedAt: now })
-  await ctx.db.patch(run._id, {
-    state: 'failed', resultJson: JSON.stringify(failure),
-    resultDigest: canonicalDigest(failure), updatedAt: now,
-  })
-}
 
 const leasedInvocation = v.object({
   dispatchRef: v.string(),
@@ -969,148 +667,9 @@ export const recordOutcome = internalMutation({
     ),
   },
   returns: outcomeResult,
-  handler: async (ctx, args): Promise<Infer<typeof outcomeResult>> => {
-    const now = Date.now()
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', args.attemptRef)).unique()
-    if (attempt === null || attempt.operationKeyDigest !== args.operationKeyDigest) {
-      return { kind: 'refused', reason: 'attempt_not_current' }
-    }
-    const run = await ctx.db.query('customerRequestRouteRuns')
-      .withIndex('by_runRef', (query) => query.eq('runRef', attempt.runRef)).unique()
-    if (run === null) throw new Error('customer_request_route_run_integrity_failure')
-    if (attempt.state === 'succeeded') {
-      const replayed = await readRunProjection(ctx, run.runRef)
-      if (replayed === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: run.state === 'completed' ? 'completed' : 'replayed', run: replayed }
-    }
-    if (attempt.state !== 'accepted' && attempt.state !== 'dispatched') {
-      return { kind: 'refused', reason: 'attempt_not_current' }
-    }
-    const observation = args.observationJson === undefined
-      ? undefined
-      : parseRouteTransportObservationJson(args.observationJson)
-    if (args.observationJson !== undefined && (observation === undefined
-      || (args.outcome.kind === 'succeeded' && observation.disposition !== 'succeeded')
-      || (args.outcome.kind === 'partial' && observation.disposition !== 'partial')
-      || (args.outcome.kind === 'failed' && observation.disposition !== 'refused')
-      || (args.outcome.kind === 'unknown'
-        && observation.disposition !== 'unknown' && observation.disposition !== 'partial')
-      || !observation.releaseStarted)) {
-      return { kind: 'refused', reason: 'output_invalid' }
-    }
-    const observationPatch = observation === undefined ? {} : {
-      transportObservationJson: args.observationJson,
-      transportObservationDigest: canonicalDigest(observation),
-    }
-    if (args.outcome.kind === 'partial') {
-      const suppliedOutput = parseBoundedJson(args.outcome.outputJson)
-      const validated = suppliedOutput === undefined
-        ? null
-        : await validateAttemptOutput(ctx, attempt, suppliedOutput)
-      if (validated === null) {
-        await ctx.db.patch(attempt._id, observationPatch)
-        await markUnknownOutcome(ctx, run, attempt, now)
-      } else {
-        const partialResult: JsonValue = { kind: 'partial_result', output: validated.output }
-        await ctx.db.patch(attempt._id, {
-          outputJson: JSON.stringify(validated.output),
-          outputDigest: canonicalDigest(validated.output),
-          evidence: [...validated.evidence],
-          ...observationPatch,
-        })
-        await markUnknownOutcome(ctx, run, attempt, now, partialResult)
-      }
-      const partial = await readRunProjection(ctx, run.runRef)
-      if (partial === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'outcome_unknown', run: partial }
-    }
-    if (args.outcome.kind === 'unknown') {
-      await ctx.db.patch(attempt._id, observationPatch)
-      await markUnknownOutcome(ctx, run, attempt, now)
-      const unknown = await readRunProjection(ctx, run.runRef)
-      if (unknown === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'outcome_unknown', run: unknown }
-    }
-    if (args.outcome.kind === 'failed') {
-      const failure: JsonValue = { reason: 'business_reported_failure' }
-      await ctx.db.patch(attempt._id, { state: 'failed', ...observationPatch, updatedAt: now })
-      await ctx.db.patch(run._id, {
-        state: 'failed', resultJson: JSON.stringify(failure),
-        resultDigest: canonicalDigest(failure), updatedAt: now,
-      })
-      const failed = await readRunProjection(ctx, run.runRef)
-      if (failed === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'failed', run: failed }
-    }
-    const suppliedOutput = args.outcome.kind === 'succeeded'
-      ? parseBoundedJson(args.outcome.outputJson)
-      : undefined
-    const validated = suppliedOutput === undefined
-      ? null
-      : await validateAttemptOutput(ctx, attempt, suppliedOutput)
-    if (validated === null) {
-      await markUnknownOutcome(ctx, run, attempt, now)
-      const unknown = await readRunProjection(ctx, run.runRef)
-      if (unknown === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'outcome_unknown', run: unknown }
-    }
-    await ctx.db.patch(attempt._id, {
-      state: 'succeeded',
-      outputJson: JSON.stringify(validated.output),
-      outputDigest: canonicalDigest(validated.output),
-      evidence: [...validated.evidence],
-      ...observationPatch,
-      updatedAt: now,
-    })
-    const cancellation = await ctx.db.query('customerRequestRouteCancellationCommands')
-      .withIndex('by_runRef_and_committedAt', (query) => query.eq('runRef', run.runRef))
-      .order('desc')
-      .first()
-    if (attempt.position < run.totalSteps && cancellation?.result === 'pending') {
-      await ctx.db.patch(run._id, {
-        completedSteps: attempt.position,
-        currentPosition: attempt.position,
-        updatedAt: now,
-      })
-      const pendingCancellation = await readRunProjection(ctx, run.runRef)
-      if (pendingCancellation === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'replayed', run: pendingCancellation }
-    }
-    if (attempt.position < run.totalSteps && cancellation?.result === 'too_late') {
-      await ctx.db.patch(run._id, {
-        state: 'cancelled',
-        completedSteps: attempt.position,
-        currentPosition: attempt.position,
-        updatedAt: now,
-      })
-      const cancelled = await readRunProjection(ctx, run.runRef)
-      if (cancelled === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'cancelled', run: cancelled }
-    }
-    if (attempt.position === run.totalSteps) {
-      await ctx.db.patch(run._id, {
-        state: 'completed',
-        completedSteps: run.totalSteps,
-        resultJson: JSON.stringify(validated.output),
-        resultDigest: canonicalDigest(validated.output),
-        updatedAt: now,
-      })
-      const completed = await readRunProjection(ctx, run.runRef)
-      if (completed === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'completed', run: completed }
-    }
-    const next = await queueNextStep(ctx, run, attempt.position + 1, now)
-    if (!next) {
-      await markUnknownOutcome(ctx, run, attempt, now)
-      const unknown = await readRunProjection(ctx, run.runRef)
-      if (unknown === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'outcome_unknown', run: unknown }
-    }
-    const advanced = await readRunProjection(ctx, run.runRef)
-    if (advanced === null) throw new Error('customer_request_route_run_integrity_failure')
-    return { kind: 'advanced', run: advanced }
-  },
+  handler: async (ctx, args): Promise<Infer<typeof outcomeResult>> => (
+    await recordOutcomeMachine(args, journalMutationPorts(ctx)) as Infer<typeof outcomeResult>
+  ),
 })
 
 export const getCurrent = internalQuery({
@@ -1948,98 +1507,6 @@ export const exportCustomerEvidence = internalQuery({
   handler: async (ctx, args) => await assembleCustomerEvidenceExport(args, evidenceLoadPorts(ctx)),
 })
 
-async function readRunProjection(
-  ctx: MutationCtx | QueryCtx,
-  runRef: string,
-): Promise<Infer<typeof runProjection> | null> {
-  const run = await ctx.db.query('customerRequestRouteRuns')
-    .withIndex('by_runRef', (query) => query.eq('runRef', runRef)).unique()
-  if (run === null) return null
-  const attempts = await ctx.db.query('customerRequestRouteStepAttempts')
-    .withIndex('by_runRef_and_position', (query) => query.eq('runRef', runRef))
-    .take(run.totalSteps + 1)
-  const current = attempts.find((attempt) => attempt.position === run.currentPosition)
-  const cancellation = await ctx.db.query('customerRequestRouteCancellationCommands')
-    .withIndex('by_runRef_and_committedAt', (query) => query.eq('runRef', runRef))
-    .order('desc')
-    .first()
-  if (routeRunIdentityDigest(run) !== run.runDigest
-    || attempts.length > run.totalSteps || current === undefined
-    || attempts.some((attempt) => !routeAttemptIntegrityValid(attempt))) {
-    throw new Error('customer_request_route_run_attempt_integrity_failure')
-  }
-  const cancellationAttempt = await ctx.db.query('customerRequestRouteCancellationAttempts')
-    .withIndex('by_runRef_and_attemptRef', (query) => (
-      query.eq('runRef', runRef).eq('attemptRef', current.attemptRef)
-    )).unique()
-  const { runRef: _runRef, runDigest: _runDigest, principalId: _principalId,
-    mandateRef: _mandateRef, mandateDigest: _mandateDigest, routePlanId: _routePlanId,
-    routeDigest: _routeDigest, createdAt: _createdAt, ...projection } = run
-  return {
-    runRef,
-    requestId: projection.requestId,
-    requestRevision: projection.requestRevision,
-    generationRef: projection.generationRef,
-    ...(projection.businesses === undefined ? {} : {
-      businesses: projection.businesses.map((business) => ({ ...business })),
-    }),
-    state: projection.state,
-    totalSteps: projection.totalSteps,
-    completedSteps: projection.completedSteps,
-    currentPosition: projection.currentPosition,
-    currentState: current.state,
-    ...(projection.resultJson === undefined ? {} : { resultJson: projection.resultJson }),
-    ...((current.state === 'queued' || current.state === 'leased')
-      ? { cancellationReleaseMayStartAt: current.createdAt + PRE_RELEASE_CANCELLATION_WINDOW_MS }
-      : {}),
-    ...(cancellation?.result === 'too_late' || cancellation?.result === 'rejected'
-      ? {
-          cancellationUnavailableSince: cancellation.boundaryChangedAt ?? cancellation.committedAt,
-          cancellationRequestedAt: cancellation.committedAt,
-        }
-      : {}),
-    ...(cancellationAttempt?.state === 'pending'
-      ? {
-          cancellationAttempt: {
-            state: 'pending' as const,
-            requestedAt: cancellationAttempt.requestedAt,
-            nextCheckAt: cancellationAttempt.updatedAt + 30_000,
-          },
-        }
-      : cancellationAttempt?.state === 'unknown'
-        ? {
-            cancellationAttempt: {
-              state: 'unknown' as const,
-              requestedAt: cancellationAttempt.requestedAt,
-              observedAt: cancellationAttempt.resolvedAt ?? cancellationAttempt.updatedAt,
-              nextCheckAt: cancellationAttempt.updatedAt + 30_000,
-            },
-          }
-        : cancellationAttempt?.state === 'rejected'
-          ? {
-              cancellationAttempt: {
-                state: 'rejected' as const,
-                requestedAt: cancellationAttempt.requestedAt,
-                observedAt: cancellationAttempt.resolvedAt ?? cancellationAttempt.updatedAt,
-                reason: cancellationAttempt.reason ?? 'provider_rejected_cancellation',
-              },
-            }
-          : {}),
-    updatedAt: projection.updatedAt,
-  }
-}
-
-type StepInputRequest = Readonly<{
-  requestId: string
-  generationRef: string
-  routePlanId: string
-  routeDigest: string
-  position: number
-  actionId: string
-  contractRef: Readonly<{ capabilityId: string; version: number; contractDigest: string }>
-  upstreamOutputs: ReadonlyMap<string, JsonValue>
-}>
-
 async function resolveCancellationCommand(
   ctx: MutationCtx,
   runRef: string,
@@ -2053,260 +1520,6 @@ async function resolveCancellationCommand(
     throw new Error('customer_request_route_cancellation_command_integrity_failure')
   }
   await ctx.db.patch(command._id, { result })
-}
-
-async function materializeStepInput(
-  ctx: MutationCtx,
-  request: StepInputRequest,
-): Promise<JsonValue | null> {
-  const generationRow = await ctx.db.query('customerRequestV2RoutePlanGenerations')
-    .withIndex('by_requestId_and_generationRef', (query) => (
-      query.eq('requestId', request.requestId).eq('generationRef', request.generationRef)
-    )).unique()
-  const route = generationRow?.routeGeneration.routes.find((candidate) => (
-    candidate.routePlanId === request.routePlanId && candidate.routeDigest === request.routeDigest
-  ))
-  const step = route?.steps[request.position - 1]
-  if (step === undefined || step.actionId !== request.actionId
-    || !sameCapabilityContractRef(step.contractRef, request.contractRef)) return null
-  const stored = await getActiveExactCapabilityContract(ctx.db, request.contractRef)
-  if (stored.kind !== 'found') return null
-  let model: ReturnType<typeof openCapabilityDecisionModel>
-  try {
-    model = openCapabilityDecisionModel(encodeCapabilityContractDocumentJson(stored.documentJson).contract)
-  } catch {
-    return null
-  }
-  if (!sameCapabilityContractRef(model.contractRef, request.contractRef)) return null
-  const mappedFacts = step.deferredInputs.flatMap((mapping) => {
-    const value = request.upstreamOutputs.get(mapping.mappingId)
-    return value === undefined ? [] : [{
-      input: mapping.target.inputKey as CapabilityInputKey,
-      inputPointer: mapping.target.inputPointer,
-      value,
-    }]
-  })
-  if (mappedFacts.length !== step.deferredInputs.length) return null
-  const assessed = model.assessInput({
-    contractRef: model.contractRef,
-    selectionKey: model.selectionKey,
-    stage: 'commitment',
-    facts: [
-      ...step.resolvedInputs.map((fact) => ({
-        input: fact.inputKey as CapabilityInputKey,
-        inputPointer: fact.inputPointer,
-        value: fact.value,
-      })),
-      ...mappedFacts,
-    ],
-  })
-  return assessed.kind === 'viable' && assessed.stage === 'commitment' ? assessed.input : null
-}
-
-async function validateAttemptOutput(
-  ctx: MutationCtx,
-  attempt: Doc<'customerRequestRouteStepAttempts'>,
-  output: unknown,
-): Promise<Readonly<{
-  output: JsonValue
-  evidence: readonly Readonly<{
-    evidenceId: string
-    outputPointer: string
-    schemaIdentity: string
-    valueDigest: string
-  }>[]
-}> | null> {
-  const contractRef = attempt.grant.step.contractRef
-  const stored = await getActiveExactCapabilityContract(ctx.db, contractRef)
-  if (stored.kind !== 'found') return null
-  let model: ReturnType<typeof openCapabilityDecisionModel>
-  try {
-    model = openCapabilityDecisionModel(encodeCapabilityContractDocumentJson(stored.documentJson).contract)
-  } catch {
-    return null
-  }
-  if (!sameCapabilityContractRef(model.contractRef, contractRef)) return null
-  const validation = model.validateOutput(output)
-  if (validation.kind !== 'valid') return null
-  const evidence: Array<{
-    evidenceId: string; outputPointer: string; schemaIdentity: string; valueDigest: string
-  }> = []
-  for (const semantic of model.evidence) {
-    const value = readJsonPointer(validation.value, semantic.outputPointer)
-    if (value === undefined || !isBoundedJsonValue(value)) {
-      if (semantic.guaranteed || semantic.purpose === 'completion') return null
-      continue
-    }
-    evidence.push({
-      evidenceId: semantic.evidenceId,
-      outputPointer: semantic.outputPointer,
-      schemaIdentity: semantic.schemaIdentity,
-      valueDigest: canonicalDigest(value),
-    })
-  }
-  return { output: validation.value, evidence }
-}
-
-async function queueNextStep(
-  ctx: MutationCtx,
-  run: Doc<'customerRequestRouteRuns'>,
-  position: number,
-  now: number,
-): Promise<boolean> {
-  const mandateState = await readCurrentRouteMandateStateForPrincipal(
-    ctx, run.requestId, run.principalId, now, { requireCurrentGraph: false },
-  )
-  if (mandateState.kind !== 'active' || mandateState.mandate.mandateRef !== run.mandateRef) return false
-  const mandateStep = mandateState.mandate.route.steps.find((step) => step.position === position)
-  if (mandateStep === undefined) return false
-  const generationRow = await ctx.db.query('customerRequestV2RoutePlanGenerations')
-    .withIndex('by_requestId_and_generationRef', (query) => (
-      query.eq('requestId', run.requestId).eq('generationRef', run.generationRef)
-    )).unique()
-  const route = generationRow?.routeGeneration.routes.find((candidate) => (
-    candidate.routePlanId === run.routePlanId && candidate.routeDigest === run.routeDigest
-  ))
-  const routeStep = route?.steps[position - 1]
-  if (routeStep === undefined || routeStep.actionId !== mandateStep.actionId) return false
-  const attempts = await ctx.db.query('customerRequestRouteStepAttempts')
-    .withIndex('by_runRef_and_position', (query) => query.eq('runRef', run.runRef))
-    .take(run.totalSteps + 1)
-  if (attempts.length >= run.totalSteps) return false
-  const upstreamOutputs = new Map<string, JsonValue>()
-  for (const mapping of routeStep.deferredInputs) {
-    const source = attempts.find((candidate) => candidate.actionId === mapping.source.actionId)
-    const evidence = source?.evidence?.find((candidate) => (
-      candidate.evidenceId === mapping.source.evidenceId
-      && candidate.outputPointer === mapping.source.outputPointer
-      && candidate.schemaIdentity === mapping.schemaIdentity
-    ))
-    const sourceOutput = source?.outputJson === undefined ? undefined : parseBoundedJson(source.outputJson)
-    if (source?.state !== 'succeeded' || sourceOutput === undefined || evidence === undefined) return false
-    const pointed = readJsonPointer(sourceOutput, mapping.source.outputPointer)
-    if (pointed === undefined || !isBoundedJsonValue(pointed)
-      || canonicalDigest(pointed) !== evidence.valueDigest) return false
-    upstreamOutputs.set(mapping.mappingId, pointed)
-  }
-  const input = await materializeStepInput(ctx, {
-    requestId: run.requestId,
-    generationRef: run.generationRef,
-    routePlanId: run.routePlanId,
-    routeDigest: run.routeDigest,
-    position,
-    actionId: mandateStep.actionId,
-    contractRef: mandateStep.contractRef,
-    upstreamOutputs,
-  })
-  if (input === null) return false
-  const admission = await admitRouteStep(ctx, {
-    requestId: run.requestId,
-    mandateRef: mandateState.mandate.mandateRef,
-    expectedMandateDigest: mandateState.mandate.mandateDigest,
-    expectedGenerationRef: run.generationRef,
-    expectedRoutePlanId: run.routePlanId,
-    expectedRouteDigest: run.routeDigest,
-    stepPosition: position,
-    expectedActionId: mandateStep.actionId,
-    expectedCapabilityId: mandateStep.contractRef.capabilityId,
-    expectedCapabilityVersion: mandateStep.contractRef.version,
-    expectedCapabilityContractDigest: mandateStep.contractRef.contractDigest,
-    idempotencyKey: `run-step:${run.runRef}:${mandateStep.actionId}`,
-  }, run.principalId)
-  if (admission.kind !== 'admitted' && admission.kind !== 'replayed') return false
-  const inputDigest = canonicalDigest(input)
-  const attemptMaterial = {
-    runRef: run.runRef,
-    requestId: run.requestId,
-    mandateRef: run.mandateRef,
-    actionId: mandateStep.actionId,
-    position,
-    operationKeyDigest: admission.grant.operationKeyDigest,
-    grantDigest: admission.grant.grantDigest,
-    inputDigest,
-    createdAt: now,
-  }
-  const attemptDigest = canonicalDigest(attemptMaterial)
-  const attemptRef = `route-step-attempt:v1:${attemptDigest}`
-  const dispatchMaterial = {
-    runRef: run.runRef,
-    attemptRef,
-    operationKeyDigest: admission.grant.operationKeyDigest,
-    availableAt: now,
-    createdAt: now,
-  }
-  const dispatchDigest = canonicalDigest(dispatchMaterial)
-  await ctx.db.insert('customerRequestRouteStepAttempts', {
-    attemptRef,
-    attemptDigest,
-    runRef: run.runRef,
-    requestId: run.requestId,
-    mandateRef: run.mandateRef,
-    actionId: mandateStep.actionId,
-    position,
-    operationKeyDigest: admission.grant.operationKeyDigest,
-    grant: admission.grant,
-    inputJson: JSON.stringify(input),
-    inputDigest,
-    state: 'queued',
-    createdAt: now,
-    updatedAt: now,
-  })
-  await ctx.db.insert('customerRequestRouteDispatchOutbox', {
-    dispatchRef: `route-dispatch:v1:${dispatchDigest}`,
-    dispatchDigest,
-    runRef: run.runRef,
-    attemptRef,
-    operationKeyDigest: admission.grant.operationKeyDigest,
-    state: 'pending',
-    availableAt: now,
-    createdAt: now,
-    updatedAt: now,
-  })
-  await ctx.scheduler.runAfter(
-    PRE_RELEASE_CANCELLATION_WINDOW_MS,
-    internal.customerRequestRouteTransportWorker.runNext,
-    { workerId: `route-worker:${run.runRef}:${position}` },
-  )
-  await ctx.db.patch(run._id, {
-    state: 'running', completedSteps: position - 1, currentPosition: position, updatedAt: now,
-  })
-  return true
-}
-
-async function markUnknownOutcome(
-  ctx: MutationCtx,
-  run: Doc<'customerRequestRouteRuns'>,
-  attempt: Doc<'customerRequestRouteStepAttempts'>,
-  now: number,
-  result?: JsonValue,
-): Promise<void> {
-  await ctx.db.patch(attempt._id, { state: 'outcome_unknown', updatedAt: now })
-  await ctx.db.patch(run._id, {
-    state: 'outcome_unknown',
-    ...(result === undefined ? {} : {
-      resultJson: JSON.stringify(result),
-      resultDigest: canonicalDigest(result),
-    }),
-    updatedAt: now,
-  })
-}
-
-function readJsonPointer(value: JsonValue, pointer: string): JsonValue | undefined {
-  if (!pointer.startsWith('/') || pointer.length < 2) return undefined
-  let current: JsonValue | undefined = value
-  for (const encoded of pointer.slice(1).split('/')) {
-    const segment = encoded.replaceAll('~1', '/').replaceAll('~0', '~')
-    if (Array.isArray(current)) {
-      if (!/^(?:0|[1-9]\d*)$/.test(segment)) return undefined
-      current = current[Number(segment)]
-    } else if (current !== null && typeof current === 'object') {
-      const object = current as Readonly<Record<string, JsonValue>>
-      current = Object.prototype.hasOwnProperty.call(object, segment)
-        ? object[segment]
-        : undefined
-    } else return undefined
-  }
-  return current
 }
 
 function parseBoundedJson(value: string): JsonValue | undefined {
@@ -2389,23 +1602,5 @@ async function currentLeasedInvocation(
       expiresAt: attempt.grant.expiresAt,
     },
   }
-}
-
-async function snapshotRouteBusinesses(
-  ctx: MutationCtx,
-  steps: readonly Readonly<{ businessId: string }>[],
-): Promise<Array<{ businessRef: string; name: string }> | undefined> {
-  const businessIds = [...new Set(steps.map(({ businessId }) => businessId))]
-  const businesses = []
-  for (const businessId of businessIds) {
-    const business = await ctx.db.get(businessId as Id<'businesses'>)
-    const name = business?.name.trim()
-    if (name === undefined || name.length === 0) return undefined
-    businesses.push({
-      businessRef: `business:${canonicalDigest({ businessId })}`,
-      name,
-    })
-  }
-  return businesses
 }
 

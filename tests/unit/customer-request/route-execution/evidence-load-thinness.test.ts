@@ -44,7 +44,7 @@ describe('customer-request route-execution evidence-load thinness', () => {
 
     const exportStart = convexHost.indexOf('export const exportCustomerEvidence = internalQuery({')
     expect(exportStart).toBeGreaterThanOrEqual(0)
-    const exportEnd = convexHost.indexOf('async function readRunProjection(', exportStart)
+    const exportEnd = convexHost.indexOf('async function resolveCancellationCommand(', exportStart)
     expect(exportEnd).toBeGreaterThan(exportStart)
     const exportBody = convexHost.slice(exportStart, exportEnd)
     expect(exportBody).toContain('assembleCustomerEvidenceExport')

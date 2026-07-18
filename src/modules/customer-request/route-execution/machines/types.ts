@@ -1,0 +1,221 @@
+import type { JsonValue } from '@/modules/capability-contract/public'
+import type { RouteStepGrant } from '@/modules/customer-request/route-mandate-admission'
+import type { RouteMandate } from '@/modules/customer-request/route-mandate'
+
+import type { RouteAttemptState } from '../journal/export-state'
+
+export type RunProjection = Readonly<{
+  runRef: string
+  requestId: string
+  requestRevision: number
+  generationRef: string
+  businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
+  state:
+    | 'queued'
+    | 'running'
+    | 'outcome_unknown'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+  totalSteps: number
+  completedSteps: number
+  currentPosition: number
+  currentState: RouteAttemptState
+  resultJson?: string
+  cancellationReleaseMayStartAt?: number
+  cancellationUnavailableSince?: number
+  cancellationRequestedAt?: number
+  cancellationAttempt?: Readonly<
+    | {
+      state: 'pending'
+      requestedAt: number
+      nextCheckAt: number
+    }
+    | {
+      state: 'unknown'
+      requestedAt: number
+      observedAt: number
+      nextCheckAt: number
+    }
+    | {
+      state: 'rejected'
+      requestedAt: number
+      observedAt: number
+      reason: string
+    }
+  >
+  updatedAt: number
+}>
+
+export type StartCommand = Readonly<{
+  requestId: string
+  principalId: string
+  idempotencyKey: string
+}>
+
+export type StartResult = Readonly<
+  | { kind: 'started'; run: RunProjection }
+  | { kind: 'replayed'; run: RunProjection }
+  | { kind: 'resumed'; run: RunProjection }
+  | { kind: 'conflict'; reason: 'command_changed' }
+  | {
+    kind: 'refused'
+    reason:
+      | 'confirmation_required'
+      | 'confirmation_expired'
+      | 'confirmation_changed'
+      | 'route_unavailable'
+  }
+>
+
+export type LeaseCommand = Readonly<{
+  workerId: string
+  leaseDurationMs: number
+}>
+
+export type DispatchLease = Readonly<{
+  dispatchRef: string
+  attemptRef: string
+  runRef: string
+  position: number
+  operationKeyDigest: string
+  inputJson: string
+  grant: RouteStepGrant
+  leaseExpiresAt: number
+}>
+
+export type LeaseResult = Readonly<
+  | { kind: 'leased'; dispatch: DispatchLease }
+  | { kind: 'none' }
+  | { kind: 'refused'; reason: 'lease_invalid' }
+>
+
+export type OutcomeCommand = Readonly<{
+  attemptRef: string
+  operationKeyDigest: string
+  observationJson?: string
+  outcome: Readonly<
+    | { kind: 'succeeded'; outputJson: string }
+    | { kind: 'partial'; outputJson: string }
+    | { kind: 'failed' }
+    | { kind: 'unknown' }
+  >
+}>
+
+export type OutcomeResult = Readonly<
+  | { kind: 'advanced'; run: RunProjection }
+  | { kind: 'cancelled'; run: RunProjection }
+  | { kind: 'completed'; run: RunProjection }
+  | { kind: 'failed'; run: RunProjection }
+  | { kind: 'outcome_unknown'; run: RunProjection }
+  | { kind: 'replayed'; run: RunProjection }
+  | {
+    kind: 'refused'
+    reason: 'attempt_not_current' | 'output_invalid'
+  }
+>
+
+export type MandateLoadResult = Readonly<
+  | { kind: 'active'; mandate: RouteMandate }
+  | { kind: 'expired' }
+  | { kind: 'missing' }
+>
+
+export type PriorRunCommand = Readonly<{
+  commandDigest: string
+  principalId: string
+  requestId: string
+  runRef: string
+}>
+
+export type RunHeadSnapshot = Readonly<{
+  principalId: string
+  currentRunRef: string
+  currentMandateRef: string
+}>
+
+export type RunRecordSnapshot = Readonly<{
+  runRef: string
+  principalId: string
+  requestId: string
+  requestRevision: number
+  mandateRef: string
+  mandateDigest: string
+  generationRef: string
+  routePlanId: string
+  routeDigest: string
+  businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
+  state:
+    | 'queued'
+    | 'running'
+    | 'outcome_unknown'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+  totalSteps: number
+  completedSteps: number
+  currentPosition: number
+  createdAt: number
+  updatedAt: number
+}>
+
+export type AttemptRecordSnapshot = Readonly<{
+  attemptRef: string
+  attemptDigest: string
+  runRef: string
+  requestId: string
+  mandateRef: string
+  actionId: string
+  position: number
+  operationKeyDigest: string
+  grant: RouteStepGrant
+  inputJson: string
+  inputDigest: string
+  state: RouteAttemptState
+  outputJson?: string
+  outputDigest?: string
+  transportObservationJson?: string
+  transportObservationDigest?: string
+  createdAt: number
+  updatedAt: number
+}>
+
+export type DispatchRecordSnapshot = Readonly<{
+  dispatchRef: string
+  dispatchDigest: string
+  runRef: string
+  attemptRef: string
+  operationKeyDigest: string
+  state: 'pending' | 'leased' | 'delivered' | 'failed' | 'cancelled' | 'outcome_unknown'
+  availableAt: number
+  createdAt: number
+}>
+
+export type ValidatedAttemptOutput = Readonly<{
+  output: JsonValue
+  evidence: readonly Readonly<{
+    evidenceId: string
+    outputPointer: string
+    schemaIdentity: string
+    valueDigest: string
+  }>[]
+}>
+
+export type StepAdmissionResult = Readonly<
+  | { kind: 'admitted'; grant: RouteStepGrant }
+  | { kind: 'replayed'; grant: RouteStepGrant }
+  | { kind: 'conflict'; reason: 'command_changed' }
+  | {
+    kind: 'refused'
+    reason:
+      | 'mandate_not_current'
+      | 'mandate_scope_mismatch'
+      | 'step_already_reserved'
+      | 'spend_limit_exceeded'
+  }
+>
+
+export type RouteBusinessSnapshot = Readonly<{
+  businessRef: string
+  name: string
+}>
