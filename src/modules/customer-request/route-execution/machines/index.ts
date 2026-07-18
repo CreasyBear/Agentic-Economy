@@ -24,6 +24,30 @@ export {
 } from './cancel-resolve-attempt'
 
 export {
+  openLeasedDispatch,
+} from './open-leased-dispatch'
+
+export {
+  recoverExpiredDispatch,
+} from './recover-expired-dispatch'
+
+export {
+  markDispatched,
+} from './mark-dispatched'
+
+export {
+  recordNotReleased,
+} from './record-not-released'
+
+export {
+  markAccepted,
+} from './mark-accepted'
+
+export {
+  currentLeasedInvocation,
+} from './current-leased-invocation'
+
+export {
   reportProblem,
 } from './problem-report'
 
@@ -49,6 +73,11 @@ export type {
 } from './cancel-ports'
 
 export type {
+  DispatchLifecycleOpenPorts,
+  DispatchLifecyclePorts,
+} from './dispatch-lifecycle-ports'
+
+export type {
   ProblemMutationPorts,
 } from './problem-ports'
 
@@ -62,15 +91,27 @@ export type {
   CancellationInvocation,
   CancellationObservation,
   DispatchLease,
+  DispatchPublicationSnapshot,
   DispatchRecordSnapshot,
   LeaseCommand,
   LeaseResult,
+  LeasedInvocation,
   MandateLoadResult,
+  MarkAcceptedCommand,
+  MarkAcceptedResult,
+  MarkDispatchedCommand,
+  MarkDispatchedResult,
   OpenCancellationResult,
+  OpenLeasedDispatchCommand,
+  OpenLeasedDispatchResult,
   OutcomeCommand,
   OutcomeResult,
   PriorCancelCommand,
   PriorRunCommand,
+  RecordNotReleasedCommand,
+  RecordNotReleasedResult,
+  RecoverExpiredDispatchCommand,
+  RecoverExpiredDispatchResult,
   ResolveCancellationCommand,
   ResolveCancellationResult,
   RouteBusinessSnapshot,

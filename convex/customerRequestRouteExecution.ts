@@ -1,7 +1,5 @@
 import { v, type Infer } from 'convex/values'
 
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
 import {
   assembleCustomerEvidenceExport,
   assembleSupportProblemList,
@@ -9,18 +7,19 @@ import {
   loadProblemUpdates,
 } from '@/modules/customer-request/route-execution/evidence-load'
 import {
-  recoverDispatchAttemptAligned,
-  recoverDispatchLeaseStillCurrent,
-  recoverExpiredDispatchKind,
   routeAttemptIntegrityValid,
-  routeDispatchIntegrityValid,
 } from '@/modules/customer-request/route-execution/journal'
 import {
   cancelCurrent as cancelCurrentMachine,
   leaseNextDispatch as leaseNextDispatchMachine,
+  markAccepted as markAcceptedMachine,
+  markDispatched as markDispatchedMachine,
   openCancellationAttempt as openCancellationAttemptMachine,
+  openLeasedDispatch as openLeasedDispatchMachine,
+  recordNotReleased as recordNotReleasedMachine,
   recordOutcome as recordOutcomeMachine,
   recordProblemBusinessReport as recordProblemBusinessReportMachine,
+  recoverExpiredDispatch as recoverExpiredDispatchMachine,
   replyProblem as replyProblemMachine,
   reportProblem as reportProblemMachine,
   resolveCancellationAttempt as resolveCancellationAttemptMachine,
@@ -31,26 +30,23 @@ import {
   projectBusinessProblem,
   projectSupportProblemExport,
 } from '@/modules/customer-request/route-execution/problem-support'
-import { routeStepGrantDigest } from '@/modules/customer-request/route-mandate-admission'
 import { routeStepGrantValue } from '@/modules/customer-request/runtime'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 
 import type { Id } from './_generated/dataModel'
-import { internal } from './_generated/api'
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
-import { getEligibleExactCapabilitySupply } from './capabilitySupply'
-import {
-  readCurrentRouteMandateStateForPrincipal,
-} from './customerRequestRouteMandate'
 import { evidenceLoadPorts } from './customerRequestEvidenceLoadPorts'
 import {
   cancelMutationPorts,
   cancelOpenPorts,
 } from './customerRequestRouteExecutionCancelPorts'
 import {
+  dispatchLifecycleOpenPorts,
+  dispatchLifecyclePorts,
+} from './customerRequestRouteExecutionDispatchPorts'
+import {
   journalMutationPorts,
-  markUnknownOutcome,
   readRunProjection as readRunProjectionPorts,
 } from './customerRequestRouteExecutionJournalPorts'
 import {
@@ -222,12 +218,9 @@ export const openLeasedDispatch = internalQuery({
     v.object({ kind: v.literal('available'), invocation: leasedInvocation }),
     v.object({ kind: v.literal('unavailable') }),
   ),
-  handler: async (ctx, args) => {
-    const material = await currentLeasedInvocation(ctx, args.dispatchRef, args.workerId, Date.now())
-    return material === null
-      ? { kind: 'unavailable' as const }
-      : { kind: 'available' as const, invocation: material }
-  },
+  handler: async (ctx, args) => (
+    await openLeasedDispatchMachine(args, dispatchLifecycleOpenPorts(ctx))
+  ),
 })
 
 const cancellationInvocation = v.object({
@@ -289,168 +282,71 @@ export const resolveCancellationAttempt = internalMutation({
   ),
 })
 
+const recoverExpiredDispatchResult = v.union(
+  v.object({ kind: v.literal('requeued') }),
+  v.object({ kind: v.literal('outcome_unknown') }),
+  v.object({ kind: v.literal('unchanged') }),
+)
+
 export const recoverExpiredDispatch = internalMutation({
   args: { dispatchRef: v.string() },
-  returns: v.union(
-    v.object({ kind: v.literal('requeued') }),
-    v.object({ kind: v.literal('outcome_unknown') }),
-    v.object({ kind: v.literal('unchanged') }),
+  returns: recoverExpiredDispatchResult,
+  handler: async (ctx, args): Promise<Infer<typeof recoverExpiredDispatchResult>> => (
+    await recoverExpiredDispatchMachine(args, dispatchLifecyclePorts(ctx)) as Infer<
+      typeof recoverExpiredDispatchResult
+    >
   ),
-  handler: async (ctx, args) => {
-    const now = Date.now()
-    const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
-      .withIndex('by_dispatchRef', (query) => query.eq('dispatchRef', args.dispatchRef)).unique()
-    if (recoverDispatchLeaseStillCurrent(dispatch, now) || dispatch === null) {
-      return { kind: 'unchanged' as const }
-    }
-    if (!routeDispatchIntegrityValid(dispatch)) {
-      throw new Error('customer_request_route_dispatch_integrity_failure')
-    }
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', dispatch.attemptRef)).unique()
-    if (!recoverDispatchAttemptAligned({ attempt, dispatch }) || attempt === null) {
-      throw new Error('customer_request_route_dispatch_integrity_failure')
-    }
-    const kind = recoverExpiredDispatchKind({
-      dispatchState: dispatch.state,
-      attemptState: attempt.state,
-    })
-    if (kind === 'requeued') {
-      await ctx.db.patch(dispatch._id, {
-        state: 'pending', leaseOwner: undefined, leaseExpiresAt: undefined,
-        availableAt: now, updatedAt: now,
-      })
-      await ctx.db.patch(attempt._id, { state: 'queued', updatedAt: now })
-      await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
-        workerId: `route-worker:recovery:${dispatch.dispatchRef}`,
-      })
-      return { kind: 'requeued' as const }
-    }
-    if (kind === 'outcome_unknown') {
-      const run = await ctx.db.query('customerRequestRouteRuns')
-        .withIndex('by_runRef', (query) => query.eq('runRef', attempt.runRef)).unique()
-      if (run === null) throw new Error('customer_request_route_run_integrity_failure')
-      await ctx.db.patch(dispatch._id, { state: 'outcome_unknown', updatedAt: now })
-      await markUnknownOutcome(ctx, run, attempt, now)
-      return { kind: 'outcome_unknown' as const }
-    }
-    return { kind: 'unchanged' as const }
-  },
 })
+
+const markDispatchedResult = v.union(
+  v.object({ kind: v.literal('recorded') }),
+  v.object({ kind: v.literal('replayed') }),
+  v.object({ kind: v.literal('refused'), reason: v.literal('lease_not_current') }),
+)
 
 export const markDispatched = internalMutation({
   args: { dispatchRef: v.string(), attemptRef: v.string(), workerId: v.string() },
-  returns: v.union(
-    v.object({ kind: v.literal('recorded') }),
-    v.object({ kind: v.literal('replayed') }),
-    v.object({ kind: v.literal('refused'), reason: v.literal('lease_not_current') }),
+  returns: markDispatchedResult,
+  handler: async (ctx, args): Promise<Infer<typeof markDispatchedResult>> => (
+    await markDispatchedMachine(args, dispatchLifecyclePorts(ctx)) as Infer<
+      typeof markDispatchedResult
+    >
   ),
-  handler: async (ctx, args) => {
-    const now = Date.now()
-    const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
-      .withIndex('by_dispatchRef', (query) => query.eq('dispatchRef', args.dispatchRef)).unique()
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', args.attemptRef)).unique()
-    if (dispatch === null || attempt === null || !routeDispatchIntegrityValid(dispatch)
-      || !routeAttemptIntegrityValid(attempt) || dispatch.attemptRef !== attempt.attemptRef) {
-      return { kind: 'refused' as const, reason: 'lease_not_current' as const }
-    }
-    if (dispatch.state === 'delivered'
-      && (attempt.state === 'dispatched' || attempt.state === 'accepted'
-        || attempt.state === 'succeeded' || attempt.state === 'outcome_unknown')) {
-      return { kind: 'replayed' as const }
-    }
-    if (dispatch.state !== 'leased' || attempt.state !== 'leased'
-      || dispatch.leaseOwner !== args.workerId || (dispatch.leaseExpiresAt ?? 0) <= now) {
-      return { kind: 'refused' as const, reason: 'lease_not_current' as const }
-    }
-    if (await currentLeasedInvocation(ctx, args.dispatchRef, args.workerId, now) === null) {
-      return { kind: 'refused' as const, reason: 'lease_not_current' as const }
-    }
-    const run = await ctx.db.query('customerRequestRouteRuns')
-      .withIndex('by_runRef', (query) => query.eq('runRef', attempt.runRef)).unique()
-    if (run === null || run.currentPosition !== attempt.position) {
-      throw new Error('customer_request_route_run_integrity_failure')
-    }
-    await ctx.db.patch(dispatch._id, { state: 'delivered', updatedAt: now })
-    await ctx.db.patch(attempt._id, { state: 'dispatched', updatedAt: now })
-    await ctx.db.patch(run._id, { state: 'running', updatedAt: now })
-    return { kind: 'recorded' as const }
-  },
 })
+
+const recordNotReleasedResult = v.union(
+  v.object({ kind: v.literal('failed'), run: runProjection }),
+  v.object({ kind: v.literal('replayed'), run: runProjection }),
+  v.object({ kind: v.literal('refused'), reason: v.literal('lease_not_current') }),
+)
 
 export const recordNotReleased = internalMutation({
   args: {
     dispatchRef: v.string(), attemptRef: v.string(), workerId: v.string(),
     observationJson: v.string(),
   },
-  returns: v.union(
-    v.object({ kind: v.literal('failed'), run: runProjection }),
-    v.object({ kind: v.literal('replayed'), run: runProjection }),
-    v.object({ kind: v.literal('refused'), reason: v.literal('lease_not_current') }),
+  returns: recordNotReleasedResult,
+  handler: async (ctx, args): Promise<Infer<typeof recordNotReleasedResult>> => (
+    await recordNotReleasedMachine(args, dispatchLifecyclePorts(ctx)) as Infer<
+      typeof recordNotReleasedResult
+    >
   ),
-  handler: async (ctx, args) => {
-    const now = Date.now()
-    const observation = parseRouteTransportObservationJson(args.observationJson)
-    if (observation === undefined || observation.disposition !== 'refused' || observation.releaseStarted) {
-      return { kind: 'refused' as const, reason: 'lease_not_current' as const }
-    }
-    const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
-      .withIndex('by_dispatchRef', (query) => query.eq('dispatchRef', args.dispatchRef)).unique()
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', args.attemptRef)).unique()
-    if (dispatch === null || attempt === null || dispatch.attemptRef !== attempt.attemptRef
-      || dispatch.leaseOwner !== args.workerId || !routeDispatchIntegrityValid(dispatch)
-      || !routeAttemptIntegrityValid(attempt)) {
-      return { kind: 'refused' as const, reason: 'lease_not_current' as const }
-    }
-    const run = await ctx.db.query('customerRequestRouteRuns')
-      .withIndex('by_runRef', (query) => query.eq('runRef', attempt.runRef)).unique()
-    if (run === null) throw new Error('customer_request_route_run_integrity_failure')
-    if (attempt.state === 'failed' && dispatch.state === 'failed') {
-      const replayed = await readRunProjection(ctx, run.runRef)
-      if (replayed === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'replayed' as const, run: replayed }
-    }
-    if (dispatch.state !== 'leased' || attempt.state !== 'leased'
-      || (dispatch.leaseExpiresAt ?? 0) <= now) {
-      return { kind: 'refused' as const, reason: 'lease_not_current' as const }
-    }
-    const result: JsonValue = { reason: observation.failureCode ?? 'transport_not_released' }
-    await ctx.db.patch(dispatch._id, { state: 'failed', updatedAt: now })
-    await ctx.db.patch(attempt._id, {
-      state: 'failed', transportObservationJson: args.observationJson,
-      transportObservationDigest: canonicalDigest(observation), updatedAt: now,
-    })
-    await ctx.db.patch(run._id, {
-      state: 'failed', resultJson: JSON.stringify(result), resultDigest: canonicalDigest(result), updatedAt: now,
-    })
-    const failed = await readRunProjection(ctx, run.runRef)
-    if (failed === null) throw new Error('customer_request_route_run_integrity_failure')
-    return { kind: 'failed' as const, run: failed }
-  },
 })
+
+const markAcceptedResult = v.union(
+  v.object({ kind: v.literal('recorded') }),
+  v.object({ kind: v.literal('replayed') }),
+  v.object({ kind: v.literal('refused'), reason: v.literal('attempt_not_current') }),
+)
 
 export const markAccepted = internalMutation({
   args: { attemptRef: v.string(), operationKeyDigest: v.string() },
-  returns: v.union(
-    v.object({ kind: v.literal('recorded') }),
-    v.object({ kind: v.literal('replayed') }),
-    v.object({ kind: v.literal('refused'), reason: v.literal('attempt_not_current') }),
+  returns: markAcceptedResult,
+  handler: async (ctx, args): Promise<Infer<typeof markAcceptedResult>> => (
+    await markAcceptedMachine(args, dispatchLifecyclePorts(ctx)) as Infer<
+      typeof markAcceptedResult
+    >
   ),
-  handler: async (ctx, args) => {
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', args.attemptRef)).unique()
-    if (attempt === null || attempt.operationKeyDigest !== args.operationKeyDigest) {
-      return { kind: 'refused' as const, reason: 'attempt_not_current' as const }
-    }
-    if (attempt.state === 'accepted' || attempt.state === 'succeeded') return { kind: 'replayed' as const }
-    if (attempt.state !== 'dispatched') {
-      return { kind: 'refused' as const, reason: 'attempt_not_current' as const }
-    }
-    await ctx.db.patch(attempt._id, { state: 'accepted', updatedAt: Date.now() })
-    return { kind: 'recorded' as const }
-  },
 })
 
 const outcomeResult = v.union(
@@ -1100,79 +996,6 @@ function parseBoundedJson(value: string): JsonValue | undefined {
     return isBoundedJsonValue(parsed) ? parsed : undefined
   } catch {
     return undefined
-  }
-}
-
-async function currentLeasedInvocation(
-  ctx: QueryCtx | MutationCtx,
-  dispatchRef: string,
-  workerId: string,
-  now: number,
-): Promise<Infer<typeof leasedInvocation> | null> {
-  const dispatch = await ctx.db.query('customerRequestRouteDispatchOutbox')
-    .withIndex('by_dispatchRef', (query) => query.eq('dispatchRef', dispatchRef)).unique()
-  if (dispatch === null || dispatch.state !== 'leased' || dispatch.leaseOwner !== workerId
-    || (dispatch.leaseExpiresAt ?? 0) <= now || !routeDispatchIntegrityValid(dispatch)) return null
-  const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-    .withIndex('by_attemptRef', (query) => query.eq('attemptRef', dispatch.attemptRef)).unique()
-  if (attempt === null || attempt.state !== 'leased' || attempt.runRef !== dispatch.runRef
-    || attempt.operationKeyDigest !== dispatch.operationKeyDigest || !routeAttemptIntegrityValid(attempt)
-    || attempt.grant.grantRef !== `route-step-grant:v1:${attempt.grant.grantDigest}`
-    || routeStepGrantDigest(attempt.grant) !== attempt.grant.grantDigest
-    || attempt.grant.expiresAt <= now) return null
-  const mandate = await readCurrentRouteMandateStateForPrincipal(
-    ctx, attempt.requestId, attempt.grant.principalId, now, { requireCurrentGraph: false },
-  )
-  if (mandate.kind !== 'active' || mandate.mandate.mandateRef !== attempt.grant.mandateRef
-    || mandate.mandate.mandateDigest !== attempt.grant.mandateDigest) return null
-  const supply = await getEligibleExactCapabilitySupply(ctx.db, {
-    networkId: mandate.networkId,
-    businessId: attempt.grant.step.businessId,
-    offeringId: attempt.grant.step.offeringId,
-    bindingId: attempt.grant.step.bindingId,
-    contractRef: attempt.grant.step.contractRef,
-    expectedOfferingRegistrationHash: attempt.grant.step.offeringRegistrationHash,
-    expectedBindingRegistrationHash: attempt.grant.step.bindingRegistrationHash,
-  })
-  if (supply.kind !== 'available') return null
-  const publication = await ctx.db.query('capabilityPublications')
-    .withIndex('by_publicationRef_and_revision', (query) => (
-      query.eq('publicationRef', attempt.grant.step.publicationRef)
-        .eq('revision', attempt.grant.step.publicationRevision)
-    )).unique()
-  if (publication === null || publication.disposition !== 'current'
-    || String(publication.businessId) !== attempt.grant.step.businessId
-    || publication.networkId !== mandate.networkId
-    || publication.offeringId !== attempt.grant.step.offeringId
-    || publication.bindingId !== attempt.grant.step.bindingId
-    || publication.capabilityId !== attempt.grant.step.contractRef.capabilityId
-    || publication.version !== attempt.grant.step.contractRef.version
-    || publication.contractDigest !== attempt.grant.step.contractRef.contractDigest
-    || publication.credentialState !== 'ready' || publication.healthState !== 'healthy'
-    || publication.readinessObservedAt === undefined || publication.readinessObservedAt > now
-    || publication.readinessValidUntil === undefined
-    || publication.readinessValidUntil < now) return null
-  return {
-    dispatchRef: dispatch.dispatchRef,
-    attemptRef: attempt.attemptRef,
-    runRef: attempt.runRef,
-    operationKeyDigest: attempt.operationKeyDigest,
-    inputJson: attempt.inputJson,
-    inputDigest: attempt.inputDigest,
-    binding: {
-      adapterId: supply.binding.adapterId,
-      endpointUrl: supply.binding.endpointUrl,
-      credentialRef: supply.binding.credentialRef,
-      configJson: supply.binding.configJson,
-      configDigest: supply.binding.configDigest,
-    },
-    authority: {
-      mandateDigest: attempt.grant.mandateDigest,
-      grantDigest: attempt.grant.grantDigest,
-      capabilityContractDigest: attempt.grant.step.contractRef.contractDigest,
-      maximumSpend: { ...attempt.grant.step.maximumSpend },
-      expiresAt: attempt.grant.expiresAt,
-    },
   }
 }
 

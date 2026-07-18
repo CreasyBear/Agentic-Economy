@@ -6,6 +6,10 @@ import { describe, expect, it } from 'vitest'
 const convexHost = readFileSync('convex/customerRequestRouteExecution.ts', 'utf8')
 const journalPortsSource = readFileSync('convex/customerRequestRouteExecutionJournalPorts.ts', 'utf8')
 const cancelPortsSource = readFileSync('convex/customerRequestRouteExecutionCancelPorts.ts', 'utf8')
+const dispatchPortsSource = readFileSync(
+  'convex/customerRequestRouteExecutionDispatchPorts.ts',
+  'utf8',
+)
 const problemPortsSource = readFileSync(
   'convex/customerRequestRouteExecutionProblemPorts.ts',
   'utf8',
@@ -13,12 +17,14 @@ const problemPortsSource = readFileSync(
 const moduleRoot = 'src/modules/customer-request/route-execution/journal'
 const machinesRoot = 'src/modules/customer-request/route-execution/machines'
 
-const hostStillUsesJournal = [
+const recoverJournalHelpers = [
   'recoverDispatchAttemptAligned',
   'recoverDispatchLeaseStillCurrent',
   'recoverExpiredDispatchKind',
+] as const
+
+const hostStillUsesJournal = [
   'routeAttemptIntegrityValid',
-  'routeDispatchIntegrityValid',
 ] as const
 
 const cancelJournalHelpers = [
@@ -42,6 +48,14 @@ const hostCancelMachines = [
   'cancelCurrent',
   'openCancellationAttempt',
   'resolveCancellationAttempt',
+] as const
+
+const hostDispatchMachines = [
+  'openLeasedDispatch',
+  'recoverExpiredDispatch',
+  'markDispatched',
+  'recordNotReleased',
+  'markAccepted',
 ] as const
 
 describe('customer-request route-execution journal thinness', () => {
@@ -108,9 +122,57 @@ describe('customer-request route-execution journal thinness', () => {
       .toContain('cancelMutationPorts(ctx)')
   })
 
-  it('does not invent Convex Start/Lease/Outcome/Cancel/Problem sibling hosts', () => {
+  it('keeps host dispatch lifecycle exports as thin ports-wired shells', () => {
+    for (const symbol of hostDispatchMachines) {
+      expect(convexHost).toMatch(new RegExp(`export const ${symbol}\\s*=`))
+    }
+    expect(convexHost).toContain('dispatchLifecyclePorts(ctx)')
+    expect(convexHost).toContain('dispatchLifecycleOpenPorts(ctx)')
+    expect(convexHost).toContain('openLeasedDispatchMachine')
+    expect(convexHost).toContain('recoverExpiredDispatchMachine')
+    expect(convexHost).toContain('markDispatchedMachine')
+    expect(convexHost).toContain('recordNotReleasedMachine')
+    expect(convexHost).toContain('markAcceptedMachine')
+    expect(convexHost).toContain("from './customerRequestRouteExecutionDispatchPorts'")
+    expect(convexHost).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+currentLeasedInvocation\b/)
+
+    const openStart = convexHost.indexOf('export const openLeasedDispatch = internalQuery({')
+    const recoverStart = convexHost.indexOf(
+      'export const recoverExpiredDispatch = internalMutation({',
+    )
+    const markDispatchedStart = convexHost.indexOf(
+      'export const markDispatched = internalMutation({',
+    )
+    const notReleasedStart = convexHost.indexOf(
+      'export const recordNotReleased = internalMutation({',
+    )
+    const markAcceptedStart = convexHost.indexOf(
+      'export const markAccepted = internalMutation({',
+    )
+    for (const start of [
+      openStart, recoverStart, markDispatchedStart, notReleasedStart, markAcceptedStart,
+    ]) {
+      expect(start).toBeGreaterThanOrEqual(0)
+      const end = convexHost.indexOf('\n})', start)
+      expect(end).toBeGreaterThan(start)
+      const body = convexHost.slice(start, end)
+      expect(body.split('\n').length).toBeLessThanOrEqual(40)
+      expect(body).not.toContain("query('customerRequestRouteRuns')")
+      expect(body).not.toContain("query('customerRequestRouteDispatchOutbox')")
+      expect(body).not.toContain('ctx.db.insert(')
+      expect(body).not.toContain('ctx.db.patch(')
+      expect(body).not.toContain('ctx.scheduler')
+    }
+    expect(convexHost.slice(openStart, convexHost.indexOf('\n})', openStart)))
+      .toContain('dispatchLifecycleOpenPorts(ctx)')
+    expect(convexHost.slice(recoverStart, convexHost.indexOf('\n})', recoverStart)))
+      .toContain('dispatchLifecyclePorts(ctx)')
+  })
+
+  it('does not invent Convex Start/Lease/Outcome/Cancel/Problem/Dispatch sibling hosts', () => {
     expect(statSync('convex/customerRequestRouteExecutionJournalPorts.ts').isFile()).toBe(true)
     expect(statSync('convex/customerRequestRouteExecutionCancelPorts.ts').isFile()).toBe(true)
+    expect(statSync('convex/customerRequestRouteExecutionDispatchPorts.ts').isFile()).toBe(true)
     expect(statSync('convex/customerRequestRouteExecutionProblemPorts.ts').isFile()).toBe(true)
     for (const forbidden of [
       'convex/customerRequestRouteExecutionStart.ts',
@@ -118,18 +180,25 @@ describe('customer-request route-execution journal thinness', () => {
       'convex/customerRequestRouteExecutionOutcome.ts',
       'convex/customerRequestRouteExecutionCancel.ts',
       'convex/customerRequestRouteExecutionProblem.ts',
+      'convex/customerRequestRouteExecutionDispatch.ts',
+      'convex/customerRequestRouteExecutionRecover.ts',
+      'convex/customerRequestRouteExecutionMark.ts',
     ]) {
       expect(() => statSync(forbidden)).toThrow()
     }
   })
 
-  it('keeps recover journal helpers referenced from the host; cancel helpers in machines', () => {
+  it('keeps recover helpers in dispatch machines; cancel helpers in machines; host still uses routeAttemptIntegrityValid', () => {
     expect(convexHost).toContain("from '@/modules/customer-request/route-execution/journal'")
     for (const symbol of hostStillUsesJournal) {
       expect(convexHost).toContain(symbol)
       expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)(?:async\\s+)?function\\s+${symbol}\\b`))
       expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)const\\s+${symbol}\\s*=`))
     }
+    for (const symbol of recoverJournalHelpers) {
+      expect(convexHost).not.toContain(symbol)
+    }
+    expect(convexHost).not.toContain('routeDispatchIntegrityValid')
     for (const symbol of cancelJournalHelpers) {
       expect(convexHost).not.toContain(symbol)
     }
@@ -139,6 +208,11 @@ describe('customer-request route-execution journal thinness', () => {
     expect(cancelCurrentMachine).toContain('cancelDisposition')
     expect(cancelPortsAdapter).toContain('cancelReplayKind')
     expect(cancelPortsAdapter).toContain('patchPendingCancelCommandResult')
+    const recoverMachine = readFileSync(join(machinesRoot, 'recover-expired-dispatch.ts'), 'utf8')
+    expect(recoverMachine).toContain('recoverExpiredDispatchKind')
+    expect(recoverMachine).toContain('recoverDispatchLeaseStillCurrent')
+    expect(dispatchPortsSource).toContain('markUnknownOutcome')
+    expect(dispatchPortsSource).toContain('readRunProjection')
   })
 
   it('keeps journal free of Convex runtime and write-plan DTOs', () => {
@@ -157,6 +231,7 @@ describe('customer-request route-execution journal thinness', () => {
       expect(source).not.toMatch(/\bpatches:\s*\[/)
       expect(source).not.toMatch(/JournalMutationPorts/)
       expect(source).not.toMatch(/CancelMutationPorts/)
+      expect(source).not.toMatch(/DispatchLifecyclePorts/)
       expect(source).not.toMatch(/ProblemMutationPorts/)
       expect(source).not.toMatch(/startOrResume/)
     }
@@ -176,12 +251,14 @@ describe('customer-request route-execution journal thinness', () => {
     expect(convexHost).not.toContain('Result evidence')
   })
 
-  it('keeps journal, cancel, and problem mutation ports factories under 1000 lines', () => {
+  it('keeps journal, cancel, dispatch, and problem mutation ports factories under 1000 lines', () => {
     expect(journalPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     expect(cancelPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
+    expect(dispatchPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     expect(problemPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     expect(journalPortsSource).toContain('export function journalMutationPorts')
     expect(cancelPortsSource).toContain('export function cancelMutationPorts')
+    expect(dispatchPortsSource).toContain('export function dispatchLifecyclePorts')
     expect(problemPortsSource).toContain('export function problemMutationPorts')
     expect(journalPortsSource).toContain('persistSucceededAttempt')
     expect(journalPortsSource).toContain('applyPendingCancellationReplay')
@@ -192,6 +269,8 @@ describe('customer-request route-execution journal thinness', () => {
     expect(journalPortsSource).not.toMatch(/\bintendedPatches\b/)
     expect(cancelPortsSource).not.toMatch(/\bWritePlan\b/)
     expect(cancelPortsSource).not.toMatch(/\bintendedPatches\b/)
+    expect(dispatchPortsSource).not.toMatch(/\bWritePlan\b/)
+    expect(dispatchPortsSource).not.toMatch(/\bintendedPatches\b/)
     expect(problemPortsSource).not.toMatch(/\bWritePlan\b/)
     expect(problemPortsSource).not.toMatch(/\bintendedPatches\b/)
   })

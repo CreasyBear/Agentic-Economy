@@ -7,6 +7,10 @@ const machinesRoot = 'src/modules/customer-request/route-execution/machines'
 const journalRoot = 'src/modules/customer-request/route-execution/journal'
 const journalPortsSource = readFileSync('convex/customerRequestRouteExecutionJournalPorts.ts', 'utf8')
 const cancelPortsSource = readFileSync('convex/customerRequestRouteExecutionCancelPorts.ts', 'utf8')
+const dispatchPortsSource = readFileSync(
+  'convex/customerRequestRouteExecutionDispatchPorts.ts',
+  'utf8',
+)
 const problemPortsSource = readFileSync(
   'convex/customerRequestRouteExecutionProblemPorts.ts',
   'utf8',
@@ -21,6 +25,13 @@ const machineFiles = [
   'cancel-open-attempt.ts',
   'cancel-resolve-attempt.ts',
   'cancel-ports.ts',
+  'dispatch-lifecycle-ports.ts',
+  'current-leased-invocation.ts',
+  'open-leased-dispatch.ts',
+  'recover-expired-dispatch.ts',
+  'mark-dispatched.ts',
+  'record-not-released.ts',
+  'mark-accepted.ts',
   'problem-report.ts',
   'problem-business-report.ts',
   'problem-update-status.ts',
@@ -32,7 +43,7 @@ const machineFiles = [
 ] as const
 
 describe('customer-request route-execution machines thinness', () => {
-  it('hosts start/lease/outcome/cancel machines under machines/', () => {
+  it('hosts start/lease/outcome/cancel/dispatch machines under machines/', () => {
     for (const file of machineFiles) {
       expect(statSync(join(machinesRoot, file)).isFile()).toBe(true)
     }
@@ -43,8 +54,14 @@ describe('customer-request route-execution machines thinness', () => {
     expect(index).toContain('cancelCurrent')
     expect(index).toContain('openCancellationAttempt')
     expect(index).toContain('resolveCancellationAttempt')
+    expect(index).toContain('openLeasedDispatch')
+    expect(index).toContain('recoverExpiredDispatch')
+    expect(index).toContain('markDispatched')
+    expect(index).toContain('recordNotReleased')
+    expect(index).toContain('markAccepted')
     expect(index).toContain('JournalMutationPorts')
     expect(index).toContain('CancelMutationPorts')
+    expect(index).toContain('DispatchLifecyclePorts')
     expect(index).toContain('ProblemMutationPorts')
     expect(index).toContain('reportProblem')
     expect(index).toContain('recordProblemBusinessReport')
@@ -81,6 +98,19 @@ describe('customer-request route-execution machines thinness', () => {
     for (const source of [cancelCurrent, cancelOpen, cancelResolve]) {
       expect(source).toContain('ports.')
     }
+    const openLeased = readFileSync(join(machinesRoot, 'open-leased-dispatch.ts'), 'utf8')
+    const recover = readFileSync(join(machinesRoot, 'recover-expired-dispatch.ts'), 'utf8')
+    const markDispatched = readFileSync(join(machinesRoot, 'mark-dispatched.ts'), 'utf8')
+    const notReleased = readFileSync(join(machinesRoot, 'record-not-released.ts'), 'utf8')
+    const markAccepted = readFileSync(join(machinesRoot, 'mark-accepted.ts'), 'utf8')
+    expect(openLeased).toContain('DispatchLifecycleOpenPorts')
+    expect(recover).toContain('DispatchLifecyclePorts')
+    expect(markDispatched).toContain('DispatchLifecyclePorts')
+    expect(notReleased).toContain('DispatchLifecyclePorts')
+    expect(markAccepted).toContain('DispatchLifecyclePorts')
+    for (const source of [openLeased, recover, markDispatched, notReleased, markAccepted]) {
+      expect(source).toContain('ports.')
+    }
     const problemReport = readFileSync(join(machinesRoot, 'problem-report.ts'), 'utf8')
     const problemBusiness = readFileSync(join(machinesRoot, 'problem-business-report.ts'), 'utf8')
     const problemUpdate = readFileSync(join(machinesRoot, 'problem-update-status.ts'), 'utf8')
@@ -109,22 +139,28 @@ describe('customer-request route-execution machines thinness', () => {
       expect(source).not.toMatch(/route-execution\/machines/)
       expect(source).not.toMatch(/JournalMutationPorts/)
       expect(source).not.toMatch(/CancelMutationPorts/)
+      expect(source).not.toMatch(/DispatchLifecyclePorts/)
       expect(source).not.toMatch(/ProblemMutationPorts/)
       expect(source).not.toMatch(/from\s+['"]\.\.\/machines/)
     }
   })
 
-  it('wires host through journal, cancel, and problem ports without sibling hosts', () => {
+  it('wires host through journal, cancel, dispatch, and problem ports without sibling hosts', () => {
     expect(hostSource).toContain('journalMutationPorts(ctx)')
     expect(hostSource).toContain('cancelMutationPorts(ctx)')
     expect(hostSource).toContain('cancelOpenPorts(ctx)')
+    expect(hostSource).toContain('dispatchLifecyclePorts(ctx)')
+    expect(hostSource).toContain('dispatchLifecycleOpenPorts(ctx)')
     expect(hostSource).toContain('problemMutationPorts(ctx)')
     expect(journalPortsSource).toContain('export function journalMutationPorts')
     expect(cancelPortsSource).toContain('export function cancelMutationPorts')
     expect(cancelPortsSource).toContain('export function cancelOpenPorts')
+    expect(dispatchPortsSource).toContain('export function dispatchLifecyclePorts')
+    expect(dispatchPortsSource).toContain('export function dispatchLifecycleOpenPorts')
     expect(problemPortsSource).toContain('export function problemMutationPorts')
     expect(journalPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     expect(cancelPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
+    expect(dispatchPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     expect(problemPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     for (const forbidden of [
       'convex/customerRequestRouteExecutionStart.ts',
@@ -132,6 +168,9 @@ describe('customer-request route-execution machines thinness', () => {
       'convex/customerRequestRouteExecutionOutcome.ts',
       'convex/customerRequestRouteExecutionCancel.ts',
       'convex/customerRequestRouteExecutionProblem.ts',
+      'convex/customerRequestRouteExecutionDispatch.ts',
+      'convex/customerRequestRouteExecutionRecover.ts',
+      'convex/customerRequestRouteExecutionMark.ts',
     ]) {
       expect(() => statSync(forbidden)).toThrow()
     }

@@ -189,6 +189,8 @@ export type DispatchRecordSnapshot = Readonly<{
   state: 'pending' | 'leased' | 'delivered' | 'failed' | 'cancelled' | 'outcome_unknown'
   availableAt: number
   createdAt: number
+  leaseOwner?: string
+  leaseExpiresAt?: number
 }>
 
 export type ValidatedAttemptOutput = Readonly<{
@@ -320,3 +322,97 @@ export type ResolveCancellationResult = Readonly<
   | { kind: 'replayed'; run: RunProjection }
   | { kind: 'refused' }
 >
+
+export type OpenLeasedDispatchCommand = Readonly<{
+  dispatchRef: string
+  workerId: string
+}>
+
+export type LeasedInvocation = Readonly<{
+  dispatchRef: string
+  attemptRef: string
+  runRef: string
+  operationKeyDigest: string
+  inputJson: string
+  inputDigest: string
+  binding: Readonly<{
+    adapterId: string
+    endpointUrl: string
+    credentialRef: string
+    configJson: string
+    configDigest: string
+  }>
+  authority: Readonly<{
+    mandateDigest: string
+    grantDigest: string
+    capabilityContractDigest: string
+    maximumSpend: Readonly<{ currency: string; amountMinor: number }>
+    expiresAt: number
+  }>
+}>
+
+export type OpenLeasedDispatchResult = Readonly<
+  | { kind: 'available'; invocation: LeasedInvocation }
+  | { kind: 'unavailable' }
+>
+
+export type RecoverExpiredDispatchCommand = Readonly<{
+  dispatchRef: string
+}>
+
+export type RecoverExpiredDispatchResult = Readonly<
+  | { kind: 'requeued' }
+  | { kind: 'outcome_unknown' }
+  | { kind: 'unchanged' }
+>
+
+export type MarkDispatchedCommand = Readonly<{
+  dispatchRef: string
+  attemptRef: string
+  workerId: string
+}>
+
+export type MarkDispatchedResult = Readonly<
+  | { kind: 'recorded' }
+  | { kind: 'replayed' }
+  | { kind: 'refused'; reason: 'lease_not_current' }
+>
+
+export type RecordNotReleasedCommand = Readonly<{
+  dispatchRef: string
+  attemptRef: string
+  workerId: string
+  observationJson: string
+}>
+
+export type RecordNotReleasedResult = Readonly<
+  | { kind: 'failed'; run: RunProjection }
+  | { kind: 'replayed'; run: RunProjection }
+  | { kind: 'refused'; reason: 'lease_not_current' }
+>
+
+export type MarkAcceptedCommand = Readonly<{
+  attemptRef: string
+  operationKeyDigest: string
+}>
+
+export type MarkAcceptedResult = Readonly<
+  | { kind: 'recorded' }
+  | { kind: 'replayed' }
+  | { kind: 'refused'; reason: 'attempt_not_current' }
+>
+
+export type DispatchPublicationSnapshot = Readonly<{
+  disposition: string
+  businessId: string
+  networkId: string
+  offeringId: string
+  bindingId: string
+  capabilityId: string
+  version: number
+  contractDigest: string
+  credentialState: string
+  healthState: string
+  readinessObservedAt?: number
+  readinessValidUntil?: number
+}>

@@ -388,5 +388,7 @@ function toDispatchRecord(
     state: dispatch.state,
     availableAt: dispatch.availableAt,
     createdAt: dispatch.createdAt,
+    ...(dispatch.leaseOwner === undefined ? {} : { leaseOwner: dispatch.leaseOwner }),
+    ...(dispatch.leaseExpiresAt === undefined ? {} : { leaseExpiresAt: dispatch.leaseExpiresAt }),
   }
 }
