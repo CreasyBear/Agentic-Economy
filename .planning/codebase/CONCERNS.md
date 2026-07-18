@@ -1,56 +1,83 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-07-18  
-**Inspected revision:** `1e919668` (post god-file Waves 1–21)  
-**last_mapped_commit:** `1e919668`
+**Inspected revision:** `19e988f5` (post god-file deepen campaign Waves 1–22)  
+**last_mapped_commit:** `19e988f5`
+
+Fresh line counts (`wc -l` at map time):
+
+| File | Lines | Campaign status |
+|------|------:|-----------------|
+| `convex/customerRequestApplication.ts` | 1749 | **host-done** — validators + thin actions |
+| `convex/capabilitySupply.ts` | 973 | **host-done** — graph/probe residual out of campaign |
+| `convex/customerRequestRouteExecution.ts` | 2463 | journal machines **DEFERRED** |
+| `convex/inquiries.ts` | 3443 | outside campaign; still largest Convex host |
 
 ## Tech Debt
 
 **Dual customer surfaces (Answer Thread vs Customer Request):**
 - Issue: Public product is split across `/` (Answer Thread + registry search) and `/engine` (authenticated Customer Request), plus `/api/v1/requests` for agents. RoutePlan multi-capability work persists internally but stays below customer projection.
-- Files: `PRODUCT.md` (current-vs-target sections), `AGENTS.md`, `src/modules/answer-thread/`, `src/modules/customer-request/`, `src/components/ae/chat/AeChat.tsx`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`
+- Files: `PRODUCT.md` (current-vs-target sections), `AGENTS.md`, `src/modules/answer-thread/`, `src/modules/customer-request/`, `src/components/ae/chat/AeChat.tsx` (821), `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` (413)
 - Why: Migration toward a single Request lifecycle while preserving the older discovery/inquiry journey.
 - Impact: New semantics added to Answer Thread create a second intent/history path; assistants and humans can disagree about which surface is canonical; cutover evidence for `/engine` → `/` is still required.
 - Fix approach: Keep Answer Thread read/compare/inquiry-only; route all Request/RoutePlan/authority work through `src/modules/customer-request/`; prove human cutover before collapsing `/engine`.
 
-**God-file Convex residual (post deepen campaign Waves 1–21):**
-- Issue: Campaign closed Application and capabilitySupply as thin registers (auth → module → ports). RouteExecution journal **machines** remain host-owned by design.
-- Current sizes: `convex/customerRequestApplication.ts` (~1749, mostly validators + thin actions — **host-done**), `convex/capabilitySupply.ts` (~973 — **host-done**; graph/probe residual out of campaign), `convex/customerRequestRouteExecution.ts` (~2463 — integrity digests, evidence export, and cancel/lease/recover **predicates** deepened; start/lease/outcome machines still host).
-- Already deepened (do not re-open as primary): compare-resume, standing-route, problem-route, preparation-egress, interpret-compile, confirm-route, refine, authorize-preparation, provide-facts, action-projection, operation-ledger, eligible inventory, publish/refresh/withdraw, supply writers, journal integrity + evidence + decisions.
-- **DEFERRED until journal write-plan ADR:** `startOrResume`, `leaseNextDispatch`, `recordOutcome` (and sibling dispatch mutation sequences). Thinness tests lock these as host-exported. Do **not** shallow-chop into `customerRequestRouteExecutionStart.ts` siblings without a designed write-plan seam.
-- Other residual: `convex/inquiries.ts` (still large if present), graph/probe in capabilitySupply — not this campaign.
-- Fix approach: Journal machines only after an ADR that defines mutation ports without write-plan DTOs; keep validators in Convex forever.
+**God-file Convex residual (post deepen campaign Waves 1–22):**
+- Issue: Campaign closed Application and capabilitySupply as thin registers (auth → module → ports). RouteExecution journal **machines** remain host-owned by design until a write-plan ADR.
+- Current sizes (verified): `convex/customerRequestApplication.ts` (1749 — **host-done**), `convex/capabilitySupply.ts` (973 — **host-done**; graph/probe residual), `convex/customerRequestRouteExecution.ts` (2463 — integrity digests, evidence export, and cancel/lease/recover **predicates** deepened; start/lease/outcome machines still host).
+- Already deepened (do not re-open as primary): compare-resume, standing-route, problem-route, preparation-egress, interpret-compile, confirm-route, refine, authorize-preparation, provide-facts, action-projection, operation-ledger, eligible inventory, publish/refresh/withdraw, supply writers, journal integrity + evidence + cancel/lease/recover decisions. Locked by thinness tests under `tests/unit/customer-request/application/*-thinness.test.ts`, `tests/unit/capability-supply/*-thinness.test.ts`, `tests/unit/customer-request/route-execution/journal-thinness.test.ts`.
+- **DEFERRED until journal write-plan ADR:** `startOrResume` (`convex/customerRequestRouteExecution.ts:138`, ~249-line export body), `leaseNextDispatch` (`:515`), `recordOutcome` (`:954`) and sibling dispatch mutation sequences. Thinness test `tests/unit/customer-request/route-execution/journal-thinness.test.ts` locks these as host-exported and forbids write-plan DTOs in `src/modules/customer-request/route-execution/journal/`.
+- **Do NOT** shallow-chop journal machines into Convex siblings such as `customerRequestRouteExecutionStart.ts` / `…Lease.ts` / `…Outcome.ts` without a designed write-plan seam. That creates shallow pass-through modules and does not deepen the mutation machines.
+- Fix approach: Journal machines only after an ADR that defines mutation ports without write-plan DTOs leaking into the pure journal module; keep Convex validators in the host forever.
+
+**capabilitySupply graph/probe residual (host-done but not empty):**
+- Issue: Publish/refresh/withdraw, eligibility, offerings/bindings, and operation-ledger deepened; graph query and readiness probe still live in the Convex host.
+- Files: `convex/capabilitySupply.ts` — `probeTargetDigest` (`:471`), `readCapabilityProbeTarget` (`:489`), `recordCapabilityProbeResult` (`:532`), `queryCapabilityGraph` (`:648`); module internals under `src/modules/capability-supply/internal/{offering,binding,eligibility,quarantine,publication,shared,operation-ledger}/`; ports in `convex/capabilitySupply*Ports.ts`.
+- Impact: Remaining host logic mixes readiness probing and graph assembly with thin command adapters; easy to “finish” the file with another shallow extract that does not deepen probe/graph semantics.
+- Fix approach: Treat graph/probe as a separate deepen candidate with its own seam (ports + pure projection), not a line-count chop of the host file.
+
+**`convex/inquiries.ts` still the largest Convex host (outside campaign):**
+- Issue: Inquiry submit/inbox/reply/close/privacy/export still concentrate in one Convex register (3443 lines, 16 exported functions) with thin module imports (~2 module import lines vs large local validators/handlers).
+- Files: `convex/inquiries.ts` (3443), `src/modules/inquiries/inquiry.functions.ts` (1381), `src/modules/inquiries/internal/ledger/commands.ts` (791), `src/modules/inquiries/internal/privacy/commands.ts`, `src/modules/inquiries/internal/commands.ts`
+- Impact: High blast radius for the only public `agentTools` write (`inquiry.submit`); privacy/export/admission changes risk regressions across owner and public paths.
+- Fix approach: Deepen behind `src/modules/inquiries/` seams (ledger/privacy/admission) the same way Customer Request Application was deepened — ports + pure commands, thin Convex register. Do not confuse this with the deferred journal-machine work.
+
+**Other large residual modules (not campaign-primary):**
+- Issue: Several multi-thousand-line files remain after Waves 1–22 and are easy to mistake for the next “god-file” chop targets.
+- Files: `src/modules/customer-request/hosted-agent-journey.ts` (2045), `convex/registry.ts` (1598), `convex/discovery.ts` (1541), `convex/customerRequestV2.ts` (1492), `convex/notificationOutbox.ts` (1455), `src/modules/discovery/developer-discovery.ts` (1534), `convex/security.ts` (1008), `src/modules/answer-thread/internal/turn-orchestrator.ts` (849)
+- Impact: Parallel complexity outside the closed campaign; unfocused chops here compete with the write-plan ADR for journal machines.
+- Fix approach: Prioritize by product risk (quiet-door writes, route execution machines, inquiry privacy) before size alone.
 
 **Legacy Customer Request v1 compiler retained:**
 - Issue: Parallel legacy compilers remain beside the current Customer Request path.
-- Files: `src/modules/customer-request/legacy-v1.ts`, `src/modules/customer-request/legacy-compiler-v1.ts`, `convex/customerRequestV2.ts` (`legacyAggregateIsInternallyConsistent`, `kind: 'legacy'`)
+- Files: `src/modules/customer-request/legacy-v1.ts` (533), `src/modules/customer-request/legacy-compiler-v1.ts` (635), `convex/customerRequestV2.ts` (`legacyAggregateIsInternallyConsistent`, `kind: 'legacy'`)
 - Why: Integrity and replay for older aggregates during v2 migration.
 - Impact: Dual code paths for the same domain; easy to fix the wrong compiler; integrity failures surface as typed throws (`customer_request_v2_legacy_*_integrity_failure`).
 - Fix approach: Bound legacy reads with an explicit retirement gate; stop writing legacy aggregates; delete compilers once migration tests prove no remaining rows.
 
 **Legacy registry sync helpers on HTTP routes:**
 - Issue: Durable handlers use actions, but sync `legacyPublicRegistry*` helpers remain exported and wired for local/e2e fallback.
-- Files: `src/routes/api.businesses.ts`, `src/routes/api.businesses.search.ts`, `src/routes/api.businesses.$slug.ts`, `src/modules/registry/registry.functions.ts` (`queryRegistryWithLegacyFallback`, `createDefaultRegistrySourceState`)
+- Files: `src/routes/api.businesses.ts`, `src/routes/api.businesses.search.ts`, `src/routes/api.businesses.$slug.ts`, `src/modules/registry/registry.functions.ts` (`legacyPublicRegistryList`, `legacyPublicRegistrySearch`, `legacyPublicRegistryDetail`, `queryRegistryWithLegacyFallback`)
 - Why: Local e2e and source-query failure fallbacks need an in-process catalog.
 - Impact: Callers of the sync helpers can silently serve fixture/local state instead of Convex-backed catalog; confusion between “durable” and “legacy” handlers.
-- Fix approach: Keep durable action handlers as the only production entry; confine legacy helpers to test/e2e packages; fail closed outside `isLocalE2EAuthBypassEnabled()`.
+- Fix approach: Keep durable action handlers as the only production entry; confine legacy helpers to test/e2e packages; fail closed outside `isLocalE2EAuthBypassEnabled()` in `src/lib/server/local-e2e-bypass.ts`.
 
 **Bespoke `Ae*` UI still dominant vs Astryx mandate:**
-- Issue: Large `src/components/ae/**` tree (chat, artifacts, workspace, listing) remains the primary UI, while AGENTS.md forbids extending bespoke `Ae*` presentation components and requires Astryx first.
-- Files: `src/components/ae/**` (e.g. `AeChat.tsx` ~821, `AeGenerativeAnswer.tsx` ~774, `AeCustomerRequestWorkspace.tsx` ~1685), `AGENTS.md`, `.agents/skills/ae-design-system/SKILL.md`
+- Issue: Large `src/components/ae/**` tree (chat, artifacts, workspace, listing) remains the primary UI, while `AGENTS.md` forbids extending bespoke `Ae*` presentation components and requires Astryx first.
+- Files: `src/components/ae/**` (e.g. `AeChat.tsx` 821, `src/components/ae/artifacts/AeGenerativeAnswer.tsx` 774, `AeCustomerRequestWorkspace.tsx` 413 after panel deepen), `AGENTS.md`, `.agents/skills/ae-design-system/SKILL.md`
 - Why: Behavioral modules predate the Astryx-era design authority.
 - Impact: New UI work tends to extend `Ae*` instead of Astryx; design-system drift and larger remount surfaces (see Fragile Areas).
 - Fix approach: Re-skin existing behavioral modules onto `@astryxdesign/core` + `@astryxdesign/theme-neutral`; do not add new `Ae*` presentation components.
 
 **Orphaned Phase 5/6 billing & business-action surface references:**
-- Issue: Runtime modules `src/modules/billing/`, `src/modules/business-action/`, `convex/businessActions.ts`, and billing/Stripe route handlers are absent from this revision, but operator nav, env placeholders, copy/import scanners, deploy-smoke, and planning docs still describe them as present or closable.
-- Files: `src/lib/operator/navigation.ts` (`/owner/business-actions`, `/admin/business-actions`), `.env.example` (Autumn/Stripe block), `src/lib/ui/contract-scans.ts` (billing/business-action path allowlists), `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`, `package.json` scripts referencing provider smokes, `.planning/STATE.md`, `.planning/adr/ADR-005-transactions-receipts.md`
-- Why: Source/local Phase 6 closeout and payment hardening landed historically; modules appear removed or relocated without a full reference cleanup in HEAD.
+- Issue: Runtime modules `src/modules/billing/`, `src/modules/business-action/`, `convex/businessActions.ts`, and `src/lib/server/billing-provider.ts` are absent, but operator nav, env placeholders, copy/import scanners, deploy-smoke, and planning docs still describe them as present or closable.
+- Files: `src/lib/operator/navigation.ts` (`/owner/business-actions`, `/admin/business-actions`), `.env.example` (Autumn/Stripe block), `src/lib/ui/contract-scans.ts` (billing/business-action path allowlists around lines 592–610), `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`, `package.json` scripts referencing provider smokes, `.planning/STATE.md`, `.planning/adr/ADR-005-transactions-receipts.md`
+- Why: Source/local Phase 6 closeout and payment hardening landed historically; modules removed or relocated without full reference cleanup.
 - Impact: Dead operator links; smoke/config that cannot run against current source; planners may assume payment adapters exist; claim/boundary confusion.
 - Fix approach: Either restore modules behind ADR-005 gates with readback, or delete/relabel nav, env, scanners, smokes, and STATE claims so “absent” matches “not claimed.”
 
 **Quarantined transport SDKs still in production dependencies:**
-- Issue: `@x402/*` and `viem` ship in `package.json` but deep Handshake / MCP / broad `@x402` / `viem` imports are banned by contract scans except one reviewed signer file.
+- Issue: `@x402/core`, `@x402/evm`, `@x402/extensions`, and `viem` ship in `package.json` but deep Handshake / MCP / broad `@x402` / `viem` imports are banned by contract scans except one reviewed signer file.
 - Files: `package.json`, `src/modules/capability-supply/internal/x402-payment-signer.ts`, `src/lib/ui/contract-scans.ts` (`isReviewedTransportSdkImport`), `tests/imports/*`
 - Why: Capability-supply route transport needs an EVM x402 payment-signature helper under a narrow allowlist.
 - Impact: Accidental un-quarantine expands wallet/payment surface area; copy/product claims can drift ahead of evidence.
@@ -66,37 +93,36 @@
 - Root cause: Live-turn identity swap (`live-…` → `turnId`) plus async `refreshProjection` and fixed-timeout scroll settler racing layout collapse.
 - Fix: Optimistically fold settled live turns into transcript with stable identity; sequence collapse→measure→anchor→reveal; keep prior turn expanded while the next streams.
 
-**CLS from missing scrollbar gutter:**
-- Symptoms: Centered `max-w-*` layouts shift horizontally when scrollbars appear/disappear on route change.
-- Trigger: Navigate between pages that differ in overflow height.
-- Files: `.planning/audits/ux/2026-07-05-PLATFORM-BEHAVIOR-AUDIT.md` (R6); public CSS entry under `src/styles/`
-- Workaround: None reliable for users.
-- Root cause: No `scrollbar-gutter: stable` on `html`.
-- Fix: Add `scrollbar-gutter: stable both-edges` on `html` in the Astryx theme / base layer.
-
 **Operator business-actions destinations missing:**
 - Symptoms: Operator shell advertises Business actions links that have no matching route tree entries in this revision.
 - Trigger: Open owner/admin operator navigation and follow Business actions.
-- Files: `src/lib/operator/navigation.ts`; absent `src/routes/**/business-actions*`; absent `routeTree.gen.ts` business-actions entries
+- Files: `src/lib/operator/navigation.ts` (owner `:69`, admin `:97`); absent `src/routes/**/business-actions*`; absent matching entries in `src/routeTree.gen.ts`
 - Workaround: Avoid those nav items until modules are restored or links removed.
 - Root cause: Navigation retained after module/route removal (see Tech Debt).
 - Fix: Remove or gate the nav entries until routes and source exist.
+
+**Mitigated — scrollbar gutter CLS (do not regress):**
+- Symptoms (historical): Centered `max-w-*` layouts shifted when scrollbars appeared/disappeared.
+- Files: `src/styles/base.css:18` now sets `scrollbar-gutter: stable both-edges` on `html`; originally tracked in `.planning/audits/ux/2026-07-05-PLATFORM-BEHAVIOR-AUDIT.md` (R6).
+- Status: Source mitigation present at map time; keep the rule when re-skinning to Astryx theme layers.
 
 ## Security Considerations
 
 **Live money / PSP processing remains gated (do not enable):**
 - Risk: Treating Stripe/Autumn env presence, historical Phase 6 docs, or x402 signer code as permission to process live funds or claim payment/booking/dispatch.
-- Current mitigation: `PRODUCT.md` / `AGENTS.md` current-vs-target split; copy scans (`npm run test:copy`); ADR-005 defer posture; FIX-NOW wave closed SSRF / source-write key split / nonce consumption / WBA binding (see `.planning/audits/redteam/2026-07-04-PAYMENT-SECURITY-PATH-FORWARD.md`).
+- Files: `PRODUCT.md`, `AGENTS.md`, `.env.example`, `src/modules/capability-supply/internal/x402-payment-signer.ts`, `.planning/adr/ADR-005-transactions-receipts.md`, `.planning/audits/redteam/2026-07-04-PAYMENT-SECURITY-PATH-FORWARD.md`
+- Current mitigation: current-vs-target split; copy scans (`npm run test:copy`); ADR-005 defer posture; FIX-NOW wave closed SSRF / source-write key split / nonce consumption / WBA binding.
 - Recommendations: Do not claim or enable live money until ADR-005 D6 / live-money evidence decision, deployed test-mode smokes, refunds/disputes/reconciliation/kill switch exist. Keep card entry PSP-hosted (SAQ-A-compatible wording only).
 
 **Provider API base-URL fail-closed allowlist incomplete in runtime:**
 - Risk: Misconfigured `AUTUMN_API_BASE_URL` / Stripe base URLs could send bearer secrets to an unexpected host if billing adapters return.
-- Current mitigation: `.env.example` documents intended Autumn/Stripe hosts; notification providers use explicit base URLs in tests.
+- Files: `.env.example` (documents intended Autumn/Stripe hosts); notification providers under `src/lib/server/notification-provider.ts`
+- Current mitigation: Env docs and notification test base URLs; billing provider module absent.
 - Recommendations: Before restoring billing/business-action providers, enforce production allowlists for Autumn (`api.useautumn.com`) and Stripe (`api.stripe.com`); fail closed on non-allowlisted hosts; keep overrides test-only.
 
 **Inquiry PII retention / purge automation incomplete:**
 - Risk: Inquiry bodies and related private content persist longer than a defined retention policy; combining with future payment state expands blast radius.
-- Files: `src/modules/inquiries/internal/commands.ts` (privacy tombstone delete path), `convex/inquiries.ts`, `.planning/audits/redteam/2026-07-04-PAYMENT-SECURITY-PATH-FORWARD.md` (§4)
+- Files: `src/modules/inquiries/internal/privacy/commands.ts`, `convex/inquiries.ts` (`deleteCurrentOwnerInquiryPrivateContent`, export paths), `.planning/audits/redteam/2026-07-04-PAYMENT-SECURITY-PATH-FORWARD.md` (§4)
 - Current mitigation: Owner privacy tombstone / private-content delete commands exist; audit redaction utilities under `src/modules/observability/`.
 - Recommendations: Define TTL, automated purge, DSAR/export ownership, and notification/observability redaction SLAs before any payment-adjacent PII.
 
@@ -108,8 +134,8 @@
 
 **Local e2e Clerk bypass:**
 - Risk: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true` widens registry fallback and session checks; catastrophic if ever true in production.
-- Files: `src/lib/server/local-e2e-bypass.ts`, `src/modules/registry/registry.functions.ts`, `src/modules/answer-thread/internal/turn-guard.ts`, claim/operator session helpers
-- Current mitigation: Throws if enabled when production is detected.
+- Files: `src/lib/server/local-e2e-bypass.ts`, `src/modules/registry/registry.functions.ts`, `src/modules/answer-thread/answer-thread.functions.ts`, `src/lib/server/claim-owner-session.ts`, `src/lib/server/require-operator-session.ts`
+- Current mitigation: Throws if enabled when production is detected (`local-e2e-bypass.ts`).
 - Recommendations: Keep production detection strict; never set the flag outside hermetic e2e; prefer dedicated test identities over bypass when possible.
 
 **Web Bot Auth trust list and draft protocol:**
@@ -124,6 +150,12 @@
 - Current mitigation: Manual redirects with per-hop re-guard, DNS/literal private-range rejection, connect-time guarded undici lookup, timeout, 2 MiB cap, HTML content-type checks (RESOLVED in 2026-07-04 path-forward audit).
 - Recommendations: Preserve hermetic network-guard tests on any importer change; keep `undici` pinned as the SSRF boundary dependency.
 
+**Route-execution journal machines concentrate authority writes:**
+- Risk: `startOrResume` / `leaseNextDispatch` / `recordOutcome` own lease grants, outcomes, and run advancement in one host file; incorrect extract or partial port can desync integrity digests from durable state.
+- Files: `convex/customerRequestRouteExecution.ts`, `src/modules/customer-request/route-execution/journal/`, `convex/customerRequestRouteTransportWorker.ts` (calls `leaseNextDispatch` / `recordOutcome`), `convex/customerRequestApplication.ts` (calls `startOrResume`)
+- Current mitigation: Integrity/decision helpers deepened and locked; thinness test forbids write-plan DTOs in the pure journal module; integration coverage in `tests/integration/customer-request-v2-multi-capability-route.test.ts`.
+- Recommendations: No shallow Convex sibling chops; wait for write-plan ADR; keep machines atomic at the mutation boundary.
+
 ## Performance Bottlenecks
 
 **Answer Thread hero / motion settle time:**
@@ -135,17 +167,24 @@
 
 **Large Convex mutation/query modules:**
 - Problem: Remaining multi-thousand-line Convex files increase parse/bundle cost and raise risk of rewriting large documents in one mutation.
-- Files: `convex/customerRequestRouteExecution.ts` (~2463, journal machines deferred), `convex/inquiries.ts` (~3443), plus thinner but still large Application (~1749 validators) and capabilitySupply (~973).
+- Files: `convex/inquiries.ts` (3443), `convex/customerRequestRouteExecution.ts` (2463, journal machines deferred), `convex/customerRequestApplication.ts` (1749 validators + thin actions — host-done), `convex/capabilitySupply.ts` (973 — host-done; graph/probe residual).
 - Measurement: Line counts above; Convex document limit 1 MiB (see `convex/_generated/ai/guidelines.md`).
 - Cause: Unbounded arrays or growing aggregates inside single documents would rewrite whole docs; journal machines still concentrate work.
-- Improvement path: Keep high-churn children in separate tables (schema convention already enforced in tests); deepen journal machines only behind a write-plan ADR; profile hot paths under `npm run check:convex-codegen` + integration suites.
+- Improvement path: Keep high-churn children in separate tables (schema convention already enforced in `tests/unit/schema/convex-schema.test.ts`); deepen journal machines only behind a write-plan ADR — not via shallow host file splits; profile hot paths under `npm run check:convex-codegen` + integration suites.
 
 **Customer Request workspace client payload:**
-- Problem: Workspace shell still owns a large interactive surface; likely heavy first paint for `/engine` (panels already split under Wave 4).
-- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` (~413 after panel deepen)
+- Problem: Workspace shell still owns a large interactive surface; likely heavy first paint for `/engine` (panels already split; shell file 413 lines).
+- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` (413), projection families in `src/modules/customer-request/customer-projection.ts` (830), `src/modules/customer-request/route-plan-customer-projection.ts` (829)
 - Measurement: File size / composition complexity (no fresh p95 captured in this map).
-- Cause: Clarification, options, authority, and recovery still compose a large client surface.
-- Improvement path: Lazy-load non-first-paint panels; keep projection families from `src/modules/customer-request/customer-projection.ts`.
+- Cause: Clarification, options, authority, and recovery still compose a large client surface across panel modules.
+- Improvement path: Lazy-load non-first-paint panels; keep projection families in the customer-request module, not in Convex hosts.
+
+**Hosted agent journey script size:**
+- Problem: `src/modules/customer-request/hosted-agent-journey.ts` (2045) packs sandbox journey orchestration into one module, increasing edit risk and cold-start cost for journey tests.
+- Files: `src/modules/customer-request/hosted-agent-journey.ts`, `tests/unit/customer-request/hosted-agent-journey.test.ts`
+- Measurement: 2045 lines at map time.
+- Cause: Multi-step sandbox journey + assertions co-located for hermetic agent evidence.
+- Improvement path: Split by journey phase behind a small public runner interface; keep Convex hosts out of the journey script.
 
 ## Fragile Areas
 
@@ -156,22 +195,29 @@
 - Safe modification: Follow `.agents/skills/ae-agent-identity-and-mandates/SKILL.md` and `.agents/skills/ae-agent-surfaces/SKILL.md`; extend refusal taxonomies, never booleans; run integration tests for agent tools.
 - Test coverage: Strong unit/integration around admissions; keep replay/nonce tests green on every change.
 
-**Capability supply quarantine / publication:**
-- Why fragile: Offerings, bindings, eligibility, publication, and readiness must all be current for routeable supply; quarantine transitions are easy to get wrong.
-- Files: `convex/capabilitySupply.ts`, `src/modules/capability-supply/**`
-- Common failures: Treating registered pages as routeable supply; publishing without readiness; parent/child quarantine inconsistency.
-- Safe modification: Use existing command mutations (`quarantineBinding`, publish paths); never short-circuit eligibility hashes; prefer `tests/unit/capability-supply/**` and integration routing readiness tests.
+**Route-execution journal machines (deferred deepen):**
+- Why fragile: Lease/outcome/start sequencing is correctness-critical; predicates deepened into `src/modules/customer-request/route-execution/journal/` but mutation write plans remain host-local.
+- Files: `convex/customerRequestRouteExecution.ts`, `src/modules/customer-request/route-execution/journal/{integrity,decisions,export-evidence,export-state,index}.ts`, `tests/unit/customer-request/route-execution/journal-thinness.test.ts`
+- Common failures: Shallow sibling file chops that leave write plans duplicated; leaking `WritePlan` / `intendedPatches` into the pure journal module; breaking lease expiry / cancel disposition invariants.
+- Safe modification: Change predicates via journal module + thinness tests; leave `startOrResume` / `leaseNextDispatch` / `recordOutcome` host-exported until write-plan ADR; never invent Convex sibling hosts as a substitute for deepening.
+- Test coverage: Unit thinness + journal tests; heavy integration in `tests/integration/customer-request-v2-multi-capability-route.test.ts`.
+
+**Capability supply quarantine / publication / probe:**
+- Why fragile: Offerings, bindings, eligibility, publication, and readiness must all be current for routeable supply; quarantine and probe transitions are easy to get wrong.
+- Files: `convex/capabilitySupply.ts`, `src/modules/capability-supply/**`, `tests/unit/capability-supply/convex-host-thinness.test.ts`
+- Common failures: Treating registered pages as routeable supply; publishing without readiness; parent/child quarantine inconsistency; probe target digest mismatch.
+- Safe modification: Use existing command mutations (`quarantineBinding`, publish/refresh/withdraw paths); never short-circuit eligibility hashes; deepen graph/probe only behind ports.
 - Test coverage: Substantial unit coverage; production useful-supply proof still separate from sandbox.
 
 **Convex `node:*` import bundling trap:**
 - Why fragile: Any `node:` import pulled into a query/mutation module graph breaks `npm run check:convex-codegen`.
-- Files: Documented in `.agents/skills/ae-convex-guardrails/SKILL.md`; Node-only examples historically in server helpers (billing/notification/storefront guard patterns)
+- Files: Documented in `.agents/skills/ae-convex-guardrails/SKILL.md`; Node-only patterns in `src/lib/server/notification-provider.ts`, `src/modules/storefront/internal/network-guard.ts`, `convex/capabilityCheck.ts` (`"use node"`)
 - Common failures: Sharing a Node crypto helper into Convex query modules.
 - Safe modification: Isolate Node actions with `"use node"` and no co-exported queries/mutations; keep pure domain in `src/modules/*/public.ts`.
 - Test coverage: `check:convex-codegen` gate; do not disable it for convenience.
 
 **Import / copy / claim boundary scanners:**
-- Why fragile: Product honesty depends on mechanical scans; path allowlists that reference deleted modules go stale.
+- Why fragile: Product honesty depends on mechanical scans; path allowlists that reference deleted modules go stale (billing/business-action paths still listed).
 - Files: `src/lib/ui/contract-scans.ts`, `tests/copy/**`, `tests/imports/**`, `tests/ui-contract/**`
 - Common failures: New public copy implying booking/payment/dispatch; forbidden Handshake deep imports; scanners allowing dead paths.
 - Safe modification: Run `npm run test:copy`, `test:imports`, `test:ui-contract` on surface changes; update scanners when modules are removed.
@@ -207,7 +253,7 @@
 ## Dependencies at Risk
 
 **nitro-nightly (Vite Start adapter):**
-- Risk: `nitro` resolves to `npm:nitro-nightly@^3.0.1-20260628-…` — pre-release, date-stamped, can break builds without semver warning.
+- Risk: `nitro` resolves to `npm:nitro-nightly@^3.0.1-20260628-090458-3df69609` — pre-release, date-stamped, can break builds without semver warning.
 - Impact: `vite build` / `vite start` and SSR route handlers fail.
 - Migration plan: Pin to a stable Nitro 3 release when available; keep dry-run deploy checks in CI.
 
@@ -236,29 +282,36 @@
 
 **Proven complete human `/engine` production journey:**
 - Problem: Authenticated workspace exists; complete human journey through real production dependencies is not proven.
-- Current workaround: Agent sandbox journey + development smokes (`package.json` `smoke:customer-request:*`).
+- Current workaround: Agent sandbox journey + development smokes (`package.json` `smoke:customer-request:*`); Playwright `tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts`.
 - Blocks: Treating `/engine` as cutover-ready or redirecting `/` to Request.
 - Implementation complexity: Medium–high — deployed smokes + dependency readiness + UX settle fixes.
 
 **Unified provider webhook replay ledger:**
 - Problem: After billing module absence, remaining notification webhooks still need a single replay/ordering standard before money returns.
-- Current workaround: Per-provider verification patterns where present (e.g. Resend/Novu paths).
+- Current workaround: Per-provider verification patterns where present (e.g. Resend/Novu paths under `convex/notificationOutbox.ts` and deploy-smoke phase2 specs).
 - Blocks: Safe live provider events and future PSP webhooks.
 - Implementation complexity: Medium — shared ledger + conflict-hold + metrics.
 
 **Action-plane cross-surface parity (ADR-010 / Phase 2):**
 - Problem: Human UI and agent API lack a mid-lifecycle parity contract for available actions, authority boundaries, and continuations.
-- Current workaround: Terminal `compareCustomerRequestSurfaces` only.
+- Current workaround: Terminal `compareCustomerRequestSurfaces` only (`src/modules/customer-request/cross-surface-parity.ts`).
 - Blocks: One-action-plane product claims across surfaces.
 - Implementation complexity: Medium — design in `.planning/phases/02-one-action-plane-cross-surface-parity/`; then falsifiable tests.
+
+**Journal write-plan ADR (blocks next deepen of route execution):**
+- Problem: No accepted ADR yet for extracting `startOrResume` / `leaseNextDispatch` / `recordOutcome` write plans behind mutation ports without Convex DTOs in the pure journal module.
+- Current workaround: Machines remain host-exported; predicates/evidence already deepened.
+- Blocks: Safe further reduction of `convex/customerRequestRouteExecution.ts` below the deferred-machine floor.
+- Implementation complexity: High — must preserve lease/outcome atomicity and integrity digests; shallow sibling chops are explicitly out of scope.
 
 ## Test Coverage Gaps
 
 **Deployed human Customer Request lifecycle:**
 - What's not tested in CI by default: Full production human journey through real dependencies (beyond local unit/integration and optional deploy-smoke scripts).
+- Files: `tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts`
 - Risk: Source-green while hosted human path fails or lacks dependencies.
 - Priority: High
-- Difficulty to test: Needs deployed credentials, seeded supply, and Playwright deploy-smoke config (`tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts`).
+- Difficulty to test: Needs deployed credentials, seeded supply, and Playwright deploy-smoke config.
 
 **Phase 6 Stripe / billing provider smokes vs missing modules:**
 - What's not tested: `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts` and related package scripts cannot exercise absent `business-action`/billing routes in this revision.
@@ -284,8 +337,16 @@
 - Priority: High for launch claims
 - Difficulty to test: Needs production or staging catalog evidence, not only `convex/devSeed.ts` / local fixtures.
 
+**Journal machine deepen (blocked):**
+- What's not tested as a deepen seam: Pure write-plan ports for start/lease/outcome (intentionally deferred).
+- Files: `tests/unit/customer-request/route-execution/journal-thinness.test.ts` (locks host export + no write-plan DTOs in journal module)
+- Risk: Premature extracts that green thinness tests while breaking mutation atomicity.
+- Priority: High before any journal-machine move; Low until write-plan ADR exists
+- Difficulty to test: Requires ADR + new port fakes; do not add Convex sibling-file “thinness” as a substitute.
+
 ---
 
-*Concerns audit: 2026-07-17*  
-*Inspected revision: `7deffac41e103ee619ce099db531fc2127ba9985`*  
+*Concerns audit: 2026-07-18*  
+*Inspected revision: `19e988f5`*  
+*last_mapped_commit: `19e988f5`*  
 *Update as issues are fixed or new ones discovered*

@@ -1,93 +1,274 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-07-17  
-**Inspected revision:** `7deffac41e103ee619ce099db531fc2127ba9985`  
-**last_mapped_commit:** `7deffac41e103ee619ce099db531fc2127ba9985`
+**Analysis Date:** 2026-07-18
+**last_mapped_commit:** 19e988f5
 
 ## Test Framework
 
 **Runner:**
-- Vitest `4.1.9` for unit, integration, types, imports, copy, SEO, UI-contract, and eval harness tests
-- Config: `vitest.config.ts` — `environment: 'node'`, `globals: false`, `include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx', 'convex/**/*.test.ts']`, `tsconfigPaths: true`
-- Playwright `@playwright/test` `1.61.1` for browser E2E and deploy smokes (`playwright.config.ts`, `playwright.deploy-smoke.config.ts`)
-- Promptfoo for model eval suites under `eval/answer/` (`npm run test:eval`)
+- Vitest `4.1.9`
+- Config: `vitest.config.ts`
+- Defaults: `environment: 'node'`, `globals: false`, `watch: false`
+- Includes: `tests/**/*.test.ts`, `tests/**/*.test.tsx`, `convex/**/*.test.ts`
+- Path resolution: `resolve.tsconfigPaths: true` (honors `@/` from `tsconfig.json`)
 
 **Assertion Library:**
-- Vitest `expect` / `expectTypeOf` (types suite)
-- Playwright `expect` for browser assertions
-- Prefer `toEqual`, `toMatchObject`, `toBe`, `resolves` / `rejects`, `not.toMatch` for copy/overclaim checks
+- Vitest `expect` (imported explicitly — no globals)
+- `@testing-library/jest-dom` available as a dependency for DOM matchers when needed
+
+**Browser / E2E:**
+- Playwright `@playwright/test` `1.61.1`
+- Config: `playwright.config.ts` (local e2e on `127.0.0.1:3020`)
+- Deploy smoke: `playwright.deploy-smoke.config.ts`
+
+**Convex in-process:**
+- `convex-test` (`convexTest(schema, modules)`) in integration suites
+
+**Model evals:**
+- Promptfoo + Vitest under `eval/` and `tests/eval/` (`npm run test:eval`)
 
 **Run Commands:**
 ```bash
-npm test                              # vitest run (all Vitest includes)
-npm run test:unit                     # tests/unit
-npm run test:integration              # tests/integration (+ one convex mandate test); no file parallelism
-npm run test:types                    # tests/types
-npm run test:imports                  # module/route boundary scanners
-npm run test:ts-standards             # explicit-any / ! / v.any() / CSRF guards
-npm run test:copy                     # public/assistant copy claims
-npm run test:seo                      # discovery/SEO outputs
-npm run test:ui-contract              # semantic token / UI contract scan
-npm run test:e2e                      # Playwright tests/e2e
-npm run test:e2e:a11y                 # Playwright a11y suite
-npm run test:all                      # typecheck + codegen check + core Vitest gates + build
-npm run test:release                  # full release source + hosted readback path
-npm run lint && npm run typecheck     # always pair with logic changes
+npm test                          # vitest run (all included unit/integration-style files)
+npm run test:unit                 # vitest run tests/unit
+npm run test:integration          # vitest run tests/integration (+ one convex test); --no-file-parallelism
+npm run test:types                # tests/types
+npm run test:imports              # boundary scanners (clean mode)
+npm run test:ts-standards         # TypeScript hole scanner
+npm run test:copy                 # public copy bans
+npm run test:seo                  # SEO / discovery output
+npm run test:ui-contract          # UI contract scanner
+npm run test:e2e                  # playwright tests/e2e
+npm run test:e2e:a11y             # playwright tests/e2e/a11y
+npm run test:all                  # typecheck + codegen + unit + integration + gates + build
+npm run test:release              # full release source + hosted readback/smoke
+npm run typecheck                 # tsc --noEmit
+npm run lint                      # oxlint --deny-warnings
+npm run check:convex-codegen      # convex codegen dry-run
 ```
 
-**Verification gate (smallest first):** see `.agents/skills/ae-verification-gates/SKILL.md` — run the narrowest script that proves the change class.
+**Verification selection:** use the smallest gate that proves the change (`.agents/skills/ae-verification-gates/SKILL.md`).
 
 ## Test File Organization
 
 **Location:**
-- Central `tests/` tree (not co-located next to `src/` sources)
-- Rare Convex colocated tests: `convex/**/*.test.ts`
-- Fixtures for negative scanners: `tests/fixtures/` (`bad-imports`, `bad-ts-standards`, `bad-copy`, `bad-ui-contract`)
-- Shared helpers: `tests/helpers/`
+- Separate `tests/` tree (not co-located next to `src/` modules), plus occasional `convex/**/*.test.ts`.
 
 **Naming:**
-- Unit/integration/copy/imports: `feature-name.test.ts` or `feature-name.test.tsx`
-- E2E / deploy smoke: `feature-name.spec.ts`
-- Mirror domain folders under `tests/unit/<domain>/` when practical
+- Behavior: `*.test.ts` / `*.test.tsx`
+- Playwright: `*.spec.ts`
+- Thinness campaign: `*-thinness.test.ts` under `tests/unit/**`
 
 **Structure:**
 ```
 tests/
-  unit/           # pure module + component unit tests
-  integration/    # multi-module / route / convex-test flows
-  types/          # expectTypeOf domain contract alignment
-  imports/        # architectural import scanners
-  copy/           # public language / overclaim
-  seo/            # sitemap, robots, llms, meta
-  ui-contract/    # visual token contract
-  e2e/            # Playwright local app flows (+ e2e/a11y)
-  deploy-smoke/   # Playwright against hosted surfaces
-  eval/           # Vitest wrappers around eval outputs
-  helpers/        # admission secrets, ports, contract servers
-  fixtures/       # intentional violations for scanner fixture mode
+├── unit/              # Pure/application/UI unit tests (+ thinness campaign)
+├── integration/       # Cross-module + convex-test backends
+├── imports/           # Import/boundary/ts-standards scanners
+├── copy/              # Banned public copy
+├── seo/               # SEO / metadata
+├── ui-contract/       # UI contract scans
+├── types/             # Type-level tests
+├── e2e/               # Playwright local flows (+ a11y/)
+├── deploy-smoke/      # Hosted/production smoke specs
+├── eval/              # Eval suite Vitest wrappers
+├── fixtures/          # Bad-* fixtures for scanner fixture mode
+├── helpers/           # Shared test ports/helpers
+├── ai/                # AI-related suites
+└── scripts/           # Tooling script tests
 ```
+
+**Mirror modules under unit:** e.g. `tests/unit/customer-request/application/composition.test.ts` ↔ `src/modules/customer-request/application/`.
 
 ## Test Structure
 
 **Suite Organization:**
 ```typescript
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { buildRegistrySearchDocumentsForCatalog } from '@/modules/registry/internal/search-documents'
+import { interpretCompileCommit } from '@/modules/customer-request/application/public'
 
-describe('registry search documents', () => {
-  it('builds one public search document per published service', () => {
-    const docs = buildRegistrySearchDocumentsForCatalog(catalog())
-    expect(docs).toHaveLength(2)
+describe('customer-request application composition', () => {
+  describe('interpret-compile orchestration ports', () => {
+    beforeEach(() => {
+      // reset mocks / ports
+    })
+
+    it('short-circuits interpretCompileCommit on committed-command replay', async () => {
+      const result = await interpretCompileCommit(baseInput, ports, interpreterEnv)
+      expect(result).toEqual(replayed)
+      expect(loadRequestGraphPort).not.toHaveBeenCalled()
+    })
   })
 })
+```
+Reference: `tests/unit/customer-request/application/composition.test.ts`.
 
-function catalog(overrides: Partial<...> = {}): ... {
-  return { slug: 'parramatta-emergency-plumbing', ...overrides }
+**Patterns:**
+- Explicit vitest imports (`globals: false`).
+- Nested `describe` by seam or concern.
+- Behavior names in `it(...)` read like specs (“short-circuits…”, “rejects…”).
+- Prefer `toEqual` / `toMatchObject` / `toBe` with independent literals — not recomputed tautologies.
+- DOM suites: top-of-file `/** @vitest-environment jsdom */` + `afterEach(cleanup)` (`tests/unit/chat/ae-chat-loop-context.test.tsx`).
+
+## Mocking
+
+**Framework:** Vitest `vi` (`vi.fn`, `vi.mock`, `vi.mocked`, `mockReset`, `mockImplementation`).
+
+**Patterns:**
+```typescript
+vi.mock('@/modules/customer-request/application/interpret-compile/interpreter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/customer-request/application/interpret-compile/interpreter')>()
+  return {
+    ...actual,
+    createConfiguredRequestInterpreter: vi.fn(actual.createConfiguredRequestInterpreter),
+  }
+})
+
+// Prefer port fakes over deep mocks:
+const ports = {
+  replayCommittedCommand: async () => undefined,
+  loadRequestGraph: vi.fn(async () => { throw new Error('must not run') }),
+  commitAggregate: async () => { throw new Error('must not run') },
 }
 ```
+Reference: `tests/unit/customer-request/application/composition.test.ts`.
 
-**Component (jsdom) pattern:**
+**What to Mock:**
+- External interpreters / network / LLM transports at the port or thin wrapper.
+- Selective module exports via `importOriginal` when the rest of the module must stay real.
+- HTTP/action callers with `vi.fn` returning fixture envelopes (`tests/unit/server/customer-request-agent-api.test.ts`).
+
+**What NOT to Mock:**
+- Pure compilers, projections, and eligibility logic under test — call the real public seam.
+- Prefer injectable ports over mocking `internal/` collaborators.
+- Do not mock away the behavior the test claims to prove.
+
+## Fixtures and Factories
+
+**Test Data:**
+```typescript
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
+
+const admittedLocalE2eBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find(
+  (fixture) => fixture.inquiryAdmission === 'admitted',
+)
+```
+Reference: `tests/integration/registry-api.test.ts`.
+
+**Location:**
+- Runtime fixtures: `src/lib/dev/local-e2e-business-fixtures.ts`, module `createEmpty*` / `createDefault*` factories in `public.ts`.
+- Scanner negative fixtures: `tests/fixtures/bad-imports/`, `bad-ts-standards/`, `bad-copy/`, `bad-ui-contract/`.
+- Shared helpers: `tests/helpers/` (`answer-thread-test-port.ts`, `source-write-admission.ts`, `openrouter-contract-server.ts`).
+- Capability fixtures: `tests/fixtures/capability-contract-v2.ts`.
+
+**convex-test bootstrap:**
+```typescript
+import { convexTest } from 'convex-test'
+import schema from '../../convex/schema'
+
+const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
+const modules = Object.fromEntries(
+  Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]),
+)
+
+const backend = convexTest(schema, modules)
+await backend.mutation(internal.devSeed.seedDevCatalog, {})
+```
+Reference: `tests/integration/customer-request-sandbox-registration.test.ts`.
+
+## Coverage
+
+**Requirements:** None enforced as a global % threshold in `vitest.config.ts`.
+
+**Proof classes (do not conflate):**
+| Class | Proves | Commands / paths |
+|---|---|---|
+| Unit / integration | Source behavior under fixtures | `test:unit`, `test:integration` |
+| Import / TS / UI / copy / SEO scanners | Structural contracts | `test:imports`, `test:ts-standards`, `test:ui-contract`, `test:copy`, `test:seo` |
+| Thinness | Host stays thin; logic in modules | `tests/unit/**/*-thinness.test.ts` |
+| Browser e2e | Local browser flow | `test:e2e` |
+| Deploy smoke | Named hosted surface | `test:deploy-smoke:*`, release smokes |
+| Evals | Model suite performance | `test:eval` |
+
+**View Coverage:** Not a standard npm script; add Vitest coverage only if explicitly requested.
+
+## Test Types
+
+**Unit Tests:**
+- Scope: pure domain, application ports, projections, UI components, HTTP handler units.
+- Approach: call `public` / application seams; inject ports; assert discriminated results.
+- Examples: `tests/unit/customer-request/application/composition.test.ts`, `tests/unit/routing-kernel/neutral-kernel.test.ts`, `tests/unit/status/owner-trust-progress.test.tsx`.
+
+**Integration Tests:**
+- Scope: multi-module flows, registry API parity, capability publication, Convex mutations via `convex-test`.
+- Approach: real schema + seeded catalog; assert DB/readback shape.
+- Examples: `tests/integration/registry-api.test.ts`, `tests/integration/capability-supply-sandbox-registration.test.ts`, `tests/integration/customer-request-v2-application-path.test.ts`.
+- Note: `npm run test:integration` disables file parallelism.
+
+**E2E Tests:**
+- Playwright under `tests/e2e/`; a11y under `tests/e2e/a11y/`.
+- Local webServer via `npm run dev -- --port 3020` unless `PLAYWRIGHT_BASE_URL` is set.
+- Projects: `compact-chromium` (375×812) and `wide-chromium` (1440×1100).
+- Deploy/production smokes: `tests/deploy-smoke/*.spec.ts`.
+
+**Guardrail / scanner tests:**
+- `tests/imports/*.test.ts` — private imports, route boundaries, kernel/capability/customer-request boundaries, backup imports, ts-standards.
+- Clean vs fixtures: `AE_SCAN_MODE=clean` (default in scripts) vs `AE_SCAN_MODE=fixtures`.
+- Scanners live in `src/lib/ui/contract-scans.ts`.
+
+## Thinness Campaign Pattern
+
+**Glob:** `tests/unit/**/*-thinness.test.ts` (17 files at map time).
+
+**Purpose:** Executable structure tests that keep Convex (or host) files as thin adapters and keep domain modules free of Convex runtime imports. They are a **campaign pattern** for deepening modules — not substitutes for behavior tests.
+
+**How they work:**
+1. `readFileSync` the Convex host (e.g. `convex/capabilitySupply.ts`, `convex/customerRequestApplication.ts`).
+2. Assert forbidden domain literals / helper definitions are **absent** from the host.
+3. Assert the host **imports** module ports and calls `*FromModule` / `*Application` delegates.
+4. Walk `src/modules/...` with `readdirSync` and forbid `convex/server`, `_generated`, `MutationCtx` / `QueryCtx` / `Doc<>` in those files.
+
+**Canonical examples:**
+- `tests/unit/capability-supply/eligible-supply-thinness.test.ts`
+- `tests/unit/capability-supply/convex-host-thinness.test.ts`
+- `tests/unit/capability-supply/operation-ledger-thinness.test.ts`
+- `tests/unit/capability-supply/publication-commands-thinness.test.ts`
+- `tests/unit/capability-supply/supply-writers-thinness.test.ts`
+- `tests/unit/customer-request/application/problem-route-thinness.test.ts`
+- `tests/unit/customer-request/application/provide-facts-thinness.test.ts`
+- `tests/unit/customer-request/application/compare-resume-thinness.test.ts`
+- `tests/unit/customer-request/application/confirm-route-thinness.test.ts`
+- `tests/unit/customer-request/application/authorize-preparation-thinness.test.ts`
+- `tests/unit/customer-request/application/action-projection-thinness.test.ts`
+- `tests/unit/customer-request/application/preparation-egress-thinness.test.ts`
+- `tests/unit/customer-request/application/standing-route-thinness.test.ts`
+- `tests/unit/customer-request/application/refine-thinness.test.ts`
+- `tests/unit/customer-request/route-execution/journal-thinness.test.ts`
+- `tests/unit/answer-thread/turn-path-thinness.test.ts`
+- `tests/unit/routing-kernel/kernel-execute-reconcile-thinness.test.ts`
+
+**When adding a thinness test:** place it under `tests/unit/<domain>/.../<concern>-thinness.test.ts`, target one host + one module root, and keep assertions source-text based (contain / not.toMatch). Pair with a behavior unit test for the moved logic.
+
+## Common Patterns
+
+**Async Testing:**
+```typescript
+it('reads catalog through registry and API', async () => {
+  const detail = getPublicBusinessCatalogBySlug(state, { slug: 'fremantle-heat-pump-repairs' })
+  expect(detail).toMatchObject({ kind: 'ok', /* ... */ })
+})
+```
+
+**Error / refuse Testing:**
+```typescript
+expect(await provideCustomerRequestFacts(input, ports)).toEqual({
+  kind: 'refused',
+  reason: 'request_not_found',
+})
+```
+
+**React Testing:**
 ```typescript
 /**
  * @vitest-environment jsdom
@@ -95,185 +276,32 @@ function catalog(overrides: Partial<...> = {}): ... {
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
-describe('AeQueryPanel', () => {
-  afterEach(() => {
-    cleanup()
-  })
+afterEach(() => cleanup())
 
-  it('can render session-aware follow-up guidance in the compact composer', () => {
-    render(<AeQueryPanel onSubmit={() => undefined} ... />)
-    expect(screen.getByPlaceholderText('...')).toBeTruthy()
-  })
+it('shows owner trust progress', () => {
+  render(<AeStatusCard readback={ownerReadback(admission)} />)
+  expect(screen.getByRole('link', { name: blocker.ownerLabel })).toBeTruthy()
 })
 ```
+References: `tests/unit/status/owner-trust-progress.test.tsx`, `tests/unit/chat/ae-chat-loop-context.test.tsx`.
 
-**Patterns:**
-- Import Vitest APIs explicitly (`globals: false`)
-- Local factory helpers at bottom of the test file
-- Guard undefined fixtures with `throw new Error('expected ...')` rather than `!`
-- Behavior-focused `it('...')` names (outcome, not implementation gossip)
-- Playwright: `test.describe` + role/label queries; assert forbidden future-surface copy with `not.toMatch`
+**In-memory registry / API parity:**
+- Build durable source state with module factories, then exercise `public` readers and `src/routes/api.businesses*` handlers together (`tests/integration/registry-api.test.ts`).
 
-## Mocking
+## Where to Add New Tests
 
-**Framework:**
-- Vitest `vi` (`vi.fn`, `vi.stubEnv`, `vi.unstubAllEnvs`, `vi.mock` when needed)
-- Prefer real domain modules with in-memory source state over heavy mocks
-- Convex: `convex-test` with `schema` + `import.meta.glob('../../convex/**/*.{ts,js}')` module map
-
-**Patterns:**
-```typescript
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { convexTest } from 'convex-test'
-import schema from '../../convex/schema'
-
-const modules = Object.fromEntries(
-  Object.entries(import.meta.glob('../../convex/**/*.{ts,js}')).map(([path, load]) => [
-    path.replace('../../convex/', './'),
-    load,
-  ]),
-)
-
-it('binds labelled sandbox businesses...', async () => {
-  const backend = convexTest(schema, modules)
-  const first = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {
-    ownerClerkUserId: 'user_dev_business_owner',
-  })
-  expect(first.ownerClerkUserId).toBe('user_dev_business_owner')
-})
-
-it('fails closed when issuer missing', async () => {
-  vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', '')
-  try {
-    await expect(import('../../../convex/auth.config')).rejects.toThrow(/CLERK_JWT_ISSUER_DOMAIN/)
-  } finally {
-    vi.unstubAllEnvs()
-  }
-})
-```
-
-**What to Mock / Stub:**
-- Env secrets for admission (`tests/helpers/source-write-admission.ts` — `installTestSourceWriteSecret`)
-- Auth identity / FakeDb rows for Convex authz unit tests
-- External network (OpenRouter contract server helper) when testing HTTP adapters
-- Catalog search backends via test setters (e.g. `setCatalogSearchBackendForTests`)
-
-**What NOT to Mock:**
-- Pure domain compilers, projections, and public catalog search logic
-- Zod validators and branded ID helpers
-- Prefer exercising `public.ts` / route handlers with constructed source state
-
-**Note on double casts:** production `as unknown as` is banned by `test:ts-standards`. Some Convex handler tests still cast `_handler` for direct invocation — do not copy that pattern into production source; prefer public APIs or convex-test mutations when adding coverage.
-
-## Fixtures and Factories
-
-**Test Data:**
-```typescript
-// File-local factory (preferred for unit tests)
-function catalog(overrides: Partial<PublicBusinessCatalogApiDto> = {}): PublicBusinessCatalogApiDto {
-  return {
-    slug: 'parramatta-emergency-plumbing',
-    name: 'Parramatta Emergency Plumbing',
-    ...overrides,
-  }
-}
-
-// Shared product fixtures
-import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
-import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
-```
-
-**Location:**
-- Factories: bottom of the consuming test file
-- Shared helpers: `tests/helpers/`
-- Scanner negatives: `tests/fixtures/` with `AE_SCAN_MODE=fixtures` vs default clean mode (`tests/imports/scan-targets.ts`)
-- Sandbox supply profiles: `src/modules/sandbox-supply/public` (and workflow cohorts)
-
-## Coverage
-
-**Requirements:**
-- No Vitest line-coverage gate / no `test:coverage` script for unit suites
-- Proof is behavior gates (`test:unit`, `test:integration`, scanners, Playwright, hosted smokes), not percentage thresholds
-- Eval “coverage” means promptfoo case-set audit (`npm run test:eval:coverage` → `eval/answer/scripts/audit-coverage.ts`), not Istanbul/c8
-
-**Configuration:**
-- Not applicable for Vitest coverage reporters
-- Release proof: `npm run test:release:source` then hosted readback/smokes
-
-**View Coverage:**
-```bash
-# Not applicable for unit/integration Istanbul reports.
-# For answer eval case coverage:
-npm run test:eval:coverage
-```
-
-## Test Types
-
-**Unit Tests (`tests/unit`):**
-- Single module/function/component in isolation
-- May import `internal/` within the same domain under test
-- jsdom + Testing Library for React pieces (`@vitest-environment jsdom`)
-- Fast; no live network
-
-**Integration Tests (`tests/integration`):**
-- Multi-module source state, HTTP route handlers, registry API parity, answer-turn flows
-- Convex runtime via `convex-test` where durability matters
-- Run with `--no-file-parallelism` via `npm run test:integration`
-
-**Type / Architecture Scanners:**
-- `tests/types` — Zod schemas equal exported unions (`expectTypeOf`)
-- `tests/imports` — private imports, route boundaries, kernel retirement, capability seams
-- `tests/ts-standards` path — `tests/imports/ts-standards.test.ts`
-- `tests/copy`, `tests/seo`, `tests/ui-contract` — product-contract scanners over `src/`
-
-**E2E / Smokes:**
-- Local Playwright: `npm run test:e2e` (starts `npm run dev` on `127.0.0.1:3020` unless `PLAYWRIGHT_BASE_URL` set)
-- Projects: `compact-chromium` (375×812) and `wide-chromium` (1440×1100)
-- Deploy/provider smokes: `playwright.deploy-smoke.config.ts` + `tests/deploy-smoke/`
-- Hosted customer-request smokes: `tsx tools/release/...` and `tools/dev/...` scripts in `package.json`
-
-**Model Evals:**
-- `eval/answer/promptfooconfig.yaml` + `npm run test:eval`
-- Vitest assertions under `tests/eval/` consume reports; do not treat eval pass as deploy proof
-
-## Common Patterns
-
-**Async Testing:**
-```typescript
-it('reads durable catalog through registry and API', async () => {
-  const state = createDurablePublishedRegistryState({ ... })
-  const detail = getPublicBusinessCatalogBySlug(state, { slug: 'fremantle-heat-pump-repairs' })
-  expect(detail).toMatchObject({ kind: 'found', business: { slug: 'fremantle-heat-pump-repairs' } })
-})
-```
-
-**Error Testing:**
-```typescript
-await expect(resolveAdminAuthority(authCtx(db, null), 'set_operator_control')).resolves.toEqual({
-  kind: 'denied',
-  reason: 'missing_membership',
-})
-
-await expect(asyncCall()).rejects.toThrow(/required/)
-```
-
-**Copy / overclaim:**
-```typescript
-expect(outputs).not.toMatch(/book now|payment required|marketplace/i)
-expect(outputs).toContain('/api/v1/requests')
-```
-
-**Source-write admission in tests:**
-```typescript
-import { installTestSourceWriteSecret } from '../helpers/source-write-admission'
-// call in beforeEach / suite setup when exercising write paths
-```
-
-**Snapshot Testing:**
-- Not a primary pattern; prefer explicit `toMatchObject` / role assertions
-- Playwright traces/screenshots on failure only (`trace: 'on-first-retry'`)
+| Change | Put test in |
+|---|---|
+| Module / application logic | `tests/unit/<domain>/.../*.test.ts` |
+| Convex host extraction | `tests/unit/<domain>/**/*-thinness.test.ts` + behavior unit for moved code |
+| Cross-module / Convex persistence | `tests/integration/*.test.ts` |
+| New import boundary | `tests/imports/*-boundaries.test.ts` (+ fixture under `tests/fixtures/` if scanner) |
+| Public copy | `tests/copy/` |
+| SEO / discovery strings | `tests/seo/` |
+| Browser flow | `tests/e2e/` or a11y subfolder |
+| Hosted smoke | `tests/deploy-smoke/` |
 
 ---
 
-*Testing analysis: 2026-07-17*  
-*Update when test patterns change*
+*Testing analysis: 2026-07-18*
+*last_mapped_commit: 19e988f5*
