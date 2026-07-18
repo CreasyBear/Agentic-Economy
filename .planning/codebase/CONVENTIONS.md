@@ -1,147 +1,174 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-07-18  
-**Last mapped commit:** `5ea44454`
-
-Authority for process and hard TypeScript rules: `.planning/ENGINEERING-STANDARDS.md`.  
-Module layout and actions: `.agents/skills/ae-actions-and-modules/SKILL.md`.  
-Deep-module vocabulary: `.agents/skills/codebase-design/SKILL.md`.  
-Convex composition: `.agents/skills/ae-convex-guardrails/SKILL.md`.
+**Analysis Date:** 2026-07-18
+**Last Mapped Commit:** `3463c1d4`
 
 ## Naming Patterns
 
 **Files:**
-- Domain modules under `src/modules/<domain>/` use kebab-case directories (`customer-request`, `capability-supply`, `answer-thread`).
-- Module surface files: `<domain>.actions.ts`, `<domain>.functions.ts`, `public.ts`, plus `internal/` for private implementation.
-- Application/deepened slices use kebab-case file names: `start-or-resume.ts`, `lease-next-dispatch.ts`, `serialize.ts`, `ports.ts`, `types.ts`, `index.ts` (example: `src/modules/customer-request/route-execution/machines/`).
-- Convex hosts use camelCase filenames matching the domain: `convex/inquiries.ts`, `convex/capabilitySupply.ts`, `convex/customerRequestRouteExecution.ts`.
-- Convex ports/adapters sit beside the host: `convex/inquirySourceStatePorts.ts`, `convex/customerRequestRouteExecutionJournalPorts.ts`, `convex/customerRequestEvidenceLoadPorts.ts`.
-- Tests mirror the module path under `tests/unit/<domain>/…` with `*.test.ts` (behavior) or `*-thinness.test.ts` (architecture/thin-host gates).
-- Playwright specs use `*.spec.ts` under `tests/e2e/` and `tests/deploy-smoke/`.
+- Domain modules: kebab-case directories under `src/modules/<domain>/` (e.g. `customer-request`, `capability-supply`, `notification-outbox`).
+- Module seams: `public.ts` (external barrel), `<domain>.actions.ts`, `<domain>.functions.ts`, optional `runtime.ts`.
+- Implementation: `internal/` for private logic; application slices use kebab-case folders (`provide-facts/`, `problem-route/`, `preparation-egress/`).
+- Route-execution machines: kebab-case verbs under `src/modules/customer-request/route-execution/machines/` (`start-or-resume.ts`, `problem-report.ts`, `cancel-current.ts`).
+- Convex hosts: camelCase filenames matching the domain (`convex/customerRequestRouteExecution.ts`, `convex/inquiries.ts`).
+- Convex ports adapters: `*Ports.ts` factories co-located with the host (`convex/customerRequestRouteExecutionJournalPorts.ts`, `convex/inquirySourceStatePorts.ts`, `convex/inquiryNotificationPorts.ts`).
+- Tests: `*.test.ts` / `*.test.tsx` (Vitest); `*.spec.ts` (Playwright e2e/deploy-smoke). Thinness locks use `*-thinness.test.ts`.
 
 **Functions:**
-- Prefer camelCase verbs that name the domain operation: `submitInquiry`, `startOrResume`, `listEligibleCapabilitySupply`, `assembleCustomerEvidenceExport`.
-- Convex-exported functions keep the same public names as the host API (`export const submitPublicInquiry`, `export const startOrResume`).
-- Ports factories are named `<domain><Concern>Ports` or `*MutationPorts` / `*LoadPorts`: `inquirySourceStatePorts`, `journalMutationPorts`, `evidenceLoadPorts`, `capabilitySupplyGraphPorts`.
-- Module entrypoints called from Convex often use an `*FromModule` or `*Application` / `*Module` suffix: `queryCapabilityGraphFromModule`, `reportRouteProblemApplication`, `submitInquiryModule`.
-- Barrel re-exports in `public.ts` import `* as …Impl` / `… as …Impl` then re-export the clean name (pattern in `src/modules/inquiries/public.ts`).
+- camelCase for functions and values (`provideCustomerRequestFacts`, `journalMutationPorts`, `reportProblem`).
+- Ports factories: `<concern>Ports(ctx)` returning a typed ports object (`journalMutationPorts`, `problemMutationPorts`, `inquirySourceStatePorts`).
+- Pure machines: verb phrases without Convex types (`startOrResume`, `leaseNextDispatch`, `reportProblem`).
+- Do not export `use`-prefixed helpers from application packages (enforced by thinness tests such as `tests/unit/customer-request/application/provide-facts-thinness.test.ts`).
 
 **Variables:**
-- camelCase locals; `UPPER_SNAKE` only for true constants in tests/fixtures when needed.
-- Discriminated results use `kind` (and often `reason`) — not broad `status: string`.
-- Brand helpers via `brandNonEmpty` from `@/modules/common/ids` for typed IDs in tests and domain code.
+- camelCase locals; SCREAMING_SNAKE for constants when shared (`NOW` in tests is fine for fixtures).
+- Prefer `readonly` on public command/result types and const arrays of symbols under test.
 
 **Types:**
-- Prefer ` cons`t tuple + derived union over TypeScript `enum`:
-  ```ts
-  export const StatusValues = ['one', 'two'] as const
-  export type Status = (typeof StatusValues)[number]
-  export const StatusSchema = z.enum(StatusValues)
-  ```
-- Ports interfaces live in the module (`src/modules/.../ports.ts`) and stay free of Convex `Doc` / `MutationCtx` / `QueryCtx`.
-- Result unions are discriminated (`kind: 'registered' | 'refused' | …`). Use `satisfies` for fixtures and exhaustive maps.
-- Exhaustive switches assign `const _exhaustive: never = value` (or `exhaustive`) in the default branch — see `src/modules/customer-request/application/route-plan-projection/project-run.ts`, `src/lib/ui/status-presentation.ts`.
+- PascalCase for types and interfaces (`ProblemMutationPorts`, `ProvideFactsPorts`, `InquirySourceStatePorts`).
+- Discriminated unions with `kind` (or equivalent) for results; exhaust with `const exhaustive: never = …` / `const _exhaustive: never = …` in `default` (see `src/modules/customer-request/application/preparation-egress/project.ts`, `src/modules/customer-request/application/route-plan-projection/project-run.ts`).
+- Prefer `type` aliases for ports and command/result shapes; keep Convex `Doc` / `MutationCtx` out of pure modules.
 
 ## Code Style
 
 **Formatting:**
-- No Prettier config or `format` script detected in package manifests.
-- Match surrounding file style: 2-space indent, single quotes, no semicolons omitted inconsistently within a file — follow the file you edit.
-- Prefer multi-line object/args when call sites already wrap; keep thin Convex handler bodies short enough that thinness tests pass.
+- No Prettier config detected; rely on editor defaults plus TypeScript/`oxlint`.
+- Prefer single quotes and no semicolons in existing TS (match neighboring files).
+- Keep imports at the top of the module — no inline imports in function bodies (workspace rule).
 
 **Linting:**
-- Primary linter: **oxlint** via `npm run lint` → `oxlint src convex tests tools examples --deny-warnings`.
-- Config: `.oxlintrc.json` — `correctness` category as error; `suspicious` off; TypeScript + oxc plugins; ignores `convex/_generated/**`, `tests/fixtures/**`, `vendor/**`.
-- Additional enforceable standards live in Vitest scan gates (`npm run test:ts-standards`, `npm run test:imports`, `npm run test:copy`, `npm run test:ui-contract`), not only oxlint.
+- Tool: `oxlint` via `npm run lint` (`oxlint src convex tests tools examples --deny-warnings`).
+- Config: `.oxlintrc.json` — `correctness` as error; `suspicious` off; plugins `typescript` + `oxc`.
+- Ignores: `convex/_generated/**`, `tests/fixtures/**`, `vendor/**`.
+- TypeScript strictness is the stronger gate: `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride` in `tsconfig.json`.
 
-**Compiler posture** (`tsconfig.json` + ENGINEERING-STANDARDS):
-- `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride`, `allowJs: false`.
-- Path aliases: `@/*` and `~/*` → `./src/*` (plus a few owner/admin route remaps).
+**TypeScript standards (enforced by tests):**
+- Run `npm run test:ts-standards` — `tests/imports/ts-standards.test.ts` scans for `explicit-any`, `non-null-assertion`, `convex-any-validator`, `broad-status-string`, `hard-coded-source-csrf`, `client-exposed-source-write-secret` via `scanTypeScriptStandards` in `@/lib/ui/contract-scans`.
+- Prefer typed results over `any`; avoid non-null assertions (`!`).
 
 ## Import Organization
 
 **Order (observed):**
-1. Node builtins (`node:fs`, `node:path`) when present.
-2. External packages (`vitest`, `zod`, `convex-test`, framework packages).
-3. Blank line, then `@/` / `~/` aliases (modules, lib, routes).
-4. Relative imports (`.` / `..`) last — types often `import type { … }`.
-
-**Rules:**
-- Imports stay at the top of the file (no inline dynamic imports for ordinary module wiring).
-- Outside a module, import only `src/modules/<domain>/public` (or documented public sub-barrels such as `application/public`). Never import another module’s `internal/`.
-- Routes import public seams only — enforced by `tests/imports/private-imports.test.ts` / `scanPrivateImports` in `src/lib/ui/contract-scans.ts`.
-- Convex hosts may import `@/modules/...` public or explicitly deepened internal packages that thinness tests pin (e.g. `@/modules/capability-supply/internal/graph`) **and** local `./…Ports` adapters.
-- Pure domain modules must not import `convex/server`, `./_generated`, `MutationCtx`, `QueryCtx`, `ActionCtx`, or `Doc<>`.
+1. Node built-ins (`node:fs`, `node:path`) when needed.
+2. External packages (`vitest`, `convex/server`, `zod`, `@astryxdesign/*`).
+3. Path-alias imports from `@/…` (and `~/…` as alias for `src/*`).
+4. Relative imports within the same package (`./`, `../`).
+5. `import type` for type-only dependencies.
 
 **Path Aliases:**
-- Prefer `@/modules/...` over deep relative paths from `src/` and tests.
-- Convex files use relative imports for sibling Convex adapters (`./inquirySourceStatePorts`) and `@/` for domain modules.
+- `@/*` → `./src/*`
+- `~/*` → `./src/*`
+- Special route remaps for operator surfaces in `tsconfig.json` (`@/routes/owner.*`, etc.).
+
+**Module boundaries (mandatory):**
+- Outside a module, import only `src/modules/<domain>/public.ts` (or documented public sub-barrels such as `application/public.ts`).
+- Never import `src/modules/<domain>/internal/*` from routes, Convex hosts, or sibling modules — `tests/imports/private-imports.test.ts` enforces `module-private-import`.
+- Convex hosts may import module public seams and co-located `*Ports.ts` files; pure domain code must not import `convex/_generated` or `convex/server`.
+
+**Public barrel pattern:**
+```typescript
+// src/modules/<domain>/public.ts
+import { submitInquiry as submitInquiryImpl } from './internal/commands'
+export const submitInquiry = submitInquiryImpl
+export type { SubmitInquiryCommand, SubmitInquiryResult } from './internal/commands'
+```
 
 ## Error Handling
 
 **Patterns:**
-- Expected domain failures return discriminated result unions (`kind: 'refused'`, `kind: 'conflict'`, …) — do not throw for business refusals.
-- Throw / reject only for programmer or infrastructure faults.
-- Convex mutations/actions validate untrusted input with Convex validators (`v.union`, `v.object`); keep `returns` exact (scan rule `inexact-convex-return`).
-- Public/HTTP layers expose allowlisted DTOs and readbacks; do not leak internal identifiers in public copy (copy gates).
+- Domain results as discriminated unions (`kind: 'ok' | 'refused' | 'conflict' | …`), not thrown exceptions for expected control flow.
+- Convex actions/mutations: validate args with Convex `v.*` validators at the host; refuse overclaims in action `boundaries` (see `src/modules/common/action.ts` / `<domain>.actions.ts`).
+- Exhaustive switches over unions — assign to `never` in `default` so new variants fail compile-time.
+
+**Do not:**
+- Swallow failures with empty `catch` without a typed refuse/error path.
+- Leak Convex `Doc` shapes or raw DB errors through public module seams.
 
 ## Logging
 
-**Framework:** Application observability goes through domain audit/funnel modules (`src/modules/observability/`) and provider clients — not ad-hoc `console.log` in new domain paths.
+**Framework:** Product observability uses Sentry (`@sentry/node`, `@sentry/react`) and PostHog (`posthog-js` / `posthog-node`). Unit/domain code generally does not `console.log`.
 
 **Patterns:**
-- Consequential mutations write typed audit events in the same logical operation (ENGINEERING-STANDARDS audit section).
-- Redact sensitive payloads; tests cover redaction under `tests/unit/observability/`.
+- Prefer structured audit/event helpers under `src/modules/observability/` for business actions.
+- Redact sensitive fields before any log or notification payload (inquiry notification path uses redacted payload JSON).
 
 ## Comments
 
 **When to Comment:**
-- Prefer self-describing names and result `kind`/`reason` strings over narrative comments.
-- Document rare exceptions at the site (e.g. allowed `v.any()` boundaries must include the exact comment phrases scanned by `isDocumentedJsonBoundary` in `src/lib/ui/contract-scans.ts`).
+- Module/public barrels may carry a short contract note (e.g. `src/modules/customer-request/application/public.ts` documents Convex vs application split and ADR references).
+- Prefer self-explanatory names over narrating what the next line does.
+- Document authority/boundary intent on actions (`summary`, `boundaries`), not inline TODOs for product claims.
 
 **JSDoc/TSDoc:**
-- Sparse in domain code; ActionDefinition `summary` / `boundaries` carry the public contract for assistants (`src/modules/common/action.ts`, module `*.actions.ts`).
+- Sparse; use when a public export’s invariants are not obvious from the type alone.
 
 ## Function Design
 
 **Size:**
-- Keep Convex **host handlers** thin: wiring + auth + ports call. Thinness tests enforce handler body line budgets (examples: ≤40 lines for route-execution machine shells, ≤90 for `submitPublicInquiry`, ≤120 for `exportCustomerEvidence`).
-- Ports **factory** files stay small (commonly ≤80 lines) and only assemble port methods.
-- Implementation files under deepened modules and Convex port impls must stay **≤1000 lines** per file (thinness campaign invariant).
-- Prefer extracting pure logic into `src/modules/...` rather than growing Convex hosts.
+- Convex host export bodies for ports-wired machines: keep ≤ ~40 lines (locked by journal/problem thinness tests).
+- Inquiry `submitPublicInquiry` host block: ≤ 90 lines (`tests/unit/inquiries/convex-host-thinness.test.ts`).
+- Ports factory files: inquiry source/notification factories ≤ 80 lines; journal/cancel/problem ports factories ≤ 1000 lines.
+- Every `machines/` TypeScript file: ≤ 1000 lines (`machines-thinness.test.ts`).
 
 **Parameters:**
-- Pass ports/adapters as explicit dependencies (`startOrResume(args, ports)`, `listEligible…(eligibleSupplyPorts(db), input)`).
-- Prefer one command/input object over long positional lists for domain operations.
+- Pure application/machine functions take explicit `ports` objects (dependency injection), never create Convex `ctx` inside pure modules.
+- Prefer small typed input objects over long positional lists for commands.
 
 **Return Values:**
-- Discriminated unions with literal `kind` (and `reason` when refused/conflicted).
-- Avoid `Promise<unknown>` and `returns: v.any()` outside documented, comment-marked boundary adapters.
+- Return result unions; callers branch on `kind`.
+- Hosts re-export Convex function handles; domain returns serializable result types.
 
 ## Module Design
 
 **Exports:**
-- `public.ts` is the only import path for sibling modules and routes.
-- Re-export types and functions from `internal/` with clean names; keep `internal/` private (enforced by import scans).
-- Actions: declare in `<domain>.actions.ts`, register via import in `src/modules/actions/index.ts`.
+- One public seam per domain (`public.ts`). Application composition uses `src/modules/customer-request/application/public.ts`.
+- Machines export through `src/modules/customer-request/route-execution/machines/index.ts`.
+- Register cross-surface operations in `src/modules/actions/index.ts` via `<domain>.actions.ts`.
 
 **Barrel Files:**
-- Use `public.ts` and focused `index.ts` barrels inside deepened slices (e.g. `route-execution/machines/index.ts`, `application/public.ts`).
-- Do not create catch-all global `validators.ts` dumping grounds — validators live with the owning module.
+- Use `public.ts` / `index.ts` for intentional re-exports only.
+- Do not create deep re-export chains that bypass private-import rules.
 
-**Deepening / thin Convex host (prescriptive):**
-1. Move pure / port-driven logic into `src/modules/<domain>/…`.
-2. Add a Convex `*Ports.ts` factory that binds `ctx.db` / helpers to the module ports interface.
-3. Leave validators, auth checks, and `export const … = mutation|query|action` shells in the Convex host.
-4. Lock the split with a `*-thinness.test.ts` that asserts: no redefined moved symbols in the host, ports wiring present, module free of Convex runtime imports, line budgets, and no cross-concern leakage (e.g. journal must not import machines; notification ports must not load source-state).
+**Layering (prescriptive):**
+| Layer | Location | May import | Must not import |
+|-------|----------|------------|-----------------|
+| Pure domain / machines | `src/modules/...` | other public seams, pure helpers | `convex/_generated`, `MutationCtx`, `Doc`, `ctx.db` |
+| Ports types | `machines/*-ports.ts`, `internal/ledger/ports.ts` | domain types | Convex runtime, `WritePlan` |
+| Ports adapters | `convex/*Ports.ts` | `_generated`, `ctx.db` | multi-step domain decisions that belong in machines |
+| Convex host | `convex/<domain>.ts` | ports factories + module public | large inline DB orchestration / redefined moved helpers |
+| Journal / problem-support | `route-execution/journal`, `problem-support` | pure helpers | `JournalMutationPorts` / machines |
 
-**Anti-patterns to avoid:**
-- Re-inlining moved helpers into `convex/*.ts` after a deepen wave.
-- Inventing sibling Convex hosts for each machine (`customerRequestRouteExecutionStart.ts`, etc.) when the campaign forbids them.
-- Introducing `WritePlan` / `intendedPatches` DTOs in journal/machines/evidence-load.
-- Importing another module’s `internal/` from routes or sibling modules.
-- Broad `status: string` / `any` / non-null assertions / `as unknown as` in runtime code.
+**Thin host + ports pattern (required for deepenings):**
+1. Host export wires `*Ports(ctx)` and calls `*Machine` / application function.
+2. Machine/application owns decisions; calls `ports.*` for IO.
+3. Ports adapter owns DB/scheduler IO only.
+4. Do not invent sibling Convex hosts (`customerRequestRouteExecutionStart.ts`, `…Cancel.ts`, `…Problem.ts`) — thinness tests assert these files do not exist.
+5. Do not introduce `WritePlan` / `intendedPatches` DTOs in machines or journal (forbidden by `machines-thinness` / `journal-thinness`).
+
+**Schema:**
+- Add tables in the owning module’s schema fragment (`internal/schema.ts` or `internal/convex-schema.ts`), then spread in `convex/schema.ts`.
+- Index names: `by_field1_and_field2` in field order.
+
+**UI:**
+- Prefer Astryx (`@astryxdesign/core`, `@astryxdesign/theme-neutral`); Tailwind 4 for layout glue only.
+- Do not extend bespoke `Ae*` presentation components or resurrect Daylight brand assets (`DESIGN.md` / `ae-design-system` skill).
+
+**Copy / claims:**
+- Public and assistant-visible copy must stay boundary-honest — no booking/charge/dispatch overclaims (`ae-public-copy-guardrails`, `npm run test:copy`).
+
+## Exhaustive Unions
+
+When switching on a discriminated union or enum, always handle every variant and end with:
+
+```typescript
+default: {
+  const exhaustive: never = value
+  return exhaustive
+}
+```
+
+New variants must fail TypeScript until handled.
 
 ---
 
-*Convention analysis: 2026-07-18 (commit `5ea44454`)*
+*Convention analysis: 2026-07-18 (commit `3463c1d4`)*

@@ -1,37 +1,38 @@
 <!-- refreshed: 2026-07-18 -->
 # Architecture
 
-**Analysis Date:** 2026-07-18  
-**last_mapped_commit:** `5ea44454` (post residual deepen Waves 23–32)
+**Analysis Date:** 2026-07-18
+**last_mapped_commit:** `3463c1d4` (post Waves 33–37)
 
 ## System Overview
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  Surfaces (TanStack Start + Vite)                                            │
-│  `src/routes/**` · `src/components/ae/**` · `GET/POST /api/agent/tools`      │
-├──────────────────┬──────────────────┬───────────────────────────────────────┤
-│  Actions         │  Server adapters │  Quiet agent door / HTTP APIs         │
-│  `src/modules/   │  `*.functions.ts`│  `src/lib/server/**`                  │
-│   actions/`      │  `src/lib/server`│  Customer Request v1/v2 routes        │
-└────────┬─────────┴────────┬─────────┴──────────────────┬────────────────────┘
-         │                  │                            │
-         ▼                  ▼                            ▼
+│  Surfaces (TanStack Start)                                                   │
+│  `src/routes/*`  ·  React UI  ·  HTTP/API  ·  quiet agent door               │
+│  Actions fan-out: `src/modules/actions/index.ts` + `*.actions.ts`            │
+└───────────────┬─────────────────────────┬───────────────────┬───────────────┘
+                │                         │                   │
+                ▼                         ▼                   ▼
+┌───────────────────────────┐  ┌──────────────────────┐  ┌────────────────────┐
+│ Registry / Inquiry        │  │ Customer Request     │  │ Capability Supply  │
+│ `src/modules/registry/`   │  │ Application          │  │ `capability-supply/`│
+│ `src/modules/inquiries/`  │  │ `application/*`      │  │ ports + commands    │
+└───────────────┬───────────┘  └──────────┬───────────┘  └─────────┬──────────┘
+                │                         │                        │
+                ▼                         ▼                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  Domain modules (pure / port-driven) — `src/modules/**`                      │
-│  public.ts barrels · application/ · route-execution/machines/ · catalog/     │
-└────────────────────────────────────┬────────────────────────────────────────┘
-                                     │ ports interfaces
-                                     ▼
+│  Convex host (validators + thin shells + *Ports adapters)                    │
+│  `convex/customerRequestApplication.ts`                                      │
+│  `convex/customerRequestRouteExecution.ts` + Journal/Cancel/Problem ports    │
+│  `convex/inquiry*.ts` · `notificationOutbox*.ts` · `capabilitySupply*.ts`    │
+└─────────────────────────────────┬───────────────────────────────────────────┘
+                                  │
+                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  Thin Convex hosts + *Ports adapters — `convex/*.ts`                         │
-│  schema composition · source_state · journalMutationPorts · inquiry ports    │
-└────────────────────────────────────┬────────────────────────────────────────┘
-                                     │
-                                     ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Convex tables (module-owned schema fragments)                               │
-│  `convex/schema.ts` ← `src/modules/*/internal/{schema,convex-schema}.ts`     │
+│  Convex tables (module-owned schema fragments → `convex/schema.ts`)          │
+│  Workers: `customerRequestRouteTransportWorker.ts`                           │
+│           `customerRequestRouteCancellationWorker.ts`                        │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,215 +40,254 @@
 
 | Component | Responsibility | File |
 |-----------|----------------|------|
-| Action registry | Declares boundary-honest operations; fans out to UI/HTTP/agentJson/agentTools | `src/modules/actions/index.ts` |
-| Domain modules | Own business logic, validators, projections; export only via `public.ts` | `src/modules/<domain>/` |
-| Module functions | TanStack `createServerFn` + Convex source binding | `src/modules/<domain>/<domain>.functions.ts` |
-| Module actions | `ActionDefinition` consts; never import `internal/` | `src/modules/<domain>/<domain>.actions.ts` |
-| Convex host | Validators, auth/admission, construct ports, call module, return | `convex/*.ts` |
-| Ports adapters | Map `MutationCtx`/`ActionCtx`/`RuntimeDb` → domain port types | `convex/*Ports.ts` |
-| Schema root | Spreads module table fragments only | `convex/schema.ts` |
-| Customer Request application | Interpret/compile, facts, confirm, standing route, problems | `src/modules/customer-request/application/` |
-| Route-execution machines | Start / lease / outcome orchestration via `JournalMutationPorts` | `src/modules/customer-request/route-execution/machines/` |
-| Pure journal | Predicates, integrity, evidence decisions only (no write-plans) | `src/modules/customer-request/route-execution/journal/` |
-| Capability supply graph | Graph query + readiness probe logic behind `CapabilityGraphPorts` | `src/modules/capability-supply/internal/graph/` |
-| Catalog assembly | Shared row→catalog adapter for registry and discovery hosts | `src/modules/catalog/internal/catalog-from-rows.ts` |
-| Inquiry ledger | Pure submit/reply/close against `InquirySourceState` | `src/modules/inquiries/internal/` |
-| Hosted agent journey | Hosted proof runners split by scenario | `src/modules/customer-request/hosted-agent-journey/` |
+| Action registry | One operation definition → UI / HTTP / agent JSON / agentTools | `src/modules/actions/index.ts` |
+| Customer Request Application | Domain orchestration for interpret/compile, facts, confirm, run, problem, standing | `src/modules/customer-request/application/` |
+| Application Convex host | Auth, validators, ActionCtx → application ports | `convex/customerRequestApplication.ts` |
+| Route-execution host | Validators + thin `internalMutation`/`internalQuery` shells | `convex/customerRequestRouteExecution.ts` (~1178 lines) |
+| Journal machines | start / lease / outcome orchestration | `src/modules/customer-request/route-execution/machines/` |
+| Journal ports adapter | `MutationCtx` → `JournalMutationPorts` | `convex/customerRequestRouteExecutionJournalPorts.ts` (~979 lines) |
+| Cancel machines + ports | cancel / open / resolve | machines + `convex/customerRequestRouteExecutionCancelPorts.ts` |
+| Problem machines + ports | report / business claim / status / reply | machines + `convex/customerRequestRouteExecutionProblemPorts.ts` |
+| Pure journal | Predicates, integrity digests, cancel/lease decisions | `src/modules/customer-request/route-execution/journal/` |
+| Problem-support | `decide*` / `project*` for problems (no Convex) | `src/modules/customer-request/route-execution/problem-support/` |
+| Evidence load | Assemble customer/support evidence exports | `src/modules/customer-request/route-execution/evidence-load/` |
+| Inquiry dual-path | `source` vs `local-e2e` server backends | `src/modules/inquiries/inquiry.functions.ts` |
+| Local E2E inquiry adapter | Fail-closed fixture backend for auth bypass | `src/modules/inquiries/internal/local-e2e-adapter.ts` |
+| Notification outbox | Enqueue / dispatch / webhook / retry commands | `src/modules/notification-outbox/` |
+| Outbox persistence helpers | Row ↔ domain record mapping + upsert | `convex/notificationOutboxPersistence.ts` |
+| Schema composition | Spread module `*Tables` into one schema | `convex/schema.ts` |
 
 ## Pattern Overview
 
-**Overall:** Deep domain modules behind small public seams, with **thin Convex ports** as the only persistence/runtime adapters (post Waves 23–32 deepen campaign).
+**Overall:** Ports-and-adapters deepen campaign — module-owned ports types + pure orchestration; Convex hosts stay validators + thin shells; adapters implement ports against `MutationCtx` / `ActionCtx` / `RuntimeDb`.
 
 **Key Characteristics:**
-- Domain logic lives under `src/modules/**`; Convex files validate, authorize, build ports, and delegate.
-- Port types are Convex-free TypeScript interfaces in the module; adapters live in `convex/*Ports.ts`.
-- Thinness is locked by `tests/unit/**/**-thinness.test.ts` (23 thinness suites) plus `tests/imports/*-boundaries.test.ts`.
-- `internal/` is private to the owning module; cross-module and route code must import `public.ts` (`tests/imports/private-imports.test.ts`).
-- Operations intended for assistants are registered actions; quiet door also requires `PublicQuietAgentToolIds` in `src/modules/harness/tool-contract.ts`.
+- **One action plane** across human and agent surfaces (`ADR-010`); domain ops declared in `*.actions.ts`, registered in `src/modules/actions/index.ts`.
+- **Semantic commits, not WritePlans** — machines call ports that execute writes inside the caller's transaction (`ADR-011`, `ADR-012`). Forbidden tokens: `WritePlan`, `writePlan`, `intendedPatches` under `journal/` and `machines/`.
+- **Dedicated port families** — do not grow `JournalMutationPorts` with cancel/problem; use `CancelMutationPorts` / `ProblemMutationPorts`.
+- **Validators stay in Convex forever** — `v.*` args/returns live in host files; modules use TypeScript domain types.
+- **Thinness locked by tests** — `tests/unit/customer-request/route-execution/journal-thinness.test.ts`, `machines-thinness.test.ts`, `problem-mutation-thinness.test.ts`, inquiry host thinness tests.
 
 ## Layers
 
-**Surface / presentation:**
-- Purpose: Human UI, public pages, operator consoles, HTTP route handlers
-- Location: `src/routes/`, `src/components/ae/`, `src/components/astryx/`
-- Contains: Route files, React panels, Astryx wrappers
-- Depends on: Module `public.ts`, `*.functions.ts`, `src/lib/server/**`
-- Used by: Browsers, assistants hitting HTTP/agent tools
+**Surface layer:**
+- Purpose: HTTP routes, React pages, quiet agent tools door
+- Location: `src/routes/`, `src/components/`, `src/views/`
+- Contains: TanStack route files, operator UI under `src/routes/_operator/`
+- Depends on: module `*.functions.ts` / actions / public barrels
+- Used by: browsers, assistants, authenticated agents
 
-**Action / contract:**
-- Purpose: Single declaration of callable operations and boundaries
-- Location: `src/modules/actions/index.ts`, `src/modules/common/action.ts`, `*.actions.ts`
-- Contains: `ActionDefinition` registry
-- Depends on: Module functions (not `internal/`)
-- Used by: Agent tools door, agent JSON, some UI/HTTP handlers
+**Action / functions layer:**
+- Purpose: Boundary-honest operation contracts and TanStack server fns
+- Location: `src/modules/<domain>/*.actions.ts`, `*.functions.ts`, `public.ts`
+- Contains: `ActionDefinition`, Zod schemas, `*ThroughSource` bindings
+- Depends on: module `internal/` (same module only), Convex API refs
+- Used by: routes, agent tools, UI
 
-**Domain / application:**
-- Purpose: Orchestration, projections, pure decisions
-- Location: `src/modules/**` especially `customer-request/application/`, `inquiries/internal/`, `capability-supply/internal/`
-- Contains: Port-driven use cases, pure helpers, schema fragments
-- Depends on: Sibling `public.ts`, `src/modules/common/**`
-- Used by: Convex hosts and server adapters via ports
+**Application / command layer (Customer Request):**
+- Purpose: Compose interpret → compile → confirm → run → inspect without merging authority helpers
+- Location: `src/modules/customer-request/application/`
+- Contains: `interpret-compile/`, `provide-facts/`, `confirm-route/`, `problem-route/`, `standing-route/`, …
+- Depends on: domain pure modules + port interfaces (no Convex imports)
+- Used by: `convex/customerRequestApplication.ts` via `*Ports(ctx)` adapters
 
-**Convex adapter:**
-- Purpose: Durable storage, scheduling, auth context, HTTP retirement stubs
-- Location: `convex/`
-- Contains: Queries/mutations/actions, `*Ports.ts`, `source_state.ts`, workers
-- Depends on: Module public APIs and port types
-- Used by: App via Convex client / `createServerFn` bindings
+**Route-execution machines layer:**
+- Purpose: Mutation orchestration for start/lease/outcome/cancel/problem
+- Location: `src/modules/customer-request/route-execution/machines/`
+- Contains: machine functions + port type files (`ports.ts`, `cancel-ports.ts`, `problem-ports.ts`)
+- Depends on: `journal/`, `problem-support/`, capability-contract types
+- Used by: thin handlers in `convex/customerRequestRouteExecution.ts` only
+
+**Pure decision libraries:**
+- Purpose: Predicates, integrity, projections without I/O
+- Location: `journal/`, `problem-support/`, parts of `capability-supply/internal/*`
+- Depends on: domain types only (no Convex, no ports adapters)
+- Used by: machines and (where applicable) host queries that call projectors
+
+**Convex adapter / host layer:**
+- Purpose: Anti-corruption — validators, auth resolution, `Doc`/`Id` mapping, scheduling
+- Location: `convex/*Ports.ts`, `convex/customerRequest*.ts`, `convex/inquiry*.ts`, `convex/notificationOutbox*.ts`
+- Contains: port factories, workers (`"use node"` where required), crons
+- Depends on: Convex runtime + module public/machine APIs
+- Used by: Application actions, transport/cancellation workers, HTTP bridges
 
 **Persistence:**
-- Purpose: Table definitions and indexes
-- Location: Module `internal/schema.ts` or `internal/convex-schema.ts`; composed in `convex/schema.ts`
-- Contains: `defineTable` fragments
-- Depends on: Convex validators
-- Used by: All Convex functions
+- Purpose: Durable tables and source-state aggregates
+- Location: `src/modules/*/internal/*schema*`, composed in `convex/schema.ts`
+- Contains: table fragments, indexes `by_field1_and_field2`
+- Depends on: Convex `defineTable`
+- Used by: all hosts via `ctx.db` / `runtimeDb`
 
 ## Data Flow
 
 ### Primary Customer Request path
 
-1. HTTP or agent client hits `src/routes/api.v1.requests*.ts` / `api.requests*.ts` → `src/lib/server/customer-request-*-api.ts`.
-2. Server adapter invokes Convex (`convex/customerRequestApplication.ts`, `customerRequestV2*.ts`) with auth/admission.
-3. Host builds ports (e.g. `provideFactsPorts` in `convex/customerRequestProvideFactsPorts.ts`) and calls application functions from `src/modules/customer-request/application/public.ts`.
-4. Application returns action results / projections; host persists only through port methods.
+1. Authenticated agent/UI hits Customer Request API routes under `src/routes/api.v1.requests*.ts` or legacy `api.requests*.ts`.
+2. Route/server fn calls Convex actions in `convex/customerRequestApplication.ts` (service assertion + validators).
+3. Host builds application ports (e.g. `provideFactsPorts`, `confirmRoutePorts`, `problemRoutePorts`) and calls `src/modules/customer-request/application/public`.
+4. Confirm/run schedules or invokes `internal.customerRequestRouteExecution.startOrResume`.
+5. Host shell: `startOrResumeMachine(args, journalMutationPorts(ctx))` (`convex/customerRequestRouteExecution.ts` ~146–151).
+6. Transport worker leases via `leaseNextDispatch` → adapter invoke → `recordOutcome` (`convex/customerRequestRouteTransportWorker.ts`).
 
-### Route execution (journal machines — ADR-011)
+### Cancel path (ADR-012)
 
-1. Worker/host mutation in `convex/customerRequestRouteExecution.ts` validates args.
-2. Handler constructs `journalMutationPorts(ctx)` from `convex/customerRequestRouteExecutionJournalPorts.ts`.
-3. Machine runs in module code: `startOrResume` / `leaseNextDispatch` / `recordOutcome` under `src/modules/customer-request/route-execution/machines/`.
-4. Pure decisions use `src/modules/customer-request/route-execution/journal/`; all writes go through `JournalMutationPorts` only.
+1. Application / cancel-route → `internal.customerRequestRouteExecution.cancelCurrent`.
+2. Thin shell → `cancelCurrentMachine(args, cancelMutationPorts(ctx))`.
+3. Pre-release cancel commits attempt+outbox+run; adapter-cancel schedules `customerRequestRouteCancellationWorker`.
+4. Worker: `openCancellationAttempt` (`cancelOpenPorts`) → adapter → `resolveCancellationAttempt` (`cancelMutationPorts`).
 
-### Inquiry submit (host-done source-state / notification ports)
+### Problem path (ADR-012 Wave 34)
 
-1. `convex/inquiries.ts` mutation loads state via `inquirySourceStatePorts(db).load()`.
-2. Pure module `submitInquiry` (`src/modules/inquiries/public.ts`) returns new state + notification.
-3. Host bridges notifications with `inquiryNotificationPorts(db).enqueueDispatches(...)`.
-4. Host persists with `inquirySourceStatePorts(db).persist(...)`. Thinness locked by `tests/unit/inquiries/inquiry-source-state-thinness.test.ts`.
+1. Application `problem-route/` actions use `ProblemRoutePorts` (`convex/customerRequestProblemRoutePorts.ts`) — action-layer seam only.
+2. Durable mutations: `reportProblem` / `recordProblemBusinessReport` / `updateProblemStatus` / `replyProblem` → machines + `problemMutationPorts(ctx)`.
+3. Machines call `problem-support/` `decide*` helpers; auth snapshots come from ports (Clerk stays host-side).
 
-### Capability supply graph / probe
+### Inquiry dual-path
 
-1. `convex/capabilitySupply.ts` exports `queryCapabilityGraph`, `readCapabilityProbeTarget`, `recordCapabilityProbeResult`.
-2. Each handler calls module functions with `capabilitySupplyGraphPorts(ctx.db)` (`convex/capabilitySupplyGraphPorts.ts`).
-3. Domain logic in `src/modules/capability-supply/internal/graph/{query-graph,read-probe-target,record-probe-result,probe-digest}.ts`. Auth for inactive inclusion stays in the host.
+1. Server entry resolves backend: `resolveInquiryServerBackend()` in `src/modules/inquiries/inquiry.functions.ts`.
+2. Factory: `createInquiryServerBackend('source' | 'local-e2e')` — local-e2e only when `isLocalE2EAuthBypassEnabled()`.
+3. Source path uses Convex inquiry hosts + `inquirySourceStatePorts` / `inquiryNotificationPorts`.
+4. Local path uses `createLocalE2eInquiryServerBackend()` in `src/modules/inquiries/internal/local-e2e-adapter.ts` (fail-closed outside bypass).
 
-### Catalog projection (shared adapter)
+### Notification outbox
 
-1. `convex/registry.ts` and `convex/discovery.ts` both call `catalogFromRows(...)`.
-2. Shared assembly lives in `src/modules/catalog/internal/catalog-from-rows.ts`, re-exported from `src/modules/catalog/public.ts`.
-3. Locked by `tests/unit/catalog/catalog-from-rows.test.ts` (host thinness + no Convex imports in adapter).
+1. Inquiry commands enqueue via `InquiryNotificationPorts.enqueueDispatches` → `convex/inquiryNotificationBridge.ts`.
+2. Bridge persists through shared helpers in `convex/notificationOutboxPersistence.ts` (`toDispatchRecord`, `upsertNotificationDispatch`, …).
+3. Source-state aggregate load/persist: `notificationOutboxSourceStatePorts(db)` → `convex/notificationOutboxSourceState.ts`.
+4. Dispatch / webhook / retry: `convex/notificationOutbox.ts` + module commands in `src/modules/notification-outbox/internal/commands.ts`.
 
 **State Management:**
-- Durable state: Convex documents; inquiry uses aggregate `InquirySourceState` loaded/persisted through ports.
-- Ephemeral UI: React route state and TanStack Start server functions.
-- Source-write admission: `convex/sourceWriteAdmission.ts` + `src/lib/server/source-write-admission.ts` middleware in `src/start.ts`.
+- Durable run/attempt/outbox/problem rows in Convex tables owned by `customer-request` schema fragment.
+- Inquiry and notification “source state” aggregates behind load/persist ports (`InquirySourceStatePorts`, `NotificationOutboxSourceStatePorts`).
+- No client-side authority for route execution; projections are readbacks of host state.
 
 ## Key Abstractions
 
-**ActionDefinition:**
-- Purpose: One operation contract for all surfaces
-- Examples: `src/modules/registry/registry.actions.ts`, `src/modules/inquiries/inquiry.actions.ts`, `src/modules/customer-request/customer-request.actions.ts`
-- Pattern: `defineAction` in `src/modules/common/action.ts`; register explicitly in `src/modules/actions/index.ts`
+**JournalMutationPorts (ADR-011):**
+- Purpose: Semantic reads/commits for start, lease, outcome (and start-path `cancelPriorUnreleasedRun`)
+- Examples: `src/modules/customer-request/route-execution/machines/ports.ts`, `convex/customerRequestRouteExecutionJournalPorts.ts`
+- Pattern: Machine orchestration + immediate port commits in one `internalMutation`
 
-**Ports (domain → Convex):**
-- Purpose: Seam for persistence and side effects without leaking Convex types into domain
-- Examples: `JournalMutationPorts` (`machines/ports.ts`), `InquirySourceStatePorts` (`inquiries/internal/ledger/ports.ts`), `CapabilityGraphPorts` (`capability-supply/internal/graph/ports.ts`), application ports under `customer-request/application/**/types.ts`
-- Pattern: Type in module; factory `fooPorts(ctx)` in `convex/*Ports.ts`; host calls `moduleFn(args, ports)`
+**CancelMutationPorts / CancelOpenPorts (ADR-012):**
+- Purpose: Cancel command, open cancellation attempt (query), resolve disposition
+- Examples: `machines/cancel-ports.ts`, `convex/customerRequestRouteExecutionCancelPorts.ts`
+- Pattern: Separate family — must not be folded into journal ports
 
-**Route-execution machines (ADR-011):**
-- Purpose: Orchestrate start/lease/outcome outside pure `journal/` and outside fat Convex handlers
-- Examples: `machines/start-or-resume.ts`, `lease-next-dispatch.ts`, `record-outcome.ts`
-- Pattern: Machines import journal; journal must not import machines; host stays thin (`machines-thinness.test.ts`)
+**ProblemMutationPorts (ADR-012):**
+- Purpose: Durable problem report/claim/status/reply commits + authority snapshots
+- Examples: `machines/problem-ports.ts`, `convex/customerRequestRouteExecutionProblemPorts.ts`
+- Pattern: Machines stay free of Clerk; host injects `resolveBusinessProblemAuthority` / `SupportAuthority`
 
-**catalogFromRows:**
-- Purpose: Single catalog-from-rows adapter shared by registry and discovery Convex hosts
-- Examples: `src/modules/catalog/internal/catalog-from-rows.ts`
-- Pattern: Host maps DB rows → `CatalogFromRowsInput`; adapter returns `PublicCatalogContract`
+**Application *Ports (ActionCtx):**
+- Purpose: Application layer I/O without Convex types in `application/`
+- Examples: `customerRequestProvideFactsPorts.ts`, `customerRequestConfirmRoutePorts.ts`, `customerRequestProblemRoutePorts.ts`, `customerRequestStandingRoutePorts.ts`
+- Pattern: Gold deepen from Waves 23–32 — thin Convex action host, fat module
 
-**Hosted agent journey split:**
-- Purpose: Hosted proof journeys by scenario without a single monolithic runner file
-- Examples: `hosted-agent-journey/{run,happy,partial,cancel,discovery,front-door,runtime,types}.ts`; barrel `hosted-agent-journey.ts` re-exports `./hosted-agent-journey/index`
+**Capability-supply ports:**
+- Purpose: Eligible inventory, publication, graph/probe, writers behind ports
+- Examples: `src/modules/capability-supply/internal/eligibility/ports.ts`, `publication/ports.ts`, `graph/ports.ts`; Convex `capabilitySupply*Ports.ts`
+- Pattern: Same deepen campaign as Application / inquiry
+
+**InquiryServerBackend factory:**
+- Purpose: Dual-path `source` vs `local-e2e` without leaking fixtures into production path
+- Examples: `inquiry.functions.ts` (`createInquiryServerBackend`), `internal/local-e2e-adapter.ts`
+- Pattern: Kind discriminant + fail-closed local constructor
 
 ## Entry Points
 
-**Vite / TanStack Start app:**
-- Location: `src/start.ts`, `src/router.tsx`, `src/routeTree.gen.ts`
-- Triggers: Browser navigation, server functions, API routes
-- Responsibilities: Middleware (Clerk, CSRF, source-write admission, security headers, observability), route tree
-
-**Convex backend:**
-- Location: `convex/` (schema, functions, crons, `http.ts`)
-- Triggers: Client queries/mutations/actions, scheduled workers, Convex HTTP routes
-- Responsibilities: Persistence, admission, thin delegation to modules
-
 **Quiet agent tools:**
-- Location: Routes under `src/routes/` + harness tool contract
-- Triggers: `GET/POST /api/agent/tools`
-- Responsibilities: List/invoke allowlisted actions only
+- Location: `GET/POST` via routes wired to harness + `src/modules/actions/index.ts`
+- Triggers: External assistants
+- Responsibilities: List/invoke allowlisted actions (`registry.*`, `inquiry.submit`, …); respect `boundaries`
 
-**Hosted journey proofs:**
-- Location: `src/modules/customer-request/hosted-agent-journey/`
-- Triggers: Release/smoke tooling (`tools/`, package scripts)
-- Responsibilities: Prove discovery, happy, partial, cancel paths against a live base URL
+**Customer Request Convex actions:**
+- Location: `convex/customerRequestApplication.ts`
+- Triggers: API routes / authenticated agents
+- Responsibilities: Interpret/compile, facts, refine, confirm, run, cancel, problem, standing permissions
+
+**Route-execution internal API:**
+- Location: `convex/customerRequestRouteExecution.ts`
+- Triggers: Application + transport/cancellation workers
+- Responsibilities: Export identities for start/lease/outcome/cancel/problem + residual dispatch helpers
+
+**Inquiry server fns:**
+- Location: `src/modules/inquiries/inquiry.functions.ts`
+- Triggers: Public submit, owner inbox, customer record
+- Responsibilities: Resolve dual-path backend; admission-gated writes
+
+**Schema composition:**
+- Location: `convex/schema.ts`
+- Triggers: Deploy / codegen
+- Responsibilities: Spread module table fragments only — no inline tables
 
 ## Architectural Constraints
 
-- **Threading:** Single-threaded JS event loop (Vite SSR + Convex isolate). Node-only code must use `"use node"` actions and must not be imported by query/mutation graphs (`ae-convex-guardrails`).
-- **Global state:** Action registry is a module-level const array in `src/modules/actions/index.ts` with uniqueness assert at load. No other shared mutable process singletons required for domain correctness.
-- **Circular imports:** Avoid `internal/` cross-module imports; use `public.ts`. Machines may import journal; journal must not import machines (ADR-011).
-- **Schema ownership:** New tables belong in the owning module fragment, then spread in `convex/schema.ts` — never define tables inline in route files.
-- **Authority honesty:** Public/assistant surfaces must not claim booking, payment, dispatch, or auto-fulfil; action `boundaries` and PRODUCT/AGENTS contracts bind copy and tools.
-- **Retirement:** Legacy routing v1 HTTP/MCP paths in `convex/http.ts` return retired responses from `src/modules/routing-kernel/retirement`.
+- **Threading:** Convex mutations/queries are single-transaction; Node workers (`customerRequestRouteTransportWorker.ts`, cancellation worker) use `"use node"` and must not be imported into mutation graphs (`npm run check:convex-codegen`).
+- **Global state:** Module-level action registry array in `src/modules/actions/index.ts` (assert unique IDs at import). Local-e2e secrets/fixtures are process-local and fail-closed.
+- **Circular imports:** `internal/` is private to its module (`tests/imports/private-imports.test.ts`). Machines may import `journal/` / `problem-support/`; those packages must not import machines or Convex adapters.
+- **Port adapter size ceiling:** ~1k lines per `*Ports.ts` adapter — journal ports (~979) are near ceiling; cancel/problem are separate files by design.
+- **Authority separation:** Mandate, preparation, and route stay separate (ADR-002 note in `application/public.ts`); Application composes them, does not merge helpers.
+- **Public copy:** No internal architecture words on human surfaces (`AGENTS.md` / public-copy skill).
 
 ## Anti-Patterns
 
-### Fat Convex host logic
+### Shallow Convex sibling chops
 
-**What happens:** Business orchestration, digests, or graph assembly implemented inside `convex/*.ts` handlers.
-**Why it's wrong:** Breaks deepen campaign invariants; untestable without Convex; duplicates across hosts.
-**Do this instead:** Put orchestration in `src/modules/**` behind ports; keep host as validate → ports → call → return. Follow existing `*Ports.ts` + thinness tests.
+**What happens:** Split host into `customerRequestRouteExecutionStart.ts` / `…Cancel.ts` / `…Problem.ts` without module ports.
+**Why it's wrong:** Moves lines without deepening write authority; duplicates sequences; banned by ADR-011/012 and CONCERNS.
+**Do this instead:** Thin shells in `customerRequestRouteExecution.ts` + `*JournalPorts.ts` / `*CancelPorts.ts` / `*ProblemPorts.ts` + machines under `route-execution/machines/`.
 
-### Importing `internal/` across modules or from routes
+### WritePlan / intendedPatches in pure modules
 
-**What happens:** `import … from '@/modules/foo/internal/…'` outside `foo`.
-**Why it's wrong:** Violates private-import guardrail; couples callers to unstable internals.
-**Do this instead:** Export through `public.ts` (Impl-suffix re-export pattern as in `src/modules/registry/public.ts`).
+**What happens:** Return patch DTOs from `journal/` or `machines/` for the host to apply later.
+**Why it's wrong:** Breaks lease/outcome/cancel atomicity; digests desync; thinness tests forbid tokens.
+**Do this instead:** Semantic port methods that commit inside the same `MutationCtx` transaction.
 
-### Write-plan DTOs inside pure `journal/`
+### Growing JournalMutationPorts with cancel/problem
 
-**What happens:** `WritePlan`, `intendedPatches`, or Convex types appear under `route-execution/journal/`.
-**Why it's wrong:** Couples integrity predicates to mutation plans (ADR-011 forbidden).
-**Do this instead:** Keep predicates in `journal/`; put mutation sequencing in `machines/` with `JournalMutationPorts`.
+**What happens:** Add cancel/problem commits onto journal ports to “finish” the god file.
+**Why it's wrong:** Exceeds adapter ceiling; mixes auth matrices and table sets (ADR-012).
+**Do this instead:** Dedicated `CancelMutationPorts` / `ProblemMutationPorts`.
 
-### Declaring `agentTools` without quiet-door allowlist
+### Application or workers constructing mutation ports
 
-**What happens:** Action sets `surfaces` including `agentTools` but id is missing from `PublicQuietAgentToolIds`.
-**Why it's wrong:** Action never appears on the public quiet door; false sense of assistant reachability.
-**Do this instead:** Register in `src/modules/actions/index.ts` **and** pin id in `src/modules/harness/tool-contract.ts`.
+**What happens:** Callers import machines or open a second mutation to “apply” work.
+**Why it's wrong:** Breaks transactional boundary and Node bundling rules.
+**Do this instead:** Always go through `internal.customerRequestRouteExecution.*` export identities.
 
-### Per-host catalog builders
+### Local-e2e backend without bypass
 
-**What happens:** Registry and discovery each assemble public catalogs differently.
-**Why it's wrong:** Drift between discovery and registry projections.
-**Do this instead:** Always call `catalogFromRows` from `src/modules/catalog/public.ts`.
+**What happens:** Construct `createLocalE2eInquiryServerBackend()` outside auth bypass.
+**Why it's wrong:** Fixture path must be fail-closed (`local-e2e-adapter.ts`).
+**Do this instead:** Only via `createInquiryServerBackend` when `isLocalE2EAuthBypassEnabled()`.
 
 ## Error Handling
 
-**Strategy:** Domain returns discriminated results (`kind: 'ok' | 'error' | 'refused' | 'conflict'`, etc.); hosts map to Convex validators / HTTP status without inventing success.
+**Strategy:** Domain results as discriminated unions (`kind: 'refused' | 'conflict' | …`); integrity failures throw named errors rather than soft-success.
 
 **Patterns:**
-- Application layer: `CustomerRequestActionResult` and related types in `src/modules/customer-request/application/action-result.ts`.
-- Inquiry: module returns `{ kind: 'ok' | 'error', … }`; host summarizes errors (`summarizeSubmitError` in `convex/inquiries.ts`).
-- Machines: return typed `StartResult` / `LeaseResult` / `OutcomeResult`; integrity failures may throw explicit integrity errors.
-- Source writes: `requireSourceWrite` / admission before mutations.
+- Machines return refuse/conflict/replayed results for expected control flow.
+- Integrity helpers in `journal/integrity.ts` — host/machines throw on digest/state mismatch.
+- Application wraps outcomes via `toActionResult` / `CustomerRequestActionResult` in `application/action-result.ts`.
+- Inquiry source errors mapped through `inquirySourceError` in functions layer.
 
 ## Cross-Cutting Concerns
 
-**Logging:** Observability module + PostHog/Sentry via `src/lib/observability/**` and middleware in `src/start.ts`; operator audit via `src/modules/observability/`.
-**Validation:** Zod at action/HTTP boundaries; Convex `v.*` validators on host args; capability contracts via `src/modules/capability-contract/`.
-**Authentication:** Clerk (`@clerk/tanstack-react-start`) for humans; service/agent envelopes in `src/modules/customer-request/service-auth-envelope.ts`; owner/admin via `convex/authz.ts`.
-**Thinness verification:** Prefer adding or extending a `*-thinness.test.ts` when deepening a host.
+**Logging:** Observability module + audit events (`src/modules/observability/`); avoid console-only authority.
+**Validation:** Zod at TanStack/action boundaries; Convex `v.*` at mutation/action edges; bounded JSON parsers at host/machine edge.
+**Authentication:** Clerk identity on host queries/mutations; service assertion envelopes for Customer Request actions (`service-auth-envelope.ts`); admin via `convex/authz.ts` `resolveAdminAuthority`.
+**Thinness enforcement:** Unit tests that read host/ports/machine sources and assert wiring + purity (no Convex imports in machines).
+
+## Post-campaign deepen map (Waves 23–37)
+
+| Wave band | Landed deepen | Primary seams |
+|-----------|---------------|---------------|
+| 23–32 | Application slices (provide-facts, authorize-preparation, refine, confirm-route, action-projection, standing); capability-supply eligible/publish/withdraw/graph/probe; inquiry source-state + notification bridge; evidence-load ports; ADR-011 journal machines (start/lease/outcome) | `application/*`, `capabilitySupply*Ports.ts`, `inquirySourceStatePorts.ts`, `inquiryNotificationPorts.ts`, `customerRequestEvidenceLoadPorts.ts`, Journal ports + machines |
+| 33–34 | ADR-012 cancel + problem mutation machines | Cancel/Problem ports + machines |
+| 35–37 | Success-outcome deepen residual + inquiry dual-path factory + shared `notificationOutboxPersistence`; campaign close at `3463c1d4` | `record-outcome` / journal commits; `inquiry.functions.ts` factory; outbox persistence helpers |
+
+**Still host-owned (not deepen-extracted under ADR-011/012):** `recoverExpiredDispatch`, `markDispatched`, `recordNotReleased`, `markAccepted`, `openLeasedDispatch`, plus fat support/business read queries that still resolve auth inline in `customerRequestRouteExecution.ts`. Prefer a later ADR before sibling chops.
 
 ---
 
-*Architecture analysis: 2026-07-18 · last_mapped_commit `5ea44454`*
+*Architecture analysis: 2026-07-18 · last_mapped_commit `3463c1d4`*
