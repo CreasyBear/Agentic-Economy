@@ -2,35 +2,22 @@ import type { Infer } from 'convex/values'
 import { v } from 'convex/values'
 
 import {
-  capabilityBindingEligibilityHash,
-  capabilityBindingRegistrationHash,
-  capabilityOfferingEligibilityHash,
-  capabilityOfferingRegistrationHash,
-  capabilitySupplyEligibilityHash,
-  defineCapabilityOfferingRegistration,
-  defineCapabilityTransportBindingRegistration,
-  admitRegisteredTransport,
-  type CapabilityOfferingRegistration,
-  type CapabilityTransportBindingRegistration,
-} from '@/modules/capability-supply/public'
-import {
   bindingIntegrityIsValid,
-  transportAdmissionInput,
+  registerCapabilityTransportBinding as registerCapabilityTransportBindingWrite,
 } from '@/modules/capability-supply/internal/binding'
 import {
   bindingEligibilityIsValid,
-  desiredEligibility,
   getEligibleExactCapabilitySupply as getEligibleExactCapabilitySupplyFromModule,
   listEligibleCapabilitySupply as listEligibleCapabilitySupplyFromModule,
   MAX_ELIGIBLE_SUPPLY,
   offeringEligibilityIsValid,
-  validEligibilityInput,
+  setCapabilitySupplyEligibility as setCapabilitySupplyEligibilityWrite,
   type EligibilityInput,
 } from '@/modules/capability-supply/internal/eligibility'
 import {
   contractRefFromRow,
   offeringIntegrityIsValid,
-  writablePresentation,
+  registerCapabilityOffering as registerCapabilityOfferingWrite,
 } from '@/modules/capability-supply/internal/offering'
 import {
   registerCapabilityBindingCommand as runRegisterBindingCommand,
@@ -44,6 +31,7 @@ import {
   publicationProjection,
   publishCapabilityCommand,
   refreshCapabilityCommand,
+  withdrawCapabilityCommand,
 } from '@/modules/capability-supply/internal/publication'
 import {
   bindingObservedRowDigest,
@@ -55,7 +43,6 @@ import {
   type RegistrationContext,
   type SupplyCommandActor,
 } from '@/modules/capability-supply/internal/shared'
-import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { type StableHashValue } from '@/modules/common/stable-hash'
 
@@ -69,6 +56,7 @@ import {
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
 import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
 import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
+import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
 
 const contractRefValue = v.object({
   capabilityId: v.string(),
@@ -589,43 +577,22 @@ export const withdrawCapability = mutation({
     ) }),
   ),
   handler: async (ctx, args) => {
-    const publication = await ctx.db.query('capabilityPublications')
-      .withIndex('by_publicationRef_and_revision', (index) => (
-        index.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)
-      )).unique()
-    if (publication === null) return { kind: 'refused' as const, reason: 'publication_not_found' as const }
-    if (!await ownsPublishedBusiness(ctx, publication.businessId)) {
+    const ports = publicationPorts(ctx)
+    const publication = await ports.loadPublicationAtRevision(
+      args.publicationRef,
+      args.expectedRevision,
+    )
+    if (publication === null) {
+      return { kind: 'refused' as const, reason: 'publication_not_found' as const }
+    }
+    if (!await ownsPublishedBusiness(ctx, publication.businessId as Id<'businesses'>)) {
       return { kind: 'refused' as const, reason: 'authorization_denied' as const }
     }
-    if (publication.disposition !== 'current') {
-      return { kind: 'refused' as const, reason: 'revision_changed' as const }
-    }
-    const [offering, binding] = await Promise.all([
-      ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique(),
-      ctx.db.query('capabilityTransportBindings')
-        .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique(),
-    ])
-    if (offering === null || binding === null) throw new Error('capability_publication_supply_integrity_failure')
-    const revoked = await setCapabilitySupplyEligibility(ctx.db, {
-      offeringId: offering.offeringId,
-      bindingId: binding.bindingId,
-      contractRef: contractRefFromRow(publication),
-      decision: 'revoke',
-      expectedOfferingRegistrationHash: offering.registrationHash,
-      expectedBindingRegistrationHash: binding.registrationHash,
-      admissionEvidenceRefs: args.evidenceRefs,
-      conformanceEvidenceRefs: args.evidenceRefs,
-    }, Date.now())
-    if (revoked.kind === 'refused') throw new Error(`capability_publication_withdraw_${revoked.reason}`)
-    const now = Date.now()
-    await ctx.db.patch(publication._id, { disposition: 'withdrawn', withdrawnAt: now, updatedAt: now })
-    return {
-      kind: 'withdrawn' as const,
-      publicationRef: publication.publicationRef,
-      revision: publication.revision,
-      lifecycle: { state: 'withdrawn' as const, reasons: ['withdrawn' as const] },
-    }
+    return await withdrawCapabilityCommand({
+      publication,
+      evidenceRefs: args.evidenceRefs,
+      now: Date.now(),
+    }, ports)
   },
 })
 
@@ -933,120 +900,13 @@ export async function quarantineCapabilityBindingCommand(
 export async function registerCapabilityOffering(
   db: MutationCtx['db'], input: unknown, registeredAt: number,
 ) {
-  let registration: CapabilityOfferingRegistration
-  try {
-    registration = defineCapabilityOfferingRegistration(input)
-  } catch {
-    return { kind: 'refused' as const, reason: 'offering_invalid' as const }
-  }
-  const business = await publishedBusiness(db, registration.businessId)
-  if (business === null) return { kind: 'refused' as const, reason: 'business_not_registered' as const }
-  const contract = await resolveExactContract(db, registration.contractRef)
-  if (contract.kind === 'refused') return contract
-  const registrationHash = capabilityOfferingRegistrationHash(registration)
-  const existing = await db.query('capabilityOfferings')
-    .withIndex('by_offeringId', (query) => query.eq('offeringId', registration.offeringId)).unique()
-  if (existing !== null) {
-    if (!offeringIntegrityIsValid(existing)) {
-      return { kind: 'refused' as const, reason: 'offering_integrity_failure' as const }
-    }
-    return existing.registrationHash === registrationHash
-      ? { kind: 'registered' as const, offeringId: registration.offeringId, registrationHash, created: false }
-      : { kind: 'refused' as const, reason: 'offering_identity_conflict' as const }
-  }
-  const status = 'inactive' as const
-  const admissionEvidenceRefs: string[] = []
-  const eligibilityHash = capabilityOfferingEligibilityHash({
-    offeringId: registration.offeringId, registrationHash, status, admissionEvidenceRefs,
-  })
-  await db.insert('capabilityOfferings', {
-    offeringId: registration.offeringId,
-    businessId: business._id,
-    networkId: registration.networkId,
-    ...registration.contractRef,
-    presentation: writablePresentation(registration.presentation),
-    searchTerms: [...registration.searchTerms],
-    registrationEvidenceRefs: [...registration.registrationEvidenceRefs],
-    registrationHash,
-    status,
-    admissionEvidenceRefs,
-    eligibilityHash,
-    registeredAt,
-    updatedAt: registeredAt,
-  })
-  return { kind: 'registered' as const, offeringId: registration.offeringId, registrationHash, created: true }
+  return registerCapabilityOfferingWrite(capabilitySupplyWriterPorts(db), input, registeredAt)
 }
 
 export async function registerCapabilityTransportBinding(
   db: MutationCtx['db'], input: unknown, registeredAt: number,
 ) {
-  let registration: CapabilityTransportBindingRegistration
-  try {
-    registration = defineCapabilityTransportBindingRegistration(input)
-  } catch {
-    return { kind: 'refused' as const, reason: 'binding_invalid' as const }
-  }
-  const offering = await db.query('capabilityOfferings')
-    .withIndex('by_offeringId', (query) => query.eq('offeringId', registration.offeringId)).unique()
-  if (offering === null) return { kind: 'refused' as const, reason: 'offering_not_found' as const }
-  if (!offeringIntegrityIsValid(offering)) {
-    return { kind: 'refused' as const, reason: 'offering_integrity_failure' as const }
-  }
-  if (
-    offering.networkId !== registration.networkId
-    || !sameCapabilityContractRef(contractRefFromRow(offering), registration.contractRef)
-  ) {
-    return { kind: 'refused' as const, reason: 'offering_binding_mismatch' as const }
-  }
-  if (await publishedBusiness(db, offering.businessId) === null) {
-    return { kind: 'refused' as const, reason: 'business_not_registered' as const }
-  }
-  const contract = await resolveExactContract(db, registration.contractRef)
-  if (contract.kind === 'refused') return contract
-  const admission = admitRegisteredTransport(transportAdmissionInput(registration))
-  if (admission.kind === 'refused') return admission
-  const registrationHash = capabilityBindingRegistrationHash(registration, admission.transport)
-  const existing = await db.query('capabilityTransportBindings')
-    .withIndex('by_bindingId', (query) => query.eq('bindingId', registration.bindingId)).unique()
-  if (existing !== null) {
-    if (!bindingIntegrityIsValid(existing)) {
-      return { kind: 'refused' as const, reason: 'binding_integrity_failure' as const }
-    }
-    return existing.registrationHash === registrationHash
-      ? { kind: 'registered' as const, bindingId: registration.bindingId, registrationHash, created: false }
-      : { kind: 'refused' as const, reason: 'binding_identity_conflict' as const }
-  }
-  const initialAdmission = 'not_admitted' as const
-  const conformance = 'not_conformant' as const
-  const admissionEvidenceRefs: string[] = []
-  const conformanceEvidenceRefs: string[] = []
-  const eligibilityHash = capabilityBindingEligibilityHash({
-    bindingId: registration.bindingId, registrationHash, admission: initialAdmission, conformance,
-    admissionEvidenceRefs, conformanceEvidenceRefs,
-  })
-  await db.insert('capabilityTransportBindings', {
-    bindingId: registration.bindingId,
-    offeringId: registration.offeringId,
-    networkId: registration.networkId,
-    ...registration.contractRef,
-    endpointUrl: registration.endpointUrl,
-    credentialRef: registration.credentialRef,
-    continuation: { ...registration.continuation, evidenceRefs: [...registration.continuation.evidenceRefs] },
-    cancellation: { ...registration.cancellation, evidenceRefs: [...registration.cancellation.evidenceRefs] },
-    adapterId: admission.transport.adapterId,
-    configJson: admission.transport.configJson,
-    configDigest: admission.transport.configDigest,
-    registrationEvidenceRefs: [...registration.registrationEvidenceRefs],
-    registrationHash,
-    admission: initialAdmission,
-    conformance,
-    admissionEvidenceRefs,
-    conformanceEvidenceRefs,
-    eligibilityHash,
-    registeredAt,
-    updatedAt: registeredAt,
-  })
-  return { kind: 'registered' as const, bindingId: registration.bindingId, registrationHash, created: true }
+  return registerCapabilityTransportBindingWrite(capabilitySupplyWriterPorts(db), input, registeredAt)
 }
 
 export async function setCapabilitySupplyEligibility(
@@ -1054,93 +914,7 @@ export async function setCapabilitySupplyEligibility(
   input: EligibilityInput,
   updatedAt: number,
 ) {
-  if (!validEligibilityInput(input)) {
-    return { kind: 'refused' as const, reason: 'registration_context_invalid' as const }
-  }
-  const offering = await db.query('capabilityOfferings')
-    .withIndex('by_offeringId', (query) => query.eq('offeringId', input.offeringId)).unique()
-  if (offering === null) return { kind: 'refused' as const, reason: 'offering_not_found' as const }
-  const binding = await db.query('capabilityTransportBindings')
-    .withIndex('by_bindingId', (query) => query.eq('bindingId', input.bindingId)).unique()
-  if (binding === null) return { kind: 'refused' as const, reason: 'binding_not_found' as const }
-  if (
-    offering.registrationHash !== input.expectedOfferingRegistrationHash
-    || binding.registrationHash !== input.expectedBindingRegistrationHash
-  ) {
-    return { kind: 'refused' as const, reason: 'registration_changed' as const }
-  }
-  if (
-    binding.offeringId !== offering.offeringId
-    || binding.networkId !== offering.networkId
-    || !sameCapabilityContractRef(contractRefFromRow(offering), contractRefFromRow(binding))
-    || !sameCapabilityContractRef(contractRefFromRow(offering), input.contractRef)
-  ) {
-    return { kind: 'refused' as const, reason: 'offering_binding_mismatch' as const }
-  }
-  if (input.decision === 'admit') {
-    if (!offeringIntegrityIsValid(offering)) {
-      return { kind: 'refused' as const, reason: 'offering_integrity_failure' as const }
-    }
-    if (!bindingIntegrityIsValid(binding)) {
-      return { kind: 'refused' as const, reason: 'binding_integrity_failure' as const }
-    }
-    const contract = await resolveExactContract(db, input.contractRef)
-    if (contract.kind === 'refused') return contract
-    if (await publishedBusiness(db, offering.businessId) === null) {
-      return { kind: 'refused' as const, reason: 'business_not_registered' as const }
-    }
-  }
-  const eligibleSiblings = input.decision === 'revoke'
-    ? await db.query('capabilityTransportBindings')
-        .withIndex('by_offeringId_and_admission_and_conformance', (query) => (
-          query.eq('offeringId', offering.offeringId).eq('admission', 'admitted').eq('conformance', 'conformant')
-        ))
-        .take(2)
-    : []
-  const hasOtherEligibleBinding = eligibleSiblings.some((candidate) => candidate.bindingId !== binding.bindingId)
-  const desired = desiredEligibility(input.decision, hasOtherEligibleBinding ? 'active' : 'inactive')
-  const offeringEligibilityHash = capabilityOfferingEligibilityHash({
-    offeringId: offering.offeringId, registrationHash: offering.registrationHash,
-    status: desired.offeringStatus, admissionEvidenceRefs: input.admissionEvidenceRefs,
-  })
-  const bindingEligibilityHash = capabilityBindingEligibilityHash({
-    bindingId: binding.bindingId, registrationHash: binding.registrationHash,
-    admission: desired.bindingAdmission, conformance: desired.bindingConformance,
-    admissionEvidenceRefs: input.admissionEvidenceRefs,
-    conformanceEvidenceRefs: input.conformanceEvidenceRefs,
-  })
-  await db.patch(offering._id, {
-    status: desired.offeringStatus, admissionEvidenceRefs: [...input.admissionEvidenceRefs],
-    eligibilityHash: offeringEligibilityHash, updatedAt,
-  })
-  await db.patch(binding._id, {
-    admission: desired.bindingAdmission, conformance: desired.bindingConformance,
-    admissionEvidenceRefs: [...input.admissionEvidenceRefs],
-    conformanceEvidenceRefs: [...input.conformanceEvidenceRefs],
-    eligibilityHash: bindingEligibilityHash, updatedAt,
-  })
-  return {
-    kind: input.decision === 'admit' ? 'eligible' as const : 'ineligible' as const,
-    offeringId: offering.offeringId,
-    bindingId: binding.bindingId,
-    eligibilityHash: capabilitySupplyEligibilityHash({
-      offeringId: offering.offeringId, bindingId: binding.bindingId,
-      offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
-      offeringStatus: desired.offeringStatus,
-      bindingAdmission: desired.bindingAdmission,
-      bindingConformance: desired.bindingConformance,
-      admissionEvidenceRefs: input.admissionEvidenceRefs,
-      conformanceEvidenceRefs: input.conformanceEvidenceRefs,
-    }),
-    offeringEligibilityHash,
-    bindingEligibilityHash,
-    transition: {
-      offeringBefore: offering.status,
-      offeringAfter: desired.offeringStatus,
-      bindingBefore: `${binding.admission}:${binding.conformance}`,
-      bindingAfter: `${desired.bindingAdmission}:${desired.bindingConformance}`,
-    },
-  }
+  return setCapabilitySupplyEligibilityWrite(capabilitySupplyWriterPorts(db), input, updatedAt)
 }
 
 export async function listEligibleCapabilitySupply(
@@ -1180,19 +954,6 @@ async function publishedBusiness(db: QueryCtx['db'], businessId: string | Id<'bu
     && business.suppressedAt === undefined
     ? business
     : null
-}
-
-async function resolveExactContract(db: QueryCtx['db'], ref: ContractRef) {
-  const result = await getActiveExactCapabilityContract(db, ref)
-  if (result.kind === 'found') return result
-  return {
-    kind: 'refused' as const,
-    reason: result.reason === 'not_found'
-      ? 'contract_not_found' as const
-      : result.reason === 'not_active'
-        ? 'contract_not_active' as const
-        : 'contract_integrity_failure' as const,
-  }
 }
 
 function portsFor(db: MutationCtx['db']): OperationLedgerPorts {

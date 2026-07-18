@@ -35,3 +35,8 @@ export {
   refreshCapabilityCommand,
   type RefreshCapabilityCommandInput,
 } from './refresh'
+
+export {
+  withdrawCapabilityCommand,
+  type WithdrawCapabilityCommandInput,
+} from './withdraw'

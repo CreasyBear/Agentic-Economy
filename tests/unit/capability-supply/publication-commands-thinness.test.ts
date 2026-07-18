@@ -8,13 +8,16 @@ const portsSource = readFileSync('convex/capabilitySupplyPublicationPorts.ts', '
 const moduleRoot = 'src/modules/capability-supply/internal/publication'
 
 describe('capability-supply publication-commands thinness', () => {
-  it('does not keep publish/refresh orchestration bodies in the Convex host', () => {
+  it('does not keep publish/refresh/withdraw orchestration bodies in the Convex host', () => {
     const publishStart = convexHost.indexOf('export const publishCapability = mutation({')
     const refreshStart = convexHost.indexOf('export const refreshCapability = mutation({')
+    const withdrawStart = convexHost.indexOf('export const withdrawCapability = mutation({')
     expect(publishStart).toBeGreaterThanOrEqual(0)
     expect(refreshStart).toBeGreaterThanOrEqual(0)
+    expect(withdrawStart).toBeGreaterThanOrEqual(0)
     const publishBody = convexHost.slice(publishStart, publishStart + 1_200)
     const refreshBody = convexHost.slice(refreshStart, refreshStart + 2_000)
+    const withdrawBody = convexHost.slice(withdrawStart, withdrawStart + 1_200)
 
     expect(publishBody).toContain('publishCapabilityCommand')
     expect(publishBody).toContain('publicationPorts')
@@ -35,6 +38,13 @@ describe('capability-supply publication-commands thinness', () => {
     expect(refreshBody).not.toContain('setCapabilitySupplyEligibility(')
     expect(refreshBody).not.toContain('disposition: \'superseded\'')
     expect(refreshBody).not.toContain('capabilitySupplyReadiness.probe')
+
+    expect(withdrawBody).toContain('withdrawCapabilityCommand')
+    expect(withdrawBody).toContain('publicationPorts')
+    expect(withdrawBody).toContain('ownsPublishedBusiness')
+    expect(withdrawBody).not.toContain('setCapabilitySupplyEligibility(')
+    expect(withdrawBody).not.toContain('disposition: \'withdrawn\'')
+    expect(withdrawBody).not.toContain('capability_publication_supply_integrity_failure')
   })
 
   it('wires publication ports adapter for writers, ledger, and readiness probe', () => {
@@ -43,11 +53,12 @@ describe('capability-supply publication-commands thinness', () => {
     expect(portsSource).toContain('scheduleReadinessProbe')
     expect(portsSource).toContain('capabilitySupplyReadiness.probe')
     expect(portsSource).toContain('insertPublication')
+    expect(portsSource).toContain('patchPublicationWithdrawn')
     expect(portsSource).not.toMatch(/normalizeCapabilityPublication/)
     expect(portsSource).not.toMatch(/publishCapabilityCommand/)
   })
 
-  it('leaves withdraw and raw writers in the host', () => {
+  it('leaves raw writers and ownership in the host', () => {
     expect(convexHost).toMatch(/export const withdrawCapability\s*=/)
     expect(convexHost).toMatch(/export async function registerCapabilityOffering\s*\(/)
     expect(convexHost).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
@@ -56,7 +67,7 @@ describe('capability-supply publication-commands thinness', () => {
   })
 
   it('keeps publication command modules free of Convex runtime imports', () => {
-    for (const file of ['ports.ts', 'publish.ts', 'refresh.ts', 'draft.ts']) {
+    for (const file of ['ports.ts', 'publish.ts', 'refresh.ts', 'withdraw.ts', 'draft.ts']) {
       const source = readFileSync(join(moduleRoot, file), 'utf8')
       expect(source).not.toMatch(/from\s+['"]\.\/_generated/)
       expect(source).not.toMatch(/from\s+['"][^'"]*_generated[^'"]*['"]/)
@@ -76,11 +87,13 @@ describe('capability-supply publication-commands thinness', () => {
     }
   })
 
-  it('does not move withdraw into the publication module', () => {
-    for (const file of listTsFiles(moduleRoot)) {
-      const source = readFileSync(file, 'utf8')
-      expect(source).not.toMatch(/withdrawCapability/)
-    }
+  it('keeps withdraw as a publication lifecycle command, not eligibility', () => {
+    const withdrawSource = readFileSync(join(moduleRoot, 'withdraw.ts'), 'utf8')
+    expect(withdrawSource).toContain('withdrawCapabilityCommand')
+    expect(withdrawSource).toContain('setEligibility')
+    expect(withdrawSource).toContain('patchPublicationWithdrawn')
+    expect(withdrawSource).not.toMatch(/desiredEligibility/)
+    expect(withdrawSource).not.toMatch(/eligibilityPublicResult/)
   })
 })
 

@@ -53,6 +53,7 @@ export type PublicationCommandPorts = OperationLedgerPorts & Readonly<{
   ) => Promise<PublicationCommandRow | null>
   insertPublication: (input: PublicationInsertInput) => Promise<void>
   patchPublicationSuperseded: (publicationId: string, updatedAt: number) => Promise<void>
+  patchPublicationWithdrawn: (publicationId: string, updatedAt: number) => Promise<void>
   registerContractDocument: (
     documentJson: string,
     now: number,

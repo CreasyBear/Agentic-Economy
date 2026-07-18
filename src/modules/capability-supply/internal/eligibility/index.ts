@@ -27,3 +27,9 @@ export type {
 export { MAX_ELIGIBLE_SUPPLY, listEligibleCapabilitySupply } from './list'
 
 export { getEligibleExactCapabilitySupply } from './exact'
+
+export {
+  setCapabilitySupplyEligibility,
+  type EligibilityWritePorts,
+  type SetEligibilityWriteResult,
+} from './write'

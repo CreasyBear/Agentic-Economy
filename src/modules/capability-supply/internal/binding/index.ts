@@ -7,3 +7,10 @@ export {
 export { bindingIntegrityIsValid } from './integrity'
 
 export { bindingRegistrationAudit } from './audit'
+
+export {
+  registerCapabilityTransportBinding,
+  type BindingInsertRow,
+  type BindingWritePorts,
+  type RegisterBindingWriteResult,
+} from './write'

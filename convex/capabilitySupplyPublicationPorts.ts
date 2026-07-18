@@ -76,6 +76,13 @@ export function capabilitySupplyPublicationPorts(
         updatedAt,
       })
     },
+    patchPublicationWithdrawn: async (publicationId, updatedAt) => {
+      await ctx.db.patch(publicationId as Id<'capabilityPublications'>, {
+        disposition: 'withdrawn',
+        withdrawnAt: updatedAt,
+        updatedAt,
+      })
+    },
     registerContractDocument: (documentJson, now) => (
       registerCapabilityContractDocument(ctx.db, documentJson, now)
     ),

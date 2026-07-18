@@ -54,12 +54,12 @@ describe('capability-supply convex host thinness', () => {
     expect(convexHost).toContain("from '@/modules/capability-supply/internal/shared'")
     expect(convexHost).toContain("from '@/modules/capability-supply/internal/operation-ledger'")
     for (const symbol of [
-      'desiredEligibility',
       'publicationLifecycle',
       'bindingObservedRowDigest',
       'offeringIntegrityIsValid',
       'publishCapabilityCommand',
       'refreshCapabilityCommand',
+      'registerCapabilityOfferingWrite',
     ]) {
       expect(convexHost).toContain(symbol)
     }
@@ -88,15 +88,30 @@ describe('capability-supply convex host thinness', () => {
     expect(convexHost).not.toMatch(/bindings\.length > input\.limit/)
   })
 
-  it('delegates publish/refresh via publication ports while keeping thin wrappers', () => {
+  it('delegates publish/refresh/withdraw via publication ports while keeping thin wrappers', () => {
     expect(convexHost).toContain('capabilitySupplyPublicationPorts')
     expect(convexHost).toContain('publishCapabilityCommand')
     expect(convexHost).toContain('refreshCapabilityCommand')
+    expect(convexHost).toContain('withdrawCapabilityCommand')
     expect(convexHost).toMatch(/function publicationPorts\s*\(/)
     expect(convexHost).toMatch(/export const publishCapability\s*=/)
     expect(convexHost).toMatch(/export const refreshCapability\s*=/)
+    expect(convexHost).toMatch(/export const withdrawCapability\s*=/)
     expect(convexHost).not.toMatch(/normalizeCapabilityPublication/)
     expect(convexHost).not.toMatch(/encodeCapabilityContractDocumentJson/)
+  })
+
+  it('delegates raw writers via capabilitySupplyWriterPorts while keeping thin wrappers', () => {
+    expect(convexHost).toContain('capabilitySupplyWriterPorts')
+    expect(convexHost).toContain('registerCapabilityOfferingWrite')
+    expect(convexHost).toContain('registerCapabilityTransportBindingWrite')
+    expect(convexHost).toContain('setCapabilitySupplyEligibilityWrite')
+    expect(convexHost).toMatch(/export async function registerCapabilityOffering\s*\(/)
+    expect(convexHost).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
+    expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
+    expect(convexHost).not.toMatch(/defineCapabilityOfferingRegistration/)
+    expect(convexHost).not.toMatch(/admitRegisteredTransport/)
+    expect(convexHost).not.toMatch(/desiredEligibility/)
   })
 })
 

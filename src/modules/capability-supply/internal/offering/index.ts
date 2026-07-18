@@ -7,3 +7,10 @@ export {
 } from './registration'
 
 export { offeringIntegrityIsValid } from './integrity'
+
+export {
+  registerCapabilityOffering,
+  type OfferingInsertRow,
+  type OfferingWritePorts,
+  type RegisterOfferingWriteResult,
+} from './write'
