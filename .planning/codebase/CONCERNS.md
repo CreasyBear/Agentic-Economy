@@ -23,7 +23,7 @@
 | 37 | Shared outbox persistence + thin inquiry notification bridge — done |
 
 **ADRs:** ADR-011 (start/lease/outcome) + ADR-012 (cancel + problem) — both **Accepted**.  
-**Waves 38–42 (in progress):** ADR-013 dispatch lifecycle ports — **Accepted** (Wave 38 design unlock). Wave 39 implements recover/mark/open behind `DispatchLifecyclePorts`. See `.planning/adr/ADR-013-route-dispatch-lifecycle-ports.md` and `.planning/codebase/WAVES-38-42-PLAN.md`.
+**Waves 38–42 (in progress):** ADR-013 dispatch lifecycle — **Accepted** + Wave 39–40 implemented. ADR-014 V2 write ports — **Accepted** (Wave 41 design unlock). Wave 42 implements `CustomerRequestV2WritePorts`. See `.planning/adr/ADR-013-route-dispatch-lifecycle-ports.md`, `.planning/adr/ADR-014-customer-request-v2-write-ports.md`, and `.planning/codebase/WAVES-38-42-PLAN.md`.
 
 ### Verified line counts (`wc -l` at `3463c1d4`)
 
