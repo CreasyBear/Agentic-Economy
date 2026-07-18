@@ -1,11 +1,11 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-07-18  
-**last_mapped_commit:** `3463c1d4` (post residual deepen campaign Waves 33–37 CLOSED)
+**last_mapped_commit:** `21964dc1` (post residual deepen campaign Waves 38–42 CLOSED)
 
-## Campaign status (Waves 23–37 CLOSED)
+## Campaign status (Waves 23–42 CLOSED)
 
-**Waves 23–32 CLOSED.** **Waves 33–37 CLOSED.**
+**Waves 23–32 CLOSED.** **Waves 33–37 CLOSED.** **Waves 38–42 CLOSED.**
 
 | Wave band | Outcome |
 |-----------|---------|
@@ -21,35 +21,42 @@
 | 35 | Success-outcome / JournalPorts helper split (ports under ~1k) — done |
 | 36 | Inquiry dual-path factory + `local-e2e-adapter` — done |
 | 37 | Shared outbox persistence + thin inquiry notification bridge — done |
+| 38 | ADR-013 dispatch lifecycle ports — **Accepted** |
+| 39 | Dispatch recover/mark/open machines + `DispatchLifecyclePorts` — done |
+| 40 | `exportProblemForSupport` load assembly behind ProblemPorts — done |
+| 41 | ADR-014 V2 write-family ports — **Accepted** |
+| 42 | V2 `commitAggregate` / refresh / retry behind `CustomerRequestV2WritePorts` — done |
 
-**ADRs:** ADR-011 (start/lease/outcome) + ADR-012 (cancel + problem) — both **Accepted**.  
-**Waves 38–42 (in progress):** ADR-013 dispatch lifecycle — **Accepted** + Wave 39–40 implemented. ADR-014 V2 write ports — **Accepted** (Wave 41 design unlock). Wave 42 implements `CustomerRequestV2WritePorts`. See `.planning/adr/ADR-013-route-dispatch-lifecycle-ports.md`, `.planning/adr/ADR-014-customer-request-v2-write-ports.md`, and `.planning/codebase/WAVES-38-42-PLAN.md`.
+**ADRs:** ADR-011 + ADR-012 + ADR-013 + ADR-014 — all **Accepted**.  
+Plan: `.planning/codebase/WAVES-38-42-PLAN.md`.
 
-### Verified line counts (`wc -l` at `3463c1d4`)
+### Verified line counts (`wc -l` at `21964dc1`)
 
 | File | Lines | Residual status |
 |------|------:|-----------------|
 | `convex/customerRequestApplication.ts` | **1749** | Host-done. Validators forever; size residual only. |
 | `convex/registry.ts` | **1622** | Catalog-from-rows shared (Wave 32); search/admission size residual. |
 | `convex/discovery.ts` | **1565** | Catalog-from-rows shared (Wave 32); manifest size residual. |
-| `convex/customerRequestV2.ts` | **1492** | Undeepened bulk host — optional ports-per-family residual. |
 | `convex/inquiries.ts` | **1435** | Host-done (Waves 23–26). Size residual. |
-| `convex/notificationOutbox.ts` | **1287** | Shared persist (Wave 37); further outbox families optional. |
-| `convex/customerRequestRouteExecution.ts` | **1178** | ADR-011 + ADR-012 machines; recover/mark + `exportProblemForSupport` residual. |
-| `convex/customerRequestRouteExecutionJournalPorts.ts` | **979** | Wave 35 success-outcome split; under ~1k ceiling. |
-| `src/modules/inquiries/inquiry.functions.ts` | **901** | Dual-path factory (Wave 36); local-e2e-adapter extracted. |
+| `convex/notificationOutbox.ts` | **1287** | Shared persist (Wave 37); further outbox families optional (Wave 43+). |
+| `convex/customerRequestRouteExecutionJournalPorts.ts` | **981** | Under ~1k ceiling. |
+| `convex/customerRequestRouteExecution.ts` | **939** | ADR-011–013 machines; Wave 40 export thin. Host under ~1k. |
+| `src/modules/inquiries/inquiry.functions.ts` | **901** | Dual-path factory (Wave 36). |
+| `convex/customerRequestV2WritePorts.ts` | **856** | Wave 42 write adapter (under ~1k). |
 | `convex/capabilitySupply.ts` | **804** | Host-done graph/probe (Wave 30). |
-| `convex/customerRequestRouteExecutionCancelPorts.ts` | **392** | Wave 33 adapter. |
-| `convex/customerRequestRouteExecutionProblemPorts.ts` | **259** | Wave 34 adapter. |
+| `convex/customerRequestV2.ts` | **644** | Wave 42 write family deepened; read/prep residual. |
+| `convex/customerRequestRouteExecutionCancelPorts.ts` | **394** | Wave 33 adapter. |
+| `convex/customerRequestRouteExecutionProblemPorts.ts` | **349** | Wave 34 + Wave 40 support-export load. |
+| `convex/customerRequestRouteExecutionDispatchPorts.ts` | **286** | Wave 39 adapter. |
 | `convex/inquiryNotificationBridge.ts` | **123** | Thin; shared persistence (Wave 37). |
 
-Thinness locks: `tests/unit/customer-request/route-execution/{machines,journal,problem-mutation,evidence-load}-thinness.test.ts`, `tests/unit/customer-request/application/*-thinness.test.ts`, `tests/unit/capability-supply/*-thinness.test.ts`, `tests/unit/inquiries/*-thinness.test.ts` (incl. `notification-bridge-thinness`).
+Thinness locks: `tests/unit/customer-request/route-execution/{machines,journal,problem-mutation,problem-support-read,evidence-load,dispatch-lifecycle}-thinness.test.ts`, `tests/unit/customer-request/v2-write-thinness.test.ts`, `tests/unit/customer-request/application/*-thinness.test.ts`, `tests/unit/capability-supply/*-thinness.test.ts`, `tests/unit/inquiries/*-thinness.test.ts` (incl. `notification-bridge-thinness`).
 
 ---
 
 ## Locked deepen practices
 
-Future deepen work **must** follow these practices (campaign gold + ADR-011 + ADR-012). Violations are regressions, not progress.
+Future deepen work **must** follow these practices (campaign gold + ADR-011–014). Violations are regressions, not progress.
 
 ### 1. Provide-facts ports pattern (gold)
 
@@ -63,13 +70,13 @@ Mirror `provideFacts`:
 
 Do **not** re-embed orchestration in the Convex host after a ports deepen.
 
-### 2. No `WritePlan` in journal or machines
+### 2. No `WritePlan` in journal, machines, or v2-write
 
-Forbidden identifiers under `src/modules/customer-request/route-execution/journal/` and `machines/`:
+Forbidden identifiers under `src/modules/customer-request/route-execution/journal/`, `machines/`, and `v2-write/`:
 
 - `WritePlan`, `writePlan`, `intendedPatches`
 
-Ports expose **semantic, immediately executed** commits (e.g. `commitSucceededOutcome`, `grantDispatchLease`). Do not return patch-list DTOs for a later apply step. Enforced by thinness tests.
+Ports expose **semantic, immediately executed** commits. Do not return patch-list DTOs for a later apply step. Enforced by thinness tests.
 
 ### 3. No Start / Lease / Outcome sibling chops
 
@@ -81,22 +88,26 @@ Ports expose **semantic, immediately executed** commits (e.g. `commitSucceededOu
 
 Shallow Convex sibling splits move lines without deepening write authority and risk duplicated write sequences. Keep a single host export surface; deepen through `machines/` + `*Ports.ts` (ADR-011).
 
-### 4. No Cancel / Problem sibling chops
+### 4. No Cancel / Problem / Dispatch / V2-Commit sibling chops
 
 **Hard ban** — do not create:
 
 - `convex/customerRequestRouteExecutionCancel.ts`
 - `convex/customerRequestRouteExecutionProblem.ts`
+- `convex/customerRequestRouteExecutionDispatch.ts` / `…Recover.ts` / `…Mark.ts`
+- `convex/customerRequestV2Commit.ts` / `…Refresh.ts` / `…Write.ts` (mutation-host siblings)
 
-Same rationale as §3. Cancel/problem deepen uses dedicated `CancelMutationPorts` / `ProblemMutationPorts` + `machines/` (ADR-012). Enforced by `machines-thinness.test.ts`.
+Same rationale as §3. Use dedicated ports adapters + module machines (ADR-012–014).
 
-### 5. Dedicated port families — do not grow JournalPorts for cancel/problem
+### 5. Dedicated port families — do not grow JournalPorts for other families
 
-- Journal machines → `JournalMutationPorts` / `convex/customerRequestRouteExecutionJournalPorts.ts`
-- Cancel machines → `CancelMutationPorts` / `convex/customerRequestRouteExecutionCancelPorts.ts`
-- Problem machines → `ProblemMutationPorts` / `convex/customerRequestRouteExecutionProblemPorts.ts`
+- Journal → `JournalMutationPorts` / `…JournalPorts.ts`
+- Cancel → `CancelMutationPorts` / `…CancelPorts.ts`
+- Problem → `ProblemMutationPorts` (+ support-read) / `…ProblemPorts.ts`
+- Dispatch lifecycle → `DispatchLifecyclePorts` / `…DispatchPorts.ts`
+- V2 write → `CustomerRequestV2WritePorts` / `customerRequestV2WritePorts.ts`
 
-Do **not** absorb cancel/problem into `JournalMutationPorts` to “save a file.” Adapter ceiling ~**1000 lines** per ports file (thinness asserts `<= 1000`).
+Do **not** absorb unrelated families into `JournalMutationPorts`. Adapter ceiling ~**1000 lines** per ports file.
 
 ### 6. Validators stay in Convex forever
 
@@ -113,40 +124,35 @@ Closed and locked — change only via the existing ports seam when semantics req
 - Cancel + problem mutation machines (Waves 33–34)
 - Evidence-load; hosted-agent-journey scenarios; catalog-from-rows
 - Shared outbox persistence + inquiry notification bridge (Wave 37)
+- Dispatch lifecycle machines (Wave 39) + support-export load (Wave 40)
+- V2 write family (Wave 42)
 
 **ADR-002** governed-send stays inquiry-owned — do not relocate send authority into outbox or Application hosts.
 
 ### 8. Atomicity at the mutation boundary
 
-Machine orchestration may call many port methods, but production durability remains **one** Convex `internalMutation` / `internalQuery` registration. Application / workers must keep calling the same `internal.customerRequestRouteExecution.*` paths — never bypass mutations to call module machines directly from ActionCtx.
+Machine orchestration may call many port methods, but production durability remains **one** Convex `internalMutation` / `internalQuery` registration. Application / workers must keep calling the same `internal.customerRequestRouteExecution.*` / `internal.customerRequestV2.*` paths — never bypass mutations to call module machines directly from ActionCtx.
 
 ---
 
 ## Tech Debt
 
-**Route-execution recover / mark helpers (Wave 39 gated on ADR-013):**
-- Issue: ADR-012 left recover/mark host glue out of Waves 33–34. Still host-owned: `recoverExpiredDispatch`, `markDispatched`, `recordNotReleased`, `markAccepted`, `openLeasedDispatch`.
-- Files: `convex/customerRequestRouteExecution.ts` (1178); transport worker callers in `convex/customerRequestRouteTransportWorker.ts`
-- Impact: Dispatch recovery/mark sequences remain concentrated in the host; wrong extract risks lease/outbox desync.
-- Fix approach: **ADR-013 Accepted** — Wave 39 implements `DispatchLifecyclePorts` + `convex/customerRequestRouteExecutionDispatchPorts.ts`; do not grow Journal/Cancel/Problem ports; no sibling chops.
-
-**`exportProblemForSupport` (optional thin residual):**
-- Issue: Fat support export query still lives on the route-execution host after Wave 34 problem mutations moved.
-- Files: `convex/customerRequestRouteExecution.ts` (`exportProblemForSupport`); related problem reads may still be thicker than action thinness.
-- Impact: Support export changes risk colliding with mutation deepen diffs.
-- Fix approach: Prefer thin ports adapter when under ~1k; keep Application `problem-route/` thinness (`export-support.ts`) — do not re-thicken Application actions.
-
-**Further outbox families (optional residual):**
+**Further outbox families (optional residual — Wave 43+):**
 - Issue: Wave 37 closed shared dispatch persist + thin bridge; `notificationOutbox.ts` still owns webhook ingest / retry / operator surfaces.
 - Files: `convex/notificationOutbox.ts` (1287), `convex/notificationOutboxPersistence.ts`, `convex/inquiryNotificationBridge.ts` (123)
 - Impact: Outbox host remains a merge hotspot; inquiry enqueue must stay inquiry-owned.
 - Fix approach: Next family deepen (webhook / retry) behind ports; keep inquiry enqueue/bind inquiry-owned (ADR-002); do not re-inflate bridge past thinness.
 
-**`customerRequestV2` host bulk:**
-- Issue: V2 aggregate, route-plan generation, and evaluation wiring still concentrate in one Convex host.
-- Files: `convex/customerRequestV2.ts` (1492); sibling preparation surfaces under `convex/customerRequestV2*.ts`
-- Impact: High merge conflict / review cost; accidental coupling to Application and capability-supply hosts.
-- Fix approach: Ports deepen per operation family using provide-facts pattern; leave validators in Convex; legacy retirement is a product gate (`legacyAggregateIsInternallyConsistent`, `kind: 'legacy'`).
+**`customerRequestV2` read / preparation residual:**
+- Issue: Wave 42 deepened write family only. Read projections and preparation siblings (`customerRequestV2Preparation*.ts`) remain undeepened.
+- Files: `convex/customerRequestV2.ts` (644); preparation surfaces under `convex/customerRequestV2*.ts`
+- Impact: Merge cost on reads/prep; accidental coupling to Application.
+- Fix approach: Later ADR per family; leave validators in Convex; legacy retirement is a product gate (`legacyAggregateIsInternallyConsistent`, `kind: 'legacy'`).
+
+**`readProblemForBusiness` (optional thin residual):**
+- Issue: Wave 40 thinned `exportProblemForSupport` only; business problem read may still be thicker than ideal.
+- Files: `convex/customerRequestRouteExecution.ts` (`readProblemForBusiness`)
+- Fix approach: Same ProblemPorts / support-read pattern when needed; keep Application thin.
 
 **Registry / discovery size residual:**
 - Issue: After Wave 32 `catalog-from-rows`, both hosts remain ~1.5k+ lines (validators, admission, row mapping).
@@ -159,6 +165,10 @@ Machine orchestration may call many port methods, but production durability rema
 - Files: `convex/customerRequestApplication.ts`; thinness under `tests/unit/customer-request/application/*-thinness.test.ts`
 - Impact: Large diffs on validator edits; false urge to “split Application.”
 - Fix approach: Never reopen Application deepen as a line-count project; validators stay in Convex forever (§6); deepen only when a new command family needs ports.
+
+**Inquiry dual-path parity harness (speculative):**
+- Issue: Wave 36 extraction done; parity between local and Convex paths still soft.
+- Fix approach: Verification harness, not a line-count deepen.
 
 **Dual customer surfaces (Answer Thread vs Customer Request):**
 - Issue: Public product is split across `/` (Answer Thread + registry search) and `/engine` (authenticated Customer Request), plus `/api/v1/requests` for agents. Multi-capability RoutePlans persist internally but stay below customer projection.
@@ -218,9 +228,9 @@ Machine orchestration may call many port methods, but production durability rema
 
 **Route-execution projection reads:**
 - Problem: Outcome/cancel/problem/recover paths repeatedly rebuild run projections via ports helpers such as `readRunProjection`.
-- Files: `convex/customerRequestRouteExecutionJournalPorts.ts`, host recover/mark handlers in `convex/customerRequestRouteExecution.ts`
+- Files: `convex/customerRequestRouteExecutionJournalPorts.ts`, `…DispatchPorts.ts`, related adapters
 - Cause: Integrity requires fresh projection after each patch sequence.
-- Improvement path: Keep projection assembly shared; avoid duplicate scans when deepening recover/mark; do not cache across mutations.
+- Improvement path: Keep projection assembly shared; avoid duplicate scans across port families; do not cache across mutations.
 
 **Catalog hosts still large:**
 - Problem: Registry/discovery hosts remain ~1.5k+ lines despite Wave 32 catalog-from-rows.

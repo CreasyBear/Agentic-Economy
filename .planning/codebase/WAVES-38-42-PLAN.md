@@ -1,6 +1,6 @@
 # Waves 38–42 — Residual deepen plan
 
-**Status:** In progress (Wave 38 ADR-013 Accepted)  
+**Status:** CLOSED (Waves 38–42 complete at `21964dc1`)  
 **Baseline:** map `0f7d185c` · code `3463c1d4` · Waves 23–37 **CLOSED**  
 **Stamped:** 2026-07-18  
 **Thermo:** PASS WITH RESERVATIONS — do not reopen closed hosts as line-count chops
