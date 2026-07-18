@@ -47,6 +47,7 @@ the review date if no evidence exists.
 | R-014 | ACTIVE | Inverse premortem + acceptance evidence | [ADR-010 inverse premortem](../research/2026-07-17-adr-010-inverse-premortem.md) | Defines success conditions and acceptance gates for proposed D-007 and ADR-010 | 2026-08-17 |
 | R-015 | ACTIVE | Workflow and wedge evaluation | [Workflow substitution candidate review](../research/2026-07-17-workflow-substitution-candidate-review.md) and [Product Foundry program](../research/2026-07-17-product-foundry-primitive-refinery-program.md) | Defines the eval portfolio for D-005 and the evidence required before engineering expansion | 2026-08-17 |
 | R-016 | ACTIVE | Production engineering pattern review | [Production agent execution patterns](../research/2026-07-17-production-agent-execution-patterns.md) | Selects the Action Invocation architecture under evaluation for D-006, D-007, ADR-009 and ADR-010 | 2026-08-17 |
+| R-017 | ACTIVE | Post-deepening source ownership and partial-entry constraint map | [Post-deepening partial-entry source rebaseline](../research/2026-07-18-post-deepening-partial-entry-source-rebaseline.md) | Revalidates D-006/D-007 against source after ADR-011–018; blocks the old Phase 1/2 execute lists until a selected task, second real caller, threat model, and two-caller vertical tracer earn a shared seam | 2026-08-17 |
 
 ## Open decisions
 
