@@ -22,6 +22,29 @@ export type CancelReplayKind = 'replayed' | 'pending' | 'too_late'
 
 export type RecoverExpiredDispatchKind = 'requeued' | 'outcome_unknown' | 'unchanged'
 
+export type SucceededOutcomeBranch =
+  | 'pending_cancellation_replay'
+  | 'too_late_cancellation'
+  | 'complete_final_step'
+  | 'advance_or_unknown'
+
+export function decideSucceededOutcomeBranch(input: Readonly<{
+  attemptPosition: number
+  totalSteps: number
+  cancellationResult: string | null | undefined
+}>): SucceededOutcomeBranch {
+  if (input.attemptPosition < input.totalSteps && input.cancellationResult === 'pending') {
+    return 'pending_cancellation_replay'
+  }
+  if (input.attemptPosition < input.totalSteps && input.cancellationResult === 'too_late') {
+    return 'too_late_cancellation'
+  }
+  if (input.attemptPosition === input.totalSteps) {
+    return 'complete_final_step'
+  }
+  return 'advance_or_unknown'
+}
+
 export function cancelCommandArgsConflict(args: Readonly<{
   idempotencyKey: string
   principalId: string

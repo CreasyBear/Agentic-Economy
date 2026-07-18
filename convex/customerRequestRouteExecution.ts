@@ -20,14 +20,14 @@ import {
   leaseNextDispatch as leaseNextDispatchMachine,
   openCancellationAttempt as openCancellationAttemptMachine,
   recordOutcome as recordOutcomeMachine,
+  recordProblemBusinessReport as recordProblemBusinessReportMachine,
+  replyProblem as replyProblemMachine,
+  reportProblem as reportProblemMachine,
   resolveCancellationAttempt as resolveCancellationAttemptMachine,
   startOrResume as startOrResumeMachine,
+  updateProblemStatus as updateProblemStatusMachine,
 } from '@/modules/customer-request/route-execution/machines'
 import {
-  decideBusinessProblemClaim,
-  decideCustomerProblemReply,
-  decideCustomerProblemReport,
-  decideSupportProblemStatus,
   projectBusinessProblem,
   projectSupportProblemExport,
 } from '@/modules/customer-request/route-execution/problem-support'
@@ -53,6 +53,9 @@ import {
   markUnknownOutcome,
   readRunProjection as readRunProjectionPorts,
 } from './customerRequestRouteExecutionJournalPorts'
+import {
+  problemMutationPorts,
+} from './customerRequestRouteExecutionProblemPorts'
 import { runtimeDb } from './source_state'
 
 const startCommand = v.object({
@@ -542,94 +545,9 @@ export const reportProblem = internalMutation({
       reason: v.union(v.literal('request_not_found'), v.literal('evidence_not_found')),
     }),
   ),
-  handler: async (ctx, args) => {
-    const head = await ctx.db.query('customerRequestRouteRunHeads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head === null || head.principalId !== args.principalId
-      || args.idempotencyKey.trim().length === 0 || args.summary.trim().length === 0 || args.summary.length > 1_000) {
-      return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    }
-    const commandKey = `route-problem:v1:${canonicalDigest({
-      principalId: args.principalId, requestId: args.requestId, idempotencyKey: args.idempotencyKey,
-    })}`
-    const prior = await ctx.db.query('customerRequestRouteProblemReports')
-      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    if (prior !== null) {
-      const decision = decideCustomerProblemReport({ args, head, prior, now: Date.now() })
-      if (decision.kind === 'reported' || decision.kind === 'replayed') {
-        return {
-          kind: decision.kind,
-          reportRef: decision.reportRef,
-          reportedAt: decision.reportedAt,
-          affected: {
-            step: decision.affected.step,
-            ...(decision.affected.attemptRef === undefined
-              ? {}
-              : { attemptRef: decision.affected.attemptRef }),
-            ...(decision.affected.business === undefined
-              ? {}
-              : { business: decision.affected.business }),
-          },
-          visibility: decision.visibility,
-          evidence: decision.evidence.map((item) => ({
-            receiptRef: item.receiptRef,
-            label: item.label,
-          })),
-        }
-      }
-      if (decision.kind === 'conflict' || decision.kind === 'refused') {
-        return decision
-      }
-      throw new Error('customer_request_route_problem_integrity_failure')
-    }
-    const run = await ctx.db.query('customerRequestRouteRuns')
-      .withIndex('by_runRef', (query) => query.eq('runRef', head.currentRunRef)).unique()
-    if (run === null || run.principalId !== args.principalId) {
-      return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    }
-    const affectedStep = args.affectedStep ?? run.currentPosition
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_runRef_and_position', (query) => (
-        query.eq('runRef', run.runRef).eq('position', affectedStep)
-      )).unique()
-    if (attempt === null || !routeAttemptIntegrityValid(attempt)) {
-      return { kind: 'refused' as const, reason: 'evidence_not_found' as const }
-    }
-    const decision = decideCustomerProblemReport({
-      args, head, prior: null, run, attempt, now: Date.now(),
-    })
-    if (decision.kind === 'append') {
-      const { businessName, evidenceReceiptRefs, ...record } = decision.record
-      await ctx.db.insert('customerRequestRouteProblemReports', {
-        ...record,
-        evidenceReceiptRefs: [...evidenceReceiptRefs],
-        ...(businessName === undefined ? {} : { businessName }),
-      })
-      return {
-        kind: decision.result.kind,
-        reportRef: decision.result.reportRef,
-        reportedAt: decision.result.reportedAt,
-        affected: {
-          step: decision.result.affected.step,
-          ...(decision.result.affected.attemptRef === undefined
-            ? {}
-            : { attemptRef: decision.result.affected.attemptRef }),
-          ...(decision.result.affected.business === undefined
-            ? {}
-            : { business: decision.result.affected.business }),
-        },
-        visibility: decision.result.visibility,
-        evidence: decision.result.evidence.map((item) => ({
-          receiptRef: item.receiptRef,
-          label: item.label,
-        })),
-      }
-    }
-    if (decision.kind === 'conflict' || decision.kind === 'refused') {
-      return decision
-    }
-    throw new Error('customer_request_route_problem_integrity_failure')
-  },
+  handler: async (ctx, args) => (
+    await reportProblemMachine(args, problemMutationPorts(ctx))
+  ),
 })
 
 const businessCausalityPosition = v.union(
@@ -767,71 +685,11 @@ export const recordProblemBusinessReport = internalMutation({
     evidenceReceiptRefs: v.array(v.string()),
   },
   returns: businessProblemReportResult,
-  handler: async (ctx, args): Promise<Infer<typeof businessProblemReportResult>> => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
-    const report = await ctx.db.query('customerRequestRouteProblemReports')
-      .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
-    if (report === null || report.attemptRef === undefined) {
-      return { kind: 'refused', reason: 'report_not_found' }
-    }
-    if ((report.visibility ?? 'customer_and_ae_only') !== 'share_with_affected_business') {
-      return { kind: 'refused', reason: 'sharing_not_authorized' }
-    }
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', report.attemptRef!)).unique()
-    if (attempt === null || attempt.requestId !== report.requestId || attempt.position !== report.step
-      || !routeAttemptIntegrityValid(attempt)) {
-      throw new Error('customer_request_route_problem_attempt_integrity_failure')
-    }
-    const business = await ctx.db.get(attempt.grant.step.businessId as Id<'businesses'>)
-    const owner = business === null ? null : await ctx.db.get(business.ownerId)
-    if (business === null || owner === null || owner.clerkUserId !== identity.subject) {
-      return { kind: 'refused', reason: 'authority_denied' }
-    }
-    const commandKey = `route-problem-business-report:v1:${canonicalDigest({
-      reportRef: args.reportRef,
-      businessId: String(business._id),
-      idempotencyKey: args.idempotencyKey,
-    })}`
-    const prior = await ctx.db.query('customerRequestRouteProblemBusinessReports')
-      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    const decision = decideBusinessProblemClaim({
-      args,
-      report,
-      attempt,
-      business: { id: String(business._id), name: business.name },
-      actorRef: identity.tokenIdentifier,
-      prior,
-      now: Date.now(),
-    })
-    if (decision.kind === 'append') {
-      await ctx.db.insert('customerRequestRouteProblemBusinessReports', {
-        ...decision.record,
-        evidenceReceiptRefs: [...decision.record.evidenceReceiptRefs],
-      })
-      return {
-        ...decision.result,
-        evidence: decision.result.evidence.map((item) => ({
-          receiptRef: item.receiptRef,
-          label: item.label,
-        })),
-      }
-    }
-    if (decision.kind === 'recorded' || decision.kind === 'replayed') {
-      return {
-        ...decision,
-        evidence: decision.evidence.map((item) => ({
-          receiptRef: item.receiptRef,
-          label: item.label,
-        })),
-      }
-    }
-    if (decision.kind === 'conflict' || decision.kind === 'refused') {
-      return decision
-    }
-    throw new Error('customer_request_route_problem_business_report_integrity_failure')
-  },
+  handler: async (ctx, args): Promise<Infer<typeof businessProblemReportResult>> => (
+    await recordProblemBusinessReportMachine(args, problemMutationPorts(ctx)) as Infer<
+      typeof businessProblemReportResult
+    >
+  ),
 })
 
 const problemUpdateState = v.union(
@@ -869,56 +727,11 @@ export const updateProblemStatus = internalMutation({
     publicMessage: v.string(),
   },
   returns: problemUpdateResult,
-  handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => {
-    const authority = await resolveAdminAuthority(
-      { db: runtimeDb(ctx.db), auth: ctx.auth },
-      'annotate_triage',
-    )
-    if (authority.kind === 'denied') {
-      return {
-        kind: 'refused',
-        reason: authority.reason === 'missing_membership'
-          ? 'authentication_required'
-          : 'authority_denied',
-      }
-    }
-    const report = await ctx.db.query('customerRequestRouteProblemReports')
-      .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
-    if (report === null) return { kind: 'refused', reason: 'report_not_found' }
-    const commandKey = `route-problem-update:v1:${canonicalDigest({
-      reportRef: args.reportRef,
-      actorRef: authority.membership.clerkUserId,
-      idempotencyKey: args.idempotencyKey,
-    })}`
-    const prior = await ctx.db.query('customerRequestRouteProblemUpdates')
-      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    if (prior !== null) {
-      const decision = decideSupportProblemStatus({
-        args,
-        actorRef: authority.membership.clerkUserId,
-        updates: [],
-        prior,
-        now: Date.now(),
-      })
-      if (decision.kind === 'append') {
-        throw new Error('customer_request_route_problem_update_integrity_failure')
-      }
-      return decision
-    }
-    const updates = await loadProblemUpdates(evidenceLoadPorts(ctx), args.reportRef)
-    const decision = decideSupportProblemStatus({
-      args,
-      actorRef: authority.membership.clerkUserId,
-      updates,
-      prior: null,
-      now: Date.now(),
-    })
-    if (decision.kind === 'append') {
-      await ctx.db.insert('customerRequestRouteProblemUpdates', { ...decision.record })
-      return decision.result
-    }
-    return decision
-  },
+  handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => (
+    await updateProblemStatusMachine(args, problemMutationPorts(ctx)) as Infer<
+      typeof problemUpdateResult
+    >
+  ),
 })
 
 export const replyProblem = internalMutation({
@@ -931,44 +744,9 @@ export const replyProblem = internalMutation({
     message: v.string(),
   },
   returns: problemUpdateResult,
-  handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => {
-    const report = await ctx.db.query('customerRequestRouteProblemReports')
-      .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
-    if (report === null || report.requestId !== args.requestId || report.principalId !== args.principalId) {
-      return { kind: 'refused', reason: 'report_not_found' }
-    }
-    const commandKey = `route-problem-reply:v1:${canonicalDigest({
-      reportRef: args.reportRef,
-      principalId: args.principalId,
-      idempotencyKey: args.idempotencyKey,
-    })}`
-    const prior = await ctx.db.query('customerRequestRouteProblemUpdates')
-      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    if (prior !== null) {
-      const decision = decideCustomerProblemReply({
-        args,
-        updates: [],
-        prior,
-        now: Date.now(),
-      })
-      if (decision.kind === 'append') {
-        throw new Error('customer_request_route_problem_update_integrity_failure')
-      }
-      return decision
-    }
-    const updates = await loadProblemUpdates(evidenceLoadPorts(ctx), args.reportRef)
-    const decision = decideCustomerProblemReply({
-      args,
-      updates,
-      prior: null,
-      now: Date.now(),
-    })
-    if (decision.kind === 'append') {
-      await ctx.db.insert('customerRequestRouteProblemUpdates', { ...decision.record })
-      return decision.result
-    }
-    return decision
-  },
+  handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => (
+    await replyProblemMachine(args, problemMutationPorts(ctx)) as Infer<typeof problemUpdateResult>
+  ),
 })
 
 export const listProblemsForSupport = internalQuery({

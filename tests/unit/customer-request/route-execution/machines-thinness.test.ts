@@ -7,6 +7,10 @@ const machinesRoot = 'src/modules/customer-request/route-execution/machines'
 const journalRoot = 'src/modules/customer-request/route-execution/journal'
 const journalPortsSource = readFileSync('convex/customerRequestRouteExecutionJournalPorts.ts', 'utf8')
 const cancelPortsSource = readFileSync('convex/customerRequestRouteExecutionCancelPorts.ts', 'utf8')
+const problemPortsSource = readFileSync(
+  'convex/customerRequestRouteExecutionProblemPorts.ts',
+  'utf8',
+)
 const hostSource = readFileSync('convex/customerRequestRouteExecution.ts', 'utf8')
 
 const machineFiles = [
@@ -17,6 +21,11 @@ const machineFiles = [
   'cancel-open-attempt.ts',
   'cancel-resolve-attempt.ts',
   'cancel-ports.ts',
+  'problem-report.ts',
+  'problem-business-report.ts',
+  'problem-update-status.ts',
+  'problem-reply.ts',
+  'problem-ports.ts',
   'ports.ts',
   'types.ts',
   'index.ts',
@@ -36,6 +45,11 @@ describe('customer-request route-execution machines thinness', () => {
     expect(index).toContain('resolveCancellationAttempt')
     expect(index).toContain('JournalMutationPorts')
     expect(index).toContain('CancelMutationPorts')
+    expect(index).toContain('ProblemMutationPorts')
+    expect(index).toContain('reportProblem')
+    expect(index).toContain('recordProblemBusinessReport')
+    expect(index).toContain('updateProblemStatus')
+    expect(index).toContain('replyProblem')
   })
 
   it('keeps machines free of Convex runtime; effects only via ports', () => {
@@ -67,6 +81,17 @@ describe('customer-request route-execution machines thinness', () => {
     for (const source of [cancelCurrent, cancelOpen, cancelResolve]) {
       expect(source).toContain('ports.')
     }
+    const problemReport = readFileSync(join(machinesRoot, 'problem-report.ts'), 'utf8')
+    const problemBusiness = readFileSync(join(machinesRoot, 'problem-business-report.ts'), 'utf8')
+    const problemUpdate = readFileSync(join(machinesRoot, 'problem-update-status.ts'), 'utf8')
+    const problemReply = readFileSync(join(machinesRoot, 'problem-reply.ts'), 'utf8')
+    expect(problemReport).toContain('ProblemMutationPorts')
+    expect(problemBusiness).toContain('ProblemMutationPorts')
+    expect(problemUpdate).toContain('ProblemMutationPorts')
+    expect(problemReply).toContain('ProblemMutationPorts')
+    for (const source of [problemReport, problemBusiness, problemUpdate, problemReply]) {
+      expect(source).toContain('ports.')
+    }
   })
 
   it('forbids WritePlan DTOs in machines and journal', () => {
@@ -84,19 +109,23 @@ describe('customer-request route-execution machines thinness', () => {
       expect(source).not.toMatch(/route-execution\/machines/)
       expect(source).not.toMatch(/JournalMutationPorts/)
       expect(source).not.toMatch(/CancelMutationPorts/)
+      expect(source).not.toMatch(/ProblemMutationPorts/)
       expect(source).not.toMatch(/from\s+['"]\.\.\/machines/)
     }
   })
 
-  it('wires host through journal and cancel ports without sibling hosts', () => {
+  it('wires host through journal, cancel, and problem ports without sibling hosts', () => {
     expect(hostSource).toContain('journalMutationPorts(ctx)')
     expect(hostSource).toContain('cancelMutationPorts(ctx)')
     expect(hostSource).toContain('cancelOpenPorts(ctx)')
+    expect(hostSource).toContain('problemMutationPorts(ctx)')
     expect(journalPortsSource).toContain('export function journalMutationPorts')
     expect(cancelPortsSource).toContain('export function cancelMutationPorts')
     expect(cancelPortsSource).toContain('export function cancelOpenPorts')
+    expect(problemPortsSource).toContain('export function problemMutationPorts')
     expect(journalPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     expect(cancelPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
+    expect(problemPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     for (const forbidden of [
       'convex/customerRequestRouteExecutionStart.ts',
       'convex/customerRequestRouteExecutionLease.ts',

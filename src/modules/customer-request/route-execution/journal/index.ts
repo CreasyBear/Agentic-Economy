@@ -35,6 +35,7 @@ export {
   cancelReplayKind,
   cancelRunHeadIntegrityValid,
   cancelRunNotFound,
+  decideSucceededOutcomeBranch,
   leaseArgsInvalid,
   leaseGrantExpired,
   leasePendingCandidateValid,
@@ -46,4 +47,5 @@ export {
   type CancelOutboxState,
   type CancelReplayKind,
   type RecoverExpiredDispatchKind,
+  type SucceededOutcomeBranch,
 } from './decisions'

@@ -13,6 +13,7 @@ import {
   type DispatchRecordSnapshot,
   type JournalMutationPorts,
   type LeaseResult,
+  type OutcomeResult,
   type RunProjection,
   type RunRecordSnapshot,
   type StepAdmissionResult,
@@ -21,6 +22,7 @@ import type { RouteStepGrant } from '@/modules/customer-request/route-mandate-ad
 import {
   routeAttemptIntegrityValid,
   routeRunIdentityDigest,
+  decideSucceededOutcomeBranch,
 } from '@/modules/customer-request/route-execution/journal'
 
 import type { Doc, Id } from './_generated/dataModel'
@@ -357,63 +359,40 @@ export function journalMutationPorts(ctx: MutationCtx): JournalMutationPorts {
     commitSucceededOutcome: async (input) => {
       const attempt = await requireAttempt(ctx, input.attemptRef)
       const run = await requireRun(ctx, input.runRef)
-      await ctx.db.patch(attempt._id, {
-        state: 'succeeded',
-        outputJson: JSON.stringify(input.validated.output),
-        outputDigest: canonicalDigest(input.validated.output),
-        evidence: [...input.validated.evidence],
-        ...input.observationPatch,
-        updatedAt: input.now,
-      })
+      await persistSucceededAttempt(ctx, attempt, input)
       const cancellation = await ctx.db.query('customerRequestRouteCancellationCommands')
         .withIndex('by_runRef_and_committedAt', (query) => query.eq('runRef', run.runRef))
         .order('desc')
         .first()
-      if (attempt.position < run.totalSteps && cancellation?.result === 'pending') {
-        await ctx.db.patch(run._id, {
-          completedSteps: attempt.position,
-          currentPosition: attempt.position,
-          updatedAt: input.now,
-        })
-        const pendingCancellation = await readRunProjection(ctx, run.runRef)
-        if (pendingCancellation === null) {
-          throw new Error('customer_request_route_run_integrity_failure')
+      const branch = decideSucceededOutcomeBranch({
+        attemptPosition: attempt.position,
+        totalSteps: run.totalSteps,
+        cancellationResult: cancellation?.result,
+      })
+      switch (branch) {
+        case 'pending_cancellation_replay':
+          return await applyPendingCancellationReplay(ctx, run, attempt.position, input.now)
+        case 'too_late_cancellation':
+          return await applyTooLateCancellation(ctx, run, attempt.position, input.now)
+        case 'complete_final_step':
+          return await completeRunOnFinalStep(ctx, run, input.validated.output, input.now)
+        case 'advance_or_unknown': {
+          const next = await queueNextStep(ctx, run, attempt.position + 1, input.now)
+          if (!next) {
+            await markUnknownOutcome(ctx, run, attempt, input.now)
+            const unknown = await readRunProjection(ctx, run.runRef)
+            if (unknown === null) throw new Error('customer_request_route_run_integrity_failure')
+            return { kind: 'outcome_unknown', run: unknown }
+          }
+          const advanced = await readRunProjection(ctx, run.runRef)
+          if (advanced === null) throw new Error('customer_request_route_run_integrity_failure')
+          return { kind: 'advanced', run: advanced }
         }
-        return { kind: 'replayed', run: pendingCancellation }
+        default: {
+          const _exhaustive: never = branch
+          return _exhaustive
+        }
       }
-      if (attempt.position < run.totalSteps && cancellation?.result === 'too_late') {
-        await ctx.db.patch(run._id, {
-          state: 'cancelled',
-          completedSteps: attempt.position,
-          currentPosition: attempt.position,
-          updatedAt: input.now,
-        })
-        const cancelled = await readRunProjection(ctx, run.runRef)
-        if (cancelled === null) throw new Error('customer_request_route_run_integrity_failure')
-        return { kind: 'cancelled', run: cancelled }
-      }
-      if (attempt.position === run.totalSteps) {
-        await ctx.db.patch(run._id, {
-          state: 'completed',
-          completedSteps: run.totalSteps,
-          resultJson: JSON.stringify(input.validated.output),
-          resultDigest: canonicalDigest(input.validated.output),
-          updatedAt: input.now,
-        })
-        const completed = await readRunProjection(ctx, run.runRef)
-        if (completed === null) throw new Error('customer_request_route_run_integrity_failure')
-        return { kind: 'completed', run: completed }
-      }
-      const next = await queueNextStep(ctx, run, attempt.position + 1, input.now)
-      if (!next) {
-        await markUnknownOutcome(ctx, run, attempt, input.now)
-        const unknown = await readRunProjection(ctx, run.runRef)
-        if (unknown === null) throw new Error('customer_request_route_run_integrity_failure')
-        return { kind: 'outcome_unknown', run: unknown }
-      }
-      const advanced = await readRunProjection(ctx, run.runRef)
-      if (advanced === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'advanced', run: advanced }
     },
 
     loadSucceededReplay: async (input) => {
@@ -425,6 +404,89 @@ export function journalMutationPorts(ctx: MutationCtx): JournalMutationPorts {
       }
     },
   }
+}
+
+export async function persistSucceededAttempt(
+  ctx: MutationCtx,
+  attempt: Doc<'customerRequestRouteStepAttempts'>,
+  input: Readonly<{
+    now: number
+    validated: Readonly<{
+      output: JsonValue
+      evidence: readonly Readonly<{
+        evidenceId: string
+        outputPointer: string
+        schemaIdentity: string
+        valueDigest: string
+      }>[]
+    }>
+    observationPatch: Readonly<{
+      transportObservationJson?: string
+      transportObservationDigest?: string
+    }>
+  }>,
+): Promise<void> {
+  await ctx.db.patch(attempt._id, {
+    state: 'succeeded',
+    outputJson: JSON.stringify(input.validated.output),
+    outputDigest: canonicalDigest(input.validated.output),
+    evidence: [...input.validated.evidence],
+    ...input.observationPatch,
+    updatedAt: input.now,
+  })
+}
+
+export async function applyPendingCancellationReplay(
+  ctx: MutationCtx,
+  run: Doc<'customerRequestRouteRuns'>,
+  attemptPosition: number,
+  now: number,
+): Promise<OutcomeResult> {
+  await ctx.db.patch(run._id, {
+    completedSteps: attemptPosition,
+    currentPosition: attemptPosition,
+    updatedAt: now,
+  })
+  const pendingCancellation = await readRunProjection(ctx, run.runRef)
+  if (pendingCancellation === null) {
+    throw new Error('customer_request_route_run_integrity_failure')
+  }
+  return { kind: 'replayed', run: pendingCancellation }
+}
+
+export async function applyTooLateCancellation(
+  ctx: MutationCtx,
+  run: Doc<'customerRequestRouteRuns'>,
+  attemptPosition: number,
+  now: number,
+): Promise<OutcomeResult> {
+  await ctx.db.patch(run._id, {
+    state: 'cancelled',
+    completedSteps: attemptPosition,
+    currentPosition: attemptPosition,
+    updatedAt: now,
+  })
+  const cancelled = await readRunProjection(ctx, run.runRef)
+  if (cancelled === null) throw new Error('customer_request_route_run_integrity_failure')
+  return { kind: 'cancelled', run: cancelled }
+}
+
+export async function completeRunOnFinalStep(
+  ctx: MutationCtx,
+  run: Doc<'customerRequestRouteRuns'>,
+  output: JsonValue,
+  now: number,
+): Promise<OutcomeResult> {
+  await ctx.db.patch(run._id, {
+    state: 'completed',
+    completedSteps: run.totalSteps,
+    resultJson: JSON.stringify(output),
+    resultDigest: canonicalDigest(output),
+    updatedAt: now,
+  })
+  const completed = await readRunProjection(ctx, run.runRef)
+  if (completed === null) throw new Error('customer_request_route_run_integrity_failure')
+  return { kind: 'completed', run: completed }
 }
 
 export async function readRunProjection(

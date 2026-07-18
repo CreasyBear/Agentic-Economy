@@ -6,6 +6,10 @@ import { describe, expect, it } from 'vitest'
 const convexHost = readFileSync('convex/customerRequestRouteExecution.ts', 'utf8')
 const journalPortsSource = readFileSync('convex/customerRequestRouteExecutionJournalPorts.ts', 'utf8')
 const cancelPortsSource = readFileSync('convex/customerRequestRouteExecutionCancelPorts.ts', 'utf8')
+const problemPortsSource = readFileSync(
+  'convex/customerRequestRouteExecutionProblemPorts.ts',
+  'utf8',
+)
 const moduleRoot = 'src/modules/customer-request/route-execution/journal'
 const machinesRoot = 'src/modules/customer-request/route-execution/machines'
 
@@ -104,9 +108,10 @@ describe('customer-request route-execution journal thinness', () => {
       .toContain('cancelMutationPorts(ctx)')
   })
 
-  it('does not invent Convex Start/Lease/Outcome/Cancel sibling hosts', () => {
+  it('does not invent Convex Start/Lease/Outcome/Cancel/Problem sibling hosts', () => {
     expect(statSync('convex/customerRequestRouteExecutionJournalPorts.ts').isFile()).toBe(true)
     expect(statSync('convex/customerRequestRouteExecutionCancelPorts.ts').isFile()).toBe(true)
+    expect(statSync('convex/customerRequestRouteExecutionProblemPorts.ts').isFile()).toBe(true)
     for (const forbidden of [
       'convex/customerRequestRouteExecutionStart.ts',
       'convex/customerRequestRouteExecutionLease.ts',
@@ -152,6 +157,7 @@ describe('customer-request route-execution journal thinness', () => {
       expect(source).not.toMatch(/\bpatches:\s*\[/)
       expect(source).not.toMatch(/JournalMutationPorts/)
       expect(source).not.toMatch(/CancelMutationPorts/)
+      expect(source).not.toMatch(/ProblemMutationPorts/)
       expect(source).not.toMatch(/startOrResume/)
     }
   })
@@ -170,15 +176,24 @@ describe('customer-request route-execution journal thinness', () => {
     expect(convexHost).not.toContain('Result evidence')
   })
 
-  it('keeps journal and cancel mutation ports factories under 1000 lines', () => {
+  it('keeps journal, cancel, and problem mutation ports factories under 1000 lines', () => {
     expect(journalPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     expect(cancelPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
+    expect(problemPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     expect(journalPortsSource).toContain('export function journalMutationPorts')
     expect(cancelPortsSource).toContain('export function cancelMutationPorts')
+    expect(problemPortsSource).toContain('export function problemMutationPorts')
+    expect(journalPortsSource).toContain('persistSucceededAttempt')
+    expect(journalPortsSource).toContain('applyPendingCancellationReplay')
+    expect(journalPortsSource).toContain('applyTooLateCancellation')
+    expect(journalPortsSource).toContain('completeRunOnFinalStep')
+    expect(journalPortsSource).toContain('decideSucceededOutcomeBranch')
     expect(journalPortsSource).not.toMatch(/\bWritePlan\b/)
     expect(journalPortsSource).not.toMatch(/\bintendedPatches\b/)
     expect(cancelPortsSource).not.toMatch(/\bWritePlan\b/)
     expect(cancelPortsSource).not.toMatch(/\bintendedPatches\b/)
+    expect(problemPortsSource).not.toMatch(/\bWritePlan\b/)
+    expect(problemPortsSource).not.toMatch(/\bintendedPatches\b/)
   })
 
   it('keeps machines free of Convex runtime and write-plan DTOs', () => {
