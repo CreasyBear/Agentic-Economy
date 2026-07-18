@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
 const internalRoot = 'src/modules/capability-supply/internal'
-const movedFolders = ['offering', 'binding', 'eligibility', 'quarantine', 'publication', 'shared', 'operation-ledger'] as const
+const movedFolders = ['offering', 'binding', 'eligibility', 'quarantine', 'publication', 'shared', 'operation-ledger', 'graph'] as const
 
 const movedSymbols = [
   'desiredEligibility',
@@ -53,13 +53,14 @@ describe('capability-supply convex host thinness', () => {
     expect(convexHost).toContain("from '@/modules/capability-supply/internal/publication'")
     expect(convexHost).toContain("from '@/modules/capability-supply/internal/shared'")
     expect(convexHost).toContain("from '@/modules/capability-supply/internal/operation-ledger'")
+    expect(convexHost).toContain("from '@/modules/capability-supply/internal/graph'")
     for (const symbol of [
       'publicationLifecycle',
       'bindingObservedRowDigest',
-      'offeringIntegrityIsValid',
       'publishCapabilityCommand',
       'refreshCapabilityCommand',
       'registerCapabilityOfferingWrite',
+      'queryCapabilityGraphFromModule',
     ]) {
       expect(convexHost).toContain(symbol)
     }

@@ -2,21 +2,21 @@ import type { Infer } from 'convex/values'
 import { v } from 'convex/values'
 
 import {
-  bindingIntegrityIsValid,
   registerCapabilityTransportBinding as registerCapabilityTransportBindingWrite,
 } from '@/modules/capability-supply/internal/binding'
 import {
-  bindingEligibilityIsValid,
   getEligibleExactCapabilitySupply as getEligibleExactCapabilitySupplyFromModule,
   listEligibleCapabilitySupply as listEligibleCapabilitySupplyFromModule,
-  MAX_ELIGIBLE_SUPPLY,
-  offeringEligibilityIsValid,
   setCapabilitySupplyEligibility as setCapabilitySupplyEligibilityWrite,
   type EligibilityInput,
 } from '@/modules/capability-supply/internal/eligibility'
 import {
+  queryCapabilityGraph as queryCapabilityGraphFromModule,
+  readCapabilityProbeTarget as readCapabilityProbeTargetFromModule,
+  recordCapabilityProbeResult as recordCapabilityProbeResultFromModule,
+} from '@/modules/capability-supply/internal/graph'
+import {
   contractRefFromRow,
-  offeringIntegrityIsValid,
   registerCapabilityOffering as registerCapabilityOfferingWrite,
 } from '@/modules/capability-supply/internal/offering'
 import {
@@ -37,23 +37,16 @@ import {
   bindingObservedRowDigest,
 } from '@/modules/capability-supply/internal/quarantine'
 import {
-  MAX_CONTEXT_VALUE_LENGTH,
-  boundedTrimmed,
   validRegistrationContext,
   type RegistrationContext,
   type SupplyCommandActor,
 } from '@/modules/capability-supply/internal/shared'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { type StableHashValue } from '@/modules/common/stable-hash'
 
-import type { Doc, Id } from './_generated/dataModel'
+import type { Id } from './_generated/dataModel'
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
-import {
-  getActiveExactCapabilityContract,
-  getExactRegisteredCapabilityContract,
-} from './capabilityContractDocuments'
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
+import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
 import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
@@ -468,24 +461,6 @@ const probeOutcomeValue = v.union(
   v.literal('response_too_large'), v.literal('response_invalid'),
 )
 
-function probeTargetDigest(
-  publication: Doc<'capabilityPublications'>,
-  offering: Doc<'capabilityOfferings'>,
-  binding: Doc<'capabilityTransportBindings'>,
-) {
-  return canonicalDigest({
-    publicationRef: publication.publicationRef, revision: publication.revision,
-    bindingId: binding.bindingId, capabilityId: publication.capabilityId,
-    endpointUrl: binding.endpointUrl, credentialRef: binding.credentialRef,
-    adapterId: binding.adapterId, configDigest: binding.configDigest,
-    offeringRegistrationHash: offering.registrationHash, offeringEligibilityHash: offering.eligibilityHash,
-    offeringStatus: offering.status, bindingRegistrationHash: binding.registrationHash,
-    bindingEligibilityHash: binding.eligibilityHash, bindingAdmission: binding.admission,
-    bindingConformance: binding.conformance, businessId: publication.businessId,
-    contractDigest: publication.contractDigest,
-  })
-}
-
 export const readCapabilityProbeTarget = internalQuery({
   args: { publicationRef: v.string(), expectedRevision: v.number() },
   returns: v.union(
@@ -500,33 +475,9 @@ export const readCapabilityProbeTarget = internalQuery({
       }),
     }),
   ),
-  handler: async (ctx, args) => {
-    const publication = await ctx.db.query('capabilityPublications')
-      .withIndex('by_publicationRef_and_revision', (q) => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
-    if (publication === null || publication.disposition !== 'current') return { kind: 'unavailable' as const }
-    const [offering, binding, business, contract] = await Promise.all([
-      ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', publication.offeringId)).unique(),
-      ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique(),
-      publishedBusiness(ctx.db, publication.businessId),
-      getActiveExactCapabilityContract(ctx.db, contractRefFromRow(publication)),
-    ])
-    if (offering === null || binding === null || business === null || contract.kind !== 'found'
-      || offering.status !== 'active' || binding.admission !== 'admitted' || binding.conformance !== 'conformant'
-      || !offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)
-      || offering.offeringId !== publication.offeringId || binding.offeringId !== offering.offeringId) {
-      return { kind: 'unavailable' as const }
-    }
-    return { kind: 'available' as const, target: {
-      publicationRef: publication.publicationRef, revision: publication.revision,
-      bindingId: binding.bindingId, capabilityId: publication.capabilityId,
-      endpointUrl: binding.endpointUrl, credentialRef: binding.credentialRef,
-      adapterId: binding.adapterId,
-      probeKind: publication.sourceKind === 'mcp' ? 'mcp' as const
-        : publication.sourceKind === 'openapi_http' ? 'openapi_http' as const
-        : publication.sourceKind === 'x402' ? 'x402' as const : 'ae_quote' as const,
-      targetDigest: probeTargetDigest(publication, offering, binding),
-    } }
-  },
+  handler: async (ctx, args) => (
+    await readCapabilityProbeTargetFromModule(capabilitySupplyGraphPorts(ctx.db), args)
+  ),
 })
 
 export const recordCapabilityProbeResult = internalMutation({
@@ -538,34 +489,9 @@ export const recordCapabilityProbeResult = internalMutation({
       reason: v.union(v.literal('revision_changed'), v.literal('target_changed')),
     }),
   ),
-  handler: async (ctx, args) => {
-    const publication = await ctx.db.query('capabilityPublications')
-      .withIndex('by_publicationRef_and_revision', (q) => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
-    if (publication === null || publication.disposition !== 'current') return { kind: 'refused' as const, reason: 'revision_changed' as const }
-    const [binding, offering, business, contract] = await Promise.all([
-      ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique(),
-      ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', publication.offeringId)).unique(),
-      publishedBusiness(ctx.db, publication.businessId),
-      getActiveExactCapabilityContract(ctx.db, contractRefFromRow(publication)),
-    ])
-    if (binding === null || offering === null || business === null || contract.kind !== 'found'
-      || offering.status !== 'active' || binding.admission !== 'admitted' || binding.conformance !== 'conformant'
-      || !offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)
-      || probeTargetDigest(publication, offering, binding) !== args.targetDigest) {
-      return { kind: 'refused' as const, reason: 'target_changed' as const }
-    }
-    const now = Date.now()
-    const healthy = args.outcome === 'healthy'
-    const credentialState = args.outcome === 'credential_unavailable' || args.outcome === 'credential_rejected' ? 'unavailable' as const : 'ready' as const
-    const healthState = healthy ? 'healthy' as const : 'unhealthy' as const
-    const validUntil = now + (healthy ? 5 * 60_000 : 60_000)
-    await ctx.db.patch(publication._id, {
-      credentialState, healthState, readinessObservedAt: now, readinessValidUntil: validUntil,
-      readinessEvidenceRefs: [`probe:${args.outcome}`], updatedAt: now,
-    })
-    return { kind: 'observed' as const, publicationRef: publication.publicationRef, revision: publication.revision,
-      lifecycle: publicationLifecycle({ ...publication, credentialState, healthState, readinessObservedAt: now, readinessValidUntil: validUntil }, offering, binding, now) }
-  },
+  handler: async (ctx, args) => (
+    await recordCapabilityProbeResultFromModule(capabilitySupplyGraphPorts(ctx.db), args)
+  ),
 })
 
 export const withdrawCapability = mutation({
@@ -649,10 +575,6 @@ export const queryCapabilityGraph = query({
   args: { networkId: v.string(), includeInactive: v.boolean(), limit: v.number() },
   returns: capabilityGraphResultValue,
   handler: async (ctx, args) => {
-    if (!boundedTrimmed(args.networkId, MAX_CONTEXT_VALUE_LENGTH)
-      || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > MAX_ELIGIBLE_SUPPLY) {
-      return { kind: 'unavailable' as const, reason: 'query_invalid' as const }
-    }
     if (args.includeInactive) {
       const authority = await resolveAdminAuthority(
         { db: ctx.db as never, auth: ctx.auth }, 'register_capability_supply',
@@ -661,98 +583,7 @@ export const queryCapabilityGraph = query({
         return { kind: 'unavailable' as const, reason: 'authorization_denied' as const }
       }
     }
-    const publications = await ctx.db.query('capabilityPublications')
-      .withIndex('by_networkId_and_disposition', (index) => (
-        index.eq('networkId', args.networkId).eq('disposition', 'current')
-      )).take(args.limit + 1)
-    if (publications.length > args.limit) {
-      return { kind: 'unavailable' as const, reason: 'graph_limit_exceeded' as const }
-    }
-    const nodes = []
-    for (const publication of publications.sort((left, right) => left.publicationRef.localeCompare(right.publicationRef))) {
-      const offering = await ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique()
-      const binding = await ctx.db.query('capabilityTransportBindings')
-        .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique()
-      const business = await publishedBusiness(ctx.db, publication.businessId)
-      const contract = await getExactRegisteredCapabilityContract(ctx.db, contractRefFromRow(publication))
-      if (offering === null || binding === null || business === null || contract.kind !== 'found'
-        || !offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)
-        || !offeringEligibilityIsValid(offering) || !bindingEligibilityIsValid(binding)) {
-        return { kind: 'unavailable' as const, reason: 'graph_integrity_failure' as const }
-      }
-      const lifecycle = publicationLifecycle(publication, offering, binding, Date.now())
-      if (!args.includeInactive && lifecycle.state !== 'active') continue
-      nodes.push({
-        publicationRef: publication.publicationRef,
-        revision: publication.revision,
-        businessId: publication.businessId,
-        contractRef: contractRefFromRow(publication),
-        offeringId: publication.offeringId,
-        bindingId: publication.bindingId,
-        source: { kind: publication.sourceKind, digest: publication.sourceDigest },
-        semantic: {
-          capabilityId: contract.contract.capabilityId,
-          name: contract.contract.name,
-          description: contract.contract.description,
-          inputSchemaDigest: canonicalDigest(contract.contract.inputSchema as StableHashValue),
-          outputSchemaDigest: canonicalDigest(contract.contract.outputSchema as StableHashValue),
-          customerAnnotations: contract.contract.customerAnnotations.map((annotation) => ({
-            annotationId: annotation.annotationId,
-            document: annotation.document,
-            pointer: annotation.pointer,
-            label: annotation.label,
-            role: annotation.role,
-            ...(annotation.semanticIdentity === undefined ? {} : { semanticIdentity: annotation.semanticIdentity }),
-            ...(annotation.inference === undefined ? {} : { inference: annotation.inference }),
-          })),
-          searchTerms: offering.searchTerms,
-        },
-        policy: {
-          effects: contract.contract.effects,
-          dataUse: contract.contract.dataUse,
-          lifecycle: contract.contract.lifecycle,
-        },
-        cost: {
-          price: offering.presentation.price,
-          commercialRelationship: offering.presentation.commercialRelationship,
-        },
-        trust: { tier: business.trustTier, publicStatus: business.publicStatus },
-        liveness: {
-          credentialState: publication.credentialState,
-          healthState: publication.healthState,
-          ...(publication.readinessObservedAt === undefined
-            ? {} : { observedAt: publication.readinessObservedAt }),
-          ...(publication.readinessValidUntil === undefined
-            ? {} : { validUntil: publication.readinessValidUntil }),
-          stale: publication.readinessValidUntil !== undefined && publication.readinessValidUntil < Date.now(),
-        },
-        routability: { eligible: lifecycle.state === 'active', reasons: lifecycle.reasons },
-        evidenceRefs: [...new Set([
-          ...publication.registrationEvidenceRefs,
-          ...publication.readinessEvidenceRefs,
-          ...offering.registrationEvidenceRefs,
-          ...binding.registrationEvidenceRefs,
-        ])].sort(),
-      })
-    }
-    const edges: Array<{
-      kind: 'published_by' | 'bound_to' | 'schema_compatible'
-      from: string
-      to: string
-    }> = nodes.flatMap((node) => [
-      { kind: 'published_by' as const, from: node.publicationRef, to: `business:${node.businessId}` },
-      { kind: 'bound_to' as const, from: node.publicationRef, to: node.bindingId },
-    ])
-    for (const upstream of nodes) {
-      for (const downstream of nodes) {
-        if (upstream.publicationRef !== downstream.publicationRef
-          && upstream.semantic.outputSchemaDigest === downstream.semantic.inputSchemaDigest) {
-          edges.push({ kind: 'schema_compatible' as const, from: upstream.publicationRef, to: downstream.publicationRef })
-        }
-      }
-    }
-    return { kind: 'available' as const, nodes, edges }
+    return await queryCapabilityGraphFromModule(capabilitySupplyGraphPorts(ctx.db), args)
   },
 })
 
