@@ -1,7 +1,7 @@
 # Research queue
 
 **Owner:** Founder
-**Last triaged:** 2026-07-17
+**Last triaged:** 2026-07-18
 
 | Priority | ID | Question | Decision / hypothesis | Evidence required | Status | Output |
 |---|---|---|---|---|---|---|
@@ -15,6 +15,7 @@
 | P0 | Q-009 | Can one Action Invocation control record support standalone and Request-owned work without duplicating authority, attempts, evidence or recovery? | D-006; D-007; ADR-009; ADR-010 | Selected task and second real caller; threat model; two-caller source tracer; cross-surface approval, interrupted-effect recovery, generation-race and reference-only composition evals | SOURCE REBASELINED; TASK, SECURITY AND EVALS REQUIRED | [Production agent execution patterns](../research/2026-07-17-production-agent-execution-patterns.md); [post-deepening source rebaseline](../research/2026-07-18-post-deepening-partial-entry-source-rebaseline.md) |
 | P0 | Q-010 | Do listed-business owners want a recommendation, comparable finished work samples, or done-for-you delegation? | Tender H-1; cold-start H-CS6; ADR-009 barrier hypothesis | 5-10 forced-choice owner interviews in the launch atom with on-the-spot budget naming | FIELDWORK REQUIRED | [Tender exploration](../research/2026-07-17-demand-side-tender-market-exploration.md); [Cold-start mechanisms](../research/2026-07-17-cold-start-onboarding-mechanisms.md) |
 | P1 | Q-011 | Which non-monetary incentive (seeded-page correction bait, AI-visibility mirror, founding receipts, job-in-hand) converts supply best under the no-money/no-overclaim constraints? | H-CS1..H-CS4 | Per-mechanism conversion measurement inside the launch atom | QUEUED | [Cold-start mechanisms](../research/2026-07-17-cold-start-onboarding-mechanisms.md) |
+| P0 | Q-012 | Which recurring human commercial work and trust questions survive across travel, procurement, events and supplier management? | D-006; ADR-009; Wayfinder #183 | Four primary-source cases; durable records, next owners, retry posture, false equivalences, residue, and irreducible non-schema trust set | RESEARCH COMPLETE; TASK/COHORT FIELD SELECTION REQUIRED | [Cross-industry task grammar](../research/2026-07-18-cross-industry-human-work-task-grammar.md); [travel/event cases](../research/2026-07-18-travel-event-task-grammar.md); [procurement/supplier cases](../research/2026-07-18-procurement-supplier-task-grammar.md) |
 
 ## Queue rule
 

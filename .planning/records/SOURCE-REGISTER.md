@@ -1,7 +1,7 @@
 # Source register
 
 **Owner:** Founder
-**Last reviewed:** 2026-07-15
+**Last reviewed:** 2026-07-18
 
 The register tracks sources that own material external facts. It is not a
 bibliography: a source appears here only when project knowledge or a decision
@@ -73,6 +73,10 @@ depends on it.
 | S-062 | IAB Tech Lab | [OpenRTB](https://iabtechlab.com/standards/openrtb/) and [ARTF v1.0](https://iabtechlab.com/press-releases/iab-tech-lab-announces-agentic-rtb-framework-artf-v1-0-for-public-comment/) | Largest live machine-run auction market (attention); agentic-RTB extension | 2026-07-17 | ARTF finalization or RTB mechanism changes |
 | S-063 | AEMO | [NEM dispatch](https://aemo.com.au/energy-systems/electricity/national-electricity-market-nem/data-nem/market-management-system-mms-data/dispatch) and [WDRM](https://www.aemo.com.au/energy-systems/electricity/national-electricity-market-nem/market-operations/wdrm) | AU real-time uniform-price auction; demand-side bidding; baseline-gaming failure mode | 2026-07-17 | NEM settlement or WDRM baseline rules change |
 | S-064 | AWS / SF Compute / Akash | [EC2 Spot repricing](https://aws.amazon.com/blogs/compute/new-amazon-ec2-spot-pricing/), [SFC order book](https://fogdocs.sfcompute.com/docs/how-the-market-works), [Akash bid engine](https://akash.network/docs/providers/architecture/bid-engine/) | Compute market forms: smoothed posted price / double auction with forwards / reverse auction | 2026-07-17 | Market mechanism of any of the three changes |
+| S-065 | ACCC / IATA / Qantas | [ACCC airline consumer-law case](https://www.accc.gov.au/media-release/airlines-need-to-comply-with-consumer-law), [travel delay/cancellation guidance](https://www.accc.gov.au/consumers/specific-products-and-activities/travel-delays-and-cancellations), [IATA offers/orders](https://www.iata.org/en/programs/airline-distribution/retailing/ndc), [Qantas conditions](https://www.qantas.com/en-au/book/flights/conditions-of-carriage) | Travel offer/order, ticket, disruption, evidence, remedy, and unresolved-effect meanings | 2026-07-18 | Consumer guidance, airline contract, or IATA order model materially changes |
+| S-066 | Victorian Auditor-General / Victorian Government | [Victoria 2026 withdrawal audit](https://www.audit.vic.gov.au/report/withdrawal-2026-commonwealth-games), [settlement statement](https://www.premier.vic.gov.au/joint-statement-victoria-2026-commonwealth-games) | Event commitment, coupled delivery evidence, withdrawal, settlement, and incomplete wind-up | 2026-07-18 | New audit/closeout evidence changes the reconstructed completion state |
+| S-067 | US GAO / US GSA | [Sonshine Enterprises B-246268](https://www.gao.gov/products/b-246268), [FAR proposal evaluation](https://www.acquisition.gov/far/15.305), [source-selection decision](https://www.acquisition.gov/far/15.308), [GAO protest procedure](https://www.acquisition.gov/far/33.104) | Procurement criteria, controlled exchanges, accountable award, protest, effect state, and limited remedy | 2026-07-18 | FAR rewrite or later official decision changes the relied-on rule family |
+| S-068 | US FDA / eCFR | [Daisy Global Trading warning letter](https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/warning-letters/daisy-global-trading-co-612999-04152021), [FSVP compliance guide](https://www.fda.gov/media/110327/download), [21 CFR 1.508](https://www.ecfr.gov/current/title-21/part-1/section-1.508) | Supplier-food verification, evidence applicability, corrective action, continuing review, and regulatory effect | 2026-07-18 | FSVP regulation/guidance changes or enforcement record is superseded |
 
 ## Source rules
 
