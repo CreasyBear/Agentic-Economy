@@ -1,35 +1,31 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-07-18  
-**last_mapped_commit:** `5ea44454` (post residual deepen Waves 23–32)
+**last_mapped_commit:** `74fcb3b8` (post residual deepen Waves 33–37)
 
-## Campaign status (Waves 23–32)
+## Campaign status (Waves 23–37)
 
-**Waves 23–32 are CLOSED.** Do not treat journal start/lease/outcome machines as deferred.
+**Waves 23–32 CLOSED.** **Waves 33–37 CLOSED** (ADR-012 cancel/problem; success-outcome split; inquiry dual-path; shared outbox persistence).
 
 | Host / artifact | Fresh `wc -l` | Residual status |
 |-----------------|---------------|-----------------|
-| `convex/inquiries.ts` | **1435** | Host-done (Waves 23–26). Size residual only. |
-| `convex/customerRequestRouteExecution.ts` | **1606** | ADR-011 machines deepened; **cancel / problem mutation bodies remain**. |
-| `convex/customerRequestApplication.ts` | **1749** | Host-done. Thin action shells + ports (e.g. `provideFacts`). Size residual. |
-| `convex/capabilitySupply.ts` | **804** | Host-done graph/probe (Wave 30). |
-| `convex/registry.ts` | **1622** | Catalog-from-rows (Wave 32). Size residual. |
-| `convex/discovery.ts` | **1565** | Catalog-from-rows (Wave 32). Size residual. |
-| `src/modules/customer-request/hosted-agent-journey.ts` | **8** | Re-export only; implementation under `hosted-agent-journey/`. |
-| `convex/customerRequestRouteExecutionJournalPorts.ts` | **917** | Ports adapter; fat `commitSucceededOutcome` residual. |
-| `convex/customerRequestV2.ts` | **1492** | Optional residual god-file. |
-| `convex/notificationOutbox.ts` | **1455** | Optional residual god-file. |
-| `src/modules/inquiries/inquiry.functions.ts` | **1381** | Dual-path residual (source vs local E2E). |
+| `convex/customerRequestApplication.ts` | **1749** | Host-done. Size residual. |
+| `convex/inquiries.ts` | **1435** | Host-done (Waves 23–26). Size residual. |
+| `convex/notificationOutbox.ts` | **1287** | Shared dispatch persist + source-state ports (Wave 37); further families optional. |
+| `convex/customerRequestRouteExecution.ts` | **1178** | ADR-011 + ADR-012 cancel/problem machines; recover/mark + exportProblem residual. |
+| `convex/customerRequestRouteExecutionJournalPorts.ts` | **979** | Success outcome split (Wave 35); under 1k. |
+| `src/modules/inquiries/inquiry.functions.ts` | **901** | Dual-path factory (Wave 36); local-e2e-adapter extracted. |
+| `convex/capabilitySupply.ts` | **804** | Host-done graph/probe. |
+| `convex/customerRequestRouteExecutionCancelPorts.ts` | **392** | Wave 33 adapter. |
+| `convex/customerRequestRouteExecutionProblemPorts.ts` | **259** | Wave 34 adapter. |
+| `convex/inquiryNotificationBridge.ts` | **123** | Thin; shared persistence (Wave 37). |
+| `hosted-agent-journey.ts` | **8** | Re-export only. |
 
-**ADR-011** (`.planning/adr/ADR-011-journal-write-plan-ports.md`) is **Accepted**. Wave 29 landed:
-
-- Machines: `src/modules/customer-request/route-execution/machines/` (`start-or-resume.ts`, `lease-next-dispatch.ts`, `record-outcome.ts`, `ports.ts`)
-- Host shells: `startOrResume` / `leaseNextDispatch` / `recordOutcome` in `convex/customerRequestRouteExecution.ts` call machines via `journalMutationPorts(ctx)`
-- Thinness locks: `tests/unit/customer-request/route-execution/machines-thinness.test.ts`, `journal-thinness.test.ts`
+**ADR-011** — start/lease/outcome. **ADR-012** — cancel + problem mutation ports (Accepted). Thinness: `machines-thinness`, `journal-thinness`, `problem-mutation-thinness`, inquiry/outbox thinness suites.
 
 ## Locked deepen practices
 
-Future deepen work **must** follow these practices (campaign gold + ADR-011). Violations are regressions, not progress.
+Future deepen work **must** follow these practices (campaign gold + ADR-011 + ADR-012). Violations are regressions, not progress.
 
 ### 1. Provide-facts ports pattern (gold)
 
@@ -63,47 +59,34 @@ Shallow Convex sibling splits move lines without deepening write authority and r
 
 ## Tech Debt
 
-**Route-execution cancel / problem (host residual):**
-- Issue: After ADR-011 machine deepen, `cancelCurrent`, cancellation open/resolve, recover/mark helpers, and problem `internalMutation`/`internalQuery` bodies remain largely inline in the host. Application-layer problem-route (`src/modules/customer-request/application/problem-route/`) and `convex/customerRequestProblemRoutePorts.ts` are thin for **actions**; durable mutation authority for cancel/problem is still host-owned.
-- Files: `convex/customerRequestRouteExecution.ts` (`cancelCurrent` ~`:153`, `reportProblem` ~`:699`, `recordProblemBusinessReport`, `updateProblemStatus`, `replyProblem`, support/export queries); predicates already in `route-execution/journal/` and `route-execution/problem-support/`
-- Impact: ~1606-line host stays hard to review; cancel/problem changes risk digest/idempotency drift; easy to “fix” with forbidden sibling chops
-- Fix approach: **ADR-012** (`.planning/adr/ADR-012-route-cancel-problem-ports.md`, Accepted) — Wave 33 `CancelMutationPorts` + cancel machines; Wave 34 `ProblemMutationPorts`; **do not** grow `JournalMutationPorts` past ~1k; **do not** invent `WritePlan`; **do not** create `…Cancel.ts` / `…Problem.ts` sibling chops
+**Route-execution recover / mark / exportProblem (optional residual):**
+- Issue: ADR-012 Waves 33–34 deepened cancel + problem mutations. Remaining host glue: `recoverExpiredDispatch`, `markDispatched`, `recordNotReleased`, `markAccepted`, fat `exportProblemForSupport` / some problem reads.
+- Files: `convex/customerRequestRouteExecution.ts` (~1178); CancelPorts / ProblemPorts adapters; thinness locks for cancel/problem machines
+- Fix approach: Same ports pattern only when those families need a seam; no sibling chops; do not reopen cancel/problem deepen
 
-**Fat `commitSucceededOutcome` in journal ports:**
-- Issue: Success-path branching (pending cancel, too-late cancel, complete, advance, unknown) lives as a large port method rather than a further-deepened machine/helper seam
-- Files: `convex/customerRequestRouteExecutionJournalPorts.ts` (`commitSucceededOutcome` ~`:357`–`:417`); contract in `src/modules/customer-request/route-execution/machines/ports.ts`
-- Impact: Ports file ~917 lines; outcome correctness concentrated in one adapter method; harder to unit-test without Convex
-- Fix approach: Extract semantic sub-commits or pure branch decisions behind ports **without** introducing write-plan DTOs; keep atomicity inside one mutation
+**Success-outcome / JournalPorts (Wave 35 closed):**
+- Status: `decideSucceededOutcomeBranch` + semantic helpers; JournalPorts ~979 (under 1k). Single `commitSucceededOutcome` port retained for atomicity.
+- Residual: further helper locality only if ports approach 1k again
 
-**Inquiry ↔ notification outbox coupling:**
-- Issue: Inquiry submit/reply paths bridge into outbox via a Convex-local bridge rather than a single owned seam
-- Files: `convex/inquiries.ts` (uses `inquiryNotificationPorts`); `convex/inquiryNotificationPorts.ts`; `convex/inquiryNotificationBridge.ts`; `convex/notificationOutbox.ts`; `src/modules/notification-outbox/public`
-- Impact: Notification failures and inquiry admission share failure modes; changes in either host can desync dispatch binding / readback
-- Fix approach: Keep module enqueue/bind pure; thin the bridge; avoid duplicating outbox state construction in inquiry host
+**Inquiry ↔ notification outbox (Wave 37 closed for shared persist):**
+- Status: `notificationOutboxPersistence.ts` + source-state ports; bridge ~123 lines. Outbox host ~1287 still has webhook/retry/operator residual.
+- Fix approach: Next outbox family deepen (webhook ingest / retry) behind ports; keep inquiry enqueue/bind inquiry-owned
 
 **`customerRequestV2` host bulk:**
 - Issue: V2 aggregate, route-plan generation, and evaluation wiring still concentrate in one Convex host
 - Files: `convex/customerRequestV2.ts` (~1492); sibling `convex/customerRequestV2Preparation.ts` (~436)
 - Impact: High merge conflict / review cost; accidental coupling to Application and capability-supply hosts
-- Fix approach: Ports deepen per operation family (replay, generation load, evaluation candidacy) using provide-facts pattern; leave validators in Convex
+- Fix approach: Ports deepen per operation family using provide-facts pattern; leave validators in Convex; legacy retirement is a product gate
 
-**`notificationOutbox` host bulk:**
-- Issue: Enqueue, dispatch, webhook ingest, retry, and operator readback remain one large host
-- Files: `convex/notificationOutbox.ts` (~1455); module logic under `src/modules/notification-outbox/`
-- Impact: Provider/webhook changes touch a wide surface; inquiry bridge depends on host shapes
-- Fix approach: Split by operation behind ports after locking module public API; do not shallow-split files without ports
-
-**Inquiry TanStack dual-path (local E2E):**
-- Issue: `inquiry.functions.ts` branches on `isLocalE2EAuthBypassEnabled()` into in-process fixture/local state vs Convex source path
-- Files: `src/modules/inquiries/inquiry.functions.ts` (~1381); `src/lib/server/local-e2e-bypass`; `src/lib/dev/local-e2e-business-fixtures`
-- Impact: Browser/E2E green can diverge from production Convex behavior; fixture secrets and owner IDs live beside real handlers
-- Fix approach: Isolate local E2E adapters behind a single factory; shrink dual branches; never treat local-path success as production proof (`ae-verification-gates`)
+**Inquiry TanStack dual-path (Wave 36 closed):**
+- Status: `resolveInquiryServerBackend` / `createInquiryServerBackend`; local helpers in `internal/local-e2e-adapter.ts`; `inquiry.functions.ts` ~901
+- Residual: dual-path parity tests still not exhaustive; never treat local-e2e green as production proof
 
 **Large but host-done Convex files (size residual, not reopen waves):**
 - Issue: Hosts finished deepen campaigns still exceed comfortable review size
-- Files: `convex/customerRequestApplication.ts` (1749), `convex/registry.ts` (1622), `convex/discovery.ts` (1565), `convex/inquiries.ts` (1435)
+- Files: `convex/customerRequestApplication.ts` (1749), `convex/registry.ts` (~1622), `convex/discovery.ts` (~1565), `convex/inquiries.ts` (1435)
 - Impact: Noise in diffs; temptation to re-chop without ports
-- Fix approach: Only deepen when a concrete operation family needs a seam; preserve catalog-from-rows / inquiry ports gains
+- Fix approach: Only deepen when a concrete operation family needs a seam; preserve catalog-from-rows / inquiry / ADR-012 gains
 
 ## Known Bugs
 
