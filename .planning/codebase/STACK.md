@@ -1,7 +1,7 @@
 # Technology Stack
 
 **Analysis Date:** 2026-07-18  
-**last_mapped_commit:** `3463c1d4`
+**last_mapped_commit:** `9d8faa04`
 
 ## Languages
 
@@ -62,7 +62,7 @@
 - `zod` 4.4.3 — schemas across actions, transports, API validation.
 - `@tanstack/ai` ^0.38.0 — JSON Schema conversion for harness/action tool contracts (`src/modules/common/action.ts`, `src/modules/harness/tool-contract.ts`).
 - `@astryxdesign/core` / `@astryxdesign/theme-neutral` — UI primitives and theme.
-- `@x402/core` 2.18.0, `@x402/evm` 2.18.0, `@x402/extensions` 2.18.0, `viem` 2.55.2 — EVM x402 payment-signature path for capability-supply route transport (`src/modules/capability-supply/internal/x402-payment-signer.ts`).
+- `@x402/core` 2.18.0, `@x402/evm` 2.18.0, `@x402/extensions` 2.18.0, `viem` 2.55.2 — EVM x402 payment-signature path for capability-supply route transport (`src/modules/capability-supply/internal/x402-payment-signer.ts`). Import allowlisted only for that signer file in `src/lib/ui/contract-scans.ts` (handshake-import exception).
 - `web-bot-auth` 0.1.3 + `http-message-sig` ^0.2.0 — Web Bot Auth / HTTP message signature identity (`src/modules/routing-kernel/caller-identity.ts`, `src/routes/[.]well-known/http-message-signatures-directory.ts`).
 - `@noble/hashes` 1.8.0 + `@noble/curves` 1.9.1 — HKDF/HMAC/sha256/ed25519 for admission, digests, attestation (`src/modules/security/source-write-admission.ts`, `src/modules/common/ed25519-attestation.ts`).
 - `@sentry/react` / `@sentry/node` ^10.63.0 — error tracking (`src/lib/observability/sentry.*.ts`).
@@ -78,6 +78,18 @@
 - Nitro Vercel preset — host packaging.
 - Convex HTTP router (`convex/http.ts`) — sandbox provider endpoints + retired routing v1/MCP stubs.
 - Meilisearch (HTTP, no npm SDK) — optional catalog search backend via `MEILISEARCH_*` / `AE_SEARCH_*` (`src/modules/registry/internal/catalog-search-port.ts`).
+
+**Not in root `package.json` (do not invent):**
+- No `stripe`, `@novu/*`, `resend`, `meilisearch`, `autumn`/`atmn`, or OpenRouter SDK — those integrations use raw `fetch` or reserved env names only (see `INTEGRATIONS.md`).
+
+## Domain port layers (Waves 38–42 — architecture, not new stack)
+
+Post deepen campaign Waves 38–42 (CLOSED at `9d8faa04`), Customer Request write/execution logic is deepened behind **TypeScript port interfaces** with Convex adapters. These add **no new runtime, package, or SaaS dependency**:
+
+- V2 write ports — `src/modules/customer-request/v2-write/` (`ports.ts`, commit/refresh aggregates); Convex adapter `convex/customerRequestV2WritePorts.ts` used by `convex/customerRequestV2.ts`.
+- Route-execution port families — `src/modules/customer-request/route-execution/machines/` (`ports.ts`, cancel/dispatch/journal/problem/evidence-load); Convex adapters `convex/customerRequestRouteExecution*Ports.ts`, orchestrated from `convex/customerRequestRouteExecution.ts`.
+
+Treat these as in-process module boundaries over Convex, not external integrations.
 
 ## Configuration
 
@@ -112,4 +124,4 @@
 
 ---
 
-*Stack analysis: 2026-07-18 (commit 3463c1d4)*
+*Stack analysis: 2026-07-18 (commit 9d8faa04)*

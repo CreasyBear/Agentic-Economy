@@ -1,7 +1,7 @@
 # Coding Conventions
 
 **Analysis Date:** 2026-07-18
-**Last Mapped Commit:** `3463c1d4`
+**Last Mapped Commit:** `9d8faa04`
 
 ## Naming Patterns
 
@@ -9,15 +9,17 @@
 - Domain modules: kebab-case directories under `src/modules/<domain>/` (e.g. `customer-request`, `capability-supply`, `notification-outbox`).
 - Module seams: `public.ts` (external barrel), `<domain>.actions.ts`, `<domain>.functions.ts`, optional `runtime.ts`.
 - Implementation: `internal/` for private logic; application slices use kebab-case folders (`provide-facts/`, `problem-route/`, `preparation-egress/`).
-- Route-execution machines: kebab-case verbs under `src/modules/customer-request/route-execution/machines/` (`start-or-resume.ts`, `problem-report.ts`, `cancel-current.ts`).
-- Convex hosts: camelCase filenames matching the domain (`convex/customerRequestRouteExecution.ts`, `convex/inquiries.ts`).
-- Convex ports adapters: `*Ports.ts` factories co-located with the host (`convex/customerRequestRouteExecutionJournalPorts.ts`, `convex/inquirySourceStatePorts.ts`, `convex/inquiryNotificationPorts.ts`).
+- Route-execution machines: kebab-case verbs under `src/modules/customer-request/route-execution/machines/` (`start-or-resume.ts`, `problem-report.ts`, `open-leased-dispatch.ts`, `mark-accepted.ts`).
+- V2 write machines: kebab-case under `src/modules/customer-request/v2-write/` (`commit-aggregate.ts`, `refresh-route-plan-generation.ts`, `record-route-plan-generation-retry.ts`).
+- Evidence-load pure package: `src/modules/customer-request/route-execution/evidence-load/`.
+- Convex hosts: camelCase filenames matching the domain (`convex/customerRequestRouteExecution.ts`, `convex/customerRequestV2.ts`, `convex/inquiries.ts`).
+- Convex ports adapters: `*Ports.ts` factories co-located with the host (`convex/customerRequestRouteExecutionJournalPorts.ts`, `convex/customerRequestRouteExecutionDispatchPorts.ts`, `convex/customerRequestV2WritePorts.ts`, `convex/customerRequestEvidenceLoadPorts.ts`, `convex/inquirySourceStatePorts.ts`).
 - Tests: `*.test.ts` / `*.test.tsx` (Vitest); `*.spec.ts` (Playwright e2e/deploy-smoke). Thinness locks use `*-thinness.test.ts`.
 
 **Functions:**
-- camelCase for functions and values (`provideCustomerRequestFacts`, `journalMutationPorts`, `reportProblem`).
-- Ports factories: `<concern>Ports(ctx)` returning a typed ports object (`journalMutationPorts`, `problemMutationPorts`, `inquirySourceStatePorts`).
-- Pure machines: verb phrases without Convex types (`startOrResume`, `leaseNextDispatch`, `reportProblem`).
+- camelCase for functions and values (`provideCustomerRequestFacts`, `journalMutationPorts`, `dispatchLifecyclePorts`, `customerRequestV2WritePorts`, `reportProblem`).
+- Ports factories: `<concern>Ports(ctx)` returning a typed ports object (`journalMutationPorts`, `problemMutationPorts`, `problemSupportReadPorts`, `dispatchLifecycleOpenPorts`, `evidenceLoadPorts`).
+- Pure machines: verb phrases without Convex types (`startOrResume`, `leaseNextDispatch`, `openLeasedDispatch`, `commitAggregate`).
 - Do not export `use`-prefixed helpers from application packages (enforced by thinness tests such as `tests/unit/customer-request/application/provide-facts-thinness.test.ts`).
 
 **Variables:**
@@ -25,7 +27,7 @@
 - Prefer `readonly` on public command/result types and const arrays of symbols under test.
 
 **Types:**
-- PascalCase for types and interfaces (`ProblemMutationPorts`, `ProvideFactsPorts`, `InquirySourceStatePorts`).
+- PascalCase for types and interfaces (`ProblemMutationPorts`, `DispatchLifecyclePorts`, `CustomerRequestV2WritePorts`, `ProvideFactsPorts`, `EvidenceLoadPorts`).
 - Discriminated unions with `kind` (or equivalent) for results; exhaust with `const exhaustive: never = …` / `const _exhaustive: never = …` in `default` (see `src/modules/customer-request/application/preparation-egress/project.ts`, `src/modules/customer-request/application/route-plan-projection/project-run.ts`).
 - Prefer `type` aliases for ports and command/result shapes; keep Convex `Doc` / `MutationCtx` out of pure modules.
 
@@ -64,6 +66,7 @@
 - Outside a module, import only `src/modules/<domain>/public.ts` (or documented public sub-barrels such as `application/public.ts`).
 - Never import `src/modules/<domain>/internal/*` from routes, Convex hosts, or sibling modules — `tests/imports/private-imports.test.ts` enforces `module-private-import`.
 - Convex hosts may import module public seams and co-located `*Ports.ts` files; pure domain code must not import `convex/_generated` or `convex/server`.
+- Application callers must not import V2 write machines or construct `customerRequestV2WritePorts` — they continue to `ctx.runMutation(internal.customerRequestV2.*)` (ADR-014).
 
 **Public barrel pattern:**
 ```typescript
@@ -105,10 +108,13 @@ export type { SubmitInquiryCommand, SubmitInquiryResult } from './internal/comma
 ## Function Design
 
 **Size:**
-- Convex host export bodies for ports-wired machines: keep ≤ ~40 lines (locked by journal/problem thinness tests).
+- Convex host export bodies for ports-wired machines: keep ≤ ~40 lines (locked by journal / problem / dispatch / v2-write thinness tests).
 - Inquiry `submitPublicInquiry` host block: ≤ 90 lines (`tests/unit/inquiries/convex-host-thinness.test.ts`).
-- Ports factory files: inquiry source/notification factories ≤ 80 lines; journal/cancel/problem ports factories ≤ 1000 lines.
-- Every `machines/` TypeScript file: ≤ 1000 lines (`machines-thinness.test.ts`).
+- Provide-facts action body: ≤ 30 lines; refine / authorize-preparation: ≤ 35 lines.
+- Support-read query (`exportProblemForSupport`): ≤ 50 lines.
+- Evidence export query (`exportCustomerEvidence`): ≤ 120 lines.
+- Ports factory files: inquiry source/notification and evidence-load factories ≤ 80 lines; route-execution journal/cancel/dispatch/problem and V2 write ports factories ≤ **1000** lines (campaign ~1k ceiling).
+- Every `machines/` TypeScript file and every `v2-write/` file: ≤ 1000 lines.
 
 **Parameters:**
 - Pure application/machine functions take explicit `ports` objects (dependency injection), never create Convex `ctx` inside pure modules.
@@ -117,12 +123,14 @@ export type { SubmitInquiryCommand, SubmitInquiryResult } from './internal/comma
 **Return Values:**
 - Return result unions; callers branch on `kind`.
 - Hosts re-export Convex function handles; domain returns serializable result types.
+- Ports expose **semantic, immediately executed** operations — never return a deferred `WritePlan` / `intendedPatches` for the host to apply (ADR-011–014).
 
 ## Module Design
 
 **Exports:**
 - One public seam per domain (`public.ts`). Application composition uses `src/modules/customer-request/application/public.ts`.
 - Machines export through `src/modules/customer-request/route-execution/machines/index.ts`.
+- V2 write machines export through `src/modules/customer-request/v2-write/index.ts` (imported by `convex/customerRequestV2.ts` only).
 - Register cross-surface operations in `src/modules/actions/index.ts` via `<domain>.actions.ts`.
 
 **Barrel Files:**
@@ -132,22 +140,50 @@ export type { SubmitInquiryCommand, SubmitInquiryResult } from './internal/comma
 **Layering (prescriptive):**
 | Layer | Location | May import | Must not import |
 |-------|----------|------------|-----------------|
-| Pure domain / machines | `src/modules/...` | other public seams, pure helpers | `convex/_generated`, `MutationCtx`, `Doc`, `ctx.db` |
-| Ports types | `machines/*-ports.ts`, `internal/ledger/ports.ts` | domain types | Convex runtime, `WritePlan` |
+| Pure domain / machines | `src/modules/...` | other public seams, pure helpers | `convex/_generated`, `MutationCtx`, `Doc`, `ctx.db`, `WritePlan` |
+| Ports types | `machines/*-ports.ts`, `v2-write/ports.ts`, `internal/ledger/ports.ts` | domain types | Convex runtime, `WritePlan` |
 | Ports adapters | `convex/*Ports.ts` | `_generated`, `ctx.db` | multi-step domain decisions that belong in machines |
 | Convex host | `convex/<domain>.ts` | ports factories + module public | large inline DB orchestration / redefined moved helpers |
-| Journal / problem-support | `route-execution/journal`, `problem-support` | pure helpers | `JournalMutationPorts` / machines |
+| Journal / problem-support / evidence-load | `route-execution/journal`, `problem-support`, `evidence-load` | pure helpers | mutation port types / machines (journal); machines / `ProblemMutationPorts` / `ProblemSupportReadPorts` (problem-support) |
+
+## Locked deepen practices (Waves 38–42 / ADR-011–014)
+
+These are **hard bans**, not style preferences. Thinness suites enforce them.
+
+1. **No `WritePlan` / `intendedPatches` in journal, machines, or v2-write**
+   - Forbidden tokens: `WritePlan`, `writePlan`, `intendedPatches`, and patch-array apply DTOs in pure packages and ports adapters for those families.
+   - Ports call semantic commits (`persistSucceededAttempt`, `commitMarkDispatched`, `commitAggregate` IO helpers) that run immediately inside the same `MutationCtx` transaction.
+
+2. **No Convex sibling chops**
+   - Do not invent mutation-host siblings such as `convex/customerRequestRouteExecutionStart.ts`, `…Cancel.ts`, `…Problem.ts`, `…Dispatch.ts`, `…Recover.ts`, `…Mark.ts`, `customerRequestV2Commit.ts`, `customerRequestV2Refresh.ts`, `customerRequestV2Write.ts`.
+   - Allowed Convex growth: thin `*Ports.ts` adapters beside the existing host register. Host export identities stay on the original file.
+
+3. **Ports adapter ceiling ~1k lines**
+   - Journal / Cancel / Dispatch / Problem / V2 write adapters: `<= 1000` lines.
+   - Evidence-load and inquiry source/notification factories: tighter (`<= 80`).
+   - If an adapter approaches 1k mid-wave, split **within the same family ADR** (e.g. read helpers under the same ports concern) — do not open an unrelated deepen or grow a foreign ports file.
+
+4. **Validators stay in Convex forever**
+   - All `v.*` argument/return validators for deepened exports remain on the host (`convex/customerRequestRouteExecution.ts`, `convex/customerRequestV2.ts`, etc.).
+   - Host-local parse helpers that feed validators (`parseBoundedJson`, `exportedStepState`) may remain host-side.
+   - Do not relocate validators into `src/modules`.
+
+5. **Family isolation**
+   - Do not grow Journal/Cancel/Problem ports to absorb Dispatch lifecycle or V2 write commits.
+   - Do not grow route-execution ports to absorb `commitAggregate` / V2 graph validation.
+   - Problem support-read ports live on the Problem ports adapter (`problemSupportReadPorts`), not Journal/Cancel/Dispatch.
 
 **Thin host + ports pattern (required for deepenings):**
-1. Host export wires `*Ports(ctx)` and calls `*Machine` / application function.
+1. Host export keeps validators; wires `*Ports(ctx)` and calls `*Machine` / application function.
 2. Machine/application owns decisions; calls `ports.*` for IO.
 3. Ports adapter owns DB/scheduler IO only.
-4. Do not invent sibling Convex hosts (`customerRequestRouteExecutionStart.ts`, `…Cancel.ts`, `…Problem.ts`) — thinness tests assert these files do not exist.
-5. Do not introduce `WritePlan` / `intendedPatches` DTOs in machines or journal (forbidden by `machines-thinness` / `journal-thinness`).
+4. Add/extend `*-thinness.test.ts` locking the above.
+5. Application / HTTP callers keep calling the same Convex export paths.
 
 **Schema:**
-- Add tables in the owning module’s schema fragment (`internal/schema.ts` or `internal/convex-schema.ts`), then spread in `convex/schema.ts`.
+- Add tables in the owning module’s schema fragment (`internal/schema.ts` or `internal/convex-schema.ts`), then spread in `convex/schema.ts` (`ae-convex-guardrails`).
 - Index names: `by_field1_and_field2` in field order.
+- Never store unbounded arrays in a document — give high-churn children their own table.
 
 **UI:**
 - Prefer Astryx (`@astryxdesign/core`, `@astryxdesign/theme-neutral`); Tailwind 4 for layout glue only.
@@ -171,4 +207,4 @@ New variants must fail TypeScript until handled.
 
 ---
 
-*Convention analysis: 2026-07-18 (commit `3463c1d4`)*
+*Convention analysis: 2026-07-18 (commit `9d8faa04`)*

@@ -1,7 +1,7 @@
 # Testing Patterns
 
 **Analysis Date:** 2026-07-18
-**Last Mapped Commit:** `3463c1d4`
+**Last Mapped Commit:** `9d8faa04`
 
 ## Test Framework
 
@@ -63,11 +63,16 @@ npm run check:convex-codegen      # convex codegen --dry-run
 tests/
 ├── unit/
 │   ├── customer-request/
+│   │   ├── v2-write-thinness.test.ts
 │   │   ├── application/*-thinness.test.ts
 │   │   └── route-execution/
-│   │       ├── journal-thinness.test.ts
 │   │       ├── machines-thinness.test.ts
-│   │       └── problem-mutation-thinness.test.ts
+│   │       ├── journal-thinness.test.ts
+│   │       ├── problem-mutation-thinness.test.ts
+│   │       ├── problem-support-read-thinness.test.ts
+│   │       ├── evidence-load-thinness.test.ts
+│   │       └── dispatch-lifecycle-thinness.test.ts
+│   ├── capability-supply/*-thinness.test.ts
 │   ├── inquiries/
 │   │   ├── convex-host-thinness.test.ts
 │   │   ├── inquiry-source-state-thinness.test.ts
@@ -106,6 +111,15 @@ describe('customer-request provide-facts', () => {
 
 Thinness tests are **source-structure contracts**. They `readFileSync` production files and assert layering — they do not exercise runtime happy paths. Pair every deepen (ports extract) with an updated thinness lock **and** keep behavioral unit/integration coverage.
 
+### Locked deepen practices (asserted across route-execution + v2-write)
+
+| Rule | What thinness forbids |
+|------|------------------------|
+| No WritePlan DTOs | `WritePlan` / `writePlan` / `intendedPatches` in `journal/`, `machines/`, `v2-write/`, and their `*Ports.ts` adapters |
+| No Convex sibling chops | Files like `customerRequestRouteExecutionStart.ts`, `…Cancel.ts`, `…Problem.ts`, `…Dispatch.ts`, `customerRequestV2Commit.ts` |
+| Ports ceiling ~1k | Journal/Cancel/Dispatch/Problem/V2-write adapters `<= 1000` lines |
+| Validators in Convex forever | Host retains `v.*` / `exportedStepState` / `parseBoundedJson`; modules stay validator-free |
+
 ### Shared recipe
 
 When adding or extending a thinness suite:
@@ -115,8 +129,47 @@ When adding or extending a thinness suite:
 3. Slice each host export body; assert line-budget and forbidden tokens (`ctx.db.insert`, table `query('…')`, decision helpers).
 4. Walk pure package trees with a local `listTsFiles`; forbid Convex imports (`_generated`, `convex/server`, `ActionCtx`/`MutationCtx`/`QueryCtx`, `Doc<`).
 5. Assert ports factory size budgets and required method names.
-6. Assert **no sibling host files** and **no cross-package pollution** (e.g. provide-facts symbols not in refine/confirm).
-7. Forbid `WritePlan` / `writePlan` / `intendedPatches` in machines and journal.
+6. Assert **no sibling host files** and **no cross-package pollution** (e.g. provide-facts symbols not in refine/confirm; V2 write not in route-execution ports).
+7. Forbid `WritePlan` / `writePlan` / `intendedPatches` in machines, journal, and v2-write.
+
+---
+
+### Critical suite: machines-thinness
+
+**File:** `tests/unit/customer-request/route-execution/machines-thinness.test.ts`
+
+**Locks:**
+- Required machine files present (start/lease/outcome/cancel/dispatch-lifecycle/problem/ports/types/index).
+- Index exports journal, cancel, dispatch, and problem port types and machine entrypoints.
+- Entire `machines/` tree free of Convex runtime and `ctx.db` / `ctx.scheduler`.
+- Start/lease/outcome use `JournalMutationPorts`; cancel variants use `CancelMutationPorts` / `CancelOpenPorts`; dispatch variants use `DispatchLifecyclePorts` / `DispatchLifecycleOpenPorts`; problem variants use `ProblemMutationPorts`; all call `ports.*`.
+- No `WritePlan` / `intendedPatches` in `machines/` or `journal/`.
+- Journal must not import machines or mutation port types.
+- Host wires `journalMutationPorts`, `cancelMutationPorts`/`cancelOpenPorts`, `dispatchLifecyclePorts`/`dispatchLifecycleOpenPorts`, `problemMutationPorts`; all four ports files ≤ 1000 lines; forbids Start/Lease/Outcome/Cancel/Problem/Dispatch sibling hosts.
+- Each machines file ≤ 1000 lines.
+
+**When to run:** any change under `route-execution/machines/` or the four ports adapters.
+
+---
+
+### Critical suite: journal-thinness
+
+**File:** `tests/unit/customer-request/route-execution/journal-thinness.test.ts`
+
+**Locks:**
+- Host `startOrResume` / `leaseNextDispatch` / `recordOutcome` are ports-wired shells (≤ 40 lines, `journalMutationPorts`, no run/outbox table queries or `ctx.db` writes in the body).
+- Cancel exports similarly thin via cancel ports; no inline `resolveCancellationCommand`.
+- Dispatch exports present and thin (cross-checked with dispatch-lifecycle suite).
+- No Start/Lease/Outcome/Cancel/Problem/Dispatch sibling Convex hosts; ports files exist.
+- Recover helpers live in dispatch machines — not redefined on the host; cancel journal helpers (`cancelDisposition`, etc.) live in machines/ports.
+- Journal package free of Convex runtime, write-plan DTOs, and mutation port / `startOrResume` coupling.
+- Host retains `parseBoundedJson` and `exportedStepState` (validators stay in Convex forever).
+- `exportCustomerEvidence` stays a thin evidence-load adapter.
+- Journal/cancel/dispatch/problem ports factories ≤ 1000 lines with required persist/branch helpers; machines also free of Convex + write-plan DTOs.
+
+**When to run:** journal package, host start/lease/outcome/cancel wiring, or journal ports adapter changes.
+
+---
 
 ### Critical suite: problem-mutation-thinness
 
@@ -133,36 +186,109 @@ When adding or extending a thinness suite:
 
 **When to run:** any edit to problem machines, problem ports, or problem-related exports in `convex/customerRequestRouteExecution.ts`.
 
-### Critical suite: machines-thinness
+---
 
-**File:** `tests/unit/customer-request/route-execution/machines-thinness.test.ts`
+### Critical suite: problem-support-read-thinness
 
-**Locks:**
-- Required machine files present (start/lease/outcome/cancel/problem/ports/types/index).
-- Index exports journal, cancel, and problem port types and machine entrypoints.
-- Entire `machines/` tree free of Convex runtime and `ctx.db` / `ctx.scheduler`.
-- Start/lease/outcome use `JournalMutationPorts`; cancel variants use `CancelMutationPorts` / `CancelOpenPorts`; problem variants use `ProblemMutationPorts`; all call `ports.*`.
-- No `WritePlan` / `intendedPatches` in `machines/` or `journal/`.
-- Journal must not import machines or mutation port types.
-- Host wires `journalMutationPorts`, `cancelMutationPorts`/`cancelOpenPorts`, `problemMutationPorts`; all three ports files ≤ 1000 lines; forbids Start/Lease/Outcome/Cancel/Problem sibling hosts.
-- Each machines file ≤ 1000 lines.
-
-**When to run:** any change under `route-execution/machines/` or the three ports adapters.
-
-### Critical suite: journal-thinness
-
-**File:** `tests/unit/customer-request/route-execution/journal-thinness.test.ts`
+**File:** `tests/unit/customer-request/route-execution/problem-support-read-thinness.test.ts`
 
 **Locks:**
-- Host `startOrResume` / `leaseNextDispatch` / `recordOutcome` are ports-wired shells (≤ 40 lines, `journalMutationPorts`, no run/outbox table queries or `ctx.db` writes in the body).
-- Cancel exports similarly thin via cancel ports; no inline `resolveCancellationCommand`.
-- No Start/Lease/Outcome/Cancel/Problem sibling Convex hosts; ports files exist.
-- Recover helpers remain imported from journal on the host; cancel journal helpers (`cancelDisposition`, etc.) live in machines/ports — not redefined on the host.
-- Journal package free of Convex runtime, write-plan DTOs, and mutation port / `startOrResume` coupling.
-- Host retains `parseBoundedJson` and `exportedStepState`; `exportCustomerEvidence` stays a thin evidence-load adapter.
-- Journal/cancel/problem ports factories ≤ 1000 lines with required persist/branch helpers; machines also free of Convex + write-plan DTOs.
+- Host `exportProblemForSupport` is a thin auth + ports + project shell (≤ 50 lines): `resolveAdminAuthority`, `problemSupportReadPorts(ctx)`, `ports.loadSupportExportMaterial`, `projectSupportProblemExport`.
+- No inline `Promise.all`, `.collect()`, problem/run/revision table queries, evidence-load ports, or `businessNames.set` in the body.
+- `ProblemSupportReadPorts` type lives in `machines/problem-ports.ts` and is re-exported from `machines/index.ts`.
+- Factory `problemSupportReadPorts` lives on `convex/customerRequestRouteExecutionProblemPorts.ts` (≤ 1000 lines); no Problem sibling host.
+- `problem-support/` free of machines / `ProblemMutationPorts` / `ProblemSupportReadPorts` / WritePlan imports.
+- Journal / Cancel / Dispatch ports must not absorb `loadSupportExportMaterial` / `projectSupportProblemExport` / `ProblemSupportReadPorts`.
 
-**When to run:** journal package, host start/lease/outcome/cancel wiring, or journal ports adapter changes.
+**When to run:** support export query, problem ports adapter, or `problem-support/` projection changes.
+
+---
+
+### Critical suite: evidence-load-thinness
+
+**File:** `tests/unit/customer-request/route-execution/evidence-load-thinness.test.ts`
+
+**Locks:**
+- Host does not redefine `assembleCustomerEvidenceExport`, `assembleSupportProblemList`, `loadProblemUpdates`, `loadProblemBusinessReports`, integrity asserts.
+- `exportCustomerEvidence` ≤ 120 lines via `evidenceLoadPorts(ctx)` + `assembleCustomerEvidenceExport`; no direct head/binding queries or `projectCustomerEvidenceExport({`.
+- `listProblemsForSupport` load glue behind `assembleSupportProblemList` + `evidenceLoadPorts`.
+- Pure package `route-execution/evidence-load/` free of Convex runtime and write-plan DTOs.
+- Journal free of WritePlan and must not absorb evidence-load ports / assemble helpers.
+- `convex/customerRequestEvidenceLoadPorts.ts` ≤ 80 lines; required list/get helpers; no freestanding assemble/load exports on the factory file.
+- Each evidence-load file ≤ 1000 lines.
+
+**When to run:** evidence-load package, evidence ports, or host export/list support query wiring.
+
+---
+
+### Critical suite: dispatch-lifecycle-thinness
+
+**File:** `tests/unit/customer-request/route-execution/dispatch-lifecycle-thinness.test.ts`
+
+**Locks:**
+- Dispatch machine files under `machines/` (`dispatch-lifecycle-ports.ts`, `current-leased-invocation.ts`, `open-leased-dispatch.ts`, `recover-expired-dispatch.ts`, `mark-dispatched.ts`, `record-not-released.ts`, `mark-accepted.ts`); index exports + `DispatchLifecyclePorts` / `DispatchLifecycleOpenPorts`.
+- Host exports `openLeasedDispatch`, `recoverExpiredDispatch`, `markDispatched`, `recordNotReleased`, `markAccepted` as thin shells (≤ 40 lines) via `dispatchLifecyclePorts` / `dispatchLifecycleOpenPorts`.
+- No run/outbox/attempt table queries, `ctx.db` writes, or `ctx.scheduler` in host bodies; `currentLeasedInvocation` not redefined on host.
+- Recover journal helpers (`recoverDispatchAttemptAligned`, etc.) live in dispatch machines, not the host.
+- No Dispatch/Recover/Mark sibling Convex hosts.
+- Dedicated adapter `convex/customerRequestRouteExecutionDispatchPorts.ts` ≤ 1000 lines, no WritePlan; Journal/Cancel/Problem ports must not contain dispatch commit helpers (`commitMarkDispatched`, etc.).
+- Dispatch machine files free of Convex runtime and write-plan DTOs; call `ports.*`.
+
+**When to run:** dispatch lifecycle machines, dispatch ports, or host open/recover/mark exports (ADR-013).
+
+---
+
+### Critical suite: v2-write-thinness
+
+**File:** `tests/unit/customer-request/v2-write-thinness.test.ts`
+
+**Locks:**
+- Module home `src/modules/customer-request/v2-write/` with `ports.ts`, `types.ts`, `aggregate-consistency.ts`, `commit-aggregate.ts`, `refresh-route-plan-generation.ts`, `record-route-plan-generation-retry.ts`, `index.ts`.
+- Host `convex/customerRequestV2.ts` exports `commitAggregate`, `refreshRoutePlanGeneration`, `recordRoutePlanGenerationRetry` as thin shells (≤ 40 lines) via `customerRequestV2WritePorts(ctx)` + `*Machine` imports from `@/modules/customer-request/v2-write`.
+- No command/head table queries, `ctx.db.insert/patch`, or `supersedeCurrentRouteMandate` in host bodies (mandate supersession only through ports).
+- No Commit/Refresh/Write sibling hosts (`customerRequestV2Commit.ts`, etc.).
+- Adapter `convex/customerRequestV2WritePorts.ts` ≤ 1000 lines; no WritePlan / intendedPatches; pure `v2-write/` free of Convex imports and WritePlan.
+- `aggregateIsInternallyConsistent` single-sourced in module and re-exported from host (not redefined).
+- Route-execution Journal/Cancel/Dispatch/Problem ports must not absorb V2 write symbols (`commitAggregate`, `customerRequestV2WritePorts`, graph validation).
+
+**When to run:** V2 write machines, write ports, or the three write exports on `convex/customerRequestV2.ts` (ADR-014).
+
+**Note:** Validators for these three exports remain on `convex/customerRequestV2.ts` forever — thinness does not move `v.*`.
+
+---
+
+### Customer-request application thinness
+
+Host: `convex/customerRequestApplication.ts` → `application/<slice>` via `application/public` + per-slice `*Ports.ts`.
+
+| File | What it locks |
+|------|----------------|
+| `tests/unit/customer-request/application/provide-facts-thinness.test.ts` | Host `provideFacts` ≤ 30 lines; compile only through ports; no dual compilers / mandate / journal leakage |
+| `tests/unit/customer-request/application/refine-thinness.test.ts` | Thin refine action; no cross-slice pollution |
+| `tests/unit/customer-request/application/confirm-route-thinness.test.ts` | Confirm-route slice isolation |
+| `tests/unit/customer-request/application/standing-route-thinness.test.ts` | Standing-route slice isolation |
+| `tests/unit/customer-request/application/compare-resume-thinness.test.ts` | Compare/resume (calls V2 refresh/retry via Convex — does not construct V2 write ports) |
+| `tests/unit/customer-request/application/authorize-preparation-thinness.test.ts` | Authorize body ≤ 35 lines |
+| `tests/unit/customer-request/application/preparation-egress-thinness.test.ts` | Preparation egress projection isolation |
+| `tests/unit/customer-request/application/action-projection-thinness.test.ts` | Action projection not folded into sibling packages |
+| `tests/unit/customer-request/application/problem-route-thinness.test.ts` | Problem-route application slice |
+
+Typical pattern: host action body delegates to module function + ports; slice free of Convex runtime; no leakage of symbols into sibling application folders.
+
+---
+
+### Capability-supply thinness
+
+| File | What it locks |
+|------|----------------|
+| `tests/unit/capability-supply/convex-host-thinness.test.ts` | `convex/capabilitySupply.ts` does not redefine moved pure helpers; imports from `internal/{offering,binding,eligibility,quarantine,publication,shared,operation-ledger,graph}`; deepened folders Convex-free |
+| `tests/unit/capability-supply/eligible-supply-thinness.test.ts` | Eligible-supply pure package boundaries |
+| `tests/unit/capability-supply/graph-probe-thinness.test.ts` | Graph probe isolation |
+| `tests/unit/capability-supply/operation-ledger-thinness.test.ts` | Operation ledger pure + host wiring |
+| `tests/unit/capability-supply/publication-commands-thinness.test.ts` | Publication command extract |
+| `tests/unit/capability-supply/supply-writers-thinness.test.ts` | Supply writer extract |
+
+---
 
 ### Inquiry / outbox thinness
 
@@ -176,18 +302,10 @@ When adding or extending a thinness suite:
 
 **Prescriptive split:** source-state ports own inquiry ledger IO; notification ports/bridge own dispatch enqueue + shared outbox persistence; host only composes both and calls module commands (`submitInquiryModule`, `replyToInquiryModule`).
 
-### Other thinness suites (same recipe)
+### Other thinness suites
 
-**Customer-request application** (host `convex/customerRequestApplication.ts` → `application/<slice>`):
-- `provide-facts-thinness.test.ts`, `refine-thinness.test.ts`, `confirm-route-thinness.test.ts`, `standing-route-thinness.test.ts`, `compare-resume-thinness.test.ts`, `authorize-preparation-thinness.test.ts`, `preparation-egress-thinness.test.ts`, `action-projection-thinness.test.ts`, `problem-route-thinness.test.ts`
-
-Typical provide-facts host budget: ≤ 30 lines; compile only through ports; no dual compilers / mandate / journal leakage into the slice.
-
-**Capability-supply / routing / answer-thread:**
-- `tests/unit/capability-supply/*-thinness.test.ts` (convex-host, eligible-supply, graph-probe, operation-ledger, publication-commands, supply-writers)
 - `tests/unit/routing-kernel/kernel-execute-reconcile-thinness.test.ts`
 - `tests/unit/answer-thread/turn-path-thinness.test.ts`
-- `tests/unit/customer-request/route-execution/evidence-load-thinness.test.ts`
 
 ## Mocking
 
@@ -238,6 +356,7 @@ vi.mock('undici', async (importOriginal) => ({
 **Integration Tests:**
 - `convex-test` against real schema + module graph; multi-capability route, registry API, discovery parity, answer-turn flows under `tests/integration/`.
 - `npm run test:integration` disables file parallelism for stability.
+- V2 write deepenings must keep integration callers green (`internal.customerRequestV2.commitAggregate` / refresh / retry paths unchanged).
 
 **Import / contract scans:**
 - Boundaries: `tests/imports/customer-request-boundaries.test.ts`, capability/routing/private-import suites.
@@ -282,13 +401,14 @@ expect(body).not.toContain('ctx.db.insert(')
 
 1. Extract pure machine/application under `src/modules/...`.
 2. Add ports type (no Convex imports, no `WritePlan`).
-3. Add `convex/*Ports.ts` factory adapting `ctx`.
-4. Thin host export to ports + machine call (respect line budgets).
-5. Add/extend `*-thinness.test.ts` locking the above.
-6. Keep or add behavioral unit tests through ports.
-7. If route execution / multi-capability behavior changes, run the relevant `tests/integration/customer-request-*.test.ts`.
-8. Run `npm run test:unit` (at least the thinness + sibling unit files) and `npm run typecheck`.
+3. Add `convex/*Ports.ts` factory adapting `ctx` (respect ~1k ceiling; do not invent sibling mutation hosts).
+4. Thin host export to validators + ports + machine call (respect line budgets).
+5. Leave all `v.*` validators on the Convex host forever.
+6. Add/extend `*-thinness.test.ts` locking the above (including no-WritePlan + no-sibling-chop).
+7. Keep or add behavioral unit tests through ports.
+8. If route execution / multi-capability / V2 write behavior changes, run the relevant `tests/integration/customer-request-*.test.ts`.
+9. Run `npm run test:unit` (at least the thinness + sibling unit files) and `npm run typecheck`.
 
 ---
 
-*Testing analysis: 2026-07-18 (commit `3463c1d4`)*
+*Testing analysis: 2026-07-18 (commit `9d8faa04`)*
