@@ -134,3 +134,11 @@ Issues #181–#187 remain dormant. They may be rewritten only after the program
 has a selected commercial cohort, observed baseline, primitive coverage matrix,
 promotion disposition for each missing primitive, product proof design, and
 transfer test.
+
+> **SUPERSEDED IN PART — 2026-07-18.** The Founder activated the ADR-009/010
+> completion goal and its Gate 0 research frontier. Issues 183 and 184 are no
+> longer dormant: they may resolve the recurring-work grammar and current-source
+> constraint map without authorizing implementation or substituting for the
+> still-required cohort, provider, burden, security, transfer, and investment
+> evidence. The remaining implementation dependencies stay gated by
+> [`2026-07-18-phase-1-2-completion-contract.md`](../scopes/2026-07-18-phase-1-2-completion-contract.md).
