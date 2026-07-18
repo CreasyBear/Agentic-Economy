@@ -48,7 +48,7 @@ describe('inquiry source-state thinness', () => {
     expect(convexHost).toContain("from './inquirySourceStatePorts'")
     expect(convexHost).toContain('submitInquiryModule')
     expect(convexHost).toMatch(/mutationGeneric[\s\S]*submitPublicInquiry|export const submitPublicInquiry\s*=\s*mutationGeneric/)
-    expect(convexHost).toContain('enqueueInquiryNotificationDispatches')
+    expect(convexHost).toContain('inquiryNotificationPorts')
     expect(convexHost).toMatch(/inquirySourceStatePorts\([^)]*\)\.load\b/)
     expect(convexHost).toMatch(/inquirySourceStatePorts\([^)]*\)\.persist\b/)
   })
@@ -90,7 +90,8 @@ describe('inquiry source-state thinness', () => {
     for (const path of sourceStateOnlyFiles) {
       expect(readFileSync(path, 'utf8')).not.toContain('notificationDispatches')
     }
-    expect(convexHost).toContain('enqueueInquiryNotificationDispatches')
+    expect(convexHost).toContain('inquiryNotificationPorts')
+    expect(convexHost).toMatch(/inquiryNotificationPorts\([^)]*\)\.enqueueDispatches\b/)
   })
 
   it('keeps each ports implementation file under 1000 lines', () => {
