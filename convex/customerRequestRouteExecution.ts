@@ -11,7 +11,7 @@ import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contr
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
 import {
-  exportState,
+  projectCustomerEvidenceExport,
   routeAttemptIntegrityValid,
   routeDispatchIntegrityValid,
   routeRunIdentityDigest,
@@ -22,7 +22,6 @@ import {
   decideCustomerProblemReport,
   decideSupportProblemStatus,
   projectBusinessProblem,
-  projectCustomerEvidenceProblems,
   projectSupportProblemExport,
   projectSupportProblemList,
 } from '@/modules/customer-request/route-execution/problem-support'
@@ -1973,55 +1972,27 @@ export const exportCustomerEvidence = internalQuery({
     if (run === null || run.principalId !== args.principalId) throw new Error('customer_request_route_run_integrity_failure')
     const attempts = await ctx.db.query('customerRequestRouteStepAttempts')
       .withIndex('by_runRef_and_position', (query) => query.eq('runRef', run.runRef)).take(run.totalSteps + 1)
-    if (attempts.length === 0 || attempts.length > run.totalSteps
-      || attempts.some((attempt) => !routeAttemptIntegrityValid(attempt))) {
-      throw new Error('customer_request_route_run_attempt_integrity_failure')
-    }
     const bindings = await Promise.all(attempts.map(async (attempt) => (
       await ctx.db.query('capabilityTransportBindings')
         .withIndex('by_bindingId', (query) => query.eq('bindingId', attempt.grant.step.bindingId))
         .unique()
     )))
-    if (bindings.some((binding, index) => {
-      const attempt = attempts[index]
-      return binding === null || attempt === undefined
-        || binding.offeringId !== attempt.grant.step.offeringId
-        || binding.registrationHash !== attempt.grant.step.bindingRegistrationHash
-    })) {
-      throw new Error('customer_request_route_run_binding_integrity_failure')
-    }
     const problems = await ctx.db.query('customerRequestRouteProblemReports')
       .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).take(101)
-    if (problems.length > 100 || problems.some((problem) => problem.principalId !== args.principalId)) {
-      throw new Error('customer_request_route_problem_integrity_failure')
-    }
     const [updatesByProblem, businessReportsByProblem] = await Promise.all([
       Promise.all(problems.map(async (problem) => readProblemUpdates(ctx, problem.reportRef))),
       Promise.all(problems.map(async (problem) => readProblemBusinessReports(ctx, problem.reportRef))),
     ])
-    return {
-      kind: 'found' as const, state: run.state, generatedAt: Date.now(),
-      ...(run.resultJson === undefined ? {} : { resultJson: run.resultJson }),
-      steps: attempts.map((attempt, index) => ({ attempt, binding: bindings[index] }))
-        .sort((left, right) => left.attempt.position - right.attempt.position)
-        .map(({ attempt, binding }) => ({
-        step: attempt.position, state: exportState(attempt.state), observedAt: attempt.updatedAt,
-        business: run.businesses?.[attempt.position - 1]?.name ?? `Business step ${attempt.position}`,
-        providerOrigin: new URL(binding!.endpointUrl).origin,
-        ...(attempt.outputDigest === undefined ? {} : { outputDigest: attempt.outputDigest }),
-        evidence: (attempt.evidence ?? []).map((item, index) => ({
-          receiptRef: `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
-          label: `Result evidence ${index + 1}`,
-        })),
-      })),
-      problems: projectCustomerEvidenceProblems({
-        problems,
-        updatesByProblem,
-        businessReportsByProblem,
-        attempts,
-        observedAt: Date.now(),
-      }),
-    }
+    return projectCustomerEvidenceExport({
+      run,
+      attempts,
+      bindings,
+      problems,
+      updatesByProblem,
+      businessReportsByProblem,
+      principalId: args.principalId,
+      generatedAt: Date.now(),
+    })
   },
 })
 

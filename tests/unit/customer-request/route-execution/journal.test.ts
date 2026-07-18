@@ -3,13 +3,16 @@ import { describe, expect, it } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   exportState,
+  projectCustomerEvidenceExport,
   routeAttemptIntegrityValid,
   routeDispatchIntegrityValid,
   routeRunIdentityDigest,
+  type CustomerEvidenceExportAttemptSnapshot,
   type RouteAttemptIntegritySnapshot,
   type RouteDispatchIntegritySnapshot,
   type RouteRunIdentitySnapshot,
 } from '@/modules/customer-request/route-execution/journal'
+import { evidenceReceiptRef } from '@/modules/customer-request/route-execution/problem-support/evidence'
 
 const runBase: RouteRunIdentitySnapshot = {
   runRef: 'route-run:v1:abc',
@@ -180,5 +183,150 @@ describe('exportState', () => {
     expect(exportState('failed')).toBe('failed')
     expect(exportState('outcome_unknown')).toBe('outcome_unknown')
     expect(exportState('cancelled')).toBe('cancelled')
+  })
+})
+
+describe('projectCustomerEvidenceExport', () => {
+  const input = { destination: 'Perth' }
+  const inputJson = JSON.stringify(input)
+  const inputDigest = canonicalDigest(input)
+  const output = { status: 'ok' }
+  const outputJson = JSON.stringify(output)
+  const outputDigest = canonicalDigest(output)
+  const evidenceItem = {
+    evidenceId: 'ev-1',
+    outputPointer: '/status',
+    schemaIdentity: 'schema:1',
+    valueDigest: 'value-digest',
+  }
+  const attemptMaterial = {
+    runRef: 'run:1',
+    requestId: 'req:1',
+    mandateRef: 'mandate:1',
+    actionId: 'action:1',
+    position: 1,
+    operationKeyDigest: 'op:1',
+    grantDigest: 'grant:1',
+    inputDigest,
+    createdAt: 1_000,
+  }
+  const attemptDigest = canonicalDigest(attemptMaterial)
+
+  function validAttempt(
+    overrides: Partial<CustomerEvidenceExportAttemptSnapshot> = {},
+  ): CustomerEvidenceExportAttemptSnapshot {
+    return {
+      runRef: attemptMaterial.runRef,
+      requestId: attemptMaterial.requestId,
+      mandateRef: attemptMaterial.mandateRef,
+      actionId: attemptMaterial.actionId,
+      position: attemptMaterial.position,
+      operationKeyDigest: attemptMaterial.operationKeyDigest,
+      grant: {
+        grantDigest: attemptMaterial.grantDigest,
+        step: {
+          offeringId: 'offering:1',
+          bindingRegistrationHash: 'reg:1',
+          businessId: 'biz:1',
+        },
+      },
+      inputDigest,
+      createdAt: attemptMaterial.createdAt,
+      attemptDigest,
+      attemptRef: `route-step-attempt:v1:${attemptDigest}`,
+      inputJson,
+      outputJson,
+      outputDigest,
+      state: 'succeeded',
+      updatedAt: 2_000,
+      evidence: [evidenceItem],
+      ...overrides,
+    }
+  }
+
+  const binding = {
+    offeringId: 'offering:1',
+    registrationHash: 'reg:1',
+    endpointUrl: 'https://provider.example/v1/book',
+  }
+
+  it('assembles found evidence from plain snapshots', () => {
+    const attempt = validAttempt()
+    const exported = projectCustomerEvidenceExport({
+      run: {
+        state: 'completed',
+        totalSteps: 1,
+        resultJson: '{"ok":true}',
+        businesses: [{ businessRef: 'business:1', name: 'AccessRide' }],
+      },
+      attempts: [attempt],
+      bindings: [binding],
+      problems: [],
+      updatesByProblem: [],
+      businessReportsByProblem: [],
+      principalId: 'principal:1',
+      generatedAt: 9_000,
+    })
+
+    expect(exported).toEqual({
+      kind: 'found',
+      state: 'completed',
+      generatedAt: 9_000,
+      resultJson: '{"ok":true}',
+      steps: [{
+        step: 1,
+        state: 'completed',
+        observedAt: 2_000,
+        business: 'AccessRide',
+        providerOrigin: 'https://provider.example',
+        outputDigest,
+        evidence: [{
+          receiptRef: evidenceReceiptRef(attempt.attemptRef, evidenceItem),
+          label: 'Result evidence 1',
+        }],
+      }],
+      problems: [],
+    })
+  })
+
+  it('rejects attempt, binding, and problem integrity failures', () => {
+    expect(() => projectCustomerEvidenceExport({
+      run: { state: 'completed', totalSteps: 1 },
+      attempts: [validAttempt({ attemptDigest: 'wrong' })],
+      bindings: [binding],
+      problems: [],
+      updatesByProblem: [],
+      businessReportsByProblem: [],
+      principalId: 'principal:1',
+      generatedAt: 1,
+    })).toThrow('customer_request_route_run_attempt_integrity_failure')
+
+    expect(() => projectCustomerEvidenceExport({
+      run: { state: 'completed', totalSteps: 1 },
+      attempts: [validAttempt()],
+      bindings: [{ ...binding, registrationHash: 'wrong' }],
+      problems: [],
+      updatesByProblem: [],
+      businessReportsByProblem: [],
+      principalId: 'principal:1',
+      generatedAt: 1,
+    })).toThrow('customer_request_route_run_binding_integrity_failure')
+
+    expect(() => projectCustomerEvidenceExport({
+      run: { state: 'completed', totalSteps: 1 },
+      attempts: [validAttempt()],
+      bindings: [binding],
+      problems: [{
+        reportRef: 'problem:1',
+        principalId: 'other',
+        createdAt: 1,
+        category: 'other',
+        summary: 'Issue',
+      }],
+      updatesByProblem: [[]],
+      businessReportsByProblem: [[]],
+      principalId: 'principal:1',
+      generatedAt: 1,
+    })).toThrow('customer_request_route_problem_integrity_failure')
   })
 })

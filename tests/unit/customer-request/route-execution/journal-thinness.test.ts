@@ -10,7 +10,7 @@ const movedSymbols = [
   'routeRunIdentityDigest',
   'routeAttemptIntegrityValid',
   'routeDispatchIntegrityValid',
-  'exportState',
+  'projectCustomerEvidenceExport',
 ] as const
 
 const hostMachines = [
@@ -20,11 +20,13 @@ const hostMachines = [
 ] as const
 
 describe('customer-request route-execution journal thinness', () => {
-  it('does not redefine moved integrity helpers in Convex', () => {
+  it('does not redefine moved journal helpers in Convex', () => {
     for (const symbol of movedSymbols) {
       expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)(?:async\\s+)?function\\s+${symbol}\\b`))
       expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)const\\s+${symbol}\\s*=`))
     }
+    expect(convexHost).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+exportState\b/)
+    expect(convexHost).not.toMatch(/(?:^|\n)const\s+exportState\s*=/)
   })
 
   it('imports journal helpers and still references them', () => {
@@ -40,7 +42,7 @@ describe('customer-request route-execution journal thinness', () => {
     }
   })
 
-  it('keeps journal free of Convex runtime', () => {
+  it('keeps journal free of Convex runtime and write-plan DTOs', () => {
     for (const file of listTsFiles(moduleRoot)) {
       const source = readFileSync(file, 'utf8')
       expect(source).not.toMatch(/from\s+['"]\.\/_generated/)
@@ -50,12 +52,21 @@ describe('customer-request route-execution journal thinness', () => {
       expect(source).not.toMatch(/\bMutationCtx\b/)
       expect(source).not.toMatch(/\bQueryCtx\b/)
       expect(source).not.toMatch(/\bDoc\s*</)
+      expect(source).not.toMatch(/\bwritePlan\b/)
+      expect(source).not.toMatch(/\bWritePlan\b/)
     }
   })
 
   it('keeps host parseBoundedJson and exportedStepState', () => {
     expect(convexHost).toMatch(/(?:^|\n)function\s+parseBoundedJson\b/)
     expect(convexHost).toContain('const exportedStepState = v.union(')
+  })
+
+  it('keeps exportCustomerEvidence as a thin DB-load adapter', () => {
+    expect(convexHost).toMatch(/export const exportCustomerEvidence\s*=/)
+    expect(convexHost).toContain('projectCustomerEvidenceExport({')
+    expect(convexHost).not.toContain('providerOrigin: new URL(')
+    expect(convexHost).not.toContain('Result evidence')
   })
 })
 
