@@ -9,14 +9,6 @@ import {
   loadProblemUpdates,
 } from '@/modules/customer-request/route-execution/evidence-load'
 import {
-  canPreReleaseCancel,
-  canRequestAdapterCancellation,
-  cancelCommandArgsConflict,
-  cancelDisposition,
-  cancelPriorCommandConflicts,
-  cancelReplayKind,
-  cancelRunHeadIntegrityValid,
-  cancelRunNotFound,
   recoverDispatchAttemptAligned,
   recoverDispatchLeaseStillCurrent,
   recoverExpiredDispatchKind,
@@ -24,8 +16,11 @@ import {
   routeDispatchIntegrityValid,
 } from '@/modules/customer-request/route-execution/journal'
 import {
+  cancelCurrent as cancelCurrentMachine,
   leaseNextDispatch as leaseNextDispatchMachine,
+  openCancellationAttempt as openCancellationAttemptMachine,
   recordOutcome as recordOutcomeMachine,
+  resolveCancellationAttempt as resolveCancellationAttemptMachine,
   startOrResume as startOrResumeMachine,
 } from '@/modules/customer-request/route-execution/machines'
 import {
@@ -50,9 +45,12 @@ import {
 } from './customerRequestRouteMandate'
 import { evidenceLoadPorts } from './customerRequestEvidenceLoadPorts'
 import {
+  cancelMutationPorts,
+  cancelOpenPorts,
+} from './customerRequestRouteExecutionCancelPorts'
+import {
   journalMutationPorts,
   markUnknownOutcome,
-  queueNextStep,
   readRunProjection as readRunProjectionPorts,
 } from './customerRequestRouteExecutionJournalPorts'
 import { runtimeDb } from './source_state'
@@ -150,121 +148,24 @@ export const startOrResume = internalMutation({
   ),
 })
 
+const cancelCurrentResult = v.union(
+  v.object({ kind: v.literal('cancelled'), run: runProjection }),
+  v.object({ kind: v.literal('replayed'), run: runProjection }),
+  v.object({ kind: v.literal('pending'), run: runProjection }),
+  v.object({ kind: v.literal('too_late'), run: runProjection }),
+  v.object({ kind: v.literal('refused'), reason: v.literal('run_not_found') }),
+  v.object({ kind: v.literal('conflict'), reason: v.literal('command_changed') }),
+)
+
 export const cancelCurrent = internalMutation({
   args: {
     requestId: v.string(), principalId: v.string(), idempotencyKey: v.string(),
     mode: v.union(v.literal('current_and_downstream'), v.literal('after_current_step')),
   },
-  returns: v.union(
-    v.object({ kind: v.literal('cancelled'), run: runProjection }),
-    v.object({ kind: v.literal('replayed'), run: runProjection }),
-    v.object({ kind: v.literal('pending'), run: runProjection }),
-    v.object({ kind: v.literal('too_late'), run: runProjection }),
-    v.object({ kind: v.literal('refused'), reason: v.literal('run_not_found') }),
-    v.object({ kind: v.literal('conflict'), reason: v.literal('command_changed') }),
+  returns: cancelCurrentResult,
+  handler: async (ctx, args): Promise<Infer<typeof cancelCurrentResult>> => (
+    await cancelCurrentMachine(args, cancelMutationPorts(ctx)) as Infer<typeof cancelCurrentResult>
   ),
-  handler: async (ctx, args) => {
-    const now = Date.now()
-    if (cancelCommandArgsConflict(args)) {
-      return { kind: 'conflict' as const, reason: 'command_changed' as const }
-    }
-    const commandKey = `route-cancel-command:v1:${canonicalDigest({
-      principalId: args.principalId, requestId: args.requestId, idempotencyKey: args.idempotencyKey,
-    })}`
-    const commandDigest = canonicalDigest(args)
-    const prior = await ctx.db.query('customerRequestRouteCancellationCommands')
-      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-    if (prior !== null) {
-      const historicalDefaultDigest = canonicalDigest({
-        requestId: args.requestId,
-        principalId: args.principalId,
-        idempotencyKey: args.idempotencyKey,
-      })
-      if (cancelPriorCommandConflicts({
-        prior, args, commandDigest, historicalDefaultDigest,
-      })) {
-        return { kind: 'conflict' as const, reason: 'command_changed' as const }
-      }
-      const replayed = await readRunProjection(ctx, prior.runRef)
-      if (replayed === null) throw new Error('customer_request_route_cancellation_integrity_failure')
-      return { kind: cancelReplayKind(prior.result), run: replayed }
-    }
-    const head = await ctx.db.query('customerRequestRouteRunHeads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (cancelRunNotFound(head, args.principalId) || head === null) {
-      return { kind: 'refused' as const, reason: 'run_not_found' as const }
-    }
-    const run = await ctx.db.query('customerRequestRouteRuns')
-      .withIndex('by_runRef', (query) => query.eq('runRef', head.currentRunRef)).unique()
-    if (!cancelRunHeadIntegrityValid(run, head) || run === null) {
-      throw new Error('customer_request_route_run_head_integrity_failure')
-    }
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_runRef_and_position', (query) => (
-        query.eq('runRef', run.runRef).eq('position', run.currentPosition)
-      )).unique()
-    if (attempt === null) throw new Error('customer_request_route_run_attempt_integrity_failure')
-    const outbox = await ctx.db.query('customerRequestRouteDispatchOutbox')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', attempt.attemptRef)).unique()
-    if (outbox === null) throw new Error('customer_request_route_dispatch_integrity_failure')
-    const canCancel = canPreReleaseCancel({
-      attemptState: attempt.state, outboxState: outbox.state,
-    })
-    const canRequestCancel = canRequestAdapterCancellation({
-      canPreReleaseCancel: canCancel,
-      mode: args.mode,
-      attemptState: attempt.state,
-      cancellationKind: attempt.grant.step.cancellation.kind,
-    })
-    if (canCancel) {
-      await ctx.db.patch(attempt._id, { state: 'cancelled', updatedAt: now })
-      await ctx.db.patch(outbox._id, { state: 'cancelled', updatedAt: now })
-      await ctx.db.patch(run._id, { state: 'cancelled', updatedAt: now })
-    }
-    if (canRequestCancel) {
-      const cancellationRef = `route-cancellation:v1:${canonicalDigest({
-        runRef: run.runRef,
-        attemptRef: attempt.attemptRef,
-        operationKeyDigest: attempt.operationKeyDigest,
-      })}`
-      const existingCancellation = await ctx.db.query('customerRequestRouteCancellationAttempts')
-        .withIndex('by_runRef_and_attemptRef', (query) => (
-          query.eq('runRef', run.runRef).eq('attemptRef', attempt.attemptRef)
-        )).unique()
-      if (existingCancellation === null) {
-        await ctx.db.insert('customerRequestRouteCancellationAttempts', {
-          cancellationRef,
-          runRef: run.runRef,
-          attemptRef: attempt.attemptRef,
-          operationKeyDigest: attempt.operationKeyDigest,
-          state: 'pending',
-          requestedAt: now,
-          updatedAt: now,
-        })
-        await ctx.scheduler.runAfter(0, internal.customerRequestRouteCancellationWorker.run, {
-          cancellationRef,
-        })
-      }
-    }
-    const commandResult = cancelDisposition({
-      canPreReleaseCancel: canCancel,
-      canRequestAdapterCancellation: canRequestCancel,
-    })
-    await ctx.db.insert('customerRequestRouteCancellationCommands', {
-      commandKey,
-      commandDigest,
-      principalId: args.principalId,
-      requestId: args.requestId,
-      runRef: run.runRef,
-      mode: args.mode,
-      result: commandResult,
-      boundaryChangedAt: run.updatedAt,
-      committedAt: now,
-    })
-    const projection = await readRunProjection(ctx, run.runRef)
-    if (projection === null) throw new Error('customer_request_route_run_integrity_failure')
-    return { kind: commandResult, run: projection }
-  },
 })
 
 const dispatchLease = v.object({
@@ -341,67 +242,26 @@ const cancellationInvocation = v.object({
   }),
 })
 
+const openCancellationAttemptResult = v.union(
+  v.object({ kind: v.literal('available'), invocation: cancellationInvocation }),
+  v.object({ kind: v.literal('unavailable') }),
+)
+
 export const openCancellationAttempt = internalQuery({
   args: { cancellationRef: v.string() },
-  returns: v.union(
-    v.object({ kind: v.literal('available'), invocation: cancellationInvocation }),
-    v.object({ kind: v.literal('unavailable') }),
+  returns: openCancellationAttemptResult,
+  handler: async (ctx, args): Promise<Infer<typeof openCancellationAttemptResult>> => (
+    await openCancellationAttemptMachine(args, cancelOpenPorts(ctx)) as Infer<
+      typeof openCancellationAttemptResult
+    >
   ),
-  handler: async (ctx, args) => {
-    const cancellation = await ctx.db.query('customerRequestRouteCancellationAttempts')
-      .withIndex('by_cancellationRef', (query) => query.eq('cancellationRef', args.cancellationRef))
-      .unique()
-    if (cancellation === null || cancellation.state !== 'pending') {
-      return { kind: 'unavailable' as const }
-    }
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', cancellation.attemptRef)).unique()
-    if (attempt === null || attempt.runRef !== cancellation.runRef
-      || attempt.operationKeyDigest !== cancellation.operationKeyDigest
-      || attempt.grant.step.cancellation.kind !== 'adapter_managed'
-      || (attempt.state !== 'dispatched' && attempt.state !== 'accepted')
-      || !routeAttemptIntegrityValid(attempt)) return { kind: 'unavailable' as const }
-    const mandate = await readCurrentRouteMandateStateForPrincipal(
-      ctx, attempt.requestId, attempt.grant.principalId, Date.now(), { requireCurrentGraph: false },
-    )
-    if (mandate.kind !== 'active' || mandate.mandate.mandateRef !== attempt.grant.mandateRef
-      || mandate.mandate.mandateDigest !== attempt.grant.mandateDigest) {
-      return { kind: 'unavailable' as const }
-    }
-    const supply = await getEligibleExactCapabilitySupply(ctx.db, {
-      networkId: mandate.networkId,
-      businessId: attempt.grant.step.businessId,
-      offeringId: attempt.grant.step.offeringId,
-      bindingId: attempt.grant.step.bindingId,
-      contractRef: attempt.grant.step.contractRef,
-      expectedOfferingRegistrationHash: attempt.grant.step.offeringRegistrationHash,
-      expectedBindingRegistrationHash: attempt.grant.step.bindingRegistrationHash,
-    })
-    if (supply.kind !== 'available') return { kind: 'unavailable' as const }
-    return {
-      kind: 'available' as const,
-      invocation: {
-        cancellationRef: cancellation.cancellationRef,
-        attemptRef: attempt.attemptRef,
-        operationKeyDigest: attempt.operationKeyDigest,
-        binding: {
-          adapterId: supply.binding.adapterId,
-          endpointUrl: supply.binding.endpointUrl,
-          credentialRef: supply.binding.credentialRef,
-          configJson: supply.binding.configJson,
-          configDigest: supply.binding.configDigest,
-        },
-        authority: {
-          mandateDigest: attempt.grant.mandateDigest,
-          grantDigest: attempt.grant.grantDigest,
-          capabilityContractDigest: attempt.grant.step.contractRef.contractDigest,
-          maximumSpend: { ...attempt.grant.step.maximumSpend },
-          expiresAt: attempt.grant.expiresAt,
-        },
-      },
-    }
-  },
 })
+
+const resolveCancellationAttemptResult = v.union(
+  v.object({ kind: v.literal('recorded'), run: runProjection }),
+  v.object({ kind: v.literal('replayed'), run: runProjection }),
+  v.object({ kind: v.literal('refused') }),
+)
 
 export const resolveCancellationAttempt = internalMutation({
   args: {
@@ -418,63 +278,12 @@ export const resolveCancellationAttempt = internalMutation({
       failureCode: v.optional(v.string()),
     }),
   },
-  returns: v.union(
-    v.object({ kind: v.literal('recorded'), run: runProjection }),
-    v.object({ kind: v.literal('replayed'), run: runProjection }),
-    v.object({ kind: v.literal('refused') }),
+  returns: resolveCancellationAttemptResult,
+  handler: async (ctx, args): Promise<Infer<typeof resolveCancellationAttemptResult>> => (
+    await resolveCancellationAttemptMachine(args, cancelMutationPorts(ctx)) as Infer<
+      typeof resolveCancellationAttemptResult
+    >
   ),
-  handler: async (ctx, args) => {
-    const now = Date.now()
-    const cancellation = await ctx.db.query('customerRequestRouteCancellationAttempts')
-      .withIndex('by_cancellationRef', (query) => query.eq('cancellationRef', args.cancellationRef))
-      .unique()
-    if (cancellation === null) return { kind: 'refused' as const }
-    const run = await ctx.db.query('customerRequestRouteRuns')
-      .withIndex('by_runRef', (query) => query.eq('runRef', cancellation.runRef)).unique()
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', cancellation.attemptRef)).unique()
-    if (run === null || attempt === null || attempt.runRef !== run.runRef) {
-      throw new Error('customer_request_route_cancellation_integrity_failure')
-    }
-    if (cancellation.state !== 'pending') {
-      const replayed = await readRunProjection(ctx, run.runRef)
-      if (replayed === null) throw new Error('customer_request_route_run_integrity_failure')
-      return { kind: 'replayed' as const, run: replayed }
-    }
-    const state = args.observation.disposition === 'accepted'
-      ? 'accepted' as const
-      : args.observation.disposition === 'rejected' || args.observation.disposition === 'unsupported'
-        ? 'rejected' as const
-        : 'unknown' as const
-    await ctx.db.patch(cancellation._id, {
-      state,
-      requestDigest: args.observation.requestDigest,
-      ...(args.observation.responseDigest === undefined ? {} : { responseDigest: args.observation.responseDigest }),
-      ...(args.observation.providerReference === undefined ? {} : { providerReference: args.observation.providerReference }),
-      ...(args.observation.reason === undefined ? {} : { reason: args.observation.reason }),
-      ...(args.observation.failureCode === undefined ? {} : { failureCode: args.observation.failureCode }),
-      resolvedAt: now,
-      updatedAt: now,
-    })
-    if (state === 'accepted') {
-      await resolveCancellationCommand(ctx, run.runRef, 'cancelled')
-      await ctx.db.patch(attempt._id, { state: 'cancelled', updatedAt: now })
-      await ctx.db.patch(run._id, {
-        state: 'cancelled',
-        currentPosition: attempt.position,
-        updatedAt: now,
-      })
-    } else if (state === 'rejected') {
-      await resolveCancellationCommand(ctx, run.runRef, 'rejected')
-      if (attempt.state === 'succeeded' && attempt.position < run.totalSteps) {
-        const advanced = await queueNextStep(ctx, run, attempt.position + 1, now)
-        if (!advanced) await markUnknownOutcome(ctx, run, attempt, now)
-      }
-    }
-    const projection = await readRunProjection(ctx, run.runRef)
-    if (projection === null) throw new Error('customer_request_route_run_integrity_failure')
-    return { kind: 'recorded' as const, run: projection }
-  },
 })
 
 export const recoverExpiredDispatch = internalMutation({
@@ -1506,21 +1315,6 @@ export const exportCustomerEvidence = internalQuery({
   ),
   handler: async (ctx, args) => await assembleCustomerEvidenceExport(args, evidenceLoadPorts(ctx)),
 })
-
-async function resolveCancellationCommand(
-  ctx: MutationCtx,
-  runRef: string,
-  result: 'cancelled' | 'rejected',
-): Promise<void> {
-  const command = await ctx.db.query('customerRequestRouteCancellationCommands')
-    .withIndex('by_runRef_and_committedAt', (query) => query.eq('runRef', runRef))
-    .order('desc')
-    .first()
-  if (command === null || command.result !== 'pending') {
-    throw new Error('customer_request_route_cancellation_command_integrity_failure')
-  }
-  await ctx.db.patch(command._id, { result })
-}
 
 function parseBoundedJson(value: string): JsonValue | undefined {
   try {

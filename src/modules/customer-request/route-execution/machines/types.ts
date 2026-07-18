@@ -219,3 +219,104 @@ export type RouteBusinessSnapshot = Readonly<{
   businessRef: string
   name: string
 }>
+
+export type CancelCommand = Readonly<{
+  requestId: string
+  principalId: string
+  idempotencyKey: string
+  mode: 'current_and_downstream' | 'after_current_step'
+}>
+
+export type CancelResult = Readonly<
+  | { kind: 'cancelled'; run: RunProjection }
+  | { kind: 'replayed'; run: RunProjection }
+  | { kind: 'pending'; run: RunProjection }
+  | { kind: 'too_late'; run: RunProjection }
+  | { kind: 'refused'; reason: 'run_not_found' }
+  | { kind: 'conflict'; reason: 'command_changed' }
+>
+
+export type PriorCancelCommand = Readonly<{
+  commandDigest: string
+  principalId: string
+  requestId: string
+  runRef: string
+  mode?: 'current_and_downstream' | 'after_current_step'
+  result: 'cancelled' | 'pending' | 'too_late' | 'rejected'
+}>
+
+export type CancellationAttemptSnapshot = Readonly<{
+  cancellationRef: string
+  runRef: string
+  attemptRef: string
+  operationKeyDigest: string
+  state: 'pending' | 'accepted' | 'rejected' | 'unknown'
+  requestedAt: number
+  updatedAt: number
+  resolvedAt?: number
+  reason?: string
+}>
+
+export type CancelMandateLoadResult = Readonly<
+  | { kind: 'active'; mandateRef: string; mandateDigest: string; networkId: string }
+  | { kind: 'missing' }
+>
+
+export type CancelSupplyLoadResult = Readonly<
+  | {
+    kind: 'available'
+    binding: Readonly<{
+      adapterId: string
+      endpointUrl: string
+      credentialRef: string
+      configJson: string
+      configDigest: string
+    }>
+  }
+  | { kind: 'unavailable' }
+>
+
+export type CancellationInvocation = Readonly<{
+  cancellationRef: string
+  attemptRef: string
+  operationKeyDigest: string
+  binding: Readonly<{
+    adapterId: string
+    endpointUrl: string
+    credentialRef: string
+    configJson: string
+    configDigest: string
+  }>
+  authority: Readonly<{
+    mandateDigest: string
+    grantDigest: string
+    capabilityContractDigest: string
+    maximumSpend: Readonly<{ currency: string; amountMinor: number }>
+    expiresAt: number
+  }>
+}>
+
+export type OpenCancellationResult = Readonly<
+  | { kind: 'available'; invocation: CancellationInvocation }
+  | { kind: 'unavailable' }
+>
+
+export type CancellationObservation = Readonly<{
+  disposition: 'accepted' | 'rejected' | 'unknown' | 'unsupported'
+  requestDigest: string
+  responseDigest?: string
+  providerReference?: string
+  reason?: string
+  failureCode?: string
+}>
+
+export type ResolveCancellationCommand = Readonly<{
+  cancellationRef: string
+  observation: CancellationObservation
+}>
+
+export type ResolveCancellationResult = Readonly<
+  | { kind: 'recorded'; run: RunProjection }
+  | { kind: 'replayed'; run: RunProjection }
+  | { kind: 'refused' }
+>

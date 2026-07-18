@@ -67,7 +67,7 @@ Shallow Convex sibling splits move lines without deepening write authority and r
 - Issue: After ADR-011 machine deepen, `cancelCurrent`, cancellation open/resolve, recover/mark helpers, and problem `internalMutation`/`internalQuery` bodies remain largely inline in the host. Application-layer problem-route (`src/modules/customer-request/application/problem-route/`) and `convex/customerRequestProblemRoutePorts.ts` are thin for **actions**; durable mutation authority for cancel/problem is still host-owned.
 - Files: `convex/customerRequestRouteExecution.ts` (`cancelCurrent` ~`:153`, `reportProblem` ~`:699`, `recordProblemBusinessReport`, `updateProblemStatus`, `replyProblem`, support/export queries); predicates already in `route-execution/journal/` and `route-execution/problem-support/`
 - Impact: ~1606-line host stays hard to review; cancel/problem changes risk digest/idempotency drift; easy to “fix” with forbidden sibling chops
-- Fix approach: Same ports pattern as start/lease/outcome — module machines + semantic `MutationCtx` ports adapter; **do not** invent `WritePlan`; **do not** fold casually into Start/Lease/Outcome; prefer a dedicated cancel/problem ADR if scope expands
+- Fix approach: **ADR-012** (`.planning/adr/ADR-012-route-cancel-problem-ports.md`, Accepted) — Wave 33 `CancelMutationPorts` + cancel machines; Wave 34 `ProblemMutationPorts`; **do not** grow `JournalMutationPorts` past ~1k; **do not** invent `WritePlan`; **do not** create `…Cancel.ts` / `…Problem.ts` sibling chops
 
 **Fat `commitSucceededOutcome` in journal ports:**
 - Issue: Success-path branching (pending cancel, too-late cancel, complete, advance, unknown) lives as a large port method rather than a further-deepened machine/helper seam

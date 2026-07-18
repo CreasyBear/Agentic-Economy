@@ -5,20 +5,25 @@ import { describe, expect, it } from 'vitest'
 
 const machinesRoot = 'src/modules/customer-request/route-execution/machines'
 const journalRoot = 'src/modules/customer-request/route-execution/journal'
-const portsSource = readFileSync('convex/customerRequestRouteExecutionJournalPorts.ts', 'utf8')
+const journalPortsSource = readFileSync('convex/customerRequestRouteExecutionJournalPorts.ts', 'utf8')
+const cancelPortsSource = readFileSync('convex/customerRequestRouteExecutionCancelPorts.ts', 'utf8')
 const hostSource = readFileSync('convex/customerRequestRouteExecution.ts', 'utf8')
 
 const machineFiles = [
   'start-or-resume.ts',
   'lease-next-dispatch.ts',
   'record-outcome.ts',
+  'cancel-current.ts',
+  'cancel-open-attempt.ts',
+  'cancel-resolve-attempt.ts',
+  'cancel-ports.ts',
   'ports.ts',
   'types.ts',
   'index.ts',
 ] as const
 
 describe('customer-request route-execution machines thinness', () => {
-  it('hosts start/lease/outcome machines under machines/', () => {
+  it('hosts start/lease/outcome/cancel machines under machines/', () => {
     for (const file of machineFiles) {
       expect(statSync(join(machinesRoot, file)).isFile()).toBe(true)
     }
@@ -26,10 +31,14 @@ describe('customer-request route-execution machines thinness', () => {
     expect(index).toContain('startOrResume')
     expect(index).toContain('leaseNextDispatch')
     expect(index).toContain('recordOutcome')
+    expect(index).toContain('cancelCurrent')
+    expect(index).toContain('openCancellationAttempt')
+    expect(index).toContain('resolveCancellationAttempt')
     expect(index).toContain('JournalMutationPorts')
+    expect(index).toContain('CancelMutationPorts')
   })
 
-  it('keeps machines free of Convex runtime; effects only via JournalMutationPorts', () => {
+  it('keeps machines free of Convex runtime; effects only via ports', () => {
     for (const file of listTsFiles(machinesRoot)) {
       const source = readFileSync(file, 'utf8')
       expect(source).not.toMatch(/from\s+['"]\.\/_generated/)
@@ -49,6 +58,15 @@ describe('customer-request route-execution machines thinness', () => {
       expect(source).toContain('JournalMutationPorts')
       expect(source).toContain('ports.')
     }
+    const cancelCurrent = readFileSync(join(machinesRoot, 'cancel-current.ts'), 'utf8')
+    const cancelOpen = readFileSync(join(machinesRoot, 'cancel-open-attempt.ts'), 'utf8')
+    const cancelResolve = readFileSync(join(machinesRoot, 'cancel-resolve-attempt.ts'), 'utf8')
+    expect(cancelCurrent).toContain('CancelMutationPorts')
+    expect(cancelOpen).toContain('CancelOpenPorts')
+    expect(cancelResolve).toContain('CancelMutationPorts')
+    for (const source of [cancelCurrent, cancelOpen, cancelResolve]) {
+      expect(source).toContain('ports.')
+    }
   })
 
   it('forbids WritePlan DTOs in machines and journal', () => {
@@ -65,18 +83,26 @@ describe('customer-request route-execution machines thinness', () => {
       const source = readFileSync(file, 'utf8')
       expect(source).not.toMatch(/route-execution\/machines/)
       expect(source).not.toMatch(/JournalMutationPorts/)
+      expect(source).not.toMatch(/CancelMutationPorts/)
       expect(source).not.toMatch(/from\s+['"]\.\.\/machines/)
     }
   })
 
-  it('wires host through journalMutationPorts without sibling Start/Lease/Outcome hosts', () => {
+  it('wires host through journal and cancel ports without sibling hosts', () => {
     expect(hostSource).toContain('journalMutationPorts(ctx)')
-    expect(portsSource).toContain('export function journalMutationPorts')
-    expect(portsSource.split('\n').length).toBeLessThanOrEqual(1000)
+    expect(hostSource).toContain('cancelMutationPorts(ctx)')
+    expect(hostSource).toContain('cancelOpenPorts(ctx)')
+    expect(journalPortsSource).toContain('export function journalMutationPorts')
+    expect(cancelPortsSource).toContain('export function cancelMutationPorts')
+    expect(cancelPortsSource).toContain('export function cancelOpenPorts')
+    expect(journalPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
+    expect(cancelPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     for (const forbidden of [
       'convex/customerRequestRouteExecutionStart.ts',
       'convex/customerRequestRouteExecutionLease.ts',
       'convex/customerRequestRouteExecutionOutcome.ts',
+      'convex/customerRequestRouteExecutionCancel.ts',
+      'convex/customerRequestRouteExecutionProblem.ts',
     ]) {
       expect(() => statSync(forbidden)).toThrow()
     }
