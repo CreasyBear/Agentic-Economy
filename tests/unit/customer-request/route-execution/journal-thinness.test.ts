@@ -10,7 +10,6 @@ const movedSymbols = [
   'routeRunIdentityDigest',
   'routeAttemptIntegrityValid',
   'routeDispatchIntegrityValid',
-  'projectCustomerEvidenceExport',
   'cancelCommandArgsConflict',
   'cancelPriorCommandConflicts',
   'cancelReplayKind',
@@ -81,7 +80,9 @@ describe('customer-request route-execution journal thinness', () => {
 
   it('keeps exportCustomerEvidence as a thin DB-load adapter', () => {
     expect(convexHost).toMatch(/export const exportCustomerEvidence\s*=/)
-    expect(convexHost).toContain('projectCustomerEvidenceExport({')
+    expect(convexHost).toContain('assembleCustomerEvidenceExport')
+    expect(convexHost).toContain('evidenceLoadPorts')
+    expect(convexHost).not.toContain('projectCustomerEvidenceExport({')
     expect(convexHost).not.toContain('providerOrigin: new URL(')
     expect(convexHost).not.toContain('Result evidence')
   })

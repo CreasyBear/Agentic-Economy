@@ -11,6 +11,12 @@ import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contr
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
 import {
+  assembleCustomerEvidenceExport,
+  assembleSupportProblemList,
+  loadProblemBusinessReports,
+  loadProblemUpdates,
+} from '@/modules/customer-request/route-execution/evidence-load'
+import {
   canPreReleaseCancel,
   canRequestAdapterCancellation,
   cancelCommandArgsConflict,
@@ -22,7 +28,6 @@ import {
   leaseArgsInvalid,
   leaseGrantExpired,
   leasePendingCandidateValid,
-  projectCustomerEvidenceExport,
   recoverDispatchAttemptAligned,
   recoverDispatchLeaseStillCurrent,
   recoverExpiredDispatchKind,
@@ -37,7 +42,6 @@ import {
   decideSupportProblemStatus,
   projectBusinessProblem,
   projectSupportProblemExport,
-  projectSupportProblemList,
 } from '@/modules/customer-request/route-execution/problem-support'
 import { routeStepGrantDigest } from '@/modules/customer-request/route-mandate-admission'
 import { routeStepGrantValue } from '@/modules/customer-request/runtime'
@@ -52,6 +56,7 @@ import { admitRouteStep } from './customerRequestRouteMandateAdmission'
 import {
   readCurrentRouteMandateStateForPrincipal,
 } from './customerRequestRouteMandate'
+import { evidenceLoadPorts } from './customerRequestEvidenceLoadPorts'
 import { runtimeDb } from './source_state'
 
 const MAX_PENDING_DISPATCH_SCAN = 64
@@ -1356,7 +1361,7 @@ export const readProblemForBusiness = internalQuery({
     if (business === null || owner === null || owner.clerkUserId !== identity.subject) {
       return { kind: 'refused', reason: 'authority_denied' }
     }
-    const businessReports = await readProblemBusinessReports(ctx, report.reportRef)
+    const businessReports = await loadProblemBusinessReports(evidenceLoadPorts(ctx), report.reportRef)
     const projected = projectBusinessProblem({
       report,
       attempt,
@@ -1532,7 +1537,7 @@ export const updateProblemStatus = internalMutation({
       }
       return decision
     }
-    const updates = await readProblemUpdates(ctx, args.reportRef)
+    const updates = await loadProblemUpdates(evidenceLoadPorts(ctx), args.reportRef)
     const decision = decideSupportProblemStatus({
       args,
       actorRef: authority.membership.clerkUserId,
@@ -1583,7 +1588,7 @@ export const replyProblem = internalMutation({
       }
       return decision
     }
-    const updates = await readProblemUpdates(ctx, args.reportRef)
+    const updates = await loadProblemUpdates(evidenceLoadPorts(ctx), args.reportRef)
     const decision = decideCustomerProblemReply({
       args,
       updates,
@@ -1641,17 +1646,9 @@ export const listProblemsForSupport = internalQuery({
       return { kind: 'denied' as const, reason: authority.reason, rows: [] }
     }
     const limit = Number.isSafeInteger(args.limit) ? Math.min(Math.max(args.limit, 1), 100) : 50
-    const reports = await ctx.db.query('customerRequestRouteProblemReports').order('desc').take(limit)
-    const updatesByReport = await Promise.all(
-      reports.map(async (problem) => readProblemUpdates(ctx, problem.reportRef)),
-    )
     return {
       kind: 'allowed' as const,
-      rows: projectSupportProblemList({
-        reports,
-        updatesByReport,
-        observedAt: Date.now(),
-      }),
+      rows: await assembleSupportProblemList({ limit }, evidenceLoadPorts(ctx)),
     }
   },
 })
@@ -1802,10 +1799,11 @@ export const exportProblemForSupport = internalQuery({
     const problem = await ctx.db.query('customerRequestRouteProblemReports')
       .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
     if (problem === null) return { kind: 'not_found' as const }
+    const ports = evidenceLoadPorts(ctx)
     const [updates, businessReports, attempt, requestRevisions, mandateIssue, run, revocation,
       reservations, attempts] = await Promise.all([
-      readProblemUpdates(ctx, problem.reportRef),
-      readProblemBusinessReports(ctx, problem.reportRef),
+      loadProblemUpdates(ports, problem.reportRef),
+      loadProblemBusinessReports(ports, problem.reportRef),
       problem.attemptRef === undefined
         ? null
         : ctx.db.query('customerRequestRouteStepAttempts')
@@ -1869,26 +1867,6 @@ export const exportProblemForSupport = internalQuery({
     })
   },
 })
-
-async function readProblemUpdates(ctx: MutationCtx | QueryCtx, reportRef: string) {
-  const updates = await ctx.db.query('customerRequestRouteProblemUpdates')
-    .withIndex('by_reportRef_and_version', (query) => query.eq('reportRef', reportRef))
-    .take(101)
-  if (updates.length > 100 || updates.some((update, index) => update.version !== index + 1)) {
-    throw new Error('customer_request_route_problem_update_integrity_failure')
-  }
-  return updates
-}
-
-async function readProblemBusinessReports(ctx: MutationCtx | QueryCtx, reportRef: string) {
-  const reports = await ctx.db.query('customerRequestRouteProblemBusinessReports')
-    .withIndex('by_reportRef_and_createdAt', (query) => query.eq('reportRef', reportRef))
-    .take(101)
-  if (reports.length > 100) {
-    throw new Error('customer_request_route_problem_business_report_integrity_failure')
-  }
-  return reports
-}
 
 const exportedStepState = v.union(
   v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
@@ -1967,37 +1945,7 @@ export const exportCustomerEvidence = internalQuery({
       })),
     }),
   ),
-  handler: async (ctx, args) => {
-    const head = await ctx.db.query('customerRequestRouteRunHeads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head === null || head.principalId !== args.principalId) return { kind: 'none' as const }
-    const run = await ctx.db.query('customerRequestRouteRuns')
-      .withIndex('by_runRef', (query) => query.eq('runRef', head.currentRunRef)).unique()
-    if (run === null || run.principalId !== args.principalId) throw new Error('customer_request_route_run_integrity_failure')
-    const attempts = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_runRef_and_position', (query) => query.eq('runRef', run.runRef)).take(run.totalSteps + 1)
-    const bindings = await Promise.all(attempts.map(async (attempt) => (
-      await ctx.db.query('capabilityTransportBindings')
-        .withIndex('by_bindingId', (query) => query.eq('bindingId', attempt.grant.step.bindingId))
-        .unique()
-    )))
-    const problems = await ctx.db.query('customerRequestRouteProblemReports')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).take(101)
-    const [updatesByProblem, businessReportsByProblem] = await Promise.all([
-      Promise.all(problems.map(async (problem) => readProblemUpdates(ctx, problem.reportRef))),
-      Promise.all(problems.map(async (problem) => readProblemBusinessReports(ctx, problem.reportRef))),
-    ])
-    return projectCustomerEvidenceExport({
-      run,
-      attempts,
-      bindings,
-      problems,
-      updatesByProblem,
-      businessReportsByProblem,
-      principalId: args.principalId,
-      generatedAt: Date.now(),
-    })
-  },
+  handler: async (ctx, args) => await assembleCustomerEvidenceExport(args, evidenceLoadPorts(ctx)),
 })
 
 async function readRunProjection(
