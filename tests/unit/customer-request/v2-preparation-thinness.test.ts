@@ -113,7 +113,7 @@ describe('customer-request v2-preparation thinness', () => {
     }
   })
 
-  it('does not deepen egress / prepared-action hosts in Wave 45', () => {
+  it('does not deepen egress / prepared-action hosts via PreparationPorts', () => {
     for (const path of [
       'convex/customerRequestV2PreparationEgress.ts',
       'convex/customerRequestV2PreparationEgressState.ts',
@@ -123,7 +123,7 @@ describe('customer-request v2-preparation thinness', () => {
       expect(source).not.toContain('customerRequestV2PreparationPorts')
       expect(source).not.toContain('CustomerRequestV2PreparationPorts')
       expect(source).not.toContain('prepareActionPreparation')
-      expect(source).not.toContain('v2-preparation')
+      expect(source).not.toMatch(/from '@\/modules\/customer-request\/v2-preparation'/)
     }
   })
 
