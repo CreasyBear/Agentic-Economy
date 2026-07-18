@@ -40,6 +40,7 @@ export type {
   SubmitInquiryResult,
 } from './internal/commands'
 export type { InquirySourceStatePorts } from './internal/ledger/ports'
+export type { InquiryNotificationPorts } from './internal/notification-ports'
 export type {
   CapabilityLaunchSupportRecord,
   InquiryAuditRecord,

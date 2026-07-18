@@ -5,28 +5,20 @@ import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalMutation } from './_generated/server'
 import { runtimeDb } from './source_state'
-import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { inquirySourceStatePorts } from './inquirySourceStatePorts'
+import { inquiryNotificationPorts } from './inquiryNotificationPorts'
+import { serializeOperatorReconstructionReadback } from './inquirySerializeOperator'
 import {
   collect,
-  booleanField,
-  isRecord,
-  numberField,
-  optionalNumberField,
-  optionalStringField,
-  stringArrayField,
   stringField,
-  upsertByFields,
 } from './inquiryRuntimeDbHelpers'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { brandNonEmpty } from '../src/modules/common/ids'
-import { stableHash } from '../src/modules/common/stable-hash'
 import { CapabilityKindValues } from '../src/modules/catalog/public'
 import {
   accessIdFromInquiryCustomerAccessKey,
-  bindInquiryNotificationDispatches as bindInquiryNotificationDispatchesModule,
   closeInquiry as closeInquiryModule,
   deleteInquiryPrivateContent as deleteInquiryPrivateContentModule,
   evaluateR1TargetAdmission,
@@ -51,43 +43,22 @@ import {
   verifyInquiryCustomerAccess,
 } from '../src/modules/inquiries/public'
 import type {
-  InquiryDeliveryReadback,
-  InquiryCustomerRecordReadback,
-  InquiryExportReadback,
-  InquiryOperatorAuditRef,
-  InquiryOperatorDispatchAttemptRef,
-  InquiryNotificationDispatchBinding,
-  InquiryNotificationDispatchStatus,
-  InquiryNotificationRecord,
-  InquiryOperatorReconstructionAllowedReadback,
   InquiryOperatorReconstructionFilter,
-  InquiryOperatorReconstructionRow,
-  InquiryOperatorFunnelRef,
-  InquiryOperatorWebhookRef,
-  InquiryOperatorOperationRef,
-  InquiryPrivacyTombstoneRecord,
-  InquirySourceState,
-  OwnerInboxReadback,
-  OwnerInquiryDetailReadback,
 } from '../src/modules/inquiries/public'
 import {
-  createEmptyNotificationOutboxSourceState,
-  enqueueInquiryNotification as enqueueInquiryNotificationModule,
+  serializeCustomerRecord,
+  serializeInquiryDeliveryReadback,
+  serializeInquiryExport,
+  serializeInquiryPrivacyTombstone,
+  serializeOwnerInbox,
+  serializeOwnerInquiryDetail,
+} from '../src/modules/inquiries/internal/projections/serialize'
+import {
   NotificationAttemptStatusValues,
-  NotificationDispatchStatusValues,
   NotificationProviderFamilyValues,
   NotificationSignatureStatusValues,
   NotificationWebhookEventStatusValues,
 } from '../src/modules/notification-outbox/public'
-import type {
-  NotificationAttemptStatus,
-  NotificationDispatchRecord,
-  NotificationOutboxSourceState,
-  NotificationProviderFamily,
-  NotificationSignatureStatus,
-  NotificationWebhookEventStatus,
-} from '../src/modules/notification-outbox/public'
-import type { RedactedPayload } from '../src/modules/observability/public'
 
 const publicInquiryContact = v.object({
   name: v.optional(v.string()),
@@ -789,7 +760,12 @@ export const submitPublicInquiry = mutationGeneric({
       return summarizeSubmitError(result)
     }
 
-    const bridged = await enqueueInquiryNotificationDispatches(db, result.state, result.notification, result.thread.businessId, args.correlationId)
+    const bridged = await inquiryNotificationPorts(db).enqueueDispatches(
+      result.state,
+      result.notification,
+      result.thread.businessId,
+      args.correlationId,
+    )
     await inquirySourceStatePorts(db).persist(bridged.state)
     return {
       kind: 'ok' as const,
@@ -1259,7 +1235,12 @@ export const replyToCurrentOwnerInquiry = mutationGeneric({
       return ownerMutationError(result)
     }
 
-    const bridged = await enqueueInquiryNotificationDispatches(db, result.state, result.notification, result.thread.businessId, args.correlationId)
+    const bridged = await inquiryNotificationPorts(db).enqueueDispatches(
+      result.state,
+      result.notification,
+      result.thread.businessId,
+      args.correlationId,
+    )
     await inquirySourceStatePorts(db).persist(bridged.state)
     return ownerMutationOk(result)
   },
@@ -1304,221 +1285,6 @@ export const closeCurrentOwnerInquiry = mutationGeneric({
   },
 })
 
-async function enqueueInquiryNotificationDispatches(
-  db: RuntimeDb,
-  state: InquirySourceState,
-  notification: InquiryNotificationRecord,
-  businessId: string,
-  correlationId: string
-): Promise<{ state: InquirySourceState; notification: InquiryNotificationRecord }> {
-  const now = Date.now()
-  let outboxState = await loadNotificationDispatchBindingState(db)
-  const bindings: InquiryNotificationDispatchBinding[] = []
-
-  for (const providerFamily of notificationProviderFamilies()) {
-    const result = enqueueInquiryNotificationModule(outboxState, {
-      businessId: brandNonEmpty(businessId, 'BusinessId'),
-      inquiryThreadId: notification.threadId,
-      inquiryMessageId: notification.messageId,
-      recipientRole: notification.recipientRole,
-      providerFamily,
-      redactedPayload: {
-        notificationId: notification.notificationId,
-        threadId: notification.threadId,
-        messageId: notification.messageId,
-        recipientRole: notification.recipientRole,
-        notificationPayloadHash: notification.payloadHash,
-      },
-      providerIdempotencyKey: `ae:${notification.notificationId}:${providerFamily}`,
-      operationKey: brandNonEmpty(`notification:enqueue:${notification.notificationId}:${providerFamily}`, 'OperationKey'),
-      correlationId: brandNonEmpty(correlationId, 'CorrelationId'),
-      now,
-    })
-
-    if (result.kind === 'error') {
-      continue
-    }
-
-    outboxState = result.state
-    bindings.push(dispatchBindingFromDispatch(result.dispatch))
-  }
-
-  await persistNotificationDispatchBindingState(db, outboxState)
-  const bound = bindInquiryNotificationDispatchesModule(state, {
-    notificationId: notification.notificationId,
-    dispatchBindings: bindings,
-    now,
-  })
-
-  return bound.kind === 'ok' ? { state: bound.state, notification: bound.notification } : { state, notification }
-}
-
-function notificationProviderFamilies(): readonly NotificationProviderFamily[] {
-  return ['novu', 'resend']
-}
-
-function dispatchBindingFromDispatch(dispatch: NotificationDispatchRecord): InquiryNotificationDispatchBinding {
-  return {
-    dispatchId: dispatch.dispatchId,
-    providerFamily: dispatch.providerFamily,
-    status: dispatch.status,
-    providerIdempotencyKey: dispatch.providerIdempotencyKey,
-    payloadHash: dispatch.payloadHash,
-    operatorNextAction: notificationOperatorNextAction(dispatch.status),
-    updatedAt: dispatch.updatedAt,
-  }
-}
-
-function notificationOperatorNextAction(status: InquiryNotificationDispatchStatus): InquiryNotificationDispatchBinding['operatorNextAction'] {
-  if (status === 'no_repair' || status === 'delivered' || status === 'sent') {
-    return 'terminal'
-  }
-  if (status === 'failed' || status === 'provider_missing' || status === 'orchestrator_missing') {
-    return 'retry_available'
-  }
-  if (status === 'bounced' || status === 'complained' || status === 'delivery_delayed') {
-    return 'operator_review_required'
-  }
-  return 'none'
-}
-
-async function loadNotificationDispatchBindingState(db: RuntimeDb): Promise<NotificationOutboxSourceState> {
-  const dispatches = await collect(db, 'notificationDispatches')
-  return createEmptyNotificationOutboxSourceState({
-    dispatches: dispatches.map(toNotificationDispatchRecord),
-  })
-}
-
-async function persistNotificationDispatchBindingState(db: RuntimeDb, state: NotificationOutboxSourceState): Promise<void> {
-  for (const dispatch of state.dispatches) {
-    await upsertByFields(db, 'notificationDispatches', ['dispatchId'], {
-      dispatchId: dispatch.dispatchId,
-      businessId: dispatch.businessId,
-      inquiryThreadId: dispatch.inquiryThreadId,
-      inquiryMessageId: dispatch.inquiryMessageId,
-      recipientRole: dispatch.recipientRole,
-      providerFamily: dispatch.providerFamily,
-      status: dispatch.status,
-      providerIdempotencyKey: dispatch.providerIdempotencyKey,
-      redactedPayloadJson: JSON.stringify(dispatch.redactedPayload),
-      payloadHash: dispatch.payloadHash,
-      ...(dispatch.resendMessageId === undefined ? {} : { resendMessageId: dispatch.resendMessageId }),
-      ...(dispatch.novuTransactionId === undefined ? {} : { novuTransactionId: dispatch.novuTransactionId }),
-      ...(dispatch.novuWorkflowId === undefined ? {} : { novuWorkflowId: dispatch.novuWorkflowId }),
-      ...(dispatch.novuMessageId === undefined ? {} : { novuMessageId: dispatch.novuMessageId }),
-      ...(dispatch.novuSubscriberId === undefined ? {} : { novuSubscriberId: dispatch.novuSubscriberId }),
-      providerMissing: dispatch.providerMissing,
-      orchestratorMissing: dispatch.orchestratorMissing,
-      retryCount: dispatch.retryCount,
-      ...(dispatch.retryAfter === undefined ? {} : { retryAfter: dispatch.retryAfter }),
-      ...(dispatch.lastRedactedError === undefined ? {} : { lastRedactedError: dispatch.lastRedactedError }),
-      operationKey: dispatch.operationKey,
-      correlationId: dispatch.correlationId,
-      createdAt: dispatch.createdAt,
-      updatedAt: dispatch.updatedAt,
-    })
-    await upsertNotificationDispatchReconstruction(db, dispatch)
-  }
-}
-
-async function upsertNotificationDispatchReconstruction(db: RuntimeDb, dispatch: NotificationDispatchRecord): Promise<void> {
-  await Promise.all([
-    upsertByFields(db, 'operationKeys', ['scope', 'key'], {
-      scope: 'notification',
-      actorKind: 'system',
-      actorRef: 'system:notification-outbox',
-      operationName: 'enqueueInquiryNotification',
-      key: dispatch.operationKey,
-      requestHash: dispatch.payloadHash,
-      sourceHash: dispatch.dispatchId,
-      status: 'succeeded',
-      resultHash: stableHash({ code: 'notification_queued', dispatchId: dispatch.dispatchId }),
-      effectRefs: [
-        'result:notification_queued',
-        `dispatch:${dispatch.dispatchId}`,
-        `inquiryThread:${dispatch.inquiryThreadId}`,
-        `inquiryMessage:${dispatch.inquiryMessageId}`,
-      ],
-      createdAt: dispatch.createdAt,
-      updatedAt: dispatch.updatedAt,
-    }),
-    upsertNotificationAuditEvent(db, {
-      eventType: 'notification.queued',
-      actorKind: 'system',
-      actorRef: 'system:notification-outbox',
-      targetRef: dispatch.dispatchId,
-      businessId: dispatch.businessId,
-      operationKey: dispatch.operationKey,
-      correlationId: dispatch.correlationId,
-      beforeState: 'none',
-      afterState: dispatch.status,
-      redactedPayload: {
-        dispatchId: dispatch.dispatchId,
-        providerFamily: dispatch.providerFamily,
-        inquiryThreadId: dispatch.inquiryThreadId,
-        inquiryMessageId: dispatch.inquiryMessageId,
-        payloadHash: dispatch.payloadHash,
-      },
-      createdAt: dispatch.createdAt,
-    }),
-    upsertByFields(db, 'funnelEvents', ['eventType', 'businessId', 'correlationId', 'createdAt'], {
-      eventType: 'notification_queued',
-      source: 'notification-outbox',
-      stage: 'published',
-      pseudonymousSessionId: `notification:${dispatch.recipientRole}`,
-      businessId: dispatch.businessId,
-      redactedPayloadJson: JSON.stringify({
-        dispatchId: dispatch.dispatchId,
-        providerFamily: dispatch.providerFamily,
-        status: dispatch.status,
-      }),
-      consentFlag: true,
-      correlationId: dispatch.correlationId,
-      createdAt: dispatch.createdAt,
-    }),
-  ])
-}
-
-async function upsertNotificationAuditEvent(
-  db: RuntimeDb,
-  input: {
-    eventType: string
-    actorKind: 'anonymous' | 'owner' | 'admin' | 'system'
-    actorRef: string
-    targetRef: string
-    businessId?: string
-    operationKey: string
-    correlationId: string
-    beforeState: string
-    afterState: string
-    redactedPayload: RedactedPayload
-    createdAt: number
-  }
-): Promise<void> {
-  const payloadHash = stableHash(input.redactedPayload)
-  await upsertByFields(db, 'auditEvents', ['eventId'], {
-    eventId: `audit:${stableHash({
-      eventType: input.eventType,
-      operationKey: input.operationKey,
-      targetRef: input.targetRef,
-    })}`,
-    eventType: input.eventType,
-    actorKind: input.actorKind,
-    actorRef: input.actorRef,
-    ...(input.businessId === undefined ? {} : { businessId: input.businessId }),
-    targetType: 'notification',
-    targetRef: input.targetRef,
-    beforeState: input.beforeState,
-    afterState: input.afterState,
-    idempotencyKey: input.operationKey,
-    correlationId: input.correlationId,
-    evidenceRefs: [],
-    redactedPayloadJson: JSON.stringify(input.redactedPayload),
-    payloadHash,
-    createdAt: input.createdAt,
-  })
-}
-
 async function readCurrentOwner(ctx: RuntimeQueryCtx | RuntimeCtx): Promise<
   | { kind: 'allowed'; ownerId: string }
   | { kind: 'denied'; reason: 'missing_auth' | 'owner_not_found' }
@@ -1534,37 +1300,6 @@ async function readCurrentOwner(ctx: RuntimeQueryCtx | RuntimeCtx): Promise<
     .unique()
   return owner === null ? { kind: 'denied', reason: 'owner_not_found' } : { kind: 'allowed', ownerId: owner._id }
 }
-
-
-function toNotificationDispatchRecord(row: RuntimeDocument): NotificationDispatchRecord {
-  return {
-    dispatchId: brandNonEmpty(stringField(row, 'dispatchId'), 'NotificationDispatchId'),
-    businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
-    inquiryThreadId: stringField(row, 'inquiryThreadId'),
-    inquiryMessageId: stringField(row, 'inquiryMessageId'),
-    recipientRole: recipientRole(row),
-    providerFamily: notificationProviderFamily(row),
-    status: notificationDispatchStatus(row),
-    providerIdempotencyKey: stringField(row, 'providerIdempotencyKey'),
-    redactedPayload: parseJson(stringField(row, 'redactedPayloadJson')),
-    payloadHash: brandNonEmpty(stringField(row, 'payloadHash'), 'SourceHash'),
-    ...(optionalStringField(row, 'resendMessageId') === undefined ? {} : { resendMessageId: stringField(row, 'resendMessageId') }),
-    ...(optionalStringField(row, 'novuTransactionId') === undefined ? {} : { novuTransactionId: stringField(row, 'novuTransactionId') }),
-    ...(optionalStringField(row, 'novuWorkflowId') === undefined ? {} : { novuWorkflowId: stringField(row, 'novuWorkflowId') }),
-    ...(optionalStringField(row, 'novuMessageId') === undefined ? {} : { novuMessageId: stringField(row, 'novuMessageId') }),
-    ...(optionalStringField(row, 'novuSubscriberId') === undefined ? {} : { novuSubscriberId: stringField(row, 'novuSubscriberId') }),
-    providerMissing: booleanField(row, 'providerMissing'),
-    orchestratorMissing: booleanField(row, 'orchestratorMissing'),
-    retryCount: numberField(row, 'retryCount'),
-    ...(optionalNumberField(row, 'retryAfter') === undefined ? {} : { retryAfter: numberField(row, 'retryAfter') }),
-    ...(optionalStringField(row, 'lastRedactedError') === undefined ? {} : { lastRedactedError: stringField(row, 'lastRedactedError') }),
-    operationKey: brandNonEmpty(stringField(row, 'operationKey'), 'OperationKey'),
-    correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
-  }
-}
-
 
 function summarizeSubmitError(result: Extract<ReturnType<typeof submitInquiryModule>, { kind: 'error' }>) {
   return {
@@ -1675,352 +1410,6 @@ function inquiryPrivacyCsrfError(reason: string) {
 }
 
 
-function redactedJsonHash(row: RuntimeDocument, field: string): string {
-  const value = row[field]
-  if (!isRecord(value) || typeof value.payloadHash !== 'string') {
-    return stableHash(null)
-  }
-  return value.payloadHash
-}
-
-function parseJson(value: string): RedactedPayload {
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return isRedactedPayload(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function isRedactedPayload(value: unknown): value is RedactedPayload {
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return true
-  }
-  if (Array.isArray(value)) {
-    return value.every(isRedactedPayload)
-  }
-  if (!isRecord(value)) {
-    return false
-  }
-  return Object.values(value).every(isRedactedPayload)
-}
-
-function effectValue(effectRefs: readonly string[], kind: string): string | undefined {
-  const prefix = `${kind}:`
-  return effectRefs.find((ref) => ref.startsWith(prefix))?.slice(prefix.length)
-}
-
-function serializeOwnerInbox(inbox: OwnerInboxReadback) {
-  return {
-    ownerId: inbox.ownerId,
-    empty: inbox.empty,
-    buckets: { ...inbox.buckets },
-    delivery: { ...inbox.delivery },
-    inquiries: inbox.inquiries.map((inquiry) => ({ ...inquiry })),
-  }
-}
-
-function serializeOwnerInquiryDetail(readback: OwnerInquiryDetailReadback): {
-  inquiry: ReturnType<typeof serializeOwnerInbox>['inquiries'][number]
-  messages: {
-    messageId: string
-    sender: 'customer' | 'owner'
-    body: string
-    createdAt: number
-  }[]
-  notifications: ReturnType<typeof serializeOwnerNotificationProjection>[]
-} {
-  return {
-    inquiry: { ...readback.inquiry },
-    messages: readback.messages.map((message) => ({ ...message })),
-    notifications: readback.notifications.map(serializeOwnerNotificationProjection),
-  }
-}
-
-function serializeCustomerRecord(record: InquiryCustomerRecordReadback) {
-  return {
-    schemaVersion: record.schemaVersion,
-    threadId: record.threadId,
-    business: { ...record.business },
-    submitted: { ...record.submitted },
-    ...(record.governedSend === undefined ? {} : {
-      governedSend: record.governedSend.posture === 'verified'
-        ? {
-            posture: 'verified' as const,
-            digest: record.governedSend.digest,
-            fields: record.governedSend.fields.map((field) => ({ ...field })),
-          }
-        : {
-            posture: 'erased' as const,
-            digest: record.governedSend.digest,
-            erasedAt: record.governedSend.erasedAt,
-            erasureEventId: record.governedSend.erasureEventId,
-          },
-    }),
-    delivery: { ...record.delivery },
-    timeline: record.timeline.map((step) => ({ ...step })),
-    ...(record.reply === undefined ? {} : { reply: { ...record.reply } }),
-    ...(record.closedAt === undefined ? {} : { closedAt: record.closedAt }),
-    updatedAt: record.updatedAt,
-  }
-}
-
-function serializeInquiryDeliveryReadback(readback: InquiryDeliveryReadback) {
-  return {
-    threadId: readback.threadId,
-    notifications: readback.notifications.map(serializeOwnerNotificationProjection),
-  }
-}
-
-function serializeInquiryExport(readback: InquiryExportReadback) {
-  return {
-    thread: { ...readback.thread },
-    messages: readback.messages.map((message) => ({ ...message })),
-    notifications: readback.notifications.map(serializeOwnerNotificationProjection),
-    auditRefs: readback.auditRefs.map((auditRef) => ({ ...auditRef })),
-    tombstones: readback.tombstones.map(serializeInquiryPrivacyTombstone),
-  }
-}
-
-function serializeOwnerNotificationProjection(notification: InquiryDeliveryReadback['notifications'][number]) {
-  return {
-    notificationId: notification.notificationId,
-    messageId: notification.messageId,
-    recipientRole: notification.recipientRole,
-    status: notification.status,
-    label: notification.label,
-    updatedAt: notification.updatedAt,
-    ...(notification.failureCode === undefined ? {} : { failureCode: notification.failureCode }),
-    dispatchIds: notification.dispatchIds.map((dispatchId) => dispatchId),
-    providerFamilies: notification.providerFamilies.map((providerFamily) => providerFamily),
-    dispatchStatuses: notification.dispatchStatuses.map((status) => status),
-    dispatchBindings: notification.dispatchBindings.map((binding) => ({ ...binding })),
-  }
-}
-
-function serializeInquiryPrivacyTombstone(tombstone: InquiryPrivacyTombstoneRecord) {
-  return {
-    threadId: tombstone.threadId,
-    businessId: tombstone.businessId,
-    reasonCode: tombstone.reasonCode,
-    status: tombstone.status,
-    operationKey: tombstone.operationKey,
-    correlationId: tombstone.correlationId,
-    createdAt: tombstone.createdAt,
-    ...(tombstone.appliedAt === undefined ? {} : { appliedAt: tombstone.appliedAt }),
-    receiptErasureCount: tombstone.receiptErasureCount,
-    erasureEventIds: [...tombstone.erasureEventIds],
-  }
-}
-
-function serializeOperatorReconstructionReadback(
-  readback: InquiryOperatorReconstructionAllowedReadback,
-  refs: {
-    actorRef: string
-    attempts: readonly RuntimeDocument[]
-    webhooks: readonly RuntimeDocument[]
-    auditRows: readonly RuntimeDocument[]
-    funnelRows: readonly RuntimeDocument[]
-    operationRows: readonly RuntimeDocument[]
-  }
-) {
-  const rows = readback.rows.map((row) => serializeOperatorRow(row, refs))
-  return {
-    ...readback,
-    actorRef: refs.actorRef,
-    rows,
-    summary: {
-      threads: rows.length,
-      messages: rows.reduce((count, row) => count + row.messageRefs.length, 0),
-      notifications: rows.reduce((count, row) => count + row.notificationRefs.length, 0),
-      dispatches: rows.reduce((count, row) => count + row.dispatchRefs.length, 0),
-      needsRepair: rows.filter((row) => row.operatorNextAction === 'retry_available' || row.operatorNextAction === 'operator_review_required').length,
-      terminal: rows.filter((row) => row.operatorNextAction === 'terminal').length,
-    },
-  }
-}
-
-function serializeOperatorRow(
-  row: InquiryOperatorReconstructionRow,
-  refs: {
-    attempts: readonly RuntimeDocument[]
-    webhooks: readonly RuntimeDocument[]
-    auditRows: readonly RuntimeDocument[]
-    funnelRows: readonly RuntimeDocument[]
-    operationRows: readonly RuntimeDocument[]
-  }
-) {
-  const dispatchIds = new Set(row.dispatchRefs.map((dispatch) => String(dispatch.dispatchId)))
-  const webhookRefs = refs.webhooks.filter((webhook) => {
-    const dispatchId = optionalStringField(webhook, 'dispatchId')
-    return dispatchId !== undefined && dispatchIds.has(dispatchId)
-  })
-  const webhookIds = new Set(webhookRefs.map((webhook) => stringField(webhook, 'webhookEventId')))
-  const notificationCorrelationIds = new Set([
-    ...row.correlationIds.map((correlationId) => String(correlationId)),
-    ...webhookRefs.map((webhook) => stringField(webhook, 'correlationId')),
-  ].filter(Boolean))
-  const notificationAuditRefs: InquiryOperatorAuditRef[] = []
-  for (const audit of refs.auditRows) {
-    if (!stringField(audit, 'eventType').startsWith('notification.')) {
-      continue
-    }
-
-    const targetRef = stringField(audit, 'targetRef')
-    if (dispatchIds.has(targetRef) || webhookIds.has(targetRef)) {
-      notificationAuditRefs.push(operatorAuditRefFromRow(audit))
-    }
-  }
-
-  const notificationFunnelRefs: InquiryOperatorFunnelRef[] = []
-  for (const funnel of refs.funnelRows) {
-    if (
-      stringField(funnel, 'eventType').startsWith('notification_') &&
-      notificationCorrelationIds.has(stringField(funnel, 'correlationId'))
-    ) {
-      notificationFunnelRefs.push(operatorFunnelRefFromRow(funnel))
-    }
-  }
-
-  const notificationOperationRefs: InquiryOperatorOperationRef[] = []
-  for (const operation of refs.operationRows) {
-    if (stringField(operation, 'scope') !== 'notification') {
-      continue
-    }
-
-    const effects = stringArrayField(operation, 'effectRefs')
-    const hasMatchingEffect = effects.some((effect) => {
-      return (
-        dispatchIds.has(effectValueFromRef(effect, 'dispatch') ?? '') ||
-        webhookIds.has(effectValueFromRef(effect, 'webhook') ?? '')
-      )
-    })
-
-    if (hasMatchingEffect) {
-      notificationOperationRefs.push(operatorOperationRefFromRow(operation))
-    }
-  }
-  const attemptsByDispatchId = new Map<string, InquiryOperatorDispatchAttemptRef[]>()
-  const webhooksByDispatchId = new Map<string, InquiryOperatorWebhookRef[]>()
-  if (row.dispatchRefs.length > 0) {
-    for (const attempt of refs.attempts) {
-      const dispatchId = stringField(attempt, 'dispatchId')
-      const existing = attemptsByDispatchId.get(dispatchId)
-      const attemptRef = operatorAttemptRefFromRow(attempt)
-      if (existing === undefined) {
-        attemptsByDispatchId.set(dispatchId, [attemptRef])
-      } else {
-        existing.push(attemptRef)
-      }
-    }
-
-    for (const webhook of webhookRefs) {
-      const dispatchId = optionalStringField(webhook, 'dispatchId')
-      if (dispatchId === undefined) {
-        continue
-      }
-      const existing = webhooksByDispatchId.get(dispatchId)
-      const webhookRef = operatorWebhookRefFromRow(webhook)
-      if (existing === undefined) {
-        webhooksByDispatchId.set(dispatchId, [webhookRef])
-      } else {
-        existing.push(webhookRef)
-      }
-    }
-  }
-
-  return {
-    rowId: row.rowId,
-    threadId: row.threadId,
-    businessId: row.businessId,
-    serviceId: row.serviceId,
-    status: row.status,
-    sourceHash: row.sourceHash,
-    correlationIds: row.correlationIds.map((correlationId) => String(correlationId)),
-    operatorNextAction: row.operatorNextAction,
-    messageRefs: row.messageRefs.map((message) => ({ ...message })),
-    notificationRefs: row.notificationRefs.map((notification) => ({
-      ...notification,
-      dispatchIds: notification.dispatchIds.map((dispatchId) => dispatchId),
-    })),
-    dispatchRefs: row.dispatchRefs.map((dispatch) => ({
-      ...dispatch,
-      attemptRefs: attemptsByDispatchId.get(dispatch.dispatchId) ?? [],
-      webhookRefs: webhooksByDispatchId.get(dispatch.dispatchId) ?? [],
-    })),
-    auditRefs: uniqueOperatorRefs([...row.auditRefs, ...notificationAuditRefs], (ref) => `${ref.eventType}:${ref.targetRef}:${ref.operationKey}`),
-    funnelRefs: uniqueOperatorRefs([...row.funnelRefs, ...notificationFunnelRefs], (ref) => `${ref.eventType}:${ref.correlationId}:${ref.createdAt}`),
-    operationRefs: uniqueOperatorRefs([...row.operationRefs, ...notificationOperationRefs], (ref) => `${ref.operationKey}:${ref.resultCode}`),
-    updatedAt: row.updatedAt,
-  }
-}
-
-function operatorAttemptRefFromRow(row: RuntimeDocument): InquiryOperatorDispatchAttemptRef {
-  return {
-    attemptId: stringField(row, 'attemptId'),
-    providerFamily: notificationProviderFamily(row),
-    status: notificationAttemptStatus(row),
-    requestPayloadHash: stringField(row, 'requestPayloadHash'),
-    ...(optionalStringField(row, 'providerResponseHash') === undefined ? {} : { providerResponseHash: stringField(row, 'providerResponseHash') }),
-    ...(optionalNumberField(row, 'retryAfter') === undefined ? {} : { retryAfter: numberField(row, 'retryAfter') }),
-    startedAt: numberField(row, 'startedAt'),
-    ...(optionalNumberField(row, 'completedAt') === undefined ? {} : { completedAt: numberField(row, 'completedAt') }),
-  }
-}
-
-function operatorWebhookRefFromRow(row: RuntimeDocument): InquiryOperatorWebhookRef {
-  return {
-    webhookEventId: stringField(row, 'webhookEventId'),
-    providerFamily: notificationProviderFamily(row),
-    providerEventId: stringField(row, 'providerEventId'),
-    logicalObjectKey: stringField(row, 'logicalObjectKey'),
-    status: notificationWebhookEventStatus(row),
-    eventType: stringField(row, 'eventType'),
-    signatureStatus: notificationSignatureStatus(row),
-    payloadHash: stringField(row, 'payloadHash'),
-    ...(optionalStringField(row, 'reason') === undefined ? {} : { reason: stringField(row, 'reason') }),
-    operationKey: stringField(row, 'operationKey'),
-    correlationId: stringField(row, 'correlationId'),
-    receivedAt: numberField(row, 'receivedAt'),
-  }
-}
-
-function operatorAuditRefFromRow(row: RuntimeDocument) {
-  return {
-    eventType: stringField(row, 'eventType'),
-    targetRef: stringField(row, 'targetRef'),
-    payloadHash: stringField(row, 'payloadHash'),
-    operationKey: stringField(row, 'idempotencyKey'),
-    correlationId: stringField(row, 'correlationId'),
-    createdAt: numberField(row, 'createdAt'),
-  }
-}
-
-function operatorFunnelRefFromRow(row: RuntimeDocument) {
-  return {
-    eventType: stringField(row, 'eventType'),
-    businessId: stringField(row, 'businessId'),
-    payloadHash: redactedJsonHash(row, 'redactedPayloadJson'),
-    correlationId: stringField(row, 'correlationId'),
-    createdAt: numberField(row, 'createdAt'),
-  }
-}
-
-function operatorOperationRefFromRow(row: RuntimeDocument): InquiryOperatorOperationRef {
-  const effectRefs = stringArrayField(row, 'effectRefs')
-  const resultCode = effectValue(effectRefs, 'result')
-  const dispatchId = effectValue(effectRefs, 'dispatch')
-  const webhookEventId = effectValue(effectRefs, 'webhook')
-  return {
-    operationKey: stringField(row, 'key'),
-    requestHash: stringField(row, 'requestHash'),
-    resultCode: resultCode ?? stringField(row, 'operationName'),
-    createdAt: numberField(row, 'createdAt'),
-    ...(dispatchId === undefined ? {} : { dispatchId }),
-    ...(webhookEventId === undefined ? {} : { webhookEventId }),
-  }
-}
-
 function compactOperatorFilter(input: {
   threadId?: string
   correlationId?: string
@@ -2043,50 +1432,4 @@ function cleanupBatchSize(value: number | undefined): number {
   }
 
   return Math.min(Math.max(Math.floor(value), 1), ABUSE_BUCKET_CLEANUP_MAX_BATCH_SIZE)
-}
-
-function effectValueFromRef(ref: string, kind: string): string | undefined {
-  const prefix = `${kind}:`
-  return ref.startsWith(prefix) ? ref.slice(prefix.length) : undefined
-}
-
-function uniqueOperatorRefs<T>(refs: readonly T[], key: (ref: T) => string): T[] {
-  const seen = new Set<string>()
-  return refs.filter((ref) => {
-    const refKey = key(ref)
-    if (seen.has(refKey)) {
-      return false
-    }
-    seen.add(refKey)
-    return true
-  })
-}
-
-
-function recipientRole(row: RuntimeDocument) {
-  return stringField(row, 'recipientRole') === 'customer' ? 'customer' : 'owner'
-}
-
-
-function notificationProviderFamily(row: RuntimeDocument): NotificationProviderFamily {
-  return stringField(row, 'providerFamily') === 'novu' ? 'novu' : 'resend'
-}
-
-function notificationDispatchStatus(row: RuntimeDocument): InquiryNotificationDispatchStatus {
-  const value = stringField(row, 'status')
-  return NotificationDispatchStatusValues.find((candidate) => candidate === value) ?? 'queued'
-}
-
-function notificationAttemptStatus(row: RuntimeDocument): NotificationAttemptStatus {
-  const value = stringField(row, 'status')
-  return NotificationAttemptStatusValues.find((candidate) => candidate === value) ?? 'pending'
-}
-
-function notificationWebhookEventStatus(row: RuntimeDocument): NotificationWebhookEventStatus {
-  const value = stringField(row, 'status')
-  return NotificationWebhookEventStatusValues.find((candidate) => candidate === value) ?? 'held_for_operator'
-}
-
-function notificationSignatureStatus(row: RuntimeDocument): NotificationSignatureStatus {
-  return stringField(row, 'signatureStatus') === 'verified' ? 'verified' : 'rejected'
 }
