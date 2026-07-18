@@ -1,8 +1,8 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-07-17  
-**Inspected revision:** `7deffac41e103ee619ce099db531fc2127ba9985`  
-**last_mapped_commit:** `7deffac41e103ee619ce099db531fc2127ba9985`
+**Analysis Date:** 2026-07-18  
+**Inspected revision:** `1e919668` (post god-file Waves 1–21)  
+**last_mapped_commit:** `1e919668`
 
 ## Tech Debt
 
@@ -13,12 +13,13 @@
 - Impact: New semantics added to Answer Thread create a second intent/history path; assistants and humans can disagree about which surface is canonical; cutover evidence for `/engine` → `/` is still required.
 - Fix approach: Keep Answer Thread read/compare/inquiry-only; route all Request/RoutePlan/authority work through `src/modules/customer-request/`; prove human cutover before collapsing `/engine`.
 
-**God-file Convex and module cores:**
-- Issue: Several runtime files exceed ~1.5k–4k lines and mix command orchestration, integrity checks, and persistence.
-- Files: `convex/customerRequestApplication.ts` (~4090), `convex/inquiries.ts` (~3443), `convex/customerRequestRouteExecution.ts` (~2994), `convex/capabilitySupply.ts` (~2486), `src/modules/inquiries/internal/commands.ts` (~2143), `src/modules/answer-thread/internal/turn-orchestrator.ts` (~1819), `src/modules/routing-kernel/internal/kernel.ts` (~1766), `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` (~1685)
-- Why: Domain growth outpaced file splits; Convex adapters absorbed successive mandate/execution/inquiry features.
-- Impact: High merge conflict risk, hard review, accidental coupling when changing one lifecycle step.
-- Fix approach: Split by lifecycle seam (admission / execution / projection / workers) following existing thin-adapter patterns; keep validators and domain rules in `src/modules/*/internal/` and Convex as persistence/auth adapters only.
+**God-file Convex residual (post deepen campaign Waves 1–21):**
+- Issue: Campaign closed Application and capabilitySupply as thin registers (auth → module → ports). RouteExecution journal **machines** remain host-owned by design.
+- Current sizes: `convex/customerRequestApplication.ts` (~1749, mostly validators + thin actions — **host-done**), `convex/capabilitySupply.ts` (~973 — **host-done**; graph/probe residual out of campaign), `convex/customerRequestRouteExecution.ts` (~2463 — integrity digests, evidence export, and cancel/lease/recover **predicates** deepened; start/lease/outcome machines still host).
+- Already deepened (do not re-open as primary): compare-resume, standing-route, problem-route, preparation-egress, interpret-compile, confirm-route, refine, authorize-preparation, provide-facts, action-projection, operation-ledger, eligible inventory, publish/refresh/withdraw, supply writers, journal integrity + evidence + decisions.
+- **DEFERRED until journal write-plan ADR:** `startOrResume`, `leaseNextDispatch`, `recordOutcome` (and sibling dispatch mutation sequences). Thinness tests lock these as host-exported. Do **not** shallow-chop into `customerRequestRouteExecutionStart.ts` siblings without a designed write-plan seam.
+- Other residual: `convex/inquiries.ts` (still large if present), graph/probe in capabilitySupply — not this campaign.
+- Fix approach: Journal machines only after an ADR that defines mutation ports without write-plan DTOs; keep validators in Convex forever.
 
 **Legacy Customer Request v1 compiler retained:**
 - Issue: Parallel legacy compilers remain beside the current Customer Request path.
@@ -133,18 +134,18 @@
 - Improvement path: Define 3 durations + 2 easings in Astryx theme layer; retire 500/700ms; add Motion section to `DESIGN.md`.
 
 **Large Convex mutation/query modules:**
-- Problem: Multi-thousand-line Convex files increase parse/bundle cost and raise risk of rewriting large documents in one mutation.
-- Files: `convex/customerRequestApplication.ts`, `convex/inquiries.ts`, `convex/customerRequestRouteExecution.ts`, `convex/capabilitySupply.ts`
-- Measurement: Line counts above (~2.5k–4k); Convex document limit 1 MiB (see `convex/_generated/ai/guidelines.md`).
-- Cause: Unbounded arrays or growing aggregates inside single documents would rewrite whole docs; god-file structure concentrates work.
-- Improvement path: Keep high-churn children in separate tables (schema convention already enforced in tests); split modules; profile hot paths under `npm run check:convex-codegen` + integration suites.
+- Problem: Remaining multi-thousand-line Convex files increase parse/bundle cost and raise risk of rewriting large documents in one mutation.
+- Files: `convex/customerRequestRouteExecution.ts` (~2463, journal machines deferred), `convex/inquiries.ts` (~3443), plus thinner but still large Application (~1749 validators) and capabilitySupply (~973).
+- Measurement: Line counts above; Convex document limit 1 MiB (see `convex/_generated/ai/guidelines.md`).
+- Cause: Unbounded arrays or growing aggregates inside single documents would rewrite whole docs; journal machines still concentrate work.
+- Improvement path: Keep high-churn children in separate tables (schema convention already enforced in tests); deepen journal machines only behind a write-plan ADR; profile hot paths under `npm run check:convex-codegen` + integration suites.
 
 **Customer Request workspace client payload:**
-- Problem: Single React workspace component (~1685 lines) owns a large interactive surface; likely heavy first paint for `/engine`.
-- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`
+- Problem: Workspace shell still owns a large interactive surface; likely heavy first paint for `/engine` (panels already split under Wave 4).
+- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` (~413 after panel deepen)
 - Measurement: File size / composition complexity (no fresh p95 captured in this map).
-- Cause: Monolithic UI for clarification, options, authority, and recovery.
-- Improvement path: Split by projection family from `src/modules/customer-request/customer-projection.ts`; lazy-load non-first-paint panels.
+- Cause: Clarification, options, authority, and recovery still compose a large client surface.
+- Improvement path: Lazy-load non-first-paint panels; keep projection families from `src/modules/customer-request/customer-projection.ts`.
 
 ## Fragile Areas
 
