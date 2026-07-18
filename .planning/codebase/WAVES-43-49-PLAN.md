@@ -1,6 +1,6 @@
 # Waves 43–49 — Next residual deepen plan
 
-**Status:** Proposed (map `be0979d4` · code close `9d8faa04`)  
+**Status:** CLOSED (Waves 43–49 complete at `6983a50d`)  
 **Baseline:** Waves 23–42 **CLOSED** · ADR-011–014 **Accepted**  
 **Thermo:** PASS WITH RESERVATIONS (2026-07-18)
 

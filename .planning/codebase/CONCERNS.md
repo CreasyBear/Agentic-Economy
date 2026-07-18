@@ -1,11 +1,11 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-07-18  
-**last_mapped_commit:** `9d8faa04` (Waves 23–42 CLOSED)
+**last_mapped_commit:** `6983a50d` (post residual deepen campaign Waves 43–49 CLOSED)
 
-## Campaign status (Waves 23–42 CLOSED)
+## Campaign status (Waves 23–49 CLOSED)
 
-**Waves 23–32 CLOSED.** **Waves 33–37 CLOSED.** **Waves 38–42 CLOSED.**
+**Waves 23–32 CLOSED.** **Waves 33–37 CLOSED.** **Waves 38–42 CLOSED.** **Waves 43–49 CLOSED.**
 
 | Wave band | Outcome |
 |-----------|---------|
@@ -26,13 +26,20 @@
 | 40 | `exportProblemForSupport` load assembly behind ProblemPorts — done |
 | 41 | ADR-014 V2 write-family ports — **Accepted** |
 | 42 | V2 `commitAggregate` / refresh / retry behind `CustomerRequestV2WritePorts` — done |
+| 43 | ADR-015 outbox operator ports + webhook/retry/no-repair deepen — done |
+| 44 | ADR-016 V2 preparation ports — **Accepted** |
+| 45 | V2 preparation core (`prepare`/`resume`) behind `CustomerRequestV2PreparationPorts` — done |
+| 46 | V2 prep egress / egress-state / prepared-action behind egress ports — done |
+| 47 | ADR-017 V2 read ports + `getCurrentAggregate` / generation reads — done |
+| 48 | ADR-018 mandate issue/revoke ports — **Accepted** |
+| 49 | Mandate `issue` / `revoke` / `getHistory` behind `RouteMandateMutationPorts` — done |
 
-**ADRs:** ADR-011 + ADR-012 + ADR-013 + ADR-014 — all **Accepted**.  
-Plan: `.planning/codebase/WAVES-38-42-PLAN.md`.
+**ADRs:** ADR-011–018 — all **Accepted**.  
+Plans: `.planning/codebase/WAVES-38-42-PLAN.md`, `.planning/codebase/WAVES-43-49-PLAN.md`.
 
-**Do not reopen Waves 23–42** as line-count chops or sibling Convex host splits. Change only via existing ports seams when semantics require it.
+**Do not reopen Waves 23–49** as line-count chops or sibling Convex host splits. Change only via existing ports seams when semantics require it.
 
-### Verified line counts (`wc -l` at `9d8faa04`)
+### Verified line counts (`wc -l` at `6983a50d`)
 
 | File | Lines | Residual status |
 |------|------:|-----------------|
@@ -40,27 +47,34 @@ Plan: `.planning/codebase/WAVES-38-42-PLAN.md`.
 | `convex/registry.ts` | **1622** | Catalog-from-rows shared (Wave 32); search/admission size residual. |
 | `convex/discovery.ts` | **1565** | Catalog-from-rows shared (Wave 32); manifest size residual. |
 | `convex/inquiries.ts` | **1435** | Host-done (Waves 23–26). Size residual. |
-| `convex/notificationOutbox.ts` | **1287** | Shared persist (Wave 37); webhook/retry families parked (Wave 43+). |
 | `convex/customerRequestRouteExecutionJournalPorts.ts` | **981** | Under ~1k ceiling. |
-| `convex/customerRequestRouteExecution.ts` | **939** | ADR-011–013 machines; Wave 40 export thin. Host under ~1k. |
+| `convex/customerRequestRouteExecution.ts` | **939** | ADR-011–013 machines; Wave 40 export thin. |
 | `src/modules/inquiries/inquiry.functions.ts` | **901** | Dual-path factory (Wave 36). |
-| `convex/customerRequestV2WritePorts.ts` | **856** | Wave 42 write adapter (under ~1k). |
+| `convex/notificationOutbox.ts` | **809** | Wave 43 operator deepen; dispatch-loop residual optional. |
 | `convex/capabilitySupply.ts` | **804** | Host-done graph/probe (Wave 30). |
-| `convex/customerRequestV2.ts` | **644** | Wave 42 write family deepened; read/prep residual. |
+| `convex/customerRequestRouteMandatePorts.ts` | **686** | Wave 49 adapter. |
+| `convex/customerRequestV2WritePorts.ts` | **679** | Wave 42 write adapter. |
+| `convex/customerRequestV2.ts` | **561** | Waves 42 + 47 write/read deepened. |
 | `convex/customerRequestRouteExecutionCancelPorts.ts` | **394** | Wave 33 adapter. |
-| `convex/customerRequestRouteExecutionProblemPorts.ts` | **349** | Wave 34 + Wave 40 support-export load. |
+| `convex/customerRequestV2ReadPorts.ts` | **391** | Wave 47 adapter. |
+| `convex/customerRequestRouteExecutionProblemPorts.ts` | **349** | Wave 34 + 40. |
+| `convex/notificationOutboxOperatorPorts.ts` | **288** | Wave 43 adapter. |
 | `convex/customerRequestRouteExecutionDispatchPorts.ts` | **286** | Wave 39 adapter. |
+| `convex/customerRequestRouteMandate.ts` | **185** | Wave 49 thin shells. |
 | `convex/inquiryNotificationBridge.ts` | **123** | Thin; shared persistence (Wave 37). |
+| `convex/customerRequestV2PreparationEgressState.ts` | **115** | Wave 46 thin. |
+| `convex/customerRequestV2PreparationEgress.ts` | **93** | Wave 46 thin (`"use node"`). |
+| `convex/customerRequestV2Preparation.ts` | **70** | Wave 45 thin. |
+| `convex/customerRequestV2PreparedAction.ts` | **46** | Wave 46 thin. |
 
-Thinness locks: `tests/unit/customer-request/route-execution/{machines,journal,problem-mutation,problem-support-read,evidence-load,dispatch-lifecycle}-thinness.test.ts`, `tests/unit/customer-request/v2-write-thinness.test.ts`, `tests/unit/customer-request/application/*-thinness.test.ts`, `tests/unit/capability-supply/*-thinness.test.ts`, `tests/unit/inquiries/*-thinness.test.ts` (incl. `notification-bridge-thinness`).
+Thinness locks include: route-execution `{machines,journal,problem-mutation,problem-support-read,evidence-load,dispatch-lifecycle}-thinness`, `v2-write`, `v2-preparation`, `v2-preparation-egress`, `v2-read`, `route-mandate-mutation`, `notification-outbox/operator-thinness`, application/capability-supply/inquiries thinness.
 
-### Parked residuals (next waves — not reopen of 23–42)
+### Parked residuals (after Waves 43–49 — not reopen)
 
-| Residual | Wave / posture | Notes |
-|----------|----------------|-------|
-| Outbox webhook / retry | **43+** | `notificationOutbox.ts` still owns webhook ingest / retry / operator surfaces after Wave 37 shared persist. |
-| V2 read / prep families | Later ADR | `customerRequestV2Preparation*.ts`, prepared-action, egress; write family closed at Wave 42. |
-| `readProblemForBusiness` | Optional | Still a thicker host query (~57-line handler); Wave 40 covered support-export only. |
+| Residual | Posture | Notes |
+|----------|---------|-------|
+| Outbox `dispatchNotificationOutbox` loop | Optional | Wave 43 covered webhook/operator; dispatch-loop may still be thicker. |
+| `readProblemForBusiness` | Optional | Wave 40 covered support-export only. |
 | Registry / discovery | Size-only | No reopen without a concrete operation-family seam. |
 | Application validators | Forever | Not a reopen wave; §6. |
 | Inquiry dual-path parity harness | Speculative | Verification harness, not a line-count deepen. |
@@ -69,7 +83,7 @@ Thinness locks: `tests/unit/customer-request/route-execution/{machines,journal,p
 
 ## Locked deepen practices
 
-Future deepen work **must** follow these practices (campaign gold + ADR-011–014). Violations are regressions, not progress.
+Future deepen work **must** follow these practices (campaign gold + ADR-011–018). Violations are regressions, not progress.
 
 ### 1. Provide-facts ports pattern (gold)
 
@@ -150,20 +164,13 @@ Machine orchestration may call many port methods, but production durability rema
 
 ## Tech Debt
 
-**Further outbox families (optional residual — Wave 43+):**
-- Issue: Wave 37 closed shared dispatch persist + thin bridge; `notificationOutbox.ts` still owns webhook ingest / retry / operator surfaces.
-- Files: `convex/notificationOutbox.ts` (1287), `convex/notificationOutboxPersistence.ts`, `convex/inquiryNotificationBridge.ts` (123)
-- Impact: Outbox host remains a merge hotspot; inquiry enqueue must stay inquiry-owned.
-- Fix approach: Next family deepen (webhook / retry) behind ports; keep inquiry enqueue/bind inquiry-owned (ADR-002); do not re-inflate bridge past thinness. Do not reopen Wave 37.
-
-**`customerRequestV2` read / preparation residual:**
-- Issue: Wave 42 deepened write family only. Read projections and preparation siblings remain undeepened.
-- Files: `convex/customerRequestV2.ts` (644); `convex/customerRequestV2Preparation.ts` (436), `convex/customerRequestV2PreparationEgress.ts` (444), `convex/customerRequestV2PreparationEgressState.ts` (622), `convex/customerRequestV2PreparedAction.ts` (503)
-- Impact: Merge cost on reads/prep; accidental coupling to Application.
-- Fix approach: Later ADR per family; leave validators in Convex; legacy retirement is a product gate (`legacyAggregateIsInternallyConsistent`, `kind: 'legacy'`). Do not reopen Wave 42 write deepen.
+**Further outbox dispatch-loop (optional residual):**
+- Issue: Wave 43 deepened webhook/operator; `dispatchNotificationOutbox` provider loop may still concentrate host glue.
+- Files: `convex/notificationOutbox.ts` (809), Wave 37 persist, OperatorPorts (288)
+- Fix approach: Optional next family deepen; keep inquiry enqueue inquiry-owned (ADR-002); do not reopen Wave 37/43.
 
 **`readProblemForBusiness` (optional thin residual):**
-- Issue: Wave 40 thinned `exportProblemForSupport` only; business problem read still inlines auth + load + project in the host (~57-line handler).
+- Issue: Wave 40 thinned `exportProblemForSupport` only; business problem read still inlines auth + load + project in the host.
 - Files: `convex/customerRequestRouteExecution.ts` (`readProblemForBusiness`)
 - Fix approach: Same ProblemPorts / support-read pattern when needed; keep Application thin. Do not reopen Wave 40 support-export.
 
