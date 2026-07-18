@@ -1,6 +1,10 @@
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
+import {
+  catalogFromRows,
+  projectDiscoveryPublicCatalog,
+} from '../src/modules/catalog/public'
 import { resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeMutationCtx, runtimeReader } from './source_state'
@@ -648,24 +652,44 @@ async function publicCatalogForBusiness(db: RuntimeReader, business: RuntimeDocu
     indexStatusForBusiness(db, business._id),
     discoveryStatusForBusiness(db, business._id, stringField(business, 'sourceHash')),
   ])
-  return {
+  const catalog = catalogFromRows({
     businessId: business._id,
     slug: stringField(business, 'slug'),
     name: stringField(business, 'name'),
     category: stringField(context, 'category'),
     suburb: stringField(context, 'suburb'),
     stateTerritory: stringField(context, 'stateTerritory'),
-    ...(optionalStringField(context, 'postcode') === undefined ? {} : { postcode: stringField(context, 'postcode') }),
-    publicStatus: 'published',
+    sourceHash: stringField(business, 'sourceHash'),
+    updatedAt: numberField(business, 'updatedAt'),
     trustTier: trustTier(business),
     indexStatus,
     discoveryStatus,
+    ...(optionalStringField(context, 'postcode') === undefined ? {} : { postcode: stringField(context, 'postcode') }),
     services: services
-      .sort((left, right) => numberField(left, 'sortOrder') - numberField(right, 'sortOrder'))
-      .map((service) => toPublicService(service, capabilities)),
-    sourceHash: stringField(business, 'sourceHash'),
-    updatedAt: numberField(business, 'updatedAt'),
-  }
+      .map((service) => ({
+        serviceId: service._id,
+        serviceSlug: stringField(service, 'serviceSlug'),
+        name: stringField(service, 'name'),
+        category: stringField(service, 'category'),
+        summary: stringField(service, 'summary'),
+        serviceArea: stringField(service, 'serviceArea'),
+        hoursOrUnknown: stringField(service, 'hoursOrUnknown'),
+        sortOrder: numberField(service, 'sortOrder'),
+        sourceHash: stringField(service, 'sourceHash'),
+        status: 'published' as const,
+      })),
+    capabilities: capabilities.map((capability) => ({
+      serviceId: stringField(capability, 'serviceId'),
+      kind: capabilityKind(capability),
+      status: capabilityStatus(capability),
+      firstRequest: toFirstRequest(capability),
+      ...(optionalStringField(capability, 'reason') === undefined
+        ? {}
+        : { reason: stringField(capability, 'reason') }),
+      sourceHash: stringField(capability, 'sourceHash'),
+    })),
+  })
+  return catalog === undefined ? undefined : projectDiscoveryPublicCatalog(catalog)
 }
 
 async function publicCatalogsForDiscovery(db: RuntimeReader): Promise<PublicCatalog[]> {

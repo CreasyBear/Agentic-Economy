@@ -1,6 +1,11 @@
 import { queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
+import {
+  catalogFromRows,
+  projectRegistryCatalogApiItem,
+} from '../src/modules/catalog/public'
+
 import { runtimeReader } from './source_state'
 import type {
   RuntimeDocument,
@@ -858,30 +863,27 @@ function catalogForBusinessFromLookup(
   }
 
   const capabilities = lookup.capabilitiesByBusinessId.get(business._id) ?? []
-  return {
+  const catalog = catalogFromRows({
     businessId: business._id,
     slug: stringField(business, 'slug'),
     name: stringField(business, 'name'),
     category: stringField(context, 'category'),
     suburb: stringField(context, 'suburb'),
     stateTerritory: stringField(context, 'stateTerritory'),
+    sourceHash: stringField(business, 'sourceHash'),
+    updatedAt: numberField(business, 'updatedAt'),
+    trustTier: trustTier(business),
+    indexStatus: lookup.indexStatusByBusinessId.get(business._id) ?? 'not_queued',
+    discoveryStatus: discoveryStatusForAttempt(
+      lookup.latestDiscoveryAttemptByBusinessId.get(business._id),
+      stringField(business, 'sourceHash'),
+    ),
     ...(optionalStringField(business, 'publishedPhone') === undefined
       ? {}
       : { publishedPhone: stringField(business, 'publishedPhone') }),
     ...(optionalStringField(context, 'postcode') === undefined
       ? {}
       : { postcode: stringField(context, 'postcode') }),
-    publicUrl: `/${stringField(business, 'slug')}`,
-    trustTier: trustTier(business),
-    publicStatus: 'published',
-    indexStatus:
-      lookup.indexStatusByBusinessId.get(business._id) ?? 'not_queued',
-    discoveryStatus: discoveryStatusForAttempt(
-      lookup.latestDiscoveryAttemptByBusinessId.get(business._id),
-      stringField(business, 'sourceHash'),
-    ),
-    schemaVersion: 'public-business-catalog-api:v1',
-    updatedAt: numberField(business, 'updatedAt'),
     photos: photosField(context, 'photos'),
     ...(optionalNumberField(context, 'responseTimeMinutes') === undefined
       ? {}
@@ -891,8 +893,30 @@ function catalogForBusinessFromLookup(
         (left, right) =>
           numberField(left, 'sortOrder') - numberField(right, 'sortOrder'),
       )
-      .map((service) => toServiceDto(service, capabilities)),
-  }
+      .map((service) => ({
+        serviceId: service._id,
+        serviceSlug: stringField(service, 'serviceSlug'),
+        name: stringField(service, 'name'),
+        category: stringField(service, 'category'),
+        summary: stringField(service, 'summary'),
+        serviceArea: stringField(service, 'serviceArea'),
+        hoursOrUnknown: stringField(service, 'hoursOrUnknown'),
+        sortOrder: numberField(service, 'sortOrder'),
+        sourceHash: stringField(service, 'sourceHash'),
+        status: 'published' as const,
+      })),
+    capabilities: capabilities.map((capability) => ({
+      serviceId: stringField(capability, 'serviceId'),
+      kind: capabilityKind(capability),
+      status: capabilityStatus(capability),
+      firstRequest: toFirstRequestDto(capability),
+      ...(optionalStringField(capability, 'reason') === undefined
+        ? {}
+        : { reason: stringField(capability, 'reason') }),
+      sourceHash: stringField(capability, 'sourceHash'),
+    })),
+  })
+  return catalog === undefined ? undefined : projectRegistryCatalogApiItem(catalog)
 }
 
 function firstByStringField(

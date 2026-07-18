@@ -72,6 +72,17 @@ export type {
   ValidatedServiceCatalogInput,
 } from './internal/catalog-model'
 
+export {
+  catalogFromRows,
+  projectDiscoveryPublicCatalog,
+  projectRegistryCatalogApiItem,
+  type CatalogFromRowsCapability,
+  type CatalogFromRowsInput,
+  type CatalogFromRowsService,
+  type DiscoveryPublicCatalogProjection,
+  type RegistryCatalogApiItem,
+} from './internal/catalog-from-rows'
+
 export const buildPublicCatalogDto = buildPublicCatalogDtoImpl
 
 export const createEmptyCatalogSourceState = createEmptyCatalogSourceStateImpl
