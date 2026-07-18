@@ -22,7 +22,8 @@
 | 36 | Inquiry dual-path factory + `local-e2e-adapter` — done |
 | 37 | Shared outbox persistence + thin inquiry notification bridge — done |
 
-**ADRs:** ADR-011 (start/lease/outcome) + ADR-012 (cancel + problem) — both **Accepted**.
+**ADRs:** ADR-011 (start/lease/outcome) + ADR-012 (cancel + problem) — both **Accepted**.  
+**Waves 38–42 (in progress):** ADR-013 dispatch lifecycle ports — **Accepted** (Wave 38 design unlock). Wave 39 implements recover/mark/open behind `DispatchLifecyclePorts`. See `.planning/adr/ADR-013-route-dispatch-lifecycle-ports.md` and `.planning/codebase/WAVES-38-42-PLAN.md`.
 
 ### Verified line counts (`wc -l` at `3463c1d4`)
 
@@ -123,11 +124,11 @@ Machine orchestration may call many port methods, but production durability rema
 
 ## Tech Debt
 
-**Route-execution recover / mark helpers (optional residual):**
-- Issue: ADR-012 explicitly left recover/mark host glue out of Waves 33–34. Still host-owned: `recoverExpiredDispatch`, `markDispatched`, `recordNotReleased`, `markAccepted`, `openLeasedDispatch`.
+**Route-execution recover / mark helpers (Wave 39 gated on ADR-013):**
+- Issue: ADR-012 left recover/mark host glue out of Waves 33–34. Still host-owned: `recoverExpiredDispatch`, `markDispatched`, `recordNotReleased`, `markAccepted`, `openLeasedDispatch`.
 - Files: `convex/customerRequestRouteExecution.ts` (1178); transport worker callers in `convex/customerRequestRouteTransportWorker.ts`
 - Impact: Dispatch recovery/mark sequences remain concentrated in the host; wrong extract risks lease/outbox desync.
-- Fix approach: Same ports pattern only when those families need a designed seam; no sibling chops; do not reopen cancel/problem deepen.
+- Fix approach: **ADR-013 Accepted** — Wave 39 implements `DispatchLifecyclePorts` + `convex/customerRequestRouteExecutionDispatchPorts.ts`; do not grow Journal/Cancel/Problem ports; no sibling chops.
 
 **`exportProblemForSupport` (optional thin residual):**
 - Issue: Fat support export query still lives on the route-execution host after Wave 34 problem mutations moved.
