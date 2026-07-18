@@ -12,28 +12,29 @@ import {
 } from '@/modules/customer-request/runtime'
 import {
   routePlanGenerationIsInternallyConsistent,
-  routePlanGenerationMatchesRequest,
   type CustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
 import {
-  aggregateIsInternallyConsistent,
   commitAggregate as commitAggregateMachine,
-  legacyAggregateIsInternallyConsistent,
   recordRoutePlanGenerationRetry as recordRoutePlanGenerationRetryMachine,
   refreshRoutePlanGeneration as refreshRoutePlanGenerationMachine,
 } from '@/modules/customer-request/v2-write'
+import {
+  getCurrentAggregate as getCurrentAggregateMachine,
+  getRoutePlanGeneration as getRoutePlanGenerationMachine,
+  getRoutePlanGenerationRefreshReplay as getRoutePlanGenerationRefreshReplayMachine,
+} from '@/modules/customer-request/v2-read'
 
 import { internalMutation, internalQuery, type QueryCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { listEligibleCapabilitySupply } from './capabilitySupply'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
+import { customerRequestV2WritePorts } from './customerRequestV2WritePorts'
 import {
-  customerRequestV2WritePorts,
-  readCurrentDecisionAggregate,
+  customerRequestV2ReadPorts,
   readExactRoutePlanGeneration,
-  readGenerationRefreshCommandResult,
   readVerifiedCommandReplay,
-} from './customerRequestV2WritePorts'
+} from './customerRequestV2ReadPorts'
 
 export {
   aggregateIsInternallyConsistent,
@@ -311,112 +312,23 @@ export const getRoutePlanGenerationRefreshReplay = internalQuery({
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
   },
   returns: generationRefreshReplayResult,
-  handler: async (ctx, args): Promise<Infer<typeof generationRefreshReplayResult>> => {
-    const command = await ctx.db.query('customerRequestV2RoutePlanGenerationCommands')
-      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
-    if (command === null) return { kind: 'not_found' as const }
-    if (command.commandDigest !== args.commandDigest || command.principalId !== args.principalId
-      || command.requestId !== args.requestId) return { kind: 'command_conflict' as const }
-    return await readGenerationRefreshCommandResult(ctx.db, command) as Infer<
-      typeof generationRefreshReplayResult
-    >
-  },
+  handler: async (ctx, args): Promise<Infer<typeof generationRefreshReplayResult>> => (
+    await getRoutePlanGenerationRefreshReplayMachine(
+      args,
+      customerRequestV2ReadPorts(ctx),
+    ) as Infer<typeof generationRefreshReplayResult>
+  ),
 })
 
 export const getCurrentAggregate = internalQuery({
   args: { requestId: v.string() },
   returns: currentAggregateResult,
-  handler: async (ctx, args) => {
-    const head = await ctx.db.query('customerRequestV2Heads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head !== null) {
-      const revision = await ctx.db.query('customerRequestV2Revisions')
-        .withIndex('by_requestId_and_requestRevision', (query) => (
-          query.eq('requestId', args.requestId).eq('requestRevision', head.currentRevision)
-        )).unique()
-      if (revision !== null && 'routes' in revision.aggregate.plan) {
-        if (revision.aggregate.aggregateDigest !== head.currentAggregateDigest
-          || !legacyAggregateIsInternallyConsistent(revision.aggregate)) {
-          throw new Error('customer_request_v2_legacy_aggregate_integrity_failure')
-        }
-        return {
-          kind: 'needs_attention' as const,
-          requestId: args.requestId,
-          reason: 'historical_request_resubmit_required' as const,
-          resumable: false as const,
-        }
-      }
-      if (revision === null || revision.aggregate.aggregateDigest !== head.currentAggregateDigest
-        || !aggregateIsInternallyConsistent(
-          revision.aggregate as unknown as Parameters<typeof aggregateIsInternallyConsistent>[0],
-          head.currentRevision - 1,
-        )) {
-        throw new Error('customer_request_v2_aggregate_integrity_failure')
-      }
-      const routeHead = await ctx.db.query('customerRequestV2RoutePlanHeads')
-        .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-      if (routeHead !== null && routeHead.currentRequestRevision !== head.currentRevision) {
-        throw new Error('customer_request_route_plan_head_integrity_failure')
-      }
-      if (routeHead !== null && (!Number.isSafeInteger(routeHead.currentGeneration)
-        || routeHead.currentGeneration < 1
-        || (routeHead.currentGenerationRef === undefined)
-          !== (routeHead.currentGenerationDigest === undefined)
-        || (routeHead.currentDecisionCommandKey === undefined)
-          !== (routeHead.currentDecisionCommandDigest === undefined))) {
-        throw new Error('customer_request_route_plan_head_integrity_failure')
-      }
-      const hasCurrentGeneration = routeHead?.currentGenerationRef !== undefined
-      if (routeHead?.currentDecisionCommandKey === undefined
-        && (revision.aggregate.outcome === 'plan_ready') !== hasCurrentGeneration) {
-        throw new Error('customer_request_route_plan_head_integrity_failure')
-      }
-      if (routeHead?.currentGenerationRef !== undefined) {
-        const currentGeneration = await readExactRoutePlanGeneration(
-          ctx.db,
-          args.requestId,
-          routeHead.currentGenerationRef,
-        )
-        if (currentGeneration.kind !== 'found'
-          || currentGeneration.routeGeneration.generation !== routeHead.currentGeneration
-          || currentGeneration.routeGeneration.generationDigest !== routeHead.currentGenerationDigest
-          || !routePlanGenerationMatchesRequest(
-            domainRouteGeneration(currentGeneration.routeGeneration),
-            revision.aggregate.snapshot,
-            routeHead.currentGeneration - 1,
-          )) {
-          throw new Error('customer_request_route_plan_head_integrity_failure')
-        }
-      }
-      const currentDecision = routeHead?.currentDecisionCommandKey === undefined
-        ? undefined
-        : await readCurrentDecisionAggregate(ctx.db, routeHead, head.principalId)
-      return {
-        kind: 'current' as const,
-        aggregate: currentDecision?.aggregate ?? revision.aggregate,
-        routeGenerationNumber: routeHead?.currentGeneration ?? 0,
-        ...(routeHead?.currentGenerationRef === undefined
-          ? {}
-          : { routeGenerationRef: routeHead.currentGenerationRef }),
-        ...(currentDecision === undefined
-          ? {}
-          : { currentDecisionCommandKey: currentDecision.commandKey }),
-      }
-    }
-    const historicalSnapshot = await ctx.db.query('customerRequestHeads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    const historicalRequest = historicalSnapshot === null
-      ? await ctx.db.query('customerRequests').withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-      : null
-    return historicalSnapshot !== null || historicalRequest !== null
-      ? {
-          kind: 'needs_attention' as const,
-          requestId: args.requestId,
-          reason: 'historical_request_resubmit_required' as const,
-          resumable: false as const,
-        }
-      : { kind: 'not_found' as const }
-  },
+  handler: async (ctx, args): Promise<Infer<typeof currentAggregateResult>> => (
+    await getCurrentAggregateMachine(
+      args,
+      customerRequestV2ReadPorts(ctx),
+    ) as Infer<typeof currentAggregateResult>
+  ),
 })
 
 export const getCurrentRoutePlanGeneration = internalQuery({
@@ -439,7 +351,12 @@ export const getCurrentRoutePlanGeneration = internalQuery({
 export const getRoutePlanGeneration = internalQuery({
   args: { requestId: v.string(), generationRef: v.string() },
   returns: routePlanGenerationResult,
-  handler: async (ctx, args) => await readExactRoutePlanGeneration(ctx.db, args.requestId, args.generationRef),
+  handler: async (ctx, args): Promise<Infer<typeof routePlanGenerationResult>> => (
+    await getRoutePlanGenerationMachine(
+      args,
+      customerRequestV2ReadPorts(ctx),
+    ) as Infer<typeof routePlanGenerationResult>
+  ),
 })
 
 export const getCurrentRoutePlanProjectionMaterial = internalQuery({

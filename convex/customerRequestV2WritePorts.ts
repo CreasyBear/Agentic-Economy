@@ -26,18 +26,11 @@ import {
   deriveCustomerMaximumResponseTimeCriterion,
   deriveCustomerProviderDataSharingCriterion,
 } from '@/modules/customer-request/semantic-interpreter'
+import type { CustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import {
-  routePlanGenerationIsInternallyConsistent,
-  routePlanGenerationMatchesAggregate,
-  type CustomerRequestRoutePlanGeneration,
-} from '@/modules/customer-request/route-plan-generation'
-import {
-  aggregateIsInternallyConsistent,
-  legacyAggregateIsInternallyConsistent,
   type CustomerRequestV2WritePorts,
   type CommitCommandRow,
   type GenerationCommandRow,
-  type GenerationRefreshResult,
   type GraphValidationStatus,
   type RequestHeadSnapshot,
   type RoutePlanHeadSnapshot,
@@ -49,16 +42,20 @@ import {
 import type { Infer } from 'convex/values'
 
 import type { Id } from './_generated/dataModel'
-import type { MutationCtx, QueryCtx } from './_generated/server'
+import type { MutationCtx } from './_generated/server'
 import { listEligibleCapabilitySupply } from './capabilitySupply'
 import {
   getActiveExactCapabilityContract,
 } from './capabilityContractDocuments'
 import { supersedeCurrentRouteMandate } from './customerRequestRouteMandateLifecycle'
+import {
+  readExactRoutePlanGeneration,
+  readGenerationRefreshCommandResult,
+  readVerifiedCommandReplay,
+} from './customerRequestV2ReadPorts'
 
 type Aggregate = Infer<typeof customerRequestV2AggregateValue>
 type RouteGeneration = Infer<typeof routePlanGenerationV2Value>
-type Db = QueryCtx['db'] | MutationCtx['db']
 
 export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2WritePorts {
   return {
@@ -271,180 +268,6 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
       })
     },
   }
-}
-
-export async function readVerifiedCommandReplay(
-  db: Db,
-  command: Readonly<{
-    requestId: string
-    resultingRevision: number
-    aggregateDigest: string
-    expectedRouteGeneration?: number
-    resultingRouteGenerationRef?: string
-    noEffect?: boolean
-  }>,
-): Promise<Readonly<{ kind: 'legacy' } | { kind: 'current'; aggregate: Aggregate }>> {
-  const revision = await db.query('customerRequestV2Revisions')
-    .withIndex('by_requestId_and_requestRevision', (query) => (
-      query.eq('requestId', command.requestId).eq('requestRevision', command.resultingRevision)
-    )).unique()
-  if (revision === null) throw new Error('customer_request_v2_command_integrity_failure')
-  if ('routes' in revision.aggregate.plan) {
-    if (revision.aggregate.aggregateDigest !== command.aggregateDigest
-      || !legacyAggregateIsInternallyConsistent(revision.aggregate)) {
-      throw new Error('customer_request_v2_legacy_command_integrity_failure')
-    }
-    return { kind: 'legacy' }
-  }
-  if (revision.aggregate.aggregateDigest !== command.aggregateDigest
-    || !aggregateIsInternallyConsistent(
-      domainAggregate(revision.aggregate),
-      command.resultingRevision - 1,
-    )) {
-    throw new Error('customer_request_v2_command_integrity_failure')
-  }
-  if ((revision.aggregate.outcome === 'plan_ready')
-    !== (command.resultingRouteGenerationRef !== undefined)) {
-    throw new Error('customer_request_v2_command_generation_integrity_failure')
-  }
-  if (command.resultingRouteGenerationRef !== undefined) {
-    if (command.expectedRouteGeneration === undefined) {
-      throw new Error('customer_request_v2_command_generation_integrity_failure')
-    }
-    const generation = await readExactRoutePlanGeneration(
-      db, command.requestId, command.resultingRouteGenerationRef,
-    )
-    if (generation.kind !== 'found'
-      || generation.routeGeneration.requestRevision !== command.resultingRevision
-      || !routePlanGenerationMatchesAggregate(
-        domainRouteGeneration(generation.routeGeneration),
-        domainAggregate(revision.aggregate),
-        command.noEffect === true ? command.expectedRouteGeneration - 1 : command.expectedRouteGeneration,
-      )) {
-      throw new Error('customer_request_v2_command_generation_integrity_failure')
-    }
-  }
-  return { kind: 'current', aggregate: revision.aggregate }
-}
-
-export async function readGenerationRefreshCommandResult(
-  db: Db,
-  command: Readonly<{
-    requestId: string
-    resultKind: 'unchanged' | 'superseded' | 'needs_information' | 'unsupported' | 'retryable'
-    retryReason?: GenerationCommandRow['retryReason']
-    resultAggregate?: Aggregate
-    resultingGeneration?: number
-    resultingGenerationRef?: string
-    resultingGenerationDigest?: string
-  }>,
-): Promise<GenerationRefreshResult> {
-  if (command.resultKind === 'retryable') {
-    if (command.retryReason === undefined || command.resultingGeneration !== undefined
-      || command.resultingGenerationRef !== undefined || command.resultingGenerationDigest !== undefined
-      || command.resultAggregate !== undefined) {
-      throw new Error('customer_request_v2_refresh_command_integrity_failure')
-    }
-    return { kind: 'retryable', reason: command.retryReason }
-  }
-  if (command.resultKind === 'needs_information' || command.resultKind === 'unsupported') {
-    if (command.retryReason !== undefined || command.resultingGeneration !== undefined
-      || command.resultingGenerationRef !== undefined
-      || command.resultingGenerationDigest !== undefined || command.resultAggregate === undefined
-      || command.resultAggregate.outcome !== command.resultKind
-      || !aggregateIsInternallyConsistent(
-        domainAggregate(command.resultAggregate),
-        command.resultAggregate.snapshot.revision - 1,
-      )) {
-      throw new Error('customer_request_v2_refresh_command_integrity_failure')
-    }
-    return {
-      kind: command.resultKind,
-      aggregate: domainAggregate(command.resultAggregate),
-    }
-  }
-  if (command.retryReason !== undefined || command.resultingGeneration === undefined
-    || command.resultingGenerationRef === undefined
-    || command.resultingGenerationDigest === undefined || command.resultAggregate !== undefined) {
-    throw new Error('customer_request_v2_refresh_command_integrity_failure')
-  }
-  const generation = await readExactRoutePlanGeneration(db, command.requestId, command.resultingGenerationRef)
-  if (generation.kind !== 'found'
-    || generation.routeGeneration.generation !== command.resultingGeneration
-    || generation.routeGeneration.generationDigest !== command.resultingGenerationDigest) {
-    throw new Error('customer_request_v2_refresh_command_integrity_failure')
-  }
-  return {
-    kind: command.resultKind,
-    routeGeneration: domainRouteGeneration(generation.routeGeneration),
-  }
-}
-
-export async function readCurrentDecisionAggregate(
-  db: Db,
-  head: Readonly<{
-    requestId: string
-    currentRequestRevision: number
-    currentGeneration: number
-    currentGenerationRef?: string
-    currentDecisionCommandKey?: string
-    currentDecisionCommandDigest?: string
-  }>,
-  principalId: string,
-): Promise<Readonly<{ commandKey: string; aggregate: Aggregate }>> {
-  const commandKey = head.currentDecisionCommandKey
-  const commandDigest = head.currentDecisionCommandDigest
-  if (commandKey === undefined
-    || commandDigest === undefined
-    || head.currentGenerationRef === undefined) {
-    throw new Error('customer_request_v2_current_decision_integrity_failure')
-  }
-  const command = await db.query('customerRequestV2RoutePlanGenerationCommands')
-    .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
-  if (command === null
-    || command.commandDigest !== commandDigest
-    || command.principalId !== principalId
-    || command.requestId !== head.requestId
-    || command.expectedRequestRevision !== head.currentRequestRevision
-    || command.expectedGeneration !== head.currentGeneration
-    || command.expectedGenerationRef !== head.currentGenerationRef
-    || (command.resultKind !== 'needs_information' && command.resultKind !== 'unsupported')) {
-    throw new Error('customer_request_v2_current_decision_integrity_failure')
-  }
-  const result = await readGenerationRefreshCommandResult(db, command)
-  if (result.kind !== 'needs_information' && result.kind !== 'unsupported') {
-    throw new Error('customer_request_v2_current_decision_integrity_failure')
-  }
-  if (result.aggregate.snapshot.requestId !== head.requestId
-    || result.aggregate.snapshot.revision !== head.currentRequestRevision
-    || result.aggregate.snapshot.principalId !== principalId) {
-    throw new Error('customer_request_v2_current_decision_integrity_failure')
-  }
-  return { commandKey: command.commandKey, aggregate: result.aggregate as unknown as Aggregate }
-}
-
-export async function readExactRoutePlanGeneration(
-  db: Db,
-  requestId: string,
-  generationRef: string,
-) {
-  const row = await db.query('customerRequestV2RoutePlanGenerations')
-    .withIndex('by_requestId_and_generationRef', (query) => (
-      query.eq('requestId', requestId).eq('generationRef', generationRef)
-    )).unique()
-  if (row === null) return { kind: 'not_found' as const }
-  if (row.requestId !== row.routeGeneration.requestId
-    || row.requestRevision !== row.routeGeneration.requestRevision
-    || row.generation !== row.routeGeneration.generation
-    || row.generationRef !== row.routeGeneration.generationRef
-    || row.generationDigest !== row.routeGeneration.generationDigest
-    || !routePlanGenerationIsInternallyConsistent(
-      domainRouteGeneration(row.routeGeneration),
-      row.generation - 1,
-    )) {
-    throw new Error('customer_request_route_plan_generation_integrity_failure')
-  }
-  return { kind: 'found' as const, routeGeneration: row.routeGeneration }
 }
 
 async function validateAggregateAgainstCurrentCapabilityGraph(
