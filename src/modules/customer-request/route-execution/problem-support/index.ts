@@ -28,5 +28,7 @@ export {
   projectSupportProblemExport,
   projectCustomerEvidenceProblems,
   type BusinessProblemProjection,
+  type SupportProblemExportMaterial,
+  type SupportProblemExportProjectionInput,
   type SupportProblemListRow,
 } from './projections'

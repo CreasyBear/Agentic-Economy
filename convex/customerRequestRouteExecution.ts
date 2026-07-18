@@ -4,7 +4,6 @@ import {
   assembleCustomerEvidenceExport,
   assembleSupportProblemList,
   loadProblemBusinessReports,
-  loadProblemUpdates,
 } from '@/modules/customer-request/route-execution/evidence-load'
 import {
   routeAttemptIntegrityValid,
@@ -51,6 +50,7 @@ import {
 } from './customerRequestRouteExecutionJournalPorts'
 import {
   problemMutationPorts,
+  problemSupportReadPorts,
 } from './customerRequestRouteExecutionProblemPorts'
 import { runtimeDb } from './source_state'
 
@@ -838,74 +838,12 @@ export const exportProblemForSupport = internalQuery({
     if (authority.kind === 'denied') {
       return { kind: 'denied' as const, reason: authority.reason }
     }
-    const problem = await ctx.db.query('customerRequestRouteProblemReports')
-      .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
-    if (problem === null) return { kind: 'not_found' as const }
-    const ports = evidenceLoadPorts(ctx)
-    const [updates, businessReports, attempt, requestRevisions, mandateIssue, run, revocation,
-      reservations, attempts] = await Promise.all([
-      loadProblemUpdates(ports, problem.reportRef),
-      loadProblemBusinessReports(ports, problem.reportRef),
-      problem.attemptRef === undefined
-        ? null
-        : ctx.db.query('customerRequestRouteStepAttempts')
-          .withIndex('by_attemptRef', (query) => query.eq('attemptRef', problem.attemptRef!)).unique(),
-      ctx.db.query('customerRequestV2Revisions')
-        .withIndex('by_requestId_and_requestRevision', (query) => (
-          query.eq('requestId', problem.requestId)
-        )).collect(),
-      problem.mandateRef === undefined
-        ? null
-        : ctx.db.query('customerRequestRouteMandateIssues')
-          .withIndex('by_mandateRef', (query) => query.eq('mandateRef', problem.mandateRef!)).unique(),
-      ctx.db.query('customerRequestRouteRuns')
-        .withIndex('by_runRef', (query) => query.eq('runRef', problem.runRef)).unique(),
-      problem.mandateRef === undefined
-        ? null
-        : ctx.db.query('customerRequestRouteMandateRevocations')
-          .withIndex('by_mandateRef', (query) => query.eq('mandateRef', problem.mandateRef!)).first(),
-      problem.mandateRef === undefined
-        ? []
-        : ctx.db.query('customerRequestRouteStepReservations')
-          .withIndex('by_mandateRef_and_recordedAt', (query) => query.eq('mandateRef', problem.mandateRef!))
-          .collect(),
-      ctx.db.query('customerRequestRouteStepAttempts')
-        .withIndex('by_runRef_and_position', (query) => query.eq('runRef', problem.runRef))
-        .collect(),
-    ])
-    if (attempt !== null && !routeAttemptIntegrityValid(attempt)) {
-      throw new Error('customer_request_route_problem_attempt_integrity_failure')
-    }
-    const requestRevision = mandateIssue === null
-      ? undefined
-      : requestRevisions.find((revision) => (
-          revision.requestRevision === mandateIssue.mandate.request.requestRevision
-        ))
-    if (run === null) {
-      throw new Error('customer_request_route_problem_reconstruction_integrity_failure')
-    }
-    const businessNames = new Map<string, string>()
-    if (problem.mandateRef !== undefined && mandateIssue !== null) {
-      for (const step of mandateIssue.mandate.route.steps) {
-        const business = await ctx.db.get(step.businessId as Id<'businesses'>)
-        if (business === null) throw new Error('customer_request_route_problem_business_integrity_failure')
-        businessNames.set(step.businessId, business.name)
-      }
-    }
-    const observedAt = Date.now()
+    const ports = problemSupportReadPorts(ctx)
+    const material = await ports.loadSupportExportMaterial(args.reportRef)
+    if (material === null) return { kind: 'not_found' as const }
     return projectSupportProblemExport({
-      problem,
-      updates,
-      businessReports,
-      attempt,
-      requestRevision,
-      mandateIssue,
-      run,
-      revocation,
-      reservations,
-      attempts,
-      businessNames,
-      observedAt,
+      ...material,
+      observedAt: ports.now(),
     })
   },
 })

@@ -3,6 +3,7 @@ import type {
   ProblemAttemptSnapshot,
   ProblemMutationPorts,
   ProblemRunSnapshot,
+  ProblemSupportReadPorts,
 } from '@/modules/customer-request/route-execution/machines/problem-ports'
 import type {
   PriorBusinessClaim,
@@ -11,16 +12,22 @@ import type {
   ProblemUpdateRow,
   ProblemVisibility,
 } from '@/modules/customer-request/route-execution/problem-support/commands'
+import type {
+  SupportProblemExportMaterial,
+} from '@/modules/customer-request/route-execution/problem-support/projections'
 import {
+  loadProblemBusinessReports,
   loadProblemUpdates,
 } from '@/modules/customer-request/route-execution/evidence-load'
 import { routeAttemptIntegrityValid } from '@/modules/customer-request/route-execution/journal'
 
 import type { Doc, Id } from './_generated/dataModel'
-import type { MutationCtx } from './_generated/server'
+import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
 import { evidenceLoadPorts } from './customerRequestEvidenceLoadPorts'
 import { runtimeDb } from './source_state'
+
+type DbCtx = MutationCtx | QueryCtx
 
 export function problemMutationPorts(ctx: MutationCtx): ProblemMutationPorts {
   return {
@@ -127,6 +134,89 @@ export function problemMutationPorts(ctx: MutationCtx): ProblemMutationPorts {
     commitProblemUpdate: async (record) => {
       await ctx.db.insert('customerRequestRouteProblemUpdates', { ...record })
     },
+  }
+}
+
+export function problemSupportReadPorts(ctx: DbCtx): ProblemSupportReadPorts {
+  return {
+    now: () => Date.now(),
+
+    loadSupportExportMaterial: async (reportRef) => (
+      await loadSupportExportMaterial(ctx, reportRef)
+    ),
+  }
+}
+
+async function loadSupportExportMaterial(
+  ctx: DbCtx,
+  reportRef: string,
+): Promise<SupportProblemExportMaterial | null> {
+  const problem = await ctx.db.query('customerRequestRouteProblemReports')
+    .withIndex('by_reportRef', (query) => query.eq('reportRef', reportRef)).unique()
+  if (problem === null) return null
+  const ports = evidenceLoadPorts(ctx)
+  const [updates, businessReports, attempt, requestRevisions, mandateIssue, run, revocation,
+    reservations, attempts] = await Promise.all([
+    loadProblemUpdates(ports, problem.reportRef),
+    loadProblemBusinessReports(ports, problem.reportRef),
+    problem.attemptRef === undefined
+      ? null
+      : ctx.db.query('customerRequestRouteStepAttempts')
+        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', problem.attemptRef!)).unique(),
+    ctx.db.query('customerRequestV2Revisions')
+      .withIndex('by_requestId_and_requestRevision', (query) => (
+        query.eq('requestId', problem.requestId)
+      )).collect(),
+    problem.mandateRef === undefined
+      ? null
+      : ctx.db.query('customerRequestRouteMandateIssues')
+        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', problem.mandateRef!)).unique(),
+    ctx.db.query('customerRequestRouteRuns')
+      .withIndex('by_runRef', (query) => query.eq('runRef', problem.runRef)).unique(),
+    problem.mandateRef === undefined
+      ? null
+      : ctx.db.query('customerRequestRouteMandateRevocations')
+        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', problem.mandateRef!)).first(),
+    problem.mandateRef === undefined
+      ? []
+      : ctx.db.query('customerRequestRouteStepReservations')
+        .withIndex('by_mandateRef_and_recordedAt', (query) => query.eq('mandateRef', problem.mandateRef!))
+        .collect(),
+    ctx.db.query('customerRequestRouteStepAttempts')
+      .withIndex('by_runRef_and_position', (query) => query.eq('runRef', problem.runRef))
+      .collect(),
+  ])
+  if (attempt !== null && !routeAttemptIntegrityValid(attempt)) {
+    throw new Error('customer_request_route_problem_attempt_integrity_failure')
+  }
+  const requestRevision = mandateIssue === null
+    ? undefined
+    : requestRevisions.find((revision) => (
+        revision.requestRevision === mandateIssue.mandate.request.requestRevision
+      ))
+  if (run === null) {
+    throw new Error('customer_request_route_problem_reconstruction_integrity_failure')
+  }
+  const businessNames = new Map<string, string>()
+  if (problem.mandateRef !== undefined && mandateIssue !== null) {
+    for (const step of mandateIssue.mandate.route.steps) {
+      const business = await ctx.db.get(step.businessId as Id<'businesses'>)
+      if (business === null) throw new Error('customer_request_route_problem_business_integrity_failure')
+      businessNames.set(step.businessId, business.name)
+    }
+  }
+  return {
+    problem,
+    updates,
+    businessReports,
+    attempt,
+    requestRevision,
+    mandateIssue,
+    run,
+    revocation,
+    reservations,
+    attempts,
+    businessNames,
   }
 }
 

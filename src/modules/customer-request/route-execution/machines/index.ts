@@ -79,6 +79,7 @@ export type {
 
 export type {
   ProblemMutationPorts,
+  ProblemSupportReadPorts,
 } from './problem-ports'
 
 export type {

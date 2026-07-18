@@ -17,6 +17,7 @@ import type {
   ProblemVisibility,
 } from '../problem-support/commands'
 import type { AttemptEvidenceItem } from '../problem-support/evidence'
+import type { SupportProblemExportMaterial } from '../problem-support/projections'
 import type { RouteAttemptIntegritySnapshot } from '../journal/integrity'
 
 export type ProblemRunHeadSnapshot = Readonly<{
@@ -123,6 +124,13 @@ export type ProblemMutationPorts = Readonly<{
   commitProblemUpdate: (record: ProblemUpdateInsert) => Promise<void>
 }>
 
+export type ProblemSupportReadPorts = Readonly<{
+  now: () => number
+  loadSupportExportMaterial: (
+    reportRef: string,
+  ) => Promise<SupportProblemExportMaterial | null>
+}>
+
 export type {
   BusinessProblemClaimArgs,
   BusinessProblemClaimDecision,
@@ -132,4 +140,5 @@ export type {
   ProblemUpdateArgs,
   ProblemUpdateDecision,
   BusinessCausalityPosition,
+  SupportProblemExportMaterial,
 }

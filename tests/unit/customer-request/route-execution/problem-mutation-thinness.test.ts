@@ -73,8 +73,10 @@ describe('customer-request route-execution problem mutation thinness', () => {
     expect(index).toContain('updateProblemStatus')
     expect(index).toContain('replyProblem')
     expect(index).toContain('ProblemMutationPorts')
+    expect(index).toContain('ProblemSupportReadPorts')
     const ports = readFileSync(join(machinesRoot, 'problem-ports.ts'), 'utf8')
     expect(ports).toContain('export type ProblemMutationPorts')
+    expect(ports).toContain('export type ProblemSupportReadPorts')
     expect(ports).not.toMatch(/\bWritePlan\b/)
     expect(ports).not.toMatch(/\bintendedPatches\b/)
   })
@@ -117,6 +119,7 @@ describe('customer-request route-execution problem mutation thinness', () => {
   it('keeps problem mutation ports factory under 1000 lines', () => {
     expect(problemPortsSource.split('\n').length).toBeLessThanOrEqual(1000)
     expect(problemPortsSource).toContain('export function problemMutationPorts')
+    expect(problemPortsSource).toContain('export function problemSupportReadPorts')
     expect(problemPortsSource).not.toMatch(/\bWritePlan\b/)
     expect(problemPortsSource).not.toMatch(/\bintendedPatches\b/)
   })

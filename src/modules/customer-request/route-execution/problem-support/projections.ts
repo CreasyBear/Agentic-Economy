@@ -318,7 +318,7 @@ function supportProblemReconstruction(input: Readonly<{
   }
 }
 
-export function projectSupportProblemExport(input: Readonly<{
+export type SupportProblemExportMaterial = Readonly<{
   problem: Readonly<{
     reportRef: string
     requestId: string
@@ -381,8 +381,13 @@ export function projectSupportProblemExport(input: Readonly<{
     evidence?: readonly AttemptEvidenceItem[]
   }>[]
   businessNames: ReadonlyMap<string, string>
+}>
+
+export type SupportProblemExportProjectionInput = SupportProblemExportMaterial & Readonly<{
   observedAt: number
-}>) {
+}>
+
+export function projectSupportProblemExport(input: SupportProblemExportProjectionInput) {
   const {
     problem, updates, businessReports, attempt, requestRevision, mandateIssue,
     run, revocation, reservations, attempts, businessNames, observedAt,
