@@ -148,6 +148,14 @@ export {
 } from './refine'
 
 export {
+  authorizePreparation,
+  type AuthorizePreparationApprovalActor,
+  type AuthorizePreparationInput,
+  type AuthorizePreparationPorts,
+  type AuthorizePreparationResult,
+} from './authorize-preparation'
+
+export {
   exportRouteEvidence,
   exportRouteProblemForSupport,
   listRouteProblemsForSupport,

@@ -103,8 +103,10 @@ describe('customer-request refine thinness', () => {
     }
   })
 
-  it('leaves authorizePreparation in the host and withdraw outside refine', () => {
+  it('leaves authorizePreparation as a thin host adapter and withdraw outside refine', () => {
     expect(convexHost).toMatch(/export const authorizePreparation\s*=/)
+    expect(convexHost).toContain('authorizePreparation as authorizePreparationApplication')
+    expect(convexHost).toContain('authorizePreparationPorts')
     const capabilityHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
     expect(capabilityHost).toMatch(/export const withdrawCapability\s*=/)
   })

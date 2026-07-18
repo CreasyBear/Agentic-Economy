@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const convexHost = readFileSync('convex/customerRequestApplication.ts', 'utf8')
 const moduleRoot = 'src/modules/customer-request/application/preparation-egress'
+const authorizeRoot = 'src/modules/customer-request/application/authorize-preparation'
 
 const movedPureSymbols = [
   'preparationResultView',
@@ -15,11 +16,6 @@ const movedPureSymbols = [
   'customerPurposeLabel',
 ] as const
 
-const movedResolveSymbols = [
-  'runPreparationEgress',
-  'recoverUnresolvedEgress',
-] as const
-
 describe('customer-request preparation-egress thinness', () => {
   it('does not redefine moved pure projection helpers in Convex', () => {
     for (const symbol of movedPureSymbols) {
@@ -28,28 +24,21 @@ describe('customer-request preparation-egress thinness', () => {
     }
     expect(convexHost).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+resolvePreparedAction\b/)
     expect(convexHost).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+resumePreparationEgress\b/)
+    expect(convexHost).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+runPreparationEgress\b/)
   })
 
-  it('keeps Convex wrappers thin and imports deepened behaviors from application/public', () => {
+  it('keeps recoverUnresolvedEgress thin and composed authorize via authorize-preparation', () => {
     expect(convexHost).toContain("from '@/modules/customer-request/application/public'")
-    expect(convexHost).toContain('runPreparationEgress as runPreparationEgressApplication')
     expect(convexHost).toContain('recoverUnresolvedEgress as recoverUnresolvedEgressApplication')
-    expect(convexHost).toContain('resumePreparationEgress as resumePreparationEgressApplication')
-    expect(convexHost).toContain('preparationResultView')
-    expect(convexHost).toContain('projectStoredPreparation')
     expect(convexHost).toContain('preparationEgressPorts')
+    expect(convexHost).toContain('authorizePreparation as authorizePreparationApplication')
 
-    for (const symbol of movedResolveSymbols) {
-      // Thin adapters may keep the local name; bodies must delegate, not reimplement.
-      const start = convexHost.indexOf(`async function ${symbol}(`)
-      expect(start).toBeGreaterThanOrEqual(0)
-      const body = convexHost.slice(start, start + 450)
-      expect(body).toContain(`${symbol}Application`)
-      expect(body).not.toContain('ctx.runAction(internal.customerRequestV2PreparationEgress.run')
-      expect(body).not.toContain('ctx.runMutation(internal.customerRequestV2PreparedAction.prepare')
-      expect(body).not.toContain('preparedActionFailureSummary')
-      expect(body).not.toContain('projectEgressCustomerState')
-    }
+    const recoverStart = convexHost.indexOf('async function recoverUnresolvedEgress(')
+    expect(recoverStart).toBeGreaterThanOrEqual(0)
+    const recoverBody = convexHost.slice(recoverStart, recoverStart + 450)
+    expect(recoverBody).toContain('recoverUnresolvedEgressApplication')
+    expect(recoverBody).not.toContain('ctx.runAction(internal.customerRequestV2PreparationEgress.run')
+    expect(recoverBody).not.toContain('ctx.runMutation(internal.customerRequestV2PreparedAction.prepare')
   })
 
   it('does not move V2PreparationEgress hosts into the application module', () => {
@@ -58,7 +47,8 @@ describe('customer-request preparation-egress thinness', () => {
       expect(source).not.toMatch(/customerRequestV2PreparationEgress/)
       expect(source).not.toMatch(/V2PreparationEgress/)
     }
-    expect(convexHost).toContain('customerRequestV2PreparationEgress')
+    expect(readFileSync('convex/customerRequestV2PreparationEgress.ts', 'utf8'))
+      .toContain('customerRequestV2PreparationEgress')
   })
 
   it('keeps preparation-egress free of Convex runtime and dual compilers', () => {
@@ -84,6 +74,15 @@ describe('customer-request preparation-egress thinness', () => {
     expect(publicSource).toContain('runPreparationEgress')
     expect(publicSource).toContain('preparationResultView')
     expect(publicSource).toContain('recoverUnresolvedEgress')
+  })
+
+  it('does not fold authorize-preparation into preparation-egress', () => {
+    for (const file of listTsFiles(moduleRoot)) {
+      const source = readFileSync(file, 'utf8')
+      expect(source).not.toMatch(/authorizePreparation/)
+      expect(source).not.toMatch(/AuthorizePreparationPorts/)
+    }
+    expect(readFileSync(`${authorizeRoot}/authorize.ts`, 'utf8')).toContain('runPreparationEgress')
   })
 })
 

@@ -4,7 +4,6 @@ import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   customerRequestV2AggregateValue,
-  durableActionPreparationV2Value,
   routePlanGenerationV2Value,
 } from '@/modules/customer-request/runtime'
 import {
@@ -25,8 +24,8 @@ import {
   interpretCompileCommit as interpretCompileCommitApplication,
   listRouteProblemsForSupport as listRouteProblemsForSupportApplication,
   loadRequestGraph as loadRequestGraphApplication,
-  preparationResultView,
   allowStandingRoute,
+  authorizePreparation as authorizePreparationApplication,
   confirmCustomerRoute,
   inspectStandingRoute,
   listStandingRouteAssistants,
@@ -44,7 +43,6 @@ import {
   reportRouteProblem as reportRouteProblemApplication,
   resumeCustomerRequest,
   revokeStandingRoute,
-  runPreparationEgress as runPreparationEgressApplication,
   applyStandingRoute,
   updateRouteProblemStatus as updateRouteProblemStatusApplication,
   type CommandReplayResult,
@@ -52,13 +50,13 @@ import {
   type CustomerRequestActionResult,
   type EligibleSupplyResult,
   type ExactContractResult,
-  type PreparationMutationResult,
   type RequestGraph,
   type RoutePlanProjectionMaterial,
 } from '@/modules/customer-request/application/public'
 
 import { internal } from './_generated/api'
 import { action, env, type ActionCtx } from './_generated/server'
+import { authorizePreparationPorts } from './customerRequestAuthorizePreparationPorts'
 import { compareResumePorts, preparationEgressPorts } from './customerRequestCompareResumePorts'
 import { confirmRoutePorts } from './customerRequestConfirmRoutePorts'
 import { problemRoutePorts } from './customerRequestProblemRoutePorts'
@@ -1623,63 +1621,23 @@ export const authorizePreparation = action({
   handler: async (ctx, args): Promise<ActionResult> => {
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind === 'needs_attention') return writableView(projectNeedsAttention({
-      requestRef: args.requestRef, revision: 0,
-      summary: 'This earlier request used a retired contract format. Start a new request to continue.',
-    }))
-    if (current.kind !== 'current') return { kind: 'refused', reason: 'request_not_found' }
-    const requestPrincipalId = current.aggregate.snapshot.principalId
-    const ownsDirectRequest = requestPrincipalId === identity.tokenIdentifier
-    const agentPrincipal = ownsDirectRequest ? null : await ctx.runQuery(internal.customerRequestPrincipals.getAgentPrincipal, {
-      principalId: requestPrincipalId,
-    })
-    if (!ownsDirectRequest && agentPrincipal?.ownerId !== identity.subject) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    if (current.aggregate.snapshot.revision !== args.revision) return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
-    }
-    if (current.aggregate.plan.actions.length !== 1 || current.aggregate.plan.actions[0] === undefined) {
-      return writableView(projectNeedsAttention({
-        requestRef: args.requestRef, revision: args.revision,
-        summary: 'This request needs an action choice before AE can prepare it.',
-      }))
-    }
     const command = {
       requestRef: args.requestRef, revision: args.revision,
       preparationRef: args.preparationRef, idempotencyKey: args.idempotencyKey,
     }
-    const now = Date.now()
-    const result: PreparationMutationResult = await ctx.runMutation(internal.customerRequestV2Preparation.prepare, {
-      commandKey: namespacedKey(requestPrincipalId, 'authorize', args.requestRef, args.idempotencyKey),
+    return toActionResult(await authorizePreparationApplication({
+      ...command,
       commandDigest: canonicalDigest(command),
-      principalId: requestPrincipalId,
-      requestId: args.requestRef,
-      expectedRevision: args.revision,
-      actionId: current.aggregate.plan.actions[0].actionId,
-      preparationRef: args.preparationRef,
-      approvalActor: {
-        kind: 'clerk_owner', requestPrincipalId, ownerId: identity.subject,
-        credentialId: identity.tokenIdentifier,
-        authenticationEvidenceRef: `clerk-identity:${canonicalDigest({
-          issuer: identity.issuer, subject: identity.subject, tokenIdentifier: identity.tokenIdentifier,
-        })}`,
-        approvedAt: now,
-      },
-      now,
-    })
-    if ((result.kind === 'stored' || result.kind === 'replayed') && result.preparation.kind === 'ready_for_routing') {
-      return await runPreparationEgress(ctx, current.aggregate, result.preparation, {
-        principalId: requestPrincipalId,
-        commandKey: namespacedKey(requestPrincipalId, 'egress', args.requestRef, args.idempotencyKey),
-        commandDigest: canonicalDigest({
-          requestRef: args.requestRef, revision: args.revision,
-          preparationRef: result.preparation.preparationRef, idempotencyKey: args.idempotencyKey,
-        }),
-      })
-    }
-    return toActionResult(preparationResultView(current.aggregate, result, args.requestRef, args.revision))
+      commandKey: (principalId) => namespacedKey(principalId, 'authorize', args.requestRef, args.idempotencyKey),
+      egressCommandKey: (principalId) => namespacedKey(principalId, 'egress', args.requestRef, args.idempotencyKey),
+      tokenIdentifier: identity.tokenIdentifier,
+      ownerId: identity.subject,
+      credentialId: identity.tokenIdentifier,
+      authenticationEvidenceRef: `clerk-identity:${canonicalDigest({
+        issuer: identity.issuer, subject: identity.subject, tokenIdentifier: identity.tokenIdentifier,
+      })}`,
+      now: Date.now(),
+    }, authorizePreparationPorts(ctx)))
   },
 })
 
@@ -1786,7 +1744,6 @@ type StoredAggregateResult = Readonly<
 >
 type StoredAggregate = Infer<typeof customerRequestV2AggregateValue>
 type StoredRouteGeneration = Infer<typeof routePlanGenerationV2Value>
-type StoredPreparation = Infer<typeof durableActionPreparationV2Value>
 
 async function projectCurrentRoutePlans(
   ctx: ActionCtx,
@@ -1832,17 +1789,6 @@ async function loadCurrentRouteGenerationNumber(
     generationRef: current.routeGenerationRef,
   })
   return result.kind === 'found' ? result.routeGeneration.generation : undefined
-}
-
-async function runPreparationEgress(
-  ctx: ActionCtx,
-  aggregate: StoredAggregate,
-  preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
-  command: Readonly<{ principalId: string; commandKey: string; commandDigest: string }>,
-): Promise<ActionResult> {
-  return toActionResult(await runPreparationEgressApplication(
-    aggregate, preparation, command, preparationEgressPorts(ctx),
-  ))
 }
 
 async function recoverUnresolvedEgress(
