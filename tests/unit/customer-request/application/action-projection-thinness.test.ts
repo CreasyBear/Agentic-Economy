@@ -44,6 +44,17 @@ describe('customer-request action-projection thinness', () => {
     expect(convexHost).toMatch(/export const resume\s*=/)
   })
 
+  it('does not keep dead Wave 15–16 host wrappers', () => {
+    for (const symbol of [
+      'projectCurrentRoutePlans',
+      'compileCommit',
+      'loadCurrentRouteGenerationNumber',
+      'recoverUnresolvedEgress',
+    ] as const) {
+      expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)(?:async\\s+)?function\\s+${symbol}\\b`))
+    }
+  })
+
   it('keeps action-projection free of Convex runtime and validators', () => {
     for (const file of listTsFiles(moduleRoot)) {
       const source = readFileSync(file, 'utf8')

@@ -3,7 +3,6 @@ import { v, type Infer } from 'convex/values'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   customerRequestV2AggregateValue,
-  routePlanGenerationV2Value,
 } from '@/modules/customer-request/runtime'
 import {
   projectCustomerCriteria,
@@ -14,7 +13,6 @@ import {
 } from '@/modules/customer-request/semantic-interpreter'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import {
-  compileCommit as compileCommitApplication,
   exportRouteEvidence as exportRouteEvidenceApplication,
   exportRouteProblemForSupport as exportRouteProblemForSupportApplication,
   interpretCompileCommit as interpretCompileCommitApplication,
@@ -26,13 +24,10 @@ import {
   inspectStandingRoute,
   listStandingRouteAssistants,
   prepareCompare,
-  projectRoutePlansFromMaterial,
-  projectStoredAggregate as projectStoredAggregateApplication,
   projectStoredRouteRun as projectStoredRouteRunApplication,
   provideCustomerRequestFacts,
   readRouteProblemForBusiness as readRouteProblemForBusinessApplication,
   recordRouteProblemBusinessReport as recordRouteProblemBusinessReportApplication,
-  recoverUnresolvedEgress as recoverUnresolvedEgressApplication,
   refineCustomerRequest,
   replyRouteProblem as replyRouteProblemApplication,
   replayCommittedCommand as replayCommittedCommandApplication,
@@ -45,18 +40,16 @@ import {
   withRestoredRequest,
   writableView,
   type CommandReplayResult,
-  type CompileCommitInput,
   type CustomerRequestActionResult,
   type EligibleSupplyResult,
   type ExactContractResult,
   type RequestGraph,
-  type RoutePlanProjectionMaterial,
 } from '@/modules/customer-request/application/public'
 
 import { internal } from './_generated/api'
 import { action, env, type ActionCtx } from './_generated/server'
 import { authorizePreparationPorts } from './customerRequestAuthorizePreparationPorts'
-import { compareResumePorts, preparationEgressPorts } from './customerRequestCompareResumePorts'
+import { compareResumePorts } from './customerRequestCompareResumePorts'
 import { confirmRoutePorts } from './customerRequestConfirmRoutePorts'
 import { problemRoutePorts } from './customerRequestProblemRoutePorts'
 import { provideFactsPorts } from './customerRequestProvideFactsPorts'
@@ -1631,16 +1624,6 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   })) as ActionResult
 }
 
-async function compileCommit(ctx: ActionCtx, input: CompileCommitInput): Promise<ActionResult> {
-  return toActionResult(await compileCommitApplication(input, {
-    replayCommittedCommand: (replayInput) => replayCommittedCommand(ctx, replayInput),
-    commitAggregate: async (commitInput) => await ctx.runMutation(
-      internal.customerRequestV2.commitAggregate,
-      commitInput,
-    ),
-  })) as ActionResult
-}
-
 async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
   commandKey: string
   commandDigest: string
@@ -1680,62 +1663,9 @@ type StoredAggregateResult = Readonly<
   | { kind: 'not_found' }
 >
 type StoredAggregate = Infer<typeof customerRequestV2AggregateValue>
-type StoredRouteGeneration = Infer<typeof routePlanGenerationV2Value>
-
-async function projectCurrentRoutePlans(
-  ctx: ActionCtx,
-  aggregate: StoredAggregate,
-): Promise<CustomerRequestActionResult> {
-  let material: RoutePlanProjectionMaterial
-  try {
-    material = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanProjectionMaterial, {
-      requestId: aggregate.snapshot.requestId,
-    }) as RoutePlanProjectionMaterial
-  } catch (error) {
-    console.error('customer_request_route_plan_projection_failed', error)
-    return projectNeedsAttention({
-      requestRef: aggregate.snapshot.requestId,
-      revision: aggregate.snapshot.revision,
-      summary: 'AE could not verify the current ways forward. Try this request again.',
-    })
-  }
-  return projectRoutePlansFromMaterial(
-    aggregate,
-    material,
-    Date.now(),
-    (error) => {
-      console.error('customer_request_route_plan_projection_invalid', error)
-    },
-  )
-}
 
 async function loadCurrent(ctx: ActionCtx, requestId: string): Promise<StoredAggregateResult> {
   return await ctx.runQuery(internal.customerRequestV2.getCurrentAggregate, { requestId })
-}
-
-async function loadCurrentRouteGenerationNumber(
-  ctx: ActionCtx,
-  current: Extract<StoredAggregateResult, { kind: 'current' }>,
-): Promise<number | undefined> {
-  if (current.routeGenerationRef === undefined) return current.routeGenerationNumber
-  const result: Readonly<
-    | { kind: 'found'; routeGeneration: StoredRouteGeneration }
-    | { kind: 'not_found' }
-  > = await ctx.runQuery(internal.customerRequestV2.getRoutePlanGeneration, {
-    requestId: current.aggregate.snapshot.requestId,
-    generationRef: current.routeGenerationRef,
-  })
-  return result.kind === 'found' ? result.routeGeneration.generation : undefined
-}
-
-async function recoverUnresolvedEgress(
-  ctx: ActionCtx,
-  aggregate: StoredAggregate,
-): Promise<ActionResult | undefined> {
-  const result = await recoverUnresolvedEgressApplication(
-    aggregate, preparationEgressPorts(ctx),
-  )
-  return result === undefined ? undefined : toActionResult(result) as ActionResult
 }
 
 type ServiceAssertion = Infer<typeof serviceAssertion>

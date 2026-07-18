@@ -27,18 +27,18 @@ describe('customer-request preparation-egress thinness', () => {
     expect(convexHost).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+runPreparationEgress\b/)
   })
 
-  it('keeps recoverUnresolvedEgress thin and composed authorize via authorize-preparation', () => {
+  it('keeps recoverUnresolvedEgress out of the Convex host and authorizes via authorize-preparation', () => {
     expect(convexHost).toContain("from '@/modules/customer-request/application/public'")
-    expect(convexHost).toContain('recoverUnresolvedEgress as recoverUnresolvedEgressApplication')
-    expect(convexHost).toContain('preparationEgressPorts')
     expect(convexHost).toContain('authorizePreparation as authorizePreparationApplication')
+    expect(convexHost).not.toMatch(/(?:^|\n)(?:async\s+)?function\s+recoverUnresolvedEgress\b/)
+    expect(convexHost).not.toContain('recoverUnresolvedEgress as recoverUnresolvedEgressApplication')
+    expect(convexHost).not.toContain('preparationEgressPorts')
 
-    const recoverStart = convexHost.indexOf('async function recoverUnresolvedEgress(')
-    expect(recoverStart).toBeGreaterThanOrEqual(0)
-    const recoverBody = convexHost.slice(recoverStart, recoverStart + 450)
-    expect(recoverBody).toContain('recoverUnresolvedEgressApplication')
-    expect(recoverBody).not.toContain('ctx.runAction(internal.customerRequestV2PreparationEgress.run')
-    expect(recoverBody).not.toContain('ctx.runMutation(internal.customerRequestV2PreparedAction.prepare')
+    const portsSource = readFileSync('convex/customerRequestProvideFactsPorts.ts', 'utf8')
+      + readFileSync('convex/customerRequestRefinePorts.ts', 'utf8')
+      + readFileSync('convex/customerRequestCompareResumePorts.ts', 'utf8')
+    expect(portsSource).toContain('recoverUnresolvedEgress')
+    expect(portsSource).toContain('preparationEgressPorts')
   })
 
   it('does not move V2PreparationEgress hosts into the application module', () => {
