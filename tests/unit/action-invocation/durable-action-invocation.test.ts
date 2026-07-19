@@ -58,6 +58,206 @@ function createEvidenceSource() {
 }
 
 describe('durable Action Invocation control', () => {
+  it.each(origins)('grants one async effect permit for duplicate same-token workers with $kind', async (origin) => {
+    let resolveRunner!: (value: { kind: 'error'; code: string; retryable: false; reason: string }) => void
+    const runner = new Promise<{ kind: 'error'; code: string; retryable: false; reason: string }>(
+      (resolve) => { resolveRunner = resolve },
+    )
+    const adapter = vi.fn(() => runner)
+    const action = findAction('inquiry.submit')!
+    const state = createDevelopmentDurableState()
+    const sync = () => createDevelopmentDurablePort(state)
+    let beginCount = 0
+    let firstBeginSeen!: () => void
+    const firstBeginPending = new Promise<void>((resolve) => { firstBeginSeen = resolve })
+    let releaseFirstBegin!: () => void
+    const firstBeginGate = new Promise<void>((resolve) => { releaseFirstBegin = resolve })
+    const asyncPort: AsyncDurableActionInvocationPort = {
+      transact: async (command) => {
+        if (command.history.kind === 'begin_release' && ++beginCount === 1) {
+          firstBeginSeen()
+          await firstBeginGate
+        }
+        return sync().transact(command)
+      },
+      readControl: async (ref) => sync().readControl(ref),
+      readAttempts: async ({ invocationRef, numItems }) => ({
+        page: sync().readAttempts(invocationRef, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      readAttempt: async (invocationRef, attemptRef) => sync().readAttempt(invocationRef, attemptRef),
+      readHistory: async ({ invocationRef, numItems }) => ({
+        page: sync().readHistory(invocationRef, 0, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      recordLateObservation: async (observation) => sync().recordLateObservation(observation),
+    }
+    const source = {
+      input,
+      context: { developmentOnlyInquirySubmitAdapter: adapter },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+    }
+    const root = await createAsyncDurableActionInvocationTracer({
+      action, port: asyncPort,
+      now: () => '2026-07-19T15:00:00.000Z',
+      nextInvocationRef: () => `dev:async:single-permit:${origin.kind}`,
+      nextAuthorityRef: () => `opaque:async:single-permit:${origin.kind}`,
+      nextAttemptRef: () => `dev:async:single-permit:attempt:${origin.kind}`,
+      resolveSourceState: () => source,
+    })
+    const prepared = await root.prepare({
+      origin, actor, input, context: source.context, freshnessMs: 300_000,
+    })
+    source.prepared = prepared.prepared!
+    const decided = await root.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const acquired = await root.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:async:single-permit',
+      leaseMs: 30_000,
+    })
+    if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+      throw new Error('Expected single-permit lease.')
+    }
+    const firstWorker = await root.coldResume(prepared.invocationRef)
+    const secondWorker = await root.coldResume(prepared.invocationRef)
+    const token = acquired.view.control
+    const firstCompletion = firstWorker.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: token.attemptRef,
+      leaseOwner: token.leaseOwner,
+      effectGeneration: token.effectGeneration,
+    })
+    await firstBeginPending
+    const winningCompletion = secondWorker.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: token.attemptRef,
+      leaseOwner: token.leaseOwner,
+      effectGeneration: token.effectGeneration,
+    })
+    await vi.waitFor(() => expect(adapter).toHaveBeenCalledTimes(1))
+    expect(sync().readControl(prepared.invocationRef)?.control.control).toMatchObject({
+      state: 'leased',
+      release: 'possibly_released',
+    })
+    releaseFirstBegin()
+    const replay = await firstCompletion
+    expect(replay).toMatchObject({
+      kind: 'refused',
+      code: 'reconciliation_required',
+      view: {
+        invocationRef: prepared.invocationRef,
+        control: { state: 'leased', release: 'possibly_released' },
+      },
+    })
+    expect(adapter).toHaveBeenCalledTimes(1)
+    resolveRunner({
+      kind: 'error',
+      code: 'mock_single_permit_complete',
+      retryable: false,
+      reason: 'MOCK single permit completion',
+    })
+    await expect(winningCompletion).resolves.toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'terminal' } },
+    })
+    expect(adapter).toHaveBeenCalledTimes(1)
+    expect(sync().readControl(prepared.invocationRef)?.control.control).toEqual({ state: 'terminal' })
+  })
+
+  it('grants one sync effect permit when two cold workers replay the same token', async () => {
+    let resolveRunner!: (value: { kind: 'error'; code: string; retryable: false; reason: string }) => void
+    const runner = new Promise<{ kind: 'error'; code: string; retryable: false; reason: string }>(
+      (resolve) => { resolveRunner = resolve },
+    )
+    const adapter = vi.fn(() => runner)
+    const action = findAction('inquiry.submit')!
+    const state = createDevelopmentDurableState()
+    const port = createDevelopmentDurablePort(state)
+    const source = {
+      input,
+      context: { developmentOnlyInquirySubmitAdapter: adapter },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+    }
+    const create = (resumeRef?: string) => createDurableActionInvocationTracer({
+      action, port,
+      now: () => '2026-07-19T15:15:00.000Z',
+      nextInvocationRef: () => 'dev:sync:single-permit',
+      nextAuthorityRef: () => 'opaque:sync:single-permit',
+      nextAttemptRef: () => 'dev:sync:single-permit:attempt',
+      resolveSourceState: () => source,
+    }, resumeRef)
+    const root = create()
+    const origin = origins[1]!
+    const prepared = root.prepare({
+      origin, actor, input, context: source.context, freshnessMs: 300_000,
+    })
+    source.prepared = prepared.prepared!
+    const decided = root.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const acquired = root.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:sync:single-permit',
+      leaseMs: 30_000,
+    })
+    if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+      throw new Error('Expected sync single-permit lease.')
+    }
+    const winner = create(prepared.invocationRef)
+    const loser = create(prepared.invocationRef)
+    const token = acquired.view.control
+    const winningCompletion = winner.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: token.attemptRef,
+      leaseOwner: token.leaseOwner,
+      effectGeneration: token.effectGeneration,
+    })
+    expect(adapter).toHaveBeenCalledTimes(1)
+    await expect(loser.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: token.attemptRef,
+      leaseOwner: token.leaseOwner,
+      effectGeneration: token.effectGeneration,
+    })).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'reconciliation_required',
+      view: { control: { state: 'leased', release: 'possibly_released' } },
+    })
+    expect(adapter).toHaveBeenCalledTimes(1)
+    resolveRunner({
+      kind: 'error',
+      code: 'mock_sync_single_permit_complete',
+      retryable: false,
+      reason: 'MOCK sync single permit completion',
+    })
+    await expect(winningCompletion).resolves.toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'terminal' } },
+    })
+  })
+
   it('refuses non-monotonic rows while preserving exact duplicate idempotency', () => {
     const state = createDevelopmentDurableState()
     const port = createDevelopmentDurablePort(state)

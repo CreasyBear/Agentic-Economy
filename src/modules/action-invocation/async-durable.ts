@@ -108,7 +108,14 @@ export async function createAsyncDurableActionInvocationTracer<
     decision: InvocationDecision<Result>,
   ): Promise<InvocationDecision<Result>> => {
     const refusal = await operation.flushRemaining()
-    return refusal === undefined ? decision : currentDecision(invocationRef, refusal)
+    if (refusal !== undefined) return currentDecision(invocationRef, refusal)
+    if (decision.kind === 'refused' && decision.code === 'reconciliation_required') {
+      return currentDecision(invocationRef, {
+        kind: 'refused',
+        code: 'reconciliation_required',
+      })
+    }
+    return decision
   }
 
   const finishView = async (

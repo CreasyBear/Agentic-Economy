@@ -71,6 +71,11 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
           memory = makeMemory(reconstructSnapshot(options.port, view.invocationRef))
           return result.code
         }
+        if (result.kind === 'duplicate') {
+          releaseRefusals.set(view.invocationRef, 'reconciliation_required')
+          memory = makeMemory(reconstructSnapshot(options.port, view.invocationRef))
+          return 'reconciliation_required'
+        }
         releaseCommitVersions.set(view.invocationRef, view.invocationVersion)
         return undefined
       }
@@ -85,6 +90,10 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
         if (flushed?.kind === 'refused') {
           releaseRefusals.set(view.invocationRef, flushed.code)
           return flushed.code
+        }
+        if (flushed?.kind === 'duplicate') {
+          releaseRefusals.set(view.invocationRef, 'reconciliation_required')
+          return 'reconciliation_required'
         }
         releaseCommitVersions.set(view.invocationRef, view.invocationVersion)
         return undefined

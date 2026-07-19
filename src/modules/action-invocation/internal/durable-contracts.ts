@@ -138,7 +138,8 @@ export type PersistControlCommand<Result extends ActionResult = ActionResult> = 
 
 export type PersistControlResult =
   | Readonly<{ kind: 'applied' | 'duplicate'; invocationVersion: number }>
-  | Readonly<{ kind: 'refused'; code: 'stale_invocation_version' | 'effect_generation_stale' | 'lease_not_current' | 'command_identity_conflict' }>
+  | Readonly<{ kind: 'refused'; code: 'stale_invocation_version' | 'effect_generation_stale' |
+    'lease_not_current' | 'command_identity_conflict' | 'reconciliation_required' }>
 
 export interface DurableActionInvocationPort<Result extends ActionResult = ActionResult> {
   transact(command: PersistControlCommand<Result>): PersistControlResult
