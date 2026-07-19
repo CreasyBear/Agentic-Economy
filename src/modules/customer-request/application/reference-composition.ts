@@ -1,4 +1,5 @@
 import type { ActionInvocationView } from '@/modules/action-invocation'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   CustomerRequestCompletedTaskReference,
   CustomerRequestV2Aggregate,
@@ -318,13 +319,7 @@ function sameCompletedReference(
   left: CustomerRequestCompletedTaskReference,
   right: CustomerRequestCompletedTaskReference,
 ): boolean {
-  return left.referenceRef === right.referenceRef
-    && left.invocationRef === right.invocationRef
-    && left.actionId === right.actionId
-    && left.actionVersion === right.actionVersion
-    && left.sourceResultRef === right.sourceResultRef
-    && left.resultDigest === right.resultDigest
-    && left.businessOutcome === right.businessOutcome
+  return canonicalDigest(left as never) === canonicalDigest(right as never)
 }
 
 function hasCycle(

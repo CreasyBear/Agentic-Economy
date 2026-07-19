@@ -232,6 +232,12 @@ describe('reference-only Customer Request composition', () => {
       ...nodes[0],
       inspection: { ...nodes[0]!.inspection, sourceResultRef: 'mock:source-result:wrong' },
     }], ports(), 'completed_reference_mismatch'],
+    ['completed role mismatch', [nodes[0]], ports({
+      resolveCompletedResult: () => ({ ...completedReference, role: 'completed_task' as never }),
+    }), 'completed_reference_mismatch'],
+    ['completed reference time mismatch', [nodes[0]], ports({
+      resolveCompletedResult: () => ({ ...completedReference, referencedAt: completedReference.referencedAt + 1 }),
+    }), 'completed_reference_mismatch'],
     ['nonexistent invocation', [nodes[1]], ports({ resolveInvocation: () => undefined }), 'invocation_reference_missing'],
     ['wrong invocation action', [nodes[1]], ports({
       resolveInvocation: () => ({

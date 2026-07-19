@@ -97,18 +97,54 @@ export type HarnessToolBoundaryEvent =
   | Readonly<{ kind: 'approval_policy'; policy: HarnessApprovalPolicy; reason: string }>
   | Readonly<{ kind: 'direct_runner_started'; actionId: string }>
   | Readonly<{ kind: 'direct_runner_returned'; actionId: string; outcome: string }>
+  | Readonly<{ kind: 'action_invocation'; invocationRef: string }>
+  | Readonly<{ kind: 'control'; invocationRef: string }>
+  | Readonly<{ kind: 'attempt'; invocationRef: string; attemptRef: string }>
+  | Readonly<{ kind: 'history'; invocationRef: string; commandId: string }>
   | Readonly<{
       kind: 'direct_control_snapshot'
-      actionInvocationEmissions: 0
-      controlEmissions: 0
-      attemptEmissions: 0
-      historyEmissions: 0
-      approvalPolicyEmissions: 1
+      actionInvocationEmissions: number
+      controlEmissions: number
+      attemptEmissions: number
+      historyEmissions: number
+      approvalPolicyEmissions: number
     }>
 
 export type HarnessToolBoundaryInstrumentation = Readonly<{
   record(event: HarnessToolBoundaryEvent): void
+  snapshot(): HarnessDirectControlSnapshot
 }>
+
+export type HarnessDirectControlSnapshot = Readonly<{
+  actionInvocationEmissions: number
+  controlEmissions: number
+  attemptEmissions: number
+  historyEmissions: number
+  approvalPolicyEmissions: number
+}>
+
+export function createHarnessToolBoundaryInstrumentation(
+  onEvent?: (event: HarnessToolBoundaryEvent) => void,
+): HarnessToolBoundaryInstrumentation {
+  const counts = {
+    actionInvocationEmissions: 0,
+    controlEmissions: 0,
+    attemptEmissions: 0,
+    historyEmissions: 0,
+    approvalPolicyEmissions: 0,
+  }
+  return {
+    record(event) {
+      if (event.kind === 'action_invocation') counts.actionInvocationEmissions += 1
+      if (event.kind === 'control') counts.controlEmissions += 1
+      if (event.kind === 'attempt') counts.attemptEmissions += 1
+      if (event.kind === 'history') counts.historyEmissions += 1
+      if (event.kind === 'approval_policy') counts.approvalPolicyEmissions += 1
+      onEvent?.(event)
+    },
+    snapshot: () => Object.freeze({ ...counts }),
+  }
+}
 
 export type HarnessAnswerModelToolDescriptor = {
   type: 'function'
@@ -169,14 +205,9 @@ export function actionToHarnessToolContract(
       actionId: action.id,
       outcome: result.kind,
     })
-    instrumentation?.record({
-      kind: 'direct_control_snapshot',
-      actionInvocationEmissions: 0,
-      controlEmissions: 0,
-      attemptEmissions: 0,
-      historyEmissions: 0,
-      approvalPolicyEmissions: 1,
-    })
+    if (instrumentation !== undefined) {
+      instrumentation.record({ kind: 'direct_control_snapshot', ...instrumentation.snapshot() })
+    }
     return result
   }
 
@@ -317,7 +348,7 @@ export function buildHarnessToolEvalFixture(
 export function buildHarnessToolContracts(
   actions: readonly AnyAction[],
 ): readonly HarnessToolContract[] {
-  return actions.map(actionToHarnessToolContract)
+  return actions.map((action) => actionToHarnessToolContract(action))
 }
 
 export function filterAnswerModelToolContracts(

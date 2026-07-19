@@ -48,6 +48,7 @@ vi.mock('@/modules/registry/public-inquiry-projection', () => ({
 import { findAction } from '@/modules/actions'
 import {
   actionToHarnessToolContract,
+  createHarnessToolBoundaryInstrumentation,
   type HarnessToolBoundaryEvent,
 } from '@/modules/harness/tool-contract'
 
@@ -56,9 +57,10 @@ describe('ADR-009 direct-path negative control', () => {
     const action = findAction('registry.detail')
     if (action === undefined) throw new Error('registry.detail is not registered')
     const emissions: HarnessToolBoundaryEvent[] = []
-    const contract = actionToHarnessToolContract(action, {
-      record: (event) => emissions.push(event),
-    })
+    const instrumentation = createHarnessToolBoundaryInstrumentation(
+      (event) => emissions.push(event),
+    )
+    const contract = actionToHarnessToolContract(action, instrumentation)
 
     const result = await contract.execute({
       input: { slug: detailFixture.business.slug },
@@ -96,6 +98,13 @@ describe('ADR-009 direct-path negative control', () => {
     expect(contract.policy).toMatchObject({
       tier: 'read',
       approval: { policy: 'allow' },
+    })
+    expect(instrumentation.snapshot()).toEqual({
+      actionInvocationEmissions: 0,
+      controlEmissions: 0,
+      attemptEmissions: 0,
+      historyEmissions: 0,
+      approvalPolicyEmissions: 1,
     })
   })
 })
