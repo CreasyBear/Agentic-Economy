@@ -19,10 +19,7 @@ import {
   type DevelopmentBookingResult,
 } from './development-booking.actions'
 import { bookingActor, developmentBookingNow } from './development-booking-fixture'
-import type {
-  createDevelopmentBookingProvider,
-  DevelopmentCancellationAttestationContext,
-} from './development-booking-provider'
+import type { createDevelopmentBookingProvider } from './development-booking-provider'
 import {
   mandateRefusalToInvocationRefusal,
   type DevelopmentBookingMandateService,
@@ -334,7 +331,6 @@ export async function runCancellationInvocation(input: Readonly<{
     mandateRef: string
     authorityUseRef: string
     policyDecisionRef?: string
-    releaseAttestationContext?: DevelopmentCancellationAttestationContext
   }>
 }>): Promise<BookingInvocationRun<DevelopmentBookingCancellationResult>> {
   const events: BookingInvocationEvent[] = []
@@ -353,10 +349,7 @@ export async function runCancellationInvocation(input: Readonly<{
     developmentOnlyBookingCancellationAdapter: async (raw: unknown) => {
       events.push({ kind: 'provider_release' as const, actionId: cancelDevelopmentReservationAction.id })
       release.markReleased()
-      const result = await input.provider.cancel(
-        raw as DevelopmentBookingCancellationInput,
-        input.fullYoloMandate?.releaseAttestationContext,
-      )
+      const result = await input.provider.cancel(raw as DevelopmentBookingCancellationInput)
       source.result = result
       source.resultIdentity = {
         sourceResultRef: result.kind === 'reservation_cancellation_confirmed'

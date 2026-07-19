@@ -27,9 +27,12 @@ import {
 import { createDevelopmentBookingProvider } from './development-booking-provider'
 import type { DevelopmentBookingProviderSnapshot } from './development-booking-provider'
 import {
-  developmentBookingOffsetVerificationKey,
   developmentCancellationConfirmationRule,
 } from './development-booking-offset-rule'
+import {
+  developmentBookingVerificationKey,
+  type DevelopmentBookingSigningCustody,
+} from './development-booking-signing-custody'
 import { runCancellationInvocation, runReservationInvocation } from './development-booking-runner'
 
 const objective = 'Book one development consultation and cancel it if the provider confirms the objective no longer requires attendance.'
@@ -67,7 +70,43 @@ export function developmentBookingObjectiveStateValid(state: DevelopmentBookingO
   return digest === canonicalDigest(material as never)
 }
 
-export async function runFullYoloDevelopmentObjective() {
+export type DevelopmentBookingMidPhase = Readonly<{
+  kind: 'booking_phase_complete'
+  processId: number
+  mandate: StandingMandate
+  grant: ReturnType<ReturnType<typeof createDevelopmentStandingMandateGrantVerifier>>
+  policyDecisions: readonly StandingMandatePolicyDecision[]
+  initialObjectiveState: DevelopmentBookingObjectiveState
+  midRun: {
+    mandateSnapshot: StandingMandateSnapshot
+    providerSnapshot: DevelopmentBookingProviderSnapshot
+    objectiveState: DevelopmentBookingObjectiveState
+    durableInvocations: readonly ReturnType<typeof projectDurableRun>[]
+  }
+  invocationRecords: readonly ReturnType<typeof invocationRecord>[]
+  providerAEffects: number
+}>
+
+export async function runFullYoloDevelopmentObjective(
+  signingCustody: DevelopmentBookingSigningCustody,
+) {
+  const result = await runFullYoloDevelopmentObjectiveInternal(signingCustody, false)
+  if ('kind' in result) throw new Error('development_booking_final_phase_missing')
+  return result
+}
+
+export async function runFullYoloDevelopmentBookingPhase(
+  signingCustody: DevelopmentBookingSigningCustody,
+) {
+  const result = await runFullYoloDevelopmentObjectiveInternal(signingCustody, true)
+  if (!('kind' in result)) throw new Error('development_booking_mid_phase_missing')
+  return result
+}
+
+async function runFullYoloDevelopmentObjectiveInternal(
+  signingCustody: DevelopmentBookingSigningCustody,
+  stopAfterBooking: boolean,
+) {
   const providerA = createDevelopmentBookingProvider({
     providerRef: 'mock:provider:calendar:a',
     slotRef: 'mock:slot:a',
@@ -76,6 +115,8 @@ export async function runFullYoloDevelopmentObjective() {
   const providerB = createDevelopmentBookingProvider({
     providerRef: 'mock:provider:calendar:b',
     slotRef: 'mock:slot:b',
+    exposureAmount: { amountMinor: 5_000, currency: 'AUD' },
+    signingCustody,
   })
   const slotA = await providerA.availability()
   const slotB = await providerB.availability()
@@ -109,7 +150,7 @@ export async function runFullYoloDevelopmentObjective() {
       permittedFallbacks: ['provider_a_primary', 'provider_b_after_terms_refusal', 'none'],
       riskCeiling: 'development_booking_bounded_loss',
       exposureOffsetRules: [developmentCancellationConfirmationRule],
-      exposureOffsetVerificationKeys: [developmentBookingOffsetVerificationKey],
+      exposureOffsetVerificationKeys: [developmentBookingVerificationKey(signingCustody)],
     },
   })
   const verifier = createDevelopmentStandingMandateGrantVerifier({
@@ -263,6 +304,19 @@ export async function runFullYoloDevelopmentObjective() {
     objectiveState: midObjectiveState,
     durableInvocations: [projectDurableRun(first), projectDurableRun(second)],
   }
+  if (stopAfterBooking) {
+    return {
+      kind: 'booking_phase_complete' as const,
+      processId: process.pid,
+      mandate,
+      grant,
+      policyDecisions: decisions,
+      initialObjectiveState,
+      midRun,
+      invocationRecords: [invocationRecord(first), invocationRecord(second)],
+      providerAEffects: providerA.effectCount(),
+    }
+  }
   const resumed = await resumeDevelopmentBookingObjective({
     processRef: 'mock:process:cold-resume:1',
     mandate,
@@ -270,21 +324,18 @@ export async function runFullYoloDevelopmentObjective() {
     providerSnapshot: midRun.providerSnapshot,
     objectiveState: midRun.objectiveState,
     durableInvocations: midRun.durableInvocations,
+    signingCustody,
   })
   decisions.push(...resumed.newPolicyDecisions)
   const cancellation = resumed.cancellationRun!
   const cancellationResult = resumed.cancellationResult!
   const cancellationMaterial = cancellation.source.input
   const cold = resumed.store
-  const record = (run: any) => ({
-    invocationRef: run.view.invocationRef,
-    action: run.view.action,
-    acceptedAuthority: run.view.acceptedAuthority,
-    events: run.events,
-    durable: projectDurableRun(run),
-    resultDigest: canonicalDigest(run.view.observedResolution),
-  })
-  const invocationRecords = [record(first), record(second), record(cancellation)]
+  const invocationRecords = [
+    invocationRecord(first),
+    invocationRecord(second),
+    invocationRecord(cancellation),
+  ]
   const actionById = new Map<string, AnyAction>([
     [createDevelopmentReservationAction.id, createDevelopmentReservationAction],
     [cancelDevelopmentReservationAction.id, cancelDevelopmentReservationAction],
@@ -307,6 +358,7 @@ export async function runFullYoloDevelopmentObjective() {
     providerSnapshot,
     objectiveState: resumed.objectiveState,
     durableInvocations: invocationRecords.map(({ durable }) => durable),
+    signingCustody,
   })
   const effectsAfterReplay = replayed.effectCounts
   return {
@@ -340,7 +392,7 @@ export async function runFullYoloDevelopmentObjective() {
       initialObjectiveState,
       finalObjectiveState: resumed.objectiveState,
       replayedObjectiveState: replayed.objectiveState,
-      freshProcessRefs: [resumed.processRef, replayed.processRef],
+      freshObjectGraphRefs: [resumed.processRef, replayed.processRef],
       resumeReconstructedInvocationRefs: resumed.reconstructed.map(({ invocationRef }) => invocationRef),
       replayReconstructedInvocationRefs: replayed.reconstructed.map(({ invocationRef }) => invocationRef),
       reconstructed: reconstructed.map((view) => ({
@@ -378,6 +430,17 @@ export async function runFullYoloDevelopmentObjective() {
   }
 }
 
+function invocationRecord(run: any) {
+  return {
+    invocationRef: run.view.invocationRef,
+    action: run.view.action,
+    acceptedAuthority: run.view.acceptedAuthority,
+    events: run.events,
+    durable: projectDurableRun(run),
+    resultDigest: canonicalDigest(run.view.observedResolution),
+  }
+}
+
 export async function resumeDevelopmentBookingObjective(input: Readonly<{
   processRef: string
   mandate: StandingMandate
@@ -385,6 +448,7 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
   providerSnapshot: DevelopmentBookingProviderSnapshot
   objectiveState: DevelopmentBookingObjectiveState
   durableInvocations: readonly ReturnType<typeof projectDurableRun>[]
+  signingCustody: DevelopmentBookingSigningCustody
 }>) {
   if (!developmentBookingObjectiveStateValid(input.objectiveState)) {
     throw new Error('development_booking_objective_integrity_refused')
@@ -404,6 +468,7 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
   })
   const provider = createDevelopmentBookingProvider({
     ...input.providerSnapshot.options,
+    signingCustody: input.signingCustody,
     snapshot: input.providerSnapshot,
   })
   const effectCounts = () => ({
@@ -485,19 +550,6 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
       mandateRef: input.mandate.mandateRef,
       authorityUseRef: 'mock:authority-use:full-yolo:cancel',
       policyDecisionRef: decision.value.policyDecisionRef,
-      releaseAttestationContext: {
-        mandateRef: input.mandate.mandateRef,
-        mandateVersion: input.mandate.version,
-        mandateGeneration: input.mandate.generation,
-        originalAuthorityUseRef: 'mock:authority-use:full-yolo:b',
-        cancellationAuthorityUseRef: 'mock:authority-use:full-yolo:cancel',
-        originalAction: { id: createDevelopmentReservationAction.id, version: 'v1' },
-        cancellationAction: { id: cancelDevelopmentReservationAction.id, version: 'v1' },
-        originalResultRef: confirmed.reservationRef,
-        originalEvidenceRef: confirmed.evidenceRef,
-        releasedAmount: { amountMinor: 5_000, currency: 'AUD' },
-        issuedAt: developmentBookingNow(),
-      },
     },
   })
   if (

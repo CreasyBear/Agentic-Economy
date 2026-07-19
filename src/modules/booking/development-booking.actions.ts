@@ -192,12 +192,6 @@ export const developmentBookingCancellationOutputSchema = z.discriminatedUnion('
           source: z.string().min(1),
           version: z.string().min(1),
         }),
-        mandateRef: z.string().min(1),
-        mandateVersion: z.number().int().positive(),
-        mandateGeneration: z.number().int().positive(),
-        principalRef: z.string().min(1),
-        originalAuthorityUseRef: z.string().min(1),
-        cancellationAuthorityUseRef: z.string().min(1),
         providerRef: z.string().min(1),
         originalEffect: z.object({
           action: z.object({ id: z.string().min(1), version: z.string().min(1) }),
@@ -212,11 +206,11 @@ export const developmentBookingCancellationOutputSchema = z.discriminatedUnion('
           evidenceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
         }),
         outcome: z.literal('provider_confirmed_reversal'),
-        releasedAmount: z.object({
+        reversedAmount: z.object({
           amountMinor: z.number().int().nonnegative(),
           currency: z.string().min(1),
         }),
-        issuedAt: z.string().datetime(),
+        observedAt: z.string().datetime(),
       }),
       digest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
       signature: z.object({

@@ -587,12 +587,6 @@ export class StandingMandateStore {
       && attested.evidenceRule.evidenceRuleRef === offset.evidenceRuleRef
       && attested.evidenceRule.source === offset.evidenceRuleSource
       && attested.evidenceRule.version === offset.evidenceRuleVersion
-      && attested.mandateRef === offset.mandateRef
-      && attested.mandateVersion === offset.mandateVersion
-      && attested.mandateGeneration === offset.mandateGeneration
-      && attested.principalRef === offset.principalRef
-      && attested.originalAuthorityUseRef === offset.authorityUseRef
-      && attested.cancellationAuthorityUseRef === offset.offsetAuthorityUseRef
       && attested.providerRef === offset.providerRef
       && attested.originalEffect.action.id === offset.exposureAction.id
       && attested.originalEffect.action.version === offset.exposureAction.version
@@ -605,8 +599,8 @@ export class StandingMandateStore {
       && attested.cancellationEffect.resultRef === offset.offsetResultRef
       && attested.cancellationEffect.evidenceDigest === canonicalDigest(offset.offsetEvidenceRef as never)
       && attested.outcome === 'provider_confirmed_reversal'
-      && attested.releasedAmount.amountMinor === offset.amountMinor
-      && attested.releasedAmount.currency === offset.currency
+      && attested.reversedAmount.amountMinor === offset.amountMinor
+      && attested.reversedAmount.currency === offset.currency
   }
 }
 

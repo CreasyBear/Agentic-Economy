@@ -16,6 +16,8 @@ import {
 } from '@/modules/booking/development-booking-offset-rule'
 import * as developmentBookingProviderSource from '@/modules/booking/development-booking-provider'
 import { createDevelopmentBookingProvider } from '@/modules/booking/development-booking-provider'
+import { resumeDevelopmentBookingObjective } from '@/modules/booking/development-booking-objective'
+import { createDevelopmentBookingSigningCustody } from '@/modules/booking/development-booking-signing-custody'
 
 describe('full_yolo bounded authority mode', () => {
   it('executes fallback and cancellation through three exact standing-mandate uses', async () => {
@@ -142,35 +144,41 @@ describe('full_yolo bounded authority mode', () => {
       .toThrow('standing_mandate_snapshot_exposure_offset_refused')
   })
 
-  it('provider signing refuses invented cancellation state', async () => {
+  it('provider signing ignores caller-authored authority claims and refuses invented state', async () => {
     expect(developmentBookingProviderSource).not.toHaveProperty('developmentProviderSigningKey')
     expect(developmentBookingProviderSource).not.toHaveProperty('issueExposureReleaseAttestation')
+    const evidence = await runFullYoloEvidence()
     const provider = createDevelopmentBookingProvider({
-      providerRef: 'mock:provider:calendar:b',
-      slotRef: 'mock:slot:b',
+      ...evidence.coldContinuation.providerSnapshot.options,
+      snapshot: evidence.coldContinuation.providerSnapshot,
     })
-    const result = await provider.cancel({
+    const maliciousAuthorityClaims = {
+      mandateRef: 'other',
+      originalAuthorityUseRef: 'other',
+      cancellationAuthorityUseRef: 'other',
+      principalRef: 'other',
+      evidenceRef: 'other',
+    }
+    const replayed = await (provider.cancel as any)(
+      evidence.authoritativeResults.cancellation.input,
+      maliciousAuthorityClaims,
+    )
+    expect(replayed.kind).toBe('reservation_cancellation_confirmed')
+    if (replayed.kind !== 'reservation_cancellation_confirmed') throw new Error('expected_confirmation')
+    expect(replayed.exposureReleaseAttestation?.material).not.toHaveProperty('mandateRef')
+    expect(replayed.exposureReleaseAttestation?.material).not.toHaveProperty('principalRef')
+    expect(replayed.exposureReleaseAttestation?.material).not.toHaveProperty('originalAuthorityUseRef')
+    expect(replayed.exposureReleaseAttestation?.material).not.toHaveProperty('cancellationAuthorityUseRef')
+    const invented = await provider.cancel({
       environment: 'MOCK/DEVELOPMENT ONLY',
       reservationRef: 'invented',
       providerRef: 'mock:provider:calendar:b',
       principalRef: 'mock:principal:full-yolo',
       reason: 'invented',
       operationKey: 'invented',
-    }, {
-      mandateRef: 'invented',
-      mandateVersion: 1,
-      mandateGeneration: 1,
-      originalAuthorityUseRef: 'invented',
-      cancellationAuthorityUseRef: 'invented',
-      originalAction: { id: 'invented', version: 'v1' },
-      cancellationAction: { id: 'invented', version: 'v1' },
-      originalResultRef: 'invented',
-      originalEvidenceRef: 'invented',
-      releasedAmount: { amountMinor: 5_000, currency: 'AUD' },
-      issuedAt: '2026-07-19T04:00:00.000Z',
     })
-    expect(result.kind).toBe('reservation_cancellation_refused')
-    expect(result).not.toHaveProperty('exposureReleaseAttestation')
+    expect(invented.kind).toBe('reservation_cancellation_refused')
+    expect(invented).not.toHaveProperty('exposureReleaseAttestation')
   })
 
   it('proves restart continuation is objective-owned rather than direct provider replay', async () => {
@@ -178,12 +186,42 @@ describe('full_yolo bounded authority mode', () => {
     expect(evidence.coldContinuation.continuationKind).toBe('source_owned_objective_resume')
     expect(evidence.coldContinuation).not.toHaveProperty('replayedBooking')
     expect(evidence.coldContinuation).not.toHaveProperty('replayedCancellation')
-    expect(evidence.coldContinuation.freshProcessRefs[0]).not.toBe(
-      evidence.coldContinuation.freshProcessRefs[1],
+    expect(evidence.coldContinuation.freshObjectGraphRefs[0]).not.toBe(
+      evidence.coldContinuation.freshObjectGraphRefs[1],
     )
     expect(evidence.coldContinuation.finalObjectiveState.digest).toBe(
       evidence.coldContinuation.replayedObjectiveState.digest,
     )
+    expect(new Set([
+      evidence.processColdProof.parentProcessId,
+      evidence.processColdProof.bookingProcessId,
+      evidence.processColdProof.cancellationProcessId,
+      evidence.processColdProof.replayProcessId,
+    ])).toHaveProperty('size', 4)
+    expect(evidence.processColdProof.privateKeySerializedInState).toBe(false)
+    expect(evidence.processColdProof.cancellationEffectCounts).toEqual({
+      booking: 1,
+      cancellation: 1,
+    })
+    expect(evidence.processColdProof.replayEffectCounts).toEqual(
+      evidence.processColdProof.cancellationEffectCounts,
+    )
+  })
+
+  it('refuses cancellation continuation under the wrong custody key', async () => {
+    const evidence = await runFullYoloEvidence()
+    await expect(resumeDevelopmentBookingObjective({
+      processRef: 'wrong-custody-test',
+      mandate: evidence.mandateSnapshot.mandates[0]!,
+      mandateSnapshot: evidence.coldContinuation.midRun.mandateSnapshot,
+      providerSnapshot: evidence.coldContinuation.midRun.providerSnapshot,
+      objectiveState: evidence.coldContinuation.midRun.objectiveState,
+      durableInvocations: evidence.coldContinuation.midRun.durableInvocations,
+      signingCustody: createDevelopmentBookingSigningCustody({
+        keyId: 'mock:development-booking-provider:release:v1',
+        privateKey: '2222222222222222222222222222222222222222222222222222222222222222',
+      }),
+    })).rejects.toThrow('authority_use_linkage_invalid')
   })
 
   it.each([
@@ -225,7 +263,7 @@ describe('full_yolo bounded authority mode', () => {
       redigest(copy.mandateSnapshot.exposureOffsets[0])
     }],
     ['attestation payload', (copy: any) => {
-      copy.mandateSnapshot.exposureOffsets[0].releaseAttestation.material.principalRef = 'other'
+      copy.mandateSnapshot.exposureOffsets[0].releaseAttestation.material.providerRef = 'other'
       redigest(copy.mandateSnapshot.exposureOffsets[0].releaseAttestation)
       redigest(copy.mandateSnapshot.exposureOffsets[0])
     }],
@@ -234,15 +272,13 @@ describe('full_yolo bounded authority mode', () => {
         `ed25519:${'0'.repeat(128)}`
       redigest(copy.mandateSnapshot.exposureOffsets[0])
     }],
-    ['attestation cross-use', (copy: any) => {
-      copy.mandateSnapshot.exposureOffsets[0].releaseAttestation.material.originalAuthorityUseRef =
-        copy.mandateSnapshot.exposureOffsets[0].offsetAuthorityUseRef
-      redigest(copy.mandateSnapshot.exposureOffsets[0].releaseAttestation)
+    ['authority cross-use join', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].offsetAuthorityUseRef =
+        copy.mandateSnapshot.exposureOffsets[0].authorityUseRef
       redigest(copy.mandateSnapshot.exposureOffsets[0])
     }],
-    ['attestation cross-mandate', (copy: any) => {
-      copy.mandateSnapshot.exposureOffsets[0].releaseAttestation.material.mandateRef = 'other'
-      redigest(copy.mandateSnapshot.exposureOffsets[0].releaseAttestation)
+    ['authority cross-mandate join', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].mandateRef = 'other'
       redigest(copy.mandateSnapshot.exposureOffsets[0])
     }],
     ['attestation evidence digest', (copy: any) => {

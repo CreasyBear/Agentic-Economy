@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 import {
   evaluateStandingMandatePolicy,
@@ -20,6 +22,13 @@ import {
   cancelDevelopmentReservationAction,
   createDevelopmentReservationAction,
 } from '../../src/modules/booking/development-booking.actions'
+import { createDevelopmentBookingSigningCustody } from '../../src/modules/booking/development-booking-signing-custody'
+
+export const developmentEvidenceCustodyFixture = {
+  keyId: 'mock:development-booking-provider:release:v1',
+  privateKey: '1111111111111111111111111111111111111111111111111111111111111111',
+} as const
+let processColdProofCache: Promise<Awaited<ReturnType<typeof runProcessColdProof>>> | undefined
 
 export type FullYoloEvidence = Awaited<ReturnType<typeof runFullYoloDevelopmentObjective>> & {
   gitRevision: string
@@ -31,10 +40,13 @@ export type FullYoloEvidence = Awaited<ReturnType<typeof runFullYoloDevelopmentO
     lossExhaustion: string
     unknownHeldLossMinor: number
   }>
+  processColdProof: Awaited<ReturnType<typeof runProcessColdProof>>
 }
 
 export async function runFullYoloEvidence(): Promise<FullYoloEvidence> {
-  const objective = await runFullYoloDevelopmentObjective()
+  const objective = await runFullYoloDevelopmentObjective(
+    createDevelopmentBookingSigningCustody(developmentEvidenceCustodyFixture),
+  )
   const freshSnapshot = {
     ...structuredClone(objective.mandateSnapshot),
     uses: [],
@@ -161,6 +173,60 @@ export async function runFullYoloEvidence(): Promise<FullYoloEvidence> {
       lossExhaustion: refusal(lossExhaustion),
       unknownHeldLossMinor: loss.capacity(mandate.mandateRef).worstCaseLossMinor,
     },
+    processColdProof: await (processColdProofCache ??= runProcessColdProof()),
+  }
+}
+
+async function runProcessColdProof() {
+  const directory = await mkdtemp(join(tmpdir(), 'ae-full-yolo-process-proof-'))
+  const custodyPath = join(directory, 'development-custody.json')
+  const bookingPath = join(directory, 'booking.json')
+  const resumePath = join(directory, 'resume.json')
+  const replayPath = join(directory, 'replay.json')
+  await writeFile(custodyPath, JSON.stringify(developmentEvidenceCustodyFixture), {
+    encoding: 'utf8',
+    flag: 'wx',
+    mode: 0o600,
+  })
+  const worker = resolve('tools/dev/full-yolo-process-worker.ts')
+  const tsx = resolve('node_modules/.bin/tsx')
+  execFileSync(tsx, [worker, 'booking', '-', bookingPath, custodyPath], { stdio: 'pipe' })
+  execFileSync(tsx, [worker, 'resume', bookingPath, resumePath, custodyPath], { stdio: 'pipe' })
+  execFileSync(tsx, [worker, 'replay', resumePath, replayPath, custodyPath], { stdio: 'pipe' })
+  const bookingRaw = await readFile(bookingPath, 'utf8')
+  const resumeRaw = await readFile(resumePath, 'utf8')
+  const replayRaw = await readFile(replayPath, 'utf8')
+  const booking = JSON.parse(bookingRaw) as any
+  const resume = JSON.parse(resumeRaw) as any
+  const replay = JSON.parse(replayRaw) as any
+  const serializedState = `${bookingRaw}${resumeRaw}${replayRaw}`
+  return {
+    parentProcessId: process.pid,
+    bookingProcessId: booking.processId as number,
+    cancellationProcessId: resume.processId as number,
+    replayProcessId: replay.processId as number,
+    phaseArtifactDigests: {
+      booking: canonicalDigest(booking as never),
+      cancellation: canonicalDigest(resume as never),
+      replay: canonicalDigest(replay as never),
+    },
+    custodyRef: 'development-custody.json',
+    privateKeySerializedInState: serializedState.includes(
+      developmentEvidenceCustodyFixture.privateKey,
+    ),
+    bookingEffectCounts: {
+      providerA: booking.providerAEffects as number,
+      providerB: booking.midRun.providerSnapshot.effects as number,
+      cancellation: booking.midRun.providerSnapshot.cancellationEffects as number,
+    },
+    cancellationEffectCounts: resume.effectCounts as Readonly<{ booking: number; cancellation: number }>,
+    replayEffectCounts: replay.effectCounts as Readonly<{ booking: number; cancellation: number }>,
+    midObjectiveDigest: booking.midRun.objectiveState.digest as string,
+    finalObjectiveDigest: resume.objectiveState.digest as string,
+    replayObjectiveDigest: replay.objectiveState.digest as string,
+    cancellationReconstructedInvocationRefs:
+      resume.reconstructedInvocationRefs as readonly string[],
+    replayReconstructedInvocationRefs: replay.reconstructedInvocationRefs as readonly string[],
   }
 }
 
@@ -171,6 +237,14 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     providerRef: string
     principalRef: string
   }>
+  const processPids = [
+    evidence.processColdProof.parentProcessId,
+    evidence.processColdProof.bookingProcessId,
+    evidence.processColdProof.cancellationProcessId,
+    evidence.processColdProof.replayProcessId,
+  ]
+  const providerFacts = evidence.mandateSnapshot.exposureOffsets?.[0]
+    ?.releaseAttestation.material
   const verifyOffset = (offset: NonNullable<typeof evidence.mandateSnapshot.exposureOffsets>[number]) =>
     booking.result.kind === 'reservation_confirmed'
     && cancellation.result.kind === 'reservation_cancellation_confirmed'
@@ -248,7 +322,7 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
       !== evidence.policyDecisions.map(({ policyDecisionRef }) => policyDecisionRef).join(',')
     || evidence.coldContinuation.midRun.objectiveState.fallbackProgress.attemptedProviderRefs.join(',')
       !== evidence.objectiveDecisionRecords.slice(0, 2).map(({ providerRef }) => providerRef).join(',')
-    || new Set(evidence.coldContinuation.freshProcessRefs).size !== 2
+    || new Set(evidence.coldContinuation.freshObjectGraphRefs).size !== 2
     || evidence.coldContinuation.resumeReconstructedInvocationRefs.join(',')
       !== evidence.invocations.slice(0, 2).map(({ invocationRef }) => invocationRef).join(',')
     || evidence.coldContinuation.replayReconstructedInvocationRefs.join(',')
@@ -279,6 +353,11 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     || canonicalDigest(cancellation.result.exposureReleaseAttestation as never)
       !== canonicalDigest(evidence.mandateSnapshot.exposureOffsets?.[0]?.releaseAttestation as never)
     || mandate.scope.exposureOffsetVerificationKeys?.length !== 1
+    || providerFacts === undefined
+    || 'mandateRef' in providerFacts
+    || 'principalRef' in providerFacts
+    || 'originalAuthorityUseRef' in providerFacts
+    || 'cancellationAuthorityUseRef' in providerFacts
     || evidence.mandateSnapshot.exposureOffsets?.[0]?.offsetAction.id
       !== cancelDevelopmentReservationAction.id
     || evidence.safetyEvals.revokeRace !== 'mandate_revoked'
@@ -287,6 +366,21 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     || evidence.safetyEvals.spendExhaustion !== 'mandate_spend_exceeded'
     || evidence.safetyEvals.lossExhaustion !== 'mandate_risk_exceeded'
     || evidence.safetyEvals.unknownHeldLossMinor !== 5_000
+    || new Set(processPids).size !== processPids.length
+    || evidence.processColdProof.privateKeySerializedInState
+    || evidence.processColdProof.bookingEffectCounts.providerA !== 1
+    || evidence.processColdProof.bookingEffectCounts.providerB !== 1
+    || evidence.processColdProof.bookingEffectCounts.cancellation !== 0
+    || evidence.processColdProof.cancellationEffectCounts.booking !== 1
+    || evidence.processColdProof.cancellationEffectCounts.cancellation !== 1
+    || evidence.processColdProof.replayEffectCounts.booking !== 1
+    || evidence.processColdProof.replayEffectCounts.cancellation !== 1
+    || evidence.processColdProof.finalObjectiveDigest
+      !== evidence.processColdProof.replayObjectiveDigest
+    || evidence.processColdProof.midObjectiveDigest
+      === evidence.processColdProof.finalObjectiveDigest
+    || evidence.processColdProof.cancellationReconstructedInvocationRefs.length !== 2
+    || evidence.processColdProof.replayReconstructedInvocationRefs.length !== 3
   ) throw new Error('full_yolo_semantic_verification_refused')
   const useRefs = new Set<string>()
   for (const [index, invocation] of evidence.invocations.entries()) {

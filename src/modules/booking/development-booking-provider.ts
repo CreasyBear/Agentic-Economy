@@ -1,14 +1,10 @@
-import { randomBytes } from 'node:crypto'
-
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import {
-  ed25519PublicKey,
-  signEd25519Attestation,
-} from '@/modules/common/ed25519-attestation'
+import { signEd25519Attestation } from '@/modules/common/ed25519-attestation'
 import type {
   ExposureOffsetRuleIdentity,
   ExposureReleaseAttestationMaterial,
 } from '@/modules/action-invocation'
+import type { DevelopmentBookingSigningCustody } from './development-booking-signing-custody'
 import type {
   DevelopmentBookingCancellationInput,
   DevelopmentBookingCancellationResult,
@@ -23,35 +19,13 @@ export const developmentCancellationConfirmationRule: ExposureOffsetRuleIdentity
   version: 'v1',
 }
 
-const developmentProviderSigningKey = {
-  keyId: 'mock:development-booking-provider:release:v1',
-  privateKey: randomBytes(32).toString('hex'),
-} as const
-
-export const developmentBookingOffsetVerificationKey = {
-  keyId: developmentProviderSigningKey.keyId,
-  publicKey: ed25519PublicKey(
-    developmentProviderSigningKey.privateKey,
-    'development_booking_release_private_key_invalid',
-  ),
-} as const
-
-export type DevelopmentCancellationAttestationContext = Readonly<{
-  mandateRef: string
-  mandateVersion: number
-  mandateGeneration: number
-  originalAuthorityUseRef: string
-  cancellationAuthorityUseRef: string
-  originalAction: Readonly<{ id: string; version: string }>
-  cancellationAction: Readonly<{ id: string; version: string }>
-  originalResultRef: string
-  originalEvidenceRef: string
-  releasedAmount: Readonly<{ amountMinor: number; currency: string }>
-  issuedAt: string
-}>
-
 export type DevelopmentBookingProviderSnapshot = Readonly<{
-  options: Readonly<{ providerRef?: string; slotRef?: string; refusal?: 'terms_changed' | 'provider_refused' }>
+  options: Readonly<{
+    providerRef?: string
+    slotRef?: string
+    refusal?: 'terms_changed' | 'provider_refused'
+    exposureAmount?: Readonly<{ amountMinor: number; currency: string }>
+  }>
   reservations: readonly Readonly<{ operationKey: string; digest: string; input: DevelopmentBookingInput; result: DevelopmentBookingResult }>[]
   cancellations: readonly Readonly<{
     operationKey: string
@@ -67,6 +41,8 @@ export function createDevelopmentBookingProvider(options: Readonly<{
   providerRef?: string
   slotRef?: string
   refusal?: 'terms_changed' | 'provider_refused'
+  exposureAmount?: Readonly<{ amountMinor: number; currency: string }>
+  signingCustody?: DevelopmentBookingSigningCustody
   snapshot?: DevelopmentBookingProviderSnapshot
 }> = {}) {
   const reservations = new Map<string, Readonly<{
@@ -154,7 +130,6 @@ export function createDevelopmentBookingProvider(options: Readonly<{
     },
     cancel: async (
       input: DevelopmentBookingCancellationInput,
-      attestationContext?: DevelopmentCancellationAttestationContext,
     ): Promise<DevelopmentBookingCancellationResult> => {
       const digest = canonicalDigest(input)
       const prior = cancellations.get(input.operationKey)
@@ -186,15 +161,17 @@ export function createDevelopmentBookingProvider(options: Readonly<{
       const suffix = canonicalDigest(input.operationKey).slice(-12)
       const cancellationRef = `mock:cancellation:${suffix}`
       const evidenceRef = `mock:cancellation-evidence:${suffix}`
-      const exposureReleaseAttestation = attestationContext === undefined
+      const exposureReleaseAttestation = options.signingCustody === undefined
         ? undefined
         : issueExposureReleaseAttestation({
-            context: attestationContext,
             input,
             reservationRef: reservation.result.reservationRef,
             providerRef: reservation.result.providerRef,
+            originalEvidenceRef: reservation.result.evidenceRef,
             cancellationRef,
             cancellationEvidenceRef: evidenceRef,
+            reversedAmount: options.exposureAmount ?? { amountMinor: 5_000, currency: 'AUD' },
+            signingCustody: options.signingCustody,
           })
       const result: DevelopmentBookingCancellationResult = {
         kind: 'reservation_cancellation_confirmed',
@@ -216,6 +193,7 @@ export function createDevelopmentBookingProvider(options: Readonly<{
         ...(options.providerRef === undefined ? {} : { providerRef: options.providerRef }),
         ...(options.slotRef === undefined ? {} : { slotRef: options.slotRef }),
         ...(options.refusal === undefined ? {} : { refusal: options.refusal }),
+        ...(options.exposureAmount === undefined ? {} : { exposureAmount: options.exposureAmount }),
       },
       reservations: [...reservations.entries()].map(([operationKey, record]) => ({ operationKey, ...record })),
       cancellations: [...cancellations.entries()].map(([operationKey, record]) => ({ operationKey, ...record })),
@@ -226,43 +204,38 @@ export function createDevelopmentBookingProvider(options: Readonly<{
 }
 
 function issueExposureReleaseAttestation(input: Readonly<{
-  context: DevelopmentCancellationAttestationContext
   input: DevelopmentBookingCancellationInput
   reservationRef: string
   providerRef: string
+  originalEvidenceRef: string
   cancellationRef: string
   cancellationEvidenceRef: string
+  reversedAmount: Readonly<{ amountMinor: number; currency: string }>
+  signingCustody: DevelopmentBookingSigningCustody
 }>) {
   if (
-    input.context.originalResultRef !== input.reservationRef
-    || input.input.reservationRef !== input.reservationRef
+    input.input.reservationRef !== input.reservationRef
     || input.input.providerRef !== input.providerRef
   ) throw new Error('development_booking_release_attestation_linkage_refused')
   const material: ExposureReleaseAttestationMaterial = {
     format: 'ae.exposure-release-attestation:v1',
     evidenceRule: developmentCancellationConfirmationRule,
-    mandateRef: input.context.mandateRef,
-    mandateVersion: input.context.mandateVersion,
-    mandateGeneration: input.context.mandateGeneration,
-    principalRef: input.input.principalRef,
-    originalAuthorityUseRef: input.context.originalAuthorityUseRef,
-    cancellationAuthorityUseRef: input.context.cancellationAuthorityUseRef,
     providerRef: input.providerRef,
     originalEffect: {
-      action: input.context.originalAction,
+      action: { id: 'booking.createDevelopmentReservation', version: 'v1' },
       subjectRef: input.reservationRef,
-      resultRef: input.context.originalResultRef,
-      evidenceDigest: canonicalDigest(input.context.originalEvidenceRef as never),
+      resultRef: input.reservationRef,
+      evidenceDigest: canonicalDigest(input.originalEvidenceRef as never),
     },
     cancellationEffect: {
-      action: input.context.cancellationAction,
+      action: { id: 'booking.cancelDevelopmentReservation', version: 'v1' },
       subjectRef: input.reservationRef,
       resultRef: input.cancellationRef,
       evidenceDigest: canonicalDigest(input.cancellationEvidenceRef as never),
     },
     outcome: 'provider_confirmed_reversal',
-    releasedAmount: input.context.releasedAmount,
-    issuedAt: input.context.issuedAt,
+    reversedAmount: input.reversedAmount,
+    observedAt: '2026-07-19T04:00:00.000Z',
   }
   const digest = canonicalDigest(material as never)
   return {
@@ -270,7 +243,7 @@ function issueExposureReleaseAttestation(input: Readonly<{
     digest,
     signature: signEd25519Attestation(
       digest,
-      developmentProviderSigningKey,
+      input.signingCustody.signingKey(),
       'development_booking_release_signing_key_invalid',
     ),
   }

@@ -14,12 +14,6 @@ export type ExposureOffsetRuleIdentity = Readonly<{
 export type ExposureReleaseAttestationMaterial = Readonly<{
   format: 'ae.exposure-release-attestation:v1'
   evidenceRule: ExposureOffsetRuleIdentity
-  mandateRef: string
-  mandateVersion: number
-  mandateGeneration: number
-  principalRef: string
-  originalAuthorityUseRef: string
-  cancellationAuthorityUseRef: string
   providerRef: string
   originalEffect: Readonly<{
     action: Readonly<{ id: string; version: string }>
@@ -34,8 +28,8 @@ export type ExposureReleaseAttestationMaterial = Readonly<{
     evidenceDigest: string
   }>
   outcome: 'provider_confirmed_reversal'
-  releasedAmount: Readonly<{ amountMinor: number; currency: string }>
-  issuedAt: string
+  reversedAmount: Readonly<{ amountMinor: number; currency: string }>
+  observedAt: string
 }>
 
 export type ExposureReleaseAttestation = Readonly<{
