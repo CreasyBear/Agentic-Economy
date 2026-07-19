@@ -14,9 +14,11 @@ import {
   retireSupersededSandboxRouteSupply,
   retireSupersededSandboxV2Supply,
   seedSandboxCapabilityPublication,
+  setCapabilitySupplyEligibilityCommand,
 } from './devSeed'
 import { runtimeDb } from './source_state'
 import { DEV_SEED_BUSINESS_FIXTURES } from '../src/modules/dev/public'
+import { SANDBOX_WORKFLOW_PROVIDER_PROFILES } from '../src/modules/sandbox-supply/workflow-cohorts'
 
 export const seedLabelledSandboxSupply = internalMutation({
   args: {
@@ -152,6 +154,44 @@ export const seedSyntheticEventWorkflowSupply = internalMutation({
       ['public-event-activation'],
     )
     const bindings = await admitSandboxV2Supply(ctx.db, registrations, registeredAt + 500)
+    const profile = SANDBOX_WORKFLOW_PROVIDER_PROFILES['event-requirements']
+    const [priorOffering, priorBinding] = await Promise.all([
+      ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.priorOfferingId))
+        .unique(),
+      ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.priorBindingId))
+        .unique(),
+    ])
+    if (priorOffering !== null && priorBinding !== null && priorBinding.eligibility === 'eligible') {
+      const evidenceRef = 'seed:synthetic-event-contract-replaced'
+      const retired = await setCapabilitySupplyEligibilityCommand(ctx.db, {
+        actor: { kind: 'system', ref: 'system:dev-seed' },
+        context: {
+          operationKey: `seed:synthetic-event-retire:${priorBinding.bindingId}`,
+          correlationId: 'seed:synthetic-event-workflow',
+          reasonCode: 'labelled_sandbox_workflow_contract_replaced',
+          evidenceRefs: [evidenceRef],
+        },
+        eligibility: {
+          offeringId: priorOffering.offeringId,
+          bindingId: priorBinding.bindingId,
+          contractRef: {
+            capabilityId: priorBinding.capabilityId,
+            version: priorBinding.version,
+            contractDigest: priorBinding.contractDigest,
+          },
+          decision: 'revoke',
+          expectedOfferingRegistrationHash: priorOffering.registrationHash,
+          expectedBindingRegistrationHash: priorBinding.registrationHash,
+          admissionEvidenceRefs: [evidenceRef],
+          conformanceEvidenceRefs: [evidenceRef],
+        },
+      }, registeredAt + 750)
+      if (retired.kind !== 'ineligible') {
+        throw new Error(`synthetic_event_prior_binding_retirement_${retired.kind}`)
+      }
+    }
     const publicationRefs = await Promise.all(registrations.map(async (registration, index) => {
       const publicationRef = await seedSandboxCapabilityPublication(
         ctx.db,
