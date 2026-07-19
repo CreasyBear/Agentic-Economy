@@ -1,5 +1,6 @@
 import type { ActionResult } from '@/modules/common/action'
-import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import type {
   ActionInvocationOrigin,
   InvocationActor,
@@ -8,7 +9,7 @@ import type {
 
 export function materialDigest(input: unknown, paths: readonly string[]): string {
   const material = Object.fromEntries(paths.map((path) => [path, readPath(input, path) ?? null]))
-  return String(stableHash(toStableValue(material)))
+  return canonicalDigest(toStableValue(material))
 }
 
 export function readPath(value: unknown, path: string): StableHashValue | undefined {

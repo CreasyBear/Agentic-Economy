@@ -48,6 +48,7 @@ export async function createAsyncDurableActionInvocationTracer<
 ): Promise<AsyncDurableActionInvocationTracer<Input, Result>> {
   let state = createDevelopmentDurableState<Result>()
   if (resumeInvocationRef !== undefined) state = await loadState(options.port, resumeInvocationRef)
+  let currentInvocationRef = resumeInvocationRef
   let pending: PersistControlCommand<Result> | undefined
 
   const makeTracer = (): DurableActionInvocationTracer<Input, Result> => {
@@ -61,7 +62,7 @@ export async function createAsyncDurableActionInvocationTracer<
     }
     return createDurableActionInvocationTracer(
       { ...options, port: capture },
-      resumeInvocationRef,
+      currentInvocationRef,
     )
   }
   let tracer = makeTracer()
@@ -74,6 +75,7 @@ export async function createAsyncDurableActionInvocationTracer<
     pending = undefined
     if (result.kind !== 'refused') return decision
     state = await loadState(options.port, decision.view.invocationRef)
+    currentInvocationRef = decision.view.invocationRef
     tracer = makeTracer()
     const current = tracer.inspect(decision.view.invocationRef)
     return current === undefined
@@ -89,9 +91,11 @@ export async function createAsyncDurableActionInvocationTracer<
     pending = undefined
     if (result.kind === 'refused') {
       state = await loadState(options.port, view.invocationRef)
+      currentInvocationRef = view.invocationRef
       tracer = makeTracer()
       throw new Error(`Durable transaction refused: ${result.code}`)
     }
+    currentInvocationRef = view.invocationRef
     return view
   }
 

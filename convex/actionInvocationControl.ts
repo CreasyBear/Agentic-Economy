@@ -1,12 +1,13 @@
 import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 import { internalMutation, internalQuery } from './_generated/server'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
   actionInvocationOriginValue,
-  attemptOutcomeValue,
   attemptReleaseValue,
   authorityBindingValue,
   durableControlProjectionValue,
+  durableAttemptOutcomeValue,
   invocationActorValue,
   invocationControlValue,
   invocationFreshnessValue,
@@ -26,9 +27,12 @@ const controlRow = v.object({
 })
 const attemptRow = v.object({
   invocationRef: v.string(), attemptRef: v.string(), attemptNumber: v.number(),
-  effectGeneration: v.number(), actor: invocationActorValue, operationKey: v.string(),
-  materialInputDigest: v.string(), effectIdentity: v.string(), leaseOwner: v.string(),
-  leaseExpiresAt: v.string(), release: attemptReleaseValue, outcome: attemptOutcomeValue,
+  effectGeneration: v.number(), actor: invocationActorValue,
+  idempotency: v.object({
+    operationKey: v.string(), materialInputDigest: v.string(), effectIdentity: v.string(),
+  }),
+  lease: v.object({ owner: v.string(), expiresAt: v.string() }),
+  release: attemptReleaseValue, outcome: durableAttemptOutcomeValue,
   recordedAt: v.string(),
 })
 const historyInput = v.object({
@@ -111,12 +115,17 @@ export const readControl = internalQuery({
 
 export const recordLateObservation = internalMutation({
   args: {
-    invocationRef: v.string(), commandId: v.string(), commandDigest: v.string(),
+    invocationRef: v.string(), commandId: v.string(),
     effectGeneration: v.number(), actorRef: v.string(), sourceEvidenceRef: v.string(),
     release: v.union(v.literal('not_released'), v.literal('released'), v.literal('possibly_released')),
     evidenceDigest: v.string(), recordedAt: v.string(),
   },
   handler: async (ctx, args) => {
+    const commandDigest = canonicalDigest({
+      invocationRef: args.invocationRef, effectGeneration: args.effectGeneration,
+      actorRef: args.actorRef, sourceEvidenceRef: args.sourceEvidenceRef,
+      release: args.release, evidenceDigest: args.evidenceDigest,
+    })
     const current = await ctx.db.query('actionInvocationControls')
       .withIndex('by_invocationRef', (q) => q.eq('invocationRef', args.invocationRef))
       .unique()
@@ -125,13 +134,13 @@ export const recordLateObservation = internalMutation({
       .withIndex('by_invocationRef_and_commandId', (q) =>
         q.eq('invocationRef', args.invocationRef).eq('commandId', args.commandId))
       .unique()
-    if (prior !== null && prior.commandDigest !== args.commandDigest) {
+    if (prior !== null && prior.commandDigest !== commandDigest) {
       return { kind: 'refused' as const, code: 'command_identity_conflict' as const }
     }
     if (prior !== null) return { kind: 'duplicate' as const, invocationVersion: prior.invocationVersion }
     await ctx.db.insert('actionInvocationHistory', {
       invocationRef: args.invocationRef, commandId: args.commandId,
-      commandDigest: args.commandDigest, commandResult: 'applied',
+      commandDigest, commandResult: 'applied',
       invocationVersion: current.invocationVersion, effectGeneration: args.effectGeneration,
       kind: 'late_observation', current: false, actorRef: args.actorRef,
       sourceEvidenceRef: args.sourceEvidenceRef,

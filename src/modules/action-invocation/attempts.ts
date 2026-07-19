@@ -1,4 +1,4 @@
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ActionAttemptView, InvocationActor } from './contracts'
 
 export type DevelopmentReleaseSignal = {
@@ -36,11 +36,11 @@ export function createAttempt(input: Readonly<{
     idempotency: {
       operationKey: input.operationKey,
       materialInputDigest: input.materialInputDigest,
-      effectIdentity: String(stableHash({
+      effectIdentity: canonicalDigest({
         actionId: input.actionId,
         operationKey: input.operationKey,
         materialInputDigest: input.materialInputDigest,
-      })),
+      }),
     },
     release: { state: 'not_released' },
     outcome: { state: 'running' },

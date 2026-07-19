@@ -8,7 +8,7 @@ import type {
   InvocationDecision,
   PreparedInvocation,
 } from './contracts'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   actorFromOrigin,
   classifyBusinessOutcome,
@@ -213,7 +213,7 @@ export function createInMemoryActionInvocationTracer<
         actionId: options.action.id,
         contractVersion: contract.version,
         digest,
-        targetDigest: String(stableHash(prepared.target)),
+        targetDigest: canonicalDigest(prepared.target),
         consequence: prepared.consequence,
         limits: prepared.dataUse.limits,
         expiresAt: freshUntil,

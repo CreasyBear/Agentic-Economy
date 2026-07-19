@@ -1,4 +1,5 @@
 import type { ActionResult } from '@/modules/common/action'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   DurableActionInvocationPort,
   DurableAttemptRow,
@@ -73,7 +74,14 @@ export function createDevelopmentDurablePort<Result extends ActionResult>(
       .filter((row) => row.invocationVersion > afterVersion)
       .slice(0, Math.max(0, limit)),
     recordLateObservation(input) {
-      const digest = `${input.invocationRef}:${input.effectGeneration}:${input.release}:${input.evidenceDigest}`
+      const digest = canonicalDigest({
+        invocationRef: input.invocationRef,
+        effectGeneration: input.effectGeneration,
+        release: input.release,
+        evidenceDigest: input.evidenceDigest,
+        actorRef: input.actorRef,
+        sourceEvidenceRef: input.sourceEvidenceRef,
+      })
       const prior = commands.get(input.commandId)
       if (prior !== undefined) {
         return prior.digest === digest

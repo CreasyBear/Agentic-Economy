@@ -1,4 +1,5 @@
 import type { ActionResult } from '@/modules/common/action'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   ActionAttemptView,
   ActionInvocationView,
@@ -26,10 +27,54 @@ export type DurableControlRow<Result extends ActionResult = ActionResult> = Read
   updatedAt: string
 }>
 
-export type DurableAttemptRow = ActionAttemptView & Readonly<{
+export type DurableAttemptOutcome =
+  | Readonly<{ state: 'running' }>
+  | Readonly<{ state: 'returned'; businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed' }>
+  | Readonly<{ state: 'failed'; retry: 'safe_before_release'; errorDigest?: string }>
+  | Readonly<{ state: 'uncertain'; retry: 'reconcile_before_retry'; errorDigest?: string }>
+  | Readonly<{ state: 'reconciled_not_released'; retry: 'safe_after_reconciliation'; observedAt: string }>
+  | Readonly<{ state: 'reconciled_released'; externalOutcome: 'unknown'; observedAt: string }>
+
+export type DurableAttemptRow = Readonly<{
   invocationRef: string
+  attemptRef: string
+  attemptNumber: number
+  actor: ActionAttemptView['actor']
+  effectGeneration: number
+  lease: ActionAttemptView['lease']
+  idempotency: ActionAttemptView['idempotency']
+  release: ActionAttemptView['release']
+  outcome: DurableAttemptOutcome
   recordedAt: string
 }>
+
+export function projectDurableAttempt(
+  invocationRef: string,
+  attempt: ActionAttemptView,
+  recordedAt: string,
+): DurableAttemptRow {
+  const outcome: DurableAttemptOutcome =
+    attempt.outcome.state === 'failed'
+      ? { state: 'failed', retry: attempt.outcome.retry, errorDigest: canonicalDigest(attempt.outcome.message) }
+      : attempt.outcome.state === 'uncertain'
+        ? { state: 'uncertain', retry: attempt.outcome.retry, errorDigest: canonicalDigest(attempt.outcome.message) }
+        : attempt.outcome
+  return { invocationRef, ...attempt, outcome, recordedAt }
+}
+
+export function restoreDurableAttempt(row: DurableAttemptRow): ActionAttemptView {
+  const outcome: ActionAttemptView['outcome'] =
+    row.outcome.state === 'failed'
+      ? { state: 'failed', retry: row.outcome.retry, message: 'Persisted failure evidence is available by digest.' }
+      : row.outcome.state === 'uncertain'
+        ? { state: 'uncertain', retry: row.outcome.retry, message: 'Persisted uncertainty evidence is available by digest.' }
+        : row.outcome
+  return {
+    attemptRef: row.attemptRef, attemptNumber: row.attemptNumber, actor: row.actor,
+    effectGeneration: row.effectGeneration, lease: row.lease, idempotency: row.idempotency,
+    release: row.release, outcome,
+  }
+}
 
 export type DurableHistoryRow = Readonly<{
   invocationRef: string

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import schema from '../../../convex/schema'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 vi.mock('@/modules/registry/registry.functions', () => ({
   readPublicRegistryBusinessDetail: vi.fn(),
@@ -87,6 +87,54 @@ describe('durable Action Invocation control', () => {
       invocationRef: prepared.invocationRef,
       control: { state: 'awaiting_authority' },
     })
+    const accepted = await firstProcess.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin: origins[1]!,
+      accept: true,
+    })
+    expect(accepted.kind).toBe('accepted')
+    const cancellingProcess = await createAsyncDurableActionInvocationTracer({
+      action, port: asyncPort(),
+      now: () => '2026-07-19T08:30:00.000Z',
+      nextInvocationRef: () => 'unused',
+      nextAttemptRef: () => 'dev:async:attempt',
+      resolveSourceState: () => source,
+    }, prepared.invocationRef)
+    const competingProcess = await createAsyncDurableActionInvocationTracer({
+      action, port: asyncPort(),
+      now: () => '2026-07-19T08:30:00.000Z',
+      nextInvocationRef: () => 'unused',
+      nextAttemptRef: () => 'dev:async:attempt',
+      resolveSourceState: () => source,
+    }, prepared.invocationRef)
+    if (accepted.kind !== 'accepted') throw new Error('Expected accepted authority')
+    const cancelled = await cancellingProcess.cancel({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: accepted.view.invocationVersion,
+      actor,
+      origin: origins[1]!,
+    })
+    expect(cancelled.kind).toBe('accepted')
+    const refused = await competingProcess.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: accepted.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin: origins[1]!,
+      materialInput: input,
+      leaseOwner: 'mock:async:stale-worker',
+      leaseMs: 30_000,
+    })
+    expect(refused).toMatchObject({
+      kind: 'refused',
+      code: 'stale_invocation_version',
+      view: { control: { state: 'cancelled' } },
+    })
+    expect((await competingProcess.inspect(prepared.invocationRef))?.control)
+      .toEqual((await asyncPort().readControl(prepared.invocationRef))?.control.control)
   })
 
   it('composes the module-owned control, attempt and history tables with bounded-read indexes', () => {
@@ -102,7 +150,7 @@ describe('durable Action Invocation control', () => {
     ]))
     expect(indexes.actionInvocationAttempts).toEqual(expect.arrayContaining([
       'by_invocationRef_and_attemptNumber', 'by_invocationRef_and_attemptRef',
-      'by_effectIdentity_and_attemptRef',
+      'by_idempotency_effectIdentity_and_attemptRef',
     ]))
     expect(indexes.actionInvocationHistory).toEqual(expect.arrayContaining([
       'by_invocationRef_and_commandId', 'by_invocationRef_and_invocationVersion',
@@ -159,6 +207,8 @@ describe('durable Action Invocation control', () => {
       leaseMs: 30_000,
     })
     if (acquired.kind !== 'accepted') throw new Error(acquired.code)
+    expect(prepared.prepared?.materialInputDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
+    expect(acquired.view.attempts[0]?.idempotency.effectIdentity).toMatch(/^sha256:[0-9a-f]{64}$/)
     if (acquired.view.control.state !== 'leased') throw new Error('Expected lease')
     const noRelease = tracer.publishObservation({
       invocationRef: prepared.invocationRef,
@@ -198,6 +248,9 @@ describe('durable Action Invocation control', () => {
     expect(persisted).not.toContain(input.body)
     expect(persisted).not.toContain(input.contact.email)
     expect(persisted).toContain(input.operationKey)
+    for (const row of port.readHistory(prepared.invocationRef, 0, 20)) {
+      expect(row.commandDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
+    }
     if (origin.kind === 'request_owned') {
       expect(readCompletedResultIdentity(port, prepared.invocationRef, actor, () => ({})))
         .toEqual({ kind: 'refused', code: 'request_owned_refused' })
@@ -288,7 +341,7 @@ describe('durable Action Invocation control', () => {
       actorRef: 'mock:worker:late',
       sourceEvidenceRef: 'mock:evidence:worker-log',
       release: 'released',
-      evidenceDigest: 'sha256:mock-evidence',
+      evidenceDigest: canonicalDigest('mock evidence'),
     })
     expect(late).toEqual({ kind: 'applied', invocationVersion: uncertain.kind === 'accepted' ? uncertain.view.invocationVersion : 0 })
     expect(tracer.recordLateObservation({
@@ -298,7 +351,7 @@ describe('durable Action Invocation control', () => {
       actorRef: 'mock:worker:late',
       sourceEvidenceRef: 'mock:evidence:worker-log',
       release: 'released',
-      evidenceDigest: 'sha256:mock-evidence',
+      evidenceDigest: canonicalDigest('mock evidence'),
     })).toEqual({
       kind: 'duplicate',
       invocationVersion: uncertain.kind === 'accepted' ? uncertain.view.invocationVersion : 0,
@@ -310,7 +363,7 @@ describe('durable Action Invocation control', () => {
       actorRef: 'mock:worker:late',
       sourceEvidenceRef: 'mock:evidence:worker-log',
       release: 'not_released',
-      evidenceDigest: 'sha256:different',
+      evidenceDigest: canonicalDigest('different evidence'),
     })).toEqual({ kind: 'refused', code: 'command_identity_conflict' })
     expect(port.readHistory(prepared.invocationRef, 0, 20)).toContainEqual(
       expect.objectContaining({ kind: 'late_observation', current: false }),
@@ -319,6 +372,58 @@ describe('durable Action Invocation control', () => {
       state: 'reconciliation_required',
       attemptRef: token.attemptRef,
     })
+  })
+
+  it('never persists raw adapter failure text', async () => {
+    const secretFailure = `${input.body} ${input.contact.email} accessKey=SECRET-FAILURE-KEY`
+    const action = findAction('inquiry.submit')!
+    const port = createDevelopmentDurablePort()
+    const source = {
+      input,
+      context: {
+        developmentOnlyInquirySubmitAdapter: vi.fn().mockRejectedValue(new Error(secretFailure)),
+      },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+    }
+    const tracer = createDurableActionInvocationTracer({
+      action, port,
+      now: () => '2026-07-19T10:30:00.000Z',
+      nextInvocationRef: () => 'dev:durable:secret-failure',
+      nextAuthorityRef: () => 'opaque:durable:secret-failure',
+      nextAttemptRef: () => 'dev:attempt:secret-failure',
+      resolveSourceState: () => source,
+    })
+    const prepared = tracer.prepare({
+      origin: origins[1]!, actor, input, context: source.context, freshnessMs: 60_000,
+    })
+    source.prepared = prepared.prepared!
+    const decided = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin: origins[1]!, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const failed = await tracer.execute({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin: origins[1]!, materialInput: input,
+    })
+    expect(failed).toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'reconciliation_required' } },
+    })
+    const persisted = JSON.stringify({
+      control: port.readControl(prepared.invocationRef),
+      attempts: port.readAttempts(prepared.invocationRef, 10),
+      history: port.readHistory(prepared.invocationRef, 0, 20),
+    })
+    expect(persisted).not.toContain(input.body)
+    expect(persisted).not.toContain(input.contact.email)
+    expect(persisted).not.toContain('SECRET-FAILURE-KEY')
+    expect(persisted).not.toContain(secretFailure)
   })
 
   it('exposes only a source-verified completed-result identity and refuses tamper or nonterminal reads', async () => {
@@ -346,7 +451,7 @@ describe('durable Action Invocation control', () => {
       observedResolution: { state: 'pending' as const },
       resultIdentity: {
         sourceResultRef: 'mock:inquiry-result:durable',
-        resultDigest: String(stableHash(result)),
+        resultDigest: canonicalDigest(result),
       },
     }
     const tracer = createDurableActionInvocationTracer({
@@ -388,6 +493,7 @@ describe('durable Action Invocation control', () => {
       sourceResultRef: 'mock:inquiry-result:durable',
       businessOutcome: 'queued_communication',
     })
+    expect(source.resultIdentity.resultDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(readCompletedResultIdentity(
       port,
       prepared.invocationRef,

@@ -31,11 +31,23 @@ export const attemptReleaseValue = v.union(
   v.object({ state: v.literal('released'), observedAt: v.string() }),
   v.object({ state: v.literal('possibly_released') }),
 )
-export const attemptOutcomeValue = v.union(
+export const durableAttemptOutcomeValue = v.union(
   v.object({ state: v.literal('running') }),
-  v.object({ state: v.literal('returned'), businessOutcome: v.string() }),
-  v.object({ state: v.literal('failed'), retry: v.literal('safe_before_release'), message: v.string() }),
-  v.object({ state: v.literal('uncertain'), retry: v.literal('reconcile_before_retry'), message: v.string() }),
+  v.object({
+    state: v.literal('returned'),
+    businessOutcome: v.union(
+      v.literal('queued_communication'), v.literal('refused'),
+      v.literal('not_found'), v.literal('completed'),
+    ),
+  }),
+  v.object({
+    state: v.literal('failed'), retry: v.literal('safe_before_release'),
+    errorDigest: v.optional(v.string()),
+  }),
+  v.object({
+    state: v.literal('uncertain'), retry: v.literal('reconcile_before_retry'),
+    errorDigest: v.optional(v.string()),
+  }),
   v.object({ state: v.literal('reconciled_not_released'), retry: v.literal('safe_after_reconciliation'), observedAt: v.string() }),
   v.object({ state: v.literal('reconciled_released'), externalOutcome: v.literal('unknown'), observedAt: v.string() }),
 )
@@ -87,18 +99,17 @@ export const actionInvocationTables = {
     attemptNumber: v.number(),
     effectGeneration: v.number(),
     actor: invocationActorValue,
-    operationKey: v.string(),
-    materialInputDigest: v.string(),
-    effectIdentity: v.string(),
-    leaseOwner: v.string(),
-    leaseExpiresAt: v.string(),
+    idempotency: v.object({
+      operationKey: v.string(), materialInputDigest: v.string(), effectIdentity: v.string(),
+    }),
+    lease: v.object({ owner: v.string(), expiresAt: v.string() }),
     release: attemptReleaseValue,
-    outcome: attemptOutcomeValue,
+    outcome: durableAttemptOutcomeValue,
     recordedAt: v.string(),
   })
     .index('by_invocationRef_and_attemptNumber', ['invocationRef', 'attemptNumber'])
     .index('by_invocationRef_and_attemptRef', ['invocationRef', 'attemptRef'])
-    .index('by_effectIdentity_and_attemptRef', ['effectIdentity', 'attemptRef']),
+    .index('by_idempotency_effectIdentity_and_attemptRef', ['idempotency.effectIdentity', 'attemptRef']),
 
   actionInvocationHistory: defineTable({
     invocationRef: v.string(),

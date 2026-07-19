@@ -36,7 +36,6 @@ export interface AsyncDurableActionInvocationPort<Result extends ActionResult = 
   recordLateObservation(input: Readonly<{
     invocationRef: string
     commandId: string
-    commandDigest: string
     effectGeneration: number
     actorRef: string
     sourceEvidenceRef: string

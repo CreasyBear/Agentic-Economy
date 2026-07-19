@@ -1,5 +1,5 @@
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
-import { stableHash } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   ActionInvocationTracer,
   ActionInvocationView,
@@ -13,6 +13,10 @@ import type {
   DurableAttemptRow,
   DurableControlRow,
   PersistControlResult,
+} from './internal/durable-contracts'
+import {
+  projectDurableAttempt,
+  restoreDurableAttempt,
 } from './internal/durable-contracts'
 import type { InMemoryTracerOptions } from './in-memory-record-store'
 
@@ -69,6 +73,7 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
     const snapshot = memory.exportSnapshot()
     const record = snapshot.records.find(({ control }) => control.invocationRef === view.invocationRef)
     if (record === undefined) throw new Error(`Missing control snapshot for ${view.invocationRef}.`)
+    const { attempts: _attempts, ...controlProjection } = record.control
     const leasedControl = view.control.state === 'leased' ? view.control : undefined
     const currentAttempt = leasedControl === undefined
       ? undefined
@@ -80,7 +85,7 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
     if (
       returned !== undefined &&
       sourceState.resultIdentity !== undefined &&
-      sourceState.resultIdentity.resultDigest !== String(stableHash(returned.result as never))
+      sourceState.resultIdentity.resultDigest !== canonicalDigest(returned.result as never)
     ) throw new Error(`Source result digest mismatch for ${view.invocationRef}.`)
     const row: DurableControlRow<Result> = {
       invocationRef: view.invocationRef,
@@ -91,11 +96,11 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
         sourceResultDigest: sourceState.resultIdentity.resultDigest,
         terminalBusinessOutcome: returned.businessOutcome,
       }),
-      control: { ...record.control, persistence: 'durable_control' },
+      control: { ...controlProjection, persistence: 'durable_control' },
       ...(record.authorityBinding === undefined ? {} : { authorityBinding: record.authorityBinding }),
       ...(view.prepared === undefined ? {} : {
         preparedMaterialDigest: view.prepared.materialInputDigest,
-        preparedTargetDigest: String(stableHash(view.prepared.target)),
+        preparedTargetDigest: canonicalDigest(view.prepared.target),
         consequence: view.prepared.consequence,
         dataLimitSummary: view.prepared.dataUse.limits,
       }),
@@ -108,12 +113,15 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       }),
       updatedAt: options.now(),
     }
-    const newestAttempt = kind === 'acquire' ? view.attempts.at(-1) : undefined
-    const newAttempt: DurableAttemptRow | undefined = newestAttempt === undefined ? undefined : ({
-      ...newestAttempt,
-      invocationRef: view.invocationRef,
-      recordedAt: options.now(),
-    })
+    const latestViewAttempt = view.attempts.at(-1)
+    const durableCurrentAttemptRef = options.port.readControl(view.invocationRef)?.currentAttemptRef
+    const newestAttempt = latestViewAttempt !== undefined &&
+      latestViewAttempt.attemptRef !== durableCurrentAttemptRef
+      ? latestViewAttempt
+      : undefined
+    const newAttempt: DurableAttemptRow | undefined = newestAttempt === undefined
+      ? undefined
+      : projectDurableAttempt(view.invocationRef, newestAttempt, options.now())
     const commandIdentity = {
       invocationRef: view.invocationRef,
       expectedInvocationVersion: beforeVersion,
@@ -122,7 +130,7 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       nextInvocationVersion: view.invocationVersion,
       control: view.control,
     }
-    const commandDigest = String(stableHash(commandIdentity))
+    const commandDigest = canonicalDigest(commandIdentity)
     const commandId = `${view.invocationRef}:${beforeVersion ?? 'create'}:${kind}`
     return options.port.transact({
       commandId,
@@ -223,7 +231,7 @@ function reconstructSnapshot<Input, Result extends ActionResult>(
 ): InMemoryControlSnapshot<Input, Result> {
   const row = port.readControl(invocationRef)
   if (row === undefined) throw new Error(`Missing durable invocation ${invocationRef}.`)
-  const attempts = port.readAttempts(invocationRef, 100)
+  const attempts = port.readAttempts(invocationRef, 100).map(restoreDurableAttempt)
   return {
     format: 'action-invocation-control:development:v1',
     records: [{
@@ -285,7 +293,7 @@ export function readCompletedResultIdentity<Result extends ActionResult>(
   if (
     source.sourceResultRef !== row.sourceResultRef ||
     source.result === undefined ||
-    String(stableHash(source.result as never)) !== row.sourceResultDigest
+    canonicalDigest(source.result as never) !== row.sourceResultDigest
   ) return { kind: 'refused', code: 'source_result_mismatch' }
   return {
     kind: 'completed_result',
