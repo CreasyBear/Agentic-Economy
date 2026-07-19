@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `7bca61c8`
+**Current accepted revision:** `b8942e8b`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -55,7 +55,7 @@ parallel plan.
 | 1. Registered-action contract | Implemented; final audit still required | `72351a80`, `ccd21ad2`, `f744e943` |
 | 2. Supplied-candidate qualification tracer | Implemented and focused-eval green | `4c27d371`, `27e885f6` |
 | 3. Supplied-candidate quote-collection tracer | Implemented and focused-eval green | `f744e943` through `e5079e23` |
-| 4. Imported-commitment observation tracer | Active; no source accepted yet | child `019f79b0-5217-7a12-98af-691a230e6776` |
+| 4. Imported-commitment observation tracer | Implemented for the claim-only/refusal branch | `0cf42307`, `b8942e8b` |
 | 5. Two-caller in-memory tracer | Implemented | `72351a80` |
 | 6. Preparation and exact authority | Implemented | `ccd21ad2` |
 | 7. Attributable effect attempt | Implemented | `f4b77026`, `f1cc1fb6` |
@@ -462,16 +462,70 @@ Not established:
 
 ### Canonical slice 4 — imported commitment attribution
 
-**Status:** paused with uncommitted child work pending canonical-slice review
+**Accepted commits:** `0cf42307`, `b8942e8b`
+**Child commits:** `b3c4e25cee966cc991783150928529a941fc44c2`,
+`461e6a5d478d52be78311665d7f8334b25c6d604`
+**Child task:** `019f79b0-5217-7a12-98af-691a230e6776`
+**Assigned base:** `7bca61c8`
+**Evidence class:** source plus labelled local/development imported-claim
+custody and reference execution
 
 Target transition:
 
 `externally supplied commitment claim -> attributable source observation -> inspectable reference without provider admission or executable authority`
 
-Model one imported commitment as a claim/observation with exact issuer,
-subject, source, observed-at, validity, digest, and evidence references. It must
-never become qualified supply, a provider quote, executable authority, or a
-completed effect without fresh source-owned admission and readiness evidence.
+Implemented:
+
+- immutable imported claim identity binds principal/importer, issuer, observer,
+  subject, commitment kind, bounded terms, exact source reference and raw-byte
+  SHA-256 digest, observed/asserted time, validity, and evidence references;
+- raw bytes and terms remain in claim-specific custody; Customer Request
+  receives only a reference projection;
+- verification and posture remain explicitly `imported_unverified` and
+  `imported_claim_only`, with authority/effect absent and provider admission not
+  established;
+- duplicate import replays, changed material under one key conflicts, and
+  cross-principal, tampered source identity/bytes/digest, and tampered Request
+  reference replay fail closed;
+- expired-at-boundary, withdrawn, and unknown validity remain explicit;
+- temporal attribution refuses assertion or withdrawal timestamps later than
+  the observation that imports them;
+- historical Request replay remains compatible;
+- the real P1-H qualification seam blocks the claim at missing publication, and
+  there is no registered executable imported-commitment action;
+- master imported-claim, Request-reference, qualification, and historical
+  checks passed 86/86 with scoped lint and diff checks.
+
+Not established:
+
+- promotion into a current AE observation through an admitted provider adapter
+  with fresh attributable evidence;
+- production persistence of raw claim custody, endpoint, deployment, hosted
+  readback, provider fulfilment, or customer value.
+
+### Canonical slices 5–7 — accepted evidence audit
+
+**Status:** source implemented; exact canonical requirements rechecked before
+advancing to the first open slice-8 transition
+
+- slice 5: both origins exercise the same registered action and source-owned
+  minimum transition;
+- slice 6: preparation, `awaiting_authority`, opaque exact decision,
+  material-change/cross-principal refusal, and invocation-version CAS are
+  executable;
+- slice 7: effect identity, idempotency, lease owner, effect generation,
+  release observation, attributable result, and action-declared retry class are
+  source-owned.
+
+### Canonical slice 8 — interruption and uncertainty
+
+**Status:** active next slice
+
+Pre-release retry, provider refusal, possible/post-release uncertainty,
+reconcile-before-retry, cancellation, and honest external-unknown state are
+implemented. The next child must close only the unproven canonical requirements:
+bounded timeout and malformed reconciliation/evidence refusal, through the same
+registered consequential action and durable control semantics.
 
 ## Evidence position
 
@@ -485,7 +539,7 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 |---|---|---|---|
 | 1 | Supplied-candidate qualification reuses contracts and supply evidence | Proven | Labelled development qualification reuses exact publication, business currentness, active contract, offering, binding, eligibility, credential, readiness, and freshness sources with deterministic blockers and no effect. |
 | 2 | Supplied-candidate quote collection reuses preparation, disclosure authority, provider attempts, and reconciliation | Proven | A labelled development quote action requalifies current supply at preparation and pre-release, binds exact disclosure, reuses shared durable attempts/fencing/reconciliation for both origins, and keeps quote data source-owned. |
-| 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Missing | No imported-commitment observation tracer. |
+| 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Proven | A labelled development claim store and Request reference preserve named-source attribution, raw-byte integrity, unverified posture, validity and evidence while refusing qualification or execution without admitted supply. |
 | 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Proven | Both origins share the registered runner, authority, effect identity, uncertainty, reconciliation, fencing, transactional durable control, and fresh-process reconstruction in labelled development execution. |
 | 5 | Historical Customer Request traces replay without semantic regression | Proven | Additive V2 references preserve historical aggregate integrity and focused historical replay remains green. |
 | 6 | Composition contains inspectable references and declared dependencies only | Partial | Completed standalone work enters Request only as an immutable verified reference; declared multi-action dependencies and route composition remain open. |
@@ -515,7 +569,7 @@ implementation gate substitute.
 
 ## Next decision
 
-Resume canonical slice 4 imported-commitment attribution. The next decision is whether an
-external commitment can remain an inspectable attributable claim without being
-silently upgraded into admitted supply, executable authority, a provider quote,
-or a completed effect.
+Close canonical slice 8’s first unproven transition: bounded timeout and
+malformed evidence. Both must preserve attributable attempts and honest
+unknown/reconciliation meaning without introducing worker-selected retry or a
+parallel recovery lifecycle.
