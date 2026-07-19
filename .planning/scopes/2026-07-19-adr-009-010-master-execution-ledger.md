@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `249a247f`
+**Current accepted revision:** `0dc146e8`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -63,7 +63,7 @@ parallel plan.
 | 9. Concurrency and recovery | Implemented in deterministic labelled development execution | `f1cc1fb6`, `8d3fe91a`, `0d5131a3`, `4a8e215b`, `8b57b2f1`, `890404d4`, `8ac11190` |
 | 10. Earned persistence | Implemented and re-audited in labelled development execution; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d`, `d7ee9fe1` |
 | 11. Request reuse | Implemented and re-audited in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0`, `249a247f` |
-| 12. Composition and direct control | Not implemented | — |
+| 12. Composition and direct control | Implemented in labelled local/development execution | `0dc146e8` |
 | 13. Transfer | Not implemented | — |
 
 Phase 2 may not start until slices 1–13, all eleven ADR-009 gates, and the
@@ -684,15 +684,49 @@ advancing to the first open slice-8 transition
   release observation, attributable result, and action-declared retry class are
   source-owned.
 
-### Canonical slice 8 — interruption and uncertainty
+### Canonical slice 12 — composition and direct control
 
-**Status:** active next slice
+**Accepted commit:** `0dc146e8`
+**Child commit:** `8c4d7e90c1e4efb082da01e8ee3d9f93f0268c3f`
+**Child task:** `019f7a07-71b5-7d80-84ec-e9bd86a068ff`
+**Assigned base:** `f14e48ae`
+**Evidence class:** source plus labelled local/development projection and
+direct-path control; no persistence or external effects
 
-Pre-release retry, provider refusal, possible/post-release uncertainty,
-reconcile-before-retry, cancellation, and honest external-unknown state are
-implemented. The next child must close only the unproven canonical requirements:
-bounded timeout and malformed reconciliation/evidence refusal, through the same
-registered consequential action and durable control semantics.
+Implemented:
+
+- a pure, deletable Customer Request application projection over one exact
+  Request reference and revision;
+- exact registered action/version validation, unique node references, declared
+  dependency endpoints, acyclicity, and completed-task reference binding;
+- independently inspectable completed-task and invocation references without
+  copying authority, attempts, evidence, results, leases, generations, or
+  recovery state;
+- exactly `completed`, `current`, `optional`, and `blocked` task states, with
+  required unresolved work preventing a complete roll-up;
+- per-action authority isolation across two independently qualified
+  `supply.collectDevelopmentQuote:v1` invocations: authority for A cannot
+  authorize B, and materially changed input cannot reuse A;
+- a registered read-only `registry.detail:v1` direct first-contact control with
+  no Action Invocation control, attempt, history, invocation, or approval
+  records;
+- no schema, persisted Bundle, RoutePlan, provider routing, or copied lifecycle;
+- parent-focused demonstration passed 26/26; child expanded relevant checks
+  passed 65/65, with scoped lint and diff checks green.
+
+Execution-policy note:
+
+- before the parent dependency-reuse correction arrived, the isolated child ran
+  `npm ci --ignore-scripts`; it made no source or Convex change, but may have
+  used npm cache/network. The child moved that local dependency tree to Trash
+  and reused the existing master dependency tree. This is not product evidence.
+
+Not established:
+
+- persisted composition, a RoutePlan, public route choice, provider routing,
+  direct booking, deployment, hosted readback, external fulfilment, or customer
+  value;
+- a contrasting transfer workflow, which remains canonical slice 13.
 
 ## Evidence position
 
@@ -709,12 +743,12 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 | 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Proven | A labelled development claim store and Request reference preserve named-source attribution, raw-byte integrity, unverified posture, validity and evidence while refusing qualification or execution without admitted supply. |
 | 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Proven | Both origins share the registered runner, authority, effect identity, uncertainty, reconciliation, fencing, transactional durable control, and fresh-process reconstruction in labelled development execution. |
 | 5 | Historical Customer Request traces replay without semantic regression | Proven | Additive V2 references preserve historical aggregate integrity and focused historical replay remains green. |
-| 6 | Composition contains inspectable references and declared dependencies only | Partial | Completed standalone work enters Request only as an immutable verified reference; declared multi-action dependencies and route composition remain open. |
-| 7 | Direct-booking negative control remains unburdened | Missing | No contrasting direct-path measurement. |
+| 6 | Composition contains inspectable references and declared dependencies only | Proven | A pure labelled-development projection validates exact Request identity, registered action/version, completed references, dependencies, and acyclicity while owning no lifecycle or authority state. |
+| 7 | Direct-booking negative control remains unburdened | Proven for the authorized development proxy | The current product does not book. The registered read-only `registry.detail:v1` first-contact path executes with zero invocation-control, attempt, history, or approval records; no booking capability is claimed. |
 | 8 | Person or cold agent can stop and continue from a durable result | Proven | Fresh development processes reconstruct durable control and a verified completed result can advance a canonical Request revision without repeating the effect. |
-| 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Missing | No Action Invocation route roll-up. |
-| 10 | Authority never crosses tasks | Proven | Cross-origin/principal/material reuse is refused, and completed-result attachment carries no authority while superseding prior Request route authority. |
-| 11 | No domain nouns enter neutral contracts | Partial | Current invocation contracts use neutral action/control vocabulary; later attempt, persistence, composition, and projection contracts remain unaudited. |
+| 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Proven | The local/development reference projection emits exactly the four required ordinary-language states plus references, dependencies, completion conditions, and continuation ownership; no Action Invocation machinery is exposed. |
+| 10 | Authority never crosses tasks | Proven | Cross-origin/principal/material reuse is refused, completed-result attachment carries no authority, and authority accepted for quote A cannot authorize independently prepared quote B. |
+| 11 | No domain nouns enter neutral contracts | Proven for Phase 1 source | Action Invocation control and the composition projector use neutral action, reference, dependency, authority, attempt, evidence, and recovery vocabulary; action-specific quote and inquiry facts remain source-owned. |
 
 ### ADR-010 — ten gates
 
@@ -736,7 +770,8 @@ implementation gate substitute.
 
 ## Next decision
 
-Close canonical slice 8’s first unproven transition: bounded timeout and
-malformed evidence. Both must preserve attributable attempts and honest
-unknown/reconciliation meaning without introducing worker-selected retry or a
-parallel recovery lifecycle.
+Execute canonical slice 13 against the cheaper contrasting workflow. Keep the
+same registered action and source-owned control meaning; reject or narrow the
+seam if it adds control records, latency, or supervision without a demonstrated
+safety or continuity benefit. After that slice, audit all eleven ADR-009 gates
+at the accepted revision before requesting the Founder disposition.
