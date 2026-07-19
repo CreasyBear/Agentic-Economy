@@ -158,17 +158,43 @@ successful external effect from runner return or queued communication.
 
 ## Evidence position
 
-| ADR gate group | Current position |
-|---|---|
-| ADR-009 request-owned versus standalone seam | Positive development evidence through the same read and consequential registered actions |
-| ADR-009 historical Request lineage | Preserved by the new discriminated seam; replay regression not yet exercised |
-| ADR-009 supplied candidates, quotes, imported commitments | Untouched |
-| ADR-009 composition, route roll-up, direct control | Untouched |
-| ADR-009 no cross-task authority | Positive in-memory evidence for actor, origin, invocation, action/version, digest, expiry, and CAS binding |
-| ADR-010 one action through two hosts | Untouched |
-| ADR-010 reconstruction and structured parity | Untouched |
-| ADR-010 failure/recovery parity | Untouched |
-| Customer/provider/operating value | External evidence required |
+`Proven` below means executable development evidence for the gate as written.
+It never means hosted, production, provider-fulfilment, or customer-value proof.
+`Partial` cannot support ADR acceptance.
+
+### ADR-009 — eleven gates
+
+| # | Gate | Position | Current evidence / next failed transition |
+|---|---|---|---|
+| 1 | Supplied-candidate qualification reuses contracts and supply evidence | Missing | No supplied-candidate tracer through current capability, eligibility, provenance, and freshness seams. |
+| 2 | Supplied-candidate quote collection reuses preparation, disclosure authority, provider attempts, and reconciliation | Missing | P1-C proves generic exact authority only; no provider quote attempt or reconciliation trace. |
+| 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Missing | No imported-commitment observation tracer. |
+| 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Partial | Same registered read and consequential action plus exact authority are proven in memory; attempt, idempotency, evidence, recovery, and durability remain open. |
+| 5 | Historical Customer Request traces replay without semantic regression | Missing | Discriminated lineage preserves the type boundary, but no historical replay regression has run. |
+| 6 | Composition contains inspectable references and declared dependencies only | Missing | No invocation composition or dependency projection. |
+| 7 | Direct-booking negative control remains unburdened | Missing | No contrasting direct-path measurement. |
+| 8 | Person or cold agent can stop and continue from a durable result | Missing | State is intentionally in-memory; restart and cold resume are unproven. |
+| 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Missing | No Action Invocation route roll-up. |
+| 10 | Authority never crosses tasks | Partial | P1-C refuses cross-origin, cross-principal, stale-version, expired, and material-change reuse for one in-memory action; cross-invocation and durable reuse still require executable proof. |
+| 11 | No domain nouns enter neutral contracts | Partial | Current invocation contracts use neutral action/control vocabulary; later attempt, persistence, composition, and projection contracts remain unaudited. |
+
+### ADR-010 — ten gates
+
+| # | Gate | Position | Current evidence / next failed transition |
+|---|---|---|---|
+| 1 | One registered action is semantically equivalent through embedded and external-agent surfaces | Missing | Both caller origins currently cross the interface directly, not two real host adapters. |
+| 2 | Both hosts use the same source-owned transition without duplicated rules | Missing | Registered-runner reuse is proven; host import/boundary enforcement is not. |
+| 3 | Task-shaped view reconstructs from records without transcript replay | Missing | No durable record or reconstruction evaluator. |
+| 4 | Non-visual form carries the same options, consequences, evidence, and continuations | Missing | No invocation-scoped structured/rich projection pair. |
+| 5 | Corrections update authoritative work and invalidate stale projections | Partial | Material input change invalidates authority in memory; authoritative correction and projection invalidation are absent. |
+| 6 | Missing information is gathered without unnecessary interrogation | Missing | No clarification loop through the action plane. |
+| 7 | Authority binds the exact action and fails after material change | Proven | P1-C binds action/version, actor, origin, invocation, digest, target, consequence, limits, expiry, and CAS version; changed material input is refused before runner execution. |
+| 8 | Interruption, refusal, timeout, uncertain effect, and recovery retain parity | Missing | P1-D owns the first attempt/uncertainty contribution; cross-host parity comes later. |
+| 9 | Cold agent continues without hidden first-party context | Missing | No durable reconstruction or cold-host continuation. |
+| 10 | Human effort improves without worsening correctness, control, privacy, accessibility, or operator burden | Missing | Requires the frozen direct comparison and real host surfaces; local control tests alone are insufficient. |
+
+Customer/provider/operating value remains external evidence and is not an ADR
+implementation gate substitute.
 
 ## Next decision
 
