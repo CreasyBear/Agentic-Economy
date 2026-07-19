@@ -27,7 +27,9 @@ graphify-out/
 
 # Agent skill vendor trees (install via skills-lock.json)
 .cursor/skills/
-.agents/skills/
+.agents/skills/*
+!.agents/skills/ae-*/
+!.agents/skills/ae-*/**
 !.agents/skills/submit-qualified-inquiry/
 .codex/skills/
 .claude/skills/
