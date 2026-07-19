@@ -72,7 +72,7 @@ export function verifyDevelopmentHostParityEvidence(
       !== canonicalDigest(packet.hostReads as unknown as StableHashValue)) {
     throw new Error('host_read_not_reconstructed_from_independent_records')
   }
-  if (canonicalDigest(compareHostSemantics(packet.hostReads) as unknown as StableHashValue)
+  if (canonicalDigest(compareHostSemantics(packet.hostReads, packet.hosts) as unknown as StableHashValue)
     !== canonicalDigest(packet.parity as unknown as StableHashValue)) {
     throw new Error('host_semantic_parity_invalid')
   }

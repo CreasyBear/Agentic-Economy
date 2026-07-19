@@ -66,6 +66,26 @@ export function developmentLostResponseRuntime(
   }
 }
 
+export function developmentReleasedRefusalRuntime(
+  endpoint: string,
+  effects: DevelopmentEffectCounts,
+): RouteTransportRuntime {
+  const base = developmentSuccessRuntime(endpoint, effects)
+  return {
+    ...base,
+    send: async (url, init) => {
+      if (init?.headers?.['Payment-Signature'] === undefined) {
+        return await base.send(url, init)
+      }
+      effects.provider += 1
+      return response(200, JSON.stringify({ unexpected: true }), {
+        'payment-response': 'mock:payment-proof',
+        'provider-receipt': 'mock:provider-refusal-receipt',
+      })
+    },
+  }
+}
+
 function developmentChallenge(endpoint: string) {
   return {
     x402Version: 2,

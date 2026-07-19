@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildDevelopmentHostParityEvidence,
+  normalizedOutcomeEvidenceResult,
   type DevelopmentHostParityEvidence,
 } from '@/modules/capability-supply/development-host-parity-evidence'
 import {
@@ -9,6 +10,8 @@ import {
 } from '@/modules/capability-supply/development-host-parity-verifier'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
+import { runDevelopmentHostScenarioMatrix } from '@/modules/capability-supply/development-host-scenarios'
 
 const provenance = {
   sourceBaseCommit: 'feda5070296c9a0cbc72e3aeb285f0961ee94ec2',
@@ -18,6 +21,9 @@ const provenance = {
 
 describe('ADR-010 development host parity', () => {
   it('drives the complete matrix independently through both thin hosts', async () => {
+    const debugHosts = await runDevelopmentHostScenarioMatrix(buildDevelopmentPublishedOperationEvidence())
+    expect(normalizedOutcomeEvidenceResult(debugHosts[0].success.snapshot))
+      .toEqual(normalizedOutcomeEvidenceResult(debugHosts[1].success.snapshot))
     const packet = await buildDevelopmentHostParityEvidence(provenance)
     expect(() => verifyDevelopmentHostParityEvidence(packet, {
       evidenceCommit: provenance.evidenceCommit,
@@ -28,6 +34,7 @@ describe('ADR-010 development host parity', () => {
       'success',
       'zero_effect_preflight_refusal',
       'source_refusal',
+      'post_release_source_refusal',
       'uncertainty_reconcile_before_retry',
       'duplicate_stale_and_cancellation_fences',
       'process_cold_resume_without_transcript_cache',
@@ -46,6 +53,22 @@ describe('ADR-010 development host parity', () => {
       .not.toBe(packet.hostReads[1].semanticRead.authority.reference)
     expect(packet.parity.sameFields).toContain('authority.bounds')
     expect(packet.parity.differentFields).toContain('authority.reference')
+    expect(packet.parity.normalizedScenarioDigests).toHaveLength(2)
+    expect(packet.hosts.every((host) => (
+      host.releasedRefusal.effects.payment === 1
+      && host.releasedRefusal.effects.provider === 1
+      && host.releasedRefusal.failureCode === 'output_schema_invalid'
+      && host.releasedRefusal.snapshot.attempts[0]!.rows[0]!.release.state === 'possibly_released'
+    ))).toBe(true)
+    expect(packet.hosts[1].completedResultReuse).toMatchObject({
+      firstKind: 'attached',
+      secondKind: 'replayed',
+      bothNoEffect: true,
+      referencePayloadAuthorityFree: true,
+      controlSnapshotUnchanged: true,
+      authorityRecordCountBefore: 1,
+      authorityRecordCountAfter: 1,
+    })
   })
 
   it.each([
@@ -84,6 +107,14 @@ describe('ADR-010 development host parity', () => {
     }],
     ['operation material', (packet: any) => {
       packet.hosts[1].success.snapshot.sourceRows[0].operation.identity.endpoint.method = 'POST'
+    }],
+    ['released refusal result content', (packet: any) => {
+      packet.hosts[1].releasedRefusal.snapshot.sourceRows[0].observedResolution.result.failureCode =
+        'forged_refusal'
+    }],
+    ['released refusal provider evidence', (packet: any) => {
+      packet.hosts[0].releasedRefusal.snapshot.sourceRows[0]
+        .observedResolution.result.providerReceipt = 'mock:forged-provider-receipt'
     }],
   ])('rejects coordinated %s tampering after attacker redigests the packet', async (_name, mutate) => {
     const packet = clone(await buildDevelopmentHostParityEvidence(provenance))

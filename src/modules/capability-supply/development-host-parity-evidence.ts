@@ -1,5 +1,6 @@
 import {
   buildDynamicPublishedInput,
+  assertDynamicPublishedSnapshotShape,
   materialDigest,
   readDevelopmentHostSnapshot,
   verifyDynamicPublishedSnapshot,
@@ -37,6 +38,12 @@ export type DevelopmentHostParityEvidence = Readonly<{
     sharedDigest: string
     requestDigest: string
     standaloneDigest: string
+    normalizedScenarioDigests: readonly Readonly<{
+      scenario: 'success' | 'released_refusal'
+      requestDigest: string
+      standaloneDigest: string
+      matchedDigest: string
+    }>[]
   }>
   evals: readonly Readonly<{ name: string; passed: boolean; evidenceDigest: string }>[]
   verdict: 'PASS_FOR_DECLARED_CLASS'
@@ -62,7 +69,7 @@ export async function buildDevelopmentHostParityEvidence(provenance: Readonly<{
       snapshot: JSON.parse(JSON.stringify(hosts[1].success.snapshot)),
     }),
   ] as const
-  const parity = compareHostSemantics(hostReads)
+  const parity = compareHostSemantics(hostReads, hosts)
   const evals = evaluateHostMatrix(hosts)
   if (evals.some((entry) => !entry.passed)) {
     throw new Error(`host_matrix_failed:${evals.filter((entry) => !entry.passed).map((entry) => entry.name).join(',')}:${hosts.map((host) => host.sourceRefusal.execution).join('|')}`)
@@ -92,15 +99,25 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
       success: host.success,
       preflightRefusal: host.preflightRefusal,
       sourceRefusal: host.sourceRefusal,
+      releasedRefusal: host.releasedRefusal,
       uncertainty: host.uncertainty,
       coldResume: host.coldResume,
     })) {
       const source = scenario.snapshot.sourceRows[0]
       const expectedStatus = scenario.state === 'reconciliation_required' ? 'uncertain' : 'completed'
       const effectWasAdmitted = scenarioName === 'success'
+        || scenarioName === 'releasedRefusal'
         || scenarioName === 'uncertainty'
         || scenarioName === 'coldResume'
       try {
+        if (scenarioName === 'releasedRefusal') {
+          verifyReleasedRefusalSnapshot(
+            packet,
+            host,
+            scenario as DevelopmentHostScenarioRecord['releasedRefusal'],
+          )
+          continue
+        }
         verifyDynamicPublishedSnapshot({
           snapshot: scenario.snapshot,
           anchors: {
@@ -139,9 +156,54 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
           },
         })
       } catch (error) {
-        throw new Error(`host_snapshot_invalid:${host.host}:${scenarioName}`, { cause: error })
+        throw new Error(
+          `host_snapshot_invalid:${host.host}:${scenarioName}:${error instanceof Error ? error.message : 'unknown'}`,
+          { cause: error },
+        )
       }
     }
+  }
+}
+
+function verifyReleasedRefusalSnapshot(
+  packet: DevelopmentHostParityEvidence,
+  host: DevelopmentHostScenarioRecord,
+  scenario: DevelopmentHostScenarioRecord['releasedRefusal'],
+): void {
+  assertDynamicPublishedSnapshotShape(scenario.snapshot)
+  const source = scenario.snapshot.sourceRows[0]!
+  const control = scenario.snapshot.controls[0]!
+  const attempt = scenario.snapshot.attempts[0]!.rows[0]!
+  const claim = scenario.snapshot.semanticClaims[0]
+  const result = source.observedResolution.state === 'returned'
+    ? source.observedResolution.result
+    : undefined
+  if (canonicalDigest(source.operation as unknown as StableHashValue)
+      !== canonicalDigest(packet.fixture.operation as unknown as StableHashValue)
+    || control.control.owner.callerRef !== host.actor.callerRef
+    || control.control.owner.principalRef !== host.actor.principalRef
+    || control.authorityBinding?.reference !== scenario.authorityRef
+    || control.control.acceptedAuthority?.kind !== 'approve_each'
+    || control.control.control.state !== 'terminal'
+    || control.terminalResultReferenceable !== false
+    || attempt.release.state !== 'possibly_released'
+    || attempt.outcome.state !== 'returned'
+    || attempt.outcome.businessOutcome !== 'published_operation_invalid_evidence'
+    || result?.kind !== 'published_operation_invalid_evidence'
+    || result.failureCode !== 'output_schema_invalid'
+    || result.providerReceipt !== 'mock:provider-refusal-receipt'
+    || result.paymentProof !== 'mock:payment-proof'
+    || source.resultIdentity === undefined
+    || source.resultIdentity.resultDigest
+      !== canonicalDigest(result as unknown as StableHashValue)
+    || claim?.status !== 'completed'
+    || claim.ownerInvocationRef !== scenario.invocationRef
+    || claim.outcome?.observedResolution.state !== 'returned'
+    || canonicalDigest(claim.outcome.observedResolution.result as unknown as StableHashValue)
+      !== canonicalDigest(result as unknown as StableHashValue)
+    || scenario.effects.payment !== 1
+    || scenario.effects.provider !== 1) {
+    throw new Error('released_refusal_snapshot_semantics_invalid')
   }
 }
 
@@ -170,6 +232,17 @@ export function evaluateHostMatrix(
         && host.sourceRefusal.effects.payment === 0
         && host.sourceRefusal.effects.provider === 0),
       evidence: hosts.map((host) => host.sourceRefusal),
+    },
+    {
+      name: 'post_release_source_refusal',
+      passed: hosts.every((host) => host.releasedRefusal.failureCode === 'output_schema_invalid'
+        && host.releasedRefusal.state === 'terminal'
+        && host.releasedRefusal.effects.payment === 1
+        && host.releasedRefusal.effects.provider === 1
+        && host.releasedRefusal.retryPosture === 'invalid_control_state'
+        && host.releasedRefusal.snapshot.attempts[0]?.rows[0]?.release.state === 'possibly_released'
+        && host.releasedRefusal.snapshot.attempts[0]?.rows[0]?.outcome.state === 'returned'),
+      evidence: hosts.map((host) => host.releasedRefusal),
     },
     {
       name: 'uncertainty_reconcile_before_retry',
@@ -201,9 +274,13 @@ export function evaluateHostMatrix(
     },
     {
       name: 'standalone_result_request_reference_only',
-      passed: hosts[1].completedResultReuse.kind === 'attached'
-        && hosts[1].completedResultReuse.noEffect
-        && !hosts[1].completedResultReuse.authorityInherited
+      passed: hosts[1].completedResultReuse.firstKind === 'attached'
+        && hosts[1].completedResultReuse.secondKind === 'replayed'
+        && hosts[1].completedResultReuse.bothNoEffect
+        && hosts[1].completedResultReuse.referencePayloadAuthorityFree
+        && hosts[1].completedResultReuse.controlSnapshotUnchanged
+        && hosts[1].completedResultReuse.authorityRecordCountBefore
+          === hosts[1].completedResultReuse.authorityRecordCountAfter
         && hosts[1].completedResultReuse.crossPrincipal === 'cross_principal_refused'
         && canonicalDigest(hosts[1].completedResultReuse.effectsBefore)
           === canonicalDigest(hosts[1].completedResultReuse.effectsAfter),
@@ -219,6 +296,7 @@ export function evaluateHostMatrix(
 
 export function compareHostSemantics(
   reads: readonly [DevelopmentHostReadReceipt, DevelopmentHostReadReceipt],
+  hosts: readonly [DevelopmentHostScenarioRecord, DevelopmentHostScenarioRecord],
 ): DevelopmentHostParityEvidence['parity'] {
   const request = reads[0].semanticRead
   const standalone = reads[1].semanticRead
@@ -241,6 +319,17 @@ export function compareHostSemantics(
     || differences.some((different) => !different)) {
     throw new Error('host_required_identity_difference_missing')
   }
+  const normalizedScenarioDigests = ([
+    ['success', hosts[0].success, hosts[1].success],
+    ['released_refusal', hosts[0].releasedRefusal, hosts[1].releasedRefusal],
+  ] as const).map(([scenario, requestScenario, standaloneScenario]) => {
+    const requestDigest = canonicalDigest(normalizedOutcomeEvidenceResult(requestScenario.snapshot))
+    const standaloneDigest = canonicalDigest(normalizedOutcomeEvidenceResult(standaloneScenario.snapshot))
+    if (requestDigest !== standaloneDigest) {
+      throw new Error(`host_normalized_${scenario}_semantics_not_equal`)
+    }
+    return { scenario, requestDigest, standaloneDigest, matchedDigest: requestDigest }
+  })
   return Object.freeze({
     sameFields: [
       'action.id', 'action.version', 'operation.id', 'operation.publicationSlot',
@@ -262,7 +351,64 @@ export function compareHostSemantics(
     sharedDigest: canonicalDigest(shared),
     requestDigest: canonicalDigest(request as unknown as StableHashValue),
     standaloneDigest: canonicalDigest(standalone as unknown as StableHashValue),
+    normalizedScenarioDigests,
   })
+}
+
+export function normalizedOutcomeEvidenceResult(
+  snapshot: DevelopmentHostScenarioRecord['success']['snapshot'],
+): StableHashValue {
+  const source = snapshot.sourceRows[0]!
+  const control = snapshot.controls[0]!
+  const attempt = snapshot.attempts[0]!.rows[0]!
+  const claim = snapshot.semanticClaims[0]
+  const returned = source.observedResolution.state === 'returned'
+    ? source.observedResolution
+    : null
+  const normalizedObserved = returned === null
+    ? source.observedResolution
+    : normalizeObservedResolution(returned)
+  const normalizedSemanticObserved = claim?.outcome?.observedResolution.state === 'returned'
+    ? normalizeObservedResolution(claim.outcome.observedResolution)
+    : claim?.outcome?.observedResolution ?? null
+  return {
+    terminalBusinessOutcome: control.terminalBusinessOutcome ?? null,
+    controlState: control.control.control.state,
+    observedResolution: normalizedObserved,
+    attempt: {
+      release: attempt.release,
+      outcome: attempt.outcome,
+      idempotency: {
+        operationKey: attempt.idempotency.operationKey,
+        materialInputDigest: attempt.idempotency.materialInputDigest,
+      },
+    },
+    semantic: {
+      status: claim?.status ?? null,
+      observedResolution: normalizedSemanticObserved,
+      normalizedResultDigest: canonicalDigest(normalizedObserved as unknown as StableHashValue),
+    },
+    normalizedResultDigest: canonicalDigest(normalizedObserved as unknown as StableHashValue),
+    releaseEvidence: snapshot.history[0]!.rows.flatMap(
+      (row) => row.observation === undefined ? [] : [{
+        release: row.observation.release,
+      }],
+    ),
+  } as unknown as StableHashValue
+}
+
+function normalizeObservedResolution(
+  resolution: Extract<
+    DevelopmentHostScenarioRecord['success']['snapshot']['sourceRows'][number]['observedResolution'],
+    { state: 'returned' }
+  >,
+): StableHashValue {
+  const { requestDigest: _hostBoundRequestDigest, ...result } = resolution.result
+  return {
+    state: resolution.state,
+    execution: resolution.execution,
+    result,
+  } as unknown as StableHashValue
 }
 
 function sharedSemantics(read: DevelopmentHostSemanticRead): StableHashValue {

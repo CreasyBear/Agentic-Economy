@@ -17,6 +17,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   attachCompletedTaskReference,
+  type AttachCompletedTaskReferencePorts,
 } from '@/modules/customer-request/application/public'
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
 
@@ -26,6 +27,7 @@ import {
 import {
   developmentLostResponseRuntime,
   developmentPreflightRefusalRuntime,
+  developmentReleasedRefusalRuntime,
   developmentSuccessRuntime,
   type DevelopmentEffectCounts,
 } from './development-host-scenario-runtime'
@@ -38,6 +40,7 @@ export type DevelopmentHostScenarioRecord = Readonly<{
   success: ScenarioOutcome
   preflightRefusal: ScenarioOutcome
   sourceRefusal: ScenarioOutcome
+  releasedRefusal: ScenarioOutcome & Readonly<{ retryPosture: string }>
   uncertainty: ScenarioOutcome & Readonly<{
     retryBeforeReconcile: string
     reconciledState: string
@@ -55,9 +58,13 @@ export type DevelopmentHostScenarioRecord = Readonly<{
     transcriptCache: 'deleted'
   }>
   completedResultReuse: Readonly<{
-    kind: 'attached' | 'not_applicable'
-    noEffect: boolean
-    authorityInherited: false
+    firstKind: 'attached' | 'not_applicable'
+    secondKind: 'replayed' | 'not_applicable'
+    bothNoEffect: boolean
+    referencePayloadAuthorityFree: boolean
+    controlSnapshotUnchanged: boolean
+    authorityRecordCountBefore: number
+    authorityRecordCountAfter: number
     crossPrincipal: string
     effectsBefore: DevelopmentEffectCounts
     effectsAfter: DevelopmentEffectCounts
@@ -100,19 +107,48 @@ async function runHostScenarios(
     success: success.outcome,
     preflightRefusal: await refusalScenario(fixture, hostKind, 'preflight'),
     sourceRefusal: await refusalScenario(fixture, hostKind, 'source'),
+    releasedRefusal: await releasedRefusalScenario(fixture, hostKind),
     uncertainty: await uncertaintyScenario(fixture, hostKind),
     staleFences: success.staleFences,
     coldResume: await coldResumeScenario(fixture, hostKind),
     completedResultReuse: hostKind === 'standalone_external_agent'
       ? completedResultReuse(fixture, success)
       : {
-          kind: 'not_applicable',
-          noEffect: true,
-          authorityInherited: false,
+          firstKind: 'not_applicable',
+          secondKind: 'not_applicable',
+          bothNoEffect: true,
+          referencePayloadAuthorityFree: true,
+          controlSnapshotUnchanged: true,
+          authorityRecordCountBefore: 0,
+          authorityRecordCountAfter: 0,
           crossPrincipal: 'not_applicable',
           effectsBefore: { ...success.outcome.effects },
           effectsAfter: { ...success.outcome.effects },
         },
+  }
+}
+
+async function releasedRefusalScenario(
+  fixture: Fixture,
+  hostKind: DevelopmentHostKind,
+): Promise<DevelopmentHostScenarioRecord['releasedRefusal']> {
+  const context = createScenario(
+    fixture,
+    hostKind,
+    'released-refusal',
+    developmentReleasedRefusalRuntime,
+  )
+  const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const decided = context.host.decide(prepared.invocationRef, true)
+  if (decided.kind !== 'accepted') throw new Error(`host_released_refusal_decision:${decided.code}`)
+  const refused = await context.host.continue(prepared.invocationRef)
+  if (refused.kind !== 'completed') {
+    throw new Error(`host_released_refusal_execute:${continuationCode(refused)}`)
+  }
+  const retry = await context.host.continue(prepared.invocationRef)
+  return {
+    ...outcome(prepared.invocationRef, prepared.authority!.reference, refused.view, context),
+    retryPosture: retry.kind === 'refused' ? retry.code : retry.kind,
   }
 }
 
@@ -291,6 +327,7 @@ function completedResultReuse(
   success: Awaited<ReturnType<typeof successScenario>>,
 ): DevelopmentHostScenarioRecord['completedResultReuse'] {
   const before = { ...success.context.effects }
+  const controlBefore = success.context.host.exportSnapshot()
   const actor = success.context.actor
   const compiled = compileCustomerRequest({
     requestId: 'request:host-parity-result-reuse',
@@ -306,24 +343,45 @@ function completedResultReuse(
     now: success.context.now,
   })
   if (compiled.kind !== 'compiled') throw new Error('host_result_reuse_request_not_compiled')
-  const attached = attachCompletedTaskReference({
+  const attachInput = {
     principalRef: actor.principalRef,
     callerRef: actor.callerRef,
     invocationRef: success.outcome.invocationRef,
     referencedAt: success.context.now,
     candidateAggregate: compiled.aggregate,
-  }, {
+  }
+  const ports: AttachCompletedTaskReferencePorts = {
     readCompletedResultIdentity: ({ invocationRef, actor: requestedActor }) =>
       success.context.adapter.readCompletedResult(invocationRef, requestedActor),
-  })
+  }
+  const attached = attachCompletedTaskReference(attachInput, ports)
+  const replayed = attached.kind === 'attached'
+    ? attachCompletedTaskReference({
+        ...attachInput,
+        candidateAggregate: attached.aggregate,
+      }, ports)
+    : attached
   const crossPrincipal = success.context.adapter.readCompletedResult(
     success.outcome.invocationRef,
     { ...actor, principalRef: 'principal:other' },
   )
+  const controlAfter = success.context.host.exportSnapshot()
+  const referencePayload = attached.kind === 'attached' ? attached.reference : undefined
   return {
-    kind: attached.kind === 'attached' ? 'attached' : 'not_applicable',
-    noEffect: attached.kind === 'attached' && attached.noEffect,
-    authorityInherited: false,
+    firstKind: attached.kind === 'attached' ? 'attached' : 'not_applicable',
+    secondKind: replayed.kind === 'replayed' ? 'replayed' : 'not_applicable',
+    bothNoEffect: attached.kind === 'attached' && attached.noEffect
+      && replayed.kind === 'replayed' && replayed.noEffect,
+    referencePayloadAuthorityFree: referencePayload !== undefined
+      && !/authority|attempt|lease|mandate|generation/iu.test(JSON.stringify(referencePayload)),
+    controlSnapshotUnchanged: canonicalDigest(controlBefore as unknown as StableHashValue)
+      === canonicalDigest(controlAfter as unknown as StableHashValue),
+    authorityRecordCountBefore: controlBefore.controls.filter(
+      (row) => row.authorityBinding !== undefined,
+    ).length,
+    authorityRecordCountAfter: controlAfter.controls.filter(
+      (row) => row.authorityBinding !== undefined,
+    ).length,
     crossPrincipal: crossPrincipal.kind === 'refused' ? crossPrincipal.code : crossPrincipal.kind,
     effectsBefore: before,
     effectsAfter: { ...success.context.effects },
