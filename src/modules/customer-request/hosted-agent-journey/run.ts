@@ -420,7 +420,8 @@ export async function runHostedCustomerRequestJourney(
       || view.state === 'options_ready' || view.state === 'needs_authorization'
       || view.state === 'route_confirmed' || view.state === 'in_progress' || view.state === 'cancelled') {
       throw new Error(
-        `hosted_journey_stopped:${view.state}:revision=${view.revision}:transition=${transitions}`
+        `hosted_journey_stopped:${view.state}:requestRef=${view.requestRef}`
+        + `:revision=${view.revision}:transition=${transitions}`
         + `:states=${states.join('>')}:${view.summary}`,
       )
     }

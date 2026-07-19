@@ -8,6 +8,7 @@ export type SandboxWorkflowStep = Readonly<{
   outputSemanticIdentity?: string
   groundFromRequest?: boolean
   contractVersion?: number
+  supplyVersion?: number
   decisionInputs?: readonly Readonly<{
     field: string
     label: string
@@ -88,6 +89,7 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     steps: Object.freeze([
       step('event-requirements', 'Ideal Event Requirements Adviser', 'Prepare sourced event requirements', 'request', 'requirementsPacket', undefined, 'ae.event-requirements-packet:v1', false, 400, 'retry_safe', {
         contractVersion: 4,
+        supplyVersion: 6,
         decisionInputs: [
           { field: 'proposedSite', label: 'Proposed site', prompt: 'What exact site is proposed?', pattern: '^.{3,200}$' },
           { field: 'operatingWindow', label: 'Operating window', prompt: 'What date and operating times are proposed?', pattern: '^.{8,200}$' },
@@ -95,9 +97,12 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
           { field: 'eventProfile', label: 'Event profile', prompt: 'Is it public or private; which activities are included and excluded; what ISO evidence-cutoff date applies; which fictional recipients and purposes are authorized; and what is the ISO response deadline?', pattern: '^(?=.*authorized:)(?=.*response deadline \\d{4}-\\d{2}-\\d{2}).{40,1600}$' },
         ],
       }),
-      step('event-site-evidence', 'Ideal Site and Safety Evidence Planner', 'Prepare site and safety evidence', 'requirementsPacket', 'siteEvidencePacket', 'ae.event-requirements-packet:v1', 'ae.event-site-evidence-packet:v1', false, 650, 'retry_safe'),
+      step('event-site-evidence', 'Ideal Site and Safety Evidence Planner', 'Prepare site and safety evidence', 'requirementsPacket', 'siteEvidencePacket', 'ae.event-requirements-packet:v1', 'ae.event-site-evidence-packet:v1', false, 650, 'retry_safe', {
+        supplyVersion: 3,
+      }),
       step('event-business-readiness', 'Ideal Event Business Readiness Desk', 'Prepare participating-business readiness evidence', 'siteEvidencePacket', 'participationEvidencePacket', 'ae.event-site-evidence-packet:v1', undefined, true, 750, 'reconcile_required', {
         contractVersion: 2,
+        supplyVersion: 4,
       }),
     ]),
     curveballs: Object.freeze(['upstream packet becomes stale', 'disclosure authority is absent', 'a business refuses or does not respond', 'final outcome is unknown']),
@@ -146,7 +151,8 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
 export const SANDBOX_WORKFLOW_PROVIDER_PROFILES = Object.freeze(Object.fromEntries(
   SANDBOX_WORKFLOW_COHORTS.flatMap((cohort) => cohort.steps.map((workflowStep, position) => {
     const contractVersion = workflowStep.contractVersion ?? 1
-    const currentSupplyVersion = contractVersion + 1
+    const currentSupplyVersion = workflowStep.supplyVersion ?? contractVersion + 1
+    const priorSupplyVersion = currentSupplyVersion - 1
     return [
       workflowStep.providerKey,
       Object.freeze({
@@ -156,8 +162,8 @@ export const SANDBOX_WORKFLOW_PROVIDER_PROFILES = Object.freeze(Object.fromEntri
         position: position + 1,
         slug: `sandbox-${workflowStep.providerKey}`,
         contractVersion,
-        priorOfferingId: `offering:sandbox-${workflowStep.providerKey}:v${contractVersion}`,
-        priorBindingId: `binding:sandbox-${workflowStep.providerKey}:http-json:v${contractVersion}`,
+        priorOfferingId: `offering:sandbox-${workflowStep.providerKey}:v${priorSupplyVersion}`,
+        priorBindingId: `binding:sandbox-${workflowStep.providerKey}:http-json:v${priorSupplyVersion}`,
         offeringId: `offering:sandbox-${workflowStep.providerKey}:v${currentSupplyVersion}`,
         bindingId: `binding:sandbox-${workflowStep.providerKey}:http-json:v${currentSupplyVersion}`,
         endpointPath: `/api/sandbox/providers/workflow?provider=${workflowStep.providerKey}`,
@@ -325,7 +331,7 @@ function step(
   completionEvidence: boolean,
   amountMinor: number,
   recovery: SandboxWorkflowStep['recovery'],
-  options: Readonly<Pick<SandboxWorkflowStep, 'groundFromRequest' | 'contractVersion' | 'decisionInputs' | 'optionalInputs'>> = {},
+  options: Readonly<Pick<SandboxWorkflowStep, 'groundFromRequest' | 'contractVersion' | 'supplyVersion' | 'decisionInputs' | 'optionalInputs'>> = {},
 ): SandboxWorkflowStep {
   return Object.freeze({
     providerKey, businessName, capabilityName, inputField, outputField,
@@ -333,6 +339,7 @@ function step(
     ...(outputSemanticIdentity === undefined ? {} : { outputSemanticIdentity }),
     ...(options.groundFromRequest === undefined ? {} : { groundFromRequest: options.groundFromRequest }),
     ...(options.contractVersion === undefined ? {} : { contractVersion: options.contractVersion }),
+    ...(options.supplyVersion === undefined ? {} : { supplyVersion: options.supplyVersion }),
     ...(options.decisionInputs === undefined ? {} : {
       decisionInputs: Object.freeze(options.decisionInputs.map((input) => Object.freeze({ ...input }))),
     }),
