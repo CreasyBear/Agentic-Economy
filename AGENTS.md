@@ -1,171 +1,193 @@
-# AGENTS.md
+# Agentic Economy operating instructions
 
-Always-on instructions for any assistant operating inside or against Agentic Economy (AE).
-Read this before acting. `DESIGN.md` is the source of truth for visual/UI decisions;
-`PRODUCT.md` is the source of truth for the product thesis and trust contract.
+Read this before acting. `PRODUCT.md` owns the product promise and maturity
+boundary. `DESIGN.md` owns human-interface decisions. Live source and executable
+behavior decide what is implemented now.
 
-## Authority and maturity
+## Work forward
 
-`PRODUCT.md` deliberately separates the **current evidenced state** from the
-**target product contract**. Preserve that separation in source, plans, issues,
-copy, tests, and status reports.
+Start from the decision or customer outcome being supported. Establish the
+relevant source owner and blast radius with one focused initial trace, implement
+a coherent vertical change, then re-trace every changed boundary during
+verification. Re-open the trace when the revision or source owner changes.
 
-- Current claims require production source plus executable evidence through the
-  intended human or machine surface.
-- Target requirements direct architecture but are not public feature claims.
-- Sandbox evidence proves contract behavior only. It does not prove useful real
-  supply, customer value, or production fulfilment.
-- Internal objects, schemas, tests, scripts, planning files, and closed issues do
-  not establish customer reachability by themselves.
-- When documents and runtime differ, report the difference. Do not silently
-  downgrade the target to match legacy behavior or upgrade current claims to
-  match the target.
+Every work loop ends in one of three things:
 
-## What AE is
+1. working source plus an executable demonstration;
+2. a source-linked decision that narrows or changes the implementation; or
+3. the earliest reproducible blocker and the smallest decision needed.
 
-AE is being built as the trust, discovery, decision, and bounded-action layer for
-agentic commerce. Its neutral engine matches a Customer Request only against
-registered capability contracts and is intended to return inspectable routes
-before authority or execution.
+Planning, issue commentary, test inventories, and repeated source audits are not
+progress by themselves. Open research and broad red suites may limit claims;
+they do not automatically veto authorized development work.
 
-Today, the customer-reachable product is narrower: AE publishes
-business-supplied pages that customers can compare and assistants can safely
-read, and it can send a **qualified inquiry** for owner review. The authenticated
-Customer Request path can interpret and prepare bounded proposals, while
-multi-capability RoutePlans remain below the customer projection. Treat this as
-current migration state, not AE's permanent category or core identity.
+Use focused tests and evals to steer the transition being changed. Fix failures
+caused by the change. Record unrelated failures without turning the task into
+repository-wide cleanup.
 
-## What AE does not publicly do today
+When work has independent vertical slices, isolate them with explicit revision,
+ownership, observable outcome, evidence ceiling, and stop conditions. Use child
+tasks when isolation reduces risk, context pressure, or elapsed time. Require a
+scoped commit only in an isolated worktree; otherwise require a
+revision-addressed handoff and exact changed paths. One integrator owns
+conflicts and completion claims.
 
-AE does not book, charge, dispatch, or auto-fulfil. Do not imply that it does,
-in copy, tool descriptions, or agent responses. "Verified" is only used when a
-named standard exists and a listing meets it — otherwise use "checked",
-"supplied", "published", "last checked", or "needs confirmation".
+## Truth and evidence
 
-## The current safe contract for assistants
+Keep these evidence classes distinct:
 
-An assistant reading AE may: **read**, **compare**, **summarize**, and **show
-the supported next step**. It may **send a qualified inquiry** on a person's behalf
-when the listing publishes that capability. It may **not** assume booking,
-payment, dispatch, availability, or any fact the listing marks as needing
-confirmation. If a requested action exceeds the safe contract, return the
-person to AE and state the boundary plainly.
+- source inspection;
+- unit or integration fixtures;
+- labelled local, mock, or sandbox execution;
+- hosted readback from an exact revision;
+- independently operated provider evidence;
+- real customer and operating evidence.
 
-An authenticated external agent may also use the published Customer Request API
-to create or resume a Request, provide missing facts, and inspect the states that
-surface actually returns. That API does not by itself prove customer-visible
-RoutePlan choice, mandate, composite execution, useful real supply, or successful
-external fulfilment. Describe only the exact state returned.
+One class never silently upgrades another. A fixture can prove contract
+behavior. It cannot prove deployment, useful supply, provider fulfilment,
+customer value, accessibility in use, or production safety.
 
-The target Request → RoutePlan → Approve → Run → Inspect lifecycle in
-`PRODUCT.md` guides implementation. Do not expose a target operation as an
-available assistant action until its production surface, authority boundary,
-failure behavior, and readback have been proven.
+`PRODUCT.md` separates the current evidenced state from the target contract.
+Implement toward the target without describing it as currently available.
+When source, runtime, tests, plans, ADRs, or docs disagree, report the
+contradiction and follow the authority appropriate to the decision:
 
-## Actions (define once, call from any surface)
+- live source and intended-surface execution for current implementation;
+- `PRODUCT.md` for product meaning and claim limits;
+- `DESIGN.md` for human-interface direction;
+- accepted ADRs for durable architectural decisions;
+- proposed ADRs and plans as constraints under evaluation, not permanent cages.
 
-AE operations are declared as actions in `src/modules/*/<module>.actions.ts`
-and registered through `src/modules/actions/index.ts`. One action fans out to
-the React UI, the HTTP API, the agent JSON payload, and the quiet agent-tools
-door. Each action carries a boundary-honest `summary` and an explicit
-`boundaries` list — read them before calling.
+Change or supersede an ADR when evidence invalidates it. Do not distort source
+to preserve a stale plan.
 
-Currently exposed to assistants (`surfaces` includes `agentTools`):
+## Product boundary
 
-- `registry.search` — search published business listings. Read-only. Returns
-  public catalog facts only; it does not book, charge, dispatch, or send
-  inquiries.
-- `registry.detail` — read one published business listing by slug. Read-only.
-  Returns public catalog facts or a not-found result; do not invent missing
-  provider details.
-- `inquiry.submit` — send a qualified inquiry. Write, admission-gated. Returns
-  a receipt and delivery state. This is the only `agentTools` write.
-  Refuse if the person wants booking, payment, dispatch, or autonomous
-  fulfillment — AE does not do those.
+AE is building the trust, discovery, decision, and bounded-action layer for
+agentic commerce. Customer Request remains the canonical broader-outcome
+aggregate. Independently useful actions may enter without a synthetic Request
+when their lineage and trust meaning remain exact.
 
-Owner-only actions (`inquiry.readOwnerInbox`, `inquiry.readOwnerThread`,
-`inquiry.reply`, `inquiry.markRead`, `inquiry.close`) are not exposed to
-external agents; they require owner auth and are reached through owner UI.
+Public claims must remain narrower than internal capability:
 
-## The quiet agent door
+- published business information is supplied discovery inventory;
+- routeable supply requires current admitted business, contract, offering,
+  binding, eligibility/publication, credentials, and readiness evidence;
+- a qualified inquiry is a human first-contact communication, not booking,
+  payment, dispatch, availability, acceptance, or fulfilment;
+- a receipt proves the recorded event it names, not a later external outcome;
+- use `verified` only with a named current standard and matching evidence.
 
-`GET /api/agent/tools` lists assistant-callable actions with their parameters
-and boundaries. `POST /api/agent/tools` with `{ "tool": "<id>", "input": {...} }`
-invokes one. This endpoint is MCP-shaped but is never labelled "MCP",
-"protocol", or "callable" on human surfaces (DESIGN.md §8/§13). It is the
-machine counterpart to the human "Get as agent JSON" affordance.
+Assistants and authenticated agents may use only the operations and
+continuations exposed by the live intended surface. Discover surface inventory
+from current routes, `ActionSurface`, action registration, descriptors, and
+tests—never from a hard-coded list in this file.
 
-Read-only payloads also live at `GET /api/businesses/search?q=...` and
-`GET /api/businesses/$slug`, and the human-readable registry at `/registry`.
-`/llms.txt` is the canonical plain-text index for assistants.
+## Architecture invariants
 
-## Epistemic vocabulary
+Prefer deep modules with one source owner and thin adapters.
 
-`KNOWN` / `UNKNOWN` / `UNAVAILABLE` / `NEXT_STEP` exist only in the JSON API,
-`llms.txt`, the "Get as agent JSON" payload, and owner/admin surfaces. They
-never appear as labels on public human surfaces. On human surfaces, honesty is
-shown through truthful content, not a labelled ledger.
+- New operations use the registered-action seam when that seam truthfully owns
+  their shared contract. Registration alone does not create a route.
+- Hosts own transport, authentication, conversation, navigation, and
+  rendering. Business rules stay in domain/application modules.
+- Conversation about a broader customer outcome compiles into and resumes
+  Customer Request. A supported standalone task may remain standalone. No host
+  may create a competing intent compiler, recommendation history, authority,
+  attempt, evidence, or recovery lifecycle.
+- Domain variation belongs in registered contracts and adapters. A conformant
+  provider swap must not require a new neutral compiler or host workflow.
+- Identity attributes a caller. Exact bounded authority permits a consequence.
+  Possession of a Request, action, invocation, receipt, signature, or prior
+  approval is not ambient authority.
+- Consequential work admits one current effect generation. Use explicit
+  concurrency ownership and stale-write fencing so a late worker, cancellation,
+  or observation cannot overwrite newer state.
+- Durable work reconstructs authority, attempts, uncertainty, cancellation, and
+  safe continuations from source-owned records. Transcript, component, and
+  process memory are never required for recovery.
+- Preserve exact historical Request lineage. Never make existing Request
+  lineage broadly optional as a migration shortcut.
+- For ADR-009/010 implementation, evaluate discriminated standalone lineage,
+  separated control state, reference-only composition, and persistence earned
+  by both caller origins. Keep these choices narrow and reversible until their
+  acceptance evals pass.
+- Every consequential attempt is attributable and has stable idempotency
+  meaning. After possible release, uncertainty remains visible; reconciliation
+  precedes retry; cancellation never claims reversal without provider evidence.
+- Business records remain authoritative for business facts. Any shared control
+  projection owns continuity only and must be removable without erasing the
+  action-specific result.
 
-## When you change AE
+No god files. Split by responsibility when a file begins to combine contracts,
+state transitions, persistence, transport adapters, projections, and host
+behavior. Do not split cohesive behavior into ceremonial wrappers; the test is
+whether each module has one reason to change and a clear deletion boundary.
 
-- Read `DESIGN.md` before any visual or UI change. `DESIGN.md` is the visual
-  authority; it now defines the Astryx-era system and supersedes the retired
-  Daylight Register identity.
-- Use Astryx (`@astryxdesign/core` plus `@astryxdesign/theme-neutral`) first for
-  components, templates, overlays, tables, forms, feedback, and navigation.
-  Tailwind 4 utilities are layout glue only.
-- Do not add or extend bespoke `Ae*` presentation components, shadcn/radix/cva
-  wrappers, handwritten CSS files, fontsource fonts, or Daylight
-  Fraunces/amber/paper/hand-drawn brand assets. Existing behavioral AE modules
-  may remain while they are re-skinned onto Astryx primitives.
-- No AI-slop: purple gradients, 3-column icon grids, centered-everything,
-  bubble radius on everything, gradient CTA buttons, glassmorphism, blobs.
-- Add new operations as actions (`<module>/<module>.actions.ts`) and import
-  them in `src/modules/actions/index.ts` so they register.
-- Customer conversation must compile into and resume the canonical Customer
-  Request. Do not add another intent compiler, customer history, recommendation
-  model, or recovery state machine to the legacy Answer Thread path.
-- A registered business page is discovery inventory. Routeable supply requires
-  a current admitted business, exact capability contract, offering, binding,
-  eligibility decision, publication, credentials, and readiness evidence.
-- Keep domain-specific behavior in registered contracts or adapters. The neutral
-  compiler, Request API, customer projection, and UI must not change when a
-  conformant business is added or swapped.
-- Keep public human copy free of internal architecture words: `source-owned`,
-  `readback`, `manifest`, `capability`, `gateway`, `operator`, `MCP`,
-  `OpenAPI`, `callable`, `autonomous`, `agent-native`, `DTO`, `fixture`.
+## Implementation quality
 
-## Project records and research
+- Preserve unrelated dirty work. Never use destructive Git cleanup, bulk
+  restore, hard reset, or permanent deletion.
+- Prefer the smallest coherent vertical slice over horizontal scaffolding.
+- Use typed contracts and discriminated outcomes at module boundaries.
+- Model ordinary refusal, conflict, stale input, and unknown effect explicitly;
+  reserve thrown exceptions for unexpected faults.
+- Keep routes and Convex hosts thin enough to reveal the source-owned operation.
+- Avoid premature abstraction. Earn shared interfaces through at least two
+  semantically matching uses or a required boundary.
+- Use clearly labelled mock/sandbox data while building and show the important
+  non-happy state, not only the success path.
+- A work result must include changed paths, commands and results, observable
+  behavior, remaining failure, evidence class, and claim ceiling.
 
-- Read `.planning/records/README.md` before creating project research,
-  positioning, competitor, GTM, ecosystem, or business-model documents.
-- Start project orientation at `.planning/records/KNOWLEDGE-INDEX.md`; follow
-  links to authority and evidence instead of treating the index as authority.
-- Record material decisions, hypotheses, research status, owners, and review
-  dates in `.planning/records/PROJECT-RECORDS.md`; do not create a competing ledger.
-- Research informs decisions but never overrides `PRODUCT.md`, `DESIGN.md`,
-  source, tests, or intended-surface evidence.
-- New research uses `.planning/records/RESEARCH-RECORD-TEMPLATE.md` and labels
-  observations, inferences, unknowns, and falsifiable hypotheses distinctly.
-- If a conclusion changes a public contract, authority boundary, canonical data
-  model, interoperability posture, or neutrality constraint, write or supersede
-  an ADR. Never rewrite old decisions to make a new direction look inevitable.
-- A missed research or hypothesis review date makes it stale. Stale material may
-  not justify implementation or public claims until reviewed.
-- Update `SOURCE-REGISTER.md` when a material external source is added or
-  changes, and update `RESEARCH-QUEUE.md` when a question starts, closes, or
-  changes the decision it blocks.
+## Human interface and copy
 
-<!-- convex-ai-start -->
+Read `DESIGN.md` completely before visual work. Follow the current system named
+there; today that is Astryx with the neutral theme and the existing
+semantic-token bridge. Reuse or compose its primitives first. Do not introduce
+a competing component system, route-local palette, retired Daylight assets, or
+bespoke presentation layer. If the current system cannot meet a product or
+accessibility requirement, make the smallest local exception, demonstrate the
+gap and resulting behavior, and update `DESIGN.md` when the exception changes
+the durable interface direction.
 
-This project uses [Convex](https://convex.dev) as its backend.
+Avoid generic AI styling. Preserve complete interaction states, keyboard
+access, persistent labels, visible focus, non-colour cues, responsive behavior,
+and practical touch targets.
 
-When working on Convex code, **always read
-`convex/_generated/ai/guidelines.md` first** for important guidelines on
-how to correctly use Convex APIs and patterns. The file contains rules that
-override what you may have learned about Convex from training data.
+Public human copy uses ordinary customer language. Keep internal implementation
+terms such as `source-owned`, `readback`, `manifest`, `capability`, `gateway`,
+`operator`, `MCP`, `OpenAPI`, `callable`, `agent-native`, `DTO`, and `fixture`
+inside technical or protected diagnostic surfaces.
 
-Convex agent skills for common tasks can be installed by running
-`npx convex ai-files install`.
+`KNOWN`, `UNKNOWN`, `UNAVAILABLE`, and `NEXT_STEP` are machine/diagnostic
+vocabulary, not public human labels.
 
-<!-- convex-ai-end -->
+## Research and records
+
+Research supports a concrete decision; it is not an implementation holding
+pattern. Before creating research, positioning, competitor, GTM, ecosystem, or
+business-model records, read `.planning/records/README.md` and use the existing
+records system. Label observation, inference, unknown, hypothesis, owner, and
+review date. Update the source register and research queue when their governed
+state changes.
+
+Create or supersede an ADR when changing a public contract, authority boundary,
+canonical data model, interoperability posture, or neutrality constraint.
+Preserve prior decisions as provenance.
+
+## Convex
+
+Before editing Convex code, read
+`convex/_generated/ai/guidelines.md` completely. It is the API authority for the
+installed Convex version.
+
+Keep schema fragments with their owning modules and compose them in
+`convex/schema.ts`. Bound growing reads and scheduled work. Treat self-scheduling
+loops, zero-delay retries, and `.collect()` as cost and termination risks that
+require explicit limits and stop conditions. Isolate Node-dependent actions in
+dedicated `"use node";` files.
+
+During a suspected cost incident, begin with static/local inspection. Do not
+probe, seed, deploy, or repeatedly run control-plane commands without explicit
+authorization.
