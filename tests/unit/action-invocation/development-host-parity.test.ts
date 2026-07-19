@@ -14,7 +14,7 @@ import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability
 import { runDevelopmentHostScenarioMatrix } from '@/modules/capability-supply/development-host-scenarios'
 
 const provenance = {
-  sourceBaseCommit: 'feda5070296c9a0cbc72e3aeb285f0961ee94ec2',
+  sourceBaseCommit: '920989b4451d183d95748b5eaee3cd1da2bdbecb',
   evidenceCommit: '1111111111111111111111111111111111111111',
   evidenceTreeDigest: '2222222222222222222222222222222222222222',
 } as const
@@ -26,6 +26,7 @@ describe('ADR-010 development host parity', () => {
       .toEqual(normalizedOutcomeEvidenceResult(debugHosts[1].success.snapshot))
     const packet = await buildDevelopmentHostParityEvidence(provenance)
     expect(() => verifyDevelopmentHostParityEvidence(packet, {
+      sourceBaseCommit: provenance.sourceBaseCommit,
       evidenceCommit: provenance.evidenceCommit,
       evidenceTreeDigest: provenance.evidenceTreeDigest,
     })).not.toThrow()
@@ -149,9 +150,16 @@ describe('ADR-010 development host parity', () => {
     expect(() => verifyDevelopmentHostParityEvidence(stale)).toThrow()
 
     expect(() => verifyDevelopmentHostParityEvidence(original, {
+      sourceBaseCommit: provenance.sourceBaseCommit,
       evidenceCommit: '3333333333333333333333333333333333333333',
       evidenceTreeDigest: provenance.evidenceTreeDigest,
     })).toThrow('host_parity_revision_provenance_invalid')
+
+    const baseTamper = clone(original)
+    baseTamper.provenance.sourceBaseCommit = '4444444444444444444444444444444444444444'
+    redigestPacket(baseTamper)
+    expect(() => verifyDevelopmentHostParityEvidence(baseTamper))
+      .toThrow('host_parity_source_base_invalid')
   })
 })
 

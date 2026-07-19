@@ -14,6 +14,7 @@ import {
   assertHostParityProvenance,
   compareHostSemantics,
   developmentHostParityClaimCeiling,
+  developmentHostParitySourceBaseCommit,
   evaluateHostMatrix,
   verifyHostSnapshots,
   type DevelopmentHostParityEvidence,
@@ -21,15 +22,23 @@ import {
 
 export function verifyDevelopmentHostParityEvidence(
   packet: DevelopmentHostParityEvidence,
-  expectedProvenance?: Readonly<{ evidenceCommit: string; evidenceTreeDigest: string }>,
+  expectedProvenance?: Readonly<{
+    sourceBaseCommit: string
+    evidenceCommit: string
+    evidenceTreeDigest: string
+  }>,
 ): void {
   const { packetDigest, ...material } = packet
   if (canonicalDigest(material as unknown as StableHashValue) !== packetDigest) {
     throw new Error('host_parity_packet_digest_invalid')
   }
   assertHostParityProvenance(packet.provenance)
+  if (packet.provenance.sourceBaseCommit !== developmentHostParitySourceBaseCommit) {
+    throw new Error('host_parity_source_base_invalid')
+  }
   if (expectedProvenance !== undefined
-    && (packet.provenance.evidenceCommit !== expectedProvenance.evidenceCommit
+    && (packet.provenance.sourceBaseCommit !== expectedProvenance.sourceBaseCommit
+      || packet.provenance.evidenceCommit !== expectedProvenance.evidenceCommit
       || packet.provenance.evidenceTreeDigest !== expectedProvenance.evidenceTreeDigest)) {
     throw new Error('host_parity_revision_provenance_invalid')
   }

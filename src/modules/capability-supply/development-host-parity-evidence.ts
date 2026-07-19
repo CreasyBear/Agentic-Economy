@@ -20,6 +20,8 @@ import {
 
 export const developmentHostParityClaimCeiling =
   'Labelled local adapter/caller parity over mock transport, payment, and provider effects only; no hosted reachability, real-human usability, independent signing or root provenance, settlement, provider fulfilment, production safety, or customer value.'
+export const developmentHostParitySourceBaseCommit =
+  '920989b4451d183d95748b5eaee3cd1da2bdbecb'
 
 export type DevelopmentHostParityEvidence = Readonly<{
   format: 'action-invocation-host-parity:development:v2'
