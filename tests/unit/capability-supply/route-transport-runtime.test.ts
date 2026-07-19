@@ -222,6 +222,107 @@ describe('registered route transport runtime', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('uses only the registered GET query mapping and never accepts caller transport fields', async () => {
+    const config = {
+      method: 'GET' as const,
+      query: [
+        { inputPointer: '/symbol', parameter: 'symbol' },
+        { inputPointer: '/convert', parameter: 'convert' },
+      ],
+      requestTimeoutMs: 5_000,
+    }
+    const fetch: RouteTransportFetch = vi.fn(async (url, init) => {
+      expect(url.href).toBe(
+        'https://provider.example/x402/v3/cryptocurrency/quotes/latest?symbol=BTC&convert=AUD',
+      )
+      expect(init?.method).toBe('GET')
+      expect(init?.body).toBeUndefined()
+      return Response.json({ price: 100_000 })
+    })
+    const observed = await invokeRegisteredRouteTransport(invocation({
+      binding: registeredBinding(
+        'http-json:v1',
+        'https://provider.example/x402/v3/cryptocurrency/quotes/latest',
+        'env:PROVIDER_KEY',
+        config,
+      ),
+      inputJson: JSON.stringify({
+        symbol: 'BTC',
+        convert: 'AUD',
+        method: 'POST',
+        path: 'https://attacker.example',
+      }),
+    }), {
+      send: fetch,
+      resolveCredential: () => 'provider-secret',
+      createX402PaymentSignature: async () => undefined,
+    })
+
+    expect(observed).toMatchObject({ transport: 'http', disposition: 'succeeded' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds an ambiguous paid GET x402 release as outcome unknown', async () => {
+    const config = {
+      method: 'GET' as const,
+      query: [
+        { inputPointer: '/symbol', parameter: 'symbol' },
+        { inputPointer: '/convert', parameter: 'convert' },
+      ],
+      requestTimeoutMs: 5_000,
+      scheme: 'exact',
+      network: 'eip155:8453',
+      currency: 'USD',
+      routeAmountExponent: 2,
+      assetAmountExponent: 6,
+      asset: '0xasset',
+      payTo: '0xrecipient',
+    }
+    const target = 'https://provider.example/x402/v3/cryptocurrency/quotes/latest?symbol=BTC&convert=USD'
+    const challenge = Buffer.from(JSON.stringify({
+      x402Version: 2,
+      resource: { url: target },
+      accepts: [{
+        scheme: 'exact', network: 'eip155:8453', amount: '10000',
+        asset: '0xasset', payTo: '0xrecipient', maxTimeoutSeconds: 60, extra: {},
+      }],
+    })).toString('base64')
+    const fetch = vi.fn<RouteTransportFetch>()
+      .mockResolvedValueOnce(new Response(null, {
+        status: 402,
+        headers: { 'Payment-Required': challenge },
+      }))
+      .mockRejectedValueOnce(Object.assign(new Error('lost'), { name: 'MockLostAfterRelease' }))
+    const observed = await invokeRegisteredRouteTransport(invocation({
+      binding: registeredBinding(
+        'x402-fetch:v2',
+        'https://provider.example/x402/v3/cryptocurrency/quotes/latest',
+        'env:X402_KEY',
+        config,
+      ),
+      authority: {
+        ...authority,
+        maximumSpend: { currency: 'USD', amountMinor: 1 },
+        expiresAt: Date.now() + 120_000,
+      },
+      inputJson: JSON.stringify({ symbol: 'BTC', convert: 'USD' }),
+    }), {
+      send: fetch,
+      resolveCredential: () => 'payment-credential',
+      createX402PaymentSignature: async () => 'mock-payment-signature',
+    })
+
+    expect(observed).toMatchObject({
+      transport: 'x402',
+      disposition: 'unknown',
+      releaseStarted: true,
+      failureCode: 'network_mocklostafterrelease',
+    })
+    expect(fetch.mock.calls[0]?.[0].href).toBe(target)
+    expect(fetch.mock.calls[1]?.[0].href).toBe(target)
+    expect(fetch.mock.calls[1]?.[1]?.body).toBeUndefined()
+  })
+
   it('initializes a Streamable HTTP MCP session and normalizes a tool result', async () => {
     const fetch = vi.fn<RouteTransportFetch>()
       .mockResolvedValueOnce(new Response([

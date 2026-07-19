@@ -25,6 +25,24 @@ export type {
 } from './internal/publication-importers'
 export { runCapabilityReadinessProbe } from './internal/readiness-probe'
 export type { CapabilityProbeOutcome } from './internal/readiness-probe'
+export {
+  materializePublishedOperation,
+  materializeRuntimePublishedOperation,
+} from './published-operation'
+export {
+  comparePublishedOperationHostSemantics,
+  observeEmbeddedPublishedOperation,
+  observeExternalPublishedOperation,
+} from './published-operation-hosts'
+export type {
+  PublishedOperationHostCommand,
+  PublishedOperationHostObservation,
+} from './published-operation-hosts'
+export type {
+  PublishedOperation,
+  PublishedOperationUsageObservation,
+  RuntimePublishedOperationDescriptor,
+} from './published-operation'
 
 const identifier = z.string().trim().min(1).max(200)
 const MAX_OPAQUE_CONFIG_BYTES = 65_536

@@ -42,7 +42,7 @@ export type CapabilityPublicationSource =
   | Readonly<{
       kind: 'openapi_http'
       descriptorDigest: string
-      selector: Readonly<{ path: string; method: 'post' }>
+      selector: Readonly<{ path: string; method: 'get' | 'post' }>
       evidenceRefs: readonly string[]
     }>
   | Readonly<{
@@ -76,7 +76,7 @@ export type CapabilityPublicationImport =
   | Readonly<{
       kind: 'openapi_http'
       document: unknown
-      operation: Readonly<{ path: string; method: 'post' }>
+      operation: Readonly<{ path: string; method: 'get' | 'post' }>
       contract: CapabilityContractMetadata
       commercial: CapabilityImporterCommercialInput
       evidenceRefs: readonly string[]
@@ -133,7 +133,7 @@ export function importOpenApiHttpCapability(
     || !input.document.openapi.startsWith('3.1.')) {
     return { kind: 'refused', reason: 'source_version_unsupported' }
   }
-  if (!validPath(input.operation.path) || input.operation.method !== 'post') {
+  if (!validPath(input.operation.path)) {
     return { kind: 'refused', reason: 'selector_invalid' }
   }
   const servers = input.document.servers
@@ -145,9 +145,12 @@ export function importOpenApiHttpCapability(
   if (baseUrl === undefined) return { kind: 'refused', reason: 'transport_unsupported' }
   const paths = input.document.paths
   const pathItem = isRecord(paths) ? paths[input.operation.path] : undefined
-  const operation = isRecord(pathItem) ? pathItem.post : undefined
+  const operation = isRecord(pathItem) ? pathItem[input.operation.method] : undefined
   if (!isRecord(operation)) return { kind: 'refused', reason: 'operation_not_found' }
-  const inputSchema = jsonContentSchema(isRecord(operation.requestBody) ? operation.requestBody.content : undefined)
+  const query = input.operation.method === 'get' ? openApiQueryMapping(operation) : undefined
+  const inputSchema = input.operation.method === 'get'
+    ? query?.schema
+    : jsonContentSchema(isRecord(operation.requestBody) ? operation.requestBody.content : undefined)
   const responses = operation.responses
   const successful = isRecord(responses)
     ? Object.entries(responses).filter(([status]) => /^2\d\d$/.test(status))
@@ -170,7 +173,12 @@ export function importOpenApiHttpCapability(
     },
     contract: input.contract, inputSchema, outputSchema, commercial: input.commercial,
     endpointUrl: endpoint,
-    adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: input.commercial.requestTimeoutMs } },
+    adapter: {
+      adapterId: 'http-json:v1',
+      config: input.operation.method === 'get'
+        ? { method: 'GET', query: query!.mapping, requestTimeoutMs: input.commercial.requestTimeoutMs }
+        : { method: 'POST', requestTimeoutMs: input.commercial.requestTimeoutMs },
+    },
   })
 }
 
@@ -225,6 +233,16 @@ export function importX402Capability(
   if (!isJsonObject(input.resource.inputSchema) || !isJsonObject(input.resource.outputSchema)) {
     return { kind: 'refused', reason: 'schema_missing' }
   }
+  const method: 'GET' | 'POST' | undefined = input.resource.method === undefined
+    ? 'POST'
+    : input.resource.method === 'GET' || input.resource.method === 'POST'
+      ? input.resource.method
+      : undefined
+  const query = method === 'GET' ? sourceQueryMapping(input.resource.query) : undefined
+  if (method === undefined || (method === 'GET' && query === undefined)
+    || (method === 'POST' && input.resource.query !== undefined)) {
+    return { kind: 'refused', reason: 'selector_invalid' }
+  }
   if (containsUnsupportedReference(input.resource.inputSchema) || containsUnsupportedReference(input.resource.outputSchema)) {
     return { kind: 'refused', reason: 'schema_profile_unsupported' }
   }
@@ -263,7 +281,8 @@ export function importX402Capability(
     adapter: {
       adapterId: 'x402-fetch:v2',
       config: {
-        method: 'POST', requestTimeoutMs: input.commercial.requestTimeoutMs,
+        method, ...(query === undefined ? {} : { query: [...query] }),
+        requestTimeoutMs: input.commercial.requestTimeoutMs,
         scheme: input.resource.scheme, network: input.resource.network,
         currency: input.resource.price.currency,
         routeAmountExponent: input.resource.routeAmountExponent,
@@ -273,6 +292,50 @@ export function importX402Capability(
       },
     },
   })
+}
+
+function openApiQueryMapping(operation: Readonly<Record<string, unknown>>): Readonly<{
+  schema: Readonly<Record<string, JsonValue>>
+  mapping: readonly Readonly<{ inputPointer: string; parameter: string }>[]
+}> | undefined {
+  if (!Array.isArray(operation.parameters) || operation.parameters.length < 1) return undefined
+  const properties: Record<string, JsonValue> = {}
+  const required: string[] = []
+  const mapping: { inputPointer: string; parameter: string }[] = []
+  for (const parameter of operation.parameters) {
+    if (!isRecord(parameter) || parameter.in !== 'query' || typeof parameter.name !== 'string'
+      || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(parameter.name) || !isJsonObject(parameter.schema)) return undefined
+    properties[parameter.name] = parameter.schema
+    mapping.push({ inputPointer: `/${parameter.name.replace(/~/g, '~0').replace(/\//g, '~1')}`, parameter: parameter.name })
+    if (parameter.required === true) required.push(parameter.name)
+  }
+  return {
+    schema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object', properties, required, additionalProperties: false,
+    },
+    mapping,
+  }
+}
+
+function sourceQueryMapping(value: unknown): readonly Readonly<{
+  inputPointer: string
+  parameter: string
+}>[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 64) return undefined
+  const seenPointers = new Set<string>()
+  const seenParameters = new Set<string>()
+  const result: { inputPointer: string; parameter: string }[] = []
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.inputPointer !== 'string' || typeof item.parameter !== 'string'
+      || !/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/.test(item.inputPointer)
+      || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(item.parameter)
+      || seenPointers.has(item.inputPointer) || seenParameters.has(item.parameter)) return undefined
+    seenPointers.add(item.inputPointer)
+    seenParameters.add(item.parameter)
+    result.push({ inputPointer: item.inputPointer, parameter: item.parameter })
+  }
+  return result
 }
 
 function normalizeDirectEnvelope(

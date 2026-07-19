@@ -126,7 +126,8 @@ export function parseRouteTransportObservationJson(value: string): RouteTranspor
 
 type AuxiliaryExchange = Readonly<{ path: string; requestTimeoutMs: number }>
 type HttpConfiguration = Readonly<{
-  method: 'POST'
+  method: 'GET' | 'POST'
+  query?: readonly QueryParameterMapping[]
   requestTimeoutMs: number
   reconciliation?: AuxiliaryExchange
   cancellation?: AuxiliaryExchange
@@ -137,7 +138,8 @@ type McpConfiguration = Readonly<{
   requestTimeoutMs: number
 }>
 type X402Configuration = Readonly<{
-  method: 'POST'
+  method: 'GET' | 'POST'
+  query?: readonly QueryParameterMapping[]
   requestTimeoutMs: number
   scheme: 'exact'
   network: string
@@ -147,6 +149,7 @@ type X402Configuration = Readonly<{
   asset: string
   payTo: string
 }>
+type QueryParameterMapping = Readonly<{ inputPointer: string; parameter: string }>
 
 type RegisteredConfiguration = HttpConfiguration | McpConfiguration | X402Configuration
 
@@ -317,11 +320,13 @@ async function invokeHttp(
   send: RouteTransportFetch,
 ): Promise<RouteTransportObservation> {
   try {
-    const response = await send(endpoint, {
+    const target = requestTarget(endpoint, configuration.method, configuration.query, invocation.inputJson)
+    if (target === undefined) return refused('http', requestDigest, false, 'input_invalid')
+    const response = await send(target, {
       method: configuration.method,
       redirect: 'manual',
       signal: AbortSignal.timeout(configuration.requestTimeoutMs),
-      body: invocation.inputJson,
+      ...(configuration.method === 'POST' ? { body: invocation.inputJson } : {}),
       headers: callHeaders(invocation, credential),
     })
     return await normalizeJsonResponse('http', response, requestDigest, true)
@@ -428,11 +433,13 @@ async function invokeX402(
   runtime: RouteTransportRuntime,
 ): Promise<RouteTransportObservation> {
   const headers = callHeaders(invocation, undefined)
+  const target = requestTarget(endpoint, configuration.method, configuration.query, invocation.inputJson)
+  if (target === undefined) return refused('x402', requestDigest, false, 'input_invalid')
   let first: RouteTransportResponse
   try {
-    first = await runtime.send(endpoint, {
+    first = await runtime.send(target, {
       method: configuration.method, redirect: 'manual', signal: AbortSignal.timeout(configuration.requestTimeoutMs),
-      headers, body: invocation.inputJson,
+      headers, ...(configuration.method === 'POST' ? { body: invocation.inputJson } : {}),
     })
   } catch (error) {
     return unknown('x402', requestDigest, false, `payment_challenge_${errorName(error)}`)
@@ -450,7 +457,7 @@ async function invokeX402(
   if (requirement === undefined) return {
     ...refused('x402', requestDigest, false, 'payment_requirement_unsupported'), paymentChallengeDigest,
   }
-  if (challenge.resource.url !== endpoint.href
+  if (challenge.resource.url !== target.href
     || Date.now() + (requirement.maxTimeoutSeconds * 1_000) > invocation.authority.expiresAt) {
     return { ...refused('x402', requestDigest, false, 'payment_requirement_outside_authority'), paymentChallengeDigest }
   }
@@ -473,9 +480,10 @@ async function invokeX402(
     return { ...refused('x402', requestDigest, false, 'payment_signature_unavailable'), paymentChallengeDigest }
   }
   try {
-    const paid = await runtime.send(endpoint, {
+    const paid = await runtime.send(target, {
       method: configuration.method, redirect: 'manual', signal: AbortSignal.timeout(configuration.requestTimeoutMs),
-      headers: { ...headers, 'Payment-Signature': paymentSignature }, body: invocation.inputJson,
+      headers: { ...headers, 'Payment-Signature': paymentSignature },
+      ...(configuration.method === 'POST' ? { body: invocation.inputJson } : {}),
     })
     const normalized = await normalizeJsonResponse('x402', paid, requestDigest, true)
     return {
@@ -536,8 +544,9 @@ function parseConfiguration(value: string): Readonly<Record<string, unknown>> | 
 }
 
 function isHttpConfiguration(value: Readonly<Record<string, unknown>>): value is HttpConfiguration {
-  if (!optionalExactKeys(value, ['method', 'requestTimeoutMs'], ['reconciliation', 'cancellation'])
-    || value.method !== 'POST' || !validTimeout(value.requestTimeoutMs)) return false
+  if (!optionalExactKeys(value, ['method', 'requestTimeoutMs'], ['query', 'reconciliation', 'cancellation'])
+    || !['GET', 'POST'].includes(String(value.method)) || !validTimeout(value.requestTimeoutMs)
+    || !validMethodQuery(value.method, value.query)) return false
   return ['reconciliation', 'cancellation'].every((key) => {
     const exchange = value[key]
     return exchange === undefined || (isJsonObject(exchange)
@@ -554,14 +563,59 @@ function isMcpConfiguration(value: Readonly<Record<string, unknown>>): value is 
 }
 
 function isX402Configuration(value: Readonly<Record<string, unknown>>): value is X402Configuration {
-  return exactKeys(value, [
+  return optionalExactKeys(value, [
     'asset', 'assetAmountExponent', 'currency', 'method', 'network', 'payTo',
     'requestTimeoutMs', 'routeAmountExponent', 'scheme',
-  ])
-    && value.method === 'POST' && value.scheme === 'exact'
+  ], ['query'])
+    && ['GET', 'POST'].includes(String(value.method)) && value.scheme === 'exact'
+    && validMethodQuery(value.method, value.query)
     && boundedString(value.network, 100) && boundedString(value.currency, 20)
     && boundedString(value.asset, 200) && boundedString(value.payTo, 200) && validTimeout(value.requestTimeoutMs)
     && validExponent(value.routeAmountExponent) && validExponent(value.assetAmountExponent)
+}
+
+function validMethodQuery(method: unknown, query: unknown): boolean {
+  if (method === 'POST') return query === undefined
+  if (method !== 'GET' || !Array.isArray(query) || query.length < 1 || query.length > 64) return false
+  const pointers = new Set<string>()
+  const parameters = new Set<string>()
+  return query.every((item) => {
+    if (!isJsonObject(item) || !exactKeys(item, ['inputPointer', 'parameter'])
+      || typeof item.inputPointer !== 'string' || typeof item.parameter !== 'string'
+      || !/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/.test(item.inputPointer)
+      || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(item.parameter)
+      || pointers.has(item.inputPointer) || parameters.has(item.parameter)) return false
+    pointers.add(item.inputPointer)
+    parameters.add(item.parameter)
+    return true
+  })
+}
+
+function requestTarget(
+  endpoint: URL,
+  method: 'GET' | 'POST',
+  query: readonly QueryParameterMapping[] | undefined,
+  inputJson: string,
+): URL | undefined {
+  if (method === 'POST') return new URL(endpoint)
+  const input = parseJson(inputJson)
+  if (!isJsonObject(input) || query === undefined) return undefined
+  const target = new URL(endpoint)
+  for (const mapping of query) {
+    const value = readJsonPointer(input, mapping.inputPointer)
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') return undefined
+    target.searchParams.append(mapping.parameter, String(value))
+  }
+  return target
+}
+
+function readJsonPointer(input: unknown, pointer: string): unknown {
+  let current = input
+  for (const token of pointer.slice(1).split('/').map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~'))) {
+    if (!isJsonObject(current) || !(token in current)) return undefined
+    current = current[token]
+  }
+  return current
 }
 
 function decodeX402Challenge(header: string | null): X402Challenge | undefined {

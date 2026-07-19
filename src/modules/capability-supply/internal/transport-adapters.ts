@@ -25,7 +25,11 @@ const mcpJsonRpcConfiguration = z.strictObject({
   requestTimeoutMs: z.number().int().min(100).max(120_000),
 })
 const x402FetchConfiguration = z.strictObject({
-  method: z.literal('POST'),
+  method: z.enum(['GET', 'POST']),
+  query: z.array(z.strictObject({
+    inputPointer: z.string().regex(/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/),
+    parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
+  })).max(64).optional(),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
   scheme: z.literal('exact'),
   network: z.string().trim().min(1).max(100),
@@ -35,6 +39,7 @@ const x402FetchConfiguration = z.strictObject({
   asset: z.string().trim().min(1).max(200),
   payTo: z.string().trim().min(1).max(200),
 }).refine((value) => value.assetAmountExponent >= value.routeAmountExponent)
+  .refine((value) => value.method === 'GET' ? (value.query?.length ?? 0) > 0 : value.query === undefined)
 
 export type TransportAdmissionInput = Readonly<{
   adapterId: string
