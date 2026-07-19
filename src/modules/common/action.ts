@@ -85,6 +85,43 @@ type ActionRunner<Input, Result extends ActionResult> = {
 
 export type ActionResult = Readonly<{ kind: string } & Record<string, unknown>>
 
+export type ActionConsequenceClass =
+  | 'read_only'
+  | 'communication'
+  | 'external_effect'
+  | 'legacy_unclassified_write'
+
+export type ActionAuthorityRequirement =
+  | 'none'
+  | 'caller'
+  | 'principal'
+  | 'owner'
+  | 'admin'
+  | 'legacy_unspecified'
+
+export type ActionRetryClass =
+  | 'replayable'
+  | 'attributable_retry'
+  | 'reconcile_before_retry'
+  | 'legacy_unspecified'
+
+export type ActionInvocationContract = Readonly<{
+  /** Immutable version of the action's invocation semantics, not the application version. */
+  version: string
+  consequenceClass: ActionConsequenceClass
+  /** Dot-addressed input paths whose change invalidates a prepared invocation. */
+  materialInputPaths: readonly string[]
+  authorityRequirement: ActionAuthorityRequirement
+  retryClass: ActionRetryClass
+  expectedEvidence: readonly string[]
+  safeContinuations: readonly string[]
+  invalidationConditions: readonly string[]
+}>
+
+export type ResolvedActionInvocationContract = ActionInvocationContract & Readonly<{
+  compatibility: 'explicit' | 'derived_from_legacy_read_only_flag'
+}>
+
 export type ActionDefinition<
   Input,
   Result extends ActionResult,
@@ -98,6 +135,11 @@ export type ActionDefinition<
   readonly readOnly: boolean
   readonly surfaces: readonly ActionSurface[]
   readonly outputSchema: z.ZodType<Result>
+  /**
+   * Optional only for compatibility with actions registered before invocation
+   * contracts existed. New classified actions declare this explicitly.
+   */
+  readonly invocationContract?: ActionInvocationContract
   readonly run: ActionRunner<Input, Result>
 }
 
@@ -110,6 +152,33 @@ export function defineAction<Input, Result extends ActionResult>(
   def: ActionDefinition<Input, Result>,
 ): Action<Input, Result> {
   return def
+}
+
+/**
+ * Resolve old registrations without inventing authority, retry, evidence, or
+ * continuation semantics. A legacy write remains deliberately unclassified.
+ */
+export function resolveActionContract(
+  action: AnyAction,
+): ResolvedActionInvocationContract {
+  if (action.invocationContract !== undefined) {
+    return {
+      ...action.invocationContract,
+      compatibility: 'explicit',
+    }
+  }
+
+  return {
+    version: 'legacy:v1',
+    consequenceClass: action.readOnly ? 'read_only' : 'legacy_unclassified_write',
+    materialInputPaths: [],
+    authorityRequirement: action.readOnly ? 'none' : 'legacy_unspecified',
+    retryClass: action.readOnly ? 'replayable' : 'legacy_unspecified',
+    expectedEvidence: [],
+    safeContinuations: [],
+    invalidationConditions: [],
+    compatibility: 'derived_from_legacy_read_only_flag',
+  }
 }
 
 /** Machine-readable description of an action. */

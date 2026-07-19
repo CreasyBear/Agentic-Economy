@@ -262,6 +262,16 @@ export const registryDetailAction = defineAction({
   parameters: detailParameters,
   readOnly: true,
   surfaces: ['http', 'agentJson', 'answerThread'],
+  invocationContract: {
+    version: 'registry.detail:v1',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['slug'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['public_registry_detail_result'],
+    safeContinuations: ['inspect_result'],
+    invalidationConditions: ['action_contract_version_changed', 'slug_changed'],
+  },
   run: async ({ data }) => {
     const result = await projectCurrentPublicInquiryDetail(
       await readPublicRegistryBusinessDetail({ slug: data.slug.trim() }),

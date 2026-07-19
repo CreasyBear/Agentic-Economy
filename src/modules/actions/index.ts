@@ -80,10 +80,16 @@ function assertUniqueActionIds(registry: readonly AnyAction[]): void {
 export {
   defineAction,
   describeActionForAgent,
+  resolveActionContract,
   type Action,
+  type ActionAuthorityRequirement,
+  type ActionConsequenceClass,
   type ActionContext,
+  type ActionInvocationContract,
   type ActionParameter,
+  type ActionRetryClass,
   type ActionSurface,
   type AgentToolDescriptor,
   type AnyAction,
+  type ResolvedActionInvocationContract,
 } from '@/modules/common/action'
