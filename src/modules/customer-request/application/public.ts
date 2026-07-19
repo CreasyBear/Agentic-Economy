@@ -13,14 +13,17 @@ export type {
 
 export {
   attachCompletedTaskReference,
-  persistCompletedTaskReference,
   type AttachCompletedTaskReferenceInput,
   type AttachCompletedTaskReferencePorts,
   type AttachCompletedTaskReferenceResult,
+} from './completed-task-reference'
+
+export {
+  persistCompletedTaskReference,
   type PersistCompletedTaskReferenceInput,
   type PersistCompletedTaskReferencePorts,
   type PersistCompletedTaskReferenceResult,
-} from './completed-task-reference'
+} from './persist-completed-task-reference'
 
 export {
   assembleRequestGraph,

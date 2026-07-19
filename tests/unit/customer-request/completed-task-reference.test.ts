@@ -305,7 +305,6 @@ describe('completed standalone result reference in Customer Request V2', () => {
       callerRef: 'agent:development:one',
       invocationRef: 'invocation:development:one',
       commandKey: 'attach:development:one',
-      commandDigest: 'sha256:attach-development-one',
       referencedAt: NOW + 2,
     }
     const stored = await persistCompletedTaskReference(command, applicationPorts)
@@ -337,7 +336,14 @@ describe('completed standalone result reference in Customer Request V2', () => {
 
     await expect(persistCompletedTaskReference({
       ...command,
-      commandDigest: 'sha256:conflicting-command',
+      invocationRef: 'invocation:development:other',
+    }, applicationPorts)).resolves.toEqual({
+      kind: 'conflict',
+      reason: 'idempotency_key_reused',
+    })
+    await expect(persistCompletedTaskReference({
+      ...command,
+      referencedAt: command.referencedAt + 1,
     }, applicationPorts)).resolves.toEqual({
       kind: 'conflict',
       reason: 'idempotency_key_reused',
@@ -345,11 +351,28 @@ describe('completed standalone result reference in Customer Request V2', () => {
     await expect(persistCompletedTaskReference({
       ...command,
       commandKey: 'attach:stale',
-      commandDigest: 'sha256:stale',
       expectedRevision: 1,
     }, applicationPorts)).resolves.toEqual({
       kind: 'conflict',
       reason: 'revision_changed',
+    })
+
+    const exact = revisions.get(2)!
+    revisions.set(2, { ...exact, completedTaskReferences: [] })
+    await expect(persistCompletedTaskReference(command, applicationPorts)).resolves.toEqual({
+      kind: 'refused',
+      reason: 'replay_integrity_failure',
+    })
+    revisions.set(2, {
+      ...exact,
+      completedTaskReferences: (exact.completedTaskReferences ?? []).map((reference) => ({
+        ...reference,
+        invocationRef: 'invocation:tampered',
+      })),
+    })
+    await expect(persistCompletedTaskReference(command, applicationPorts)).resolves.toEqual({
+      kind: 'refused',
+      reason: 'replay_integrity_failure',
     })
   })
 })
