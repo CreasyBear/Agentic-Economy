@@ -7,6 +7,10 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import { verifyDevelopmentPublishedOperationEvidence } from './development-published-operation-evidence'
 import {
+  materializePublishedOperation,
+  materializeRuntimePublishedOperation,
+} from './published-operation'
+import {
   assertHostParityProvenance,
   compareHostSemantics,
   developmentHostParityClaimCeiling,
@@ -29,7 +33,13 @@ export function verifyDevelopmentHostParityEvidence(
       || packet.provenance.evidenceTreeDigest !== expectedProvenance.evidenceTreeDigest)) {
     throw new Error('host_parity_revision_provenance_invalid')
   }
-  verifyDevelopmentPublishedOperationEvidence(packet.fixture)
+  const rebuiltOperation = materializePublishedOperation(packet.fixture.sourceMaterial)
+  const rebuiltDescriptor = materializeRuntimePublishedOperation(rebuiltOperation)
+  verifyDevelopmentPublishedOperationEvidence({
+    ...packet.fixture,
+    operation: rebuiltOperation,
+    descriptor: rebuiltDescriptor,
+  })
   if (packet.format !== 'action-invocation-host-parity:development:v2'
     || packet.environment !== 'MOCK/DEVELOPMENT ONLY'
     || packet.verdict !== 'PASS_FOR_DECLARED_CLASS'
@@ -48,7 +58,14 @@ export function verifyDevelopmentHostParityEvidence(
       snapshot: packet.hosts[1].success.snapshot,
     }),
   ] as const
-  verifyHostSnapshots(packet)
+  verifyHostSnapshots({
+    ...packet,
+    fixture: {
+      ...packet.fixture,
+      operation: rebuiltOperation,
+      descriptor: rebuiltDescriptor,
+    },
+  })
   packet.hostReads.forEach(verifyDevelopmentHostReadReceipt)
   if (packet.hostReads[0].readRef === packet.hostReads[1].readRef
     || canonicalDigest(rebuiltReads as unknown as StableHashValue)

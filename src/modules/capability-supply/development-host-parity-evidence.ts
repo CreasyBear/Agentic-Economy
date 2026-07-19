@@ -79,9 +79,10 @@ export async function buildDevelopmentHostParityEvidence(provenance: Readonly<{
     verdict: 'PASS_FOR_DECLARED_CLASS' as const,
     claimCeiling: developmentHostParityClaimCeiling,
   }
+  const serializable = JSON.parse(JSON.stringify(material)) as typeof material
   return Object.freeze({
-    ...material,
-    packetDigest: canonicalDigest(material as unknown as StableHashValue),
+    ...serializable,
+    packetDigest: canonicalDigest(serializable as unknown as StableHashValue),
   })
 }
 
