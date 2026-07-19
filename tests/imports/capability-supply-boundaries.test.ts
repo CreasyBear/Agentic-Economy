@@ -56,13 +56,13 @@ describe('capability supply boundaries', () => {
     expect(importer).not.toMatch(/\bfetch\s*\(/)
   })
 
-  it('uses generated private Convex references for readiness calls and scheduling', () => {
+  it('uses generated private Convex references and keeps each readiness probe one-shot', () => {
     const readiness = readFileSync('convex/capabilitySupplyReadiness.ts', 'utf8')
 
     expect(readiness).toContain("import { internal } from './_generated/api'")
     expect(readiness).toContain('internal.capabilitySupply.readCapabilityProbeTarget')
     expect(readiness).toContain('internal.capabilitySupply.recordCapabilityProbeResult')
-    expect(readiness).toContain('internal.capabilitySupplyReadiness.probe')
+    expect(readiness).not.toMatch(/ctx\.scheduler\.runAfter[\s\S]*internal\.capabilitySupplyReadiness\.probe/)
     expect(readiness).not.toContain('makeFunctionReference')
   })
 })

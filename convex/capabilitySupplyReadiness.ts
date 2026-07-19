@@ -83,11 +83,6 @@ export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = inter
       targetDigest: target.targetDigest, outcome: observation.outcome,
       },
     )
-    if (recorded.kind === 'observed') {
-      await ctx.scheduler.runAfter(observation.outcome === 'healthy' ? 4 * 60_000 : 60_000,
-        internal.capabilitySupplyReadiness.probe,
-        { publicationRef: target.publicationRef, expectedRevision: target.revision })
-    }
     return recorded
   },
 })
