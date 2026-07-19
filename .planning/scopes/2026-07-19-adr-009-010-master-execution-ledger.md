@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `2cc23984`
+**Current accepted revision:** `b933999e`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -55,7 +55,7 @@ parallel plan.
 | 1. Registered-action contract | Implemented; final audit still required | `72351a80`, `ccd21ad2`, `f744e943` |
 | 2. Supplied-candidate qualification tracer | Implemented and focused-eval green | `4c27d371`, `27e885f6` |
 | 3. Supplied-candidate quote-collection tracer | Implemented and focused-eval green | `f744e943` through `e5079e23` |
-| 4. Imported-commitment observation tracer | Partial: claim custody/refusal proven; admitted-provider observation transition missing | `0cf42307`, `b8942e8b` |
+| 4. Imported-commitment observation tracer | Implemented for claim custody/refusal and admitted-provider observation boundary | `0cf42307`, `b8942e8b`, `269cfcf0` |
 | 5. Two-caller in-memory tracer | Implemented | `72351a80` |
 | 6. Preparation and exact authority | Implemented | `ccd21ad2` |
 | 7. Attributable effect attempt | Implemented | `f4b77026`, `f1cc1fb6` |
@@ -63,8 +63,8 @@ parallel plan.
 | 9. Concurrency and recovery | Implemented in deterministic labelled development execution | `f1cc1fb6`, `8d3fe91a`, `0d5131a3`, `4a8e215b`, `8b57b2f1`, `890404d4`, `8ac11190` |
 | 10. Earned persistence | Implemented and re-audited in labelled development execution; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d`, `d7ee9fe1` |
 | 11. Request reuse | Implemented and re-audited in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0`, `249a247f` |
-| 12. Composition and direct control | Partial: initial projection/control eval integrated; authoritative record resolution missing | `0dc146e8` |
-| 13. Transfer | Partial: initial transfer eval integrated; executed measurement instrumentation missing | `edc82390`, `9dd406be` |
+| 12. Composition and direct control | Implemented with authoritative record resolution and measured direct control | `0dc146e8`, `a1442309`, `212ea0dd` |
+| 13. Transfer | Implemented with executed measurement and development evidence surface | `edc82390`, `9dd406be`, `bd23435e`, `7bb9836a`, `b933999e` |
 
 Phase 2 may not start until slices 1–13, all eleven ADR-009 gates, and the
 Founder ADR-009 decision are complete. Existing reconstruction or projection
@@ -783,10 +783,67 @@ Implemented proof:
 Not established:
 
 - wall-clock or provider latency, real strata-repair supply, provider response,
-  fulfilment, deployment, hosted behavior, or customer value;
-- reusable execution instrumentation for control, supervision, and logical
-  transitions. The initial evaluator derives some counts from stores/calls but
-  still embeds other metrics and the recommendation inside test data.
+  fulfilment, deployment, hosted behavior, or customer value.
+
+### Phase 1 independent-audit repairs and development evidence surface
+
+**Accepted commits:** `269cfcf0`, `2654a7ea`, `8e97eeb6`, `61e2603c`,
+`a1442309`, `212ea0dd`, `bd23435e`, `7bb9836a`, `b933999e`
+**Evidence class:** source, deterministic local execution, checksummed
+MOCK/DEVELOPMENT ONLY packet; no live backend, network, provider, or deployment
+
+Independent review at `2cc23984` rejected optimistic Gate 3/5/6/7/9/11 and
+transfer claims. The accepted repairs now provide:
+
+- a positive imported-claim observation boundary requiring exact current
+  admitted supply plus fresh attributable adapter evidence;
+- frozen pre-reference V2 aggregate/head/command provenance from
+  `d15f3b4b23cca4444535e982591f4b7c3983c144`, replayed through current local
+  persistence/readback without manufacturing new fields;
+- action-owned data-use and result classification, a neutral Action Invocation
+  vocabulary boundary, and fail-closed legacy result-reference migration;
+- authoritative composition resolving exact registered actions, completed
+  results, invocation versions, source identities, and freshness rather than
+  copying caller prose;
+- event-derived direct-control and transfer measurements whose falsifier result
+  changes when no-effect reuse is altered to repeat an effect;
+- an intended local development CLI that executes both caller origins, direct
+  read, direct consequential baseline, controlled consequential action,
+  possible-release recovery, result reuse, and composition outside Vitest;
+- fresh-process verification that hydrates durable records, cold-inspects the
+  invocation, verifies completed-result identity, reruns composition and
+  transfer evaluation, and rejects recomputed-checksum semantic tampering.
+
+Master development-surface execution:
+
+```text
+npm run evidence:action-invocation:development -- run /tmp/ae-phase1-evidence-b933999e.json
+npm run evidence:action-invocation:development -- verify /tmp/ae-phase1-evidence-b933999e.json
+```
+
+Observed at exact revision
+`b933999e3c9ba61c1ec90c24edbe50f19c4f4ae4`:
+
+- Request-owned and standalone invocations both completed through
+  `supply.collectDevelopmentQuote:v1`;
+- possible release reconstructed as `reconciliation_required` and resolved
+  terminal only by attributable released evidence;
+- direct read: one runner call, zero effects and zero lifecycle records;
+- direct consequential baseline: one runner call and one effect, with no
+  attributable attempt or exact authority;
+- controlled action: one effect, one exact authority decision, one attributable
+  attempt, five durable transitions/history records;
+- completed standalone result reused by canonical Request/composition with
+  effect count remaining one and no copied lifecycle/result fields;
+- transfer verdict:
+  `retain_control_for_consequential_and_bypass_read_only`;
+- packet checksum:
+  `sha256:a45c783062be2b5c7d55f88f2a5f5adabfdeb8564c1e7d3a987b1b4849623b15`;
+- artifact SHA-256:
+  `f86cffe4d0d0ef8c111e702dab046748090cc5dc455e18b3f0631b0e32232484`.
+
+The artifact remains outside Git. It contains labelled fixture data and no
+production credential or real customer/provider record.
 
 ## Evidence position
 
@@ -800,15 +857,15 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 |---|---|---|---|
 | 1 | Supplied-candidate qualification reuses contracts and supply evidence | Proven | Labelled development qualification reuses exact publication, business currentness, active contract, offering, binding, eligibility, credential, readiness, and freshness sources with deterministic blockers and no effect. |
 | 2 | Supplied-candidate quote collection reuses preparation, disclosure authority, provider attempts, and reconciliation | Proven | A labelled development quote action requalifies current supply at preparation and pre-release, binds exact disclosure, reuses shared durable attempts/fencing/reconciliation for both origins, and keeps quote data source-owned. |
-| 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Partial | Claim custody, attribution, Request reference, and refusal without admitted supply are proven. No positive admitted-provider adapter transition demonstrates when fresh attributable evidence may create a current AE observation. |
+| 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Proven | Claim custody remains imported/unverified; a separate local-development observation boundary requires current admitted supply and fresh exact adapter evidence, while stale/unadmitted/mismatched/tampered evidence remains claim-only with no invocation/effect. |
 | 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Proven | Both origins share the registered runner, authority, effect identity, uncertainty, reconciliation, fencing, transactional durable control, and fresh-process reconstruction in labelled development execution. |
-| 5 | Historical Customer Request traces replay without semantic regression | Partial | Additive optional fields and current compatibility checks are green, but no frozen pre-change V2 aggregate/head/command fixture has been replayed through current persistence and readback. |
-| 6 | Composition contains inspectable references and declared dependencies only | Contradicted | Completed references and graph shape are validated, but invocation references are not resolved and caller-authored owner/continuation/outcome prose is copied into the projection. |
-| 7 | Direct-booking negative control remains unburdened | Governance disposition required | AE explicitly does not book. The current eval uses read-only first contact and an unrelated empty development store; it neither proves direct booking nor observes a shared instrumentation boundary. Supersede the stale gate to the selected direct-path control rather than invent booking. |
+| 5 | Historical Customer Request traces replay without semantic regression | Proven | A frozen pre-reference V2 aggregate/head/command from exact revision `d15f3b4b` replays through current local persistence/readback with identical digest, proposal-only authority, projection, command outcome, and absent optional fields. |
+| 6 | Composition contains inspectable references and declared dependencies only | Proven | The projector accepts graph structure and exact identities only, resolves authoritative registered-action/completed-result/invocation records, and refuses mismatched, missing, stale, cyclic, or uninspectable references. |
+| 7 | Direct-booking negative control remains unburdened | Governance disposition required | AE explicitly does not book. The selected registered first-contact/read control now executes through the instrumented development harness with one runner call, zero effects, and zero invocation/control/attempt/history emissions. Supersede the stale gate wording rather than invent booking. |
 | 8 | Person or cold agent can stop and continue from a durable result | Proven | Fresh development processes reconstruct durable control and a verified completed result can advance a canonical Request revision without repeating the effect. |
-| 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Contradicted | Four labels exist, but `current` is inferred from caller-declared dependencies without resolving actual invocation control/resolution/freshness; caller prose can therefore invent route truth. |
+| 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Proven | Four ordinary-language states and continuations derive from registered descriptors and authoritative invocation/result records; caller prose injection, stale state, and unknown identities are refused. |
 | 10 | Authority never crosses tasks | Proven | Cross-origin/principal/material reuse is refused, completed-result attachment carries no authority, and authority accepted for quote A cannot authorize independently prepared quote B. |
-| 11 | No domain nouns enter neutral contracts | Contradicted | Neutral Action Invocation preparation/result classification still hard-codes `inquiry.submit`, `body`, `contact`, `notificationStatus`, `queued_communication`, and inquiry-specific errors. Move these rules to registered action/source adapters. |
+| 11 | No domain nouns enter neutral contracts | Proven | Inquiry and quote actions own data-use/result classifications; the neutral engine carries opaque action-declared outcomes and generic errors. A recursive vocabulary boundary test covers the neutral module, and legacy referenceability remains in an action-owned compatibility shim. |
 
 ### ADR-010 — ten gates
 
@@ -830,9 +887,8 @@ implementation gate substitute.
 
 ## Next decision
 
-Repair the five bounded audit failures: admitted-provider imported observation,
-frozen historical V2 replay, authoritative composition resolution, neutral
-action-owned data-use/outcome classification, and executed transfer/direct
-instrumentation. Then re-run the eleven-gate audit. The stale direct-booking
-wording remains a Founder governance disposition; implementation must not
-invent booking to make the document green.
+Founder disposition is required for ADR-009 Gate 7. Recommended decision:
+supersede the stale “direct-booking negative control” wording with the executed
+direct first-contact/read control. AE explicitly does not book; adding booking
+to make the document green would contradict `PRODUCT.md`. If the Founder does
+not supersede the gate, ADR-009 remains proposed and Phase 2 entry is blocked.
