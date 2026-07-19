@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   evaluateStandingMandatePolicy,
+  ExposureOffsetRuleRegistry,
   StandingMandateStore,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -10,6 +11,10 @@ import {
   runFullYoloEvidence,
   verifyFullYoloEvidence,
 } from '../../../tools/dev/full-yolo-evidence-packet'
+import {
+  createDevelopmentBookingOffsetRuleRegistry,
+  developmentCancellationConfirmationRule,
+} from '@/modules/booking/development-booking-offset-rule'
 
 describe('full_yolo bounded authority mode', () => {
   it('executes fallback and cancellation through three exact standing-mandate uses', async () => {
@@ -75,10 +80,82 @@ describe('full_yolo bounded authority mode', () => {
     const store = new StandingMandateStore(snapshot)
     expect(store.capacity(snapshot.mandates[0]!.mandateRef).worstCaseLossMinor).toBe(5_000)
     const { digest: _digest, ...offset } = evidence.mandateSnapshot.exposureOffsets![0]!
-    expect(store.recordExposureOffset({
+    expect((store.recordExposureOffset as any)({
       ...offset,
       offsetAuthorityUseRef: 'mock:authority-use:full-yolo:a',
-    }, () => false)).toEqual({ kind: 'refused', code: 'authority_use_linkage_invalid' })
+    }, () => true)).toEqual({ kind: 'refused', code: 'authority_use_linkage_invalid' })
+  })
+
+  it('selects only the exact mandate-allowed registered offset rule', async () => {
+    const evidence = await runFullYoloEvidence()
+    const snapshot = structuredClone(evidence.mandateSnapshot)
+    ;(snapshot as any).exposureOffsets = []
+    const { digest: _digest, ...offset } = evidence.mandateSnapshot.exposureOffsets![0]!
+    const authoritativeRegistry = createDevelopmentBookingOffsetRuleRegistry(
+      evidence.coldContinuation.providerSnapshot,
+    )
+    const store = new StandingMandateStore(snapshot, { offsetRuleRegistry: authoritativeRegistry })
+    expect(store.recordExposureOffset({ ...offset, evidenceRuleRef: 'unknown' })).toEqual({
+      kind: 'refused',
+      code: 'authority_use_linkage_invalid',
+    })
+    const wrongRegistry = new ExposureOffsetRuleRegistry([{
+      identity: {
+        ...developmentCancellationConfirmationRule,
+        source: 'other.source',
+      },
+      resolve: () => true,
+    }])
+    const wrongStore = new StandingMandateStore(snapshot, { offsetRuleRegistry: wrongRegistry })
+    expect(wrongStore.recordExposureOffset(offset)).toEqual({
+      kind: 'refused',
+      code: 'authority_use_linkage_invalid',
+    })
+    const wrongVersionStore = new StandingMandateStore(snapshot, {
+      offsetRuleRegistry: new ExposureOffsetRuleRegistry([{
+        identity: {
+          ...developmentCancellationConfirmationRule,
+          version: 'v2',
+        },
+        resolve: () => true,
+      }]),
+    })
+    expect(wrongVersionStore.recordExposureOffset(offset)).toEqual({
+      kind: 'refused',
+      code: 'authority_use_linkage_invalid',
+    })
+  })
+
+  it('requires the trusted resolver and released causal uses during cold reconstruction', async () => {
+    const evidence = await runFullYoloEvidence()
+    expect(() => new StandingMandateStore(structuredClone(evidence.mandateSnapshot))).toThrow(
+      'standing_mandate_snapshot_exposure_offset_refused',
+    )
+    for (const state of ['uncertain', 'not_released']) {
+      const notReleased = structuredClone(evidence.mandateSnapshot)
+      const original = (notReleased.uses as any[]).find(({ authorityUseRef }) =>
+        authorityUseRef === notReleased.exposureOffsets![0]!.authorityUseRef)
+      original.state = state
+      redigest(original)
+      expect(() => new StandingMandateStore(notReleased, {
+        offsetRuleRegistry: createDevelopmentBookingOffsetRuleRegistry(
+          evidence.coldContinuation.providerSnapshot,
+        ),
+      })).toThrow('standing_mandate_snapshot_exposure_offset_refused')
+    }
+  })
+
+  it('proves restart continuation is objective-owned rather than direct provider replay', async () => {
+    const evidence = await runFullYoloEvidence()
+    expect(evidence.coldContinuation.continuationKind).toBe('source_owned_objective_resume')
+    expect(evidence.coldContinuation).not.toHaveProperty('replayedBooking')
+    expect(evidence.coldContinuation).not.toHaveProperty('replayedCancellation')
+    expect(evidence.coldContinuation.freshProcessRefs[0]).not.toBe(
+      evidence.coldContinuation.freshProcessRefs[1],
+    )
+    expect(evidence.coldContinuation.finalObjectiveState.digest).toBe(
+      evidence.coldContinuation.replayedObjectiveState.digest,
+    )
   })
 
   it.each([
@@ -106,6 +183,14 @@ describe('full_yolo bounded authority mode', () => {
       copy.mandateSnapshot.exposureOffsets[0].offsetEvidenceRef = 'other'
       redigest(copy.mandateSnapshot.exposureOffsets[0])
     }],
+    ['offset rule source', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].evidenceRuleSource = 'other'
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['offset rule version', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].evidenceRuleVersion = 'v2'
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
     ['causal use', (copy: any) => {
       copy.mandateSnapshot.exposureOffsets[0].offsetAuthorityUseRef =
         copy.mandateSnapshot.exposureOffsets[0].authorityUseRef
@@ -123,6 +208,25 @@ describe('full_yolo bounded authority mode', () => {
     }],
     ['cold provider effect count', (copy: any) => {
       copy.coldContinuation.effectsAfterReplay.booking += 1
+    }],
+    ['objective stage', (copy: any) => {
+      copy.coldContinuation.midRun.objectiveState.stage = 'completed'
+      redigest(copy.coldContinuation.midRun.objectiveState)
+    }],
+    ['objective current action', (copy: any) => {
+      copy.coldContinuation.midRun.objectiveState.currentActionRef = 'other'
+      redigest(copy.coldContinuation.midRun.objectiveState)
+    }],
+    ['objective fallback progress', (copy: any) => {
+      copy.coldContinuation.midRun.objectiveState.fallbackProgress.attemptedProviderRefs.reverse()
+      redigest(copy.coldContinuation.midRun.objectiveState)
+    }],
+    ['objective result linkage', (copy: any) => {
+      copy.coldContinuation.finalObjectiveState.cancellationResultRef = 'other'
+      redigest(copy.coldContinuation.finalObjectiveState)
+    }],
+    ['direct provider replay evidence', (copy: any) => {
+      copy.coldContinuation.replayedBooking = copy.authoritativeResults.booking.result
     }],
   ])('rejects valid outer-checksum tampering of %s', async (_label, mutate) => {
     const evidence = structuredClone(await runFullYoloEvidence())

@@ -5,6 +5,11 @@ import {
 } from './standing-mandate-grant'
 import type { StandingMandateAuthorityBasis } from './contracts'
 import type { StandingMandatePolicyDecision } from './standing-mandate-policy'
+import {
+  ExposureOffsetRuleRegistry,
+  type ExposureOffsetRuleIdentity,
+  type ExposureOffsetRuleMaterial,
+} from './exposure-offset-rules'
 
 export const STANDING_MANDATE_FORMAT = 'ae.action-invocation-standing-mandate:v1' as const
 
@@ -24,6 +29,7 @@ export type StandingMandateScope = Readonly<{
   permittedFallbacks: readonly string[]
   riskCeiling: string
   maximumLoss?: Readonly<{ amountMinor: number; currency: string }>
+  exposureOffsetRules?: readonly ExposureOffsetRuleIdentity[]
 }>
 
 export type StandingMandate = Readonly<{
@@ -81,27 +87,7 @@ export type StandingMandateSnapshot = Readonly<{
   policyDecisions?: readonly StandingMandatePolicyDecision[]
 }>
 
-export type AuthorityExposureOffset = Readonly<{
-  authorityUseRef: string
-  offsetAuthorityUseRef: string
-  mandateRef: string
-  mandateVersion: number
-  mandateGeneration: number
-  principalRef: string
-  providerRef: string
-  exposureAction: Readonly<{ id: string; version: string }>
-  offsetAction: Readonly<{ id: string; version: string }>
-  exposureSubjectRef: string
-  exposureResultRef: string
-  exposureEvidenceRef: string
-  offsetSubjectRef: string
-  offsetResultRef: string
-  offsetEvidenceRef: string
-  amountMinor: number
-  currency: string
-  evidenceRuleRef: string
-  offsetGeneration: 1
-  recordedAt: string
+export type AuthorityExposureOffset = Readonly<ExposureOffsetRuleMaterial & {
   digest: string
 }>
 
@@ -157,13 +143,15 @@ export class StandingMandateStore {
   readonly #policyDecisions = new Map<string, StandingMandatePolicyDecision>()
   readonly #usedOffsetUses = new Set<string>()
   readonly #usedOffsetEvidence = new Set<string>()
+  readonly #offsetRuleRegistry: ExposureOffsetRuleRegistry
 
   constructor(
     snapshot?: StandingMandateSnapshot,
     options?: Readonly<{
-      verifyExposureOffset?: (offset: AuthorityExposureOffset) => boolean
+      offsetRuleRegistry?: ExposureOffsetRuleRegistry
     }>,
   ) {
+    this.#offsetRuleRegistry = options?.offsetRuleRegistry ?? new ExposureOffsetRuleRegistry()
     for (const mandate of snapshot?.mandates ?? []) {
       if (!mandateIntegrityValid(mandate)) throw new Error('standing_mandate_snapshot_integrity_refused')
       this.#mandates.set(mandate.mandateRef, deepFreeze(structuredClone(mandate)))
@@ -201,8 +189,7 @@ export class StandingMandateStore {
         digest !== canonicalDigest(material as never)
         || use === undefined
         || offsetUse === undefined
-        || options?.verifyExposureOffset === undefined
-        || !options.verifyExposureOffset(offset)
+        || use.state !== 'released'
         || offset.mandateRef !== use.mandateRef
         || offset.mandateRef !== offsetUse.mandateRef
         || offset.mandateVersion !== use.mandateVersion
@@ -216,6 +203,8 @@ export class StandingMandateStore {
         || offsetUse.action.id !== offset.offsetAction.id
         || offsetUse.action.version !== offset.offsetAction.version
         || offsetUse.state !== 'released'
+        || !this.#offsetRuleAllowed(offset, use.mandateRef)
+        || !this.#offsetRuleResolves(offset)
         || offset.exposureSubjectRef !== offset.offsetSubjectRef
         || offset.offsetGeneration !== 1
         || this.#usedOffsetUses.has(offset.offsetAuthorityUseRef)
@@ -383,7 +372,6 @@ export class StandingMandateStore {
 
   recordExposureOffset(
     input: Omit<AuthorityExposureOffset, 'digest'>,
-    verifyEvidence: (input: Omit<AuthorityExposureOffset, 'digest'>) => boolean,
   ): MandateDecision<AuthorityExposureOffset> {
     const use = this.#uses.get(input.authorityUseRef)
     const offsetUse = this.#uses.get(input.offsetAuthorityUseRef)
@@ -404,7 +392,8 @@ export class StandingMandateStore {
       || input.exposureAction.version !== use.action.version
       || offsetUse.action.id !== input.offsetAction.id
       || offsetUse.action.version !== input.offsetAction.version
-      || input.evidenceRuleRef.length === 0
+      || !this.#offsetRuleAllowed(input, input.mandateRef)
+      || !this.#offsetRuleResolves(input)
       || input.exposureSubjectRef !== input.offsetSubjectRef
       || input.exposureResultRef.length === 0
       || input.exposureEvidenceRef.length === 0
@@ -413,7 +402,6 @@ export class StandingMandateStore {
       || input.offsetGeneration !== 1
       || this.#usedOffsetUses.has(input.offsetAuthorityUseRef)
       || this.#usedOffsetEvidence.has(input.offsetEvidenceRef)
-      || !verifyEvidence(input)
       || input.currency !== (use.reservedLoss?.currency ?? use.reservedSpend.currency)
       || input.amountMinor < 0
       || input.amountMinor > (use.reservedLoss?.amountMinor ?? use.reservedSpend.amountMinor)
@@ -557,6 +545,27 @@ export class StandingMandateStore {
       && decision.proposal.fallbackRef === (input.fallbackRef ?? 'none')
       && decision.proposal.risk === input.risk
   }
+
+  #offsetRuleAllowed(
+    identity: ExposureOffsetRuleIdentity | Pick<ExposureOffsetRuleMaterial,
+      'evidenceRuleRef' | 'evidenceRuleSource' | 'evidenceRuleVersion'>,
+    mandateRef: string,
+  ) {
+    const source = 'source' in identity ? identity.source : identity.evidenceRuleSource
+    const version = 'version' in identity ? identity.version : identity.evidenceRuleVersion
+    return this.#mandates.get(mandateRef)?.scope.exposureOffsetRules?.some((allowed) =>
+      allowed.evidenceRuleRef === identity.evidenceRuleRef
+      && allowed.source === source
+      && allowed.version === version) === true
+  }
+
+  #offsetRuleResolves(material: ExposureOffsetRuleMaterial) {
+    return this.#offsetRuleRegistry.resolve({
+      evidenceRuleRef: material.evidenceRuleRef,
+      source: material.evidenceRuleSource,
+      version: material.evidenceRuleVersion,
+    })?.resolve(material) === true
+  }
 }
 
 export function mandateIntegrityValid(mandate: StandingMandate): boolean {
@@ -593,6 +602,8 @@ function assertMandateInput(
     || actions.length === 0
     || actions.some((action) => action.id.length === 0 || action.version.length === 0)
     || new Set(actions.map((action) => `${action.id}:${action.version}`)).size !== actions.length
+    || input.scope.exposureOffsetRules?.some((rule) =>
+      rule.evidenceRuleRef.length === 0 || rule.source.length === 0 || rule.version.length === 0)
     || (mode === 'bounded_mandate' && (
       actions.length !== 1
       || actions[0]?.id !== input.scope.action.id

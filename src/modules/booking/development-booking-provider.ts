@@ -10,7 +10,12 @@ export type DevelopmentAvailabilityObservation = DevelopmentBookingInput['slot']
 export type DevelopmentBookingProviderSnapshot = Readonly<{
   options: Readonly<{ providerRef?: string; slotRef?: string; refusal?: 'terms_changed' | 'provider_refused' }>
   reservations: readonly Readonly<{ operationKey: string; digest: string; input: DevelopmentBookingInput; result: DevelopmentBookingResult }>[]
-  cancellations: readonly Readonly<{ operationKey: string; digest: string; result: DevelopmentBookingCancellationResult }>[]
+  cancellations: readonly Readonly<{
+    operationKey: string
+    digest: string
+    input: DevelopmentBookingCancellationInput
+    result: DevelopmentBookingCancellationResult
+  }>[]
   effects: number
   cancellationEffects: number
 }>
@@ -28,6 +33,7 @@ export function createDevelopmentBookingProvider(options: Readonly<{
   }>>(options.snapshot?.reservations.map(({ operationKey, ...record }) => [operationKey, record]))
   const cancellations = new Map<string, Readonly<{
     digest: string
+    input: DevelopmentBookingCancellationInput
     result: DevelopmentBookingCancellationResult
   }>>(options.snapshot?.cancellations.map(({ operationKey, ...record }) => [operationKey, record]))
   let effects = options.snapshot?.effects ?? 0
@@ -125,7 +131,7 @@ export function createDevelopmentBookingProvider(options: Readonly<{
         cancellationRef: `mock:cancellation:${suffix}`,
         evidenceRef: `mock:cancellation-evidence:${suffix}`,
       }
-      cancellations.set(input.operationKey, { digest, result })
+      cancellations.set(input.operationKey, { digest, input: structuredClone(input), result })
       return result
     },
     effectCount: () => effects,

@@ -9,7 +9,14 @@ import {
   verifiedGrantMatchesMandate,
 } from '../../src/modules/action-invocation'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
-import { runFullYoloDevelopmentObjective } from '../../src/modules/booking/development-booking-objective'
+import {
+  developmentBookingObjectiveStateValid,
+  runFullYoloDevelopmentObjective,
+} from '../../src/modules/booking/development-booking-objective'
+import {
+  createDevelopmentBookingOffsetRuleRegistry,
+  developmentCancellationConfirmationRule,
+} from '../../src/modules/booking/development-booking-offset-rule'
 import {
   cancelDevelopmentReservationAction,
   createDevelopmentReservationAction,
@@ -161,6 +168,10 @@ export async function runFullYoloEvidence(): Promise<FullYoloEvidence> {
 export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
   const booking = evidence.authoritativeResults.booking
   const cancellation = evidence.authoritativeResults.cancellation
+  const cancellationInput = cancellation.input as Readonly<{
+    providerRef: string
+    principalRef: string
+  }>
   const verifyOffset = (offset: NonNullable<typeof evidence.mandateSnapshot.exposureOffsets>[number]) =>
     booking.result.kind === 'reservation_confirmed'
     && cancellation.result.kind === 'reservation_cancellation_confirmed'
@@ -174,10 +185,12 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     && cancellation.result.reservationRef === offset.offsetSubjectRef
     && cancellation.result.cancellationRef === offset.offsetResultRef
     && cancellation.result.evidenceRef === offset.offsetEvidenceRef
-    && cancellation.input.providerRef === booking.result.providerRef
-    && cancellation.input.principalRef === booking.principalRef
+    && cancellationInput.providerRef === booking.result.providerRef
+    && cancellationInput.principalRef === booking.principalRef
   const store = new StandingMandateStore(structuredClone(evidence.mandateSnapshot), {
-    verifyExposureOffset: verifyOffset,
+    offsetRuleRegistry: createDevelopmentBookingOffsetRuleRegistry(
+      evidence.coldContinuation.providerSnapshot,
+    ),
   })
   const mandate = evidence.mandateSnapshot.mandates[0]
   if (
@@ -214,8 +227,40 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     || evidence.coldContinuation.effectsBeforeReplay.cancellation
       !== evidence.coldContinuation.effectsAfterReplay.cancellation
     || evidence.coldContinuation.reconstructed.length !== 3
-    || evidence.coldContinuation.midRun.objectiveState.next
-      !== 'evaluate_source_owned_cancellation_condition'
+    || !developmentBookingObjectiveStateValid(evidence.coldContinuation.initialObjectiveState)
+    || !developmentBookingObjectiveStateValid(evidence.coldContinuation.midRun.objectiveState)
+    || !developmentBookingObjectiveStateValid(evidence.coldContinuation.finalObjectiveState)
+    || !developmentBookingObjectiveStateValid(evidence.coldContinuation.replayedObjectiveState)
+    || evidence.coldContinuation.initialObjectiveState.stage !== 'attempt_primary'
+    || evidence.coldContinuation.initialObjectiveState.currentActionRef
+      !== createDevelopmentReservationAction.id
+    || evidence.coldContinuation.midRun.objectiveState.stage !== 'booking_confirmed'
+    || evidence.coldContinuation.midRun.objectiveState.currentActionRef
+      !== cancelDevelopmentReservationAction.id
+    || evidence.coldContinuation.midRun.objectiveState.bookingResultRef
+      !== (booking.result.kind === 'reservation_confirmed' ? booking.result.reservationRef : '')
+    || evidence.coldContinuation.finalObjectiveState.stage !== 'completed'
+    || evidence.coldContinuation.finalObjectiveState.currentActionRef !== 'none'
+    || evidence.coldContinuation.finalObjectiveState.cancellationResultRef
+      !== (cancellation.result.kind === 'reservation_cancellation_confirmed'
+        ? cancellation.result.cancellationRef
+        : '')
+    || evidence.coldContinuation.finalObjectiveState.digest
+      !== evidence.coldContinuation.replayedObjectiveState.digest
+    || evidence.coldContinuation.finalObjectiveState.completedInvocationRefs.join(',')
+      !== evidence.invocations.map(({ invocationRef }) => invocationRef).join(',')
+    || evidence.coldContinuation.finalObjectiveState.policyDecisionRefs.join(',')
+      !== evidence.policyDecisions.map(({ policyDecisionRef }) => policyDecisionRef).join(',')
+    || evidence.coldContinuation.midRun.objectiveState.fallbackProgress.attemptedProviderRefs.join(',')
+      !== evidence.objectiveDecisionRecords.slice(0, 2).map(({ providerRef }) => providerRef).join(',')
+    || new Set(evidence.coldContinuation.freshProcessRefs).size !== 2
+    || evidence.coldContinuation.resumeReconstructedInvocationRefs.join(',')
+      !== evidence.invocations.slice(0, 2).map(({ invocationRef }) => invocationRef).join(',')
+    || evidence.coldContinuation.replayReconstructedInvocationRefs.join(',')
+      !== evidence.invocations.map(({ invocationRef }) => invocationRef).join(',')
+    || evidence.coldContinuation.continuationKind !== 'source_owned_objective_resume'
+    || 'replayedBooking' in evidence.coldContinuation
+    || 'replayedCancellation' in evidence.coldContinuation
     || evidence.coldContinuation.midRun.mandateSnapshot.uses.length !== 2
     || evidence.coldContinuation.midRun.mandateSnapshot.policyDecisions?.length !== 2
     || evidence.coldContinuation.midRun.providerSnapshot.effects !== 1
@@ -229,7 +274,11 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     || evidence.comparison.retainedExactAuthorityUses !== 3
     || evidence.capacityAfterCancellation.worstCaseLossMinor !== 0
     || evidence.mandateSnapshot.exposureOffsets?.[0]?.evidenceRuleRef
-      !== 'provider_confirmed_cancellation:v1'
+      !== developmentCancellationConfirmationRule.evidenceRuleRef
+    || evidence.mandateSnapshot.exposureOffsets?.[0]?.evidenceRuleSource
+      !== developmentCancellationConfirmationRule.source
+    || evidence.mandateSnapshot.exposureOffsets?.[0]?.evidenceRuleVersion
+      !== developmentCancellationConfirmationRule.version
     || evidence.mandateSnapshot.exposureOffsets?.[0]?.offsetAction.id
       !== cancelDevelopmentReservationAction.id
     || evidence.safetyEvals.revokeRace !== 'mandate_revoked'
