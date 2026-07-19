@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `f1808da0`
+**Current accepted revision:** `27e885f6`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -338,16 +338,59 @@ Not established:
 
 ### P1-H — supplied-candidate qualification
 
-**Status:** ready to dispatch from `f1808da0`
+**Accepted commits:** `4c27d371`, `27e885f6`
+**Child commits:** `d993c6cc1f838a5b03da3893b4071a3871d97adf`,
+`45f4d9506406d1496cfe612329d8f1806afe66d4`
+**Child task:** `019f7988-85cc-7ec0-a559-5189f4ada69a`
+**Assigned base:** `8db1ba9e`
+**Evidence class:** source plus labelled local/development supply qualification
 
 Target transition:
 
 `registered supplied candidate -> current admission/evidence qualification -> inspectable eligible or blocked invocation dependency`
 
-Trace one real current capability through contract, offering, binding,
-eligibility/publication, credentials, readiness, and freshness source owners.
-Expose only an inspectable neutral qualification/reference usable by Action
-Invocation; do not copy business lifecycle state or imply independent supply.
+Implemented:
+
+- exact publication revision, current business publication predicate, active
+  contract registration, offering eligibility, binding admission/conformance,
+  credential access, readiness evidence, and freshness are evaluated through
+  existing source owners;
+- the result is neutral `eligible` or deterministic `blocked` qualification
+  with exact source references, evidence references, canonical digests, and
+  validity horizon;
+- listing-only, missing/inactive contract, missing offering/binding,
+  non-current publication, candidate mismatch, unpublished business,
+  ineligible offering, unadmitted/nonconformant binding, unavailable
+  credentials, missing/unhealthy/stale readiness, and source-integrity
+  failures fail closed;
+- the business source exposes the exact predicate it proves: published claim,
+  published public state, and unsuppressed current publication. It does not
+  invent a separate business-admission claim;
+- returned active-contract identity and registration time are digest-bound;
+- Request-owned and standalone callers receive identical qualification
+  meaning, and the operation has no runner or effect path;
+- master qualification, graph integration, lifecycle, and thinness checks
+  passed 45/45 with scoped lint and diff checks.
+
+Not established:
+
+- independently operated or useful real supply;
+- quote preparation, disclosure authority, provider attempt, or quote result;
+- deployment, hosted readback, provider fulfilment, or customer value.
+
+### P1-I — supplied-candidate quote collection
+
+**Status:** ready to dispatch from `27e885f6`
+
+Target transition:
+
+`eligible candidate -> exact quote preparation/disclosure authority -> attributable provider attempt -> returned quote or reconcile-before-retry`
+
+Reuse the proven qualification reference and Action Invocation authority,
+attempt, uncertainty, fencing, and recovery semantics. Domain-specific quote
+meaning stays in the registered contract/adapter. A labelled development
+provider may return a structured quote result, refusal, or uncertain release;
+it must not imply a real provider response or fulfilment.
 
 ## Evidence position
 
@@ -359,7 +402,7 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 
 | # | Gate | Position | Current evidence / next failed transition |
 |---|---|---|---|
-| 1 | Supplied-candidate qualification reuses contracts and supply evidence | Missing | No supplied-candidate tracer through current capability, eligibility, provenance, and freshness seams. |
+| 1 | Supplied-candidate qualification reuses contracts and supply evidence | Proven | Labelled development qualification reuses exact publication, business currentness, active contract, offering, binding, eligibility, credential, readiness, and freshness sources with deterministic blockers and no effect. |
 | 2 | Supplied-candidate quote collection reuses preparation, disclosure authority, provider attempts, and reconciliation | Missing | P1-C proves generic exact authority only; no provider quote attempt or reconciliation trace. |
 | 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Missing | No imported-commitment observation tracer. |
 | 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Proven | Both origins share the registered runner, authority, effect identity, uncertainty, reconciliation, fencing, transactional durable control, and fresh-process reconstruction in labelled development execution. |
@@ -391,7 +434,7 @@ implementation gate substitute.
 
 ## Next decision
 
-Dispatch supplied-candidate qualification. The next decision is whether the
-current supply graph can produce an honest inspectable Action Invocation
-dependency without promoting admitted fixtures or registry listings into
-independently operated supply.
+Dispatch supplied-candidate quote collection. The next decision is whether the
+qualified reference can drive exact disclosure authority and an attributable,
+recoverable provider attempt through the shared Action Invocation control
+without promoting a development adapter response into real provider evidence.
