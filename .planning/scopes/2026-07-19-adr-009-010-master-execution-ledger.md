@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `b3372462`  
+**Current accepted revision:** `ccd21ad2`  
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -104,13 +104,13 @@ reversible proposed-ADR choices, reconstructability and concurrency invariants,
 no-god-file discipline, and safe parent/child isolation. The live surface is now
 discovered from source rather than frozen into this instruction file.
 
-## Active slice
-
 ### P1-C — exact in-memory authority for `inquiry.submit`
 
+**Accepted commit:** `ccd21ad2`  
+**Child commit:** `041be4dabd6e48d986fe32977bec6351fc9b0577`  
 **Child task:** `019f7931-9f74-7e20-87cb-d3ae1e8d3502`  
 **Assigned base:** `72351a80`  
-**Status:** active
+**Evidence class:** labelled mock/development, consequential action, in-memory
 
 Target transition:
 
@@ -118,24 +118,53 @@ Target transition:
 
 Scope:
 
-- classify `inquiry.submit` without inventing external-effect meaning;
-- freeze exact material inputs and issue an opaque authority reference;
-- refuse stale, expired, cross-principal, cross-invocation, and
-  material-change reuse;
-- run no source write before accepted authority;
-- use a controlled labelled mock source adapter and distinguish queued delivery
-  from fulfilment;
-- no persistence, attempts, leases, generations, or real external send.
+- classified `inquiry.submit` as principal-authorized communication with an
+  attributable-retry contract;
+- froze exact material inputs and issued an opaque, expiring authority
+  reference bound to actor, origin, invocation, action/version, and digest;
+- refused stale CAS versions, expired authority, cross-principal,
+  cross-origin, unaccepted authority, and material-change reuse;
+- ran no registered action runner before accepted authority;
+- exercised the same registered `inquiry.submit` runner from Request-owned and
+  standalone origins through a controlled development adapter;
+- distinguished runner return/throw from queued communication, refusal, and
+  not-found business outcomes;
+- split contracts, preparation, and in-memory control rather than creating a
+  combined lifecycle god file;
+- passed focused Action Invocation checks 4/4, scoped lint, and diff checks in
+  the accepted parent checkout.
+
+Not established:
+
+- an attributable attempt or idempotency identity;
+- pre-release versus post-release uncertainty;
+- reconcile-before-retry;
+- leases, generations, cancellation, recovery, durability, or restart;
+- network send, provider delivery, fulfilment, hosted, or production behavior.
+
+## Active slice
+
+### P1-D — attributable attempt and uncertainty
+
+**Status:** ready to dispatch from `ccd21ad2`
+
+Target transition:
+
+`authorized communication -> attributable attempt -> pre-release retry or post-release reconcile-before-retry`
+
+This slice must preserve both origin types, keep the state port in memory, and
+show the distinction using a labelled development adapter. It must not infer a
+successful external effect from runner return or queued communication.
 
 ## Evidence position
 
 | ADR gate group | Current position |
 |---|---|
-| ADR-009 request-owned versus standalone seam | Partial positive development evidence from a read-only action |
+| ADR-009 request-owned versus standalone seam | Positive development evidence through the same read and consequential registered actions |
 | ADR-009 historical Request lineage | Preserved by the new discriminated seam; replay regression not yet exercised |
 | ADR-009 supplied candidates, quotes, imported commitments | Untouched |
 | ADR-009 composition, route roll-up, direct control | Untouched |
-| ADR-009 no cross-task authority | Design invariant only; P1-C is the first executable contribution |
+| ADR-009 no cross-task authority | Positive in-memory evidence for actor, origin, invocation, action/version, digest, expiry, and CAS binding |
 | ADR-010 one action through two hosts | Untouched |
 | ADR-010 reconstruction and structured parity | Untouched |
 | ADR-010 failure/recovery parity | Untouched |
@@ -143,8 +172,7 @@ Scope:
 
 ## Next decision
 
-Review P1-C against the exact-authority and no-god-file invariants. If accepted,
-dispatch the attempt/uncertainty slice:
+Dispatch the attempt/uncertainty slice:
 
 `authorized communication -> attributable attempt -> pre-release retry or post-release reconcile-before-retry`
 
