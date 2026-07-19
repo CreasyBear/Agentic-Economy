@@ -73,7 +73,7 @@ export type ActionInvocationView<Result extends ActionResult = ActionResult> = R
     | Readonly<{ state: 'pending' }>
     | Readonly<{
         state: 'returned'
-        execution: 'runner_returned'
+        execution: 'runner_returned' | 'pre_release_refused'
         businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed'
         result: Result
       }>

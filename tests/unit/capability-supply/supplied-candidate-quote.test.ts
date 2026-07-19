@@ -514,11 +514,13 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         }],
         observedResolution: {
           state: 'returned',
+          execution: 'pre_release_refused',
           businessOutcome: 'refused',
           result: { kind: 'refused', code: 'qualification_changed_before_release' },
         },
       },
     })
+    expect(JSON.stringify(refused)).not.toContain('"execution":"runner_returned"')
   })
 
   it.each([

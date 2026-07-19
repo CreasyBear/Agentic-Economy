@@ -94,7 +94,7 @@ export function createInMemoryActionInvocationTracer<
         }),
         observedResolution: {
           state: 'returned',
-          execution: 'runner_returned',
+          execution: 'pre_release_refused',
           businessOutcome: classifyBusinessOutcome(preReleaseResult),
           result: preReleaseResult,
         },
