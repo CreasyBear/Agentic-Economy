@@ -91,7 +91,7 @@ const principalRef = providerOperationActor(requestOrigin).principalRef
 const callerRef = providerOperationActor(requestOrigin).callerRef
 const standaloneOrigin = { kind: 'standalone', principalRef, callerRef } as const
 
-function createIssuedStore(maximumConcurrentEffects = 2) {
+function createIssuedStore(maximumConcurrentReservations = 2) {
   const mandate = issueStandingMandate({
     mandateRef: 'mock:packet:standing-mandate',
     version: 1,
@@ -110,7 +110,7 @@ function createIssuedStore(maximumConcurrentEffects = 2) {
       allowedDataFields: ['customer.name', 'customer.email'],
       maximumSpend: { amountMinor: 0, currency: 'AUD' },
       maximumActionCount: 8,
-      maximumConcurrentEffects,
+      maximumConcurrentReservations,
       startsAt: now,
       expiresAt: '2026-07-19T05:00:00.000Z',
       permittedFallbacks: ['none'],

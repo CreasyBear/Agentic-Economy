@@ -144,7 +144,7 @@ async function runFullYoloDevelopmentObjectiveInternal(
       maximumSpend: { amountMinor: 10_000, currency: 'AUD' },
       maximumLoss: { amountMinor: 5_000, currency: 'AUD' },
       maximumActionCount: 4,
-      maximumConcurrentEffects: 2,
+      maximumConcurrentReservations: 2,
       startsAt: developmentProviderOperationNow(),
       expiresAt: '2026-07-19T05:00:00.000Z',
       permittedFallbacks: ['provider_a_primary', 'provider_b_after_terms_refusal', 'none'],

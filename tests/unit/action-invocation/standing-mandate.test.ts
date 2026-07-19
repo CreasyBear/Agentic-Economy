@@ -5,6 +5,7 @@ import {
   createDevelopmentStandingMandateGrantVerifier,
   StandingMandateStore,
   type AuthorityUseMaterial,
+  type StandingMandateSnapshot,
 } from '@/modules/action-invocation'
 import { executeDevelopmentProviderOperationAction } from '@/modules/provider-operation-fixture/development-provider-operation.actions'
 import {
@@ -19,6 +20,86 @@ import { createDevelopmentProviderOperationMandateService } from '@/modules/prov
 const now = developmentProviderOperationNow()
 const principalRef = 'request-owner:mock:request:mandated'
 const callerRef = 'request:mock:request:mandated'
+const legacyV1HeldCapacitySnapshot = Object.freeze({
+  format: 'ae.action-invocation-standing-mandate-store:v1',
+  mandates: [{
+    mandateRef: 'legacy:v1:mandate',
+    version: 1,
+    generation: 1,
+    grantorRef: 'legacy:grantor',
+    principalRef: 'legacy:principal',
+    delegateRef: 'legacy:delegate',
+    callerRef: 'legacy:caller',
+    issuedAt: '2026-07-19T04:00:00.000Z',
+    scope: {
+      objective: 'Execute one bounded provider operation.',
+      action: { id: 'provider_operation.executeDevelopmentCancellable', version: 'v1' },
+      providerRefs: ['legacy:provider'],
+      recipientRefs: ['legacy:provider'],
+      purposes: ['create_development_effect'],
+      allowedDataFields: ['customer.name'],
+      maximumSpend: { amountMinor: 0, currency: 'AUD' },
+      maximumActionCount: 2,
+      maximumConcurrentReservations: 1,
+      startsAt: '2026-07-19T04:00:00.000Z',
+      expiresAt: '2026-07-19T05:00:00.000Z',
+      permittedFallbacks: ['none'],
+      riskCeiling: 'legacy_zero_charge',
+    },
+    format: 'ae.action-invocation-standing-mandate:v1',
+    mode: 'bounded_mandate',
+    revoked: false,
+    digest: 'sha256:30cd923c3c6833eba7581f0d51b543456c5afbd0cce6f10627e8f29e2d5e6a51',
+  }],
+  grants: [{
+    format: 'ae.verified-standing-mandate-grant:v1',
+    evidenceRef: 'legacy:evidence',
+    verifierRef: 'legacy:verifier',
+    source: 'legacy:authenticated-principal:v1',
+    environment: 'MOCK/DEVELOPMENT ONLY',
+    mandateRef: 'legacy:v1:mandate',
+    mandateVersion: 1,
+    mandateGeneration: 1,
+    grantorRef: 'legacy:grantor',
+    principalRef: 'legacy:principal',
+    delegateRef: 'legacy:delegate',
+    callerRef: 'legacy:caller',
+    scopeDigest: 'sha256:e46c43b597d19662e46cb5957d77a2c563d72a5323111a61987bd3dab702ed5b',
+    mandateDigest: 'sha256:30cd923c3c6833eba7581f0d51b543456c5afbd0cce6f10627e8f29e2d5e6a51',
+    issuedAt: '2026-07-19T04:00:00.000Z',
+    verifiedAt: '2026-07-19T04:00:00.000Z',
+    freshUntil: '2026-07-19T04:30:00.000Z',
+    authenticated: true,
+    cryptographicResult: 'valid',
+    digest: 'sha256:3c5a606d0c19e7a64471eedbbae34e63a44ac4f30283bc51db0b39650841562d',
+  }],
+  uses: [{
+    authorityUseRef: 'legacy:use:held',
+    mandateRef: 'legacy:v1:mandate',
+    mandateVersion: 1,
+    mandateGeneration: 1,
+    callerRef: 'legacy:caller',
+    principalRef: 'legacy:principal',
+    delegateRef: 'legacy:delegate',
+    invocationRef: 'legacy:invocation:held',
+    action: { id: 'provider_operation.executeDevelopmentCancellable', version: 'v1' },
+    preparedMaterialDigest: 'sha256:legacy-prepared',
+    providerRef: 'legacy:provider',
+    recipientRef: 'legacy:provider',
+    purpose: 'create_development_effect',
+    dataFields: ['customer.name'],
+    reservedSpend: { amountMinor: 0, currency: 'AUD' },
+    fallbackRef: null,
+    risk: 'legacy_zero_charge',
+    effectGeneration: 1,
+    state: 'reserved',
+    reservedAt: '2026-07-19T04:00:00.000Z',
+    digest: 'sha256:eb62c5751b41a127a1c891c46f45b3a0a564adf619f61f4076e6a8537a1e8166',
+  }],
+  exposureOffsets: [],
+  policyDecisions: [],
+} as const satisfies StandingMandateSnapshot)
+
 const mandate = issueStandingMandate({
   mandateRef: 'mock:standing-mandate:operation',
   version: 1,
@@ -37,7 +118,7 @@ const mandate = issueStandingMandate({
     allowedDataFields: ['customer.name', 'customer.email'],
     maximumSpend: { amountMinor: 0, currency: 'AUD' },
     maximumActionCount: 3,
-    maximumConcurrentEffects: 1,
+    maximumConcurrentReservations: 1,
     startsAt: now,
     expiresAt: '2026-07-19T05:00:00.000Z',
     permittedFallbacks: ['none'],
@@ -93,6 +174,33 @@ function providerOperationService(store: StandingMandateStore) {
 }
 
 describe('Action Invocation bounded standing mandate', () => {
+  it('loads a frozen valid v1 snapshot and enforces its held concurrency reservation', () => {
+    const cold = new StandingMandateStore(structuredClone(legacyV1HeldCapacitySnapshot))
+    expect(cold.reserve({
+      authorityUseRef: 'legacy:use:second',
+      mandateRef: 'legacy:v1:mandate',
+      mandateVersion: 1,
+      mandateGeneration: 1,
+      callerRef: 'legacy:caller',
+      principalRef: 'legacy:principal',
+      delegateRef: 'legacy:delegate',
+      invocationRef: 'legacy:invocation:second',
+      action: { id: 'provider_operation.executeDevelopmentCancellable', version: 'v1' },
+      preparedMaterialDigest: 'sha256:legacy-prepared-second',
+      providerRef: 'legacy:provider',
+      recipientRef: 'legacy:provider',
+      purpose: 'create_development_effect',
+      dataFields: ['customer.name'],
+      reservedSpend: { amountMinor: 0, currency: 'AUD' },
+      fallbackRef: null,
+      risk: 'legacy_zero_charge',
+      effectGeneration: 1,
+    }, '2026-07-19T04:01:00.000Z')).toEqual({
+      kind: 'refused',
+      code: 'mandate_concurrency_exhausted',
+    })
+  })
+
   it('executes Request-owned and standalone operation through one mandate and exact authority uses', async () => {
     const store = issuedStore()
     const service = providerOperationService(store)
