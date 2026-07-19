@@ -250,3 +250,25 @@ Additional production-pattern evidence:
 Implementation specification:
 
 - [Action Invocation engineering specification](../specs/ACTION-INVOCATION-ENGINEERING-SPEC.md).
+
+## Amendment — 2026-07-20: business-published operations
+
+Founder direction supersedes the booking-specific wording in Gate 7 and the
+2026-07-19 amendment. Booking is not an AE bounded context or privileged
+operation type. It is one possible business-published endpoint shape.
+
+Gate 7 is now read as **direct-operation proportionality**: one
+provider-supported consequential operation uses its exact published contract
+and Action Invocation without a synthetic Request or RoutePlan. A second
+provider-defined cancellable operation may be used as labelled development
+evidence for cancellation and exposure release when the selected x402
+operation does not support cancellation.
+
+The accepted development reference uses the paid business-published
+`GET /x402/v3/cryptocurrency/quotes/latest` operation for the shared invocation
+plane. Historical booking packets remain provenance only. The former
+development booking actions are no longer globally registered, and their
+control evidence has moved to an unregistered provider-operation fixture.
+
+This amendment changes the selected evidence adapter, not the neutral
+Action Invocation architecture or the public claim ceiling.

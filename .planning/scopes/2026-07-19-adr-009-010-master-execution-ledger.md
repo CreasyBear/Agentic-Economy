@@ -2,19 +2,24 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `82090112`
+**Current integrated implementation revision:** `90f6ce7c`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
-## Founder governance rebaseline — 2026-07-19
+## Founder governance rebaseline — 2026-07-20
 
-Accepted ADR-019 supersedes the ledger's recommendation that booking
-contradicts `PRODUCT.md`. The prior inquiry/read controls remain valid scoped
-development evidence. Phase 1 now includes a labelled provider-supported
-booking action and closes ADR-009 Gate 7 for the declared development class.
+Founder direction supersedes booking as AE architecture and as the mandatory
+Phase 1/2 evidence adapter. The primitive is a generic business-published
+operation. Booking is one possible provider-defined endpoint shape.
 
-Authority-mode exact-use/revocation evals remain open. Phase 2 selects the
-booking action for human/embedded/external host parity.
+The accepted reference operation is
+`GET /x402/v3/cryptocurrency/quotes/latest` at USD $0.01. Request-owned and
+standalone callers, plus embedded-human and external-agent development hosts,
+use the same dynamic PublishedOperation and source-owned Action Invocation
+plane. The former booking actions are absent from the global action registry.
+Cancellation, exposure release, standing-mandate and `full_yolo` evidence that
+the x402 operation cannot express remains in an unregistered, labelled
+provider-operation fixture.
 
 ## Operating contract
 
@@ -47,6 +52,9 @@ Hard stops:
 These pre-existing modifications are outside the master program unless the
 owner explicitly hands them over:
 
+- `AGENTS.md`
+- `DESIGN.md`
+- `PRODUCT.md`
 - `convex/_generated/api.d.ts`
 - `tests/unit/customer-request/direct-agent-baseline.test.ts`
 
@@ -74,7 +82,7 @@ parallel plan.
 | 10. Earned persistence | Implemented and re-audited in labelled development execution; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d`, `d7ee9fe1` |
 | 11. Request reuse | Implemented and re-audited in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0`, `249a247f` |
 | 12. Composition and direct control | Implemented with authoritative record resolution and measured direct control | `0dc146e8`, `a1442309`, `212ea0dd` |
-| 13. Booking and authority modes | Open — fresh development slot and provider adapter/simulator required | None |
+| 13. Consequential operation and authority modes | Implemented with a generic published x402 operation plus an unregistered cancellable provider-operation fixture | `bc79ae80` through `90f6ce7c` |
 | 14. Transfer | Implemented with executed measurement and development evidence surface | `edc82390`, `9dd406be`, `bd23435e`, `7bb9836a`, `b933999e` |
 
 Phase 2 may not start until slices 1–14, all eleven ADR-009 gates, and the
@@ -856,14 +864,14 @@ Observed again after the ledger update at exact revision
 The artifact remains outside Git. It contains labelled fixture data and no
 production credential or real customer/provider record.
 
-### Direct development booking and Gate 7
+### Historical development booking evidence and current Gate 7
 
 **Accepted commits:** `87fb7b35`, `d30493b0`, `1ee5ff6c`, `e0d3f2c0`
 **Evidence class:** source, deterministic local execution, checksummed
 MOCK/DEVELOPMENT ONLY packet; no reachable surface, live provider, network,
 backend, or deployment
 
-The accepted booking vertical provides:
+The historical booking vertical provided:
 
 - booking-owned provider availability with exact slot, binding, contract,
   terms, provenance, and release-time freshness;
@@ -896,10 +904,28 @@ npm run evidence:booking:development -- verify /tmp/ae-booking-master-e0d3f2c0.j
 Focused booking and packet checks passed 16/16. Packet checksum:
 `sha256:5226c54f24d7ff41110be71fa93a5d070f0c6427da6e610cf637faa7d704d051`.
 
-This closes Gate 7 only for labelled local development. It does not establish
+This evidence originally closed Gate 7 for labelled local development. It does not establish
 customer reachability, hosted behavior, independently operated supply,
 real-provider fulfilment, production safety, cold-agent usability, or customer
 value.
+
+Founder direction on 2026-07-20 superseded booking as the selected architecture.
+By `90f6ce7c`, both booking actions were removed from the global registry and
+the booking module was retired. Equivalent exact authority, attempt,
+idempotency, uncertainty, reconciliation, truthful cancellation, reconstruction
+and restart evidence now runs through the unregistered
+`provider-operation-fixture`. The current generic execution reference is the
+dynamic PublishedOperation x402 quote endpoint.
+
+Current master execution:
+
+```text
+npm run evidence:operation:development -- run /tmp/ae-operation-master-90f6ce7c.json
+npm run evidence:operation:development -- verify /tmp/ae-operation-master-90f6ce7c.json
+```
+
+Packet checksum:
+`sha256:8e36c0efda121e60ff5d629155c257ad1e3c668c8bfa5e2008ba0fd995002afc`.
 
 ### Bounded standing-mandate authority
 
@@ -914,7 +940,7 @@ The accepted bounded-mandate vertical provides:
   grantor/principal/delegate/caller/scope/generation evidence;
 - a distinct Action Invocation `standing_mandate_use` authority basis, with one
   grant decision and zero repeated per-invocation principal decisions;
-- booking-owned derivation of actual actor, action/version, provider,
+- provider-operation-owned derivation of actual actor, action/version, provider,
   recipient, purpose, disclosed fields, spend/currency, prepared digest, and
   effect generation rather than caller-authored authority-use claims;
 - atomic synchronous in-process reservation of count, concurrency, and spend
@@ -953,7 +979,7 @@ Integrated master revision
 `045f3544c7eb1cf8d8553a84eb6937b267b1b572` proves the ADR-019
 `full_yolo` widening over the same standing-mandate and Action Invocation
 plane. The labelled development objective performs provider-A refusal,
-provider-B fallback and booking, then resumes cancellation and terminal replay
+provider-B fallback and one provider effect, then resumes cancellation and terminal replay
 from durable artifacts in three distinct operating-system processes.
 
 The provider signs only provider-owned reservation and cancellation facts.
@@ -961,7 +987,8 @@ Neutral mandate control verifies those facts and joins them to its own exact
 mandate, principal, released authority uses, actions, evidence, amount, and
 currency. Both the original exposure use and cancellation use must be released
 before exposure is offset. A wrong development custody key is refused, and
-terminal replay leaves provider effects at one booking and one cancellation.
+terminal replay leaves provider effects at one original effect and one
+cancellation.
 
 Master execution:
 
@@ -982,6 +1009,89 @@ custody or rotation, externally rooted artifact integrity, durable multi-worker
 CAS, hosted reachability, independently operated providers, fulfilment,
 production safety, or customer value.
 
+### Generic PublishedOperation host parity and Gate 10
+
+**Accepted revisions:** `43c7151a` through `78ff2334`
+**Evidence class:** labelled local development with mock PublishedOperation
+transport, x402 payment, provider, authority, projection and recovery records
+
+The integrated Phase 2 vertical provides:
+
+- one dynamic business-published
+  `GET /x402/v3/cryptocurrency/quotes/latest` operation at USD $0.01;
+- Request-owned embedded-human and standalone external-agent hosts over one
+  source-owned Action Invocation application service;
+- distinct attributable caller/origin lineage with no fake shared identity;
+- durable missing-information work, preparation, exact authority, correction,
+  attempt, uncertainty, reconciliation, cancellation and continuation;
+- an enforced host import boundary that keeps business, transport, payment,
+  credential, retry, release and evidence rules source-owned;
+- rich and structured projections reconstructed independently from the same
+  authoritative JSON-round-tripped records;
+- material correction with actual authority replacement plus stale
+  version/receipt/authority/attempt fencing;
+- true timeout and failure/recovery parity;
+- v2 cold hydration compatibility and explicit unsupported-v1 refusal.
+
+Focused master verification:
+
+```text
+npm exec vitest run tests/unit/action-invocation \
+  tests/imports/action-invocation-host-boundaries.test.ts
+```
+
+Result: 11 files and 181 tests passed.
+
+Gate 10 uses a direct controller frozen at `1873de02` before measurement. It
+executes the same 402 challenge, x402 signature, provider release, material
+correction and provider-ledger reconciliation without Action Invocation.
+Producer and separate verifier:
+
+```text
+npm run evidence:adr-010:gate-10:run -- \
+  /tmp/ae-gate10-master-90f6ce7c.json
+npm run evidence:adr-010:gate-10:verify -- \
+  /tmp/ae-gate10-master-90f6ce7c.json
+```
+
+Verified packet:
+`sha256:c457e54b9b224b6b8d68d959ea919698c18d98ba1e141e8d8585b26e40e86da3`.
+The disposition is `NARROW_OR_REDESIGN`: direct and embedded human-effort
+tuples are identical. The packet does not establish real-human accessibility
+or complete production burden parity.
+
+### Booking-architecture retirement
+
+**Accepted revisions:** `efbc2c29`, `35287afc`, `c9c2ff1e`, `90f6ce7c`
+**Evidence class:** source plus labelled local development fixtures
+
+The former `src/modules/booking` bounded context and globally registered
+development booking actions are retired. Cancellation, exposure release,
+standing-mandate and `full_yolo` evidence now lives in an unregistered
+`src/modules/provider-operation-fixture` with `surfaces: []`. Calendar/slot
+material is one provider-defined endpoint example, not neutral AE meaning.
+
+The persisted standing-mandate v1 key
+`maximumConcurrentReservations` remains unchanged for historical snapshot
+compatibility. Neutral source interprets it as concurrent effect capacity. A
+frozen legacy snapshot proves that a held use survives cold load and a second
+reservation is refused with `mandate_concurrency_exhausted`.
+
+Current master packets:
+
+- provider operation:
+  `sha256:8e36c0efda121e60ff5d629155c257ad1e3c668c8bfa5e2008ba0fd995002afc`;
+- bounded mandate:
+  `sha256:5c29f1d7b36692b24ab2d6c778073738728c9df872c63a926d92715b04844c67`;
+- `full_yolo`:
+  `sha256:a3c6bb3ea8673807583c7d43d2ee4baaa996d9fb3a2710a726f608896059c068`.
+
+The `full_yolo` checksum identifies this exact run artifact. It is intentionally
+not a deterministic golden digest because the process-cold proof records the
+distinct operating-system process identities used by that run.
+
+Combined focused master verification passed 16 files and 214 tests.
+
 ## Evidence position
 
 `Proven` below means executable development evidence for the gate as written.
@@ -998,7 +1108,7 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 | 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Proven | Both origins share the registered runner, authority, effect identity, uncertainty, reconciliation, fencing, transactional durable control, and fresh-process reconstruction in labelled development execution. |
 | 5 | Historical Customer Request traces replay without semantic regression | Proven | A frozen pre-reference V2 aggregate/head/command from exact revision `d15f3b4b` replays through current local persistence/readback with identical digest, proposal-only authority, projection, command outcome, and absent optional fields. |
 | 6 | Composition contains inspectable references and declared dependencies only | Proven | The projector accepts graph structure and exact identities only, resolves authoritative registered-action/completed-result/invocation records, and refuses mismatched, missing, stale, cyclic, or uninspectable references. |
-| 7 | Direct-booking proportionality | Proven | One registered provider-supported development booking action uses Action Invocation without synthetic Request/Route orchestration. Both origins prove exact per-action authority, provider-owned cross-invocation idempotency, uncertain-effect reconciliation, truthful cancellation, semantic reconstruction, and measured proportionality. |
+| 7 | Direct-operation proportionality | Proven | The generic paid x402 PublishedOperation uses Action Invocation without synthetic Request/Route orchestration. Both origins prove exact per-action authority, provider-owned idempotency, uncertain-effect reconciliation and semantic reconstruction. An unregistered cancellable provider-operation fixture preserves truthful cancellation and exposure-release evidence without making booking an AE bounded context. |
 | 8 | Person or cold agent can stop and continue from a durable result | Proven | Fresh development processes reconstruct durable control and a verified completed result can advance a canonical Request revision without repeating the effect. |
 | 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Proven | Four ordinary-language states and continuations derive from registered descriptors and authoritative invocation/result records; caller prose injection, stale state, and unknown identities are refused. |
 | 10 | Authority never crosses tasks | Proven | Cross-origin/principal/material reuse is refused, completed-result attachment carries no authority, and authority accepted for quote A cannot authorize independently prepared quote B. |
@@ -1008,28 +1118,34 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 
 | # | Gate | Position | Current evidence / next failed transition |
 |---|---|---|---|
-| 1 | One registered action is semantically equivalent through embedded and external-agent surfaces | Missing | Both caller origins currently cross the interface directly, not two real host adapters. |
-| 2 | Both hosts use the same source-owned transition without duplicated rules | Missing | Registered-runner reuse is proven; host import/boundary enforcement is not. |
-| 3 | Task-shaped view reconstructs from records without transcript replay | Proven | Fresh development processes reconstruct control, attempts, uncertainty, cancellation, and completed-result continuity from durable/source records without transcript replay. |
-| 4 | Non-visual form carries the same options, consequences, evidence, and continuations | Missing | No invocation-scoped structured/rich projection pair. |
-| 5 | Corrections update authoritative work and invalidate stale projections | Partial | Material input change invalidates authority in memory; authoritative correction and projection invalidation are absent. |
-| 6 | Missing information is gathered without unnecessary interrogation | Missing | No clarification loop through the action plane. |
-| 7 | Authority binds the exact action and fails after material change | Proven | P1-C binds action/version, actor, origin, invocation, digest, target, consequence, limits, expiry, and CAS version; changed material input is refused before runner execution. |
-| 8 | Interruption, refusal, timeout, uncertain effect, and recovery retain parity | Partial | Local pre-release failure, possible release, replay refusal, reconciliation, cancellation, stale-worker fencing, and late-completion refusal are proven; timeout, durable recovery, and cross-host parity remain open. |
-| 9 | Cold agent continues without hidden first-party context | Partial | Cold development reconstruction and Request continuation are proven; an actual external-agent host has not yet exercised them. |
-| 10 | Human effort improves without worsening correctness, control, privacy, accessibility, or operator burden | Missing | Requires the frozen direct comparison and real host surfaces; local control tests alone are insufficient. |
+| 1 | One registered action is semantically equivalent through embedded and external-agent surfaces | Proven | Request-owned embedded-human and standalone external-agent development hosts invoke the same dynamic PublishedOperation, return the same source-owned result identity and retain distinct attributable caller/origin lineage. |
+| 2 | Both hosts use the same source-owned transition without duplicated rules | Proven | Both hosts use the public Action Invocation application seam. An import boundary rejects host ownership of capability-supply, transport, payment, credential, authority, attempt, retry, reconciliation, cancellation, release and evidence rules. |
+| 3 | Task-shaped view reconstructs from records without transcript replay | Proven | JSON-round-tripped authoritative snapshots reconstruct control, attempts, source resolution, origin/owner lineage and completed-result continuity without transcript or component state. |
+| 4 | Non-visual form carries the same options, consequences, evidence, and continuations | Proven | Independent rich and structured projections derive from the same exact invocation/version and agree on operation, suitability, information, price, data release, consequence, authority, attempt, disposition, evidence and continuations. |
+| 5 | Corrections update authoritative work and invalidate stale projections | Proven | Material correction is recorded on the same lineage, replaces exact authority, advances invocation version and fences stale projection, authority, receipt and attempt reuse; terminal or possibly released work refuses correction. |
+| 6 | Missing information is gathered without unnecessary interrogation | Proven | Partial input produces durable `gathering_information` with exact missing fields and no authority, attempt or provider release; one answer resumes the same lineage into preparation. |
+| 7 | Authority binds the exact action and fails after material change | Proven | Exact action/version, actor, origin, invocation, material/target digest, consequence, data/price limits, expiry and CAS version are bound; material change invalidates and requires a fresh decision. |
+| 8 | Interruption, refusal, timeout, uncertain effect, and recovery retain parity | Proven | Both hosts exercise success, pre-release refusal, true timeout, possible release, reconcile-before-retry, attributable recovery, cancellation and stale-worker fencing through the same source transitions. |
+| 9 | Cold agent continues without hidden first-party context | Proven | Structured projection and continuation rebuild from durable/source records after JSON round-trip; v2 snapshots hydrate compatibly and unsupported v1 is explicitly rejected. |
+| 10 | Human effort improves without worsening correctness, control, privacy, accessibility, or operator burden | Narrow / redesign | Frozen direct x402 execution and the Request-owned host were equal at `3 questions / 4 decisions / 0 repeats / 11 turns / 0 recovery decisions`. No strict human-effort gain was earned. Packet `sha256:c457e54b9b224b6b8d68d959ea919698c18d98ba1e141e8d8585b26e40e86da3`. Protected-dimension parity remains development instrumentation, not real-human proof. |
 
 Customer/provider/operating value remains external evidence and is not an ADR
 implementation gate substitute.
 
 ## Next decision
 
-Founder disposition was recorded on 2026-07-19 in accepted ADR-019. Direct
-booking proportionality passes for labelled development evidence and all
-eleven ADR-009 gates are proven at that evidence class. `bounded_mandate` and
-the explicit `full_yolo` widening now have executable development evidence,
-including bounded-loss accounting and real process-cold objective recovery
-without ambient authority. The next source transition is Phase 2 host parity on
-the same registered booking action and Action Invocation plane. It must add an
-explicit delegated-actor grant for truthful human/external-agent handoff rather
-than weakening caller/origin binding or reusing one fake caller identity.
+All eleven ADR-009 gates and ADR-010 Gates 1–9 have executable labelled
+development evidence. `bounded_mandate` and explicit `full_yolo` use the same
+exact-use plane with bounded-loss accounting, revocation, generation fencing
+and process-cold recovery without ambient authority.
+
+ADR-010 Gate 10 is the terminal product finding for this comparison:
+`NARROW_OR_REDESIGN`. Action Invocation earns control, reconstruction and
+cross-host semantic integrity, but this fixture does not demonstrate reduced
+human effort. No further source work should attempt to manufacture that gain.
+A future product iteration may change the human interaction itself and rerun a
+new predeclared real-human comparison.
+
+Current evidence remains local/development only. Hosted reachability,
+independent supply, provider fulfilment, production safety, real accessibility
+and customer value are outside this program and unproved.

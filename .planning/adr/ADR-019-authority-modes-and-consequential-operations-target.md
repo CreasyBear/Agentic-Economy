@@ -127,3 +127,23 @@ and recovery.
    and honest unknown-effect recovery.
 
 No stage changes the public claim ceiling without intended-surface evidence.
+
+## Amendment — 2026-07-20: operation-generic target
+
+Founder direction supersedes “beginning with booking” and the booking-specific
+staged sequence as implementation authority. AE's primitive is a
+business-published operation with an exact contract, endpoint or adapter,
+price and payment terms where applicable, authority requirement, attempt,
+receipt and recovery semantics. Booking is one possible provider-defined API
+surface; it is not an AE bounded context, aggregate or privileged lifecycle.
+
+The four authority modes and every exact-use, reservation, settlement,
+revocation, generation-fencing, uncertainty and step-up rule remain unchanged.
+The current development reference uses the paid x402 quote endpoint. A separate
+unregistered provider-operation fixture preserves cancellation and exposure
+release evidence for an operation that supports those continuations.
+
+Historical booking evidence remains attributable provenance. The development
+booking module and its globally registered actions are retired. No amendment
+claim makes booking, payment, dispatch, fulfilment or high-autonomy operation
+customer-reachable.

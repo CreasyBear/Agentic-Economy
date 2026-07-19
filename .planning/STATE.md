@@ -46,6 +46,18 @@ Action Invocation, plus exact authority-mode/revocation evals. Phase 2 selects
 that booking action for host parity. No source, runtime, deployment, provider,
 or customer capability is claimed by this documentation change.
 
+Action Invocation implementation rebaseline (2026-07-20): Founder direction
+supersedes booking as AE architecture. The implemented primitive is a generic
+business-published operation; booking is only one possible provider endpoint
+shape. The former development booking actions are removed from the global
+registry and their cancellation/mandate evidence is quarantined in an
+unregistered provider-operation fixture. ADR-009's eleven gates and ADR-010
+Gates 1–9 have labelled local-development evidence. ADR-010 Gate 10 is
+`NARROW_OR_REDESIGN`: the embedded and direct paths showed equal human effort,
+so reduced effort, real-human value, hosted operation, independent supply,
+provider fulfilment and production safety remain unproved. The canonical
+execution evidence is the ADR-009/010 master ledger.
+
 Hosted proof frontier (2026-07-14): the cold external-agent Request journey (#165) is closed at `6c982d0f976bfd37b53394ef6a2770f4ee0b8a27`. GitHub run `29304508882` passed the clean source contract, deployed that exact Git revision to Vercel and Convex, registered exactly two labelled sandbox businesses through production registration, authenticated-read-back deployment `dpl_8ygRkWVAHMehKyVTGrEZNbAsbtqs`, and completed the cold agent journey through typed clarification and both customer-authority stops to `options_ready`. This is sandbox contract and hosted-journey proof only, not real supply, booking, purchase, autonomous execution, or customer value.
 
 RoutePlan supersession frontier (2026-07-14): [Supersede RoutePlan generations on material Request or graph change](https://github.com/CreasyBear/Agentic-Economy/issues/169) is closed at exact deployed revision `9553845e215aa4aa47a08ae72016ed32a28def1d`. GitHub run `29321940577` passed clean source, exact Vercel and Convex deployment, authenticated deployment readback `dpl_3Pmk9Nv4ZRVR2x479cuWMUfYZjZc`, and the sandbox-labelled cold external-agent journey. Immutable generations now converge on identical material, supersede with exact-head CAS on material Request or graph change, preserve terminal Request decisions across resume, and block stale V2 preparation. This remains sandbox contract and hosted-path proof only, not real supply, execution, customer value, booking, payment, or autonomous fulfillment.

@@ -391,3 +391,24 @@ the Founder records **stop**.
 
 An open backlog, an implementation-ready plan, an unexplained cancellation, or
 a green simulator cannot end any branch.
+
+## Execution rebaseline — 2026-07-20
+
+Founder direction supersedes booking as the mandatory Phase 1/2 evidence
+adapter. The active primitive is a generic business-published operation.
+Booking-specific references in the dependency graph and slice descriptions are
+historical plan provenance, not current implementation authority.
+
+The integrated development reference uses
+`GET /x402/v3/cryptocurrency/quotes/latest` at USD $0.01 for both caller origins
+and both hosts. The former development booking module is retired from the
+production action registry. An unregistered provider-operation fixture retains
+the cancellation, exposure-release, standing-mandate and `full_yolo` cases that
+the selected x402 operation cannot express.
+
+ADR-009's eleven implementation gates have development evidence. ADR-010 Gates
+1–9 have development evidence for the selected operation. Gate 10 is
+`NARROW_OR_REDESIGN`: the embedded and direct paths have equal measured human
+effort, so no experience-payoff claim is accepted. This is a terminal gate
+disposition for the current development comparison, not a production, provider
+or customer-value decision.

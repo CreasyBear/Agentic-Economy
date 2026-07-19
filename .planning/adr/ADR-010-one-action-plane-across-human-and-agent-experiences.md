@@ -209,6 +209,28 @@ first-contact communication and is not the Phase 2 booking substitute. This
 amendment changes the target and eval selection; it does not claim an existing
 booking adapter, authority-mode UI, or customer-reachable operation.
 
+## Amendment — 2026-07-20: generic parity target and Gate 10 result
+
+Founder direction supersedes registered booking as the mandatory first parity
+target. Phase 2 uses the same generic business-published
+`GET /x402/v3/cryptocurrency/quotes/latest` operation through Request-owned and
+standalone external-agent hosts. Booking remains one possible provider endpoint
+shape and does not become an AE module or host rule.
+
+Labelled local development evidence satisfies Gates 1–9 for the selected
+operation and source revision. Gate 10 does not pass: the frozen direct
+controller and embedded Request-owned host each required three questions, four
+authority decisions, zero repeated facts, eleven interaction turns and zero
+human recovery decisions across success, material correction and post-release
+uncertainty. The disposition is `NARROW_OR_REDESIGN`.
+
+That result supports the shared action plane for semantic integrity and
+continuity, but it does not establish reduced human effort. It also does not
+prove real-human accessibility, hosted operation, independent supply,
+provider fulfilment, production safety or customer value. ADR-010 therefore
+remains proposed and its experience-payoff claim is narrowed rather than
+manufactured.
+
 ## Consequences
 
 Every new human interaction must begin from a registered action or authoritative
