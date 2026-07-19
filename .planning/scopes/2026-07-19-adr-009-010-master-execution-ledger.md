@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `e0d3f2c0`
+**Current accepted revision:** `82090112`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -901,6 +901,52 @@ customer reachability, hosted behavior, independently operated supply,
 real-provider fulfilment, production safety, cold-agent usability, or customer
 value.
 
+### Bounded standing-mandate authority
+
+**Accepted commits:** `3ac308a6`, `dd39a14f`, `e3f49371`, `82090112`
+**Evidence class:** source and deterministic local in-process
+MOCK/DEVELOPMENT ONLY behavior; no durable multi-worker backend, reachable
+surface, provider, or deployment
+
+The accepted bounded-mandate vertical provides:
+
+- authenticated development grant admission over exact
+  grantor/principal/delegate/caller/scope/generation evidence;
+- a distinct Action Invocation `standing_mandate_use` authority basis, with one
+  grant decision and zero repeated per-invocation principal decisions;
+- booking-owned derivation of actual actor, action/version, provider,
+  recipient, purpose, disclosed fields, spend/currency, prepared digest, and
+  effect generation rather than caller-authored authority-use claims;
+- atomic synchronous in-process reservation of count, concurrency, and spend
+  before release, plus exact release-token and revocation-generation recheck;
+- settlement of released, not-released, and uncertain effects, including
+  reconciliation-driven released/not-released resolution;
+- compensation for authorization, acquisition, reconstruction, and proven
+  pre-release failures, while possible/post-release faults remain uncertain and
+  hold capacity;
+- cold reconstruction of an in-flight authority use from durable mandate,
+  grant, use, and Action Invocation records without process-memory tokens;
+- semantic packet verification and valid-checksum tamper rejection across
+  grants, scope/generation, actor/material/effect linkage, capacity, revocation,
+  settlement, recovery identity, event ordering, and exception classification.
+
+Master execution at exact revision
+`82090112eea04611c3f0e58ef894bf4fef9bb651`:
+
+```text
+npm run evidence:bounded-mandate:development -- run /tmp/ae-bounded-master-82090112.json
+npm run evidence:bounded-mandate:development -- verify /tmp/ae-bounded-master-82090112.json
+```
+
+Focused mandate, Action Invocation, booking, durable, and packet checks passed
+91/91. Packet checksum:
+`sha256:07d8921520bf3a1c0e9b6f7fb7ddfe6931dd1df0c5e6a21d745dbcb465e8694b`.
+
+This proves local synchronous single-process semantics only. Durable
+multi-worker CAS, hosted reachability, independently operated supply,
+real-provider fulfilment, production safety, and customer value remain
+unproven.
+
 ## Evidence position
 
 `Proven` below means executable development evidence for the gate as written.
@@ -945,8 +991,9 @@ implementation gate substitute.
 
 Founder disposition was recorded on 2026-07-19 in accepted ADR-019. Direct
 booking proportionality now passes for labelled development evidence and all
-eleven ADR-009 gates are proven at that evidence class. The next source
-transition is standing-mandate authority use and revocation, beginning with
-`bounded_mandate` and widening to `full_yolo` only through explicit limits and
-generation-fenced revocation. Phase 2 host parity follows on the same registered
-booking action and Action Invocation plane.
+eleven ADR-009 gates are proven at that evidence class. `bounded_mandate` now
+has executable local development evidence. The next source transition is
+`full_yolo` as an explicit widening of the same standing-mandate contract:
+broader registered action/fallback/risk scope, bounded-loss accounting, and
+multi-action parity without ambient authority. Phase 2 host parity follows on
+the same registered booking action and Action Invocation plane.
