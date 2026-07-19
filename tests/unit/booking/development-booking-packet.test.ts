@@ -5,6 +5,7 @@ import { homedir, tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 
 import { runDevelopmentBookingEvidence } from '@/modules/booking/development-booking-evidence'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   readAndVerifyBookingPacket,
   writeEvidencePacket,
@@ -57,7 +58,64 @@ describe('development booking evidence packet', () => {
     terminal.history[0]!.invocationRef = 'mock:invocation:wrong'
     await expectTamperRefused(packet, 'test:history-tamper', 'packet_booking_history_linkage_refused')
   })
+
+  it('refuses released terminal disposition rewritten to not released', async () => {
+    const packet = await reconciliationTamperPacket('test:resolution-tamper')
+    const evidence = reconciliationEvidence(packet)
+    evidence.resolution = 'not_released'
+    evidence.digest = digestEvidence(evidence)
+    await expectTamperRefused(
+      packet,
+      'test:resolution-tamper',
+      'packet_booking_reconciliation_disposition_refused',
+    )
+  })
+
+  it('refuses reconciliation evidence with a mismatched canonical digest', async () => {
+    const packet = await reconciliationTamperPacket('test:digest-tamper')
+    reconciliationEvidence(packet).digest = 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+    await expectTamperRefused(
+      packet,
+      'test:digest-tamper',
+      'packet_booking_reconciliation_evidence_refused:evidence_digest_mismatch',
+    )
+  })
+
+  it('refuses reconciliation observation outside the persisted attempt window', async () => {
+    const packet = await reconciliationTamperPacket('test:time-tamper')
+    const evidence = reconciliationEvidence(packet)
+    evidence.observedAt = '2026-07-19T05:00:00.000Z'
+    evidence.digest = digestEvidence(evidence)
+    await expectTamperRefused(
+      packet,
+      'test:time-tamper',
+      'packet_booking_reconciliation_evidence_refused:evidence_time_invalid',
+    )
+  })
 })
+
+type MutableEvidence = {
+  resolution: 'released' | 'not_released'
+  observedAt: string
+  digest: string
+  [key: string]: unknown
+}
+
+async function reconciliationTamperPacket(revision: string) {
+  const scenario = await runDevelopmentBookingEvidence()
+  return structuredClone({ gitRevision: revision, ...scenario }) as Record<string, unknown>
+}
+
+function reconciliationEvidence(packet: Record<string, unknown>): MutableEvidence {
+  return (packet.durable as {
+    uncertain: { source: { reconciliationEvidence: MutableEvidence } }
+  }).uncertain.source.reconciliationEvidence
+}
+
+function digestEvidence(evidence: MutableEvidence) {
+  const { digest: _digest, ...material } = evidence
+  return canonicalDigest(material as never)
+}
 
 async function expectTamperRefused(
   packet: Record<string, unknown>,

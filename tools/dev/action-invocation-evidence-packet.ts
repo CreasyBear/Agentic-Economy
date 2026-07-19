@@ -34,6 +34,10 @@ import {
   type DevelopmentBookingResult,
 } from '../../src/modules/booking/development-booking.actions'
 import { materialDigest } from '../../src/modules/action-invocation/preparation'
+import {
+  validateReconciliationEvidence,
+  type ReconciliationEvidence,
+} from '../../src/modules/action-invocation/reconciliation-evidence'
 
 export type EvidenceEnvelope = Readonly<{
   schema: 'ae.action-invocation-development-evidence:v1'
@@ -124,7 +128,6 @@ export async function readAndVerifyBookingPacket(path: string, expectedRevision:
   if (
     durable.uncertain.source.before.control.state !== 'reconciliation_required'
     || durable.uncertain.source.before.attempts[0]?.release.state !== 'possibly_released'
-    || durable.uncertain.source.after.control.state !== 'terminal'
     || uncertain.control.state !== 'terminal'
   ) throw new Error('packet_booking_reconciliation_refused')
   if (
@@ -150,14 +153,7 @@ function validateBookingLinkage(durable: PacketDurable, terminal: boolean) {
     prepared: PreparedInvocation
     result?: DevelopmentBookingResult
     resultIdentity?: { sourceResultRef: string; resultDigest: string }
-    reconciliationEvidence?: {
-      source: string
-      invocationRef: string
-      attemptRef: string
-      effectGeneration: number
-      evidenceRef: string
-      digest: string
-    }
+    reconciliationEvidence?: ReconciliationEvidence
   }
   const invocationRef = String(control.invocationRef)
   const controlProjection = control.control as {
@@ -225,6 +221,25 @@ function validateBookingLinkage(durable: PacketDurable, terminal: boolean) {
       || evidence.effectGeneration !== attempt.effectGeneration
       || !durable.history.some((row) => row.sourceEvidenceRef === evidence.evidenceRef)
     ) throw new Error('packet_booking_reconciliation_linkage_refused')
+    const evidenceError = validateReconciliationEvidence({
+      evidence,
+      source: createDevelopmentReservationAction.invocationContract!.reconciliationEvidenceSource,
+      invocationRef,
+      attemptRef: String(attempt.attemptRef),
+      effectGeneration: Number(attempt.effectGeneration),
+      notBefore: String(attempt.recordedAt),
+      now: String(control.updatedAt),
+      verifySourceEvidence: (candidate) =>
+        canonicalDigest(candidate) === canonicalDigest(evidence),
+    })
+    if (evidenceError !== undefined) {
+      throw new Error(`packet_booking_reconciliation_evidence_refused:${evidenceError}`)
+    }
+    if (
+      evidence.resolution !== 'released'
+      || (attempt.outcome as { state?: string }).state !== 'reconciled_released'
+      || (attempt.outcome as { externalOutcome?: string }).externalOutcome !== 'unknown'
+    ) throw new Error('packet_booking_reconciliation_disposition_refused')
   }
 }
 
