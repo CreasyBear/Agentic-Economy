@@ -6,8 +6,9 @@ export {
   createDevelopmentTimeoutSignal,
 } from './attempts'
 export {
-  createReconciliationEvidence,
   type ReconciliationEvidence,
+  type ReconciliationEvidenceMaterial,
+  type ReconciliationEvidenceVerifier,
 } from './reconciliation-evidence'
 export { roundTripControlSnapshot } from './snapshot'
 export {

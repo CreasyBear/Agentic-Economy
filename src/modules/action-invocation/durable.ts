@@ -115,14 +115,20 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       updatedAt: options.now(),
     }
     const latestViewAttempt = view.attempts.at(-1)
-    const durableCurrentAttemptRef = options.port.readControl(view.invocationRef)?.currentAttemptRef
-    const newestAttempt = latestViewAttempt !== undefined &&
-      latestViewAttempt.attemptRef !== durableCurrentAttemptRef
-      ? latestViewAttempt
-      : undefined
-    const newAttempt: DurableAttemptRow | undefined = newestAttempt === undefined
+    const projectedAttempt = latestViewAttempt === undefined
       ? undefined
-      : projectDurableAttempt(view.invocationRef, newestAttempt, options.now())
+      : projectDurableAttempt(view.invocationRef, latestViewAttempt, options.now())
+    const durableAttempt = projectedAttempt === undefined
+      ? undefined
+      : options.port.readAttempt(view.invocationRef, projectedAttempt.attemptRef)
+    const attemptUpdate: DurableAttemptRow | undefined =
+      projectedAttempt !== undefined &&
+      (
+        durableAttempt === undefined ||
+        canonicalDigest(projectedAttempt as never) !== canonicalDigest(durableAttempt as never)
+      )
+        ? projectedAttempt
+        : undefined
     const commandIdentity = {
       invocationRef: view.invocationRef,
       expectedInvocationVersion: beforeVersion,
@@ -143,7 +149,7 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       expectedInvocationVersion: beforeVersion,
       ...(expectedEffectGeneration === undefined ? {} : { expectedEffectGeneration }),
       row,
-      ...(newAttempt === undefined ? {} : { newAttempt }),
+      ...(attemptUpdate === undefined ? {} : { currentAttemptWrite: attemptUpdate }),
       history: {
         invocationRef: view.invocationRef,
         commandId,
@@ -157,6 +163,18 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
             kind: 'release_observation' as const,
             release: evidence.resolution,
             evidenceDigest: evidence.digest,
+          },
+        }),
+        ...(attemptUpdate === undefined || durableAttempt === undefined ? {} : {
+          attemptTransition: {
+            attemptRef: attemptUpdate.attemptRef,
+            effectGeneration: attemptUpdate.effectGeneration,
+            priorDigest: canonicalDigest(durableAttempt as never),
+            nextDigest: canonicalDigest(attemptUpdate as never),
+            priorReleaseState: durableAttempt.release.state,
+            nextReleaseState: attemptUpdate.release.state,
+            priorOutcomeState: durableAttempt.outcome.state,
+            nextOutcomeState: attemptUpdate.outcome.state,
           },
         }),
       },

@@ -65,19 +65,15 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
     }
   } catch (error) {
     if (error instanceof AttemptTimeout) {
-      const explicitlyNotReleased =
-        input.releaseSignal !== undefined && !input.releaseSignal.wasReleased()
+      const reconciliationRequiredAt = input.now()
       const timedOutAttempt = {
         ...attempt,
-        release: explicitlyNotReleased
-          ? { state: 'not_released' as const }
-          : { state: 'possibly_released' as const },
+        release: { state: 'possibly_released' as const },
         outcome: {
           state: 'timed_out' as const,
           timeoutMs: error.timeoutMs,
-          retry: explicitlyNotReleased
-            ? 'safe_before_release' as const
-            : 'reconcile_before_retry' as const,
+          retry: 'reconcile_before_retry' as const,
+          reconciliationRequiredAt,
         },
       }
       return {
@@ -88,9 +84,7 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
           observedAt: input.now(),
         },
         freshness: { state: 'current', observedAt: input.now() },
-        control: explicitlyNotReleased
-          ? { state: 'retryable', reason: 'pre_release_failure' }
-          : { state: 'reconciliation_required', attemptRef: attempt.attemptRef },
+        control: { state: 'reconciliation_required', attemptRef: attempt.attemptRef },
       }
     }
     const message = error instanceof Error ? error.message : 'Unknown runner failure'
@@ -104,7 +98,12 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
       : {
           ...attempt,
           release: { state: 'possibly_released' as const },
-          outcome: { state: 'uncertain' as const, retry: 'reconcile_before_retry' as const, message },
+          outcome: {
+            state: 'uncertain' as const,
+            retry: 'reconcile_before_retry' as const,
+            message,
+            reconciliationRequiredAt: input.now(),
+          },
         }
     return {
       attempts: replaceAttempt(attempts, failedAttempt),

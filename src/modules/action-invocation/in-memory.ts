@@ -59,9 +59,9 @@ export function createInMemoryActionInvocationTracer<
   if (
     (contract.consequenceClass === 'communication' || contract.consequenceClass === 'external_effect') &&
     (
-      contract.attemptTimeoutMs === undefined ||
-      !Number.isInteger(contract.attemptTimeoutMs) ||
-      contract.attemptTimeoutMs <= 0
+      contract.developmentAttemptTimeoutMs === undefined ||
+      !Number.isInteger(contract.developmentAttemptTimeoutMs) ||
+      contract.developmentAttemptTimeoutMs <= 0
     )
   ) {
     throw new Error(`Consequential action ${options.action.id} must declare a positive attempt timeout.`)
@@ -139,9 +139,9 @@ export function createInMemoryActionInvocationTracer<
       ...(options.developmentTimeoutSignal === undefined
         ? {}
         : { timeoutSignal: options.developmentTimeoutSignal }),
-      ...(contract.attemptTimeoutMs === undefined
+      ...(contract.developmentAttemptTimeoutMs === undefined
         ? {}
-        : { timeoutMs: contract.attemptTimeoutMs }),
+        : { timeoutMs: contract.developmentAttemptTimeoutMs }),
     })
     const completionRefusal = checkReleaseCompletionFence(record.view, releaseStart.view, input)
     if (completionRefusal !== undefined) {
@@ -371,6 +371,7 @@ export function createInMemoryActionInvocationTracer<
         input,
         options.now(),
         contract.reconciliationEvidenceSource,
+        options.verifyReconciliationEvidence,
       )
     },
     inspect(invocationRef) {

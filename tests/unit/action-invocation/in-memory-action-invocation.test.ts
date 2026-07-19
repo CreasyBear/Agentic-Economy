@@ -11,14 +11,16 @@ vi.mock('@/modules/registry/registry.functions', () => ({
 }))
 
 import { findAction } from '@/modules/actions'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   createDevelopmentReleaseSignal,
   createDevelopmentTimeoutSignal,
-  createReconciliationEvidence,
   createInMemoryActionInvocationTracer,
   roundTripControlSnapshot,
   type ActionInvocationOrigin,
   type InvocationActor,
+  type ReconciliationEvidence,
+  type ReconciliationEvidenceMaterial,
 } from '@/modules/action-invocation'
 
 const actor: InvocationActor = {
@@ -47,6 +49,30 @@ const inquiryInput = {
   contact: { email: 'joel@example.test' },
   expectedDigest: `sha256:${'a'.repeat(64)}`,
   operationKey: 'mock:operation:inquiry:0001',
+}
+
+function createDevelopmentEvidenceSource() {
+  const issued = new Set<string>()
+  return {
+    issue(material: ReconciliationEvidenceMaterial): ReconciliationEvidence {
+      const exact: ReconciliationEvidenceMaterial = {
+        kind: material.kind,
+        version: material.version,
+        evidenceRef: material.evidenceRef,
+        source: material.source,
+        invocationRef: material.invocationRef,
+        attemptRef: material.attemptRef,
+        effectGeneration: material.effectGeneration,
+        resolution: material.resolution,
+        observedAt: material.observedAt,
+      }
+      const evidence = { ...exact, digest: canonicalDigest(exact as never) }
+      issued.add(canonicalDigest(evidence as never))
+      return evidence
+    },
+    verify: (evidence: ReconciliationEvidence) =>
+      issued.has(canonicalDigest(evidence as never)),
+  }
 }
 
 describe('in-memory Action Invocation tracer', () => {
@@ -250,6 +276,7 @@ describe('in-memory Action Invocation tracer', () => {
     ['Request-owned', requestOrigin],
     ['standalone', standaloneOrigin],
   ])('records attributable pre-release retry and post-release uncertainty for %s origin', async (_label, origin) => {
+    const evidenceSource = createDevelopmentEvidenceSource()
     const action = findAction('inquiry.submit')!
     const release = createDevelopmentReleaseSignal()
     const developmentAdapter = vi.fn()
@@ -268,6 +295,7 @@ describe('in-memory Action Invocation tracer', () => {
         return () => `dev:attempt:${origin.kind}:${++sequence}`
       })(),
       developmentReleaseSignal: release,
+      verifyReconciliationEvidence: evidenceSource.verify,
     })
     const prepared = tracer.prepare({
       origin,
@@ -349,13 +377,39 @@ describe('in-memory Action Invocation tracer', () => {
       code: 'reconciliation_required',
     })
     expect(developmentAdapter).toHaveBeenCalledTimes(2)
+    const forgedMaterial: ReconciliationEvidenceMaterial = {
+      kind: 'action_invocation_reconciliation',
+      version: 1,
+      evidenceRef: `mock:forged:${origin.kind}:not-released`,
+      source: 'inquiry.submit:delivery-observer:v1',
+      invocationRef: prepared.invocationRef,
+      attemptRef: `dev:attempt:${origin.kind}:2`,
+      effectGeneration: uncertain.view.attempts[1]!.effectGeneration,
+      resolution: 'not_released',
+      observedAt: '2026-07-19T07:00:00.000Z',
+    }
+    expect(tracer.reconcile({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: uncertain.view.invocationVersion,
+      attemptRef: `dev:attempt:${origin.kind}:2`,
+      actor,
+      origin,
+      evidence: {
+        ...forgedMaterial,
+        digest: canonicalDigest(forgedMaterial as never),
+      },
+    })).toMatchObject({
+      kind: 'refused',
+      code: 'evidence_source_unverified',
+      view: { control: { state: 'reconciliation_required' } },
+    })
     const reconciled = tracer.reconcile({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       attemptRef: `dev:attempt:${origin.kind}:2`,
       actor,
       origin,
-      evidence: createReconciliationEvidence({
+      evidence: evidenceSource.issue({
         kind: 'action_invocation_reconciliation',
         version: 1,
         evidenceRef: `mock:evidence:${origin.kind}:released`,
@@ -396,6 +450,7 @@ describe('in-memory Action Invocation tracer', () => {
   })
 
   it('fails closed when no release observer can prove a runner throw happened before release', async () => {
+    const evidenceSource = createDevelopmentEvidenceSource()
     const action = findAction('inquiry.submit')!
     const developmentAdapter = vi.fn().mockRejectedValue(new Error('MOCK unobserved interruption'))
     const tracer = createInMemoryActionInvocationTracer({
@@ -404,6 +459,7 @@ describe('in-memory Action Invocation tracer', () => {
       nextInvocationRef: () => 'dev:action-invocation:missing-observer',
       nextAuthorityRef: () => 'opaque:authority:missing-observer',
       nextAttemptRef: () => 'dev:attempt:missing-observer:1',
+      verifyReconciliationEvidence: evidenceSource.verify,
     })
     const prepared = tracer.prepare({
       origin: standaloneOrigin,
@@ -446,7 +502,7 @@ describe('in-memory Action Invocation tracer', () => {
       attemptRef: 'dev:attempt:missing-observer:1',
       actor,
       origin: standaloneOrigin,
-      evidence: createReconciliationEvidence({
+      evidence: evidenceSource.issue({
         kind: 'action_invocation_reconciliation',
         version: 1,
         evidenceRef: 'mock:evidence:missing-observer:not-released',
@@ -477,7 +533,7 @@ describe('in-memory Action Invocation tracer', () => {
     ['Request-owned', requestOrigin],
     ['standalone', standaloneOrigin],
   ])('bounds timeout without cancelling or accepting a late result for %s origin', async (_label, origin) => {
-    for (const releasePosture of ['before_release', 'possibly_after_release'] as const) {
+    for (const releasePosture of ['runner_not_yet_released', 'possibly_after_release'] as const) {
       const release = createDevelopmentReleaseSignal()
       const timeout = createDevelopmentTimeoutSignal()
       let finishRunner!: (value: {
@@ -533,24 +589,23 @@ describe('in-memory Action Invocation tracer', () => {
           timeoutMs: 30_000,
           observedAt: '2026-07-19T08:30:00.000Z',
         },
-        control: releasePosture === 'before_release'
-          ? { state: 'retryable', reason: 'pre_release_failure' }
-          : { state: 'reconciliation_required', attemptRef: `dev:timeout-attempt:${origin.kind}:${releasePosture}` },
+        control: {
+          state: 'reconciliation_required',
+          attemptRef: `dev:timeout-attempt:${origin.kind}:${releasePosture}`,
+        },
         attempts: [{
           actor,
-          release: releasePosture === 'before_release'
-            ? { state: 'not_released' }
-            : { state: 'possibly_released' },
+          release: { state: 'possibly_released' },
           outcome: {
             state: 'timed_out',
             timeoutMs: 30_000,
-            retry: releasePosture === 'before_release'
-              ? 'safe_before_release'
-              : 'reconcile_before_retry',
+            retry: 'reconcile_before_retry',
+            reconciliationRequiredAt: '2026-07-19T08:30:00.000Z',
           },
         }],
       })
       const currentAtTimeout = tracer.inspect(prepared.invocationRef)
+      if (releasePosture === 'runner_not_yet_released') release.markReleased()
       finishRunner({
         kind: 'error',
         code: 'mock_late_timeout_return',
@@ -568,6 +623,7 @@ describe('in-memory Action Invocation tracer', () => {
         timeoutMs: 30_000,
         runnerCallCount: developmentAdapter.mock.calls.length,
         control: timedOut.view.control,
+        runnerReleasedAfterTimeout: releasePosture === 'runner_not_yet_released',
         lateResultCurrent: false,
       }))
     }

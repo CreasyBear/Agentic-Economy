@@ -85,6 +85,7 @@ export function reconcileInvocation<Input, Result extends ActionResult>(
   }>,
   observedAt: string,
   evidenceSource: string | undefined,
+  verifySourceEvidence: import('./reconciliation-evidence').ReconciliationEvidenceVerifier | undefined,
 ): InvocationDecision<Result> {
   const owned = checkOwned(record, input)
   if (owned.kind === 'refused') return owned
@@ -103,6 +104,13 @@ export function reconcileInvocation<Input, Result extends ActionResult>(
   if (attempt === undefined) {
     return { kind: 'refused', code: 'invalid_control_state', view: owned.record.view }
   }
+  const reconciliationRequiredAt =
+    attempt.outcome.state === 'uncertain' || attempt.outcome.state === 'timed_out'
+      ? attempt.outcome.reconciliationRequiredAt
+      : undefined
+  if (reconciliationRequiredAt === undefined) {
+    return { kind: 'refused', code: 'invalid_control_state', view: owned.record.view }
+  }
   const evidenceRefusal = validateReconciliationEvidence({
     evidence: input.evidence,
     source: evidenceSource,
@@ -110,6 +118,8 @@ export function reconcileInvocation<Input, Result extends ActionResult>(
     attemptRef: attempt.attemptRef,
     effectGeneration: attempt.effectGeneration,
     now: observedAt,
+    notBefore: reconciliationRequiredAt,
+    verifySourceEvidence,
   })
   if (evidenceRefusal !== undefined) {
     return { kind: 'refused', code: evidenceRefusal, view: owned.record.view }

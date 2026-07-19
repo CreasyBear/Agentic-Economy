@@ -127,8 +127,8 @@ export type ActionInvocationContract = Readonly<{
   expectedEvidence: readonly string[]
   safeContinuations: readonly string[]
   invalidationConditions: readonly string[]
-  /** Source-owned upper bound for one consequential attempt. */
-  attemptTimeoutMs?: number
+  /** Duration parameter for the deterministic development timeout transition. */
+  developmentAttemptTimeoutMs?: number
   /** Exact producer identity accepted for reconciliation evidence. */
   reconciliationEvidenceSource?: string
 }>

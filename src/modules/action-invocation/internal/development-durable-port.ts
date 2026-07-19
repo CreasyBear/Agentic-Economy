@@ -48,8 +48,8 @@ export function createDevelopmentDurablePort<Result extends ActionResult>(
 
     controls.set(command.row.invocationRef, command.row)
     const rows = attempts.get(command.row.invocationRef) ?? new Map()
-    for (const attempt of command.newAttempt === undefined ? [] : [command.newAttempt]) {
-      if (!rows.has(attempt.attemptRef)) rows.set(attempt.attemptRef, attempt)
+    for (const attempt of command.currentAttemptWrite === undefined ? [] : [command.currentAttemptWrite]) {
+      rows.set(attempt.attemptRef, attempt)
     }
     attempts.set(command.row.invocationRef, rows)
     const entries = history.get(command.row.invocationRef) ?? []
@@ -70,6 +70,7 @@ export function createDevelopmentDurablePort<Result extends ActionResult>(
     readControl: (ref) => controls.get(ref),
     readAttempts: (ref, limit) => [...(attempts.get(ref)?.values() ?? [])]
       .sort((a, b) => a.attemptNumber - b.attemptNumber).slice(0, Math.max(0, limit)),
+    readAttempt: (ref, attemptRef) => attempts.get(ref)?.get(attemptRef),
     readHistory: (ref, afterVersion, limit) => (history.get(ref) ?? [])
       .filter((row) => row.invocationVersion > afterVersion)
       .slice(0, Math.max(0, limit)),

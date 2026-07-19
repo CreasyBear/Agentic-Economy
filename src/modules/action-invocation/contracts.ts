@@ -39,6 +39,7 @@ export type DecisionRefusalCode =
   | 'evidence_attempt_mismatch'
   | 'evidence_generation_stale'
   | 'evidence_time_invalid'
+  | 'evidence_source_unverified'
 
 export type ActionAttemptView = Readonly<{
   attemptRef: string
@@ -59,11 +60,17 @@ export type ActionAttemptView = Readonly<{
     | Readonly<{ state: 'running' }>
     | Readonly<{ state: 'returned'; businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed' }>
     | Readonly<{ state: 'failed'; retry: 'safe_before_release'; message: string }>
-    | Readonly<{ state: 'uncertain'; retry: 'reconcile_before_retry'; message: string }>
+    | Readonly<{
+        state: 'uncertain'
+        retry: 'reconcile_before_retry'
+        message: string
+        reconciliationRequiredAt: string
+      }>
     | Readonly<{
         state: 'timed_out'
         timeoutMs: number
-        retry: 'safe_before_release' | 'reconcile_before_retry'
+        retry: 'reconcile_before_retry'
+        reconciliationRequiredAt: string
       }>
     | Readonly<{ state: 'reconciled_not_released'; retry: 'safe_after_reconciliation'; observedAt: string }>
     | Readonly<{ state: 'reconciled_released'; externalOutcome: 'unknown'; observedAt: string }>

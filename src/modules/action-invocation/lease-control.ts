@@ -88,7 +88,16 @@ export function publishLeaseObservation<Result extends { kind: string }>(input: 
     ? { ...attempt, release: { state: 'not_released' as const }, outcome: { state: 'failed' as const, retry: 'safe_before_release' as const, message: 'Worker observed no release.' } }
     : input.release === 'released'
       ? { ...attempt, release: { state: 'released' as const, observedAt: input.observedAt }, outcome: { state: 'reconciled_released' as const, externalOutcome: 'unknown' as const, observedAt: input.observedAt } }
-      : { ...attempt, release: { state: 'possibly_released' as const }, outcome: { state: 'uncertain' as const, retry: 'reconcile_before_retry' as const, message: 'Worker could not prove release outcome.' } }
+      : {
+          ...attempt,
+          release: { state: 'possibly_released' as const },
+          outcome: {
+            state: 'uncertain' as const,
+            retry: 'reconcile_before_retry' as const,
+            message: 'Worker could not prove release outcome.',
+            reconciliationRequiredAt: input.observedAt,
+          },
+        }
   return {
     ...input.view,
     invocationVersion: input.view.invocationVersion + 1,

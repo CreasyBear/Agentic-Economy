@@ -165,7 +165,7 @@ export const collectSuppliedCandidateQuoteAction = defineAction({
       'quote request or disclosure changes', 'principal, caller, origin, or invocation changes',
       'authority expires',
     ],
-    attemptTimeoutMs: 15_000,
+    developmentAttemptTimeoutMs: 15_000,
     reconciliationEvidenceSource: 'supply.collectDevelopmentQuote:provider-observer:v1',
   },
   projectInvocationPreparation: (input) => ({

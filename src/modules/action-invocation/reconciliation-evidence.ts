@@ -18,22 +18,9 @@ export type ReconciliationEvidence = ReconciliationEvidenceMaterial & Readonly<{
   digest: string
 }>
 
-export function createReconciliationEvidence(
-  material: ReconciliationEvidenceMaterial,
-): ReconciliationEvidence {
-  const exact: ReconciliationEvidenceMaterial = {
-    kind: material.kind,
-    version: material.version,
-    evidenceRef: material.evidenceRef,
-    source: material.source,
-    invocationRef: material.invocationRef,
-    attemptRef: material.attemptRef,
-    effectGeneration: material.effectGeneration,
-    resolution: material.resolution,
-    observedAt: material.observedAt,
-  }
-  return { ...exact, digest: canonicalDigest(exact) }
-}
+export type ReconciliationEvidenceVerifier = (
+  evidence: ReconciliationEvidence,
+) => boolean
 
 export function validateReconciliationEvidence(input: Readonly<{
   evidence: ReconciliationEvidence
@@ -42,8 +29,11 @@ export function validateReconciliationEvidence(input: Readonly<{
   attemptRef: string
   effectGeneration: number
   now: string
+  notBefore: string
+  verifySourceEvidence: ReconciliationEvidenceVerifier | undefined
 }>): 'evidence_malformed' | 'evidence_digest_mismatch' | 'evidence_source_mismatch' |
-  'evidence_attempt_mismatch' | 'evidence_generation_stale' | 'evidence_time_invalid' | undefined {
+  'evidence_attempt_mismatch' | 'evidence_generation_stale' | 'evidence_time_invalid' |
+  'evidence_source_unverified' | undefined {
   const { evidence } = input
   if (
     evidence.kind !== 'action_invocation_reconciliation' ||
@@ -67,6 +57,10 @@ export function validateReconciliationEvidence(input: Readonly<{
   if (evidence.effectGeneration !== input.effectGeneration) {
     return 'evidence_generation_stale'
   }
-  if (Date.parse(evidence.observedAt) > Date.parse(input.now)) return 'evidence_time_invalid'
+  if (
+    Date.parse(evidence.observedAt) > Date.parse(input.now) ||
+    Date.parse(evidence.observedAt) < Date.parse(input.notBefore)
+  ) return 'evidence_time_invalid'
+  if (input.verifySourceEvidence?.(evidence) !== true) return 'evidence_source_unverified'
   return undefined
 }

@@ -25,7 +25,6 @@ import {
 } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  createReconciliationEvidence,
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
   createDevelopmentReleaseSignal,
@@ -35,12 +34,38 @@ import {
   type ActionInvocationView,
   type InvocationActor,
   type PreparedInvocation,
+  type ReconciliationEvidence,
+  type ReconciliationEvidenceMaterial,
 } from '@/modules/action-invocation'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
 
 const nowMs = Date.parse('2026-07-19T08:00:00.000Z')
 const nowIso = () => new Date(nowMs).toISOString()
 const actor: InvocationActor = { callerRef: 'dev:caller', principalRef: 'dev:principal' }
+
+function createDevelopmentEvidenceSource() {
+  const issued = new Set<string>()
+  return {
+    issue(material: ReconciliationEvidenceMaterial): ReconciliationEvidence {
+      const exact: ReconciliationEvidenceMaterial = {
+        kind: material.kind,
+        version: material.version,
+        evidenceRef: material.evidenceRef,
+        source: material.source,
+        invocationRef: material.invocationRef,
+        attemptRef: material.attemptRef,
+        effectGeneration: material.effectGeneration,
+        resolution: material.resolution,
+        observedAt: material.observedAt,
+      }
+      const evidence = { ...exact, digest: canonicalDigest(exact as never) }
+      issued.add(canonicalDigest(evidence as never))
+      return evidence
+    },
+    verify: (evidence: ReconciliationEvidence) =>
+      issued.has(canonicalDigest(evidence as never)),
+  }
+}
 const contract = defineCapabilityContract(capabilityContractV2({
   capabilityId: 'sandbox.route.service.quote',
   lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
@@ -607,7 +632,14 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })).resolves.toMatchObject({ kind: 'refused', code: 'material_input_changed' })
   })
 
-  it.each(origins)('durably reconstructs and reconciles possible release for $kind without quote data in neutral rows', async (origin) => {
+  it.each(origins.flatMap((origin) => [
+    { origin, resolution: 'released' as const },
+    { origin, resolution: 'not_released' as const },
+  ]))('durably reconstructs $resolution reconciliation for $origin.kind without quote data in neutral rows', async ({
+    origin,
+    resolution,
+  }) => {
+    const evidenceSource = createDevelopmentEvidenceSource()
     const ports = qualificationPorts()
     const quoteInput = await quoteInputFor(ports)
     const durableState = createDevelopmentDurableState<SuppliedCandidateQuoteResult>()
@@ -630,6 +662,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       nextAuthorityRef: () => `dev:durable-authority:${origin.kind}`,
       nextAttemptRef: () => `dev:durable-attempt:${origin.kind}`,
       developmentReleaseSignal: releaseSignal,
+      verifyReconciliationEvidence: evidenceSource.verify,
       resolveSourceState: () => source,
     }, resumeRef)
     const firstProcess = create()
@@ -675,42 +708,62 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       persistence: 'durable_control',
       control: { state: 'reconciliation_required' },
     })
-    const reconciliationEvidence = createReconciliationEvidence({
+    const reconciliationEvidence = evidenceSource.issue({
       kind: 'action_invocation_reconciliation',
       version: 1,
-      evidenceRef: `mock:quote-evidence:${origin.kind}:released`,
+      evidenceRef: `mock:quote-evidence:${origin.kind}:${resolution}`,
       source: 'supply.collectDevelopmentQuote:provider-observer:v1',
       invocationRef: uncertain.view.invocationRef,
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
       effectGeneration: uncertain.view.attempts[0]!.effectGeneration,
-      resolution: 'released',
+      resolution,
       observedAt: nowIso(),
     })
     const unchangedBeforeMalformedEvidence = freshProcess.inspect(uncertain.view.invocationRef)
     const malformedEvidence = { ...reconciliationEvidence }
     Reflect.set(malformedEvidence, 'kind', 'malformed')
+    const forgedMaterial: ReconciliationEvidenceMaterial = {
+      kind: reconciliationEvidence.kind,
+      version: reconciliationEvidence.version,
+      evidenceRef: `mock:forged:${origin.kind}:${resolution}`,
+      source: reconciliationEvidence.source,
+      invocationRef: reconciliationEvidence.invocationRef,
+      attemptRef: reconciliationEvidence.attemptRef,
+      effectGeneration: reconciliationEvidence.effectGeneration,
+      resolution: reconciliationEvidence.resolution,
+      observedAt: reconciliationEvidence.observedAt,
+    }
+    const forgedEvidence = {
+      ...forgedMaterial,
+      digest: canonicalDigest(forgedMaterial as never),
+    }
     const refusedEvidence = [
       malformedEvidence,
       {
         ...reconciliationEvidence,
         digest: `sha256:${'0'.repeat(64)}`,
       },
-      createReconciliationEvidence({
+      evidenceSource.issue({
         ...reconciliationEvidence,
         source: 'mock:wrong-provider-observer:v1',
       }),
-      createReconciliationEvidence({
+      evidenceSource.issue({
         ...reconciliationEvidence,
         attemptRef: 'mock:cross-attempt',
       }),
-      createReconciliationEvidence({
+      evidenceSource.issue({
         ...reconciliationEvidence,
         effectGeneration: reconciliationEvidence.effectGeneration + 1,
       }),
-      createReconciliationEvidence({
+      evidenceSource.issue({
         ...reconciliationEvidence,
         observedAt: '2026-07-19T08:00:00.001Z',
       }),
+      evidenceSource.issue({
+        ...reconciliationEvidence,
+        observedAt: '2026-07-19T07:59:59.999Z',
+      }),
+      forgedEvidence,
     ].map((evidence) => freshProcess.reconcile({
       invocationRef: uncertain.view.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
@@ -727,6 +780,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         'evidence_attempt_mismatch',
         'evidence_generation_stale',
         'evidence_time_invalid',
+        'evidence_time_invalid',
+        'evidence_source_unverified',
       ])
     expect(freshProcess.inspect(uncertain.view.invocationRef)).toEqual(unchangedBeforeMalformedEvidence)
 
@@ -738,16 +793,27 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       origin,
       evidence: reconciliationEvidence,
     })
-    expect(reconciled).toMatchObject({
-      kind: 'accepted',
-      view: {
-        control: { state: 'terminal' },
-        attempts: [{
-          release: { state: 'released' },
-          outcome: { state: 'reconciled_released', externalOutcome: 'unknown' },
-        }],
-      },
-    })
+    expect(reconciled).toMatchObject(resolution === 'released'
+      ? {
+          kind: 'accepted',
+          view: {
+            control: { state: 'terminal' },
+            attempts: [{
+              release: { state: 'released' },
+              outcome: { state: 'reconciled_released', externalOutcome: 'unknown' },
+            }],
+          },
+        }
+      : {
+          kind: 'accepted',
+          view: {
+            control: { state: 'retryable' },
+            attempts: [{
+              release: { state: 'not_released' },
+              outcome: { state: 'reconciled_not_released', retry: 'safe_after_reconciliation' },
+            }],
+          },
+        })
     if (reconciled.kind !== 'accepted') throw new Error(reconciled.code)
     expect(freshProcess.reconcile({
       invocationRef: uncertain.view.invocationRef,
@@ -763,18 +829,27 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
       actor,
       origin,
-      evidence: createReconciliationEvidence({
+      evidence: evidenceSource.issue({
         ...reconciliationEvidence,
-        resolution: 'not_released',
+        resolution: resolution === 'released' ? 'not_released' : 'released',
       }),
     })).toMatchObject({ kind: 'refused', code: 'command_identity_conflict' })
-    const unsafeRetry = await freshProcess.execute({
-      invocationRef: reconciled.view.invocationRef,
-      expectedInvocationVersion: reconciled.view.invocationVersion,
-      authorityRef: reconciled.view.authority!.reference,
-      actor, origin, materialInput: quoteInput,
+    const coldAfterReconciliation = create(reconciled.view.invocationRef)
+    const coldView = coldAfterReconciliation.inspect(reconciled.view.invocationRef)
+    expect(coldView).toMatchObject({
+      control: resolution === 'released' ? { state: 'terminal' } : { state: 'retryable' },
+      attempts: [resolution === 'released'
+        ? {
+            release: { state: 'released' },
+            outcome: { state: 'reconciled_released' },
+          }
+        : {
+            release: { state: 'not_released' },
+            outcome: { state: 'reconciled_not_released' },
+          }],
     })
-    expect(unsafeRetry).toMatchObject({ kind: 'refused', code: 'authority_not_accepted' })
+    expect(coldView?.control).toEqual(reconciled.view.control)
+    expect(coldView?.attempts).toEqual(reconciled.view.attempts)
     expect(adapter).toHaveBeenCalledTimes(1)
 
     const port = createDevelopmentDurablePort(durableState)
@@ -789,8 +864,18 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         current: true,
         sourceEvidenceRef: reconciliationEvidence.evidenceRef,
         observation: expect.objectContaining({
-          release: 'released',
+          release: resolution,
           evidenceDigest: reconciliationEvidence.digest,
+        }),
+        attemptTransition: expect.objectContaining({
+          attemptRef: uncertain.view.attempts[0]!.attemptRef,
+          effectGeneration: uncertain.view.attempts[0]!.effectGeneration,
+          priorReleaseState: 'possibly_released',
+          nextReleaseState: resolution,
+          priorOutcomeState: 'uncertain',
+          nextOutcomeState: resolution === 'released'
+            ? 'reconciled_released'
+            : 'reconciled_not_released',
         }),
       }),
     )

@@ -31,8 +31,18 @@ export type DurableAttemptOutcome =
   | Readonly<{ state: 'running' }>
   | Readonly<{ state: 'returned'; businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed' }>
   | Readonly<{ state: 'failed'; retry: 'safe_before_release'; errorDigest?: string }>
-  | Readonly<{ state: 'uncertain'; retry: 'reconcile_before_retry'; errorDigest?: string }>
-  | Readonly<{ state: 'timed_out'; timeoutMs: number; retry: 'safe_before_release' | 'reconcile_before_retry' }>
+  | Readonly<{
+      state: 'uncertain'
+      retry: 'reconcile_before_retry'
+      errorDigest?: string
+      reconciliationRequiredAt: string
+    }>
+  | Readonly<{
+      state: 'timed_out'
+      timeoutMs: number
+      retry: 'reconcile_before_retry'
+      reconciliationRequiredAt: string
+    }>
   | Readonly<{ state: 'reconciled_not_released'; retry: 'safe_after_reconciliation'; observedAt: string }>
   | Readonly<{ state: 'reconciled_released'; externalOutcome: 'unknown'; observedAt: string }>
 
@@ -58,7 +68,12 @@ export function projectDurableAttempt(
     attempt.outcome.state === 'failed'
       ? { state: 'failed', retry: attempt.outcome.retry, errorDigest: canonicalDigest(attempt.outcome.message) }
       : attempt.outcome.state === 'uncertain'
-        ? { state: 'uncertain', retry: attempt.outcome.retry, errorDigest: canonicalDigest(attempt.outcome.message) }
+        ? {
+            state: 'uncertain',
+            retry: attempt.outcome.retry,
+            errorDigest: canonicalDigest(attempt.outcome.message),
+            reconciliationRequiredAt: attempt.outcome.reconciliationRequiredAt,
+          }
         : attempt.outcome
   return { invocationRef, ...attempt, outcome, recordedAt }
 }
@@ -68,7 +83,12 @@ export function restoreDurableAttempt(row: DurableAttemptRow): ActionAttemptView
     row.outcome.state === 'failed'
       ? { state: 'failed', retry: row.outcome.retry, message: 'Persisted failure evidence is available by digest.' }
       : row.outcome.state === 'uncertain'
-        ? { state: 'uncertain', retry: row.outcome.retry, message: 'Persisted uncertainty evidence is available by digest.' }
+        ? {
+            state: 'uncertain',
+            retry: row.outcome.retry,
+            message: 'Persisted uncertainty evidence is available by digest.',
+            reconciliationRequiredAt: row.outcome.reconciliationRequiredAt,
+          }
         : row.outcome
   return {
     attemptRef: row.attemptRef, attemptNumber: row.attemptNumber, actor: row.actor,
@@ -93,6 +113,16 @@ export type DurableHistoryRow = Readonly<{
     release: 'not_released' | 'released' | 'possibly_released'
     evidenceDigest: string
   }>
+  attemptTransition?: Readonly<{
+    attemptRef: string
+    effectGeneration: number
+    priorDigest: string
+    nextDigest: string
+    priorReleaseState: ActionAttemptView['release']['state']
+    nextReleaseState: ActionAttemptView['release']['state']
+    priorOutcomeState: ActionAttemptView['outcome']['state']
+    nextOutcomeState: ActionAttemptView['outcome']['state']
+  }>
   recordedAt: string
 }>
 
@@ -102,7 +132,7 @@ export type PersistControlCommand<Result extends ActionResult = ActionResult> = 
   expectedInvocationVersion: number | null
   expectedEffectGeneration?: number
   row: DurableControlRow<Result>
-  newAttempt?: DurableAttemptRow
+  currentAttemptWrite?: DurableAttemptRow
   history: Omit<DurableHistoryRow, 'invocationVersion' | 'recordedAt' | 'current'>
 }>
 
@@ -114,6 +144,7 @@ export interface DurableActionInvocationPort<Result extends ActionResult = Actio
   transact(command: PersistControlCommand<Result>): PersistControlResult
   readControl(invocationRef: string): DurableControlRow<Result> | undefined
   readAttempts(invocationRef: string, limit: number): readonly DurableAttemptRow[]
+  readAttempt(invocationRef: string, attemptRef: string): DurableAttemptRow | undefined
   readHistory(invocationRef: string, afterVersion: number, limit: number): readonly DurableHistoryRow[]
   readHistoryCommand(invocationRef: string, commandId: string): DurableHistoryRow | undefined
   recordLateObservation(input: Readonly<{

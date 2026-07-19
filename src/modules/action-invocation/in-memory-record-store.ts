@@ -9,6 +9,7 @@ import type {
   PreparedInvocation,
 } from './contracts'
 import type { DevelopmentReleaseSignal, DevelopmentTimeoutSignal } from './attempts'
+import type { ReconciliationEvidenceVerifier } from './reconciliation-evidence'
 import { readPath } from './preparation'
 
 export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly<{
@@ -19,6 +20,7 @@ export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly
   nextAttemptRef?: () => string
   developmentReleaseSignal?: DevelopmentReleaseSignal
   developmentTimeoutSignal?: DevelopmentTimeoutSignal
+  verifyReconciliationEvidence?: ReconciliationEvidenceVerifier
   contextForExecution?: (context: ActionContext) => ActionContext
   initialSnapshot?: InMemoryControlSnapshot<Input, Result>
   resolveSourceState?: (sourceRef: string) => Readonly<{
