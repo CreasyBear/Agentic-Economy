@@ -8,11 +8,34 @@ export type DevelopmentEffectCounts = {
   provider: number
 }
 
+export type DevelopmentTransportTraceEvent = Readonly<{
+  kind:
+    | 'transport_request'
+    | 'payment_signature_requested'
+    | 'payment_signature_created'
+    | 'provider_release'
+    | 'provider_response'
+    | 'provider_response_lost'
+    | 'provider_reconciliation'
+  detail: Readonly<Record<string, string | number | boolean>>
+}>
+
+export type DevelopmentTransportObserver = (event: DevelopmentTransportTraceEvent) => void
+
 export function developmentSuccessRuntime(
   endpoint: string,
   effects: DevelopmentEffectCounts,
+  observer: DevelopmentTransportObserver = () => undefined,
 ): RouteTransportRuntime {
   const send: RouteTransportFetch = async (url, init) => {
+    observer({
+      kind: 'transport_request',
+      detail: {
+        endpoint: String(url),
+        method: init?.method ?? 'GET',
+        paymentSignaturePresent: init?.headers?.['Payment-Signature'] !== undefined,
+      },
+    })
     if (init?.headers?.['Payment-Signature'] === undefined) {
       return response(402, '', {
         'payment-required': Buffer.from(JSON.stringify(
@@ -21,6 +44,8 @@ export function developmentSuccessRuntime(
       })
     }
     effects.provider += 1
+    observer({ kind: 'provider_release', detail: { endpoint: String(url), providerCalls: effects.provider } })
+    observer({ kind: 'provider_response', detail: { status: 200, evidence: 'quote_data' } })
     return response(200, JSON.stringify({ data: { BTC: { price: 1 } } }), {
       'payment-response': 'mock:payment-proof',
       'provider-receipt': 'mock:provider-receipt',
@@ -30,8 +55,18 @@ export function developmentSuccessRuntime(
     send,
     resolveCredential: () => 'mock:server-held-credential',
     x402PaymentSigningAvailable: () => true,
-    createX402PaymentSignature: async () => {
+    createX402PaymentSignature: async (request) => {
+      observer({
+        kind: 'payment_signature_requested',
+        detail: {
+          network: request.selectedRequirement.network,
+          asset: request.selectedRequirement.asset,
+          payTo: request.selectedRequirement.payTo,
+          amount: request.selectedRequirement.amount,
+        },
+      })
       effects.payment += 1
+      observer({ kind: 'payment_signature_created', detail: { paymentAttempts: effects.payment } })
       return 'mock:payment-signature'
     },
   }
@@ -51,18 +86,59 @@ export function developmentPreflightRefusalRuntime(
 export function developmentLostResponseRuntime(
   endpoint: string,
   effects: DevelopmentEffectCounts,
+  observer: DevelopmentTransportObserver = () => undefined,
 ): RouteTransportRuntime {
-  const base = developmentSuccessRuntime(endpoint, effects)
+  const base = developmentSuccessRuntime(endpoint, effects, observer)
   let sends = 0
   return {
     ...base,
     send: async (url, init) => {
       sends += 1
       if (sends === 2) {
+        observer({
+          kind: 'transport_request',
+          detail: { endpoint: String(url), method: init?.method ?? 'GET', paymentSignaturePresent: true },
+        })
         effects.provider += 1
+        observer({ kind: 'provider_release', detail: { endpoint: String(url), providerCalls: effects.provider } })
+        observer({ kind: 'provider_response_lost', detail: { attempt: sends } })
         throw new Error('lost_x402_response')
       }
       return await base.send(url, init)
+    },
+  }
+}
+
+export function developmentReconciliableLostResponseRuntime(
+  endpoint: string,
+  effects: DevelopmentEffectCounts,
+  expectedAttemptRef: string,
+  observer: DevelopmentTransportObserver = () => undefined,
+): Readonly<{
+  runtime: RouteTransportRuntime
+  reconcile: (attemptRef: string) => Readonly<{
+    resolution: 'released'
+    evidence: 'provider_ledger'
+    attemptRef: string
+  }> | undefined
+}> {
+  const releasedAttempts = new Set<string>()
+  const base = developmentLostResponseRuntime(endpoint, effects, (event) => {
+    observer(event)
+    if (event.kind === 'provider_release') {
+      releasedAttempts.add(expectedAttemptRef)
+    }
+  })
+  return {
+    runtime: base,
+    reconcile: (attemptRef) => {
+      observer({
+        kind: 'provider_reconciliation',
+        detail: { attemptRef, released: releasedAttempts.has(attemptRef), automated: true },
+      })
+      return releasedAttempts.has(attemptRef)
+        ? { resolution: 'released', evidence: 'provider_ledger', attemptRef }
+        : undefined
     },
   }
 }
