@@ -602,6 +602,7 @@ export async function registerSandboxWorkflowSupplyRegistrations(
       profile.cohortId === 'procurement'
       || profile.cohortId === 'itinerary'
       || profile.cohortId === 'journey-management'
+      || profile.cohortId === 'public-event-activation'
     ))
   const siteUrl = process.env.AE_SANDBOX_WORKFLOW_ORIGIN?.trim()
     || process.env.AE_SANDBOX_ROUTE_RESOLVER_ORIGIN?.trim()

@@ -7,10 +7,11 @@ import {
 } from '@/modules/sandbox-supply/workflow-cohorts'
 
 describe('sandbox workflow cohorts', () => {
-  it('defines five economically distinct workflows with typed composition', () => {
+  it('defines six economically distinct workflows with typed composition', () => {
     expect(SANDBOX_WORKFLOW_COHORTS.map(({ cohortId }) => cohortId)).toEqual([
       'procurement',
       'itinerary',
+      'public-event-activation',
       'journey-management',
       'recurring-operations',
       'exception-coordination',
@@ -22,7 +23,7 @@ describe('sandbox workflow cohorts', () => {
       expect(cohort.steps.filter(({ completionEvidence }) => completionEvidence)).toHaveLength(1)
       expect(cohort.steps.at(-1)?.completionEvidence).toBe(true)
       expect(cohort.steps.at(-1)?.recovery).toBe('reconcile_required')
-      expect(cohort.curveballs).toHaveLength(3)
+      expect(cohort.curveballs.length).toBeGreaterThanOrEqual(3)
 
       if (cohort.cohortId === 'itinerary') continue
       for (let index = 1; index < cohort.steps.length; index += 1) {
@@ -49,6 +50,7 @@ describe('sandbox workflow cohorts', () => {
 
     expect(claims).toContain('no order or payment')
     expect(claims).toContain('no reservation or ticketing')
+    expect(claims).toContain('no application, commitment, certification, or approval')
     expect(claims).toContain('no hidden operator coordination')
     expect(claims).toContain('no fabricated field completion')
     expect(claims).toContain('no claim that recovery actions occurred')

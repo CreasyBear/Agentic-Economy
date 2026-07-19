@@ -237,6 +237,8 @@ describe('labelled sandbox V2 capability supply', () => {
         'sandbox-route-resolver', 'sandbox-route-quoter',
         'sandbox-procurement-brief', 'sandbox-supplier-options',
         'sandbox-procurement-recommendation',
+        'sandbox-event-requirements', 'sandbox-event-site-evidence',
+        'sandbox-event-business-readiness',
         'sandbox-trip-constraints',
         'sandbox-accessible-transfer', 'sandbox-accessible-hotel',
         'sandbox-meeting-schedule', 'sandbox-dinner-plan',
@@ -263,7 +265,7 @@ describe('labelled sandbox V2 capability supply', () => {
       ],
     })
     const bindings = await backend.run((ctx) => ctx.db.query('capabilityTransportBindings').collect())
-    expect(bindings).toHaveLength(17)
+    expect(bindings).toHaveLength(20)
     expect(bindings.every(({ credentialRef }) => credentialRef === 'env:AE_SANDBOX_PROVIDER_KEY')).toBe(true)
     expect(bindings.filter(({ bindingId }) => bindingId.startsWith('binding:sandbox-route-')).map((binding) => ({
       bindingId: binding.bindingId, endpointUrl: binding.endpointUrl,
@@ -282,6 +284,9 @@ describe('labelled sandbox V2 capability supply', () => {
       'sandbox-accessible-hotel',
       'sandbox-accessible-transfer',
       'sandbox-dinner-plan',
+      'sandbox-event-business-readiness',
+      'sandbox-event-requirements',
+      'sandbox-event-site-evidence',
       'sandbox-itinerary-builder',
       'sandbox-itinerary-readiness',
       'sandbox-journey-case',
@@ -370,6 +375,21 @@ describe('labelled sandbox V2 capability supply', () => {
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
+        publicationRef: 'offering:sandbox-event-requirements:v3',
+        bindingId: 'binding:sandbox-event-requirements:http-json:v3',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-event-site-evidence:v2',
+        bindingId: 'binding:sandbox-event-site-evidence:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-event-business-readiness:v2',
+        bindingId: 'binding:sandbox-event-business-readiness:http-json:v2',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
         publicationRef: 'offering:sandbox-journey-case:v2',
         bindingId: 'binding:sandbox-journey-case:http-json:v2',
         credentialState: 'unobserved', healthState: 'unobserved',
@@ -406,6 +426,9 @@ describe('labelled sandbox V2 capability supply', () => {
       'binding:sandbox-accessible-hotel:http-json:v2',
       'binding:sandbox-accessible-transfer:http-json:v2',
       'binding:sandbox-dinner-plan:http-json:v2',
+      'binding:sandbox-event-business-readiness:http-json:v2',
+      'binding:sandbox-event-requirements:http-json:v3',
+      'binding:sandbox-event-site-evidence:http-json:v2',
       'binding:sandbox-itinerary-builder:http-json:v3',
       'binding:sandbox-itinerary-readiness:http-json:v2',
       'binding:sandbox-journey-case:http-json:v2',
@@ -433,7 +456,7 @@ describe('labelled sandbox V2 capability supply', () => {
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
 
     expect(result.businessIdsBySlug).toMatchObject(existing.businessIdsBySlug)
-    expect(Object.keys(result.businessIdsBySlug)).toHaveLength(17)
+    expect(Object.keys(result.businessIdsBySlug)).toHaveLength(20)
     expect(result.sandboxV2Bindings).toHaveLength(2)
   })
 
@@ -460,7 +483,7 @@ describe('labelled sandbox V2 capability supply', () => {
     ])
   })
 
-  it('publishes seventeen inert businesses through the normal production command planes', async () => {
+  it('publishes twenty inert businesses through the normal production command planes', async () => {
     const backend = convexTest(schema, modules)
     const first = await backend.mutation(internal.devSeed.seedDevCatalog, {})
     const ownerBeforeReplay = await backend.run((ctx) => (
@@ -552,9 +575,9 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(JSON.stringify({ offerings: state.offerings, bindings: state.bindings })).not.toContain('"operation"')
     expect(state.supplyOperations).toHaveLength(12)
     expect(state.supplyOperations.every((operation) => operation.actorKind === 'system' && operation.status === 'succeeded')).toBe(true)
-    expect(state.catalogOperations).toHaveLength(17)
+    expect(state.catalogOperations).toHaveLength(20)
     expect(state.catalogOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
-    expect(state.claimOperations).toHaveLength(17)
+    expect(state.claimOperations).toHaveLength(20)
     expect(state.claimOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
     expect(state.audits.filter((audit) => (
       audit.eventType.startsWith('capability_')
@@ -570,7 +593,7 @@ describe('labelled sandbox V2 capability supply', () => {
     )
     expect(state.audits.filter((audit) => (
       audit.eventType === 'claim.published' && audit.slug?.startsWith('sandbox-')
-    ))).toHaveLength(17)
+    ))).toHaveLength(20)
 
     const eligible = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
     expect(eligible).toMatchObject({

@@ -80,6 +80,34 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     curveballs: Object.freeze(['weather invalidates one day', 'mobility requirement changes', 'an activity has unknown availability']),
   }),
   Object.freeze({
+    cohortId: 'public-event-activation',
+    label: 'Synthetic public event activation',
+    customerRequest: 'Turn my outline for a small weekend market in Perth into a current, approval-ready requirements and participating-business evidence packet. Show what is known, what needs confirmation, who owns each next step, and stop before any permit application, booking, payment, dispatch, certification, or approval.',
+    completionBoundary: 'Three attributable synthetic evidence packets with explicit freshness, unknowns, refusals, and next owners; no application, commitment, certification, or approval.',
+    prohibitedClaim: 'Do not claim independently operated supply, approval, availability, booking, payment, dispatch, certification, fulfilment, or real customer value.',
+    steps: Object.freeze([
+      step('event-requirements', 'Ideal Event Requirements Adviser', 'Prepare sourced event requirements', 'request', 'requirementsPacket', undefined, 'ae.event-requirements-packet:v1', false, 400, 'retry_safe', {
+        contractVersion: 2,
+        decisionInputs: [
+          { field: 'eventStatus', label: 'Event access', prompt: 'Is the event public or private?', pattern: '^(?:public|private)$' },
+          { field: 'proposedSite', label: 'Proposed site', prompt: 'What exact site is proposed?', pattern: '^.{3,200}$' },
+          { field: 'operatingWindow', label: 'Operating window', prompt: 'What date and operating times are proposed?', pattern: '^.{8,200}$' },
+          { field: 'expectedAttendance', label: 'Expected attendance', prompt: 'How many visitors are expected?', pattern: '^[1-9]\\d{0,5}$' },
+          { field: 'declaredActivities', label: 'Declared activities', prompt: 'Which food, sound, structures, access and other activities are included or excluded?', pattern: '^.{3,1000}$' },
+          { field: 'evidenceCutoff', label: 'Evidence cutoff', prompt: 'What ISO date should sources be checked against?', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+        ],
+      }),
+      step('event-site-evidence', 'Ideal Site and Safety Evidence Planner', 'Prepare site and safety evidence', 'requirementsPacket', 'siteEvidencePacket', 'ae.event-requirements-packet:v1', 'ae.event-site-evidence-packet:v1', false, 650, 'retry_safe'),
+      step('event-business-readiness', 'Ideal Event Business Readiness Desk', 'Prepare participating-business readiness evidence', 'siteEvidencePacket', 'participationEvidencePacket', 'ae.event-site-evidence-packet:v1', undefined, true, 750, 'reconcile_required', {
+        decisionInputs: [
+          { field: 'disclosureAuthority', label: 'Disclosure authority', prompt: 'Which fictional recipients and purposes may receive the packet?', pattern: '^authorized:.{3,500}$' },
+          { field: 'responseDeadline', label: 'Response deadline', prompt: 'What ISO date is the fictional response deadline?', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+        ],
+      }),
+    ]),
+    curveballs: Object.freeze(['upstream packet becomes stale', 'disclosure authority is absent', 'a business refuses or does not respond', 'final outcome is unknown']),
+  }),
+  Object.freeze({
     cohortId: 'journey-management',
     label: 'Service journey management',
     customerRequest: 'Coordinate a small office move, build a milestone plan, show what is blocked, and give me a resumable progress summary naming who owes the next update.',

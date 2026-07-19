@@ -253,6 +253,86 @@ describe('sandbox capability provider', () => {
       .toMatch(/^sandbox-workflow:procurement-recommendation:/u)
   })
 
+  it('returns attributable structured event evidence and binds each downstream packet', async () => {
+    const requirements = await workflowCall('event-requirements', {
+      request: 'Prepare the fictional Riverside Makers Market evidence packet.',
+      eventStatus: 'public',
+      proposedSite: 'Fictional Riverside Community Forecourt',
+      operatingWindow: '2026-10-17 08:00-16:00',
+      expectedAttendance: '350',
+      declaredActivities: '24 stalls; packaged and hot food; acoustic music; temporary marquees; no alcohol',
+      evidenceCutoff: '2026-07-19',
+    })
+    expect(requirements.status).toBe(200)
+    const requirementsValue = (await requirements.json() as { requirementsPacket: string }).requirementsPacket
+    const requirementsPacket = JSON.parse(requirementsValue) as Record<string, unknown>
+    expect(requirementsPacket).toMatchObject({
+      format: 'ae.synthetic-event-requirements:v1',
+      packetRef: expect.stringMatching(/^synthetic-requirements:/u),
+      sources: expect.arrayContaining([expect.objectContaining({ status: 'unknown' })]),
+      effects: [],
+    })
+
+    const site = await workflowCall('event-site-evidence', { requirementsPacket: requirementsValue })
+    expect(site.status).toBe(200)
+    const siteValue = (await site.json() as { siteEvidencePacket: string }).siteEvidencePacket
+    const sitePacket = JSON.parse(siteValue) as Record<string, unknown>
+    expect(sitePacket).toMatchObject({
+      upstream: { packetRef: requirementsPacket.packetRef, version: 1 },
+      responsibilityRows: expect.arrayContaining([
+        expect.objectContaining({ status: 'professional_judgement_required' }),
+      ]),
+      operatorInterventions: [],
+    })
+
+    const readiness = await workflowCall('event-business-readiness', {
+      siteEvidencePacket: siteValue,
+      disclosureAuthority: 'authorized: fictional stallholders for readiness comparison only',
+      responseDeadline: '2026-09-30',
+    })
+    expect(readiness.status).toBe(200)
+    const readinessValue = (await readiness.json() as { participationEvidencePacket: string }).participationEvidencePacket
+    expect(JSON.parse(readinessValue)).toMatchObject({
+      upstream: { packetRef: sitePacket.packetRef, version: 1 },
+      responses: expect.arrayContaining([
+        expect.objectContaining({ state: 'no_response' }),
+        expect.objectContaining({ state: 'needs_confirmation' }),
+        expect.objectContaining({
+          state: 'declined',
+          conditions: ['site plan unavailable'],
+          checkedAt: '2026-07-19T00:00:00.000Z',
+          expiresAt: '2026-09-30',
+        }),
+      ]),
+      operatorInterventions: [],
+      effects: [],
+    })
+  })
+
+  it('fails closed before event readiness when disclosure authority is absent', async () => {
+    const response = await workflowCall('event-business-readiness', {
+      siteEvidencePacket: JSON.stringify({ packetRef: 'synthetic-site:one', version: 1 }),
+      responseDeadline: '2026-09-30',
+    })
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ kind: 'refused', reason: 'request_invalid' })
+  })
+
+  it('refuses stale event evidence rather than silently rebuilding downstream work', async () => {
+    const response = await workflowCall('event-site-evidence', {
+      requirementsPacket: JSON.stringify({
+        packetRef: 'synthetic-requirements:old',
+        version: 1,
+        scenario: '[synthetic-scenario:stale_upstream]',
+      }),
+    })
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      kind: 'refused',
+      reason: 'synthetic_upstream_packet_stale',
+    })
+  })
+
   it.each([
     {
       cohort: 'procurement',
