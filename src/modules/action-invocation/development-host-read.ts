@@ -4,36 +4,56 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   assertDynamicPublishedSnapshotShape,
 } from './dynamic-published-snapshot-verifier'
+import type { ActionInvocationOrigin } from './contracts'
 
 export type DevelopmentHostKind = 'request_owned_human' | 'standalone_external_agent'
 
 export type DevelopmentHostSemanticRead = Readonly<{
   action: Readonly<{ id: string; version: string }>
-  invocation: Readonly<{ ref: string; version: number }>
-  publication: Readonly<{ slot: string; revision: number; materialDigest: string; configDigest: string }>
-  payment: Readonly<{ identityDigest: string; amountMinor: number; currency: string }>
-  prepared: Readonly<{ inputDigest: string; targetDigest: string }>
-  identity: Readonly<{ originDigest: string; principalRef: string; callerRef: string }>
-  authority: Readonly<{ mandateKind: string; acceptedDigest: string; generation: number | null }>
-  control: Readonly<{
-    attemptRef: string | null
-    leaseOwner: string | null
-    effectGeneration: number | null
-    idempotencyDigest: string | null
-    state: string
-    outcomeDigest: string
+  operation: Readonly<{
+    id: string
+    publicationSlot: string
+    publicationRevision: number
+    materialDigest: string
+    transportConfigDigest: string
+    paymentIdentity: StableHashValue
+    price: StableHashValue
   }>
-  source: Readonly<{
+  prepared: Readonly<{ inputDigest: string; materialDigest: string; targetDigest: string }>
+  identity: Readonly<{
+    invocationRef: string
+    invocationVersion: number
+    origin: ActionInvocationOrigin
+    principalRef: string
+    callerRef: string
+  }>
+  authority: Readonly<{
+    reference: string
+    kind: string
+    generation: number | null
+    bindingDigest: string
+    bounds: StableHashValue
+  }>
+  attempt: Readonly<{
+    attemptRef: string
+    leaseOwner: string
+    effectGeneration: number
+    idempotency: StableHashValue
+  }> | null
+  resolution: Readonly<{
+    controlState: string
     semanticOwnerRef: string | null
     semanticStatus: string | null
-    releaseDigest: string | null
+    semanticOutcomeDigest: string | null
+    release: StableHashValue | null
     evidenceDigest: string
-    resultIdentityDigest: string | null
+    resultIdentity: StableHashValue | null
+    sourceResultDigest: string | null
   }>
 }>
 
 export type DevelopmentHostReadReceipt = Readonly<{
-  format: 'action-invocation-host-read:development:v1'
+  format: 'action-invocation-host-read:development:v2'
   host: DevelopmentHostKind
   readRef: string
   readAt: string
@@ -46,8 +66,6 @@ export type DevelopmentHostReadReceipt = Readonly<{
 
 export function readDevelopmentHostSnapshot(input: Readonly<{
   host: DevelopmentHostKind
-  readRef: string
-  readAt: string
   snapshot: unknown
 }>): DevelopmentHostReadReceipt {
   assertDynamicPublishedSnapshotShape(input.snapshot)
@@ -56,86 +74,109 @@ export function readDevelopmentHostSnapshot(input: Readonly<{
   const control = snapshot.controls[0]!
   const attempt = snapshot.attempts[0]!.rows.at(-1)
   const claim = snapshot.semanticClaims[0]
-  const operation = source.operation as any
-  const owner = control.control.owner
+  const operation = source.operation
   const accepted = control.control.acceptedAuthority
+  if (control.authorityBinding === undefined || accepted === undefined) {
+    throw new Error('host_read_authority_missing')
+  }
   const semanticRead: DevelopmentHostSemanticRead = Object.freeze({
-    action: { id: control.control.action.id, version: control.control.action.contractVersion },
-    invocation: { ref: control.invocationRef, version: control.invocationVersion },
-    publication: {
-      slot: `${operation.identity.publicationRef}:${operation.identity.businessId}:${operation.identity.bindingId}`,
-      revision: operation.identity.publicationRevision,
-      materialDigest: canonicalDigest(operation as StableHashValue),
-      configDigest: canonicalDigest(operation.binding.adapter.config as StableHashValue),
+    action: {
+      id: control.control.action.id,
+      version: control.control.action.contractVersion,
     },
-    payment: {
-      identityDigest: canonicalDigest(operation.identity.payment as StableHashValue),
-      amountMinor: control.authorityBinding?.limits.amountMinor ?? 0,
-      currency: operation.identity.payment.currency,
+    operation: {
+      id: operation.operationId,
+      publicationSlot: [
+        operation.identity.publicationRef,
+        operation.identity.businessId,
+        operation.identity.bindingId,
+      ].join(':'),
+      publicationRevision: operation.identity.publicationRevision,
+      materialDigest: operation.materialDigest,
+      transportConfigDigest: operation.identity.transportConfigDigest,
+      paymentIdentity: operation.identity.payment as unknown as StableHashValue,
+      price: operation.identity.price as unknown as StableHashValue,
     },
     prepared: {
       inputDigest: source.input.inputDigest,
-      targetDigest: canonicalDigest(source.input.target as StableHashValue),
+      materialDigest: control.preparedMaterialDigest ?? '',
+      targetDigest: control.preparedTargetDigest ?? '',
     },
     identity: {
-      originDigest: canonicalDigest(control.control.origin as StableHashValue),
-      principalRef: owner.principalRef,
-      callerRef: owner.callerRef,
+      invocationRef: control.invocationRef,
+      invocationVersion: control.invocationVersion,
+      origin: control.control.origin,
+      principalRef: control.control.owner.principalRef,
+      callerRef: control.control.owner.callerRef,
     },
     authority: {
-      mandateKind: accepted?.kind ?? 'none',
-      acceptedDigest: canonicalDigest((accepted ?? null) as StableHashValue),
-      generation: accepted?.kind === 'standing_mandate_use' ? accepted.mandateGeneration : null,
+      reference: control.authorityBinding.reference,
+      kind: accepted.kind,
+      generation: accepted.kind === 'standing_mandate_use' ? accepted.mandateGeneration : null,
+      bindingDigest: control.authorityBinding.digest,
+      bounds: {
+        targetDigest: control.authorityBinding.targetDigest,
+        consequence: control.authorityBinding.consequence,
+        limits: control.authorityBinding.limits,
+        expiresAt: control.authorityBinding.expiresAt,
+      },
     },
-    control: {
-      attemptRef: attempt?.attemptRef ?? null,
-      leaseOwner: attempt?.lease.owner ?? null,
-      effectGeneration: attempt?.effectGeneration ?? null,
-      idempotencyDigest: attempt === undefined
-        ? null
-        : canonicalDigest({ attemptRef: attempt.attemptRef, effectGeneration: attempt.effectGeneration }),
-      state: control.control.control.state,
-      outcomeDigest: canonicalDigest({
-        terminalBusinessOutcome: control.terminalBusinessOutcome ?? null,
-        sourceResultDigest: control.sourceResultDigest ?? null,
-        attemptOutcome: attempt?.outcome ?? null,
-      } as StableHashValue),
+    attempt: attempt === undefined ? null : {
+      attemptRef: attempt.attemptRef,
+      leaseOwner: attempt.lease.owner,
+      effectGeneration: attempt.effectGeneration,
+      idempotency: attempt.idempotency as unknown as StableHashValue,
     },
-    source: {
+    resolution: {
+      controlState: control.control.control.state,
       semanticOwnerRef: claim?.ownerInvocationRef ?? null,
       semanticStatus: claim?.status ?? null,
-      releaseDigest: attempt?.release === undefined
+      semanticOutcomeDigest: claim?.outcome === undefined
         ? null
-        : canonicalDigest(attempt.release as StableHashValue),
+        : canonicalDigest(claim.outcome as unknown as StableHashValue),
+      release: attempt?.release as unknown as StableHashValue ?? null,
       evidenceDigest: canonicalDigest(snapshot.history[0]!.rows as unknown as StableHashValue),
-      resultIdentityDigest: source.resultIdentity === undefined
-        ? null
-        : canonicalDigest(source.resultIdentity as StableHashValue),
+      resultIdentity: source.resultIdentity as unknown as StableHashValue ?? null,
+      sourceResultDigest: control.sourceResultDigest ?? null,
     },
   })
-  const semanticDigest = canonicalDigest(semanticRead as StableHashValue)
-  const material = {
-    format: 'action-invocation-host-read:development:v1' as const,
+  const snapshotDigest = canonicalDigest(snapshot as unknown as StableHashValue)
+  const semanticDigest = canonicalDigest(semanticRead as unknown as StableHashValue)
+  const readRef = `host-read:${canonicalDigest({
     host: input.host,
-    readRef: input.readRef,
-    readAt: input.readAt,
-    snapshotDigest: canonicalDigest(snapshot as unknown as StableHashValue),
+    invocationRef: semanticRead.identity.invocationRef,
+    snapshotDigest,
+    semanticDigest,
+  })}`
+  const material = {
+    format: 'action-invocation-host-read:development:v2' as const,
+    host: input.host,
+    readRef,
+    readAt: control.updatedAt,
+    snapshotDigest,
     semanticRead,
     semanticDigest,
     provenance: 'LOCAL DEVELOPMENT DIGEST; NO EXTERNAL SIGNATURE OR ROOT' as const,
   }
   return Object.freeze({
     ...material,
-    receiptDigest: canonicalDigest(material as StableHashValue),
+    receiptDigest: canonicalDigest(material as unknown as StableHashValue),
   })
 }
 
 export function verifyDevelopmentHostReadReceipt(receipt: DevelopmentHostReadReceipt): void {
   const { receiptDigest, ...material } = receipt
-  if (canonicalDigest(material as StableHashValue) !== receiptDigest) {
+  if (canonicalDigest(material as unknown as StableHashValue) !== receiptDigest) {
     throw new Error('host_read_receipt_digest_invalid')
   }
-  if (canonicalDigest(receipt.semanticRead as StableHashValue) !== receipt.semanticDigest) {
+  if (canonicalDigest(receipt.semanticRead as unknown as StableHashValue) !== receipt.semanticDigest) {
     throw new Error('host_read_semantic_digest_invalid')
   }
+  const expectedReadRef = `host-read:${canonicalDigest({
+    host: receipt.host,
+    invocationRef: receipt.semanticRead.identity.invocationRef,
+    snapshotDigest: receipt.snapshotDigest,
+    semanticDigest: receipt.semanticDigest,
+  })}`
+  if (receipt.readRef !== expectedReadRef) throw new Error('host_read_reference_invalid')
 }

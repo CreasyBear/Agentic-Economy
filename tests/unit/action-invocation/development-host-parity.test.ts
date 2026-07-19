@@ -1,136 +1,140 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
-  createRequestOwnedDevelopmentHost,
-  createStandaloneAgentDevelopmentHost,
-  type DynamicPublishedActionInvocationAdapter,
-} from '@/modules/action-invocation'
-import {
   buildDevelopmentHostParityEvidence,
-  verifyDevelopmentHostParityEvidence,
   type DevelopmentHostParityEvidence,
 } from '@/modules/capability-supply/development-host-parity-evidence'
+import {
+  verifyDevelopmentHostParityEvidence,
+} from '@/modules/capability-supply/development-host-parity-verifier'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
+const provenance = {
+  sourceBaseCommit: 'feda5070296c9a0cbc72e3aeb285f0961ee94ec2',
+  evidenceCommit: '1111111111111111111111111111111111111111',
+  evidenceTreeDigest: '2222222222222222222222222222222222222222',
+} as const
+
 describe('ADR-010 development host parity', () => {
-  it('binds distinct host identity and lineage instead of accepting host-injected trust fields', () => {
-    const prepare = vi.fn(() => ({ invocationRef: 'invocation:one' }))
-    const decide = vi.fn(() => ({ kind: 'refused', code: 'invalid_control_state' }))
-    const acquire = vi.fn(() => ({ kind: 'refused', code: 'invalid_control_state' }))
-    const adapter = {
-      prepare,
-      decide,
-      acquire,
-      executeAcquired: vi.fn(),
-      reconcile: vi.fn(),
-      cancel: vi.fn(),
-      inspect: vi.fn(),
-      exportSnapshot: vi.fn(),
-    } as unknown as DynamicPublishedActionInvocationAdapter
-    const requestActor = { callerRef: 'human:request-owner', principalRef: 'principal:customer' }
-    const agentActor = { callerRef: 'agent:external', principalRef: 'principal:customer' }
-    const requestHost = createRequestOwnedDevelopmentHost({
-      adapter, actor: requestActor, requestRef: 'request:existing', revision: 4,
+  it('drives the complete matrix independently through both thin hosts', async () => {
+    const packet = await buildDevelopmentHostParityEvidence(provenance)
+    expect(() => verifyDevelopmentHostParityEvidence(packet, {
+      evidenceCommit: provenance.evidenceCommit,
+      evidenceTreeDigest: provenance.evidenceTreeDigest,
+    })).not.toThrow()
+    expect(packet.evals.every((entry) => entry.passed)).toBe(true)
+    expect(packet.evals.map((entry) => entry.name)).toEqual([
+      'success',
+      'zero_effect_preflight_refusal',
+      'source_refusal',
+      'uncertainty_reconcile_before_retry',
+      'duplicate_stale_and_cancellation_fences',
+      'process_cold_resume_without_transcript_cache',
+      'standalone_result_request_reference_only',
+    ])
+    expect(packet.hosts[0].actor).toEqual({
+      callerRef: 'human:request-owned-host',
+      principalRef: 'principal:host-parity-customer',
     })
-    const agentHost = createStandaloneAgentDevelopmentHost({ adapter, actor: agentActor })
-
-    requestHost.prepare({ symbol: 'BTC', convert: 'USD' }, 1_000)
-    agentHost.decide({
-      invocationRef: 'invocation:one',
-      expectedInvocationVersion: 1,
-      authorityRef: 'authority:one',
-      accept: true,
+    expect(packet.hosts[1].actor).toEqual({
+      callerRef: 'agent:standalone-external-host',
+      principalRef: 'principal:host-parity-customer',
     })
-
-    expect(prepare).toHaveBeenCalledWith({
-      actor: requestActor,
-      origin: { kind: 'request_owned', requestRef: 'request:existing', revision: 4 },
-      value: { symbol: 'BTC', convert: 'USD' },
-      freshnessMs: 1_000,
-    })
-    expect(decide).toHaveBeenCalledWith({
-      actor: agentActor,
-      origin: { kind: 'standalone', ...agentActor },
-      invocationRef: 'invocation:one',
-      expectedInvocationVersion: 1,
-      authorityRef: 'authority:one',
-      accept: true,
-    })
+    expect(packet.hostReads[0].readRef).not.toBe(packet.hostReads[1].readRef)
+    expect(packet.hostReads[0].semanticRead.authority.reference)
+      .not.toBe(packet.hostReads[1].semanticRead.authority.reference)
+    expect(packet.parity.sameFields).toContain('authority.bounds')
+    expect(packet.parity.differentFields).toContain('authority.reference')
   })
 
-  it('reconstructs parity from durable snapshots and rejects coordinated tampering', async () => {
-    const packet = await buildDevelopmentHostParityEvidence()
-    expect(() => verifyDevelopmentHostParityEvidence(packet)).not.toThrow()
-    expect(packet.hostReads[0].semanticRead.identity.callerRef)
-      .not.toBe(packet.hostReads[1].semanticRead.identity.callerRef)
-    expect(packet.hostReads[0].semanticRead.identity.principalRef)
-      .toBe(packet.hostReads[1].semanticRead.identity.principalRef)
-    expect(packet.effects).toEqual({ payment: 2, provider: 2 })
-    expect(packet.dynamicEvidence.recovery).toMatchObject({
-      uncertainty: 'reconciliation_required',
-      retryBeforeReconcile: 'refused',
-      staleWorker: 'refused',
-      cancellation: 'unsupported',
-      paymentEffects: 1,
-      providerEffects: 1,
-    })
+  it.each([
+    ['caller', (packet: any) => {
+      packet.hosts[0].success.snapshot.controls[0].control.owner.callerRef = 'human:forged'
+    }],
+    ['origin', (packet: any) => {
+      packet.hosts[1].success.snapshot.controls[0].control.origin.callerRef = 'agent:forged'
+    }],
+    ['authority', (packet: any) => {
+      packet.hosts[0].success.snapshot.controls[0].authorityBinding.reference = 'authority:copied'
+    }],
+    ['attempt', (packet: any) => {
+      packet.hosts[1].success.snapshot.attempts[0].rows[0].attemptRef = 'attempt:copied'
+    }],
+    ['lease', (packet: any) => {
+      packet.hosts[0].success.snapshot.attempts[0].rows[0].lease.owner = 'worker:forged'
+    }],
+    ['idempotency', (packet: any) => {
+      packet.hosts[1].success.snapshot.attempts[0].rows[0].idempotency.operationKey = 'operation:forged'
+    }],
+    ['semantic owner', (packet: any) => {
+      packet.hosts[0].success.snapshot.semanticClaims[0].ownerInvocationRef = 'invocation:copied'
+    }],
+    ['outcome', (packet: any) => {
+      packet.hosts[1].success.snapshot.attempts[0].rows[0].outcome.businessOutcome = 'forged'
+    }],
+    ['release', (packet: any) => {
+      packet.hosts[0].success.snapshot.attempts[0].rows[0].release.state = 'not_released'
+    }],
+    ['evidence', (packet: any) => {
+      packet.hosts[1].success.snapshot.history[0].rows[0].commandDigest = 'sha256:forged'
+    }],
+    ['result', (packet: any) => {
+      packet.hosts[0].success.snapshot.sourceRows[0].resultIdentity.resultDigest = 'sha256:forged'
+    }],
+    ['operation material', (packet: any) => {
+      packet.hosts[1].success.snapshot.sourceRows[0].operation.identity.endpoint.method = 'POST'
+    }],
+  ])('rejects coordinated %s tampering after attacker redigests the packet', async (_name, mutate) => {
+    const packet = clone(await buildDevelopmentHostParityEvidence(provenance))
+    mutate(packet)
+    redigestPacket(packet)
+    expect(() => verifyDevelopmentHostParityEvidence(packet)).toThrow()
+  })
 
-    const identityAttack = clone(packet)
-    identityAttack.dynamicEvidence.cases[0]!.snapshot.controls[0]!.control.owner.principalRef =
-      'principal:attacker'
-    redigestDynamic(identityAttack)
-    redigestPacket(identityAttack)
-    expect(() => verifyDevelopmentHostParityEvidence(identityAttack))
-      .toThrow('dynamic_published_snapshot_semantics_invalid')
+  it('rejects equal refs, copied receipts, host swaps, stale reads, and stale provenance', async () => {
+    const original = await buildDevelopmentHostParityEvidence(provenance)
 
-    const materialAttack = clone(packet)
-    ;(materialAttack.dynamicEvidence.cases[0]!.snapshot.sourceRows[0]!.operation as any)
-      .identity.endpoint.method = 'POST'
-    redigestDynamic(materialAttack)
-    redigestPacket(materialAttack)
-    expect(() => verifyDevelopmentHostParityEvidence(materialAttack))
-      .toThrow('dynamic_published_snapshot_semantics_invalid')
+    const equalRefs = clone(original)
+    equalRefs.hostReads[1].readRef = equalRefs.hostReads[0].readRef
+    redigestReceipt(equalRefs.hostReads[1])
+    redigestPacket(equalRefs)
+    expect(() => verifyDevelopmentHostParityEvidence(equalRefs)).toThrow()
 
-    const generationAttack = clone(packet)
-    generationAttack.dynamicEvidence.cases[1]!.snapshot.attempts[0]!.rows[0]!.effectGeneration = 9
-    redigestDynamic(generationAttack)
-    redigestPacket(generationAttack)
-    expect(() => verifyDevelopmentHostParityEvidence(generationAttack)).toThrow()
+    const copied = clone(original)
+    copied.hostReads[1] = clone(copied.hostReads[0])
+    redigestPacket(copied)
+    expect(() => verifyDevelopmentHostParityEvidence(copied)).toThrow()
 
-    const staleReceipt = clone(packet)
-    staleReceipt.hostReads[0].readAt = '2000-01-01T00:00:00.000Z'
-    redigestReceipt(staleReceipt.hostReads[0])
-    redigestPacket(staleReceipt)
-    expect(() => verifyDevelopmentHostParityEvidence(staleReceipt))
-      .toThrow('host_read_receipt_stale')
-
-    const swapped = clone(packet)
-    const first = swapped.hostReads[0]
-    swapped.hostReads[0] = swapped.hostReads[1]
-    swapped.hostReads[1] = first
+    const swapped = clone(original)
+    ;[swapped.hostReads[0], swapped.hostReads[1]] = [swapped.hostReads[1], swapped.hostReads[0]]
     redigestPacket(swapped)
-    expect(() => verifyDevelopmentHostParityEvidence(swapped))
-      .toThrow('host_read_not_reconstructed_from_durable_source')
+    expect(() => verifyDevelopmentHostParityEvidence(swapped)).toThrow()
+
+    const stale = clone(original)
+    stale.hostReads[0].readAt = '2000-01-01T00:00:00.000Z'
+    redigestReceipt(stale.hostReads[0])
+    redigestPacket(stale)
+    expect(() => verifyDevelopmentHostParityEvidence(stale)).toThrow()
+
+    expect(() => verifyDevelopmentHostParityEvidence(original, {
+      evidenceCommit: '3333333333333333333333333333333333333333',
+      evidenceTreeDigest: provenance.evidenceTreeDigest,
+    })).toThrow('host_parity_revision_provenance_invalid')
   })
 })
 
-function clone(packet: DevelopmentHostParityEvidence): any {
-  return JSON.parse(JSON.stringify(packet))
-}
-
-function redigestDynamic(packet: any): void {
-  const { packetDigest: _discarded, ...material } = packet.dynamicEvidence
-  packet.dynamicEvidence.packetDigest = canonicalDigest(material as StableHashValue)
+function clone<T>(value: T): any {
+  return JSON.parse(JSON.stringify(value))
 }
 
 function redigestReceipt(receipt: any): void {
-  const { receiptDigest: _discarded, ...material } = receipt
   receipt.semanticDigest = canonicalDigest(receipt.semanticRead as StableHashValue)
+  const { receiptDigest: _discarded, ...material } = receipt
   receipt.receiptDigest = canonicalDigest(material as StableHashValue)
 }
 
-function redigestPacket(packet: any): void {
+function redigestPacket(packet: DevelopmentHostParityEvidence | any): void {
   const { packetDigest: _discarded, ...material } = packet
   packet.packetDigest = canonicalDigest(material as StableHashValue)
 }
