@@ -212,6 +212,35 @@ export const submitInquiryAction = defineAction({
   parameters: submitParameters,
   readOnly: false,
   surfaces: ['agentJson'],
+  invocationContract: {
+    version: 'inquiry.submit:v1',
+    consequenceClass: 'communication',
+    materialInputPaths: [
+      'target',
+      'body',
+      'contact',
+      'expectedDigest',
+      'operationKey',
+      'inquiryOrigin',
+    ],
+    authorityRequirement: 'principal',
+    retryClass: 'attributable_retry',
+    expectedEvidence: [
+      'attributable inquiry receipt',
+      'notification queue state',
+    ],
+    safeContinuations: [
+      'inspect the returned customer inquiry record',
+      'wait for human owner review',
+    ],
+    invalidationConditions: [
+      'material inquiry input changes',
+      'target changes',
+      'authority expires',
+      'principal or caller changes',
+      'origin changes',
+    ],
+  },
   run: async ({ data, context }) =>
     submitPublicInquiryThroughSource(data, context) as Promise<PublicInquirySubmitServerResult>,
 })

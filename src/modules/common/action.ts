@@ -62,6 +62,10 @@ export type ActionContext = {
   agentIdentity?: ActionAgentIdentity
   /** Harness-only approval authority for owner/admin-gated tools. */
   harnessApproval?: ActionHarnessApprovalContext
+  /** Explicitly labelled in-process adapter for Action Invocation development evals only. */
+  developmentOnlyInquirySubmitAdapter?: (
+    data: unknown,
+  ) => Promise<ActionResult>
 }
 
 export type ActionRunArgs<Input> = {

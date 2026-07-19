@@ -610,7 +610,22 @@ export async function submitPublicInquiryThroughSource(
   data: z.infer<typeof publicInquirySubmitSchema>,
   context?: unknown,
 ): Promise<PublicInquirySubmitServerResult> {
+  const developmentAdapter = readDevelopmentInquirySubmitAdapter(context)
+  if (developmentAdapter !== undefined) {
+    return developmentAdapter(data) as Promise<PublicInquirySubmitServerResult>
+  }
   return resolveInquiryServerBackend().submitPublicInquiry(data, context)
+}
+
+function readDevelopmentInquirySubmitAdapter(
+  context: unknown,
+): ((data: z.infer<typeof publicInquirySubmitSchema>) => Promise<PublicInquirySubmitServerResult>) | undefined {
+  if (typeof context !== 'object' || context === null) return undefined
+  const adapter = (context as { developmentOnlyInquirySubmitAdapter?: unknown })
+    .developmentOnlyInquirySubmitAdapter
+  return typeof adapter === 'function'
+    ? adapter as (data: z.infer<typeof publicInquirySubmitSchema>) => Promise<PublicInquirySubmitServerResult>
+    : undefined
 }
 
 export async function readCustomerRecordThroughSource(
