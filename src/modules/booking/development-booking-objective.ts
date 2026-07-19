@@ -2,10 +2,12 @@ import {
   createDevelopmentStandingMandateGrantVerifier,
   evaluateStandingMandatePolicy,
   issueStandingMandate,
+  materialDigest,
   StandingMandateStore,
   type StandingMandatePolicyDecision,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { AnyAction } from '@/modules/common/action'
 import {
   cancelDevelopmentReservationAction,
   createDevelopmentReservationAction,
@@ -16,7 +18,10 @@ import {
   developmentBookingNow,
 } from './development-booking-fixture'
 import { createDevelopmentBookingMandateService } from './development-booking-mandate'
-import { projectDurableRun } from './development-booking-packet'
+import {
+  projectDurableRun,
+  reconstructDevelopmentBookingInvocation,
+} from './development-booking-packet'
 import { createDevelopmentBookingProvider } from './development-booking-provider'
 import { runCancellationInvocation, runReservationInvocation } from './development-booking-runner'
 
@@ -25,6 +30,7 @@ const principalRef = 'mock:principal:full-yolo'
 const callerRef = 'mock:caller:full-yolo'
 const delegateRef = 'mock:delegate:full-yolo'
 const origin = { kind: 'standalone', principalRef, callerRef } as const
+const objectiveRef = 'mock:objective:full-yolo'
 
 export async function runFullYoloDevelopmentObjective() {
   const providerA = createDevelopmentBookingProvider({
@@ -82,21 +88,37 @@ export async function runFullYoloDevelopmentObjective() {
   const issued = store.issue(mandate, grant, developmentBookingNow())
   if (issued.kind === 'refused') throw new Error(issued.code)
   let service = bookingService(store)
-  const decisions: Array<StandingMandatePolicyDecision & { actionId: string; providerRef: string }> = []
+  const decisions: StandingMandatePolicyDecision[] = []
 
-  const choose = (proposal: Parameters<typeof evaluateStandingMandatePolicy>[0]['proposal']) => {
+  const choose = (
+    policyDecisionRef: string,
+    proposal: Parameters<typeof evaluateStandingMandatePolicy>[0]['proposal'],
+  ) => {
     const decision = evaluateStandingMandatePolicy({
       mandate,
       proposal,
       uses: store.exportSnapshot().uses,
+      policyDecisionRef,
     })
     if (decision.kind === 'refused') throw new Error(decision.code)
-    decisions.push({ ...decision.value, actionId: proposal.action.id, providerRef: proposal.providerRef })
+    const accepted = store.acceptPolicyDecision(decision.value)
+    if (accepted.kind === 'refused') throw new Error(accepted.code)
+    decisions.push(decision.value)
     return decision.value
   }
 
-  choose({
+  const bookingA = bookingInput(slotA, principalRef, 'mock:operation:full-yolo:a')
+  const bookingAInvocationRef = 'mock:booking-invocation:full-yolo-a'
+  const decisionA = choose('mock:policy-decision:full-yolo:a', {
+    objectiveRef,
     objective,
+    sourceOptionRef: slotA.provenance.observationRef,
+    materialDigest: materialDigest(
+      bookingA,
+      createDevelopmentReservationAction.invocationContract!.materialInputPaths,
+    ),
+    authorityUseRef: 'mock:authority-use:full-yolo:a',
+    invocationRef: bookingAInvocationRef,
     action: { id: createDevelopmentReservationAction.id, version: 'v1' },
     providerRef: slotA.providerRef,
     recipientRef: slotA.providerRef,
@@ -109,7 +131,7 @@ export async function runFullYoloDevelopmentObjective() {
   })
   const first = await runReservationInvocation({
     provider: providerA,
-    booking: bookingInput(slotA, principalRef, 'mock:operation:full-yolo:a'),
+    booking: bookingA,
     origin,
     ref: 'full-yolo-a',
     boundedMandate: {
@@ -119,6 +141,7 @@ export async function runFullYoloDevelopmentObjective() {
       fallbackRef: 'provider_a_primary',
       reservedLossMinor: 0,
       risk: 'development_booking_bounded_loss',
+      policyDecisionRef: decisionA.policyDecisionRef,
     },
   })
   if (first.view.observedResolution.state !== 'returned'
@@ -126,8 +149,18 @@ export async function runFullYoloDevelopmentObjective() {
     throw new Error('provider_a_expected_refusal_missing')
   }
 
-  choose({
+  const bookingB = bookingInput(slotB, principalRef, 'mock:operation:full-yolo:b')
+  const bookingBInvocationRef = 'mock:booking-invocation:full-yolo-b'
+  const decisionB = choose('mock:policy-decision:full-yolo:b', {
+    objectiveRef,
     objective,
+    sourceOptionRef: slotB.provenance.observationRef,
+    materialDigest: materialDigest(
+      bookingB,
+      createDevelopmentReservationAction.invocationContract!.materialInputPaths,
+    ),
+    authorityUseRef: 'mock:authority-use:full-yolo:b',
+    invocationRef: bookingBInvocationRef,
     action: { id: createDevelopmentReservationAction.id, version: 'v1' },
     providerRef: slotB.providerRef,
     recipientRef: slotB.providerRef,
@@ -140,7 +173,7 @@ export async function runFullYoloDevelopmentObjective() {
   })
   const second = await runReservationInvocation({
     provider: providerB,
-    booking: bookingInput(slotB, principalRef, 'mock:operation:full-yolo:b'),
+    booking: bookingB,
     origin,
     ref: 'full-yolo-b',
     boundedMandate: {
@@ -151,6 +184,7 @@ export async function runFullYoloDevelopmentObjective() {
       reservedSpendMinor: 5_000,
       reservedLossMinor: 5_000,
       risk: 'development_booking_bounded_loss',
+      policyDecisionRef: decisionB.policyDecisionRef,
       reconstructBeforeRelease: () => {
         store = new StandingMandateStore(structuredClone(store.exportSnapshot()))
         service = bookingService(store)
@@ -163,9 +197,41 @@ export async function runFullYoloDevelopmentObjective() {
     throw new Error('provider_b_confirmation_missing')
   }
   const confirmed = second.view.observedResolution.result
+  const midRun = {
+    mandateSnapshot: structuredClone(store.exportSnapshot()),
+    providerSnapshot: providerB.exportSnapshot(),
+    objectiveState: {
+      objectiveRef,
+      next: 'evaluate_source_owned_cancellation_condition' as const,
+      completedInvocationRefs: [first.view.invocationRef, second.view.invocationRef],
+      policyDecisionRefs: decisions.map(({ policyDecisionRef }) => policyDecisionRef),
+    },
+    durableInvocations: [projectDurableRun(first), projectDurableRun(second)],
+  }
+  store = new StandingMandateStore(structuredClone(midRun.mandateSnapshot))
+  service = bookingService(store)
+  const resumedProvider = createDevelopmentBookingProvider({
+    ...midRun.providerSnapshot.options,
+    snapshot: midRun.providerSnapshot,
+  })
 
-  choose({
+  const cancellationMaterial = cancellationInput({
+    reservationRef: confirmed.reservationRef,
+    providerRef: confirmed.providerRef,
+    principalRef,
+    operationKey: 'mock:operation:full-yolo:cancel',
+  })
+  const cancellationInvocationRef = 'mock:cancellation-invocation:full-yolo-cancel'
+  const decisionCancellation = choose('mock:policy-decision:full-yolo:cancel', {
+    objectiveRef,
     objective,
+    sourceOptionRef: confirmed.evidenceRef,
+    materialDigest: materialDigest(
+      cancellationMaterial,
+      cancelDevelopmentReservationAction.invocationContract!.materialInputPaths,
+    ),
+    authorityUseRef: 'mock:authority-use:full-yolo:cancel',
+    invocationRef: cancellationInvocationRef,
     action: { id: cancelDevelopmentReservationAction.id, version: 'v1' },
     providerRef: slotB.providerRef,
     recipientRef: slotB.providerRef,
@@ -177,19 +243,15 @@ export async function runFullYoloDevelopmentObjective() {
     risk: 'development_booking_bounded_loss',
   })
   const cancellation = await runCancellationInvocation({
-    provider: providerB,
-    cancellation: cancellationInput({
-      reservationRef: confirmed.reservationRef,
-      providerRef: confirmed.providerRef,
-      principalRef,
-      operationKey: 'mock:operation:full-yolo:cancel',
-    }),
+    provider: resumedProvider,
+    cancellation: cancellationMaterial,
     origin,
     ref: 'full-yolo-cancel',
     fullYoloMandate: {
       service,
       mandateRef: mandate.mandateRef,
       authorityUseRef: 'mock:authority-use:full-yolo:cancel',
+      policyDecisionRef: decisionCancellation.policyDecisionRef,
     },
   })
   if (cancellation.view.observedResolution.state !== 'returned'
@@ -200,18 +262,82 @@ export async function runFullYoloDevelopmentObjective() {
   const offset = store.recordExposureOffset({
     authorityUseRef: 'mock:authority-use:full-yolo:b',
     offsetAuthorityUseRef: 'mock:authority-use:full-yolo:cancel',
+    mandateRef: mandate.mandateRef,
+    mandateVersion: mandate.version,
+    mandateGeneration: mandate.generation,
+    principalRef,
+    providerRef: confirmed.providerRef,
+    exposureAction: { id: createDevelopmentReservationAction.id, version: 'v1' },
+    offsetAction: { id: cancelDevelopmentReservationAction.id, version: 'v1' },
+    exposureSubjectRef: confirmed.reservationRef,
+    exposureResultRef: confirmed.reservationRef,
+    exposureEvidenceRef: confirmed.evidenceRef,
+    offsetSubjectRef: cancellationResult.reservationRef,
+    offsetResultRef: cancellationResult.cancellationRef,
+    offsetEvidenceRef: cancellationResult.evidenceRef,
     amountMinor: 5_000,
     currency: 'AUD',
-    evidenceRef: cancellationResult.evidenceRef,
-    offsetAction: { id: cancelDevelopmentReservationAction.id, version: 'v1' },
     evidenceRuleRef: 'provider_confirmed_cancellation:v1',
+    offsetGeneration: 1,
     recordedAt: developmentBookingNow(),
   }, (candidate) =>
-    candidate.evidenceRef === cancellationResult.evidenceRef
-    && candidate.offsetAuthorityUseRef === 'mock:authority-use:full-yolo:cancel')
+    candidate.exposureSubjectRef === confirmed.reservationRef
+    && candidate.exposureResultRef === confirmed.reservationRef
+    && candidate.exposureEvidenceRef === confirmed.evidenceRef
+    && candidate.offsetSubjectRef === cancellationResult.reservationRef
+    && candidate.offsetResultRef === cancellationResult.cancellationRef
+    && candidate.offsetEvidenceRef === cancellationResult.evidenceRef)
   if (offset.kind === 'refused') throw new Error(offset.code)
 
-  const cold = new StandingMandateStore(structuredClone(store.exportSnapshot()))
+  const authoritativeOffsetVerifier = (candidate: import('@/modules/action-invocation').AuthorityExposureOffset) =>
+    candidate.exposureSubjectRef === confirmed.reservationRef
+    && candidate.exposureResultRef === confirmed.reservationRef
+    && candidate.exposureEvidenceRef === confirmed.evidenceRef
+    && candidate.offsetSubjectRef === cancellationResult.reservationRef
+    && candidate.offsetResultRef === cancellationResult.cancellationRef
+    && candidate.offsetEvidenceRef === cancellationResult.evidenceRef
+    && candidate.providerRef === confirmed.providerRef
+    && candidate.principalRef === principalRef
+  const cold = new StandingMandateStore(structuredClone(store.exportSnapshot()), {
+    verifyExposureOffset: authoritativeOffsetVerifier,
+  })
+  const record = (run: any) => ({
+    invocationRef: run.view.invocationRef,
+    action: run.view.action,
+    acceptedAuthority: run.view.acceptedAuthority,
+    events: run.events,
+    durable: projectDurableRun(run),
+    resultDigest: canonicalDigest(run.view.observedResolution),
+  })
+  const invocationRecords = [record(first), record(second), record(cancellation)]
+  const actionById = new Map<string, AnyAction>([
+    [createDevelopmentReservationAction.id, createDevelopmentReservationAction],
+    [cancelDevelopmentReservationAction.id, cancelDevelopmentReservationAction],
+  ])
+  const reconstructed = invocationRecords.map((record) => {
+    const action = actionById.get(record.action.id)
+    if (action === undefined) throw new Error('cold_action_missing')
+    return reconstructDevelopmentBookingInvocation({
+      invocationRef: record.invocationRef,
+      action,
+      durable: record.durable,
+    }).view
+  })
+  const providerSnapshot = resumedProvider.exportSnapshot()
+  const coldProvider = createDevelopmentBookingProvider({
+    ...providerSnapshot.options,
+    snapshot: providerSnapshot,
+  })
+  const effectsBeforeReplay = {
+    booking: coldProvider.effectCount(),
+    cancellation: coldProvider.cancellationEffectCount(),
+  }
+  const replayedBooking = await coldProvider.reserve(structuredClone(bookingB))
+  const replayedCancellation = await coldProvider.cancel(structuredClone(cancellationMaterial))
+  const effectsAfterReplay = {
+    booking: coldProvider.effectCount(),
+    cancellation: coldProvider.cancellationEffectCount(),
+  }
   return {
     environment: 'MOCK/DEVELOPMENT ONLY' as const,
     objective,
@@ -223,18 +349,45 @@ export async function runFullYoloDevelopmentObjective() {
       { ordinal: 1, kind: 'fallback_after_terms_refusal', providerRef: slotB.providerRef },
       { ordinal: 2, kind: 'cancel_on_source_owned_condition', providerRef: slotB.providerRef },
     ],
-    invocations: [first, second, cancellation].map((run) => ({
-      invocationRef: run.view.invocationRef,
-      action: run.view.action,
-      acceptedAuthority: run.view.acceptedAuthority,
-      events: run.events,
-      durable: projectDurableRun(run),
-      resultDigest: canonicalDigest(run.view.observedResolution),
-    })),
+    invocations: invocationRecords,
+    authoritativeResults: {
+      booking: {
+        principalRef,
+        input: bookingB,
+        result: confirmed,
+        resultDigest: canonicalDigest(confirmed),
+      },
+      cancellation: {
+        principalRef,
+        input: cancellationMaterial,
+        result: cancellationResult,
+        resultDigest: canonicalDigest(cancellationResult),
+      },
+    },
+    coldContinuation: {
+      midRun,
+      reconstructed: reconstructed.map((view) => ({
+        invocationRef: view.invocationRef,
+        invocationVersion: view.invocationVersion,
+        controlState: view.control.state,
+        authorityUseRef: view.acceptedAuthority?.kind === 'standing_mandate_use'
+          ? view.acceptedAuthority.authorityUseRef
+          : null,
+      })),
+      mandateSnapshot: cold.exportSnapshot(),
+      providerSnapshot,
+      replayedBooking,
+      replayedCancellation,
+      effectsBeforeReplay,
+      effectsAfterReplay,
+      noDuplicateEffect:
+        effectsBeforeReplay.booking === effectsAfterReplay.booking
+        && effectsBeforeReplay.cancellation === effectsAfterReplay.cancellation,
+    },
     providerEffects: {
       providerA: providerA.effectCount(),
-      providerB: providerB.effectCount(),
-      cancellation: providerB.cancellationEffectCount(),
+      providerB: resumedProvider.effectCount(),
+      cancellation: resumedProvider.cancellationEffectCount(),
     },
     capacityAfterCancellation: cold.capacity(mandate.mandateRef),
     comparison: {

@@ -6,7 +6,12 @@ import type {
 } from './standing-mandate'
 
 export type StandingMandatePolicyProposal = Readonly<{
+  objectiveRef: string
   objective: string
+  sourceOptionRef: string
+  materialDigest: string
+  authorityUseRef: string
+  invocationRef: string
   action: Readonly<{ id: string; version: string }>
   providerRef: string
   recipientRef: string
@@ -19,17 +24,32 @@ export type StandingMandatePolicyProposal = Readonly<{
 }>
 
 export type StandingMandatePolicyDecision = Readonly<{
+  policyDecisionRef: string
   policy: 'exact_scope_and_worst_case_loss:v1'
+  objectiveRef: string
+  mandateRef: string
+  mandateVersion: number
+  mandateGeneration: number
+  proposal: StandingMandatePolicyProposal
+  capacity: Readonly<{
+    consumedCount: number
+    reservedCount: number
+    committedSpendMinor: number
+    heldWorstCaseLossMinor: number
+  }>
   fallbackOrdinal: number
   heldWorstCaseLossMinor: number
   proposedWorstCaseLossMinor: number
   maximumLossMinor: number
+  accepted: true
+  digest: string
 }>
 
 export function evaluateStandingMandatePolicy(input: Readonly<{
   mandate: StandingMandate
   proposal: StandingMandatePolicyProposal
   uses: readonly AuthorityUse[]
+  policyDecisionRef: string
 }>): MandateDecision<StandingMandatePolicyDecision> {
   const { mandate, proposal } = input
   const refusal = scopeRefusal(mandate, proposal)
@@ -38,18 +58,39 @@ export function evaluateStandingMandatePolicy(input: Readonly<{
   const heldWorstCaseLossMinor = input.uses
     .filter((use) => use.mandateRef === mandate.mandateRef && use.state !== 'not_released')
     .reduce((sum, use) => sum + (use.reservedLoss?.amountMinor ?? use.reservedSpend.amountMinor), 0)
+  const committedSpendMinor = input.uses
+    .filter((use) => use.state !== 'not_released')
+    .reduce((sum, use) => sum + use.reservedSpend.amountMinor, 0)
+  if (committedSpendMinor + proposal.spend.amountMinor > mandate.scope.maximumSpend.amountMinor) {
+    return { kind: 'refused', code: 'mandate_spend_exceeded' }
+  }
   if (heldWorstCaseLossMinor + proposal.worstCaseLoss.amountMinor > maximumLoss.amountMinor) {
     return { kind: 'refused', code: 'mandate_risk_exceeded' }
   }
+  const capacity = {
+    consumedCount: input.uses.filter((use) => use.state === 'released').length,
+    reservedCount: input.uses.filter((use) => use.state === 'reserved' || use.state === 'uncertain').length,
+    committedSpendMinor,
+    heldWorstCaseLossMinor,
+  }
+  const material = {
+    policyDecisionRef: input.policyDecisionRef,
+    policy: 'exact_scope_and_worst_case_loss:v1' as const,
+    objectiveRef: proposal.objectiveRef,
+    mandateRef: mandate.mandateRef,
+    mandateVersion: mandate.version,
+    mandateGeneration: mandate.generation,
+    proposal,
+    capacity,
+    fallbackOrdinal: mandate.scope.permittedFallbacks.indexOf(proposal.fallbackRef),
+    heldWorstCaseLossMinor,
+    proposedWorstCaseLossMinor: proposal.worstCaseLoss.amountMinor,
+    maximumLossMinor: maximumLoss.amountMinor,
+    accepted: true as const,
+  }
   return {
     kind: 'accepted',
-    value: {
-      policy: 'exact_scope_and_worst_case_loss:v1',
-      fallbackOrdinal: mandate.scope.permittedFallbacks.indexOf(proposal.fallbackRef),
-      heldWorstCaseLossMinor,
-      proposedWorstCaseLossMinor: proposal.worstCaseLoss.amountMinor,
-      maximumLossMinor: maximumLoss.amountMinor,
-    },
+    value: { ...material, digest: canonicalDigest(material as never) },
   }
 }
 
@@ -76,3 +117,4 @@ function scopeRefusal(
   if (proposal.risk !== mandate.scope.riskCeiling) return 'mandate_risk_exceeded'
   return undefined
 }
+import { canonicalDigest } from '@/modules/common/canonical-digest'

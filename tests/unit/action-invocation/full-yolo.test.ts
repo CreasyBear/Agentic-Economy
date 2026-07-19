@@ -5,6 +5,7 @@ import {
   evaluateStandingMandatePolicy,
   StandingMandateStore,
 } from '@/modules/action-invocation'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   runFullYoloEvidence,
   verifyFullYoloEvidence,
@@ -30,7 +31,12 @@ describe('full_yolo bounded authority mode', () => {
     const evidence = await runFullYoloEvidence()
     const mandate = evidence.mandateSnapshot.mandates[0]!
     const base = {
+      objectiveRef: 'mock:objective:test',
       objective: mandate.scope.objective,
+      sourceOptionRef: 'mock:option:test',
+      materialDigest: 'sha256:test',
+      authorityUseRef: 'mock:use:test',
+      invocationRef: 'mock:invocation:test',
       action: mandate.scope.actions![0]!,
       providerRef: mandate.scope.providerRefs[0]!,
       recipientRef: mandate.scope.recipientRefs[0]!,
@@ -57,6 +63,7 @@ describe('full_yolo bounded authority mode', () => {
         mandate,
         proposal: { ...base, ...variant },
         uses: [],
+        policyDecisionRef: 'mock:policy:test',
       }).kind).toBe('refused')
     }
   })
@@ -64,18 +71,13 @@ describe('full_yolo bounded authority mode', () => {
   it('holds uncertain/released exposure and offsets only provider-confirmed cancellation evidence', async () => {
     const evidence = await runFullYoloEvidence()
     const snapshot = structuredClone(evidence.mandateSnapshot)
-    snapshot.exposureOffsets = []
+    ;(snapshot as any).exposureOffsets = []
     const store = new StandingMandateStore(snapshot)
     expect(store.capacity(snapshot.mandates[0]!.mandateRef).worstCaseLossMinor).toBe(5_000)
+    const { digest: _digest, ...offset } = evidence.mandateSnapshot.exposureOffsets![0]!
     expect(store.recordExposureOffset({
-      authorityUseRef: 'mock:authority-use:full-yolo:b',
+      ...offset,
       offsetAuthorityUseRef: 'mock:authority-use:full-yolo:a',
-      amountMinor: 5_000,
-      currency: 'AUD',
-      evidenceRef: 'request-only',
-      offsetAction: { id: 'booking.createDevelopmentReservation', version: 'v1' },
-      evidenceRuleRef: 'provider_confirmed_cancellation:v1',
-      recordedAt: '2026-07-19T04:00:00.000Z',
     }, () => false)).toEqual({ kind: 'refused', code: 'authority_use_linkage_invalid' })
   })
 
@@ -88,6 +90,40 @@ describe('full_yolo bounded authority mode', () => {
     ['action-use linkage', (copy: any) => { copy.invocations[1].acceptedAuthority.authorityUseRef = 'other' }],
     ['evidence', (copy: any) => { copy.mandateSnapshot.exposureOffsets[0].evidenceRef = 'other' }],
     ['event order', (copy: any) => { copy.invocations[0].events.reverse() }],
+    ['causal reservation', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].exposureSubjectRef = 'other'
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['causal provider', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].providerRef = 'other'
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['causal principal', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].principalRef = 'other'
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['causal evidence', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].offsetEvidenceRef = 'other'
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['causal use', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].offsetAuthorityUseRef =
+        copy.mandateSnapshot.exposureOffsets[0].authorityUseRef
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['offset reuse', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets.push(structuredClone(copy.mandateSnapshot.exposureOffsets[0]))
+    }],
+    ['policy material', (copy: any) => {
+      copy.policyDecisions[1].proposal.providerRef = 'other'
+      redigest(copy.policyDecisions[1])
+    }],
+    ['cold source result', (copy: any) => {
+      copy.invocations[1].durable.source.result.providerRef = 'other'
+    }],
+    ['cold provider effect count', (copy: any) => {
+      copy.coldContinuation.effectsAfterReplay.booking += 1
+    }],
   ])('rejects valid outer-checksum tampering of %s', async (_label, mutate) => {
     const evidence = structuredClone(await runFullYoloEvidence())
     mutate(evidence)
@@ -95,3 +131,8 @@ describe('full_yolo bounded authority mode', () => {
     expect(() => verifyFullYoloEvidence(evidence)).toThrow()
   })
 })
+
+function redigest(record: Record<string, unknown>) {
+  const { digest: _digest, ...material } = record
+  record.digest = canonicalDigest(material as never)
+}

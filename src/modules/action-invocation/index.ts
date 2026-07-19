@@ -30,6 +30,7 @@ export {
   verifiedGrantMatchesMandate,
 } from './standing-mandate-grant'
 export { evaluateStandingMandatePolicy } from './standing-mandate-policy'
+export { materialDigest } from './preparation'
 
 export type {
   ActionInvocationOrigin,

@@ -76,6 +76,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
       reservedSpendMinor?: number
       reservedLossMinor?: number
       risk?: string
+      policyDecisionRef?: string
     }>): MandateDecision<Readonly<{ use: AuthorityUse; basis: StandingMandateAuthorityBasis }>> {
       const mandate = input.store.inspectMandate(args.mandateRef)
       const grant = input.store.inspectGrant(args.mandateRef)
@@ -117,6 +118,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
         fallbackRef: args.fallbackRef ?? null,
         risk: args.risk ?? 'development_booking_zero_charge',
         effectGeneration: args.effectGeneration,
+        ...(args.policyDecisionRef === undefined ? {} : { policyDecisionRef: args.policyDecisionRef }),
       }, input.now())
       if (reserved.kind === 'refused') return reserved
       const basis: StandingMandateAuthorityBasis = {
@@ -143,6 +145,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
       action: Readonly<{ id: string; version: string }>
       effectGeneration: number
       risk: string
+      policyDecisionRef?: string
     }>): MandateDecision<Readonly<{ use: AuthorityUse; basis: StandingMandateAuthorityBasis }>> {
       const mandate = input.store.inspectMandate(args.mandateRef)
       const grant = input.store.inspectGrant(args.mandateRef)
@@ -170,6 +173,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
         fallbackRef: null,
         risk: args.risk,
         effectGeneration: args.effectGeneration,
+        ...(args.policyDecisionRef === undefined ? {} : { policyDecisionRef: args.policyDecisionRef }),
       }, input.now())
       if (reserved.kind === 'refused') return reserved
       return {
@@ -188,9 +192,9 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
       }
     },
 
-    recheckRelease(args: Readonly<{
+    recheckRelease<Result extends BookingEffectResult>(args: Readonly<{
       authorityUseRef: string
-      view: ActionInvocationView<BookingEffectResult>
+      view: ActionInvocationView<Result>
       effectGeneration: number
     }>): MandateDecision<AuthorityUse> {
       const token = reconstructReleaseToken(input.store, args.authorityUseRef, args.view, args.effectGeneration)
@@ -201,9 +205,9 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
       }, input.now())
     },
 
-    settleFromInvocation(args: Readonly<{
+    settleFromInvocation<Result extends BookingEffectResult>(args: Readonly<{
       authorityUseRef: string
-      view: ActionInvocationView<BookingEffectResult>
+      view: ActionInvocationView<Result>
       attemptRef: string
     }>): MandateDecision<AuthorityUse> {
       const use = input.store.inspectUse(args.authorityUseRef)
@@ -231,10 +235,10 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
   }
 }
 
-export function reconstructReleaseToken(
+export function reconstructReleaseToken<Result extends BookingEffectResult>(
   store: StandingMandateStore,
   authorityUseRef: string,
-  view: ActionInvocationView<BookingEffectResult>,
+  view: ActionInvocationView<Result>,
   effectGeneration: number,
 ): MandateDecision<DevelopmentBookingReleaseToken> {
   const use = store.inspectUse(authorityUseRef)

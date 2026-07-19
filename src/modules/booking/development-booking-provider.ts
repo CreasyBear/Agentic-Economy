@@ -7,23 +7,31 @@ import type {
 } from './development-booking.actions'
 
 export type DevelopmentAvailabilityObservation = DevelopmentBookingInput['slot']
+export type DevelopmentBookingProviderSnapshot = Readonly<{
+  options: Readonly<{ providerRef?: string; slotRef?: string; refusal?: 'terms_changed' | 'provider_refused' }>
+  reservations: readonly Readonly<{ operationKey: string; digest: string; input: DevelopmentBookingInput; result: DevelopmentBookingResult }>[]
+  cancellations: readonly Readonly<{ operationKey: string; digest: string; result: DevelopmentBookingCancellationResult }>[]
+  effects: number
+  cancellationEffects: number
+}>
 
 export function createDevelopmentBookingProvider(options: Readonly<{
   providerRef?: string
   slotRef?: string
   refusal?: 'terms_changed' | 'provider_refused'
+  snapshot?: DevelopmentBookingProviderSnapshot
 }> = {}) {
   const reservations = new Map<string, Readonly<{
     digest: string
     input: DevelopmentBookingInput
     result: DevelopmentBookingResult
-  }>>()
+  }>>(options.snapshot?.reservations.map(({ operationKey, ...record }) => [operationKey, record]))
   const cancellations = new Map<string, Readonly<{
     digest: string
     result: DevelopmentBookingCancellationResult
-  }>>()
-  let effects = 0
-  let cancellationEffects = 0
+  }>>(options.snapshot?.cancellations.map(({ operationKey, ...record }) => [operationKey, record]))
+  let effects = options.snapshot?.effects ?? 0
+  let cancellationEffects = options.snapshot?.cancellationEffects ?? 0
   const availability: DevelopmentAvailabilityObservation = {
     slotRef: options.slotRef ?? 'mock:slot:2026-07-21T02:00Z',
     providerRef: options.providerRef ?? 'mock:provider:calendar',
@@ -124,5 +132,16 @@ export function createDevelopmentBookingProvider(options: Readonly<{
     cancellationEffectCount: () => cancellationEffects,
     inspect: (operationKey: string) => reservations.get(operationKey),
     inspectCancellation: (operationKey: string) => cancellations.get(operationKey),
+    exportSnapshot: (): DevelopmentBookingProviderSnapshot => ({
+      options: {
+        ...(options.providerRef === undefined ? {} : { providerRef: options.providerRef }),
+        ...(options.slotRef === undefined ? {} : { slotRef: options.slotRef }),
+        ...(options.refusal === undefined ? {} : { refusal: options.refusal }),
+      },
+      reservations: [...reservations.entries()].map(([operationKey, record]) => ({ operationKey, ...record })),
+      cancellations: [...cancellations.entries()].map(([operationKey, record]) => ({ operationKey, ...record })),
+      effects,
+      cancellationEffects,
+    }),
   }
 }

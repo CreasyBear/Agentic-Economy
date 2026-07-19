@@ -73,6 +73,7 @@ export async function runReservationInvocation(input: Readonly<{
     reservedSpendMinor?: number
     reservedLossMinor?: number
     risk?: string
+    policyDecisionRef?: string
   }>
 }>): Promise<BookingInvocationRun<DevelopmentBookingResult>> {
   const events: BookingInvocationEvent[] = []
@@ -189,6 +190,7 @@ export async function runReservationInvocation(input: Readonly<{
     ...(bounded.reservedSpendMinor === undefined ? {} : { reservedSpendMinor: bounded.reservedSpendMinor }),
     ...(bounded.reservedLossMinor === undefined ? {} : { reservedLossMinor: bounded.reservedLossMinor }),
     ...(bounded.risk === undefined ? {} : { risk: bounded.risk }),
+    ...(bounded.policyDecisionRef === undefined ? {} : { policyDecisionRef: bounded.policyDecisionRef }),
   })
   if (reserved.kind === 'refused') throw new Error(reserved.code)
   let standingAuthorization
@@ -328,6 +330,7 @@ export async function runCancellationInvocation(input: Readonly<{
     service: DevelopmentBookingMandateService
     mandateRef: string
     authorityUseRef: string
+    policyDecisionRef?: string
   }>
 }>): Promise<BookingInvocationRun<DevelopmentBookingCancellationResult>> {
   const events: BookingInvocationEvent[] = []
@@ -357,7 +360,10 @@ export async function runCancellationInvocation(input: Readonly<{
     },
   }
   const state = createDevelopmentDurableState<DevelopmentBookingCancellationResult>()
-  const tracer = createDurableActionInvocationTracer({
+  const tracer = createDurableActionInvocationTracer<
+    DevelopmentBookingCancellationInput,
+    DevelopmentBookingCancellationResult
+  >({
     action: cancelDevelopmentReservationAction,
     port: createDevelopmentDurablePort(state),
     now: developmentBookingNow,
@@ -407,6 +413,9 @@ export async function runCancellationInvocation(input: Readonly<{
       action: { id: cancelDevelopmentReservationAction.id, version: 'v1' },
       effectGeneration: 1,
       risk: 'development_booking_bounded_loss',
+      ...(configured.policyDecisionRef === undefined
+        ? {}
+        : { policyDecisionRef: configured.policyDecisionRef }),
     })
     if (reserved.kind === 'refused') throw new Error(reserved.code)
     const authorized = tracer.authorizeStandingMandateUse({
