@@ -3,6 +3,9 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import {
+  admitRegisteredTransport,
+  capabilityBindingRegistrationHash,
+  capabilityOfferingRegistrationHash,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
 } from './public'
@@ -15,6 +18,12 @@ import type { SuppliedCandidateQualification } from './server'
 const observedAt = Date.parse('2026-07-19T08:00:00.000Z')
 const validUntil = observedAt + 300_000
 const endpointPath = '/x402/v3/cryptocurrency/quotes/latest'
+const expectedPayment = {
+  network: 'eip155:8453',
+  asset: '0xmock-usdc',
+  payTo: '0xmock-provider-recipient',
+  currency: 'USD',
+} as const
 
 export const developmentPublishedEndpointCards = [
   { method: 'GET', path: endpointPath, summary: 'Latest cryptocurrency quotes' },
@@ -122,6 +131,17 @@ export function buildDevelopmentPublishedOperationEvidence() {
     adapter: { adapterId: 'x402-fetch:v2', config },
     registrationEvidenceRefs: ['mock:evidence:binding'],
   })
+  const admission = admitRegisteredTransport({
+    adapterId: binding.adapter.adapterId,
+    endpointUrl: binding.endpointUrl,
+    credentialRef: binding.credentialRef,
+    continuation: binding.continuation,
+    cancellation: binding.cancellation,
+    config: binding.adapter.config,
+  })
+  if (admission.kind !== 'admitted') throw new Error(admission.reason)
+  const offeringDigest = capabilityOfferingRegistrationHash(offering)
+  const bindingDigest = capabilityBindingRegistrationHash(binding, admission.transport)
   const qualification: SuppliedCandidateQualification = {
     kind: 'supplied_candidate_qualification',
     environment: 'SOURCE-OWNED DEVELOPMENT EVIDENCE',
@@ -149,11 +169,11 @@ export function buildDevelopmentPublishedOperationEvidence() {
       },
       {
         kind: 'offering', ref: `offering:${offering.offeringId}`,
-        digest: canonicalDigest(offering as StableHashValue), evidenceRefs: ['mock:evidence:offering'],
+        digest: offeringDigest, evidenceRefs: ['mock:evidence:offering'],
       },
       {
         kind: 'binding', ref: `binding:${binding.bindingId}`,
-        digest: canonicalDigest(binding as StableHashValue), evidenceRefs: ['mock:evidence:binding'],
+        digest: bindingDigest, evidenceRefs: ['mock:evidence:binding'],
       },
       {
         kind: 'readiness', ref: 'readiness:mock:publication:published-api@7',
@@ -173,10 +193,8 @@ export function buildDevelopmentPublishedOperationEvidence() {
     },
     contract,
     offering,
-    offeringDigest: qualification.sources[2]!.digest,
     binding,
-    bindingDigest: qualification.sources[3]!.digest,
-    admittedConfig: config,
+    admittedTransport: admission.transport,
     qualification,
     usageObservation: {
       window: { kind: 'rolling', days: 30 },
@@ -192,6 +210,25 @@ export function buildDevelopmentPublishedOperationEvidence() {
     discovery: developmentPublishedEndpointCards,
     operation,
     descriptor: materializeRuntimePublishedOperation(operation),
+    sourceMaterial: {
+      publication: {
+        publicationRef: qualification.candidate.publicationRef,
+        revision: qualification.candidate.revision,
+        businessId: qualification.candidate.businessId,
+        sourceDigest: qualification.sources[0]!.digest,
+        readinessObservedAt: observedAt,
+        readinessValidUntil: validUntil,
+        readinessEvidenceRefs: ['mock:evidence:fresh-402'],
+      },
+      contract,
+      offering,
+      binding,
+      admittedTransport: admission.transport,
+      qualification,
+      ...(operation.usageObservation === undefined
+        ? {}
+        : { usageObservation: operation.usageObservation }),
+    },
     readinessObservation: { status: 402, observedAt, validUntil, evidenceRef: 'mock:evidence:fresh-402' },
     usageLabel: '8 calls · 2 distinct payers · rolling 30 days',
     claimCeiling:
@@ -202,17 +239,72 @@ export function buildDevelopmentPublishedOperationEvidence() {
 export function verifyDevelopmentPublishedOperationEvidence(
   packet: ReturnType<typeof buildDevelopmentPublishedOperationEvidence>,
 ): void {
+  let rebuilt
+  try {
+    rebuilt = materializePublishedOperation(packet.sourceMaterial)
+  } catch {
+    throw new Error('development_published_operation_evidence_invalid')
+  }
+  const descriptor = materializeRuntimePublishedOperation(rebuilt)
+  const expectedDiscoveryDigest = canonicalDigest(developmentPublishedEndpointCards)
+  const actualDiscoveryDigest = canonicalDigest(packet.discovery)
+  const operationDigest = canonicalDigest(packet.operation as unknown as StableHashValue)
+  const rebuiltDigest = canonicalDigest(rebuilt as unknown as StableHashValue)
+  const descriptorDigest = runtimeDescriptorDigest(packet.descriptor)
+  const rebuiltDescriptorDigest = runtimeDescriptorDigest(descriptor)
   if (packet.discovery.length !== 5
+    || actualDiscoveryDigest !== expectedDiscoveryDigest
+    || operationDigest !== rebuiltDigest
+    || packet.operation.materialDigest !== rebuilt.materialDigest
+    || descriptorDigest !== rebuiltDescriptorDigest
     || packet.operation.identity.endpoint.resource !== `GET ${endpointPath}`
     || packet.operation.identity.price.kind !== 'fixed'
     || packet.operation.identity.price.currency !== 'USD'
     || packet.operation.identity.price.amountMinor !== 1
+    || packet.operation.identity.payment.kind !== 'x402'
+    || packet.operation.identity.payment.network !== expectedPayment.network
+    || packet.operation.identity.payment.asset !== expectedPayment.asset
+    || packet.operation.identity.payment.payTo !== expectedPayment.payTo
+    || packet.operation.identity.payment.currency !== expectedPayment.currency
+    || packet.operation.transport.configDigest
+      !== canonicalDigest(JSON.parse(packet.operation.transport.configJson) as StableHashValue)
+    || packet.readinessObservation.status !== 402
+    || packet.readinessObservation.observedAt !== observedAt
+    || packet.readinessObservation.validUntil !== validUntil
+    || packet.operation.readiness.observedAt !== packet.readinessObservation.observedAt
+    || packet.operation.readiness.validUntil !== packet.readinessObservation.validUntil
     || packet.operation.usageObservation?.calls !== 8
     || packet.operation.usageObservation.distinctPayers !== 2
+    || packet.operation.usageObservation.window.days !== 30
+    || packet.operation.usageObservation.observedAt !== observedAt
+    || packet.usageLabel !== '8 calls · 2 distinct payers · rolling 30 days'
     || packet.descriptor.retryClass !== 'reconcile_before_retry'
     || packet.descriptor.authorityRequirement !== 'principal'
     || !packet.descriptor.validateInput({ symbol: 'BTC', convert: 'USD' })
     || packet.descriptor.validateInput({ symbol: 'BTC', convert: 'USD', method: 'POST' })) {
     throw new Error('development_published_operation_evidence_invalid')
   }
+}
+
+function runtimeDescriptorDigest(
+  descriptor: ReturnType<typeof materializeRuntimePublishedOperation>,
+): string {
+  return canonicalDigest({
+    id: descriptor.id,
+    version: descriptor.version,
+    name: descriptor.name,
+    summary: descriptor.summary,
+    inputSchema: descriptor.inputSchema,
+    outputSchema: descriptor.outputSchema,
+    consequenceClass: descriptor.consequenceClass,
+    authorityRequirement: descriptor.authorityRequirement,
+    retryClass: descriptor.retryClass,
+    materialInputPointers: descriptor.materialInputPointers,
+    dataUse: descriptor.dataUse,
+    effects: descriptor.effects,
+    evidence: descriptor.evidence,
+    safeContinuations: descriptor.safeContinuations,
+    price: descriptor.price,
+    target: descriptor.target,
+  } as StableHashValue)
 }

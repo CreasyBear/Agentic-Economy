@@ -11,11 +11,15 @@ import type {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
-import type {
+import {
+  capabilityBindingRegistrationHash,
+  capabilityOfferingRegistrationHash,
+  type AdmittedTransportMaterial,
   CapabilityOfferingRegistration,
   CapabilityTransportBindingRegistration,
 } from './public'
 import type { SuppliedCandidateQualification } from './server'
+import { admitRegisteredTransport } from './internal/transport-adapters'
 
 export type PublishedOperationUsageObservation = Readonly<{
   window: Readonly<{ kind: 'rolling'; days: number }>
@@ -44,7 +48,18 @@ export type PublishedOperation = Readonly<{
     bindingId: string
     bindingDigest: string
     adapterId: string
+    transportConfigDigest: string
     endpoint: Readonly<{ method: 'GET' | 'POST'; url: string; path: string; resource: string }>
+    payment: Readonly<{ kind: 'none' }> | Readonly<{
+      kind: 'x402'
+      network: string
+      asset: string
+      payTo: string
+      currency: string
+      routeAmountExponent: number
+      assetAmountExponent: number
+    }>
+    paymentRecipient: string
     price: CapabilityOfferingRegistration['presentation']['price']
     materialTerms: CapabilityOfferingRegistration['presentation']['materialTerms']
     evidenceDigest: string
@@ -52,6 +67,7 @@ export type PublishedOperation = Readonly<{
   contract: CapabilityContract
   offering: CapabilityOfferingRegistration
   binding: CapabilityTransportBindingRegistration
+  transport: AdmittedTransportMaterial
   readiness: Readonly<{
     observedAt: number
     validUntil: number
@@ -94,15 +110,29 @@ export function materializePublishedOperation(input: Readonly<{
   }>
   contract: CapabilityContract
   offering: CapabilityOfferingRegistration
-  offeringDigest: string
   binding: CapabilityTransportBindingRegistration
-  bindingDigest: string
-  admittedConfig: JsonValue
+  admittedTransport: AdmittedTransportMaterial
   qualification: SuppliedCandidateQualification
   usageObservation?: PublishedOperationUsageObservation
 }>): PublishedOperation {
-  const { publication, contract, offering, binding, qualification } = input
-  if (qualification.status !== 'eligible' || qualification.validUntil === undefined
+  const { publication, contract, offering, binding, qualification, admittedTransport } = input
+  const admittedConfig = parseAdmittedConfig(admittedTransport)
+  const authoritativeAdmission = admitRegisteredTransport({
+    adapterId: binding.adapter.adapterId,
+    endpointUrl: binding.endpointUrl,
+    credentialRef: binding.credentialRef,
+    continuation: binding.continuation,
+    cancellation: binding.cancellation,
+    config: binding.adapter.config,
+  })
+  const offeringDigest = capabilityOfferingRegistrationHash(offering)
+  const bindingDigest = capabilityBindingRegistrationHash(binding, admittedTransport)
+  const sources = new Map(qualification.sources.map((source) => [source.kind, source]))
+  if (authoritativeAdmission.kind !== 'admitted'
+    || authoritativeAdmission.transport.configJson !== admittedTransport.configJson
+    || authoritativeAdmission.transport.configDigest !== admittedTransport.configDigest
+    || authoritativeAdmission.transport.adapterId !== binding.adapter.adapterId
+    || qualification.status !== 'eligible' || qualification.validUntil === undefined
     || publication.readinessObservedAt === undefined || publication.readinessValidUntil === undefined
     || publication.publicationRef !== qualification.candidate.publicationRef
     || publication.revision !== qualification.candidate.revision
@@ -111,10 +141,21 @@ export function materializePublishedOperation(input: Readonly<{
     || offering.offeringId !== qualification.candidate.offeringId
     || binding.bindingId !== qualification.candidate.bindingId
     || binding.offeringId !== offering.offeringId
-    || contract.ref.contractDigest !== qualification.candidate.contractRef.contractDigest) {
+    || contract.ref.capabilityId !== qualification.candidate.contractRef.capabilityId
+    || contract.ref.version !== qualification.candidate.contractRef.version
+    || contract.ref.contractDigest !== qualification.candidate.contractRef.contractDigest
+    || !sameContractRef(offering.contractRef, contract.ref)
+    || !sameContractRef(binding.contractRef, contract.ref)
+    || binding.networkId !== offering.networkId
+    || binding.adapter.adapterId !== admittedTransportAdapter(binding, admittedConfig)
+    || sources.get('publication')?.digest !== publication.sourceDigest
+    || sources.get('contract')?.digest !== contract.ref.contractDigest
+    || sources.get('offering')?.digest !== offeringDigest
+    || sources.get('binding')?.digest !== bindingDigest
+    || sources.get('readiness') === undefined) {
     throw new Error('published_operation_sources_not_exact')
   }
-  const transport = transportIdentity(binding.endpointUrl, input.admittedConfig)
+  const transport = transportIdentity(binding.endpointUrl, admittedConfig)
   if (transport === undefined) throw new Error('published_operation_transport_invalid')
   validateUsage(input.usageObservation)
   const evidenceDigest = canonicalDigest({
@@ -130,11 +171,14 @@ export function materializePublishedOperation(input: Readonly<{
     contractVersion: contract.ref.version,
     contractDigest: contract.ref.contractDigest,
     offeringId: offering.offeringId,
-    offeringDigest: input.offeringDigest,
+    offeringDigest,
     bindingId: binding.bindingId,
-    bindingDigest: input.bindingDigest,
+    bindingDigest,
     adapterId: binding.adapter.adapterId,
+    transportConfigDigest: admittedTransport.configDigest,
     endpoint: transport,
+    payment: paymentIdentity(binding.adapter.adapterId, admittedConfig),
+    paymentRecipient: paymentRecipient(binding.adapter.adapterId, admittedConfig),
     price: offering.presentation.price,
     materialTerms: offering.presentation.materialTerms,
     evidenceDigest,
@@ -149,6 +193,7 @@ export function materializePublishedOperation(input: Readonly<{
     contract,
     offering,
     binding,
+    transport: admittedTransport,
     readiness: {
       observedAt: publication.readinessObservedAt,
       validUntil: publication.readinessValidUntil,
@@ -200,6 +245,38 @@ export function materializeRuntimePublishedOperation(
   }
 }
 
+function parseAdmittedConfig(transport: AdmittedTransportMaterial): JsonValue {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(transport.configJson)
+  } catch {
+    throw new Error('published_operation_transport_invalid')
+  }
+  if (canonicalDigest(parsed as StableHashValue) !== transport.configDigest) {
+    throw new Error('published_operation_transport_invalid')
+  }
+  return parsed as JsonValue
+}
+
+function admittedTransportAdapter(
+  binding: CapabilityTransportBindingRegistration,
+  config: JsonValue,
+): string | undefined {
+  return canonicalDigest(config as StableHashValue)
+    === canonicalDigest(binding.adapter.config as StableHashValue)
+    ? binding.adapter.adapterId
+    : undefined
+}
+
+function sameContractRef(
+  left: CapabilityTransportBindingRegistration['contractRef'],
+  right: CapabilityContract['ref'],
+): boolean {
+  return left.capabilityId === right.capabilityId
+    && left.version === right.version
+    && left.contractDigest === right.contractDigest
+}
+
 function transportIdentity(
   endpointUrl: string,
   config: JsonValue,
@@ -210,6 +287,37 @@ function transportIdentity(
   if (method !== 'GET' && method !== 'POST') return undefined
   const url = new URL(endpointUrl)
   return { method, url: url.href, path: url.pathname, resource: `${method} ${url.pathname}` }
+}
+
+function paymentIdentity(
+  adapterId: string,
+  config: JsonValue,
+): PublishedOperation['identity']['payment'] {
+  if (adapterId !== 'x402-fetch:v2') return { kind: 'none' }
+  if (config === null || Array.isArray(config) || typeof config !== 'object') {
+    throw new Error('published_operation_transport_invalid')
+  }
+  const value = config as Readonly<Record<string, JsonValue>>
+  if (typeof value.network !== 'string' || typeof value.asset !== 'string'
+    || typeof value.payTo !== 'string' || typeof value.currency !== 'string'
+    || typeof value.routeAmountExponent !== 'number'
+    || typeof value.assetAmountExponent !== 'number') {
+    throw new Error('published_operation_transport_invalid')
+  }
+  return {
+    kind: 'x402',
+    network: value.network,
+    asset: value.asset,
+    payTo: value.payTo,
+    currency: value.currency,
+    routeAmountExponent: value.routeAmountExponent,
+    assetAmountExponent: value.assetAmountExponent,
+  }
+}
+
+function paymentRecipient(adapterId: string, config: JsonValue): string {
+  const payment = paymentIdentity(adapterId, config)
+  return payment.kind === 'x402' ? payment.payTo : 'none'
 }
 
 function validateUsage(observation: PublishedOperationUsageObservation | undefined): void {

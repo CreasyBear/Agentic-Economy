@@ -1,4 +1,4 @@
-import type { ActionInvocationOrigin, ActionInvocationView, InvocationActor } from '@/modules/action-invocation'
+import type { ActionInvocationOrigin, ActionInvocationView } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -11,10 +11,13 @@ export type PublishedOperationHostObservation = Readonly<{
   invocationRef: string
   invocationVersion: number
   origin: ActionInvocationOrigin
-  actor: InvocationActor
+  originDigest: string
   owner: string
   principal: string
   actingActor: string
+  delegation: 'none'
+  effectGeneration: number
+  provenance: Readonly<{ adapterId: string; observationRef: string }>
   materialDigest: string
   parametersDigest: string
   priceDigest: string
@@ -33,22 +36,24 @@ export type PublishedOperationHostCommand = Readonly<{
   descriptor: RuntimePublishedOperationDescriptor
   invocation: ActionInvocationView
   input: unknown
-  actor: InvocationActor
-  origin: ActionInvocationOrigin
-  paymentRecipient: string
+  provenance: Readonly<{ adapterId: string; observationRef: string }>
 }>
 
 export function observeEmbeddedPublishedOperation(
   command: PublishedOperationHostCommand,
 ): PublishedOperationHostObservation {
-  if (command.origin.kind !== 'request_owned') throw new Error('embedded_origin_must_be_request_owned')
+  if (command.provenance.adapterId !== 'embedded_human') {
+    throw new Error('published_operation_host_provenance_invalid')
+  }
   return observe('embedded_human', command)
 }
 
 export function observeExternalPublishedOperation(
   command: PublishedOperationHostCommand,
 ): PublishedOperationHostObservation {
-  if (command.origin.kind !== 'standalone') throw new Error('external_origin_must_be_standalone')
+  if (command.provenance.adapterId !== 'external_agent') {
+    throw new Error('published_operation_host_provenance_invalid')
+  }
   return observe('external_agent', command)
 }
 
@@ -57,11 +62,15 @@ export function comparePublishedOperationHostSemantics(
   right: PublishedOperationHostObservation,
 ): Readonly<{ kind: 'pass' } | { kind: 'fail'; fields: readonly string[] }> {
   const semanticFields = [
-    'operationId', 'operationVersion', 'owner', 'principal', 'actingActor', 'materialDigest',
+    'operationId', 'operationVersion', 'invocationRef', 'invocationVersion', 'originDigest',
+    'owner', 'principal', 'actingActor', 'delegation', 'effectGeneration', 'materialDigest',
     'parametersDigest', 'priceDigest', 'paymentRecipient', 'authorityDigest', 'attemptsDigest',
     'evidenceDigest', 'freshnessDigest', 'uncertaintyDigest', 'continuationsDigest',
   ] as const
-  const fields = semanticFields.filter((field) => left[field] !== right[field])
+  const fields: string[] = semanticFields.filter((field) => left[field] !== right[field])
+  if (left.provenance.observationRef === right.provenance.observationRef) {
+    fields.push('provenance')
+  }
   return fields.length === 0 ? { kind: 'pass' } : { kind: 'fail', fields }
 }
 
@@ -78,19 +87,35 @@ function observe(
     || preparedTarget.materialDigest !== command.operation.materialDigest) {
     throw new Error('published_operation_invocation_not_anchored')
   }
+  const actors = new Set(command.invocation.attempts.map(({ actor }) =>
+    `${actor.principalRef}\u0000${actor.callerRef}`))
+  if (actors.size > 1 || command.invocation.attempts.some(({ actor }) =>
+    actor.principalRef !== command.invocation.owner.principalRef)) {
+    throw new Error('published_operation_persisted_attribution_invalid')
+  }
+  const persistedActor = command.invocation.attempts.at(-1)?.actor ?? command.invocation.owner
+  const effectGeneration = command.invocation.attempts.reduce(
+    (highest, attempt) => Math.max(highest, attempt.effectGeneration),
+    0,
+  )
   const common = {
     operationId: command.operation.operationId,
     operationVersion: command.descriptor.version,
-    owner: command.actor.principalRef,
-    principal: command.actor.principalRef,
-    actingActor: command.actor.callerRef,
+    invocationRef: command.invocation.invocationRef,
+    invocationVersion: command.invocation.invocationVersion,
+    originDigest: canonicalDigest(command.invocation.origin as StableHashValue),
+    owner: command.invocation.owner.callerRef,
+    principal: command.invocation.owner.principalRef,
+    actingActor: persistedActor.callerRef,
+    delegation: 'none' as const,
+    effectGeneration,
     materialDigest: command.operation.materialDigest,
     parametersDigest: canonicalDigest(command.input as StableHashValue),
     priceDigest: canonicalDigest(command.operation.identity.price as StableHashValue),
-    paymentRecipient: command.paymentRecipient,
+    paymentRecipient: command.operation.identity.paymentRecipient,
     authorityDigest: canonicalDigest({
       authority: command.invocation.authority,
-      principalRef: command.actor.principalRef,
+      principalRef: command.invocation.owner.principalRef,
     } as StableHashValue),
     attemptsDigest: canonicalDigest(command.invocation.attempts as StableHashValue),
     evidenceDigest: command.operation.identity.evidenceDigest,
@@ -104,10 +129,8 @@ function observe(
   return {
     host,
     ...common,
-    invocationRef: command.invocation.invocationRef,
-    invocationVersion: command.invocation.invocationVersion,
-    origin: command.origin,
-    actor: command.actor,
+    origin: command.invocation.origin,
+    provenance: command.provenance,
     semanticDigest: canonicalDigest(common as StableHashValue),
   }
 }

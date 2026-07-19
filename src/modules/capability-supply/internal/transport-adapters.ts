@@ -7,8 +7,13 @@ import { stableStringify, type StableHashValue } from '@/modules/common/stable-h
 
 const MAX_ADAPTER_CONFIG_BYTES = 65_536
 const encoder = new TextEncoder()
+const queryMapping = z.array(z.strictObject({
+  inputPointer: z.string().regex(/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/),
+  parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
+})).min(1).max(64)
 const httpJsonConfiguration = z.strictObject({
-  method: z.literal('POST'),
+  method: z.enum(['GET', 'POST']),
+  query: queryMapping.optional(),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
   reconciliation: z.strictObject({
     path: z.string().regex(/^\/(?!\/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/),
@@ -18,7 +23,9 @@ const httpJsonConfiguration = z.strictObject({
     path: z.string().regex(/^\/(?!\/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/),
     requestTimeoutMs: z.number().int().min(100).max(120_000),
   }).optional(),
-})
+}).refine((value) => value.method === 'GET'
+  ? value.query !== undefined && value.reconciliation === undefined && value.cancellation === undefined
+  : value.query === undefined)
 const mcpJsonRpcConfiguration = z.strictObject({
   protocolVersion: z.string().trim().min(1).max(64),
   toolName: z.string().trim().min(1).max(200),
@@ -26,10 +33,7 @@ const mcpJsonRpcConfiguration = z.strictObject({
 })
 const x402FetchConfiguration = z.strictObject({
   method: z.enum(['GET', 'POST']),
-  query: z.array(z.strictObject({
-    inputPointer: z.string().regex(/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/),
-    parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
-  })).max(64).optional(),
+  query: queryMapping.optional(),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
   scheme: z.literal('exact'),
   network: z.string().trim().min(1).max(100),

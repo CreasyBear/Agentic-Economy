@@ -33,6 +33,35 @@ describe('capability supply transport adapter registry', () => {
     })
   })
 
+  it('admits closed GET query mappings but keeps cancellation and reconciliation POST-only', () => {
+    const base = {
+      adapterId: 'http-json:v1',
+      endpointUrl: 'https://example.test/capability',
+      credentialRef: 'env:CAPABILITY_KEY',
+      continuation: { kind: 'single_response' as const, evidenceRefs: ['evidence:response'] },
+      cancellation: { kind: 'unsupported' as const, evidenceRefs: ['evidence:cancellation'] },
+    }
+    expect(admitRegisteredTransport({
+      ...base,
+      config: {
+        method: 'GET', requestTimeoutMs: 5_000,
+        query: [{ inputPointer: '/symbol', parameter: 'symbol' }],
+      },
+    })).toMatchObject({ kind: 'admitted', transport: { adapterId: 'http-json:v1' } })
+    expect(admitRegisteredTransport({
+      ...base,
+      config: { method: 'GET', requestTimeoutMs: 5_000 },
+    })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
+    expect(admitRegisteredTransport({
+      ...base,
+      config: {
+        method: 'GET', requestTimeoutMs: 5_000,
+        query: [{ inputPointer: '/symbol', parameter: 'symbol' }],
+        reconciliation: { path: '/reconcile', requestTimeoutMs: 1_000 },
+      },
+    })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
+  })
+
   it('admits an optional same-origin reconciliation exchange without provider vocabulary', () => {
     expect(admitRegisteredTransport({
       adapterId: 'http-json:v1',

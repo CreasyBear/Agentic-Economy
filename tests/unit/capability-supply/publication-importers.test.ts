@@ -39,6 +39,51 @@ describe('capability publication importers', () => {
     }
   })
 
+  it('normalizes and admits OpenAPI 3.1 GET with an exact query mapping', () => {
+    const document = openApiDocument()
+    document.paths['/lookup'] = {
+      get: {
+        parameters: [
+          { in: 'query', name: 'query', required: true, schema: { type: 'string', minLength: 1 } },
+        ],
+        responses: { '200': { content: { 'application/json': { schema: outputSchema() } } } },
+      },
+    } as never
+    const result = importOpenApiHttpCapability({
+      kind: 'openapi_http',
+      document,
+      operation: { path: '/lookup', method: 'get' },
+      contract: contractMetadata('independent.lookup-get'),
+      commercial: commercialInput(),
+      evidenceRefs: ['source:openapi:get'],
+    })
+    expect(result).toMatchObject({
+      kind: 'normalized',
+      draft: {
+        source: { selector: { path: '/lookup', method: 'get' } },
+        binding: {
+          adapter: {
+            adapterId: 'http-json:v1',
+            config: {
+              method: 'GET',
+              query: [{ inputPointer: '/query', parameter: 'query' }],
+            },
+          },
+        },
+      },
+    })
+    if (result.kind === 'normalized') {
+      expect(admitRegisteredTransport({
+        adapterId: result.draft.binding.adapter.adapterId,
+        endpointUrl: result.draft.binding.endpointUrl,
+        credentialRef: result.draft.binding.credentialRef,
+        continuation: result.draft.binding.continuation,
+        cancellation: result.draft.binding.cancellation,
+        config: result.draft.binding.adapter.config,
+      })).toMatchObject({ kind: 'admitted', transport: { adapterId: 'http-json:v1' } })
+    }
+  })
+
   it('normalizes one MCP tool with a distinct admitted JSON-RPC transport', () => {
     const result = importMcpCapability({
       kind: 'mcp',
@@ -106,6 +151,43 @@ describe('capability publication importers', () => {
       expect(result.draft.binding.adapter.config).toMatchObject({
         scheme: 'exact', network: 'eip155:84532', currency: 'AUD',
       })
+    }
+  })
+
+  it.each(['GET', 'POST'] as const)('normalizes and admits x402 %s without widening payment material', (method) => {
+    const result = importX402Capability({
+      kind: 'x402',
+      resource: {
+        resourceUrl: 'https://api.example.test/lookup',
+        method,
+        ...(method === 'GET'
+          ? { query: [{ inputPointer: '/query', parameter: 'query' }] }
+          : {}),
+        inputSchema: inputSchema(),
+        outputSchema: outputSchema(),
+        price: { currency: 'AUD', amountMinor: 1_200 },
+        scheme: 'exact', network: 'eip155:84532',
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+        routeAmountExponent: 2, assetAmountExponent: 6,
+      },
+      contract: contractMetadata(`independent.x402-${method.toLowerCase()}`),
+      commercial: commercialInput({ price: { kind: 'fixed', currency: 'AUD', amountMinor: 1_200 } }),
+      evidenceRefs: [`source:x402:${method}`],
+    })
+    expect(result).toMatchObject({
+      kind: 'normalized',
+      draft: { binding: { adapter: { config: { method } } } },
+    })
+    if (result.kind === 'normalized') {
+      expect(admitRegisteredTransport({
+        adapterId: result.draft.binding.adapter.adapterId,
+        endpointUrl: result.draft.binding.endpointUrl,
+        credentialRef: result.draft.binding.credentialRef,
+        continuation: result.draft.binding.continuation,
+        cancellation: result.draft.binding.cancellation,
+        config: result.draft.binding.adapter.config,
+      })).toMatchObject({ kind: 'admitted', transport: { adapterId: 'x402-fetch:v2' } })
     }
   })
 
