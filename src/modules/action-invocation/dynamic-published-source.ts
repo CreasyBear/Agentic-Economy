@@ -15,7 +15,10 @@ import {
 } from './dynamic-published-contract'
 
 export type DynamicPublishedSourceRow = Readonly<{
+  invocationRef: string
   operationKey: string
+  semanticBaseKey: string
+  semanticIdentityDigest: string
   operation: PublishedOperation
   input: DynamicPublishedInvocationInput
   context: ActionContext
@@ -24,11 +27,31 @@ export type DynamicPublishedSourceRow = Readonly<{
   resultIdentity?: Readonly<{ sourceResultRef: string; resultDigest: string }>
 }>
 
+export type DynamicPublishedSharedOutcome = Readonly<{
+  semanticIdentityDigest: string
+  ownerInvocationRef: string
+  observedResolution: DynamicPublishedSourceRow['observedResolution']
+  resultIdentity?: DynamicPublishedSourceRow['resultIdentity']
+}>
+
 export type DynamicPublishedSourcePort = Readonly<{
   current(slot: string): PublishedOperation | undefined
-  read(operationKey: string): DynamicPublishedSourceRow | undefined
+  read(invocationRef: string): DynamicPublishedSourceRow | undefined
   write(row: DynamicPublishedSourceRow): void
   list(): readonly DynamicPublishedSourceRow[]
+  claimSemanticEffect(input: Readonly<{
+    semanticBaseKey: string
+    semanticIdentityDigest: string
+    invocationRef: string
+  }>):
+    | Readonly<{ kind: 'owner' }>
+    | Readonly<{ kind: 'reuse'; outcome: DynamicPublishedSharedOutcome }>
+    | Readonly<{ kind: 'wait'; outcome: Promise<DynamicPublishedSharedOutcome> }>
+    | Readonly<{ kind: 'conflict' }>
+  completeSemanticEffect(input: Readonly<{
+    semanticBaseKey: string
+    outcome: DynamicPublishedSharedOutcome
+  }>): void
 }>
 
 export function dynamicPublishedOperationSlot(operation: PublishedOperation): string {
@@ -48,12 +71,59 @@ export function createDevelopmentDynamicPublishedSource(
   setCurrent(operation: PublishedOperation): void
 }> {
   const current = new Map(operations.map((operation) => [dynamicPublishedOperationSlot(operation), operation]))
+  const semantic = new Map<string, {
+    semanticIdentityDigest: string
+    ownerInvocationRef: string
+    outcome?: DynamicPublishedSharedOutcome
+    waiters: ((outcome: DynamicPublishedSharedOutcome) => void)[]
+  }>()
+  for (const row of rows.values()) {
+    if (row.resultIdentity === undefined || row.observedResolution.state === 'pending') continue
+    semantic.set(row.semanticBaseKey, {
+      semanticIdentityDigest: row.semanticIdentityDigest,
+      ownerInvocationRef: row.invocationRef,
+      outcome: {
+        semanticIdentityDigest: row.semanticIdentityDigest,
+        ownerInvocationRef: row.invocationRef,
+        observedResolution: row.observedResolution,
+        resultIdentity: row.resultIdentity,
+      },
+      waiters: [],
+    })
+  }
   return {
     rows,
     current: (operationId) => current.get(operationId),
-    read: (operationKey) => rows.get(operationKey),
-    write: (row) => rows.set(row.operationKey, row),
+    read: (invocationRef) => rows.get(invocationRef),
+    write: (row) => rows.set(row.invocationRef, row),
     list: () => [...rows.values()],
+    claimSemanticEffect: ({ semanticBaseKey, semanticIdentityDigest, invocationRef }) => {
+      const prior = semantic.get(semanticBaseKey)
+      if (prior === undefined) {
+        semantic.set(semanticBaseKey, {
+          semanticIdentityDigest,
+          ownerInvocationRef: invocationRef,
+          waiters: [],
+        })
+        return { kind: 'owner' }
+      }
+      if (prior.semanticIdentityDigest !== semanticIdentityDigest) return { kind: 'conflict' }
+      if (prior.outcome !== undefined) return { kind: 'reuse', outcome: prior.outcome }
+      return {
+        kind: 'wait',
+        outcome: new Promise((resolve) => prior.waiters.push(resolve)),
+      }
+    },
+    completeSemanticEffect: ({ semanticBaseKey, outcome }) => {
+      const prior = semantic.get(semanticBaseKey)
+      if (prior === undefined
+        || prior.ownerInvocationRef !== outcome.ownerInvocationRef
+        || prior.semanticIdentityDigest !== outcome.semanticIdentityDigest) {
+        throw new Error('dynamic_semantic_effect_owner_mismatch')
+      }
+      prior.outcome = outcome
+      for (const resolve of prior.waiters.splice(0)) resolve(outcome)
+    },
     setCurrent: (operation) => current.set(dynamicPublishedOperationSlot(operation), operation),
   }
 }

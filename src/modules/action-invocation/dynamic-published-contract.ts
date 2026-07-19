@@ -143,6 +143,7 @@ export function createDynamicPublishedAction(input: Readonly<{
   ) => Promise<DynamicPublishedInvocationResult>
   preReleaseCheck: (
     value: DynamicPublishedInvocationInput,
+    context: ActionContext,
   ) => Promise<DynamicPublishedInvocationResult | undefined>
 }>): Action<DynamicPublishedInvocationInput, DynamicPublishedInvocationResult> {
   const { operation, descriptor } = input
@@ -196,8 +197,8 @@ export function createDynamicPublishedAction(input: Readonly<{
       }),
     }.classify,
     preReleaseCheck: {
-      check: async ({ data }: { data: DynamicPublishedInvocationInput }) =>
-        await input.preReleaseCheck(data),
+      check: async ({ data, context }: { data: DynamicPublishedInvocationInput; context: ActionContext }) =>
+        await input.preReleaseCheck(data, context),
     }.check,
     run: async ({ data, context }) => await input.run(data, context),
   }

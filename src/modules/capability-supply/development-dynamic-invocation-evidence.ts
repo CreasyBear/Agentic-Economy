@@ -103,6 +103,19 @@ export type DevelopmentDynamicInvocationEvidence = Readonly<{
     providerEffects: 1
     snapshot: DynamicPublishedAdapterSnapshot
   }>
+  semanticReuse: Readonly<{
+    policy: 'same_principal_exact_reuse_cross_principal_isolated'
+    sharedOutcomeRef: string
+    paymentEffects: 1
+    providerEffects: 1
+    invocations: readonly Readonly<{
+      invocationRef: string
+      authorityRef: string
+      attemptRef: string
+      effectGeneration: 1
+      snapshot: DynamicPublishedAdapterSnapshot
+    }>[]
+  }>
   sourceDigest: string
   evidenceContract: Readonly<{
     anchored: 'semantic_identity_authority_material_effect_reconstruction'
@@ -331,6 +344,83 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       providerEffects: 1 as const,
       snapshot: recoverySnapshot,
     }
+    const semanticEffects = { payment: 0, provider: 0 }
+    const semanticSource = createDevelopmentDynamicPublishedSource([fixture.operation])
+    let semanticInvocationSequence = 0
+    let semanticAuthoritySequence = 0
+    let semanticAttemptSequence = 0
+    const semanticAdapter = createDynamicPublishedActionInvocationAdapter({
+      operation: fixture.operation,
+      source: semanticSource,
+      runtime: successRuntime(fixture.operation.binding.endpointUrl, semanticEffects),
+      now: () => now,
+      nextInvocationRef: () => `semantic:invocation:${++semanticInvocationSequence}`,
+      nextAuthorityRef: () => `semantic:authority:${++semanticAuthoritySequence}`,
+      nextAttemptRef: () => `semantic:attempt:${++semanticAttemptSequence}`,
+    })
+    const executeSemantic = async () => {
+      const prepared = semanticAdapter.prepare({
+        origin: developmentOrigins[1]!,
+        actor,
+        value: { symbol: 'BTC', convert: 'USD' },
+        freshnessMs: 60_000,
+      })
+      const decided = semanticAdapter.decide({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: prepared.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor,
+        origin: developmentOrigins[1]!,
+        accept: true,
+      })
+      if (decided.kind !== 'accepted') throw new Error(decided.code)
+      const acquired = semanticAdapter.acquire({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: decided.view.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor,
+        origin: developmentOrigins[1]!,
+        leaseOwner: `worker:${prepared.invocationRef}`,
+        leaseMs: 30_000,
+      })
+      if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+        throw new Error('semantic_reuse_not_leased')
+      }
+      const completed = await semanticAdapter.executeAcquired({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: acquired.view.invocationVersion,
+        attemptRef: acquired.view.control.attemptRef,
+        leaseOwner: acquired.view.control.leaseOwner,
+        effectGeneration: acquired.view.control.effectGeneration,
+      })
+      if (completed.kind !== 'accepted') throw new Error(completed.code)
+      return {
+        invocationRef: prepared.invocationRef,
+        authorityRef: prepared.authority!.reference,
+        attemptRef: acquired.view.control.attemptRef,
+        effectGeneration: 1 as const,
+      }
+    }
+    const semanticFirst = await executeSemantic()
+    const semanticSecond = await executeSemantic()
+    const semanticSnapshot = semanticAdapter.exportSnapshot()
+    const sharedOutcomeRef = semanticSource.read(semanticFirst.invocationRef)?.resultIdentity?.sourceResultRef
+    if (sharedOutcomeRef === undefined
+      || semanticSource.read(semanticSecond.invocationRef)?.resultIdentity?.sourceResultRef !== sharedOutcomeRef
+      || semanticEffects.payment !== 1
+      || semanticEffects.provider !== 1) {
+      throw new Error('semantic_reuse_evidence_invalid')
+    }
+    const semanticReuse = {
+      policy: 'same_principal_exact_reuse_cross_principal_isolated' as const,
+      sharedOutcomeRef,
+      paymentEffects: 1 as const,
+      providerEffects: 1 as const,
+      invocations: [semanticFirst, semanticSecond].map((entry) => ({
+        ...entry,
+        snapshot: invocationSnapshot(semanticSnapshot, entry.invocationRef),
+      })),
+    }
     const sourceDigest = canonicalDigest({
       operation: fixture.operation,
       descriptor: {
@@ -347,6 +437,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       fixture,
       cases,
       recovery,
+      semanticReuse,
       sourceDigest,
       evidenceContract: {
         anchored: 'semantic_identity_authority_material_effect_reconstruction' as const,
@@ -432,6 +523,34 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       1,
     ),
   })
+  const semanticInvocationsValid = packet.semanticReuse.invocations.length === 2
+    && packet.semanticReuse.invocations.every((entry, index) => {
+      verifyDynamicPublishedSnapshot({
+        snapshot: entry.snapshot,
+        anchors: snapshotAnchors(
+          rebuiltOperation,
+          rebuiltDescriptor,
+          developmentOrigins[1]!,
+          `semantic:authority:${index + 1}`,
+          1,
+          canonicalDigest(
+            developmentChallenge(rebuiltOperation.binding.endpointUrl) as unknown as StableHashValue,
+          ),
+        ),
+      })
+      const source = entry.snapshot.sourceRows[0]
+      const control = entry.snapshot.controls[0]
+      const attempt = entry.snapshot.attempts[0]?.rows[0]
+      return source?.invocationRef === entry.invocationRef
+        && control?.invocationRef === entry.invocationRef
+        && control.control.authority?.reference === entry.authorityRef
+        && attempt?.attemptRef === entry.attemptRef
+        && attempt.effectGeneration === entry.effectGeneration
+        && source.resultIdentity?.sourceResultRef === packet.semanticReuse.sharedOutcomeRef
+        && control.sourceResultRef === packet.semanticReuse.sharedOutcomeRef
+    })
+  const [semanticFirst, semanticSecond] = packet.semanticReuse.invocations
+  const semanticRows = packet.semanticReuse.invocations.map((entry) => entry.snapshot.sourceRows[0]!)
   if (
     canonicalDigest(material as unknown as StableHashValue) !== packetDigest
     || recomputedSource !== packet.sourceDigest
@@ -446,6 +565,15 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     || packet.recovery.reconciled !== 'terminal'
     || packet.recovery.paymentEffects !== 1
     || packet.recovery.providerEffects !== 1
+    || packet.semanticReuse.policy !== 'same_principal_exact_reuse_cross_principal_isolated'
+    || packet.semanticReuse.paymentEffects !== 1
+    || packet.semanticReuse.providerEffects !== 1
+    || !semanticInvocationsValid
+    || semanticFirst?.invocationRef === semanticSecond?.invocationRef
+    || semanticFirst?.authorityRef === semanticSecond?.authorityRef
+    || semanticFirst?.attemptRef === semanticSecond?.attemptRef
+    || semanticRows[0]?.semanticBaseKey !== semanticRows[1]?.semanticBaseKey
+    || semanticRows[0]?.semanticIdentityDigest !== semanticRows[1]?.semanticIdentityDigest
     || packet.evidenceContract.anchored
       !== 'semantic_identity_authority_material_effect_reconstruction'
     || packet.evidenceContract.reconstructionMetadataOnly
@@ -478,6 +606,22 @@ function verifierRuntime(): RouteTransportRuntime {
     send: async () => { throw new Error('verifier_must_not_execute_effect') },
     resolveCredential: () => undefined,
     createX402PaymentSignature: async () => undefined,
+  }
+}
+
+function invocationSnapshot(
+  snapshot: DynamicPublishedAdapterSnapshot,
+  invocationRef: string,
+): DynamicPublishedAdapterSnapshot {
+  const history = snapshot.history.filter((group) => group.invocationRef === invocationRef)
+  const commandIds = new Set(history.flatMap((group) => group.rows.map(({ commandId }) => commandId)))
+  return {
+    ...snapshot,
+    sourceRows: snapshot.sourceRows.filter((row) => row.invocationRef === invocationRef),
+    controls: snapshot.controls.filter((row) => row.invocationRef === invocationRef),
+    attempts: snapshot.attempts.filter((group) => group.invocationRef === invocationRef),
+    history,
+    commands: snapshot.commands.filter(({ commandId }) => commandIds.has(commandId)),
   }
 }
 

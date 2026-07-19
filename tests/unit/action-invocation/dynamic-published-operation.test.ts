@@ -752,6 +752,255 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     expect(effects).toEqual({ payment: 1, provider: 1 })
   })
 
+  it('isolates invocation ownership while reusing one principal-scoped semantic effect', async () => {
+    const fixture = buildDevelopmentPublishedOperationEvidence()
+    const clock = fixture.operation.readiness.observedAt + 1_000
+    vi.spyOn(Date, 'now').mockReturnValue(clock)
+    const effects = { payment: 0, provider: 0 }
+    const source = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const adapter = createAdapter(
+      fixture.operation,
+      successRuntime(fixture.operation.binding.endpointUrl, effects),
+      clock,
+      source,
+    )
+    const origin = origins[1]!
+    const execute = async (prepared: ReturnType<typeof adapter.prepare>, worker: string) => {
+      const decided = adapter.decide({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: prepared.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin, accept: true,
+      })
+      if (decided.kind !== 'accepted') throw new Error(decided.code)
+      const acquired = adapter.acquire({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: decided.view.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin, leaseOwner: worker, leaseMs: 30_000,
+      })
+      if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') throw new Error('not leased')
+      return await adapter.executeAcquired({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: acquired.view.invocationVersion,
+        attemptRef: acquired.view.control.attemptRef,
+        leaseOwner: acquired.view.control.leaseOwner,
+        effectGeneration: acquired.view.control.effectGeneration,
+      })
+    }
+    const first = adapter.prepare({
+      origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+    })
+    const firstResult = await execute(first, 'worker:first')
+    if (firstResult.kind !== 'accepted') throw new Error(firstResult.code)
+    const firstIdentity = adapter.readCompletedResult(first.invocationRef, actor)
+    const second = adapter.prepare({
+      origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+    })
+    expect(second.invocationRef).not.toBe(first.invocationRef)
+    expect(second.authority?.reference).not.toBe(first.authority?.reference)
+    expect(adapter.readCompletedResult(first.invocationRef, actor)).toEqual(firstIdentity)
+    const secondResult = await execute(second, 'worker:second')
+    if (secondResult.kind !== 'accepted') throw new Error(secondResult.code)
+    expect(effects).toEqual({ payment: 1, provider: 1 })
+    const rows = source.list()
+    expect(rows).toHaveLength(2)
+    expect(new Set(rows.map(({ invocationRef }) => invocationRef)).size).toBe(2)
+    expect(rows[0]?.resultIdentity?.sourceResultRef)
+      .toBe(rows[1]?.resultIdentity?.sourceResultRef)
+    expect(firstResult.view.attempts[0]?.attemptRef)
+      .not.toBe(secondResult.view.attempts[0]?.attemptRef)
+    expect(firstResult.view.acceptedAuthority)
+      .not.toEqual(secondResult.view.acceptedAuthority)
+  })
+
+  it('atomically suppresses simultaneous exact invocations without crossing runtime attribution', async () => {
+    const fixture = buildDevelopmentPublishedOperationEvidence()
+    const clock = fixture.operation.readiness.observedAt + 1_000
+    vi.spyOn(Date, 'now').mockReturnValue(clock)
+    const effects = { payment: 0, provider: 0 }
+    const source = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const adapter = createAdapter(
+      fixture.operation,
+      successRuntime(fixture.operation.binding.endpointUrl, effects),
+      clock,
+      source,
+    )
+    const origin = origins[1]!
+    const acquire = (prepared: ReturnType<typeof adapter.prepare>, worker: string) => {
+      const decided = adapter.decide({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: prepared.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin, accept: true,
+      })
+      if (decided.kind !== 'accepted') throw new Error(decided.code)
+      const acquired = adapter.acquire({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: decided.view.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin, leaseOwner: worker, leaseMs: 30_000,
+      })
+      if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') throw new Error('not leased')
+      return acquired.view
+    }
+    const first = adapter.prepare({
+      origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+    })
+    const second = adapter.prepare({
+      origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+    })
+    const firstLease = acquire(first, 'worker:simultaneous:first')
+    const secondLease = acquire(second, 'worker:simultaneous:second')
+    if (firstLease.control.state !== 'leased' || secondLease.control.state !== 'leased') {
+      throw new Error('not leased')
+    }
+    const [firstResult, secondResult] = await Promise.all([
+      adapter.executeAcquired({
+        invocationRef: first.invocationRef,
+        expectedInvocationVersion: firstLease.invocationVersion,
+        attemptRef: firstLease.control.attemptRef,
+        leaseOwner: firstLease.control.leaseOwner,
+        effectGeneration: firstLease.control.effectGeneration,
+      }),
+      adapter.executeAcquired({
+        invocationRef: second.invocationRef,
+        expectedInvocationVersion: secondLease.invocationVersion,
+        attemptRef: secondLease.control.attemptRef,
+        leaseOwner: secondLease.control.leaseOwner,
+        effectGeneration: secondLease.control.effectGeneration,
+      }),
+    ])
+    expect(firstResult.kind).toBe('accepted')
+    expect(secondResult.kind).toBe('accepted')
+    expect(effects).toEqual({ payment: 1, provider: 1 })
+    expect(source.list().map(({ resultIdentity }) => resultIdentity?.sourceResultRef))
+      .toEqual([source.list()[0]?.resultIdentity?.sourceResultRef, source.list()[0]?.resultIdentity?.sourceResultRef])
+  })
+
+  it('shares one uncertain provider outcome without retrying the effect', async () => {
+    const fixture = buildDevelopmentPublishedOperationEvidence()
+    const clock = fixture.operation.readiness.observedAt + 1_000
+    vi.spyOn(Date, 'now').mockReturnValue(clock)
+    const effects = { payment: 0, provider: 0 }
+    const source = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const adapter = createAdapter(
+      fixture.operation,
+      lostResponseRuntime(fixture.operation.binding.endpointUrl, effects),
+      clock,
+      source,
+    )
+    const origin = origins[1]!
+    const lease = (worker: string) => {
+      const prepared = adapter.prepare({
+        origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+      })
+      const decided = adapter.decide({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: prepared.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin, accept: true,
+      })
+      if (decided.kind !== 'accepted') throw new Error(decided.code)
+      const acquired = adapter.acquire({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: decided.view.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin, leaseOwner: worker, leaseMs: 30_000,
+      })
+      if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') throw new Error('not leased')
+      return { prepared, view: acquired.view }
+    }
+    const first = lease('worker:uncertain:first')
+    const second = lease('worker:uncertain:second')
+    if (first.view.control.state !== 'leased' || second.view.control.state !== 'leased') {
+      throw new Error('not leased')
+    }
+    const execute = (entry: typeof first) => adapter.executeAcquired({
+      invocationRef: entry.prepared.invocationRef,
+      expectedInvocationVersion: entry.view.invocationVersion,
+      attemptRef: entry.view.control.state === 'leased' ? entry.view.control.attemptRef : '',
+      leaseOwner: entry.view.control.state === 'leased' ? entry.view.control.leaseOwner : '',
+      effectGeneration: entry.view.control.state === 'leased' ? entry.view.control.effectGeneration : 0,
+    })
+    const [firstResult, secondResult] = await Promise.all([execute(first), execute(second)])
+    expect(firstResult.kind === 'accepted' && firstResult.view.control)
+      .toMatchObject({ state: 'reconciliation_required' })
+    expect(secondResult.kind === 'accepted' && secondResult.view.control)
+      .toMatchObject({ state: 'reconciliation_required' })
+    expect(effects).toEqual({ payment: 1, provider: 1 })
+    expect(source.list().every(
+      ({ observedResolution }) => observedResolution.state === 'threw',
+    )).toBe(true)
+  })
+
+  it('conflicts changed semantic material and isolates different principals', async () => {
+    const fixture = buildDevelopmentPublishedOperationEvidence()
+    const source = createDevelopmentDynamicPublishedSource([fixture.operation])
+    expect(source.claimSemanticEffect({
+      semanticBaseKey: 'semantic:base',
+      semanticIdentityDigest: 'sha256:first',
+      invocationRef: 'invocation:first',
+    })).toEqual({ kind: 'owner' })
+    expect(source.claimSemanticEffect({
+      semanticBaseKey: 'semantic:base',
+      semanticIdentityDigest: 'sha256:changed-target-or-material',
+      invocationRef: 'invocation:second',
+    })).toEqual({ kind: 'conflict' })
+
+    const effects = { payment: 0, provider: 0 }
+    const clock = fixture.operation.readiness.observedAt + 1_000
+    vi.spyOn(Date, 'now').mockReturnValue(clock)
+    const isolatedSource = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const adapter = createAdapter(
+      fixture.operation,
+      successRuntime(fixture.operation.binding.endpointUrl, effects),
+      clock,
+      isolatedSource,
+    )
+    const executeFor = async (principal: InvocationActor) => {
+      const origin = {
+        kind: 'standalone' as const,
+        callerRef: principal.callerRef,
+        principalRef: principal.principalRef,
+      }
+      const prepared = adapter.prepare({
+        origin, actor: principal, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+      })
+      const decided = adapter.decide({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: prepared.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor: principal, origin, accept: true,
+      })
+      if (decided.kind !== 'accepted') throw new Error(decided.code)
+      const acquired = adapter.acquire({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: decided.view.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor: principal,
+        origin,
+        leaseOwner: `worker:${principal.principalRef}`,
+        leaseMs: 30_000,
+      })
+      if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') throw new Error('not leased')
+      const result = await adapter.executeAcquired({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: acquired.view.invocationVersion,
+        attemptRef: acquired.view.control.attemptRef,
+        leaseOwner: acquired.view.control.leaseOwner,
+        effectGeneration: acquired.view.control.effectGeneration,
+      })
+      return { prepared, result }
+    }
+    const other = { callerRef: 'agent:other', principalRef: 'principal:other' }
+    const first = await executeFor(actor)
+    await executeFor(other)
+    expect(effects).toEqual({ payment: 2, provider: 2 })
+    expect(adapter.readCompletedResult(first.prepared.invocationRef, other))
+      .toEqual({ kind: 'refused', code: 'cross_principal_refused' })
+  })
+
   it('rejects redigested snapshot and evidence attacks from immutable anchors', async () => {
     const base = await buildDevelopmentDynamicInvocationEvidence()
     expect(base.evidenceContract.reconstructionMetadataOnly)
@@ -810,6 +1059,27 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         )
         row.commandDigest = command.value.digest
         command.value.result = { kind: 'applied', invocationVersion: row.invocationVersion }
+      }],
+      ['semantic invocation swap', (packet) => {
+        packet.semanticReuse.invocations[1].invocationRef =
+          packet.semanticReuse.invocations[0].invocationRef
+      }],
+      ['semantic attempt swap', (packet) => {
+        packet.semanticReuse.invocations[1].attemptRef =
+          packet.semanticReuse.invocations[0].attemptRef
+      }],
+      ['semantic generation', (packet) => {
+        packet.semanticReuse.invocations[1].effectGeneration = 7
+      }],
+      ['semantic index', (packet) => {
+        packet.semanticReuse.invocations[1].snapshot.sourceRows[0].semanticIdentityDigest =
+          'sha256:forged-semantic-index'
+      }],
+      ['semantic result reference', (packet) => {
+        const entry = packet.semanticReuse.invocations[1]
+        entry.snapshot.sourceRows[0].resultIdentity.sourceResultRef = 'result:forged'
+        entry.snapshot.controls[0].sourceResultRef = 'result:forged'
+        packet.semanticReuse.sharedOutcomeRef = 'result:forged'
       }],
       ['schema', (packet) => { packet.cases[0].snapshot.untrusted = true }],
     ]

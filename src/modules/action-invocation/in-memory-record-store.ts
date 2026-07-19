@@ -20,6 +20,10 @@ export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly
   nextAttemptRef?: () => string
   developmentReleaseSignal?: DevelopmentReleaseSignal
   onExecutionResolved?: (view: ActionInvocationView<Result>) => void
+  sourceRefForInvocation?: (
+    view: ActionInvocationView<Result>,
+    input: Input,
+  ) => string
   developmentTimeoutSignal?: DevelopmentTimeoutSignal
   verifyReconciliationEvidence?: ReconciliationEvidenceVerifier
   contextForExecution?: (context: ActionContext) => ActionContext
@@ -37,6 +41,7 @@ export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly
 }>
 
 export type StoredInvocation<Input, Result extends ActionResult> = {
+  sourceRef: string
   view: ActionInvocationView<Result>
   input: Input
   context: ActionContext
@@ -51,6 +56,7 @@ export function createRecordStore<Input, Result extends ActionResult>(
     const source = options.resolveSourceState?.(record.sourceRef)
     if (source === undefined) throw new Error(`Missing source state for ${record.sourceRef}.`)
     return [record.control.invocationRef, {
+      sourceRef: record.sourceRef,
       view: {
         ...record.control,
         prepared: source.prepared,
@@ -69,11 +75,7 @@ export function exportControlSnapshot<Input, Result extends ActionResult>(
 ): InMemoryControlSnapshot<Input, Result> {
   return {
     format: 'action-invocation-control:development:v1',
-    records: [...records.values()].map(({ view, input, authorityBinding }) => {
-      const sourceRef = readPath(input, 'operationKey')
-      if (typeof sourceRef !== 'string') {
-        throw new Error(`Invocation ${view.invocationRef} has no source-owned operation reference.`)
-      }
+    records: [...records.values()].map(({ view, sourceRef, authorityBinding }) => {
       const { prepared: _prepared, observedResolution: _observedResolution, ...control } = view
       return {
         sourceRef,
@@ -92,23 +94,28 @@ export function createRecord<Input, Result extends ActionResult>(
   input: Input,
   context: ActionContext,
 ): StoredInvocation<Input, Result> {
+  const invocationRef = options.nextInvocationRef()
+  const provisionalView: ActionInvocationView<Result> = {
+    invocationRef,
+    invocationVersion: 1,
+    environment: 'MOCK/DEVELOPMENT ONLY',
+    persistence: 'in_memory_only',
+    origin,
+    owner: actor,
+    action: { id: options.action.id, contractVersion },
+    desired: { state: 'invoke' },
+    attempts: [],
+    observedResolution: { state: 'pending' },
+    freshness: { state: 'not_observed' },
+    control: { state: 'in_progress' },
+  }
+  const sourceRef = options.sourceRefForInvocation?.(provisionalView, input)
+    ?? readPath(input, 'operationKey')
   return {
+    sourceRef: typeof sourceRef === 'string' ? sourceRef : invocationRef,
     input,
     context,
-    view: {
-      invocationRef: options.nextInvocationRef(),
-      invocationVersion: 1,
-      environment: 'MOCK/DEVELOPMENT ONLY',
-      persistence: 'in_memory_only',
-      origin,
-      owner: actor,
-      action: { id: options.action.id, contractVersion },
-      desired: { state: 'invoke' },
-      attempts: [],
-      observedResolution: { state: 'pending' },
-      freshness: { state: 'not_observed' },
-      control: { state: 'in_progress' },
-    },
+    view: provisionalView,
     reconciliationEvidence: new Map(),
   }
 }

@@ -6,6 +6,7 @@ import {
 import type { RouteTransportRuntime } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import type { ActionContext } from '@/modules/common/action'
 
 import type {
   ActionInvocationOrigin,
@@ -34,6 +35,7 @@ import {
 } from './dynamic-published-source'
 import { createDurableActionInvocationTracer } from './durable'
 import { readCompletedResultIdentity, type CompletedResultIdentity } from './durable'
+import { materialDigest } from './preparation'
 import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
@@ -141,11 +143,38 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   const durablePort = createDevelopmentDurablePort(durableState)
   const executionTokens = new Map<string, DynamicPublishedExecutionToken>()
   const preparedTransports = new Map<string, DynamicPublishedPreparedTransport>()
+  const executionContexts = new Map<string, ActionContext>()
+  const semanticClaims = new Map<string, Readonly<{
+    kind: 'owner' | 'reuse'
+    semanticBaseKey: string
+    semanticIdentityDigest: string
+    outcome?: import('./dynamic-published-source').DynamicPublishedSharedOutcome
+  }>>()
+  let pendingSource: Readonly<{
+    row: Omit<DynamicPublishedSourceRow, 'invocationRef'>
+    context: ActionContext
+  }> | undefined
+  const runtimeKey = (invocationRef: string, attemptRef: string, generation: number) =>
+    `${invocationRef}\u0000${attemptRef}\u0000${generation}`
   const action = createDynamicPublishedAction({
     operation: input.operation,
     descriptor,
     now: input.now,
-    preReleaseCheck: async (value) => {
+    preReleaseCheck: async (value, context) => {
+      const execution = context.actionInvocationExecution
+      if (execution === undefined) return {
+        kind: 'published_operation_refused',
+        sourceDisposition: 'refused',
+        operationId: input.operation.operationId,
+        operationVersion: descriptor.version,
+        requestDigest: value.operationKey,
+        failureCode: 'published_operation_execution_attribution_missing',
+      }
+      const key = runtimeKey(
+        execution.invocationRef,
+        execution.attemptRef,
+        execution.effectGeneration,
+      )
       const reason = requalifyDynamicPublishedSource({
         preparedOperation: input.operation,
         descriptor,
@@ -161,7 +190,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         requestDigest: value.operationKey,
         failureCode: reason,
       }
-      const token = executionTokens.get(value.operationKey)
+      const token = executionTokens.get(key)
       if (token === undefined) return {
         kind: 'published_operation_refused',
         sourceDisposition: 'refused',
@@ -178,13 +207,69 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         runtime: input.runtime,
       })
       if (preparation.kind === 'refused') return preparation.result
-      preparedTransports.set(value.operationKey, preparation.prepared)
+      const row = input.source.read(execution.invocationRef)
+      if (row === undefined) return {
+        kind: 'published_operation_refused',
+        sourceDisposition: 'refused',
+        operationId: input.operation.operationId,
+        operationVersion: descriptor.version,
+        requestDigest: value.operationKey,
+        failureCode: 'published_operation_source_missing',
+      }
+      const claim = input.source.claimSemanticEffect({
+        semanticBaseKey: row.semanticBaseKey,
+        semanticIdentityDigest: row.semanticIdentityDigest,
+        invocationRef: execution.invocationRef,
+      })
+      if (claim.kind === 'conflict') return {
+        kind: 'published_operation_refused',
+        sourceDisposition: 'refused',
+        operationId: input.operation.operationId,
+        operationVersion: descriptor.version,
+        requestDigest: value.operationKey,
+        failureCode: 'semantic_idempotency_conflict',
+      }
+      const outcome = claim.kind === 'wait' ? await claim.outcome
+        : claim.kind === 'reuse' ? claim.outcome
+          : undefined
+      if (outcome !== undefined) {
+        semanticClaims.set(execution.invocationRef, {
+          kind: 'reuse',
+          semanticBaseKey: row.semanticBaseKey,
+          semanticIdentityDigest: row.semanticIdentityDigest,
+          outcome,
+        })
+        if (outcome.observedResolution.state === 'returned') {
+          return outcome.observedResolution.result
+        }
+        return undefined
+      }
+      semanticClaims.set(execution.invocationRef, {
+        kind: 'owner',
+        semanticBaseKey: row.semanticBaseKey,
+        semanticIdentityDigest: row.semanticIdentityDigest,
+      })
+      preparedTransports.set(key, preparation.prepared)
       return undefined
     },
-    run: async (value) => {
-      const token = executionTokens.get(value.operationKey)
+    run: async (value, context) => {
+      const execution = context.actionInvocationExecution
+      if (execution === undefined) throw new Error('published_operation_execution_attribution_missing')
+      const key = runtimeKey(
+        execution.invocationRef,
+        execution.attemptRef,
+        execution.effectGeneration,
+      )
+      const token = executionTokens.get(key)
       if (token === undefined) throw new Error('published_operation_attempt_not_leased')
-      const prepared = preparedTransports.get(value.operationKey)
+      const claim = semanticClaims.get(execution.invocationRef)
+      if (claim?.kind === 'reuse' && claim.outcome !== undefined) {
+        if (claim.outcome.observedResolution.state === 'returned') {
+          return claim.outcome.observedResolution.result
+        }
+        throw new Error('published_operation_shared_outcome_uncertain')
+      }
+      const prepared = preparedTransports.get(key)
       if (prepared === undefined
         || prepared.attemptRef !== token.attemptRef
         || prepared.effectGeneration !== token.effectGeneration) {
@@ -206,7 +291,14 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     action,
     port: durablePort,
     now: () => new Date(input.now()).toISOString(),
-    nextInvocationRef: input.nextInvocationRef,
+    nextInvocationRef: () => {
+      const invocationRef = input.nextInvocationRef()
+      const pending = pendingSource
+      if (pending === undefined) throw new Error('dynamic_published_source_not_reserved')
+      input.source.write({ ...pending.row, invocationRef })
+      executionContexts.set(invocationRef, pending.context)
+      return invocationRef
+    },
     nextAuthorityRef: input.nextAuthorityRef,
     nextAttemptRef: input.nextAttemptRef,
     onExecutionResolved: (view) => {
@@ -214,26 +306,51 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       if (operationKey === undefined) return
       const row = input.source.read(operationKey)
       if (row === undefined) return
+      const claim = semanticClaims.get(view.invocationRef)
       if (view.observedResolution.state !== 'returned') {
         input.source.write({ ...row, observedResolution: view.observedResolution })
+        if (claim?.kind === 'owner') {
+          input.source.completeSemanticEffect({
+            semanticBaseKey: claim.semanticBaseKey,
+            outcome: {
+              semanticIdentityDigest: claim.semanticIdentityDigest,
+              ownerInvocationRef: view.invocationRef,
+              observedResolution: view.observedResolution,
+            },
+          })
+        }
         return
+      }
+      const reusedIdentity = claim?.kind === 'reuse' ? claim.outcome?.resultIdentity : undefined
+      const resultIdentity = reusedIdentity ?? {
+        sourceResultRef: `published-result:${claim?.semanticIdentityDigest ?? view.invocationRef}`,
+        resultDigest: canonicalDigest(
+          view.observedResolution.result as unknown as StableHashValue,
+        ),
       }
       input.source.write({
         ...row,
         observedResolution: view.observedResolution,
-        resultIdentity: {
-          sourceResultRef: `published-result:${operationKey}`,
-          resultDigest: canonicalDigest(
-            view.observedResolution.result as unknown as StableHashValue,
-          ),
-        },
+        resultIdentity,
       })
+      if (claim?.kind === 'owner') {
+        input.source.completeSemanticEffect({
+          semanticBaseKey: claim.semanticBaseKey,
+          outcome: {
+            semanticIdentityDigest: claim.semanticIdentityDigest,
+            ownerInvocationRef: view.invocationRef,
+            observedResolution: view.observedResolution,
+            resultIdentity,
+          },
+        })
+      }
     },
+    sourceRefForInvocation: (view) => view.invocationRef,
     verifyReconciliationEvidence: (evidence) =>
       evidence.source === `published-operation:${input.operation.operationId}`,
-    resolveSourceState: (operationKey) => {
-      const row = input.source.read(operationKey)
-      if (row === undefined) throw new Error(`Missing dynamic published source ${operationKey}.`)
+    resolveSourceState: (invocationRef) => {
+      const row = input.source.read(invocationRef)
+      if (row === undefined) throw new Error(`Missing dynamic published source ${invocationRef}.`)
       return {
         input: row.input,
         context: row.context,
@@ -246,7 +363,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
 
   const materialFor = (invocationRef: string): DynamicPublishedInvocationInput | undefined => {
     const control = durableState.controls.get(invocationRef)
-    return control === undefined ? undefined : input.source.read(control.sourceRef)?.input
+      return control === undefined ? undefined : input.source.read(invocationRef)?.input
   }
 
   return {
@@ -266,28 +383,56 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         now: input.now(),
       })
       if (reason !== undefined) throw new Error(`published_operation_not_current:${reason}`)
-      input.source.write({
+      const preparedDigest = materialDigest(
+        material,
+        ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+      )
+      const semanticBaseKey = canonicalDigest({
+        principalRef: request.actor.principalRef,
+        actionId: input.operation.operationId,
+        actionVersion: descriptor.version,
         operationKey: material.operationKey,
+      })
+      const context: ActionContext = {}
+      pendingSource = {
+        context,
+        row: {
+        operationKey: material.operationKey,
+        semanticBaseKey,
+        semanticIdentityDigest: canonicalDigest({
+          semanticBaseKey,
+          target: material.target,
+          preparedMaterialDigest: preparedDigest,
+        }),
         operation: input.operation,
         input: material,
-        context: {},
+        context,
         observedResolution: { state: 'pending' },
-      })
+        },
+      }
       const view = tracer.prepare({
         origin: request.origin,
         actor: request.actor,
         input: material,
-        context: {},
+        context,
         freshnessMs: Math.min(
           request.freshnessMs,
           Math.max(1, input.operation.readiness.validUntil - input.now()),
         ),
       })
+      pendingSource = undefined
       input.source.write({
+        invocationRef: view.invocationRef,
         operationKey: material.operationKey,
+        semanticBaseKey,
+        semanticIdentityDigest: canonicalDigest({
+          semanticBaseKey,
+          target: material.target,
+          preparedMaterialDigest: preparedDigest,
+        }),
         operation: input.operation,
         input: material,
-        context: {},
+        context,
         ...(view.prepared === undefined ? {} : { prepared: view.prepared }),
         observedResolution: { state: 'pending' },
       })
@@ -306,7 +451,24 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       if (material === undefined || view?.authority === undefined) {
         return { kind: 'refused', code: 'invocation_not_found' }
       }
-      executionTokens.set(material.operationKey, {
+      if (view.invocationVersion !== request.expectedInvocationVersion) {
+        return { kind: 'refused', code: 'stale_invocation_version', view }
+      }
+      if (view.control.state !== 'leased'
+        || view.control.attemptRef !== request.attemptRef
+        || view.control.effectGeneration !== request.effectGeneration
+        || view.control.leaseOwner !== request.leaseOwner) {
+        return { kind: 'refused', code: 'lease_not_current', view }
+      }
+      const context = executionContexts.get(request.invocationRef)
+      if (context === undefined) return { kind: 'refused', code: 'invocation_not_found' }
+      context.actionInvocationExecution = {
+        invocationRef: request.invocationRef,
+        attemptRef: request.attemptRef,
+        effectGeneration: request.effectGeneration,
+      }
+      const key = runtimeKey(request.invocationRef, request.attemptRef, request.effectGeneration)
+      executionTokens.set(key, {
         attemptRef: request.attemptRef,
         effectGeneration: request.effectGeneration,
         authorityRef: view.authority.reference,
@@ -321,8 +483,10 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       try {
         return await tracer.executeAcquired(request)
       } finally {
-        executionTokens.delete(material.operationKey)
-        preparedTransports.delete(material.operationKey)
+        executionTokens.delete(key)
+        preparedTransports.delete(key)
+        semanticClaims.delete(request.invocationRef)
+        delete context.actionInvocationExecution
       }
     },
     cancel(request) {
@@ -344,8 +508,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         durablePort,
         invocationRef,
         actor,
-        (operationKey) => {
-          const row = input.source.read(operationKey)
+        (invocationRef) => {
+          const row = input.source.read(invocationRef)
           const returned = row?.observedResolution.state === 'returned'
             ? row.observedResolution.result
             : undefined
@@ -405,6 +569,6 @@ export function loadDynamicPublishedAdapterSnapshot(
   }
   return {
     durableState,
-    sourceRows: new Map(verified.sourceRows.map((row) => [row.operationKey, row])),
+    sourceRows: new Map(verified.sourceRows.map((row) => [row.invocationRef, row])),
   }
 }

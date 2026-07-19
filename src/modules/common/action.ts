@@ -52,6 +52,12 @@ export type ActionAgentIdentity = {
 }
 
 export type ActionContext = {
+  /** Kernel-owned execution attribution; action callers must not supply it. */
+  actionInvocationExecution?: Readonly<{
+    invocationRef: string
+    attemptRef: string
+    effectGeneration: number
+  }>
   /** Admission context for writes; built from the calling surface's request. */
   sourceWriteRequest?: ActionSourceWriteRequest
   /** The raw incoming request, when available at an HTTP boundary. */

@@ -82,6 +82,17 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     value: source.input.input,
   })
   const price = executableFixedPrice(operation)
+  const semanticBaseKey = canonicalDigest({
+    principalRef: actor.principalRef,
+    actionId: operation.operationId,
+    actionVersion: descriptor.version,
+    operationKey: recomputedInput.operationKey,
+  })
+  const semanticIdentityDigest = canonicalDigest({
+    semanticBaseKey,
+    target: recomputedInput.target,
+    preparedMaterialDigest: issuedAuthority.materialInputDigest,
+  })
   if (
     canonicalDigest(source.operation as unknown as StableHashValue)
       !== canonicalDigest(operation as unknown as StableHashValue)
@@ -90,7 +101,10 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     || source.input.sourceSnapshotDigest !== dynamicPublishedSourceDigest(operation, descriptor)
     || canonicalDigest(source.input.target) !== canonicalDigest(recomputedInput.target)
     || source.operationKey !== recomputedInput.operationKey
-    || control.sourceRef !== recomputedInput.operationKey
+    || source.semanticBaseKey !== semanticBaseKey
+    || source.semanticIdentityDigest !== semanticIdentityDigest
+    || source.invocationRef !== control.invocationRef
+    || control.sourceRef !== control.invocationRef
     || control.control.owner.callerRef !== actor.callerRef
     || control.control.owner.principalRef !== actor.principalRef
     || canonicalDigest(control.control.origin as unknown as StableHashValue)
@@ -130,7 +144,16 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     || !commandsValid(snapshot.commands, historyGroup.rows, control.invocationRef)
     || !attemptGroup.rows.every((attempt) =>
       attempt.idempotency.materialInputDigest === issuedAuthority.materialInputDigest)
-    || !resultIdentityValid(source, control, input.anchors.expectedChallengeDigest)
+    || !resultIdentityValid(
+      source,
+      control,
+      input.anchors.expectedChallengeDigest,
+      `published-result:${
+        control.terminalResultReferenceable === true
+          ? semanticIdentityDigest
+          : control.invocationRef
+      }`,
+    )
   ) throw new Error('dynamic_published_snapshot_semantics_invalid')
 }
 
@@ -165,11 +188,12 @@ function historyValid(
   authorityKind: 'approve_each' | 'standing_mandate_use',
   attempts: DynamicPublishedAdapterSnapshot['attempts'][number]['rows'],
 ): boolean {
+  const includesRelease = history.some(({ kind }) => kind === 'begin_release')
   const expectedKinds = [
     'prepare',
     authorityKind === 'approve_each' ? 'decide' : 'authorize_standing_mandate_use',
     'acquire',
-    'begin_release',
+    ...(includesRelease ? ['begin_release'] : []),
     'execute_acquired',
   ]
   if (history.length !== expectedKinds.length || attempts.length !== 1) return false
@@ -265,12 +289,14 @@ function resultIdentityValid(
   source: DynamicPublishedAdapterSnapshot['sourceRows'][number],
   control: DynamicPublishedAdapterSnapshot['controls'][number],
   expectedChallengeDigest: string | undefined,
+  expectedSourceResultRef: string,
 ): boolean {
   if (control.control.control.state !== 'terminal') return source.resultIdentity === undefined
   if (source.observedResolution.state !== 'returned') return false
   const identity = source.resultIdentity
   return identity !== undefined
     && identity.sourceResultRef === control.sourceResultRef
+    && identity.sourceResultRef === expectedSourceResultRef
     && identity.resultDigest === control.sourceResultDigest
     && identity.resultDigest
       === canonicalDigest(source.observedResolution.result as unknown as StableHashValue)
