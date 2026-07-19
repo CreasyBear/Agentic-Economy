@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `ccd21ad2`  
+**Current accepted revision:** `f4b77026`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -142,19 +142,59 @@ Not established:
 - leases, generations, cancellation, recovery, durability, or restart;
 - network send, provider delivery, fulfilment, hosted, or production behavior.
 
-## Active slice
-
 ### P1-D — attributable attempt and uncertainty
 
-**Status:** ready to dispatch from `ccd21ad2`
+**Accepted commit:** `f4b77026`
+**Child commit:** `95716836689479ae5c0c0fb765be312db5dc4e8f`
+**Child task:** `019f793d-43dc-7c32-a0a5-9a9885f54825`
+**Assigned base:** `0e341878`
+**Evidence class:** labelled mock/development, consequential attempt, in-memory
 
 Target transition:
 
 `authorized communication -> attributable attempt -> pre-release retry or post-release reconcile-before-retry`
 
-This slice must preserve both origin types, keep the state port in memory, and
-show the distinction using a labelled development adapter. It must not infer a
-successful external effect from runner return or queued communication.
+Implemented:
+
+- both origins continue through the same registered `inquiry.submit` runner;
+- attempt identity binds action id, actor, `operationKey`, and prepared material
+  digest into a stable effect identity;
+- only an explicit pre-release observation permits retry;
+- absent or post-release evidence becomes `reconciliation_required`;
+- generic replay is refused while reconciliation is required;
+- reconciliation updates the exact attributable attempt;
+- confirmed release remains terminal with external outcome explicitly unknown;
+- attempt construction, effect execution, contracts, and in-memory orchestration
+  have separate reasons to change;
+- focused checks passed 7/7 with scoped lint and diff checks in the accepted
+  parent checkout.
+
+Not established:
+
+- leases, effect generations, competing workers, late observations, or fencing;
+- cancellation before or after release;
+- restart, cold resume, or durable persistence;
+- provider/network execution, delivery, fulfilment, hosted, or production
+  behavior.
+
+## Active slice
+
+### P1-E — concurrency fencing, cancellation, and in-memory recovery
+
+**Status:** ready to dispatch from `f4b77026`
+
+Target transitions:
+
+`ready attempt -> leased generation -> release -> fenced observation`
+
+`cancel before release -> no effect`
+
+`cancel after possible release -> reconcile, never erase uncertainty`
+
+The slice must prove takeover after lease expiry, reject stale workers and late
+observations by invocation version plus effect generation, and reconstruct the
+same in-memory view after a simulated process boundary. It must not choose
+durable storage yet.
 
 ## Evidence position
 
@@ -169,7 +209,7 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 | 1 | Supplied-candidate qualification reuses contracts and supply evidence | Missing | No supplied-candidate tracer through current capability, eligibility, provenance, and freshness seams. |
 | 2 | Supplied-candidate quote collection reuses preparation, disclosure authority, provider attempts, and reconciliation | Missing | P1-C proves generic exact authority only; no provider quote attempt or reconciliation trace. |
 | 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Missing | No imported-commitment observation tracer. |
-| 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Partial | Same registered read and consequential action plus exact authority are proven in memory; attempt, idempotency, evidence, recovery, and durability remain open. |
+| 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Partial | Same registered actions, exact authority, effect identity, pre-release retry, uncertainty, and reconciliation are proven in memory; fencing, cancellation, restart, and durability remain open. |
 | 5 | Historical Customer Request traces replay without semantic regression | Missing | Discriminated lineage preserves the type boundary, but no historical replay regression has run. |
 | 6 | Composition contains inspectable references and declared dependencies only | Missing | No invocation composition or dependency projection. |
 | 7 | Direct-booking negative control remains unburdened | Missing | No contrasting direct-path measurement. |
@@ -189,7 +229,7 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 | 5 | Corrections update authoritative work and invalidate stale projections | Partial | Material input change invalidates authority in memory; authoritative correction and projection invalidation are absent. |
 | 6 | Missing information is gathered without unnecessary interrogation | Missing | No clarification loop through the action plane. |
 | 7 | Authority binds the exact action and fails after material change | Proven | P1-C binds action/version, actor, origin, invocation, digest, target, consequence, limits, expiry, and CAS version; changed material input is refused before runner execution. |
-| 8 | Interruption, refusal, timeout, uncertain effect, and recovery retain parity | Missing | P1-D owns the first attempt/uncertainty contribution; cross-host parity comes later. |
+| 8 | Interruption, refusal, timeout, uncertain effect, and recovery retain parity | Partial | P1-D proves local pre-release failure, possible release, replay refusal, and reconciliation meaning; timeout, cancellation, recovery, and cross-host parity remain open. |
 | 9 | Cold agent continues without hidden first-party context | Missing | No durable reconstruction or cold-host continuation. |
 | 10 | Human effort improves without worsening correctness, control, privacy, accessibility, or operator burden | Missing | Requires the frozen direct comparison and real host surfaces; local control tests alone are insufficient. |
 
@@ -198,9 +238,6 @@ implementation gate substitute.
 
 ## Next decision
 
-Dispatch the attempt/uncertainty slice:
-
-`authorized communication -> attributable attempt -> pre-release retry or post-release reconcile-before-retry`
-
-Do not introduce durable persistence before that slice and the subsequent
-concurrency/recovery slice demonstrate shared control meaning for both origins.
+Dispatch the concurrency/recovery slice. Do not introduce durable persistence
+until fencing, cancellation, takeover, late-observation refusal, and simulated
+restart demonstrate shared control meaning for both origins.
