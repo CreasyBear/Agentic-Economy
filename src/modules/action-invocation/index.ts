@@ -25,6 +25,10 @@ export {
   StandingMandateStore,
   STANDING_MANDATE_FORMAT,
 } from './standing-mandate'
+export {
+  createDevelopmentStandingMandateGrantVerifier,
+  verifiedGrantMatchesMandate,
+} from './standing-mandate-grant'
 
 export type {
   ActionInvocationOrigin,
@@ -38,6 +42,7 @@ export type {
   InvokeActionInput,
   PrepareActionInput,
   PreparedInvocation,
+  StandingMandateAuthorityBasis,
 } from './contracts'
 export type {
   AuthorityUse,
@@ -48,6 +53,10 @@ export type {
   StandingMandateScope,
   StandingMandateSnapshot,
 } from './standing-mandate'
+export type {
+  StandingMandateGrantVerifier,
+  VerifiedStandingMandateGrant,
+} from './standing-mandate-grant'
 export type {
   DurableActionInvocationPort,
   DurableActionInvocationTracer,

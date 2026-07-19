@@ -8,6 +8,15 @@ export type ActionInvocationOrigin =
 
 export type InvocationActor = Readonly<{ callerRef: string; principalRef: string }>
 
+export type StandingMandateAuthorityBasis = Readonly<{
+  kind: 'standing_mandate_use'
+  mandateRef: string
+  mandateVersion: number
+  mandateGeneration: number
+  authorityUseRef: string
+  grantEvidenceRef: string
+}>
+
 export type PreparedInvocation = Readonly<{
   materialInputDigest: string
   target: StableHashValue
@@ -87,6 +96,9 @@ export type ActionInvocationView<Result extends ActionResult = ActionResult> = R
   desired: Readonly<{ state: 'invoke' }>
   prepared?: PreparedInvocation
   authority?: Readonly<{ reference: string; expiresAt: string }>
+  acceptedAuthority?:
+    | Readonly<{ kind: 'approve_each'; authorityRef: string }>
+    | StandingMandateAuthorityBasis
   attempts: readonly ActionAttemptView[]
   observedResolution:
     | Readonly<{ state: 'pending' }>
@@ -147,6 +159,14 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     origin: ActionInvocationOrigin
     accept: boolean
   }>): InvocationDecision<Result>
+  authorizeStandingMandateUse(input: Readonly<{
+    invocationRef: string
+    expectedInvocationVersion: number
+    authorityRef: string
+    actor: InvocationActor
+    origin: ActionInvocationOrigin
+    basis: StandingMandateAuthorityBasis
+  }>): InvocationDecision<Result>
   execute(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -164,6 +184,7 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     materialInput: Input
     leaseOwner: string
     leaseMs: number
+    acceptedAuthorityBasis?: StandingMandateAuthorityBasis
   }>): InvocationDecision<Result>
   executeAcquired(input: Readonly<{
     invocationRef: string
@@ -206,7 +227,7 @@ export type InMemoryControlSnapshot<Input, Result extends ActionResult> = Readon
       ActionInvocationView<Result>,
       'invocationRef' | 'invocationVersion' | 'environment' | 'persistence' |
       'origin' | 'owner' | 'action' | 'desired' | 'authority' | 'attempts' |
-      'freshness' | 'control'
+      'acceptedAuthority' | 'freshness' | 'control'
     >
     authorityBinding?: AuthorityBindingSnapshot
   }>[]
@@ -225,4 +246,7 @@ export type AuthorityBindingSnapshot = Readonly<{
   consequence: string
   limits: Readonly<Record<string, number>>
   expiresAt: string
+  acceptedBasis?:
+    | Readonly<{ kind: 'approve_each'; authorityRef: string }>
+    | StandingMandateAuthorityBasis
 }>

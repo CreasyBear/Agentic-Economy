@@ -156,6 +156,13 @@ export async function createAsyncDurableActionInvocationTracer<
       )
       return finishDecision(operation, input.invocationRef, value)
     },
+    async authorizeStandingMandateUse(input) {
+      const { operation, value } = await existingOperation(
+        input.invocationRef,
+        (tracer) => tracer.authorizeStandingMandateUse(input),
+      )
+      return finishDecision(operation, input.invocationRef, value)
+    },
     async execute(input) {
       const { operation, value } = await existingOperation(
         input.invocationRef,

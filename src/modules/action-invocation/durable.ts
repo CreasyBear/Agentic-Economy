@@ -261,9 +261,9 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       if (
         decision.view !== undefined &&
         decision.view.invocationVersion > beforeVersion &&
-        decision.code === 'reconciliation_required'
+        (decision.code === 'reconciliation_required' || decision.code === 'authority_not_accepted')
       ) {
-        const result = persist(beforeVersion, decision.view, `${kind}_expired`, generation)
+        const result = persist(beforeVersion, decision.view, `${kind}_refused`, generation)
         if (result.kind === 'refused') {
           memory = makeMemory(reconstructSnapshot(options.port, decision.view.invocationRef))
           const durableView = memory.inspect(decision.view.invocationRef)
@@ -304,6 +304,13 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
     },
     decide(input) {
       return accept(input.expectedInvocationVersion, memory.decide(input), 'decide')
+    },
+    authorizeStandingMandateUse(input) {
+      return accept(
+        input.expectedInvocationVersion,
+        memory.authorizeStandingMandateUse(input),
+        'authorize_standing_mandate_use',
+      )
     },
     async execute(input) {
       const acquired = accept(input.expectedInvocationVersion, memory.acquire({

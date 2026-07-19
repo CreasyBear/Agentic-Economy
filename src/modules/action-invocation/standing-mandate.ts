@@ -1,4 +1,9 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  verifiedGrantMatchesMandate,
+  type VerifiedStandingMandateGrant,
+} from './standing-mandate-grant'
+import type { StandingMandateAuthorityBasis } from './contracts'
 
 export const STANDING_MANDATE_FORMAT = 'ae.action-invocation-standing-mandate:v1' as const
 
@@ -65,12 +70,14 @@ export type AuthorityUse = AuthorityUseMaterial & Readonly<{
 export type StandingMandateSnapshot = Readonly<{
   format: 'ae.action-invocation-standing-mandate-store:v1'
   mandates: readonly StandingMandate[]
+  grants: readonly VerifiedStandingMandateGrant[]
   uses: readonly AuthorityUse[]
 }>
 
 export type MandateRefusalCode =
   | 'mandate_not_found'
   | 'mandate_integrity_invalid'
+  | 'mandate_grant_unauthenticated'
   | 'mandate_revoked'
   | 'mandate_not_started'
   | 'mandate_expired'
@@ -111,11 +118,19 @@ export function issueStandingMandate(input: Omit<StandingMandate, 'format' | 'mo
 export class StandingMandateStore {
   readonly #mandates = new Map<string, StandingMandate>()
   readonly #uses = new Map<string, AuthorityUse>()
+  readonly #grants = new Map<string, VerifiedStandingMandateGrant>()
 
   constructor(snapshot?: StandingMandateSnapshot) {
     for (const mandate of snapshot?.mandates ?? []) {
       if (!mandateIntegrityValid(mandate)) throw new Error('standing_mandate_snapshot_integrity_refused')
       this.#mandates.set(mandate.mandateRef, deepFreeze(structuredClone(mandate)))
+    }
+    for (const grant of snapshot?.grants ?? []) {
+      const mandate = this.#mandates.get(grant.mandateRef)
+      if (mandate === undefined || !verifiedGrantMatchesMandate(grant, mandate, grant.verifiedAt)) {
+        throw new Error('standing_mandate_snapshot_grant_refused')
+      }
+      this.#grants.set(grant.mandateRef, deepFreeze(structuredClone(grant)))
     }
     for (const use of snapshot?.uses ?? []) {
       if (!authorityUseIntegrityValid(use) || !this.#useLinkageValid(use)) {
@@ -125,8 +140,15 @@ export class StandingMandateStore {
     }
   }
 
-  issue(mandate: StandingMandate): MandateDecision<StandingMandate> {
+  issue(
+    mandate: StandingMandate,
+    admission: VerifiedStandingMandateGrant,
+    now: string,
+  ): MandateDecision<StandingMandate> {
     if (!mandateIntegrityValid(mandate)) return { kind: 'refused', code: 'mandate_integrity_invalid' }
+    if (!verifiedGrantMatchesMandate(admission, mandate, now)) {
+      return { kind: 'refused', code: 'mandate_grant_unauthenticated' }
+    }
     const prior = this.#mandates.get(mandate.mandateRef)
     if (prior !== undefined) {
       return prior.digest === mandate.digest
@@ -134,6 +156,7 @@ export class StandingMandateStore {
         : { kind: 'refused', code: 'authority_use_conflict' }
     }
     this.#mandates.set(mandate.mandateRef, mandate)
+    this.#grants.set(mandate.mandateRef, admission)
     return { kind: 'accepted', value: mandate }
   }
 
@@ -175,11 +198,35 @@ export class StandingMandateStore {
     return { kind: 'accepted', value: use }
   }
 
-  recheckBeforeRelease(authorityUseRef: string, now: string): MandateDecision<AuthorityUse> {
-    const use = this.#uses.get(authorityUseRef)
+  recheckBeforeRelease(token: Readonly<{
+    authorityUseRef: string
+    invocationRef: string
+    acceptedBasis: StandingMandateAuthorityBasis
+    action: Readonly<{ id: string; version: string }>
+    preparedMaterialDigest: string
+    actor: Readonly<{ callerRef: string; principalRef: string }>
+    delegateRef: string
+    effectGeneration: number
+  }>, now: string): MandateDecision<AuthorityUse> {
+    const use = this.#uses.get(token.authorityUseRef)
     if (use === undefined) return { kind: 'refused', code: 'authority_use_not_found' }
     if (use.state !== 'reserved') return { kind: 'refused', code: 'authority_use_linkage_invalid' }
-    const validation = this.#validateScope(use, now, authorityUseRef)
+    if (
+      use.invocationRef !== token.invocationRef
+      || use.action.id !== token.action.id
+      || use.action.version !== token.action.version
+      || use.preparedMaterialDigest !== token.preparedMaterialDigest
+      || use.callerRef !== token.actor.callerRef
+      || use.principalRef !== token.actor.principalRef
+      || use.delegateRef !== token.delegateRef
+      || use.effectGeneration !== token.effectGeneration
+      || token.acceptedBasis.authorityUseRef !== use.authorityUseRef
+      || token.acceptedBasis.mandateRef !== use.mandateRef
+      || token.acceptedBasis.mandateVersion !== use.mandateVersion
+      || token.acceptedBasis.mandateGeneration !== use.mandateGeneration
+      || token.acceptedBasis.grantEvidenceRef !== this.#grants.get(use.mandateRef)?.evidenceRef
+    ) return { kind: 'refused', code: 'authority_use_linkage_invalid' }
+    const validation = this.#validateScope(use, now, token.authorityUseRef)
     return validation === undefined
       ? { kind: 'accepted', value: use }
       : { kind: 'refused', code: validation }
@@ -192,8 +239,11 @@ export class StandingMandateStore {
   ): MandateDecision<AuthorityUse> {
     const use = this.#uses.get(authorityUseRef)
     if (use === undefined) return { kind: 'refused', code: 'authority_use_not_found' }
-    if (use.state !== 'reserved' && !(use.state === 'uncertain' && state === 'released')) {
-      return use.state === state
+    if (
+      use.state !== 'reserved'
+      && !(use.state === 'uncertain' && (state === 'released' || state === 'not_released'))
+    ) {
+      return use.state === state && use.settledAt === settledAt
         ? { kind: 'accepted', value: use }
         : { kind: 'refused', code: 'authority_use_linkage_invalid' }
     }
@@ -205,12 +255,13 @@ export class StandingMandateStore {
   }
 
   inspectMandate(mandateRef: string) { return this.#mandates.get(mandateRef) }
+  inspectGrant(mandateRef: string) { return this.#grants.get(mandateRef) }
   inspectUse(authorityUseRef: string) { return this.#uses.get(authorityUseRef) }
 
   capacity(mandateRef: string) {
     const mandate = this.#mandates.get(mandateRef)
     const uses = [...this.#uses.values()].filter((use) => use.mandateRef === mandateRef)
-    const consumed = uses.filter((use) => use.state === 'released' || use.state === 'uncertain')
+    const consumed = uses.filter((use) => use.state === 'released')
     const active = uses.filter((use) => use.state === 'reserved' || use.state === 'uncertain')
     return {
       maximumActionCount: mandate?.scope.maximumActionCount ?? 0,
@@ -225,6 +276,7 @@ export class StandingMandateStore {
     return deepFreeze({
       format: 'ae.action-invocation-standing-mandate-store:v1',
       mandates: [...this.#mandates.values()],
+      grants: [...this.#grants.values()],
       uses: [...this.#uses.values()],
     })
   }

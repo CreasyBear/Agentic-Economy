@@ -15,6 +15,7 @@ import {
 import { bookingActor, developmentBookingNow } from './development-booking-fixture'
 import type { createDevelopmentBookingProvider } from './development-booking-provider'
 import { runReservationInvocation } from './development-booking-runner'
+import type { DevelopmentBookingMandateService } from './development-booking-mandate'
 
 type Provider = ReturnType<typeof createDevelopmentBookingProvider>
 
@@ -22,6 +23,12 @@ export async function runBookingReconciliation(input: Readonly<{
   provider: Provider
   booking: DevelopmentBookingInput
   origin: ActionInvocationOrigin
+  resolution?: 'released' | 'not_released'
+  boundedMandate?: Readonly<{
+    service: DevelopmentBookingMandateService
+    mandateRef: string
+    authorityUseRef: string
+  }>
 }>) {
   const issued = new Set<string>()
   const uncertain = await runReservationInvocation({
@@ -29,8 +36,11 @@ export async function runBookingReconciliation(input: Readonly<{
     ref: 'unknown',
     loseResponseAfterRelease: true,
     verifyReconciliationEvidence: (evidence) => issued.has(canonicalDigest(evidence)),
+    ...(input.resolution === 'not_released' ? { unknownWithoutProviderRelease: true } : {}),
+    ...(input.boundedMandate === undefined ? {} : { boundedMandate: input.boundedMandate }),
   })
-  const attempt = uncertain.view.attempts[0]!
+  const attempt = uncertain.view.attempts[0]
+  if (attempt === undefined) throw new Error('booking_reconciliation_attempt_missing')
   const material: ReconciliationEvidenceMaterial = {
     kind: 'action_invocation_reconciliation',
     version: 1,
@@ -39,7 +49,7 @@ export async function runBookingReconciliation(input: Readonly<{
     invocationRef: uncertain.view.invocationRef,
     attemptRef: attempt.attemptRef,
     effectGeneration: attempt.effectGeneration,
-    resolution: 'released',
+    resolution: input.resolution ?? 'released',
     observedAt: developmentBookingNow(),
   }
   const evidence = { ...material, digest: canonicalDigest(material) }
@@ -53,6 +63,13 @@ export async function runBookingReconciliation(input: Readonly<{
     evidence,
   })
   if (reconciled.kind !== 'accepted') throw new Error(reconciled.code)
+  if (input.boundedMandate !== undefined) {
+    const settled = input.boundedMandate.service.settleFromInvocation({
+      authorityUseRef: input.boundedMandate.authorityUseRef,
+      view: reconciled.view,
+    })
+    if (settled.kind === 'refused') throw new Error(settled.code)
+  }
   return { uncertain, attempt, evidence, reconciled: reconciled.view }
 }
 

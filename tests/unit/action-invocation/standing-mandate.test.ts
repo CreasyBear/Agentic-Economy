@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   issueStandingMandate,
+  createDevelopmentStandingMandateGrantVerifier,
   StandingMandateStore,
   type AuthorityUseMaterial,
 } from '@/modules/action-invocation'
@@ -13,6 +14,7 @@ import {
 } from '@/modules/booking/development-booking-fixture'
 import { createDevelopmentBookingProvider } from '@/modules/booking/development-booking-provider'
 import { runReservationInvocation } from '@/modules/booking/development-booking-runner'
+import { createDevelopmentBookingMandateService } from '@/modules/booking/development-booking-mandate'
 
 const now = developmentBookingNow()
 const principalRef = 'request-owner:mock:request:mandated'
@@ -67,10 +69,33 @@ function use(overrides: Partial<AuthorityUseMaterial> = {}): AuthorityUseMateria
   }
 }
 
+function issuedStore() {
+  const store = new StandingMandateStore()
+  const verifier = createDevelopmentStandingMandateGrantVerifier({
+    admittedMandateDigest: mandate.digest,
+    evidenceRef: 'mock:grant-evidence:1',
+    verifierRef: 'mock:grant-verifier:1',
+    source: 'mock:authenticated-principal-grant:v1',
+    freshUntil: '2026-07-19T04:30:00.000Z',
+  })
+  const admission = verifier(mandate, now)
+  if (!admission.authenticated) throw new Error(admission.reason)
+  expect(store.issue(mandate, admission, now).kind).toBe('accepted')
+  return store
+}
+
+function bookingService(store: StandingMandateStore) {
+  return createDevelopmentBookingMandateService({
+    store,
+    authenticatedDelegate: { delegateRef: mandate.delegateRef, callerRef, principalRef },
+    now: developmentBookingNow,
+  })
+}
+
 describe('Action Invocation bounded standing mandate', () => {
   it('executes Request-owned and standalone booking through one mandate and exact authority uses', async () => {
-    const store = new StandingMandateStore()
-    expect(store.issue(mandate).kind).toBe('accepted')
+    const store = issuedStore()
+    const service = bookingService(store)
     const provider = createDevelopmentBookingProvider()
     const slot = await provider.availability()
     const requestOrigin = { kind: 'request_owned', requestRef: 'mock:request:mandated', revision: 1 } as const
@@ -87,7 +112,11 @@ describe('Action Invocation bounded standing mandate', () => {
         booking: bookingInput(slot, bookingActor(origin).principalRef, `mock:operation:mandated:${index}`),
         origin,
         ref: `mandated:${index}`,
-        boundedMandate: { store, material },
+        boundedMandate: {
+          service,
+          mandateRef: mandate.mandateRef,
+          authorityUseRef: material.authorityUseRef,
+        },
       })
       expect(run.view.observedResolution).toMatchObject({
         state: 'returned',
@@ -108,6 +137,9 @@ describe('Action Invocation bounded standing mandate', () => {
       consumedSpendMinor: 0,
     })
     expect(provider.effectCount()).toBe(2)
+    expect(runs.flatMap(({ events }) => events).filter(({ kind }) => kind === 'authority_decision')).toHaveLength(0)
+    expect(runs.flatMap(({ events }) => events)
+      .filter(({ kind }) => kind === 'standing_mandate_authorization')).toHaveLength(2)
     const coldMandates = new StandingMandateStore(structuredClone(store.exportSnapshot()))
     expect(coldMandates.capacity(mandate.mandateRef).consumedCount).toBe(2)
     for (const run of runs) {
@@ -117,6 +149,75 @@ describe('Action Invocation bounded standing mandate', () => {
           observedResolution: { state: 'returned', result: { kind: 'reservation_confirmed' } },
         })
     }
+  })
+
+  it('requires authenticated grant admission and refuses self-authored, stale, mismatched, and tampered evidence', () => {
+    const store = new StandingMandateStore()
+    const verifier = createDevelopmentStandingMandateGrantVerifier({
+      admittedMandateDigest: mandate.digest,
+      evidenceRef: 'mock:grant-evidence:test',
+      verifierRef: 'mock:grant-verifier:test',
+      source: 'mock:authenticated-principal-grant:v1',
+      freshUntil: '2026-07-19T04:30:00.000Z',
+    })
+    const grant = verifier(mandate, now)
+    if (!grant.authenticated) throw new Error(grant.reason)
+    expect(store.issue(mandate, { ...grant, principalRef: 'self-authored' }, now))
+      .toEqual({ kind: 'refused', code: 'mandate_grant_unauthenticated' })
+    expect(store.issue(mandate, grant, grant.freshUntil))
+      .toEqual({ kind: 'refused', code: 'mandate_grant_unauthenticated' })
+    expect(store.issue({ ...mandate, principalRef: 'mismatch' }, grant, now))
+      .toEqual({ kind: 'refused', code: 'mandate_integrity_invalid' })
+    expect(store.issue(mandate, { ...grant, digest: 'sha256:tampered' }, now))
+      .toEqual({ kind: 'refused', code: 'mandate_grant_unauthenticated' })
+  })
+
+  it('derives actual actor and booking scope instead of trusting caller-supplied use material', async () => {
+    const store = issuedStore()
+    const provider = createDevelopmentBookingProvider()
+    const slot = await provider.availability()
+    const wrongActorService = createDevelopmentBookingMandateService({
+      store,
+      authenticatedDelegate: {
+        delegateRef: mandate.delegateRef,
+        callerRef: 'mock:caller:wrong',
+        principalRef,
+      },
+      now: developmentBookingNow,
+    })
+    await expect(runReservationInvocation({
+      provider,
+      booking: bookingInput(slot, principalRef, 'mock:operation:actual-actor-mismatch'),
+      origin: { kind: 'standalone', callerRef, principalRef },
+      ref: 'actual-actor-mismatch',
+      boundedMandate: {
+        service: wrongActorService,
+        mandateRef: mandate.mandateRef,
+        authorityUseRef: 'mock:authority-use:actual-actor-mismatch',
+      },
+    })).rejects.toThrow('mandate_principal_mismatch')
+    expect(provider.effectCount()).toBe(0)
+
+    const service = bookingService(store)
+    await expect(runReservationInvocation({
+      provider,
+      booking: {
+        ...bookingInput(slot, principalRef, 'mock:operation:actual-booking-mismatch'),
+        disclosure: {
+          fields: ['customer.name', 'customer.email'],
+          recipient: 'mock:provider:wrong',
+          purpose: 'create_development_reservation',
+        },
+      },
+      origin: { kind: 'standalone', callerRef, principalRef },
+      ref: 'actual-booking-mismatch',
+      boundedMandate: {
+        service,
+        mandateRef: mandate.mandateRef,
+        authorityUseRef: 'mock:authority-use:actual-booking-mismatch',
+      },
+    })).rejects.toThrow('mandate_recipient_mismatch')
+    expect(provider.effectCount()).toBe(0)
   })
 
   it.each([
@@ -133,21 +234,19 @@ describe('Action Invocation bounded standing mandate', () => {
     ['mandate_risk_exceeded', { risk: 'higher' }],
     ['mandate_caller_mismatch', { callerRef: 'other' }],
   ] as const)('refuses %s scope widening', (code, override) => {
-    const store = new StandingMandateStore()
-    store.issue(mandate)
+    const store = issuedStore()
     expect(store.reserve(use(override as Partial<AuthorityUseMaterial>), now)).toEqual({ kind: 'refused', code })
   })
 
   it('refuses expired mandates', () => {
-    const store = new StandingMandateStore()
-    store.issue(mandate)
+    const store = issuedStore()
     expect(store.reserve(use(), mandate.scope.expiresAt))
       .toEqual({ kind: 'refused', code: 'mandate_expired' })
   })
 
   it('rechecks revocation immediately before provider release', async () => {
-    const store = new StandingMandateStore()
-    store.issue(mandate)
+    const store = issuedStore()
+    const service = bookingService(store)
     const provider = createDevelopmentBookingProvider()
     const slot = await provider.availability()
     const origin = { kind: 'standalone', callerRef, principalRef } as const
@@ -157,8 +256,9 @@ describe('Action Invocation bounded standing mandate', () => {
       origin,
       ref: 'revoke-before-release',
       boundedMandate: {
-        store,
-        material: use({ authorityUseRef: 'mock:authority-use:revoke-before-release' }),
+        service,
+        mandateRef: mandate.mandateRef,
+        authorityUseRef: 'mock:authority-use:revoke-before-release',
         afterReservation: () => {
           store.revoke({
             mandateRef: mandate.mandateRef,
@@ -174,8 +274,7 @@ describe('Action Invocation bounded standing mandate', () => {
   })
 
   it('atomically refuses concurrent oversubscription and count exhaustion', () => {
-    const store = new StandingMandateStore()
-    store.issue(mandate)
+    const store = issuedStore()
     expect(store.reserve(use(), now).kind).toBe('accepted')
     expect(store.reserve(use({ authorityUseRef: 'mock:authority-use:2' }), now))
       .toEqual({ kind: 'refused', code: 'mandate_concurrency_exhausted' })
@@ -189,8 +288,7 @@ describe('Action Invocation bounded standing mandate', () => {
   })
 
   it('fences revocation and stale generations without rewriting released effects', () => {
-    const store = new StandingMandateStore()
-    store.issue(mandate)
+    const store = issuedStore()
     store.reserve(use(), now)
     store.settle('mock:authority-use:1', 'released', now)
     store.reserve(use({ authorityUseRef: 'mock:authority-use:before-revoke' }), now)
@@ -201,30 +299,26 @@ describe('Action Invocation bounded standing mandate', () => {
       revokedAt: '2026-07-19T04:01:00.000Z',
     })
     expect(revoked).toMatchObject({ kind: 'accepted', value: { generation: 2, revoked: { reason: expect.any(String) } } })
-    expect(store.recheckBeforeRelease('mock:authority-use:before-revoke', '2026-07-19T04:02:00.000Z'))
-      .toEqual({ kind: 'refused', code: 'mandate_revoked' })
     expect(store.reserve(use({ authorityUseRef: 'mock:authority-use:2' }), '2026-07-19T04:02:00.000Z'))
       .toEqual({ kind: 'refused', code: 'mandate_revoked' })
     expect(store.inspectUse('mock:authority-use:1')).toMatchObject({ state: 'released', mandateGeneration: 1 })
   })
 
   it('holds uncertain capacity until reconciliation settlement and reconstructs cold', () => {
-    const store = new StandingMandateStore()
-    store.issue(mandate)
+    const store = issuedStore()
     store.reserve(use(), now)
     store.settle('mock:authority-use:1', 'uncertain', now)
     expect(store.reserve(use({ authorityUseRef: 'mock:authority-use:2' }), now))
       .toEqual({ kind: 'refused', code: 'mandate_concurrency_exhausted' })
     const cold = new StandingMandateStore(structuredClone(store.exportSnapshot()))
-    expect(cold.capacity(mandate.mandateRef)).toMatchObject({ consumedCount: 1, reservedCount: 1 })
+    expect(cold.capacity(mandate.mandateRef)).toMatchObject({ consumedCount: 0, reservedCount: 1 })
     expect(cold.settle('mock:authority-use:1', 'released', '2026-07-19T04:03:00.000Z').kind).toBe('accepted')
     expect(cold.reserve(use({ authorityUseRef: 'mock:authority-use:2' }), '2026-07-19T04:04:00.000Z').kind)
       .toBe('accepted')
   })
 
   it('rejects checksummed-record tampering during cold reconstruction', () => {
-    const store = new StandingMandateStore()
-    store.issue(mandate)
+    const store = issuedStore()
     store.reserve(use(), now)
     const snapshot = structuredClone(store.exportSnapshot())
     ;(snapshot.mandates[0] as { generation: number }).generation = 9

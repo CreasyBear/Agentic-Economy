@@ -133,6 +133,21 @@ export function createInMemoryActionInvocationTracer<
       ? await releaseFence
       : releaseFence
     if (durableReleaseRefusal !== undefined) {
+      const attempt = record.view.attempts.find(({ attemptRef }) => attemptRef === input.attemptRef)
+      if (attempt !== undefined) {
+        record.view = nextView(record.view, {
+          attempts: replaceAttempt(record.view.attempts, {
+            ...attempt,
+            release: { state: 'not_released' },
+            outcome: {
+              state: 'failed',
+              retry: 'safe_before_release',
+              message: durableReleaseRefusal,
+            },
+          }),
+          control: { state: 'retryable', reason: 'pre_release_failure' },
+        })
+      }
       return { kind: 'refused', code: durableReleaseRefusal, view: record.view }
     }
     const completed = await executeReleasedAttempt({
@@ -298,12 +313,37 @@ export function createInMemoryActionInvocationTracer<
         return { kind: 'refused', code: 'authority_not_accepted', view: record.view }
       }
       record.view = nextView(record.view, {
+        acceptedAuthority: { kind: 'approve_each', authorityRef: input.authorityRef },
         control: { state: 'authorized', decidedAt: options.now() },
       })
       if (record.authorityBinding) {
         record.authorityBinding = {
           ...record.authorityBinding,
           invocationVersion: record.view.invocationVersion,
+          acceptedBasis: { kind: 'approve_each', authorityRef: input.authorityRef },
+        }
+      }
+      return { kind: 'accepted', view: record.view }
+    },
+    authorizeStandingMandateUse(input) {
+      const checked = checkBinding(records.get(input.invocationRef), input, options.now())
+      if (checked.kind === 'refused') return checked
+      const record = checked.record
+      if (
+        record.view.control.state !== 'awaiting_authority'
+        || input.basis.kind !== 'standing_mandate_use'
+        || input.basis.authorityUseRef.length === 0
+        || input.basis.grantEvidenceRef.length === 0
+      ) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      record.view = nextView(record.view, {
+        acceptedAuthority: input.basis,
+        control: { state: 'authorized', decidedAt: options.now() },
+      })
+      if (record.authorityBinding) {
+        record.authorityBinding = {
+          ...record.authorityBinding,
+          invocationVersion: record.view.invocationVersion,
+          acceptedBasis: input.basis,
         }
       }
       return { kind: 'accepted', view: record.view }
@@ -343,6 +383,14 @@ export function createInMemoryActionInvocationTracer<
       }
       const canAcquire = control.state === 'authorized' || control.state === 'retryable'
       if (!canAcquire) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      if (
+        record.view.acceptedAuthority?.kind === 'standing_mandate_use'
+        && (
+          input.acceptedAuthorityBasis === undefined
+          || canonicalDigest(record.view.acceptedAuthority as never)
+            !== canonicalDigest(input.acceptedAuthorityBasis as never)
+        )
+      ) return { kind: 'refused', code: 'authority_not_accepted', view: record.view }
       const digest = materialDigest(input.materialInput, contract.materialInputPaths)
       if (digest !== record.authorityBinding?.digest) {
         return { kind: 'refused', code: 'material_input_changed', view: record.view }

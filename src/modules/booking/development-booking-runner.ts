@@ -3,12 +3,10 @@ import {
   createDevelopmentDurableState,
   createDevelopmentReleaseSignal,
   createDurableActionInvocationTracer,
-  type AuthorityUseMaterial,
   type ActionInvocationOrigin,
   type ActionInvocationView,
   type PreparedInvocation,
   type ReconciliationEvidenceVerifier,
-  StandingMandateStore,
 } from '@/modules/action-invocation'
 import type { TransferBoundaryEvent } from '@/modules/action-invocation/transfer-evaluator'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -22,8 +20,16 @@ import {
 } from './development-booking.actions'
 import { bookingActor, developmentBookingNow } from './development-booking-fixture'
 import type { createDevelopmentBookingProvider } from './development-booking-provider'
+import {
+  mandateRefusalToInvocationRefusal,
+  type DevelopmentBookingMandateService,
+} from './development-booking-mandate'
 
 type Provider = ReturnType<typeof createDevelopmentBookingProvider>
+type BookingInvocationEvent = TransferBoundaryEvent | Readonly<{
+  kind: 'standing_mandate_authorization'
+  invocationRef: string
+}>
 
 export type BookingInvocationRun<Result extends DevelopmentBookingResult | DevelopmentBookingCancellationResult> =
   Readonly<{
@@ -38,7 +44,7 @@ export type BookingInvocationRun<Result extends DevelopmentBookingResult | Devel
       result?: Result
       resultIdentity?: Readonly<{ sourceResultRef: string; resultDigest: string }>
     }>
-    events: readonly TransferBoundaryEvent[]
+    events: readonly BookingInvocationEvent[]
   }>
 
 export async function runReservationInvocation(input: Readonly<{
@@ -48,14 +54,16 @@ export async function runReservationInvocation(input: Readonly<{
   ref: string
   nowMs?: number
   loseResponseAfterRelease?: boolean
+  unknownWithoutProviderRelease?: boolean
   verifyReconciliationEvidence?: ReconciliationEvidenceVerifier
   boundedMandate?: Readonly<{
-    store: StandingMandateStore
-    material: Omit<AuthorityUseMaterial, 'invocationRef' | 'action' | 'preparedMaterialDigest' | 'effectGeneration'>
+    service: DevelopmentBookingMandateService
+    mandateRef: string
+    authorityUseRef: string
     afterReservation?: () => void
   }>
 }>): Promise<BookingInvocationRun<DevelopmentBookingResult>> {
-  const events: TransferBoundaryEvent[] = []
+  const events: BookingInvocationEvent[] = []
   const source: {
     input: DevelopmentBookingInput
     prepared: PreparedInvocation | undefined
@@ -71,6 +79,9 @@ export async function runReservationInvocation(input: Readonly<{
     developmentOnlyBookingAvailabilityCheck: (raw: unknown, now: number) =>
       input.provider.check(raw as DevelopmentBookingInput, now),
     developmentOnlyBookingAdapter: async (raw: unknown) => {
+      if (input.unknownWithoutProviderRelease === true) {
+        throw new Error('mock_transport_failed_before_provider_release_observation')
+      }
       events.push({ kind: 'provider_release' as const, actionId: createDevelopmentReservationAction.id })
       release.markReleased()
       const result = await input.provider.reserve(raw as DevelopmentBookingInput)
@@ -86,11 +97,11 @@ export async function runReservationInvocation(input: Readonly<{
     },
   }
   const state = createDevelopmentDurableState<DevelopmentBookingResult>()
-  const tracer = createDurableActionInvocationTracer({
+  const tracer = createDurableActionInvocationTracer<DevelopmentBookingInput, DevelopmentBookingResult>({
     action: createDevelopmentReservationAction,
     port: createDevelopmentDurablePort(state),
     now: developmentBookingNow,
-    developmentReleaseSignal: release,
+    ...(input.unknownWithoutProviderRelease === true ? {} : { developmentReleaseSignal: release }),
     ...(input.verifyReconciliationEvidence === undefined
       ? {}
       : { verifyReconciliationEvidence: input.verifyReconciliationEvidence }),
@@ -98,12 +109,15 @@ export async function runReservationInvocation(input: Readonly<{
     nextAuthorityRef: () => `mock:booking-authority:${input.ref}`,
     nextAttemptRef: () => `mock:booking-attempt:${input.ref}`,
     ...(input.boundedMandate === undefined ? {} : {
-      beforeEffectRelease: () => {
-        const checked = input.boundedMandate!.store.recheckBeforeRelease(
-          input.boundedMandate!.material.authorityUseRef,
-          developmentBookingNow(),
-        )
-        return checked.kind === 'accepted' ? undefined : 'authority_not_accepted' as const
+      beforeEffectRelease: (current, effectGeneration) => {
+        const checked = input.boundedMandate!.service.recheckRelease({
+          authorityUseRef: input.boundedMandate!.authorityUseRef,
+          view: current,
+          effectGeneration,
+        })
+        return checked.kind === 'accepted'
+          ? undefined
+          : mandateRefusalToInvocationRefusal(checked.code)
       },
     }),
     resolveSourceState: () => ({
@@ -123,15 +137,15 @@ export async function runReservationInvocation(input: Readonly<{
     origin: input.origin, actor: owner, input: input.booking, context, freshnessMs: 900_000,
   })
   source.prepared = prepared.prepared
-  const decision = tracer.decide({
-    invocationRef: prepared.invocationRef,
-    expectedInvocationVersion: prepared.invocationVersion,
-    authorityRef: prepared.authority!.reference,
-    actor: owner, origin: input.origin, accept: true,
-  })
-  if (decision.kind !== 'accepted') throw new Error(decision.code)
-  events.push({ kind: 'authority_decision', invocationRef: prepared.invocationRef })
   if (input.boundedMandate === undefined) {
+    const decision = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor: owner, origin: input.origin, accept: true,
+    })
+    if (decision.kind !== 'accepted') throw new Error(decision.code)
+    events.push({ kind: 'authority_decision', invocationRef: prepared.invocationRef })
     const executed = await tracer.execute({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decision.view.invocationVersion,
@@ -141,25 +155,37 @@ export async function runReservationInvocation(input: Readonly<{
     if (executed.kind !== 'accepted') throw new Error(executed.code)
     return { view: executed.view, origin: input.origin, owner, state, tracer: tracer as never, source, events }
   }
+  const reserved = input.boundedMandate.service.reserveAndAuthorize({
+    mandateRef: input.boundedMandate.mandateRef,
+    authorityUseRef: input.boundedMandate.authorityUseRef,
+    view: prepared,
+    origin: input.origin,
+    booking: input.booking,
+    effectGeneration: prepared.attempts.length + 1,
+  })
+  if (reserved.kind === 'refused') throw new Error(reserved.code)
+  const standingAuthorization = tracer.authorizeStandingMandateUse({
+    invocationRef: prepared.invocationRef,
+    expectedInvocationVersion: prepared.invocationVersion,
+    authorityRef: prepared.authority!.reference,
+    actor: owner,
+    origin: input.origin,
+    basis: reserved.value.basis,
+  })
+  if (standingAuthorization.kind === 'refused') throw new Error(standingAuthorization.code)
+  events.push({ kind: 'standing_mandate_authorization', invocationRef: prepared.invocationRef })
   const acquired = tracer.acquire({
     invocationRef: prepared.invocationRef,
-    expectedInvocationVersion: decision.view.invocationVersion,
+    expectedInvocationVersion: standingAuthorization.view.invocationVersion,
     authorityRef: prepared.authority!.reference,
     actor: owner, origin: input.origin, materialInput: input.booking,
     leaseOwner: `mock:booking-worker:${input.ref}`,
     leaseMs: 30_000,
+    acceptedAuthorityBasis: reserved.value.basis,
   })
   if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
     throw new Error(acquired.kind === 'refused' ? acquired.code : 'booking_acquisition_failed')
   }
-  const authorityUse = input.boundedMandate.store.reserve({
-    ...input.boundedMandate.material,
-    invocationRef: prepared.invocationRef,
-    action: { id: prepared.action.id, version: prepared.action.contractVersion },
-    preparedMaterialDigest: prepared.prepared!.materialInputDigest,
-    effectGeneration: acquired.view.control.effectGeneration,
-  }, developmentBookingNow())
-  if (authorityUse.kind === 'refused') throw new Error(authorityUse.code)
   input.boundedMandate.afterReservation?.()
   const executed = await tracer.executeAcquired({
     invocationRef: prepared.invocationRef,
@@ -169,24 +195,18 @@ export async function runReservationInvocation(input: Readonly<{
     effectGeneration: acquired.view.control.effectGeneration,
   })
   if (executed.kind !== 'accepted') {
-    input.boundedMandate.store.settle(
-      authorityUse.value.authorityUseRef,
-      'not_released',
-      developmentBookingNow(),
-    )
+    const settlement = input.boundedMandate.service.settleFromInvocation({
+      authorityUseRef: input.boundedMandate.authorityUseRef,
+      view: executed.view ?? acquired.view,
+    })
+    if (settlement.kind === 'refused') throw new Error(settlement.code)
     throw new Error(executed.code)
   }
-  const attempt = executed.view.attempts.at(-1)
-  const settlement = attempt?.release.state === 'possibly_released'
-    ? 'uncertain'
-    : attempt?.release.state === 'released'
-      ? 'released'
-      : 'not_released'
-  input.boundedMandate.store.settle(
-    authorityUse.value.authorityUseRef,
-    settlement,
-    developmentBookingNow(),
-  )
+  const settled = input.boundedMandate.service.settleFromInvocation({
+    authorityUseRef: input.boundedMandate.authorityUseRef,
+    view: executed.view,
+  })
+  if (settled.kind === 'refused') throw new Error(settled.code)
   return { view: executed.view, origin: input.origin, owner, state, tracer: tracer as never, source, events }
 }
 
