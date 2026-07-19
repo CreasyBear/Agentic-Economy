@@ -43,6 +43,12 @@ describe('bounded mandate executable evidence packet', () => {
       const events = copy.bookings[0].events
       copy.bookings[0].events = [events[1], events[0]]
     }],
+    ['exception compensation class', (copy: any) => {
+      copy.observations.exceptionCases.find((item: any) => item.stage === 'pre_release_execution').useState = 'uncertain'
+    }],
+    ['post-release uncertainty class', (copy: any) => {
+      copy.observations.exceptionCases.find((item: any) => item.stage === 'post_release_execution').useState = 'not_released'
+    }],
   ])('rejects valid outer-checksum tampering of %s', async (_label, mutate) => {
     const evidence = structuredClone(await runBoundedMandateDevelopmentEvidence())
     mutate(evidence)

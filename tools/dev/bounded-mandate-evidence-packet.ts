@@ -52,6 +52,14 @@ export type BoundedMandatePacketEvidence = Readonly<{
       heldCount: number
       useState: string
     }>[]
+    exceptionCases: readonly Readonly<{
+      stage: 'reconstruction' | 'pre_release_execution' | 'post_release_execution'
+      refusal: string
+      providerEffects: number
+      heldCount: number
+      useState: string
+      secondEffectRefusal?: string
+    }>[]
     revokeRace: Readonly<{ refusal: string; providerEffects: number; useState: string }>
     reconciliations: readonly Readonly<{
       authorityUseRef: string
@@ -269,6 +277,64 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
     })
   }
 
+  const exceptionCases = []
+  for (const stage of ['reconstruction', 'pre_release_execution', 'post_release_execution'] as const) {
+    const exception = createIssuedStore(1)
+    const exceptionProvider = createDevelopmentBookingProvider()
+    const exceptionSlot = await exceptionProvider.availability()
+    const authorityUseRef = `mock:packet:use:exception:${stage}`
+    let refusal = 'none'
+    try {
+      await runReservationInvocation({
+        provider: exceptionProvider,
+        booking: bookingInput(exceptionSlot, principalRef, `mock:packet:operation:exception:${stage}`),
+        origin: standaloneOrigin,
+        ref: `packet-exception-${stage}`,
+        ...(stage === 'post_release_execution' ? { corruptSourceResultAfterRelease: true } : {}),
+        boundedMandate: {
+          service: exception.service,
+          mandateRef: exception.mandate.mandateRef,
+          authorityUseRef,
+          ...(stage === 'reconstruction' ? {
+            reconstructBeforeRelease: () => exception.service,
+            throwDuringReconstruction: true,
+          } : {}),
+          ...(stage === 'pre_release_execution' ? {
+            throwFromReleaseFenceBeforeProvider: true,
+          } : {}),
+        },
+      })
+    } catch (error) {
+      refusal = error instanceof Error ? error.message : 'unknown'
+    }
+    let secondEffectRefusal: string | undefined
+    if (stage === 'post_release_execution') {
+      try {
+        await runReservationInvocation({
+          provider: exceptionProvider,
+          booking: bookingInput(exceptionSlot, principalRef, 'mock:packet:operation:exception:second'),
+          origin: standaloneOrigin,
+          ref: 'packet-exception-second',
+          boundedMandate: {
+            service: exception.service,
+            mandateRef: exception.mandate.mandateRef,
+            authorityUseRef: 'mock:packet:use:exception:second',
+          },
+        })
+      } catch (error) {
+        secondEffectRefusal = error instanceof Error ? error.message : 'unknown'
+      }
+    }
+    exceptionCases.push({
+      stage,
+      refusal,
+      providerEffects: exceptionProvider.effectCount(),
+      heldCount: exception.store.capacity(exception.mandate.mandateRef).reservedCount,
+      useState: exception.store.inspectUse(authorityUseRef)?.state ?? 'missing',
+      ...(secondEffectRefusal === undefined ? {} : { secondEffectRefusal }),
+    })
+  }
+
   const revoke = createIssuedStore()
   let revokeRefusal = 'none'
   const effectsBeforeRevoke = provider.effectCount()
@@ -314,6 +380,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
       concurrentRefusal: concurrent.kind === 'refused' ? concurrent.code : 'not_refused',
       scopeRefusal: scope.kind === 'refused' ? scope.code : 'not_refused',
       compensationCases,
+      exceptionCases,
       revokeRace: {
         refusal: revokeRefusal,
         providerEffects: provider.effectCount() - effectsBeforeRevoke,
@@ -379,6 +446,18 @@ export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvide
       || providerEffects !== 0
       || heldCount !== 0
       || useState !== 'not_released')
+    || evidence.observations.exceptionCases.length !== 3
+    || evidence.observations.exceptionCases.some((exception) => {
+      if (exception.stage === 'post_release_execution') {
+        return exception.providerEffects !== 1
+          || exception.heldCount !== 1
+          || exception.useState !== 'uncertain'
+          || exception.secondEffectRefusal !== 'mandate_concurrency_exhausted'
+      }
+      return exception.providerEffects !== 0
+        || exception.heldCount !== 0
+        || exception.useState !== 'not_released'
+    })
     || evidence.observations.revokeRace.providerEffects !== 0
     || evidence.observations.revokeRace.useState !== 'not_released'
     || evidence.observations.reconciliations.some(({ resolution, useState }) => resolution !== useState)

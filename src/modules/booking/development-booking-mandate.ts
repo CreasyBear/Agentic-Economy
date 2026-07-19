@@ -30,6 +30,35 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
       return input.store.settle(authorityUseRef, 'not_released', input.now())
     },
 
+    settleExecutionException(args: Readonly<{
+      authorityUseRef: string
+      view: ActionInvocationView<DevelopmentBookingResult> | undefined
+      attemptRef: string
+      releaseSignalObserved: boolean
+    }>): MandateDecision<AuthorityUse> {
+      const use = input.store.inspectUse(args.authorityUseRef)
+      if (use === undefined) return { kind: 'refused', code: 'authority_use_not_found' }
+      const attempt = args.view?.attempts.find((candidate) =>
+        candidate.attemptRef === args.attemptRef
+        && candidate.effectGeneration === use.effectGeneration)
+      if (args.view !== undefined) {
+        const token = reconstructReleaseToken(
+          input.store,
+          args.authorityUseRef,
+          args.view,
+          use.effectGeneration,
+        )
+        if (token.kind === 'refused') return token
+      }
+      const positivelyNotReleased = !args.releaseSignalObserved
+        && attempt?.release.state === 'not_released'
+      return input.store.settle(
+        args.authorityUseRef,
+        positivelyNotReleased ? 'not_released' : 'uncertain',
+        input.now(),
+      )
+    },
+
     reserveAndAuthorize(args: Readonly<{
       mandateRef: string
       authorityUseRef: string

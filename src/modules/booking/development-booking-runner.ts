@@ -55,6 +55,7 @@ export async function runReservationInvocation(input: Readonly<{
   nowMs?: number
   loseResponseAfterRelease?: boolean
   unknownWithoutProviderRelease?: boolean
+  corruptSourceResultAfterRelease?: boolean
   verifyReconciliationEvidence?: ReconciliationEvidenceVerifier
   boundedMandate?: Readonly<{
     service: DevelopmentBookingMandateService
@@ -66,6 +67,8 @@ export async function runReservationInvocation(input: Readonly<{
     ) => DevelopmentBookingMandateService
     developmentAuthorizationVersionOverride?: number
     developmentAcquisitionVersionOverride?: number
+    throwDuringReconstruction?: boolean
+    throwFromReleaseFenceBeforeProvider?: boolean
   }>
 }>): Promise<BookingInvocationRun<DevelopmentBookingResult>> {
   const events: BookingInvocationEvent[] = []
@@ -98,6 +101,9 @@ export async function runReservationInvocation(input: Readonly<{
           : `mock:booking-refusal:${input.ref}`,
         resultDigest: canonicalDigest(result),
       }
+      if (input.corruptSourceResultAfterRelease === true && source.resultIdentity !== undefined) {
+        source.resultIdentity.resultDigest = canonicalDigest({ corrupted: true })
+      }
       return result
     },
   }
@@ -123,6 +129,9 @@ export async function runReservationInvocation(input: Readonly<{
           view: current,
           effectGeneration,
         })
+        if (configuredMandate.throwFromReleaseFenceBeforeProvider === true) {
+          throw new Error('mock_pre_release_infrastructure_fault')
+        }
         return checked.kind === 'accepted'
           ? undefined
           : mandateRefusalToInvocationRefusal(checked.code)
@@ -227,9 +236,20 @@ export async function runReservationInvocation(input: Readonly<{
     )
   }
   if (bounded.reconstructBeforeRelease !== undefined) {
-    activeMandateService = bounded.reconstructBeforeRelease(
-      tracer.coldResume(prepared.invocationRef).inspect(prepared.invocationRef) ?? acquired.view,
-    )
+    try {
+      if (bounded.throwDuringReconstruction === true) {
+        throw new Error('mock_cold_reconstruction_failed')
+      }
+      activeMandateService = bounded.reconstructBeforeRelease(
+        tracer.coldResume(prepared.invocationRef).inspect(prepared.invocationRef) ?? acquired.view,
+      )
+    } catch (error) {
+      throw compensateAndPreserve(
+        bounded.service,
+        bounded.authorityUseRef,
+        error instanceof Error ? error.message : 'cold_reconstruction_failed',
+      )
+    }
   }
   try {
     bounded.afterReservation?.()
@@ -250,11 +270,17 @@ export async function runReservationInvocation(input: Readonly<{
       effectGeneration: acquired.view.control.effectGeneration,
     })
   } catch (error) {
-    throw compensateAndPreserve(
-      activeMandateService,
-      bounded.authorityUseRef,
-      error instanceof Error ? error.message : 'pre_release_execution_threw',
-    )
+    const current = tracer.inspect(prepared.invocationRef)
+    const settlement = activeMandateService.settleExecutionException({
+      authorityUseRef: bounded.authorityUseRef,
+      view: current,
+      attemptRef: acquired.view.control.attemptRef,
+      releaseSignalObserved: release.wasReleased(),
+    })
+    const original = error instanceof Error ? error.message : 'execution_threw'
+    throw settlement.kind === 'accepted'
+      ? new Error(original)
+      : new Error(`${original}; exception_settlement_failed:${settlement.code}`)
   }
   if (executed.kind !== 'accepted') {
     const settlement = activeMandateService.settleFromInvocation({

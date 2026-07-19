@@ -277,6 +277,82 @@ describe('Action Invocation bounded standing mandate', () => {
       .toThrow('standing_mandate_snapshot_authority_use_refused')
   })
 
+  it('compensates a cold reconstruction failure before provider release', async () => {
+    const store = issuedStore()
+    const provider = createDevelopmentBookingProvider()
+    const slot = await provider.availability()
+    const authorityUseRef = 'mock:authority-use:reconstruction-failure'
+    await expect(runReservationInvocation({
+      provider,
+      booking: bookingInput(slot, principalRef, 'mock:operation:reconstruction-failure'),
+      origin: { kind: 'standalone', callerRef, principalRef },
+      ref: 'reconstruction-failure',
+      boundedMandate: {
+        service: bookingService(store),
+        mandateRef: mandate.mandateRef,
+        authorityUseRef,
+        reconstructBeforeRelease: () => bookingService(store),
+        throwDuringReconstruction: true,
+      },
+    })).rejects.toThrow('mock_cold_reconstruction_failed')
+    expect(provider.effectCount()).toBe(0)
+    expect(store.inspectUse(authorityUseRef)).toMatchObject({ state: 'not_released' })
+    expect(store.capacity(mandate.mandateRef).reservedCount).toBe(0)
+  })
+
+  it('compensates an execution exception only with positive pre-release evidence', async () => {
+    const store = issuedStore()
+    const provider = createDevelopmentBookingProvider()
+    const slot = await provider.availability()
+    const authorityUseRef = 'mock:authority-use:pre-release-exception'
+    await expect(runReservationInvocation({
+      provider,
+      booking: bookingInput(slot, principalRef, 'mock:operation:pre-release-exception'),
+      origin: { kind: 'standalone', callerRef, principalRef },
+      ref: 'pre-release-exception',
+      boundedMandate: {
+        service: bookingService(store),
+        mandateRef: mandate.mandateRef,
+        authorityUseRef,
+        throwFromReleaseFenceBeforeProvider: true,
+      },
+    })).rejects.toThrow('mock_pre_release_infrastructure_fault')
+    expect(provider.effectCount()).toBe(0)
+    expect(store.inspectUse(authorityUseRef)).toMatchObject({ state: 'not_released' })
+    expect(store.capacity(mandate.mandateRef).reservedCount).toBe(0)
+  })
+
+  it('holds uncertainty after an execution exception following provider release', async () => {
+    const store = issuedStore()
+    const service = bookingService(store)
+    const provider = createDevelopmentBookingProvider()
+    const slot = await provider.availability()
+    const authorityUseRef = 'mock:authority-use:post-release-exception'
+    await expect(runReservationInvocation({
+      provider,
+      booking: bookingInput(slot, principalRef, 'mock:operation:post-release-exception'),
+      origin: { kind: 'standalone', callerRef, principalRef },
+      ref: 'post-release-exception',
+      corruptSourceResultAfterRelease: true,
+      boundedMandate: { service, mandateRef: mandate.mandateRef, authorityUseRef },
+    })).rejects.toThrow('Source result digest mismatch')
+    expect(provider.effectCount()).toBe(1)
+    expect(store.inspectUse(authorityUseRef)).toMatchObject({ state: 'uncertain' })
+    expect(store.capacity(mandate.mandateRef)).toMatchObject({ reservedCount: 1, consumedCount: 0 })
+    await expect(runReservationInvocation({
+      provider,
+      booking: bookingInput(slot, principalRef, 'mock:operation:blocked-by-uncertainty'),
+      origin: { kind: 'standalone', callerRef, principalRef },
+      ref: 'blocked-by-uncertainty',
+      boundedMandate: {
+        service,
+        mandateRef: mandate.mandateRef,
+        authorityUseRef: 'mock:authority-use:blocked-by-uncertainty',
+      },
+    })).rejects.toThrow('mandate_concurrency_exhausted')
+    expect(provider.effectCount()).toBe(1)
+  })
+
   it('validates exact settlement view and attempt and replays immutable terminal settlement', async () => {
     const store = issuedStore()
     const service = bookingService(store)
