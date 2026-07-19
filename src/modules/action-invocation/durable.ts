@@ -1,5 +1,6 @@
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isLegacyReferenceableInvocationOutcome } from '@/modules/actions/legacy-invocation-result-compatibility'
 import type {
   ActionInvocationTracer,
   ActionInvocationView,
@@ -478,7 +479,9 @@ export function readCompletedResultIdentity<Result extends ActionResult>(
   if (row.terminalBusinessOutcome === undefined) {
     return { kind: 'refused', code: 'outcome_not_referenceable' }
   }
-  if (row.terminalResultReferenceable === false) {
+  const referenceable = row.terminalResultReferenceable
+    ?? isLegacyReferenceableInvocationOutcome(row.terminalBusinessOutcome)
+  if (!referenceable) {
     return { kind: 'refused', code: 'outcome_not_referenceable' }
   }
   const source = resolve(row.sourceRef)

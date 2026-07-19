@@ -1835,6 +1835,47 @@ describe('durable Action Invocation control', () => {
       sourceResultRef: 'mock:inquiry-result:durable',
       businessOutcome: 'queued_communication',
     })
+    const completedRow = port.readControl(prepared.invocationRef)!
+    const readIdentity = () => readCompletedResultIdentity(
+      port,
+      prepared.invocationRef,
+      actor,
+      () => ({ sourceResultRef: source.resultIdentity.sourceResultRef, result }),
+    )
+    durableState.controls.set(prepared.invocationRef, {
+      ...completedRow,
+      terminalBusinessOutcome: 'new_action_outcome',
+      terminalResultReferenceable: true,
+    })
+    expect(readIdentity()).toMatchObject({
+      kind: 'completed_result',
+      businessOutcome: 'new_action_outcome',
+    })
+    durableState.controls.set(prepared.invocationRef, {
+      ...completedRow,
+      terminalResultReferenceable: false,
+    })
+    expect(readIdentity()).toEqual({ kind: 'refused', code: 'outcome_not_referenceable' })
+    for (const legacyOutcome of ['queued_communication', 'completed'] as const) {
+      const { terminalResultReferenceable: _newFlag, ...legacyRow } = completedRow
+      durableState.controls.set(prepared.invocationRef, {
+        ...legacyRow,
+        terminalBusinessOutcome: legacyOutcome,
+      })
+      expect(readIdentity()).toMatchObject({
+        kind: 'completed_result',
+        businessOutcome: legacyOutcome,
+      })
+    }
+    for (const legacyOutcome of ['refused', 'not_found', 'arbitrary_legacy_outcome'] as const) {
+      const { terminalResultReferenceable: _newFlag, ...legacyRow } = completedRow
+      durableState.controls.set(prepared.invocationRef, {
+        ...legacyRow,
+        terminalBusinessOutcome: legacyOutcome,
+      })
+      expect(readIdentity()).toEqual({ kind: 'refused', code: 'outcome_not_referenceable' })
+    }
+    durableState.controls.set(prepared.invocationRef, completedRow)
     expect(source.resultIdentity.resultDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(readCompletedResultIdentity(
       port,
