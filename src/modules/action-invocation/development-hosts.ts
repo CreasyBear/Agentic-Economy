@@ -36,7 +36,7 @@ export type DevelopmentHostSourceCommands = Readonly<{
   ): ReconciliationEvidence | undefined
   beforeExecute?(
     view: ActionInvocationView<DynamicPublishedInvocationResult>,
-  ): void
+  ): void | Promise<void>
 }>
 
 function bindHost(
@@ -96,7 +96,7 @@ function bindHost(
       if (view.control.state !== 'leased') {
         return { kind: 'refused', code: 'invalid_control_state', view }
       }
-      sourceCommands.beforeExecute?.(view)
+      await sourceCommands.beforeExecute?.(view)
       const executed = await adapter.executeAcquired({
         invocationRef,
         expectedInvocationVersion: view.invocationVersion,

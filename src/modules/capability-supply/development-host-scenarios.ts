@@ -117,7 +117,35 @@ async function runHostScenarios(
 }
 
 async function successScenario(fixture: Fixture, hostKind: DevelopmentHostKind) {
-  const context = createScenario(fixture, hostKind, 'success', developmentSuccessRuntime)
+  let staleVersionCode = 'not_run'
+  let staleGenerationCode = 'not_run'
+  const context = createScenario(
+    fixture,
+    hostKind,
+    'success',
+    developmentSuccessRuntime,
+    async (leased) => {
+      if (leased.control.state !== 'leased') throw new Error('host_probe_not_leased')
+      const staleVersion = await context.adapter.executeAcquired({
+        invocationRef: leased.invocationRef,
+        expectedInvocationVersion: leased.invocationVersion - 1,
+        attemptRef: leased.control.attemptRef,
+        leaseOwner: leased.control.leaseOwner,
+        effectGeneration: leased.control.effectGeneration,
+      })
+      staleVersionCode = staleVersion.kind === 'refused' ? staleVersion.code : staleVersion.kind
+      const staleGeneration = await context.adapter.executeAcquired({
+        invocationRef: leased.invocationRef,
+        expectedInvocationVersion: leased.invocationVersion,
+        attemptRef: leased.control.attemptRef,
+        leaseOwner: leased.control.leaseOwner,
+        effectGeneration: leased.control.effectGeneration + 1,
+      })
+      staleGenerationCode = staleGeneration.kind === 'refused'
+        ? staleGeneration.code
+        : staleGeneration.kind
+    },
+  )
   const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
   const decided = context.host.decide(prepared.invocationRef, true)
   if (decided.kind !== 'accepted') throw new Error(`host_success_decision:${decided.code}`)
@@ -125,27 +153,13 @@ async function successScenario(fixture: Fixture, hostKind: DevelopmentHostKind) 
   if (completed.kind !== 'completed') throw new Error(`host_success_execute:${continuationCode(completed)}`)
   const duplicate = await context.host.continue(prepared.invocationRef)
   const cancellation = context.host.requestCancellation(prepared.invocationRef)
-  const staleVersion = await context.adapter.executeAcquired({
-    invocationRef: prepared.invocationRef,
-    expectedInvocationVersion: completed.view.invocationVersion - 1,
-    attemptRef: completed.view.attempts[0]!.attemptRef,
-    leaseOwner: completed.view.attempts[0]!.lease.owner,
-    effectGeneration: completed.view.attempts[0]!.effectGeneration,
-  })
-  const staleGeneration = await context.adapter.executeAcquired({
-    invocationRef: prepared.invocationRef,
-    expectedInvocationVersion: completed.view.invocationVersion,
-    attemptRef: completed.view.attempts[0]!.attemptRef,
-    leaseOwner: completed.view.attempts[0]!.lease.owner,
-    effectGeneration: completed.view.attempts[0]!.effectGeneration + 1,
-  })
   return {
     context,
     outcome: outcome(prepared.invocationRef, prepared.authority!.reference, completed.view, context),
     staleFences: {
       duplicate: duplicate.kind === 'refused' ? duplicate.code : duplicate.kind,
-      staleVersion: staleVersion.kind === 'refused' ? staleVersion.code : staleVersion.kind,
-      staleGeneration: staleGeneration.kind === 'refused' ? staleGeneration.code : staleGeneration.kind,
+      staleVersion: staleVersionCode,
+      staleGeneration: staleGenerationCode,
       effects: { ...context.effects },
       unsupportedCancellation: cancellation.kind === 'refused' ? cancellation.code : cancellation.kind,
     },
