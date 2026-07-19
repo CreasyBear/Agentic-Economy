@@ -1,10 +1,6 @@
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
 import type { ActionInvocationView } from './contracts'
-import {
-  createAttempt,
-  replaceAttempt,
-  type DevelopmentReleaseSignal,
-} from './attempts'
+import { replaceAttempt, type DevelopmentReleaseSignal } from './attempts'
 import { classifyBusinessOutcome } from './preparation'
 
 type AttemptTransition<Result extends ActionResult> = Pick<
@@ -21,19 +17,13 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
   operationKey: string
   now: () => string
   releaseSignal?: DevelopmentReleaseSignal
+  attempt: ActionInvocationView<Result>['attempts'][number]
 }>): Promise<AttemptTransition<Result>> {
   const prepared = input.currentView.prepared
   if (prepared === undefined) throw new Error('Consequential attempt requires prepared invocation state.')
   input.releaseSignal?.beginAttempt()
-  const attempt = createAttempt({
-    actionId: input.action.id,
-    attemptRef: input.attemptRef,
-    attemptNumber: input.currentView.attempts.length + 1,
-    actor: input.currentView.owner,
-    operationKey: input.operationKey,
-    materialInputDigest: prepared.materialInputDigest,
-  })
-  const attempts = [...input.currentView.attempts, attempt]
+  const attempt = input.attempt
+  const attempts = input.currentView.attempts
 
   try {
     const result = await input.action.run({ data: input.actionInput, context: input.context })

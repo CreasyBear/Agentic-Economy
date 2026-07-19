@@ -14,6 +14,7 @@ import { findAction } from '@/modules/actions'
 import {
   createDevelopmentReleaseSignal,
   createInMemoryActionInvocationTracer,
+  roundTripControlSnapshot,
   type ActionInvocationOrigin,
   type InvocationActor,
 } from '@/modules/action-invocation'
@@ -448,5 +449,222 @@ describe('in-memory Action Invocation tracer', () => {
         }],
       },
     })
+  })
+
+  it.each([
+    ['Request-owned', requestOrigin],
+    ['standalone', standaloneOrigin],
+  ])('fences takeover, cancellation, late observation, and restart for %s origin', async (_label, origin) => {
+    let now = '2026-07-19T09:00:00.000Z'
+    let attempt = 0
+    const developmentAdapter = vi.fn().mockResolvedValue({ kind: 'error', code: 'mock', retryable: false, reason: 'mock' })
+    const options = {
+      action: findAction('inquiry.submit')!,
+      now: () => now,
+      nextInvocationRef: () => `dev:action-invocation:fence:${origin.kind}`,
+      nextAuthorityRef: () => `opaque:authority:fence:${origin.kind}`,
+      nextAttemptRef: () => `dev:attempt:fence:${origin.kind}:${++attempt}`,
+    }
+    const tracer = createInMemoryActionInvocationTracer(options)
+    const prepared = tracer.prepare({
+      origin,
+      actor,
+      input: inquiryInput,
+      context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+      freshnessMs: 300_000,
+    })
+    const authority = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin,
+      accept: true,
+    })
+    if (authority.kind !== 'accepted') throw new Error('Expected accepted authority')
+
+    const first = tracer.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: authority.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin,
+      materialInput: inquiryInput,
+      leaseOwner: 'mock:worker:one',
+      leaseMs: 1_000,
+    })
+    if (first.kind !== 'accepted' || first.view.control.state !== 'leased') {
+      throw new Error('Expected first lease')
+    }
+    const firstToken = {
+      attemptRef: first.view.control.attemptRef,
+      leaseOwner: first.view.control.leaseOwner,
+      effectGeneration: first.view.control.effectGeneration,
+    }
+    expect(tracer.publishObservation({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: first.view.invocationVersion - 1,
+      ...firstToken,
+      release: 'released',
+    })).toMatchObject({ kind: 'refused', code: 'stale_invocation_version' })
+
+    await expect(tracer.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: first.view.invocationVersion - 1,
+      ...firstToken,
+    })).resolves.toMatchObject({ kind: 'refused', code: 'stale_invocation_version' })
+    expect(developmentAdapter).not.toHaveBeenCalled()
+
+    const provenNotReleased = tracer.publishObservation({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: first.view.invocationVersion,
+      ...firstToken,
+      release: 'not_released',
+    })
+    if (provenNotReleased.kind !== 'accepted') throw new Error('Expected proven non-release')
+    now = '2026-07-19T09:00:02.000Z'
+    const takeover = tracer.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: provenNotReleased.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin,
+      materialInput: inquiryInput,
+      leaseOwner: 'mock:worker:two',
+      leaseMs: 1_000,
+    })
+    if (takeover.kind !== 'accepted' || takeover.view.control.state !== 'leased') {
+      throw new Error('Expected takeover lease')
+    }
+    expect(takeover.view.control.effectGeneration).toBe(2)
+    expect(tracer.publishObservation({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: takeover.view.invocationVersion,
+      ...firstToken,
+      release: 'released',
+    })).toMatchObject({ kind: 'refused', code: 'effect_generation_stale' })
+    expect(tracer.inspect(prepared.invocationRef)).toEqual(takeover.view)
+
+    const snapshot = roundTripControlSnapshot(tracer.exportSnapshot())
+    expect(JSON.stringify(snapshot)).not.toContain(inquiryInput.body)
+    expect(JSON.stringify(snapshot)).not.toContain(inquiryInput.contact.email)
+    const restored = createInMemoryActionInvocationTracer({
+      ...options,
+      initialSnapshot: snapshot,
+      resolveSourceState: () => ({
+        input: inquiryInput,
+        context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+        prepared: takeover.view.prepared!,
+        observedResolution: takeover.view.observedResolution,
+      }),
+    })
+    expect(restored.inspect(prepared.invocationRef)).toEqual(takeover.view)
+
+    const possibleRelease = restored.publishObservation({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: takeover.view.invocationVersion,
+      attemptRef: takeover.view.control.attemptRef,
+      leaseOwner: takeover.view.control.leaseOwner,
+      effectGeneration: takeover.view.control.effectGeneration,
+      release: 'possibly_released',
+    })
+    if (possibleRelease.kind !== 'accepted') throw new Error('Expected uncertain observation')
+    const cancelAfterRelease = restored.cancel({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: possibleRelease.view.invocationVersion,
+      actor,
+      origin,
+    })
+    expect(cancelAfterRelease).toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'reconciliation_required' } },
+    })
+
+    const unknownTracer = createInMemoryActionInvocationTracer({
+      ...options,
+      nextInvocationRef: () => `dev:action-invocation:unknown:${origin.kind}`,
+    })
+    const unknownPrepared = unknownTracer.prepare({
+      origin,
+      actor,
+      input: inquiryInput,
+      context: {},
+      freshnessMs: 300_000,
+    })
+    const unknownAuthority = unknownTracer.decide({
+      invocationRef: unknownPrepared.invocationRef,
+      expectedInvocationVersion: unknownPrepared.invocationVersion,
+      authorityRef: unknownPrepared.authority!.reference,
+      actor,
+      origin,
+      accept: true,
+    })
+    if (unknownAuthority.kind !== 'accepted') throw new Error('Expected accepted authority')
+    const unknownLease = unknownTracer.acquire({
+      invocationRef: unknownPrepared.invocationRef,
+      expectedInvocationVersion: unknownAuthority.view.invocationVersion,
+      authorityRef: unknownPrepared.authority!.reference,
+      actor,
+      origin,
+      materialInput: inquiryInput,
+      leaseOwner: 'mock:worker:unknown',
+      leaseMs: 1,
+    })
+    if (unknownLease.kind !== 'accepted') throw new Error('Expected unknown lease')
+    now = '2026-07-19T09:00:03.000Z'
+    expect(unknownTracer.acquire({
+      invocationRef: unknownPrepared.invocationRef,
+      expectedInvocationVersion: unknownLease.view.invocationVersion,
+      authorityRef: unknownPrepared.authority!.reference,
+      actor,
+      origin,
+      materialInput: inquiryInput,
+      leaseOwner: 'mock:worker:takeover-refused',
+      leaseMs: 1_000,
+    })).toMatchObject({
+      kind: 'refused',
+      code: 'reconciliation_required',
+      view: { control: { state: 'reconciliation_required' } },
+    })
+
+    const cancellationTracer = createInMemoryActionInvocationTracer({
+      ...options,
+      nextInvocationRef: () => `dev:action-invocation:cancel:${origin.kind}`,
+    })
+    const cancelPrepared = cancellationTracer.prepare({
+      origin,
+      actor,
+      input: inquiryInput,
+      context: {},
+      freshnessMs: 300_000,
+    })
+    const cancelAuthority = cancellationTracer.decide({
+      invocationRef: cancelPrepared.invocationRef,
+      expectedInvocationVersion: cancelPrepared.invocationVersion,
+      authorityRef: cancelPrepared.authority!.reference,
+      actor,
+      origin,
+      accept: true,
+    })
+    if (cancelAuthority.kind !== 'accepted') throw new Error('Expected accepted authority')
+    expect(cancellationTracer.cancel({
+      invocationRef: cancelPrepared.invocationRef,
+      expectedInvocationVersion: cancelAuthority.view.invocationVersion,
+      actor,
+      origin,
+    })).toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'cancelled', effect: 'not_released' }, attempts: [] },
+    })
+
+    console.log(JSON.stringify({
+      label: 'MOCK/DEVELOPMENT ONLY - lease fencing, cancellation, and JSON snapshot reconstruction',
+      origin: origin.kind,
+      takeover: takeover.view.control,
+      staleObservation: 'refused',
+      restoredByteEquivalent: true,
+      cancellationBeforeRelease: 'cancelled_no_effect',
+      cancellationAfterPossibleRelease: 'reconciliation_required',
+    }, null, 2))
   })
 })

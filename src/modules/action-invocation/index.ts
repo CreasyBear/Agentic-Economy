@@ -2,6 +2,7 @@ export {
   createInMemoryActionInvocationTracer,
 } from './in-memory'
 export { createDevelopmentReleaseSignal } from './attempts'
+export { roundTripControlSnapshot } from './snapshot'
 
 export type {
   ActionInvocationOrigin,
@@ -11,6 +12,7 @@ export type {
   DecisionRefusalCode,
   InvocationActor,
   InvocationDecision,
+  InMemoryControlSnapshot,
   InvokeActionInput,
   PrepareActionInput,
 } from './contracts'

@@ -23,11 +23,16 @@ export function createAttempt(input: Readonly<{
   actor: InvocationActor
   operationKey: string
   materialInputDigest: string
+  effectGeneration: number
+  leaseOwner: string
+  leaseExpiresAt: string
 }>): ActionAttemptView {
   return {
     attemptRef: input.attemptRef,
     attemptNumber: input.attemptNumber,
     actor: input.actor,
+    effectGeneration: input.effectGeneration,
+    lease: { owner: input.leaseOwner, expiresAt: input.leaseExpiresAt },
     idempotency: {
       operationKey: input.operationKey,
       materialInputDigest: input.materialInputDigest,

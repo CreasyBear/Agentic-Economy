@@ -1,18 +1,14 @@
 import {
   resolveActionContract,
-  type Action,
-  type ActionContext,
   type ActionResult,
 } from '@/modules/common/action'
 import type {
-  ActionInvocationOrigin,
   ActionInvocationTracer,
   ActionInvocationView,
-  DecisionRefusalCode,
-  InvocationActor,
   InvocationDecision,
   PreparedInvocation,
 } from './contracts'
+import { stableHash } from '@/modules/common/stable-hash'
 import {
   actorFromOrigin,
   classifyBusinessOutcome,
@@ -21,41 +17,28 @@ import {
   readPath,
 } from './preparation'
 import {
-  reconcileAttempt,
-  replaceAttempt,
-  type DevelopmentReleaseSignal,
+  createAttempt,
 } from './attempts'
-import { executeConsequentialAttempt } from './attempt-execution'
-
-type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly<{
-  action: Action<Input, Result>
-  now: () => string
-  nextInvocationRef: () => string
-  nextAuthorityRef?: () => string
-  nextAttemptRef?: () => string
-  developmentReleaseSignal?: DevelopmentReleaseSignal
-  contextForExecution?: (context: ActionContext) => ActionContext
-}>
-
-type StoredInvocation<Input, Result extends ActionResult> = {
-  view: ActionInvocationView<Result>
-  input: Input
-  context: ActionContext
-  authorityBinding?: {
-    reference: string
-    invocationRef: string
-    actor: InvocationActor
-    origin: ActionInvocationOrigin
-    invocationVersion: number
-    actionId: string
-    contractVersion: string
-    digest: string
-    target: PreparedInvocation['target']
-    consequence: string
-    limits: PreparedInvocation['dataUse']['limits']
-    expiresAt: string
-  }
-}
+import { executeAcquiredAttempt } from './fenced-execution'
+import {
+  acquireLease,
+  leaseIsExpired,
+  nextEffectGeneration,
+} from './lease-control'
+import {
+  checkBinding,
+  createRecord,
+  createRecordStore,
+  exportControlSnapshot,
+  nextView,
+  type InMemoryTracerOptions,
+  type StoredInvocation,
+} from './in-memory-record-store'
+import {
+  cancelInvocation,
+  publishObservation,
+  reconcileInvocation,
+} from './resolution-control'
 
 /**
  * Development-only in-memory control seam. It proves preparation, exact
@@ -66,10 +49,39 @@ export function createInMemoryActionInvocationTracer<
   Input,
   Result extends ActionResult,
 >(options: InMemoryTracerOptions<Input, Result>): ActionInvocationTracer<Input, Result> {
-  const records = new Map<string, StoredInvocation<Input, Result>>()
+  const records = createRecordStore(options)
   const contract = resolveActionContract(options.action)
   let authoritySequence = 0
   let attemptSequence = 0
+
+  const runAcquired = async (
+    record: StoredInvocation<Input, Result>,
+    input: Readonly<{
+      expectedInvocationVersion: number
+      attemptRef: string
+      leaseOwner: string
+      effectGeneration: number
+    }>,
+  ): Promise<InvocationDecision<Result>> => {
+    const operationKey = readPath(record.input, 'operationKey')
+    if (typeof operationKey !== 'string') {
+      throw new Error('Consequential inquiry attempt requires operationKey and prepared material digest.')
+    }
+    const decision = await executeAcquiredAttempt({
+      action: options.action,
+      actionInput: record.input,
+      context: options.contextForExecution?.(record.context) ?? record.context,
+      view: record.view,
+      ...input,
+      operationKey,
+      now: options.now,
+      ...(options.developmentReleaseSignal === undefined
+        ? {}
+        : { releaseSignal: options.developmentReleaseSignal }),
+    })
+    if (decision.view !== undefined) record.view = decision.view
+    return decision
+  }
 
   const executeRunner = async (
     record: StoredInvocation<Input, Result>,
@@ -107,22 +119,36 @@ export function createInMemoryActionInvocationTracer<
     if (typeof operationKey !== 'string') {
       throw new Error('Consequential inquiry attempt requires operationKey and prepared material digest.')
     }
-    const running = nextView(record.view, { control: { state: 'in_progress' } })
-    record.view = running
-    const transition = await executeConsequentialAttempt({
-      action: options.action,
-      actionInput: record.input,
-      context: options.contextForExecution?.(record.context) ?? record.context,
-      currentView: running,
+    const leaseOwner = 'development:execute'
+    const leaseExpiresAt = new Date(Date.parse(options.now()) + 30_000).toISOString()
+    const attempt = createAttempt({
+      actionId: options.action.id,
       attemptRef: options.nextAttemptRef?.() ?? `dev:attempt:${++attemptSequence}`,
+      attemptNumber: record.view.attempts.length + 1,
+      actor: record.view.owner,
       operationKey,
-      now: options.now,
-      ...(options.developmentReleaseSignal === undefined
-        ? {}
-        : { releaseSignal: options.developmentReleaseSignal }),
+      materialInputDigest: record.view.prepared.materialInputDigest,
+      effectGeneration: nextEffectGeneration(record.view.attempts),
+      leaseOwner,
+      leaseExpiresAt,
     })
-    record.view = nextView(running, transition)
-    return record.view
+    record.view = acquireLease({
+      view: record.view,
+      actionId: options.action.id,
+      attemptRef: attempt.attemptRef,
+      operationKey,
+      materialInputDigest: record.view.prepared.materialInputDigest,
+      leaseOwner,
+      leaseExpiresAt,
+    })
+    const result = await runAcquired(record, {
+      expectedInvocationVersion: record.view.invocationVersion,
+      attemptRef: attempt.attemptRef,
+      leaseOwner,
+      effectGeneration: attempt.effectGeneration,
+    })
+    if (result.kind !== 'accepted') throw new Error(`Development execution refused: ${result.code}`)
+    return result.view
   }
 
   return {
@@ -167,7 +193,7 @@ export function createInMemoryActionInvocationTracer<
         actionId: options.action.id,
         contractVersion: contract.version,
         digest,
-        target: prepared.target,
+        targetDigest: String(stableHash(prepared.target)),
         consequence: prepared.consequence,
         limits: prepared.dataUse.limits,
         expiresAt: freshUntil,
@@ -191,7 +217,12 @@ export function createInMemoryActionInvocationTracer<
       record.view = nextView(record.view, {
         control: { state: 'authorized', decidedAt: options.now() },
       })
-      if (record.authorityBinding) record.authorityBinding.invocationVersion = record.view.invocationVersion
+      if (record.authorityBinding) {
+        record.authorityBinding = {
+          ...record.authorityBinding,
+          invocationVersion: record.view.invocationVersion,
+        }
+      }
       return { kind: 'accepted', view: record.view }
     },
     async execute(input) {
@@ -214,107 +245,65 @@ export function createInMemoryActionInvocationTracer<
       record.input = input.materialInput
       return { kind: 'accepted', view: await executeRunner(record) }
     },
-    reconcile(input) {
+    acquire(input) {
+      const checked = checkBinding(records.get(input.invocationRef), input, options.now())
+      if (checked.kind === 'refused') return checked
+      const record = checked.record
+      const control = record.view.control
+      if (control.state === 'leased' && leaseIsExpired(control, options.now())) {
+        record.view = nextView(record.view, {
+          control: { state: 'reconciliation_required', attemptRef: control.attemptRef },
+        })
+        return { kind: 'refused', code: 'reconciliation_required', view: record.view }
+      }
+      const canAcquire = control.state === 'authorized' || control.state === 'retryable'
+      if (!canAcquire) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      const digest = materialDigest(input.materialInput, contract.materialInputPaths)
+      if (digest !== record.authorityBinding?.digest) {
+        return { kind: 'refused', code: 'material_input_changed', view: record.view }
+      }
+      const operationKey = readPath(input.materialInput, 'operationKey')
+      if (typeof operationKey !== 'string' || record.view.prepared === undefined) {
+        return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      }
+      const leaseExpiresAt = new Date(Date.parse(options.now()) + input.leaseMs).toISOString()
+      record.input = input.materialInput
+      record.view = acquireLease({
+        view: record.view,
+        actionId: options.action.id,
+        attemptRef: options.nextAttemptRef?.() ?? `dev:attempt:${++attemptSequence}`,
+        operationKey,
+        materialInputDigest: record.view.prepared.materialInputDigest,
+        leaseOwner: input.leaseOwner,
+        leaseExpiresAt,
+      })
+      if (record.authorityBinding) {
+        record.authorityBinding = {
+          ...record.authorityBinding,
+          invocationVersion: record.view.invocationVersion,
+        }
+      }
+      return { kind: 'accepted', view: record.view }
+    },
+    async executeAcquired(input) {
       const record = records.get(input.invocationRef)
       if (record === undefined) return { kind: 'refused', code: 'invocation_not_found' }
-      if (record.view.invocationVersion !== input.expectedInvocationVersion) {
-        return { kind: 'refused', code: 'stale_invocation_version', view: record.view }
-      }
-      if (
-        record.view.owner.callerRef !== input.actor.callerRef ||
-        record.view.owner.principalRef !== input.actor.principalRef
-      ) return { kind: 'refused', code: 'cross_principal_refused', view: record.view }
-      if (JSON.stringify(record.view.origin) !== JSON.stringify(input.origin)) {
-        return { kind: 'refused', code: 'cross_origin_refused', view: record.view }
-      }
-      if (
-        record.view.control.state !== 'reconciliation_required' ||
-        record.view.control.attemptRef !== input.attemptRef
-      ) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
-      const attempt = record.view.attempts.find((candidate) => candidate.attemptRef === input.attemptRef)
-      if (attempt === undefined) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
-      const reconciled = reconcileAttempt(attempt, input.resolution, options.now())
-      record.view = nextView(record.view, {
-        attempts: replaceAttempt(record.view.attempts, reconciled),
-        control: input.resolution === 'not_released'
-          ? { state: 'retryable', reason: 'pre_release_failure' }
-          : { state: 'terminal' },
-      })
-      return { kind: 'accepted', view: record.view }
+      return runAcquired(record, input)
+    },
+    publishObservation(input) {
+      return publishObservation(records.get(input.invocationRef), input, options.now())
+    },
+    cancel(input) {
+      return cancelInvocation(records.get(input.invocationRef), input)
+    },
+    reconcile(input) {
+      return reconcileInvocation(records.get(input.invocationRef), input, options.now())
     },
     inspect(invocationRef) {
       return records.get(invocationRef)?.view
     },
-  }
-}
-
-function createRecord<Input, Result extends ActionResult>(
-  options: InMemoryTracerOptions<Input, Result>,
-  contractVersion: string,
-  origin: ActionInvocationOrigin,
-  actor: InvocationActor,
-  input: Input,
-  context: ActionContext,
-): StoredInvocation<Input, Result> {
-  return {
-    input,
-    context,
-    view: {
-      invocationRef: options.nextInvocationRef(),
-      invocationVersion: 1,
-      environment: 'MOCK/DEVELOPMENT ONLY',
-      persistence: 'in_memory_only',
-      origin,
-      owner: actor,
-      action: { id: options.action.id, contractVersion },
-      desired: { state: 'invoke' },
-      attempts: [],
-      observedResolution: { state: 'pending' },
-      freshness: { state: 'not_observed' },
-      control: { state: 'in_progress' },
+    exportSnapshot() {
+      return exportControlSnapshot(records)
     },
   }
-}
-
-function nextView<Result extends ActionResult>(
-  view: ActionInvocationView<Result>,
-  change: Partial<ActionInvocationView<Result>>,
-): ActionInvocationView<Result> {
-  return { ...view, ...change, invocationVersion: view.invocationVersion + 1 }
-}
-
-function checkBinding<Input, Result extends ActionResult>(
-  record: StoredInvocation<Input, Result> | undefined,
-  input: {
-    expectedInvocationVersion: number
-    authorityRef: string
-    actor: InvocationActor
-    origin: ActionInvocationOrigin
-  },
-  now: string,
-): { kind: 'ok'; record: StoredInvocation<Input, Result> } | Readonly<{
-  kind: 'refused'
-  code: DecisionRefusalCode
-  view?: ActionInvocationView<Result>
-}> {
-  if (!record?.authorityBinding) return { kind: 'refused', code: 'invocation_not_found' }
-  if (record.view.invocationVersion !== input.expectedInvocationVersion) {
-    return { kind: 'refused', code: 'stale_invocation_version', view: record.view }
-  }
-  const binding = record.authorityBinding
-  if (
-    binding.reference !== input.authorityRef ||
-    binding.actor.callerRef !== input.actor.callerRef ||
-    binding.actor.principalRef !== input.actor.principalRef
-  ) return { kind: 'refused', code: 'cross_principal_refused', view: record.view }
-  if (JSON.stringify(binding.origin) !== JSON.stringify(input.origin)) {
-    return { kind: 'refused', code: 'cross_origin_refused', view: record.view }
-  }
-  if (Date.parse(now) >= Date.parse(binding.expiresAt)) {
-    record.view = nextView(record.view, {
-      control: { state: 'invalidated', reason: 'authority_expired' },
-    })
-    return { kind: 'refused', code: 'authority_expired', view: record.view }
-  }
-  return { kind: 'ok', record }
 }

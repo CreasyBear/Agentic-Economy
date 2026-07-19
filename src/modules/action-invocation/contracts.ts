@@ -28,12 +28,16 @@ export type DecisionRefusalCode =
   | 'material_input_changed'
   | 'authority_not_accepted'
   | 'reconciliation_required'
+  | 'lease_not_current'
+  | 'effect_generation_stale'
   | 'invalid_control_state'
 
 export type ActionAttemptView = Readonly<{
   attemptRef: string
   attemptNumber: number
   actor: InvocationActor
+  effectGeneration: number
+  lease: Readonly<{ owner: string; expiresAt: string }>
   idempotency: Readonly<{
     operationKey: string
     materialInputDigest: string
@@ -79,10 +83,19 @@ export type ActionInvocationView<Result extends ActionResult = ActionResult> = R
   control:
     | Readonly<{ state: 'awaiting_authority' }>
     | Readonly<{ state: 'authorized'; decidedAt: string }>
+    | Readonly<{
+        state: 'leased'
+        attemptRef: string
+        leaseOwner: string
+        effectGeneration: number
+        leaseExpiresAt: string
+        release: 'not_started' | 'not_released' | 'possibly_released'
+      }>
     | Readonly<{ state: 'in_progress' }>
     | Readonly<{ state: 'retryable'; reason: 'pre_release_failure' }>
     | Readonly<{ state: 'reconciliation_required'; attemptRef: string }>
     | Readonly<{ state: 'terminal' }>
+    | Readonly<{ state: 'cancelled'; effect: 'not_released' }>
     | Readonly<{ state: 'invalidated'; reason: DecisionRefusalCode }>
 }>
 
@@ -120,6 +133,37 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     origin: ActionInvocationOrigin
     materialInput: Input
   }>): Promise<InvocationDecision<Result>>
+  acquire(input: Readonly<{
+    invocationRef: string
+    expectedInvocationVersion: number
+    authorityRef: string
+    actor: InvocationActor
+    origin: ActionInvocationOrigin
+    materialInput: Input
+    leaseOwner: string
+    leaseMs: number
+  }>): InvocationDecision<Result>
+  executeAcquired(input: Readonly<{
+    invocationRef: string
+    expectedInvocationVersion: number
+    attemptRef: string
+    leaseOwner: string
+    effectGeneration: number
+  }>): Promise<InvocationDecision<Result>>
+  publishObservation(input: Readonly<{
+    invocationRef: string
+    expectedInvocationVersion: number
+    attemptRef: string
+    leaseOwner: string
+    effectGeneration: number
+    release: 'not_released' | 'released' | 'possibly_released'
+  }>): InvocationDecision<Result>
+  cancel(input: Readonly<{
+    invocationRef: string
+    expectedInvocationVersion: number
+    actor: InvocationActor
+    origin: ActionInvocationOrigin
+  }>): InvocationDecision<Result>
   reconcile(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -129,4 +173,34 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     resolution: 'not_released' | 'released'
   }>): InvocationDecision<Result>
   inspect(invocationRef: string): ActionInvocationView<Result> | undefined
+  exportSnapshot(): InMemoryControlSnapshot<Input, Result>
 }
+
+export type InMemoryControlSnapshot<Input, Result extends ActionResult> = Readonly<{
+  format: 'action-invocation-control:development:v1'
+  records: readonly Readonly<{
+    sourceRef: string
+    control: Pick<
+      ActionInvocationView<Result>,
+      'invocationRef' | 'invocationVersion' | 'environment' | 'persistence' |
+      'origin' | 'owner' | 'action' | 'desired' | 'authority' | 'attempts' |
+      'freshness' | 'control'
+    >
+    authorityBinding?: AuthorityBindingSnapshot
+  }>[]
+}>
+
+export type AuthorityBindingSnapshot = Readonly<{
+  reference: string
+  invocationRef: string
+  actor: InvocationActor
+  origin: ActionInvocationOrigin
+  invocationVersion: number
+  actionId: string
+  contractVersion: string
+  digest: string
+  targetDigest: string
+  consequence: string
+  limits: Readonly<Record<string, number>>
+  expiresAt: string
+}>
