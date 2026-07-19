@@ -71,11 +71,14 @@ export type X402PaymentSignatureRequest = Readonly<{
 export type RouteTransportRuntime = Readonly<{
   send: RouteTransportFetch
   resolveCredential: (reference: string) => string | undefined
+  x402PaymentSigningAvailable?: (input: Readonly<{
+    credentialRef: string
+    network: string
+    asset: string
+    payTo: string
+    maximumSpend: Readonly<{ currency: string; amountMinor: number }>
+  }>) => boolean
   createX402PaymentSignature: (request: X402PaymentSignatureRequest) => Promise<string | undefined>
-}>
-
-export type RouteTransportEffectReleaseController = Readonly<{
-  beginEffectRelease(): void
 }>
 
 export type RouteTransportObservation = Readonly<{
@@ -163,6 +166,7 @@ export type PreparedRouteTransportInvocation = Readonly<{
   credential: string
   configuration: RegisteredConfiguration
   requestDigest: string
+  target?: URL
 }>
 
 export type RouteTransportPreparation =
@@ -172,12 +176,15 @@ export type RouteTransportPreparation =
 export async function invokeRegisteredRouteTransport(
   invocation: RouteTransportInvocation,
   runtime: RouteTransportRuntime,
-  effectRelease?: RouteTransportEffectReleaseController,
 ): Promise<RouteTransportObservation> {
-  const preparation = prepareRegisteredRouteTransportInvocation(invocation, runtime.resolveCredential)
+  const preparation = prepareRegisteredRouteTransportInvocation(
+    invocation,
+    runtime.resolveCredential,
+    runtime.x402PaymentSigningAvailable,
+  )
   return preparation.kind === 'refused'
     ? preparation.observation
-    : await invokePreparedRouteTransport(preparation.prepared, runtime, effectRelease)
+    : await invokePreparedRouteTransport(preparation.prepared, runtime)
 }
 
 export async function invokeRegisteredRouteCancellation(
@@ -250,6 +257,7 @@ export async function invokeRegisteredRouteCancellation(
 export function prepareRegisteredRouteTransportInvocation(
   invocation: RouteTransportInvocation,
   resolveCredential: RouteTransportRuntime['resolveCredential'],
+  x402PaymentSigningAvailable?: RouteTransportRuntime['x402PaymentSigningAvailable'],
 ): RouteTransportPreparation {
   const requestDigest = canonicalDigest({
     adapterId: invocation.binding.adapterId,
@@ -293,33 +301,86 @@ export function prepareRegisteredRouteTransportInvocation(
           : 'adapter_not_registered'),
     }
   }
+  const typedConfiguration = configuration as RegisteredConfiguration
+  const target = invocation.binding.adapterId === 'http-json:v1'
+    || invocation.binding.adapterId === 'x402-fetch:v2'
+    ? requestTarget(
+        endpoint,
+        (typedConfiguration as HttpConfiguration | X402Configuration).method,
+        (typedConfiguration as HttpConfiguration | X402Configuration).query,
+        invocation.inputJson,
+      )
+    : undefined
+  if ((invocation.binding.adapterId === 'http-json:v1'
+      || invocation.binding.adapterId === 'x402-fetch:v2') && target === undefined) {
+    return {
+      kind: 'refused',
+      observation: refused(transportKind(invocation.binding.adapterId), requestDigest, false, 'input_invalid'),
+    }
+  }
+  if (invocation.binding.adapterId === 'mcp-jsonrpc:v1'
+    && !isJsonObject(parseJson(invocation.inputJson))) {
+    return { kind: 'refused', observation: refused('mcp', requestDigest, false, 'input_invalid') }
+  }
+  if (invocation.binding.adapterId === 'x402-fetch:v2') {
+    const x402 = typedConfiguration as X402Configuration
+    if (invocation.authority.maximumSpend.currency !== x402.currency
+      || convertAmount(
+        invocation.authority.maximumSpend.amountMinor,
+        x402.routeAmountExponent,
+        x402.assetAmountExponent,
+      ) === undefined) {
+      return {
+        kind: 'refused',
+        observation: refused('x402', requestDigest, false, 'payment_authority_invalid'),
+      }
+    }
+    if (x402PaymentSigningAvailable?.({
+      credentialRef: invocation.binding.credentialRef,
+      network: x402.network,
+      asset: x402.asset,
+      payTo: x402.payTo,
+      maximumSpend: invocation.authority.maximumSpend,
+    }) === false) {
+      return {
+        kind: 'refused',
+        observation: refused('x402', requestDigest, false, 'payment_signature_unavailable'),
+      }
+    }
+  }
   return {
     kind: 'prepared',
-    prepared: { invocation, endpoint, credential, configuration: configuration as RegisteredConfiguration, requestDigest },
+    prepared: {
+      invocation,
+      endpoint,
+      credential,
+      configuration: typedConfiguration,
+      requestDigest,
+      ...(target === undefined ? {} : { target }),
+    },
   }
 }
 
 export async function invokePreparedRouteTransport(
   prepared: PreparedRouteTransportInvocation,
   runtime: RouteTransportRuntime,
-  effectRelease?: RouteTransportEffectReleaseController,
 ): Promise<RouteTransportObservation> {
   const { invocation, endpoint, credential, configuration, requestDigest } = prepared
   switch (invocation.binding.adapterId) {
     case 'http-json:v1':
       return await invokeHttp(
         endpoint, configuration as HttpConfiguration, invocation, credential, requestDigest,
-        runtime.send, effectRelease,
+        runtime.send, prepared.target,
       )
     case 'mcp-jsonrpc:v1':
       return await invokeMcp(
         endpoint, configuration as McpConfiguration, invocation, credential, requestDigest,
-        runtime.send, effectRelease,
+        runtime.send,
       )
     case 'x402-fetch:v2':
       return await invokeX402(
         endpoint, configuration as X402Configuration, invocation, credential, requestDigest,
-        runtime, effectRelease,
+        runtime, prepared.target,
       )
     default:
       return refused('unknown', requestDigest, false, 'adapter_not_registered')
@@ -333,12 +394,11 @@ async function invokeHttp(
   credential: string,
   requestDigest: string,
   send: RouteTransportFetch,
-  effectRelease: RouteTransportEffectReleaseController | undefined,
+  preparedTarget: URL | undefined,
 ): Promise<RouteTransportObservation> {
   try {
-    const target = requestTarget(endpoint, configuration.method, configuration.query, invocation.inputJson)
+    const target = preparedTarget
     if (target === undefined) return refused('http', requestDigest, false, 'input_invalid')
-    effectRelease?.beginEffectRelease()
     const response = await send(target, {
       method: configuration.method,
       redirect: 'manual',
@@ -359,7 +419,6 @@ async function invokeMcp(
   credential: string,
   requestDigest: string,
   send: RouteTransportFetch,
-  effectRelease: RouteTransportEffectReleaseController | undefined,
 ): Promise<RouteTransportObservation> {
   const commonHeaders = callHeaders(invocation, credential)
   const initializeId = `initialize:${invocation.authority.operationKeyDigest}`
@@ -406,7 +465,6 @@ async function invokeMcp(
   try {
     const input = parseJson(invocation.inputJson)
     if (!isJsonObject(input)) return refused('mcp', requestDigest, false, 'input_invalid')
-    effectRelease?.beginEffectRelease()
     const response = await send(endpoint, {
       method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       headers: {
@@ -450,10 +508,10 @@ async function invokeX402(
   credential: string,
   requestDigest: string,
   runtime: RouteTransportRuntime,
-  effectRelease: RouteTransportEffectReleaseController | undefined,
+  preparedTarget: URL | undefined,
 ): Promise<RouteTransportObservation> {
   const headers = callHeaders(invocation, undefined)
-  const target = requestTarget(endpoint, configuration.method, configuration.query, invocation.inputJson)
+  const target = preparedTarget
   if (target === undefined) return refused('x402', requestDigest, false, 'input_invalid')
   let first: RouteTransportResponse
   try {
@@ -462,11 +520,11 @@ async function invokeX402(
       headers, ...(configuration.method === 'POST' ? { body: invocation.inputJson } : {}),
     })
   } catch (error) {
-    return unknown('x402', requestDigest, false, `payment_challenge_${errorName(error)}`)
+    return unknown('x402', requestDigest, true, `payment_challenge_${errorName(error)}`)
   }
-  if (first.status !== 402) return await normalizeJsonResponse('x402', first, requestDigest, false)
+  if (first.status !== 402) return await normalizeJsonResponse('x402', first, requestDigest, true)
   const challenge = decodeX402Challenge(first.headers.get('payment-required'))
-  if (challenge === undefined) return refused('x402', requestDigest, false, 'payment_challenge_invalid')
+  if (challenge === undefined) return refused('x402', requestDigest, true, 'payment_challenge_invalid')
   const paymentChallengeDigest = canonicalDigest(challenge as StableHashValue)
   const requirement = challenge.accepts.find((candidate) => (
     candidate.scheme === configuration.scheme
@@ -475,14 +533,14 @@ async function invokeX402(
     && candidate.payTo.toLowerCase() === configuration.payTo.toLowerCase()
   ))
   if (requirement === undefined) return {
-    ...refused('x402', requestDigest, false, 'payment_requirement_unsupported'), paymentChallengeDigest,
+    ...refused('x402', requestDigest, true, 'payment_requirement_unsupported'), paymentChallengeDigest,
   }
   if (challenge.resource.url !== target.href
     || Date.now() + (requirement.maxTimeoutSeconds * 1_000) > invocation.authority.expiresAt) {
-    return { ...refused('x402', requestDigest, false, 'payment_requirement_outside_authority'), paymentChallengeDigest }
+    return { ...refused('x402', requestDigest, true, 'payment_requirement_outside_authority'), paymentChallengeDigest }
   }
   if (invocation.authority.maximumSpend.currency !== configuration.currency) {
-    return { ...refused('x402', requestDigest, false, 'payment_currency_mismatch'), paymentChallengeDigest }
+    return { ...refused('x402', requestDigest, true, 'payment_currency_mismatch'), paymentChallengeDigest }
   }
   const ceiling = convertAmount(
     invocation.authority.maximumSpend.amountMinor,
@@ -490,17 +548,16 @@ async function invokeX402(
     configuration.assetAmountExponent,
   )
   if (ceiling === undefined || BigInt(requirement.amount) > ceiling) {
-    return { ...refused('x402', requestDigest, false, 'payment_exceeds_step_ceiling'), paymentChallengeDigest }
+    return { ...refused('x402', requestDigest, true, 'payment_exceeds_step_ceiling'), paymentChallengeDigest }
   }
   const paymentSignature = await runtime.createX402PaymentSignature({
     challenge, credential, paymentIdentifier: invocation.authority.operationKeyDigest,
     selectedRequirement: requirement,
   })
   if (paymentSignature === undefined || paymentSignature.length === 0) {
-    return { ...refused('x402', requestDigest, false, 'payment_signature_unavailable'), paymentChallengeDigest }
+    return { ...refused('x402', requestDigest, true, 'payment_signature_unavailable'), paymentChallengeDigest }
   }
   try {
-    effectRelease?.beginEffectRelease()
     const paid = await runtime.send(target, {
       method: configuration.method, redirect: 'manual', signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       headers: { ...headers, 'Payment-Signature': paymentSignature },

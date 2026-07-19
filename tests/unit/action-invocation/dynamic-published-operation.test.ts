@@ -42,12 +42,12 @@ const origins: readonly ActionInvocationOrigin[] = [
 ]
 
 describe('dynamic PublishedOperation Action Invocation adapter', () => {
-  it('keeps executor release truth monotonic against malicious result shapes', async () => {
+  it('marks release conservatively before a malicious runner can return an opt-out shape', async () => {
     const now = () => '2026-07-20T00:00:00.000Z'
     let sequence = 0
-    const create = (signal: boolean) => createInMemoryActionInvocationTracer({
+    const tracer = createInMemoryActionInvocationTracer({
       action: defineAction({
-        id: `malicious.release.${signal}`,
+        id: 'malicious.release.opt-out',
         name: 'Malicious release test',
         summary: 'Development test only.',
         boundaries: ['Development only.'],
@@ -67,65 +67,60 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
           invalidationConditions: [],
           developmentAttemptTimeoutMs: 1_000,
         },
-        run: async ({ effectRelease }) => {
-          if (signal) effectRelease?.beginEffectRelease()
-          return { kind: 'malicious_return', release: 'not_released' }
-        },
+        run: async () => ({ kind: 'malicious_return', release: 'not_released' }),
       }),
       now,
       nextInvocationRef: () => `malicious:invocation:${++sequence}`,
       nextAuthorityRef: () => `malicious:authority:${sequence}`,
       nextAttemptRef: () => `malicious:attempt:${sequence}`,
-      releaseTracking: 'monotonic_controller',
     })
     const origin = origins[0]!
-    for (const signal of [true, false]) {
-      const tracer = create(signal)
-      const material = { operationKey: `operation:${signal}`, target: {} }
-      const prepared = tracer.prepare({
-        origin, actor, input: material, context: {}, freshnessMs: 60_000,
-      })
-      const decided = tracer.decide({
-        invocationRef: prepared.invocationRef,
-        expectedInvocationVersion: prepared.invocationVersion,
-        authorityRef: prepared.authority!.reference,
-        actor, origin, accept: true,
-      })
-      if (decided.kind !== 'accepted') throw new Error(decided.code)
-      const result = await tracer.execute({
-        invocationRef: prepared.invocationRef,
-        expectedInvocationVersion: decided.view.invocationVersion,
-        authorityRef: prepared.authority!.reference,
-        actor, origin, materialInput: material,
-      })
-      if (result.kind !== 'accepted') throw new Error(result.code)
-      expect(result.view.attempts[0]).toMatchObject(signal
-        ? { release: { state: 'released' }, outcome: { state: 'returned' } }
-        : {
-            release: { state: 'not_released' },
-            outcome: { state: 'failed', retry: 'safe_before_release' },
-          })
-      expect(result.view.control).toMatchObject(signal
-        ? { state: 'terminal' }
-        : { state: 'retryable', reason: 'pre_release_failure' })
-    }
+    const material = { operationKey: 'operation:malicious', target: {} }
+    const prepared = tracer.prepare({
+      origin, actor, input: material, context: {}, freshnessMs: 60_000,
+    })
+    const decided = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const result = await tracer.execute({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: material,
+    })
+    if (result.kind !== 'accepted') throw new Error(result.code)
+    expect(result.view.attempts[0]).toMatchObject({
+      release: { state: 'possibly_released' },
+      outcome: { state: 'returned' },
+    })
+    expect(result.view.control).toEqual({ state: 'terminal' })
   })
 
   it.each([
     'credential_unavailable',
-    'challenge_invalid',
-    'challenge_mismatch',
-    'payment_outside_authority',
     'signing_unavailable',
-    'endpoint_refusal',
-  ] as const)('classifies %s as typed pre-release refusal', async (mode) => {
+  ] as const)('refuses %s before any transport effect', async (mode) => {
     const fixture = buildDevelopmentPublishedOperationEvidence()
     const clock = fixture.operation.readiness.observedAt + 1_000
     vi.spyOn(Date, 'now').mockReturnValue(clock)
+    let sends = 0
+    const baseRuntime = preReleaseRuntime(fixture.operation.binding.endpointUrl, mode)
+    const source = createDevelopmentDynamicPublishedSource([fixture.operation])
     const adapter = createAdapter(
       fixture.operation,
-      preReleaseRuntime(fixture.operation.binding.endpointUrl, mode),
+      {
+        ...baseRuntime,
+        send: async (...args: Parameters<RouteTransportFetch>) => {
+          sends += 1
+          return await baseRuntime.send(...args)
+        },
+      },
       clock,
+      source,
     )
     const origin = origins[0]!
     const prepared = adapter.prepare({
@@ -153,14 +148,134 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       effectGeneration: acquired.view.control.effectGeneration,
     })
     expect(refused.kind === 'accepted' && refused.view).toMatchObject({
-      control: { state: 'retryable', reason: 'pre_release_failure' },
+      control: { state: 'terminal' },
       observedResolution: { state: 'returned', execution: 'pre_release_refused' },
       attempts: [{
         release: { state: 'not_released' },
-        outcome: { state: 'failed', retry: 'safe_before_release' },
+        outcome: { state: 'returned' },
       }],
     })
+    expect(source.list()[0]?.observedResolution).toEqual(
+      refused.kind === 'accepted' ? refused.view.observedResolution : undefined,
+    )
+    expect(sends).toBe(0)
   })
+
+  it.each([
+    'challenge_invalid',
+    'challenge_mismatch',
+    'payment_outside_authority',
+    'endpoint_refusal',
+  ] as const)('treats first-send %s as possibly released', async (mode) => {
+    const fixture = buildDevelopmentPublishedOperationEvidence()
+    const clock = fixture.operation.readiness.observedAt + 1_000
+    vi.spyOn(Date, 'now').mockReturnValue(clock)
+    const source = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const adapter = createAdapter(
+      fixture.operation,
+      preReleaseRuntime(fixture.operation.binding.endpointUrl, mode),
+      clock,
+      source,
+    )
+    const origin = origins[0]!
+    const prepared = adapter.prepare({
+      origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+    })
+    const decided = adapter.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const acquired = adapter.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, leaseOwner: 'worker:first-send', leaseMs: 30_000,
+    })
+    if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') throw new Error('not leased')
+    const refused = await adapter.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: acquired.view.control.attemptRef,
+      leaseOwner: acquired.view.control.leaseOwner,
+      effectGeneration: acquired.view.control.effectGeneration,
+    })
+    expect(refused.kind === 'accepted' && refused.view).toMatchObject({
+      control: { state: 'terminal' },
+      observedResolution: { state: 'returned', execution: 'runner_returned' },
+      attempts: [{ release: { state: 'possibly_released' }, outcome: { state: 'returned' } }],
+    })
+    expect(source.list()[0]?.observedResolution).toEqual(
+      refused.kind === 'accepted' ? refused.view.observedResolution : undefined,
+    )
+  })
+
+  it.each(['config', 'payment_authority'] as const)(
+    'refuses invalid %s during zero-effect transport preparation',
+    async (kind) => {
+      const fixture = buildDevelopmentPublishedOperationEvidence()
+      const operation = kind === 'config'
+        ? {
+            ...fixture.operation,
+            transport: {
+              ...fixture.operation.transport,
+              configJson: '{}',
+              configDigest: canonicalDigest({}),
+            },
+          }
+        : {
+            ...fixture.operation,
+            identity: {
+              ...fixture.operation.identity,
+              price: { kind: 'fixed' as const, currency: 'EUR', amountMinor: 1 },
+            },
+          }
+      const clock = operation.readiness.observedAt + 1_000
+      vi.spyOn(Date, 'now').mockReturnValue(clock)
+      let sends = 0
+      const base = successRuntime(operation.binding.endpointUrl, { payment: 0, provider: 0 })
+      const runtime = {
+        ...base,
+        send: async (...args: Parameters<RouteTransportFetch>) => {
+          sends += 1
+          return await base.send(...args)
+        },
+      }
+      const adapter = createAdapter(operation, runtime, clock)
+      const origin = origins[0]!
+      const prepared = adapter.prepare({
+        origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+      })
+      const decided = adapter.decide({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: prepared.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin, accept: true,
+      })
+      if (decided.kind !== 'accepted') throw new Error(decided.code)
+      const acquired = adapter.acquire({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: decided.view.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin, leaseOwner: 'worker:zero-effect', leaseMs: 30_000,
+      })
+      if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') throw new Error('not leased')
+      const result = await adapter.executeAcquired({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: acquired.view.invocationVersion,
+        attemptRef: acquired.view.control.attemptRef,
+        leaseOwner: acquired.view.control.leaseOwner,
+        effectGeneration: acquired.view.control.effectGeneration,
+      })
+      expect(result.kind === 'accepted' && result.view).toMatchObject({
+        observedResolution: { execution: 'pre_release_refused' },
+        attempts: [{ release: { state: 'not_released' } }],
+      })
+      expect(sends).toBe(0)
+    },
+  )
 
   it.each(origins)('executes exact persisted x402 material once for $kind', async (origin) => {
     const fixture = buildDevelopmentPublishedOperationEvidence()
@@ -639,6 +754,11 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
 
   it('rejects redigested snapshot and evidence attacks from immutable anchors', async () => {
     const base = await buildDevelopmentDynamicInvocationEvidence()
+    expect(base.evidenceContract.reconstructionMetadataOnly)
+      .toBe('timestamps_and_order_without_external_root')
+    expect(base.claimCeiling).toContain(
+      'Timestamps and order metadata have no independent provenance',
+    )
     const attacks: readonly [string, (packet: any) => void][] = [
       ['owner', (packet) => { packet.cases[0].snapshot.controls[0].control.owner.principalRef = 'principal:attacker' }],
       ['origin', (packet) => { packet.cases[0].snapshot.controls[0].control.origin = { kind: 'standalone', callerRef: 'x', principalRef: 'y' } }],
@@ -777,6 +897,7 @@ function runtime(
   return {
     send,
     resolveCredential: () => 'mock:credential',
+    x402PaymentSigningAvailable: () => true,
     createX402PaymentSignature: async () => {
       effects.payment += 1
       return 'mock:signature'
@@ -804,6 +925,7 @@ function preReleaseRuntime(
   }
   return {
     resolveCredential: () => mode === 'credential_unavailable' ? undefined : 'mock:credential',
+    x402PaymentSigningAvailable: () => mode !== 'signing_unavailable',
     createX402PaymentSignature: async () => mode === 'signing_unavailable' ? undefined : 'mock:signature',
     send: async () => mode === 'endpoint_refusal'
       ? response(503, JSON.stringify({ reason: 'unavailable' }), {})

@@ -174,14 +174,19 @@ function historyValid(
   ]
   if (history.length !== expectedKinds.length || attempts.length !== 1) return false
   const commands = new Set<string>()
+  let priorRecordedAt = Number.NEGATIVE_INFINITY
   for (const [index, row] of history.entries()) {
+    const recordedAt = Date.parse(row.recordedAt)
     if (
       row.invocationVersion !== index + 1
       || row.kind !== expectedKinds[index]
       || commands.has(row.commandId)
+      || !Number.isFinite(recordedAt)
+      || recordedAt < priorRecordedAt
     ) {
       return false
     }
+    priorRecordedAt = recordedAt
     commands.add(row.commandId)
   }
   const transition = history.at(-1)?.attemptTransition

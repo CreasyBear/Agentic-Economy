@@ -92,15 +92,9 @@ export type ActionContext = {
   ) => Promise<Readonly<{ kind: 'current' } | { kind: 'refused'; reason: string }>>
 }
 
-export type ActionEffectReleaseController = Readonly<{
-  beginEffectRelease(): void
-}>
-
 export type ActionRunArgs<Input> = {
   data: Input
   context: ActionContext
-  /** Executor-owned capability; absent for legacy conservative execution. */
-  effectRelease?: ActionEffectReleaseController
 }
 
 export type ActionParameterType = 'string' | 'number' | 'boolean' | 'enum' | 'object'

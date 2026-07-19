@@ -104,6 +104,10 @@ export type DevelopmentDynamicInvocationEvidence = Readonly<{
     snapshot: DynamicPublishedAdapterSnapshot
   }>
   sourceDigest: string
+  evidenceContract: Readonly<{
+    anchored: 'semantic_identity_authority_material_effect_reconstruction'
+    reconstructionMetadataOnly: 'timestamps_and_order_without_external_root'
+  }>
   packetDigest: string
   verdict: 'PASS_FOR_DECLARED_CLASS'
   claimCeiling: string
@@ -344,9 +348,13 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       cases,
       recovery,
       sourceDigest,
+      evidenceContract: {
+        anchored: 'semantic_identity_authority_material_effect_reconstruction' as const,
+        reconstructionMetadataOnly: 'timestamps_and_order_without_external_root' as const,
+      },
       verdict: 'PASS_FOR_DECLARED_CLASS' as const,
       claimCeiling:
-        'Labelled fixture/local development proof of the dynamic Action Invocation seam only; no host parity, deployment, independent provider, settlement, fulfilment, production safety, or customer value.',
+        'Labelled fixture/local development proof of anchored semantic identity, authority, material, effect, and reconstruction behavior only. Timestamps and order metadata have no independent provenance without an external signed/root anchor. No host parity, deployment, independent provider, settlement, fulfilment, production safety, or customer value.',
     }
     const serializable = JSON.parse(JSON.stringify(material)) as typeof material
     return {
@@ -438,6 +446,13 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     || packet.recovery.reconciled !== 'terminal'
     || packet.recovery.paymentEffects !== 1
     || packet.recovery.providerEffects !== 1
+    || packet.evidenceContract.anchored
+      !== 'semantic_identity_authority_material_effect_reconstruction'
+    || packet.evidenceContract.reconstructionMetadataOnly
+      !== 'timestamps_and_order_without_external_root'
+    || !packet.claimCeiling.includes(
+      'Timestamps and order metadata have no independent provenance',
+    )
     || packet.cases.some((entry) => (
       entry.actionId !== packet.fixture.operation.operationId
       || entry.actionVersion !== packet.fixture.descriptor.version
@@ -483,6 +498,7 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
   return {
     send,
     resolveCredential: () => 'mock:server-held-credential',
+    x402PaymentSigningAvailable: () => true,
     createX402PaymentSignature: async () => {
       effects.payment += 1
       return 'mock:payment-signature'

@@ -140,7 +140,6 @@ export function createDynamicPublishedAction(input: Readonly<{
   run: (
     value: DynamicPublishedInvocationInput,
     context: ActionContext,
-    effectRelease: import('@/modules/common/action').ActionEffectReleaseController | undefined,
   ) => Promise<DynamicPublishedInvocationResult>
   preReleaseCheck: (
     value: DynamicPublishedInvocationInput,
@@ -200,7 +199,7 @@ export function createDynamicPublishedAction(input: Readonly<{
       check: async ({ data }: { data: DynamicPublishedInvocationInput }) =>
         await input.preReleaseCheck(data),
     }.check,
-    run: async ({ data, context, effectRelease }) => await input.run(data, context, effectRelease),
+    run: async ({ data, context }) => await input.run(data, context),
   }
 }
 

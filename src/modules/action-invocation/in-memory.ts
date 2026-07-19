@@ -113,6 +113,7 @@ export function createInMemoryActionInvocationTracer<
         freshness: { state: 'current', observedAt: options.now() },
         control: { state: 'terminal' },
       })
+      options.onExecutionResolved?.(record.view)
       return { kind: 'accepted', view: record.view }
     }
     const releaseStart = beginAcquiredRelease({
@@ -160,9 +161,7 @@ export function createInMemoryActionInvocationTracer<
       effectGeneration: input.effectGeneration,
       operationKey,
       now: options.now,
-      releaseTracking: options.releaseTracking ?? 'conservative',
-      ...((options.releaseTracking ?? 'conservative') === 'monotonic_controller'
-        || options.developmentReleaseSignal === undefined
+      ...(options.developmentReleaseSignal === undefined
         ? {}
         : { legacyReleaseSignal: options.developmentReleaseSignal }),
       ...(options.developmentTimeoutSignal === undefined
@@ -177,6 +176,7 @@ export function createInMemoryActionInvocationTracer<
       return { kind: 'refused', code: completionRefusal, view: record.view }
     }
     record.view = completed
+    options.onExecutionResolved?.(record.view)
     return { kind: 'accepted', view: record.view }
   }
 

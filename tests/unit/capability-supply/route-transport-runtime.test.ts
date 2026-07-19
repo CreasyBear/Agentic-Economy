@@ -446,7 +446,7 @@ describe('registered route transport runtime', () => {
     })
 
     expect(observed).toMatchObject({
-      transport: 'x402', disposition: 'refused', releaseStarted: false,
+      transport: 'x402', disposition: 'refused', releaseStarted: true,
       paymentChallengeDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
       failureCode: 'payment_exceeds_step_ceiling',
     })

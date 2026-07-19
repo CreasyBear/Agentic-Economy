@@ -23,7 +23,9 @@ import {
 } from './dynamic-published-contract'
 import {
   executeDynamicPublishedTransport,
+  prepareDynamicPublishedTransport,
   type DynamicPublishedExecutionToken,
+  type DynamicPublishedPreparedTransport,
 } from './dynamic-published-execution'
 import {
   requalifyDynamicPublishedSource,
@@ -138,6 +140,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   const durableState = input.durableState ?? createDevelopmentDurableState<DynamicPublishedInvocationResult>()
   const durablePort = createDevelopmentDurablePort(durableState)
   const executionTokens = new Map<string, DynamicPublishedExecutionToken>()
+  const preparedTransports = new Map<string, DynamicPublishedPreparedTransport>()
   const action = createDynamicPublishedAction({
     operation: input.operation,
     descriptor,
@@ -150,7 +153,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         value: value.input,
         now: input.now(),
       })
-      return reason === undefined ? undefined : {
+      if (reason !== undefined) return {
         kind: 'published_operation_refused',
         sourceDisposition: 'refused',
         operationId: input.operation.operationId,
@@ -158,37 +161,41 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         requestDigest: value.operationKey,
         failureCode: reason,
       }
-    },
-    run: async (value, context, effectRelease) => {
-      if (effectRelease === undefined) throw new Error('effect_release_controller_unavailable')
       const token = executionTokens.get(value.operationKey)
-      if (token === undefined) throw new Error('published_operation_attempt_not_leased')
-      const result = await executeDynamicPublishedTransport({
+      if (token === undefined) return {
+        kind: 'published_operation_refused',
+        sourceDisposition: 'refused',
+        operationId: input.operation.operationId,
+        operationVersion: descriptor.version,
+        requestDigest: value.operationKey,
+        failureCode: 'published_operation_attempt_not_leased',
+      }
+      const preparation = prepareDynamicPublishedTransport({
         operation: input.operation,
         descriptor,
         invocation: value,
         token,
         runtime: input.runtime,
-        effectRelease,
       })
-      const row = input.source.read(value.operationKey)
-      if (row !== undefined) {
-        const resultDigest = canonicalDigest(result as unknown as StableHashValue)
-        input.source.write({
-          ...row,
-          observedResolution: {
-            state: 'returned',
-            execution: 'runner_returned',
-            businessOutcome: result.kind,
-            resultReferenceable: result.kind === 'published_operation_succeeded',
-            result,
-          },
-          resultIdentity: {
-            sourceResultRef: `published-result:${value.operationKey}`,
-            resultDigest,
-          },
-        })
+      if (preparation.kind === 'refused') return preparation.result
+      preparedTransports.set(value.operationKey, preparation.prepared)
+      return undefined
+    },
+    run: async (value) => {
+      const token = executionTokens.get(value.operationKey)
+      if (token === undefined) throw new Error('published_operation_attempt_not_leased')
+      const prepared = preparedTransports.get(value.operationKey)
+      if (prepared === undefined
+        || prepared.attemptRef !== token.attemptRef
+        || prepared.effectGeneration !== token.effectGeneration) {
+        throw new Error('published_operation_transport_not_prepared')
       }
+      const result = await executeDynamicPublishedTransport({
+        operation: input.operation,
+        descriptor,
+        prepared,
+        runtime: input.runtime,
+      })
       return result
     },
   })
@@ -202,7 +209,26 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     nextInvocationRef: input.nextInvocationRef,
     nextAuthorityRef: input.nextAuthorityRef,
     nextAttemptRef: input.nextAttemptRef,
-    releaseTracking: 'monotonic_controller',
+    onExecutionResolved: (view) => {
+      const operationKey = durableState.controls.get(view.invocationRef)?.sourceRef
+      if (operationKey === undefined) return
+      const row = input.source.read(operationKey)
+      if (row === undefined) return
+      if (view.observedResolution.state !== 'returned') {
+        input.source.write({ ...row, observedResolution: view.observedResolution })
+        return
+      }
+      input.source.write({
+        ...row,
+        observedResolution: view.observedResolution,
+        resultIdentity: {
+          sourceResultRef: `published-result:${operationKey}`,
+          resultDigest: canonicalDigest(
+            view.observedResolution.result as unknown as StableHashValue,
+          ),
+        },
+      })
+    },
     verifyReconciliationEvidence: (evidence) =>
       evidence.source === `published-operation:${input.operation.operationId}`,
     resolveSourceState: (operationKey) => {
@@ -296,6 +322,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         return await tracer.executeAcquired(request)
       } finally {
         executionTokens.delete(material.operationKey)
+        preparedTransports.delete(material.operationKey)
       }
     },
     cancel(request) {

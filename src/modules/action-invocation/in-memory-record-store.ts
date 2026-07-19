@@ -18,9 +18,8 @@ export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly
   nextInvocationRef: () => string
   nextAuthorityRef?: () => string
   nextAttemptRef?: () => string
-  releaseTracking?: 'conservative' | 'monotonic_controller'
-  /** Legacy development observer; ignored by monotonic-controller execution. */
   developmentReleaseSignal?: DevelopmentReleaseSignal
+  onExecutionResolved?: (view: ActionInvocationView<Result>) => void
   developmentTimeoutSignal?: DevelopmentTimeoutSignal
   verifyReconciliationEvidence?: ReconciliationEvidenceVerifier
   contextForExecution?: (context: ActionContext) => ActionContext
