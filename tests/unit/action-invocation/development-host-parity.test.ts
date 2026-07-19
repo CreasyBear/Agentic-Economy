@@ -12,6 +12,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
 import { runDevelopmentHostScenarioMatrix } from '@/modules/capability-supply/development-host-scenarios'
+import { loadDynamicPublishedAdapterSnapshot } from '@/modules/action-invocation'
 
 const provenance = {
   sourceBaseCommit: 'ebe35bdbd3b4707b356607e8dc615d3e29babe8d',
@@ -132,6 +133,36 @@ describe('ADR-010 development host parity', () => {
           canonicalDigest(host.correction.structured.semantics)
       }
     }],
+    ['coordinated rich and structured owner identity', (packet: any) => {
+      for (const host of packet.hosts) {
+        host.correction.rich.semantics.identity.owner.callerRef = 'caller:forged'
+        host.correction.structured.semantics.identity.owner.callerRef = 'caller:forged'
+        host.correction.rich.semanticDigest = canonicalDigest(host.correction.rich.semantics)
+        host.correction.structured.semanticDigest =
+          canonicalDigest(host.correction.structured.semantics)
+      }
+    }],
+    ['coordinated underlying origin and owner', (packet: any) => {
+      for (const host of packet.hosts) {
+        const snapshot = host.correction.snapshot
+        snapshot.controls[0].control.owner.callerRef = 'caller:forged'
+        snapshot.inputWork[0].owner.callerRef = 'caller:forged'
+        snapshot.sourceRows[0].owner.callerRef = 'caller:forged'
+      }
+    }],
+    ['input work material', (packet: any) => {
+      packet.hosts[0].correction.snapshot.inputWork[0].knownInput.symbol = 'DOGE'
+    }],
+    ['input history epoch', (packet: any) => {
+      packet.hosts[0].correction.snapshot.inputHistory.at(-1).invocationVersion = 1
+    }],
+    ['command CAS epoch', (packet: any) => {
+      packet.hosts[0].correction.snapshot.commands.at(-1).value.material.expectedInvocationVersion = 1
+      packet.hosts[0].correction.snapshot.commands.at(-1).value.digest =
+        canonicalDigest(packet.hosts[0].correction.snapshot.commands.at(-1).value.material)
+      packet.hosts[0].correction.snapshot.history[0].rows.at(-1).commandDigest =
+        packet.hosts[0].correction.snapshot.commands.at(-1).value.digest
+    }],
     ['corrected source material', (packet: any) => {
       for (const host of packet.hosts) {
         host.correction.snapshot.sourceRows[0].input.input.symbol = 'DOGE'
@@ -188,6 +219,52 @@ describe('ADR-010 development host parity', () => {
     redigestPacket(baseTamper)
     expect(() => verifyDevelopmentHostParityEvidence(baseTamper))
       .toThrow('host_parity_source_base_invalid')
+  })
+
+  it('hydrates the historically accepted v2 snapshot without optional input state', async () => {
+    const packet = await buildDevelopmentHostParityEvidence(provenance)
+    const liveFixture = buildDevelopmentPublishedOperationEvidence()
+    const scenario = packet.hosts[1].success
+    const legacy = clone(scenario.snapshot)
+    delete legacy.inputWork
+    delete legacy.inputHistory
+    delete legacy.operations
+    for (const row of legacy.sourceRows) {
+      delete row.origin
+      delete row.owner
+    }
+    const frozenDigest = canonicalDigest(legacy)
+    expect(frozenDigest)
+      .toBe('sha256:279c3e8b9dea33a5aa4e83481ad815a5e97737298a3177bb662f401a293183d2')
+    const loaded = loadDynamicPublishedAdapterSnapshot(legacy, {
+      operation: liveFixture.operation,
+      descriptor: liveFixture.descriptor,
+      actor: packet.hosts[1].actor,
+      origin: {
+        kind: 'standalone',
+        callerRef: packet.hosts[1].actor.callerRef,
+        principalRef: packet.hosts[1].actor.principalRef,
+      },
+      issuedAuthority: {
+        reference: scenario.authorityRef,
+        accepted: { kind: 'approve_each', authorityRef: scenario.authorityRef },
+        materialInputDigest: legacy.sourceRows[0].prepared.materialInputDigest,
+      },
+      expectedEffectCount: 1,
+      expectedSemanticClaim: {
+        ownerInvocationRef: scenario.invocationRef,
+        status: 'completed',
+        outcomeResultRef: legacy.sourceRows[0].resultIdentity.sourceResultRef,
+      },
+    })
+    expect(loaded.inputWork).toEqual([])
+    expect(loaded.inputHistory).toEqual([])
+    expect(canonicalDigest(legacy)).toBe(frozenDigest)
+
+    const unsupportedV1 = clone(legacy)
+    unsupportedV1.format = 'dynamic-published-action-invocation:development:v1'
+    expect(() => loadDynamicPublishedAdapterSnapshot(unsupportedV1, {} as any))
+      .toThrow('dynamic_published_snapshot_schema_invalid')
   })
 })
 

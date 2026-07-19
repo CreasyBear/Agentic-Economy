@@ -5,6 +5,7 @@ import {
   createDynamicPublishedActionInvocationAdapter,
   createRequestOwnedDevelopmentHost,
   createStandaloneAgentDevelopmentHost,
+  createDevelopmentInvocationApplication,
   loadDynamicPublishedAdapterSnapshot,
   materialDigest,
   type DevelopmentHostKind,
@@ -65,6 +66,14 @@ export type DevelopmentHostScenarioRecord = Readonly<{
     correctedInputDigest: string
     execution: string
     terminalCorrection: string
+    releasedCorrection: Readonly<{
+      state: string
+      refusal: string
+      snapshotUnchanged: boolean
+      authorityUnchanged: boolean
+      historyUnchanged: boolean
+      effectsUnchanged: boolean
+    }>
     effects: DevelopmentEffectCounts
     rich: RichInvocationTaskProjection
     structured: StructuredInvocationTaskProjection
@@ -262,6 +271,32 @@ async function correctionScenario(
     { symbol: 'SOL' },
     60_000,
   )
+  const releasedContext = createScenario(
+    fixture,
+    hostKind,
+    'released-correction',
+    developmentLostResponseRuntime,
+  )
+  const releasedPrepared = releasedContext.host.prepare(
+    { symbol: 'BTC', convert: 'USD' },
+    60_000,
+  )
+  const releasedAccepted = releasedContext.host.decide(releasedPrepared.invocationRef, true)
+  if (releasedAccepted.kind !== 'accepted') {
+    throw new Error(`released_correction_decision:${releasedAccepted.code}`)
+  }
+  const released = await releasedContext.host.continue(releasedPrepared.invocationRef)
+  if (released.kind !== 'completed') {
+    throw new Error(`released_correction_execution:${continuationCode(released)}`)
+  }
+  const releasedBefore = releasedContext.host.exportSnapshot()
+  const releasedEffectsBefore = { ...releasedContext.effects }
+  const releasedRefusal = releasedContext.host.correct(
+    releasedPrepared.invocationRef,
+    { symbol: 'SOL' },
+    60_000,
+  )
+  const releasedAfter = releasedContext.host.exportSnapshot()
   return {
     invocationRef: corrected.view.invocationRef,
     oldVersion: accepted.view.invocationVersion,
@@ -277,6 +312,23 @@ async function correctionScenario(
     terminalCorrection: terminalCorrection.kind === 'refused'
       ? terminalCorrection.code
       : terminalCorrection.kind,
+    releasedCorrection: {
+      state: released.view.control.state,
+      refusal: releasedRefusal.kind === 'refused' ? releasedRefusal.code : releasedRefusal.kind,
+      snapshotUnchanged: canonicalDigest(releasedBefore as unknown as StableHashValue)
+        === canonicalDigest(releasedAfter as unknown as StableHashValue),
+      authorityUnchanged: canonicalDigest(
+        releasedBefore.controls[0]?.authorityBinding as unknown as StableHashValue,
+      ) === canonicalDigest(
+        releasedAfter.controls[0]?.authorityBinding as unknown as StableHashValue,
+      ),
+      historyUnchanged: canonicalDigest(
+        releasedBefore.history as unknown as StableHashValue,
+      ) === canonicalDigest(releasedAfter.history as unknown as StableHashValue),
+      effectsUnchanged: canonicalDigest(
+        releasedEffectsBefore as unknown as StableHashValue,
+      ) === canonicalDigest(releasedContext.effects as unknown as StableHashValue),
+    },
     effects: { ...context.effects },
     rich,
     structured,
@@ -620,13 +672,15 @@ function createHost(
 ): DevelopmentInvocationHost {
   return hostKind === 'request_owned_human'
     ? createRequestOwnedDevelopmentHost({
-        adapter,
+      application: createDevelopmentInvocationApplication({ adapter, sourceCommands: commands }),
         actor,
         requestRef: 'request:host-parity-existing',
         revision: 7,
-        sourceCommands: commands,
-      })
-    : createStandaloneAgentDevelopmentHost({ adapter, actor, sourceCommands: commands })
+    })
+    : createStandaloneAgentDevelopmentHost({
+      application: createDevelopmentInvocationApplication({ adapter, sourceCommands: commands }),
+      actor,
+    })
 }
 
 function sourceCommands(

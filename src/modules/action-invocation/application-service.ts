@@ -174,23 +174,73 @@ function bindHost(
       })
     },
     inspect: adapter.inspect,
-    projectRich: (invocationRef, expectedInvocationVersion) =>
-      projectRichInvocationTask({
+    projectRich: (invocationRef, expectedInvocationVersion) => {
+      const projection = projectRichInvocationTask({
         invocationRef,
         expectedInvocationVersion,
         resolver: { resolve: () => JSON.parse(JSON.stringify(adapter.exportSnapshot())) },
-      }),
-    projectStructured: (invocationRef, expectedInvocationVersion) =>
-      projectStructuredInvocationTask({
+      })
+      assertProjectionBinding(projection.semantics.identity, actor, origin)
+      return projection
+    },
+    projectStructured: (invocationRef, expectedInvocationVersion) => {
+      const projection = projectStructuredInvocationTask({
         invocationRef,
         expectedInvocationVersion,
         resolver: { resolve: () => JSON.parse(JSON.stringify(adapter.exportSnapshot())) },
-      }),
+      })
+      assertProjectionBinding(projection.semantics.identity, actor, origin)
+      return projection
+    },
     exportSnapshot: adapter.exportSnapshot,
   })
 }
 
-export function createRequestOwnedDevelopmentHost(input: Readonly<{
+function assertProjectionBinding(
+  identity: Readonly<{
+    owner: InvocationActor
+    origin: ActionInvocationOrigin
+  }>,
+  actor: InvocationActor,
+  origin: ActionInvocationOrigin,
+): void {
+  if (identity.owner.callerRef !== actor.callerRef
+    || identity.owner.principalRef !== actor.principalRef
+    || JSON.stringify(identity.origin) !== JSON.stringify(origin)) {
+    throw new Error('invocation_projection_host_binding_invalid')
+  }
+}
+
+export type DevelopmentInvocationApplication = Readonly<{
+  bindRequestOwned(input: Readonly<{
+    actor: InvocationActor
+    requestRef: string
+    revision: number
+  }>): DevelopmentInvocationHost
+  bindStandalone(input: Readonly<{ actor: InvocationActor }>): DevelopmentInvocationHost
+}>
+
+export function createDevelopmentInvocationApplication(input: Readonly<{
+  adapter: DynamicPublishedActionInvocationAdapter
+  sourceCommands: DevelopmentHostSourceCommands
+}>): DevelopmentInvocationApplication {
+  return Object.freeze({
+    bindRequestOwned: ({ actor, requestRef, revision }) => bindRequestOwned({
+      adapter: input.adapter,
+      sourceCommands: input.sourceCommands,
+      actor,
+      requestRef,
+      revision,
+    }),
+    bindStandalone: ({ actor }) => bindStandalone({
+      adapter: input.adapter,
+      sourceCommands: input.sourceCommands,
+      actor,
+    }),
+  })
+}
+
+function bindRequestOwned(input: Readonly<{
   adapter: DynamicPublishedActionInvocationAdapter
   actor: InvocationActor
   requestRef: string
@@ -207,7 +257,7 @@ export function createRequestOwnedDevelopmentHost(input: Readonly<{
   }, input.sourceCommands)
 }
 
-export function createStandaloneAgentDevelopmentHost(input: Readonly<{
+function bindStandalone(input: Readonly<{
   adapter: DynamicPublishedActionInvocationAdapter
   actor: InvocationActor
   sourceCommands: DevelopmentHostSourceCommands

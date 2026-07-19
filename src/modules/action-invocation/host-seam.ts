@@ -1,4 +1,4 @@
-import type { DevelopmentInvocationHost } from './host-application'
+import type { DevelopmentInvocationHost } from './application-service'
 
 /**
  * Public host contract. Hosts receive only application commands and

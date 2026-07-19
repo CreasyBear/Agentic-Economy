@@ -48,9 +48,12 @@ export {
   verifyDynamicPublishedSnapshot,
 } from './dynamic-published-snapshot-verifier'
 export {
+  createDevelopmentInvocationApplication,
+} from './application-service'
+export {
   createRequestOwnedDevelopmentHost,
   createStandaloneAgentDevelopmentHost,
-} from './host-application'
+} from './hosts/development-hosts'
 export {
   readDevelopmentHostSnapshot,
   verifyDevelopmentHostReadReceipt,
@@ -92,8 +95,9 @@ export type { DynamicPublishedSnapshotAnchors } from './dynamic-published-snapsh
 export type {
   DevelopmentHostContinuation,
   DevelopmentHostSourceCommands,
+  DevelopmentInvocationApplication,
   DevelopmentInvocationHost,
-} from './host-application'
+} from './application-service'
 export type {
   DevelopmentHostKind,
   DevelopmentHostReadReceipt,

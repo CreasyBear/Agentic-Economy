@@ -164,6 +164,12 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
       source.resultIdentity,
     )
     || source.invocationRef !== control.invocationRef
+    || (source.owner !== undefined
+      && canonicalDigest(source.owner as unknown as StableHashValue)
+        !== canonicalDigest(actor as unknown as StableHashValue))
+    || (source.origin !== undefined
+      && canonicalDigest(source.origin as unknown as StableHashValue)
+        !== canonicalDigest(origin as unknown as StableHashValue))
     || control.sourceRef !== control.invocationRef
     || control.control.owner.callerRef !== actor.callerRef
     || control.control.owner.principalRef !== actor.principalRef
@@ -207,6 +213,14 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
       attemptGroup.rows,
     )
     || !commandsValid(snapshot.commands, historyGroup.rows, control.invocationRef)
+    || !inputStateValid(
+      snapshot,
+      source,
+      control.invocationRef,
+      control.invocationVersion,
+      actor,
+      origin,
+    )
     || !attemptGroup.rows.every((attempt) =>
       attempt.idempotency.materialInputDigest === issuedAuthority.materialInputDigest)
     || !resultIdentityValid(
@@ -291,9 +305,14 @@ function historyValid(
   attempts: DynamicPublishedAdapterSnapshot['attempts'][number]['rows'],
 ): boolean {
   const includesRelease = history.some(({ kind }) => kind === 'begin_release')
+  const authorityCommand = authorityKind === 'approve_each'
+    ? 'decide'
+    : 'authorize_standing_mandate_use'
+  const revised = history.some(({ kind }) => kind === 'revise_prepared')
   const expectedKinds = [
     'prepare',
-    authorityKind === 'approve_each' ? 'decide' : 'authorize_standing_mandate_use',
+    authorityCommand,
+    ...(revised ? ['revise_prepared', authorityCommand] : []),
     'acquire',
     ...(includesRelease ? ['begin_release'] : []),
     'execute_acquired',
@@ -317,8 +336,9 @@ function historyValid(
     commands.add(row.commandId)
   }
   if (currentVersion !== history.length) return false
-  if (history.length <= 2) return attempts.length === 0
-  if (history.length === 3) {
+  const acquireIndex = expectedKinds.indexOf('acquire')
+  if (history.length <= acquireIndex) return attempts.length === 0
+  if (history.length === acquireIndex + 1) {
     return attempts.length === 1
       && attempts[0]?.release.state === 'not_released'
       && attempts[0]?.outcome.state === 'running'
@@ -373,7 +393,9 @@ function commandsValid(
 
 function commandControlValid(kind: string, value: unknown): boolean {
   if (!isRecord(value)) return false
-  if (kind === 'prepare') return value.state === 'awaiting_authority'
+  if (kind === 'prepare' || kind === 'revise_prepared') {
+    return value.state === 'awaiting_authority'
+  }
   if (kind === 'decide' || kind === 'authorize_standing_mandate_use') {
     return value.state === 'authorized' && typeof value.decidedAt === 'string'
   }
@@ -393,6 +415,39 @@ function commandControlValid(kind: string, value: unknown): boolean {
   }
   return kind === 'execute_acquired'
     && (value.state === 'terminal' || value.state === 'reconciliation_required')
+}
+
+function inputStateValid(
+  snapshot: DynamicPublishedAdapterSnapshot,
+  source: DynamicPublishedSourceRow,
+  invocationRef: string,
+  currentVersion: number,
+  actor: InvocationActor,
+  origin: ActionInvocationOrigin,
+): boolean {
+  const work = snapshot.inputWork?.filter((row) => row.invocationRef === invocationRef) ?? []
+  const history = snapshot.inputHistory?.filter((row) => row.invocationRef === invocationRef) ?? []
+  if (work.length > 1) return false
+  if (work.length === 0) return history.length === 0
+  const current = work[0]!
+  if (current.invocationVersion > currentVersion
+    || canonicalDigest(current.owner as unknown as StableHashValue)
+      !== canonicalDigest(actor as unknown as StableHashValue)
+    || canonicalDigest(current.origin as unknown as StableHashValue)
+      !== canonicalDigest(origin as unknown as StableHashValue)
+    || canonicalDigest(current.knownInput as unknown as StableHashValue)
+      !== canonicalDigest(source.input.input as unknown as StableHashValue)
+    || current.missingFields.some((field) => !current.requiredFields.includes(field))
+    || current.askedFields.some((field) => !current.requiredFields.includes(field))) return false
+  let priorVersion = 0
+  return history.every((row) => {
+    const valid = row.invocationVersion > priorVersion
+      && row.invocationVersion <= current.invocationVersion
+      && row.commandDigest.startsWith('sha256:')
+      && Number.isFinite(Date.parse(row.recordedAt))
+    priorVersion = row.invocationVersion
+    return valid
+  })
 }
 
 function resultIdentityValid(

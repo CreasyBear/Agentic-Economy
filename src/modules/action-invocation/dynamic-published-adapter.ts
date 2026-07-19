@@ -440,6 +440,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     pendingSource = {
       context,
       row: {
+        origin: request.origin,
+        owner: request.actor,
         operationKey: material.operationKey,
         semanticBaseKey,
         semanticIdentityDigest: canonicalDigest({
@@ -497,6 +499,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     const view = decision.view
     input.source.write({
       invocationRef: view.invocationRef,
+      origin: view.origin,
+      owner: view.owner,
       operationKey: material.operationKey,
       semanticBaseKey,
       semanticIdentityDigest: canonicalDigest({

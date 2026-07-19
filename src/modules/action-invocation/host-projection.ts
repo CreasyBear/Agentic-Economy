@@ -4,13 +4,19 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import { dynamicPublishedSourceDigest } from './dynamic-published-contract'
 import { inspectUserInputContract } from './input-work'
+import type { ActionInvocationOrigin, InvocationActor } from './contracts'
 
 export type InvocationProjectionResolver = Readonly<{
   resolve(invocationRef: string): unknown
 }>
 
 export type InvocationTaskSemantics = Readonly<{
-  identity: Readonly<{ invocationRef: string; invocationVersion: number }>
+  identity: Readonly<{
+    invocationRef: string
+    invocationVersion: number
+    origin: ActionInvocationOrigin
+    owner: InvocationActor
+  }>
   operation: Readonly<{ id: string; version: string; name: string; summary: string }>
   information: Readonly<{
     required: readonly string[]
@@ -133,7 +139,17 @@ function resolveSemantics(input: Readonly<{
   if (source !== undefined
     && (canonicalDigest(source.operation as unknown as StableHashValue)
       !== canonicalDigest(operation as unknown as StableHashValue)
-      || source.input.inputDigest !== canonicalDigest(source.input.input))) {
+      || source.input.inputDigest !== canonicalDigest(source.input.input)
+      || canonicalDigest(work.origin as StableHashValue)
+        !== canonicalDigest(control.control.origin as StableHashValue)
+      || canonicalDigest(work.owner as StableHashValue)
+        !== canonicalDigest(control.control.owner as StableHashValue)
+      || (source.origin !== undefined
+        && canonicalDigest(source.origin as StableHashValue)
+          !== canonicalDigest(control.control.origin as StableHashValue))
+      || (source.owner !== undefined
+        && canonicalDigest(source.owner as StableHashValue)
+          !== canonicalDigest(control.control.owner as StableHashValue)))) {
     throw new Error('invocation_projection_source_invalid')
   }
   const attempts = snapshot.attempts.find((group) => group.invocationRef === input.invocationRef)?.rows ?? []
@@ -150,6 +166,8 @@ function resolveSemantics(input: Readonly<{
     identity: {
       invocationRef: control.invocationRef,
       invocationVersion: control.invocationVersion,
+      origin: control.control.origin,
+      owner: control.control.owner,
     },
     operation: {
       id: descriptor.id,

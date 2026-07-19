@@ -169,8 +169,6 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
       }
     }
     const correctionSource = host.correction.snapshot.sourceRows[0]
-    const correctionControl = host.correction.snapshot.controls[0]
-    const correctionAttempt = host.correction.snapshot.attempts[0]?.rows[0]
     const correctedMaterial = buildDynamicPublishedInput({
       operation: packet.fixture.operation,
       descriptor: packet.fixture.descriptor,
@@ -180,21 +178,34 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
       correctedMaterial,
       ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
     )
-    if (canonicalDigest(correctionSource?.operation as unknown as StableHashValue)
-        !== canonicalDigest(packet.fixture.operation as unknown as StableHashValue)
-      || canonicalDigest(correctionSource?.input as unknown as StableHashValue)
-        !== canonicalDigest(correctedMaterial as unknown as StableHashValue)
-      || correctionControl?.authorityBinding?.reference !== host.correction.newAuthorityRef
-      || correctionControl.authorityBinding.digest !== correctedDigest
-      || correctionControl.control.acceptedAuthority?.kind !== 'approve_each'
-      || correctionControl.control.acceptedAuthority.authorityRef !== host.correction.newAuthorityRef
-      || correctionAttempt?.idempotency.materialInputDigest !== correctedDigest
-      || correctionAttempt.release.state !== 'possibly_released'
-      || host.correction.snapshot.semanticClaims[0]?.ownerInvocationRef
-        !== host.correction.invocationRef
-      || host.correction.snapshot.semanticClaims[0]?.status !== 'completed') {
-      throw new Error('host_correction_snapshot_invalid')
-    }
+    verifyDynamicPublishedSnapshot({
+      snapshot: host.correction.snapshot,
+      anchors: {
+        operation: packet.fixture.operation,
+        descriptor: packet.fixture.descriptor,
+        actor: host.actor,
+        origin: host.host === 'request_owned_human'
+          ? { kind: 'request_owned', requestRef: 'request:host-parity-existing', revision: 7 }
+          : {
+              kind: 'standalone',
+              callerRef: host.actor.callerRef,
+              principalRef: host.actor.principalRef,
+            },
+        issuedAuthority: {
+          reference: host.correction.newAuthorityRef,
+          accepted: { kind: 'approve_each', authorityRef: host.correction.newAuthorityRef },
+          materialInputDigest: correctedDigest,
+        },
+        expectedEffectCount: 1,
+        expectedSemanticClaim: {
+          ownerInvocationRef: host.correction.invocationRef,
+          status: 'completed',
+          ...(correctionSource?.resultIdentity === undefined
+            ? {}
+            : { outcomeResultRef: correctionSource.resultIdentity.sourceResultRef }),
+        },
+      },
+    })
     const gathering = host.clarification.gatheringSnapshot
     const gatheringWork = gathering.inputWork?.[0]
     const gatheringControl = gathering.controls[0]
@@ -299,6 +310,12 @@ export function evaluateHostMatrix(
           && host.correction.effects.payment === 1
           && host.correction.effects.provider === 1
           && host.correction.terminalCorrection === 'invalid_control_state'
+          && host.correction.releasedCorrection.state === 'reconciliation_required'
+          && host.correction.releasedCorrection.refusal === 'invalid_control_state'
+          && host.correction.releasedCorrection.snapshotUnchanged
+          && host.correction.releasedCorrection.authorityUnchanged
+          && host.correction.releasedCorrection.historyUnchanged
+          && host.correction.releasedCorrection.effectsUnchanged
           && rich.semanticDigest === structured.semanticDigest
           && rich.semanticDigest === host.correction.rich.semanticDigest
           && structured.semanticDigest === host.correction.structured.semanticDigest

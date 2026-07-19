@@ -6,7 +6,12 @@ import {
 import type { ActionContext } from '@/modules/common/action'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
-import type { ActionInvocationView, PreparedInvocation } from './contracts'
+import type {
+  ActionInvocationOrigin,
+  ActionInvocationView,
+  InvocationActor,
+  PreparedInvocation,
+} from './contracts'
 import {
   assertExactDescriptor,
   dynamicPublishedSourceDigest,
@@ -16,6 +21,8 @@ import {
 
 export type DynamicPublishedSourceRow = Readonly<{
   invocationRef: string
+  origin?: ActionInvocationOrigin
+  owner?: InvocationActor
   operationKey: string
   semanticBaseKey: string
   semanticIdentityDigest: string

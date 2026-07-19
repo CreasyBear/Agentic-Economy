@@ -224,6 +224,17 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
           knownInput: value, requiredFields: contract.requiredFields, missingFields: [],
           askedFields: [], updatedAt: new Date(input.now()).toISOString(),
         })
+        input.history.push({
+          invocationRef: view.invocationRef,
+          invocationVersion: next.invocationVersion,
+          kind: 'correct',
+          commandDigest: inputWorkCommandDigest({
+            invocationRef: view.invocationRef,
+            priorVersion: view.invocationVersion,
+            knownInput: value,
+          }),
+          recordedAt: new Date(input.now()).toISOString(),
+        })
         return { kind: 'accepted', view: next }
       } catch {
         return { kind: 'refused', code: 'material_input_changed', view }
