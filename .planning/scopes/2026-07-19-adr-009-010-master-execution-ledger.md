@@ -947,6 +947,41 @@ multi-worker CAS, hosted reachability, independently operated supply,
 real-provider fulfilment, production safety, and customer value remain
 unproven.
 
+### `full_yolo` development authority and process-cold recovery
+
+Integrated master revision
+`045f3544c7eb1cf8d8553a84eb6937b267b1b572` proves the ADR-019
+`full_yolo` widening over the same standing-mandate and Action Invocation
+plane. The labelled development objective performs provider-A refusal,
+provider-B fallback and booking, then resumes cancellation and terminal replay
+from durable artifacts in three distinct operating-system processes.
+
+The provider signs only provider-owned reservation and cancellation facts.
+Neutral mandate control verifies those facts and joins them to its own exact
+mandate, principal, released authority uses, actions, evidence, amount, and
+currency. Both the original exposure use and cancellation use must be released
+before exposure is offset. A wrong development custody key is refused, and
+terminal replay leaves provider effects at one booking and one cancellation.
+
+Master execution:
+
+```text
+npm run evidence:full-yolo:development -- run /tmp/ae-full-yolo-master-045f3544.json
+npm run evidence:full-yolo:development -- verify /tmp/ae-full-yolo-master-045f3544.json
+```
+
+Focused Action Invocation checks passed 66/66 in the master checkout. Semantic
+packet checksum:
+`sha256:93248aab1fa434888d07728e0f2e7f80aa87d4f0a6714df140699acf28b829cc`.
+File checksum:
+`sha256:a452e83b3a3090f2bc303e8a25b595463473d84f166a2ef0386a2994b9aea702`.
+
+This is deterministic local/development proof with mock provider supply and
+persisted development signing custody. It does not prove production key
+custody or rotation, externally rooted artifact integrity, durable multi-worker
+CAS, hosted reachability, independently operated providers, fulfilment,
+production safety, or customer value.
+
 ## Evidence position
 
 `Proven` below means executable development evidence for the gate as written.
@@ -990,10 +1025,11 @@ implementation gate substitute.
 ## Next decision
 
 Founder disposition was recorded on 2026-07-19 in accepted ADR-019. Direct
-booking proportionality now passes for labelled development evidence and all
-eleven ADR-009 gates are proven at that evidence class. `bounded_mandate` now
-has executable local development evidence. The next source transition is
-`full_yolo` as an explicit widening of the same standing-mandate contract:
-broader registered action/fallback/risk scope, bounded-loss accounting, and
-multi-action parity without ambient authority. Phase 2 host parity follows on
-the same registered booking action and Action Invocation plane.
+booking proportionality passes for labelled development evidence and all
+eleven ADR-009 gates are proven at that evidence class. `bounded_mandate` and
+the explicit `full_yolo` widening now have executable development evidence,
+including bounded-loss accounting and real process-cold objective recovery
+without ambient authority. The next source transition is Phase 2 host parity on
+the same registered booking action and Action Invocation plane. It must add an
+explicit delegated-actor grant for truthful human/external-agent handoff rather
+than weakening caller/origin binding or reusing one fake caller identity.
