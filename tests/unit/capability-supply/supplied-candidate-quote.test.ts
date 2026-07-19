@@ -269,7 +269,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       origin,
       actor,
       context: { developmentOnlySuppliedQuoteAdapter: adapter },
-      now: nowMs,
+      now: () => nowMs,
     })
     expect(prepared.kind).toBe('prepared')
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
@@ -296,6 +296,15 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       materialInput: quoteInput,
     })
     expect(adapter).toHaveBeenCalledTimes(1)
+    expect(adapter).toHaveBeenCalledWith({
+      target: candidate,
+      operationKey: quoteInput.operationKey,
+      request: {
+        serviceReference: quoteInput.quoteRequest.serviceReference,
+        constraints: quoteInput.quoteRequest.constraints,
+      },
+    })
+    expect(adapter.mock.calls[0]![0]).not.toHaveProperty('request.requestedFields')
     expect(executed).toMatchObject({
       kind: 'accepted',
       view: {
@@ -336,7 +345,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       origin: origins[1]!,
       actor,
       context: {},
-      now: nowMs,
+      now: () => nowMs,
     })
     expect(blocked).toEqual({ kind: 'refused', code: 'qualification_blocked' })
     expect(tracer.exportSnapshot().records).toEqual([])
@@ -356,7 +365,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       tracer, qualificationPorts: ports, invocationInput: quoteInput,
       origin: origins[1]!, actor,
       context: { developmentOnlySuppliedQuoteAdapter: adapter },
-      now: nowMs,
+      now: () => nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
     const accepted = tracer.decide({
@@ -397,7 +406,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       tracer, qualificationPorts: ports, invocationInput: quoteInput,
       origin: origins[1]!, actor,
       context: { developmentOnlySuppliedQuoteAdapter: adapter },
-      now: nowMs,
+      now: () => nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
     const accepted = tracer.decide({
@@ -440,7 +449,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       origin: origins[1]!,
       actor,
       context: {},
-      now: nowMs,
+      now: () => nowMs,
     })
     expect(tamperedDigest).toEqual({ kind: 'refused', code: 'qualification_digest_mismatch' })
 
@@ -456,10 +465,103 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       origin: origins[1]!,
       actor,
       context: {},
-      now: nowMs,
+      now: () => nowMs,
     })
     expect(changedSources).toEqual({ kind: 'refused', code: 'qualification_digest_mismatch' })
     expect(tracer.exportSnapshot().records).toEqual([])
+  })
+
+  it('requalifies immediately before release and refuses changed readiness without calling the adapter', async () => {
+    let currentPublication = publication()
+    const ports = qualificationPorts({
+      loadPublicationAtRevision: async () => currentPublication,
+    })
+    const quoteInput = await quoteInputFor(ports)
+    const adapter = vi.fn()
+    const tracer = inMemoryTracer(adapter)
+    const prepared = await prepareSuppliedCandidateQuote({
+      tracer, qualificationPorts: ports, invocationInput: quoteInput,
+      origin: origins[1]!, actor,
+      context: { developmentOnlySuppliedQuoteAdapter: adapter },
+      now: () => nowMs,
+    })
+    if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+    const accepted = tracer.decide({
+      invocationRef: prepared.view.invocationRef,
+      expectedInvocationVersion: prepared.view.invocationVersion,
+      authorityRef: prepared.view.authority!.reference,
+      actor, origin: origins[1]!, accept: true,
+    })
+    if (accepted.kind !== 'accepted') throw new Error(accepted.code)
+    currentPublication = publication({
+      readinessObservedAt: nowMs - 250,
+      readinessEvidenceRefs: ['dev:readiness:changed-after-authority'],
+    })
+    const refused = await tracer.execute({
+      invocationRef: prepared.view.invocationRef,
+      expectedInvocationVersion: accepted.view.invocationVersion,
+      authorityRef: prepared.view.authority!.reference,
+      actor, origin: origins[1]!, materialInput: quoteInput,
+    })
+    expect(adapter).not.toHaveBeenCalled()
+    expect(refused).toMatchObject({
+      kind: 'accepted',
+      view: {
+        control: { state: 'terminal' },
+        attempts: [{
+          release: { state: 'not_released' },
+          outcome: { state: 'returned', businessOutcome: 'refused' },
+        }],
+        observedResolution: {
+          state: 'returned',
+          businessOutcome: 'refused',
+          result: { kind: 'refused', code: 'qualification_changed_before_release' },
+        },
+      },
+    })
+  })
+
+  it.each([
+    ['undisclosed constraint', (input: SuppliedCandidateQuoteInput) => ({
+      ...input,
+      quoteRequest: {
+        ...input.quoteRequest,
+        constraints: { ...input.quoteRequest.constraints, phone: '0400000000' },
+      },
+    })],
+    ['extra disclosure', (input: SuppliedCandidateQuoteInput) => ({
+      ...input,
+      disclosure: {
+        ...input.disclosure,
+        fields: [...input.disclosure.fields, 'quoteRequest.constraints.phone'],
+        limits: { ...input.disclosure.limits, 'quoteRequest.constraints.phone': 32 },
+      },
+    })],
+    ['missing limit', (input: SuppliedCandidateQuoteInput) => {
+      const { ['quoteRequest.constraints.timing']: _missing, ...limits } = input.disclosure.limits
+      return { ...input, disclosure: { ...input.disclosure, limits } }
+    }],
+    ['over-limit value', (input: SuppliedCandidateQuoteInput) => ({
+      ...input,
+      disclosure: {
+        ...input.disclosure,
+        limits: { ...input.disclosure.limits, 'quoteRequest.constraints.suburb': 2 },
+      },
+    })],
+  ] as const)('refuses %s before invocation or adapter release', async (_label, change) => {
+    const ports = qualificationPorts()
+    const quoteInput = change(await quoteInputFor(ports))
+    const adapter = vi.fn()
+    const tracer = inMemoryTracer(adapter)
+    const refused = await prepareSuppliedCandidateQuote({
+      tracer, qualificationPorts: ports, invocationInput: quoteInput,
+      origin: origins[1]!, actor,
+      context: { developmentOnlySuppliedQuoteAdapter: adapter },
+      now: () => nowMs,
+    })
+    expect(refused).toEqual({ kind: 'refused', code: 'disclosure_invalid' })
+    expect(tracer.exportSnapshot().records).toEqual([])
+    expect(adapter).not.toHaveBeenCalled()
   })
 
   it('invalidates changed disclosure and refuses inherited cross-principal authority', async () => {
@@ -468,7 +570,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     const tracer = inMemoryTracer(vi.fn())
     const prepared = await prepareSuppliedCandidateQuote({
       tracer, qualificationPorts: ports, invocationInput: quoteInput,
-      origin: origins[1]!, actor, context: {}, now: nowMs,
+      origin: origins[1]!, actor, context: {}, now: () => nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
     expect(tracer.decide({
@@ -535,7 +637,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       origin,
       actor,
       context: source.context,
-      now: nowMs,
+      now: () => nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
     source.prepared = prepared.view.prepared!

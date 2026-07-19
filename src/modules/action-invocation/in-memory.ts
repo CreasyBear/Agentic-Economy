@@ -18,6 +18,7 @@ import {
 } from './preparation'
 import {
   createAttempt,
+  replaceAttempt,
 } from './attempts'
 import {
   beginAcquiredRelease,
@@ -70,6 +71,37 @@ export function createInMemoryActionInvocationTracer<
     const operationKey = readPath(record.input, 'operationKey')
     if (typeof operationKey !== 'string') {
       throw new Error('Consequential inquiry attempt requires operationKey and prepared material digest.')
+    }
+    const preReleaseResult = options.action.preReleaseCheck === undefined
+      ? undefined
+      : await options.action.preReleaseCheck({
+          data: record.input,
+          context: options.contextForExecution?.(record.context) ?? record.context,
+        })
+    if (preReleaseResult !== undefined) {
+      const attempt = record.view.attempts.find(({ attemptRef }) => attemptRef === input.attemptRef)
+      if (attempt === undefined) {
+        return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      }
+      record.view = nextView(record.view, {
+        attempts: replaceAttempt(record.view.attempts, {
+          ...attempt,
+          release: { state: 'not_released' },
+          outcome: {
+            state: 'returned',
+            businessOutcome: classifyBusinessOutcome(preReleaseResult),
+          },
+        }),
+        observedResolution: {
+          state: 'returned',
+          execution: 'runner_returned',
+          businessOutcome: classifyBusinessOutcome(preReleaseResult),
+          result: preReleaseResult,
+        },
+        freshness: { state: 'current', observedAt: options.now() },
+        control: { state: 'terminal' },
+      })
+      return { kind: 'accepted', view: record.view }
     }
     const releaseStart = beginAcquiredRelease({
       view: record.view,

@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
 import { defineAction, type ActionParameter } from '@/modules/common/action'
+import {
+  qualifySuppliedCandidate,
+  type CapabilityGraphPorts,
+} from './internal/graph'
 
 const digestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/)
 const contractRefSchema = z.strictObject({
@@ -61,6 +65,67 @@ export const suppliedCandidateQuoteOutputSchema = z.discriminatedUnion('kind', [
 
 export type SuppliedCandidateQuoteInput = z.infer<typeof suppliedCandidateQuoteInputSchema>
 export type SuppliedCandidateQuoteResult = z.infer<typeof suppliedCandidateQuoteOutputSchema>
+export type DevelopmentQuoteProviderRequest = Readonly<{
+  target: SuppliedCandidateQuoteInput['target']
+  operationKey: string
+  request: Readonly<{
+    serviceReference: string
+    constraints: Readonly<Record<string, string>>
+  }>
+}>
+
+export type QuoteDisclosureValidation =
+  | Readonly<{
+      kind: 'valid'
+      providerRequest: DevelopmentQuoteProviderRequest
+      fields: readonly string[]
+      limits: Readonly<Record<string, number>>
+    }>
+  | Readonly<{ kind: 'invalid'; code:
+      | 'disclosure_fields_mismatch'
+      | 'disclosure_limits_mismatch'
+      | 'disclosed_value_over_limit'
+    }>
+
+export function validateDevelopmentQuoteDisclosure(
+  input: SuppliedCandidateQuoteInput,
+): QuoteDisclosureValidation {
+  const fields = [
+    'quoteRequest.serviceReference',
+    ...Object.keys(input.quoteRequest.constraints)
+      .sort()
+      .map((key) => `quoteRequest.constraints.${key}`),
+  ]
+  const declaredFields = [...input.disclosure.fields]
+  if (
+    new Set(declaredFields).size !== declaredFields.length
+    || [...declaredFields].sort().join('\0') !== [...fields].sort().join('\0')
+  ) return { kind: 'invalid', code: 'disclosure_fields_mismatch' }
+  if (
+    Object.keys(input.disclosure.limits).sort().join('\0') !== [...fields].sort().join('\0')
+  ) return { kind: 'invalid', code: 'disclosure_limits_mismatch' }
+  const values = new Map<string, string>([
+    ['quoteRequest.serviceReference', input.quoteRequest.serviceReference],
+    ...Object.entries(input.quoteRequest.constraints)
+      .map(([key, value]) => [`quoteRequest.constraints.${key}`, value] as const),
+  ])
+  if (fields.some((field) => values.get(field)!.length > input.disclosure.limits[field]!)) {
+    return { kind: 'invalid', code: 'disclosed_value_over_limit' }
+  }
+  return {
+    kind: 'valid',
+    fields,
+    limits: { ...input.disclosure.limits },
+    providerRequest: {
+      target: input.target,
+      operationKey: input.operationKey,
+      request: {
+        serviceReference: input.quoteRequest.serviceReference,
+        constraints: { ...input.quoteRequest.constraints },
+      },
+    },
+  }
+}
 
 const parameters: readonly ActionParameter[] = [
   { name: 'target', type: 'object', description: 'Exact currently qualified supplied candidate.', required: true },
@@ -102,12 +167,60 @@ export const collectSuppliedCandidateQuoteAction = defineAction({
     ],
   },
   projectInvocationPreparation: (input) => ({
-    dataUse: { fields: [...input.disclosure.fields], limits: { ...input.disclosure.limits } },
+    dataUse: (() => {
+      const disclosure = validateDevelopmentQuoteDisclosure(input)
+      return disclosure.kind === 'valid'
+        ? { fields: disclosure.fields, limits: disclosure.limits }
+        : { fields: [], limits: {} }
+    })(),
   }),
+  preReleaseCheck: async ({ data, context }) => {
+    const input = suppliedCandidateQuoteInputSchema.parse(data)
+    const disclosure = validateDevelopmentQuoteDisclosure(input)
+    if (disclosure.kind === 'invalid') {
+      return {
+        kind: 'refused' as const,
+        environment: 'MOCK/DEVELOPMENT ONLY' as const,
+        code: disclosure.code,
+        reason: 'The provider-visible quote request is not exactly covered by the authorized disclosure.',
+      }
+    }
+    const ports = context.developmentOnlySuppliedQuoteQualificationPorts as CapabilityGraphPorts | undefined
+    const now = context.developmentOnlySuppliedQuoteNow?.()
+    if (ports === undefined || now === undefined) {
+      return {
+        kind: 'refused' as const,
+        environment: 'MOCK/DEVELOPMENT ONLY' as const,
+        code: 'qualification_source_unavailable',
+        reason: 'Current supplied-candidate evidence could not be checked immediately before release.',
+      }
+    }
+    const qualification = await qualifySuppliedCandidate(ports, {
+      candidate: input.target,
+      now,
+    })
+    if (
+      qualification.status !== 'eligible'
+      || qualification.validUntil === undefined
+      || now >= qualification.validUntil
+      || qualification.validUntil !== input.qualificationValidUntil
+      || qualification.qualificationDigest !== input.qualificationDigest
+    ) {
+      return {
+        kind: 'refused' as const,
+        environment: 'MOCK/DEVELOPMENT ONLY' as const,
+        code: 'qualification_changed_before_release',
+        reason: 'The supplied candidate changed or expired after authority and before release.',
+      }
+    }
+    return undefined
+  },
   run: async ({ data, context }) => {
     const parsed = suppliedCandidateQuoteInputSchema.parse(data)
+    const disclosure = validateDevelopmentQuoteDisclosure(parsed)
+    if (disclosure.kind === 'invalid') throw new Error('development_quote_disclosure_not_validated')
     const adapter = context.developmentOnlySuppliedQuoteAdapter
     if (adapter === undefined) throw new Error('development_quote_adapter_unavailable')
-    return suppliedCandidateQuoteOutputSchema.parse(await adapter(parsed))
+    return suppliedCandidateQuoteOutputSchema.parse(await adapter(disclosure.providerRequest))
   },
 })

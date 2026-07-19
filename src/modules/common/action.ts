@@ -69,6 +69,10 @@ export type ActionContext = {
   developmentOnlySuppliedQuoteAdapter?: (
     data: unknown,
   ) => Promise<ActionResult>
+  /** Opaque source ports consumed only by the supplied-quote action's trusted development hook. */
+  developmentOnlySuppliedQuoteQualificationPorts?: unknown
+  /** Fixed development clock paired with the supplied-quote source ports. */
+  developmentOnlySuppliedQuoteNow?: () => number
 }
 
 export type ActionRunArgs<Input> = {
@@ -136,6 +140,10 @@ type ActionPreparationProjector<Input> = {
   project(input: Input): ActionInvocationPreparation
 }['project']
 
+type ActionPreReleaseCheck<Input, Result extends ActionResult> = {
+  check(input: ActionRunArgs<Input>): Promise<Result | undefined>
+}['check']
+
 export type ResolvedActionInvocationContract = ActionInvocationContract & Readonly<{
   compatibility: 'explicit' | 'derived_from_legacy_read_only_flag'
 }>
@@ -159,6 +167,8 @@ export type ActionDefinition<
    */
   readonly invocationContract?: ActionInvocationContract
   readonly projectInvocationPreparation?: ActionPreparationProjector<Input>
+  /** Action-owned refusal check that runs before an attempt can enter release. */
+  readonly preReleaseCheck?: ActionPreReleaseCheck<Input, Result>
   readonly run: ActionRunner<Input, Result>
 }
 
