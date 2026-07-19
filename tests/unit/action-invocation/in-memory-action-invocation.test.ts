@@ -667,4 +667,93 @@ describe('in-memory Action Invocation tracer', () => {
       cancellationAfterPossibleRelease: 'reconciliation_required',
     }, null, 2))
   })
+
+  it('refuses a runner completion that arrives after cancellation advanced control', async () => {
+    let resolveRunner!: (result: {
+      kind: 'error'
+      code: string
+      retryable: boolean
+      reason: string
+    }) => void
+    const pendingRunner = new Promise<{
+      kind: 'error'
+      code: string
+      retryable: boolean
+      reason: string
+    }>((resolve) => { resolveRunner = resolve })
+    const developmentAdapter = vi.fn(() => pendingRunner)
+    const tracer = createInMemoryActionInvocationTracer({
+      action: findAction('inquiry.submit')!,
+      now: () => '2026-07-19T10:00:00.000Z',
+      nextInvocationRef: () => 'dev:action-invocation:late-completion',
+      nextAuthorityRef: () => 'opaque:authority:late-completion',
+      nextAttemptRef: () => 'dev:attempt:late-completion:1',
+    })
+    const prepared = tracer.prepare({
+      origin: standaloneOrigin,
+      actor,
+      input: inquiryInput,
+      context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+      freshnessMs: 60_000,
+    })
+    const authority = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin: standaloneOrigin,
+      accept: true,
+    })
+    if (authority.kind !== 'accepted') throw new Error('Expected accepted authority')
+    const acquired = tracer.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: authority.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin: standaloneOrigin,
+      materialInput: inquiryInput,
+      leaseOwner: 'mock:worker:pending',
+      leaseMs: 30_000,
+    })
+    if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+      throw new Error('Expected acquired attempt')
+    }
+    const pendingCompletion = tracer.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: acquired.view.control.attemptRef,
+      leaseOwner: acquired.view.control.leaseOwner,
+      effectGeneration: acquired.view.control.effectGeneration,
+    })
+    expect(developmentAdapter).toHaveBeenCalledTimes(1)
+    const releaseStarted = tracer.inspect(prepared.invocationRef)!
+    expect(releaseStarted.control).toMatchObject({
+      state: 'leased',
+      release: 'possibly_released',
+    })
+    const cancelled = tracer.cancel({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: releaseStarted.invocationVersion,
+      actor,
+      origin: standaloneOrigin,
+    })
+    expect(cancelled).toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'reconciliation_required' } },
+    })
+    resolveRunner({
+      kind: 'error',
+      code: 'mock_late_return',
+      retryable: false,
+      reason: 'MOCK late runner result',
+    })
+    await expect(pendingCompletion).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'stale_invocation_version',
+      view: { control: { state: 'reconciliation_required' } },
+    })
+    expect(tracer.inspect(prepared.invocationRef)).toEqual(
+      cancelled.kind === 'accepted' ? cancelled.view : undefined,
+    )
+  })
 })

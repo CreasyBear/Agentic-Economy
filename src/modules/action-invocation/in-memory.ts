@@ -19,7 +19,11 @@ import {
 import {
   createAttempt,
 } from './attempts'
-import { executeAcquiredAttempt } from './fenced-execution'
+import {
+  beginAcquiredRelease,
+  checkReleaseCompletionFence,
+  executeReleasedAttempt,
+} from './fenced-execution'
 import {
   acquireLease,
   leaseIsExpired,
@@ -67,20 +71,36 @@ export function createInMemoryActionInvocationTracer<
     if (typeof operationKey !== 'string') {
       throw new Error('Consequential inquiry attempt requires operationKey and prepared material digest.')
     }
-    const decision = await executeAcquiredAttempt({
+    const releaseStart = beginAcquiredRelease({
+      view: record.view,
+      ...input,
+      now: options.now,
+    })
+    if (releaseStart.kind !== 'accepted') {
+      if (releaseStart.view !== undefined) record.view = releaseStart.view
+      return releaseStart
+    }
+    record.view = releaseStart.view
+    const completed = await executeReleasedAttempt({
       action: options.action,
       actionInput: record.input,
       context: options.contextForExecution?.(record.context) ?? record.context,
-      view: record.view,
-      ...input,
+      releaseStartView: releaseStart.view,
+      attemptRef: input.attemptRef,
+      leaseOwner: input.leaseOwner,
+      effectGeneration: input.effectGeneration,
       operationKey,
       now: options.now,
       ...(options.developmentReleaseSignal === undefined
         ? {}
         : { releaseSignal: options.developmentReleaseSignal }),
     })
-    if (decision.view !== undefined) record.view = decision.view
-    return decision
+    const completionRefusal = checkReleaseCompletionFence(record.view, releaseStart.view, input)
+    if (completionRefusal !== undefined) {
+      return { kind: 'refused', code: completionRefusal, view: record.view }
+    }
+    record.view = completed
+    return { kind: 'accepted', view: record.view }
   }
 
   const executeRunner = async (

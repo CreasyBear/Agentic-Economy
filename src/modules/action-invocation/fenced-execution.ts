@@ -8,19 +8,17 @@ import type { DevelopmentReleaseSignal } from './attempts'
 import { executeConsequentialAttempt } from './attempt-execution'
 import { currentLease, leaseIsExpired } from './lease-control'
 
-export async function executeAcquiredAttempt<Input, Result extends ActionResult>(input: Readonly<{
-  action: Action<Input, Result>
-  actionInput: Input
-  context: ActionContext
-  view: ActionInvocationView<Result>
+type AcquiredToken = Readonly<{
   expectedInvocationVersion: number
   attemptRef: string
   leaseOwner: string
   effectGeneration: number
-  operationKey: string
+}>
+
+export function beginAcquiredRelease<Result extends ActionResult>(input: Readonly<{
+  view: ActionInvocationView<Result>
   now: () => string
-  releaseSignal?: DevelopmentReleaseSignal
-}>): Promise<InvocationDecision<Result>> {
+}> & AcquiredToken): InvocationDecision<Result> {
   if (input.view.invocationVersion !== input.expectedInvocationVersion) {
     return { kind: 'refused', code: 'stale_invocation_version', view: input.view }
   }
@@ -36,18 +34,45 @@ export async function executeAcquiredAttempt<Input, Result extends ActionResult>
   const releasing = nextView(input.view, {
     control: { ...input.view.control, release: 'possibly_released' },
   })
+  return { kind: 'accepted', view: releasing }
+}
+
+export async function executeReleasedAttempt<Input, Result extends ActionResult>(input: Readonly<{
+  action: Action<Input, Result>
+  actionInput: Input
+  context: ActionContext
+  releaseStartView: ActionInvocationView<Result>
+  operationKey: string
+  now: () => string
+  releaseSignal?: DevelopmentReleaseSignal
+}> & Omit<AcquiredToken, 'expectedInvocationVersion'>): Promise<ActionInvocationView<Result>> {
+  const attempt = input.releaseStartView.attempts.find(
+    ({ attemptRef }) => attemptRef === input.attemptRef,
+  )
+  if (attempt === undefined) throw new Error(`Missing acquired attempt ${input.attemptRef}.`)
   const transition = await executeConsequentialAttempt({
     action: input.action,
     actionInput: input.actionInput,
     context: input.context,
-    currentView: releasing,
+    currentView: input.releaseStartView,
     attemptRef: attempt.attemptRef,
     operationKey: input.operationKey,
     now: input.now,
     ...(input.releaseSignal === undefined ? {} : { releaseSignal: input.releaseSignal }),
     attempt,
   })
-  return { kind: 'accepted', view: nextView(releasing, transition) }
+  return nextView(input.releaseStartView, transition)
+}
+
+export function checkReleaseCompletionFence<Result extends ActionResult>(
+  currentView: ActionInvocationView<Result>,
+  releaseStartView: ActionInvocationView<Result>,
+  token: Omit<AcquiredToken, 'expectedInvocationVersion'>,
+): DecisionRefusalCode | undefined {
+  if (currentView.invocationVersion !== releaseStartView.invocationVersion) {
+    return 'stale_invocation_version'
+  }
+  return currentLease(currentView, token)
 }
 
 function refusalAfterExpiry<Result extends ActionResult>(
