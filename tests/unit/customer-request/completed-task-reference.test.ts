@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
+import { findAction } from '@/modules/actions'
 import {
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
+  createDurableActionInvocationTracer,
   readCompletedResultIdentity,
   type DurableActionInvocationPort,
+  type PreparedInvocation,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ActionResult } from '@/modules/common/action'
@@ -206,6 +211,92 @@ describe('completed standalone result reference in Customer Request V2', () => {
   })
 
   it('commits one canonical revision, supersedes prior route authority, and cold-replays without another effect', async () => {
+    const invocationActor = {
+      principalRef: 'principal:development:one',
+      callerRef: 'agent:development:one',
+    }
+    const invocationOrigin = { kind: 'standalone' as const, ...invocationActor }
+    const invocationInput = {
+      target: {
+        businessId: 'mock:business:development',
+        serviceId: 'mock:service:development',
+        capabilityKind: 'quote_request' as const,
+      },
+      body: 'MOCK/DEVELOPMENT ONLY completed inquiry',
+      contact: { email: 'development@example.test' },
+      expectedDigest: `sha256:${'b'.repeat(64)}`,
+      operationKey: 'mock:source:completed-task-reference',
+    }
+    const invocationResult = {
+      kind: 'ok' as const,
+      code: 'inquiry_submitted' as const,
+      receipt: {
+        threadId: 'mock:thread:completed-task-reference',
+        businessId: invocationInput.target.businessId,
+        serviceId: invocationInput.target.serviceId,
+        status: 'open' as const,
+        version: 1,
+        notificationId: 'mock:notification:completed-task-reference',
+        notificationStatus: 'queued' as const,
+        accessKey: 'SOURCE-OWNED-DEVELOPMENT-SECRET',
+      },
+    }
+    const runner = vi.fn().mockResolvedValue(invocationResult)
+    const invocationState = createDevelopmentDurableState()
+    const invocationPort = createDevelopmentDurablePort(invocationState)
+    const invocationSource = {
+      input: invocationInput,
+      context: { developmentOnlyInquirySubmitAdapter: runner },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+      resultIdentity: {
+        sourceResultRef: 'mock:inquiry-result:completed-task-reference',
+        resultDigest: canonicalDigest(invocationResult),
+      },
+    }
+    const invocation = createDurableActionInvocationTracer({
+      action: findAction('inquiry.submit')!,
+      port: invocationPort,
+      now: () => new Date(NOW).toISOString(),
+      nextInvocationRef: () => 'invocation:development:one',
+      nextAuthorityRef: () => 'opaque:authority:completed-task-reference',
+      nextAttemptRef: () => 'attempt:development:one',
+      resolveSourceState: () => invocationSource,
+    })
+    const prepared = invocation.prepare({
+      origin: invocationOrigin,
+      actor: invocationActor,
+      input: invocationInput,
+      context: invocationSource.context,
+      freshnessMs: 60_000,
+    })
+    invocationSource.prepared = prepared.prepared!
+    const decided = invocation.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor: invocationActor,
+      origin: invocationOrigin,
+      accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const completed = await invocation.execute({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor: invocationActor,
+      origin: invocationOrigin,
+      materialInput: invocationInput,
+    })
+    expect(completed).toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'terminal' } },
+    })
+    expect(runner).toHaveBeenCalledTimes(1)
+    const attemptCountAfterEffect = invocationPort.readAttempts(prepared.invocationRef, 10).length
+    const historyCountAfterEffect = invocationPort.readHistory(prepared.invocationRef, 0, 20).length
+    expect(attemptCountAfterEffect).toBe(1)
+
     const initial = aggregate()
     const revisions = new Map([[1, initial]])
     const commands = new Map<string, {
@@ -273,7 +364,13 @@ describe('completed standalone result reference in Customer Request V2', () => {
       readGenerationRefreshCommandResult: async () => ({ kind: 'request_conflict' as const }),
       insertGenerationCommand: async () => {},
     } as unknown as CustomerRequestV2WritePorts
-    const identityPorts = ports()
+    const identityPorts: AttachCompletedTaskReferencePorts = {
+      readCompletedResultIdentity: ({ invocationRef, actor }) =>
+        readCompletedResultIdentity(invocationPort, invocationRef, actor, () => ({
+          sourceResultRef: invocationSource.resultIdentity.sourceResultRef,
+          result: invocationResult,
+        })),
+    }
     const applicationPorts: PersistCompletedTaskReferencePorts = {
       ...identityPorts,
       replayCommittedAttachment: async ({ commandKey, commandDigest }) => {
@@ -333,13 +430,21 @@ describe('completed standalone result reference in Customer Request V2', () => {
     const cold = structuredClone(revisions.get(2)!)
     expect(cold.completedTaskReferences).toHaveLength(1)
     expect(aggregateIsInternallyConsistent(cold, 1)).toBe(true)
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(invocationPort.readAttempts(prepared.invocationRef, 10)).toHaveLength(
+      attemptCountAfterEffect,
+    )
+    expect(invocationPort.readHistory(prepared.invocationRef, 0, 20)).toHaveLength(
+      historyCountAfterEffect,
+    )
+    expect(JSON.stringify(cold)).not.toContain(invocationResult.receipt.accessKey)
 
     await expect(persistCompletedTaskReference({
       ...command,
       invocationRef: 'invocation:development:other',
     }, applicationPorts)).resolves.toEqual({
-      kind: 'conflict',
-      reason: 'idempotency_key_reused',
+      kind: 'refused',
+      reason: 'invocation_not_found',
     })
     await expect(persistCompletedTaskReference({
       ...command,
