@@ -2,6 +2,7 @@ import {
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
   loadDynamicPublishedAdapterSnapshot,
+  verifyDynamicPublishedSnapshot,
   type ActionInvocationOrigin,
   type DynamicPublishedAdapterSnapshot,
   type InvocationActor,
@@ -331,6 +332,18 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     },
   } as StableHashValue)
   const separatelyResumed = packet.cases.every((entry) => {
+    verifyDynamicPublishedSnapshot({
+      snapshot: entry.snapshot,
+      operation: rebuiltOperation,
+      descriptor: rebuiltDescriptor,
+      actor,
+      origin: entry.origin,
+      expectedAuthorityKind: 'approve_each',
+      expectedEffectCount: 1,
+      expectedChallengeDigest: canonicalDigest(
+        developmentChallenge(rebuiltOperation.binding.endpointUrl) as unknown as StableHashValue,
+      ),
+    })
     const loaded = loadDynamicPublishedAdapterSnapshot(entry.snapshot)
     const source = createDevelopmentDynamicPublishedSource([rebuiltOperation], loaded.sourceRows)
     const adapter = createDynamicPublishedActionInvocationAdapter({
@@ -348,6 +361,15 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       && view.origin.kind === entry.origin.kind
       && view.action.id === rebuiltOperation.operationId
       && view.action.contractVersion === rebuiltDescriptor.version
+  })
+  verifyDynamicPublishedSnapshot({
+    snapshot: packet.recovery.snapshot,
+    operation: rebuiltOperation,
+    descriptor: rebuiltDescriptor,
+    actor,
+    origin: packet.cases[1]!.origin,
+    expectedAuthorityKind: 'approve_each',
+    expectedEffectCount: 1,
   })
   if (
     canonicalDigest(material as unknown as StableHashValue) !== packetDigest
@@ -392,14 +414,7 @@ function verifierRuntime(): RouteTransportRuntime {
 }
 
 function successRuntime(endpoint: string, effects: { payment: number; provider: number }): RouteTransportRuntime {
-  const challenge = {
-    x402Version: 2,
-    resource: { url: `${endpoint}?symbol=BTC&convert=USD` },
-    accepts: [{
-      scheme: 'exact', network: 'eip155:8453', amount: '10000', asset: '0xmock-usdc',
-      payTo: '0xmock-provider-recipient', maxTimeoutSeconds: 30, extra: {},
-    }],
-  }
+  const challenge = developmentChallenge(endpoint)
   const send: RouteTransportFetch = async (_url, init) => {
     if (init?.headers?.['Payment-Signature'] === undefined) {
       return response(402, '', {
@@ -419,6 +434,17 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
       effects.payment += 1
       return 'mock:payment-signature'
     },
+  }
+}
+
+function developmentChallenge(endpoint: string) {
+  return {
+    x402Version: 2,
+    resource: { url: `${endpoint}?symbol=BTC&convert=USD` },
+    accepts: [{
+      scheme: 'exact', network: 'eip155:8453', amount: '10000', asset: '0xmock-usdc',
+      payTo: '0xmock-provider-recipient', maxTimeoutSeconds: 30, extra: {},
+    }],
   }
 }
 

@@ -10,6 +10,7 @@ import type {
   DynamicPublishedInvocationResult,
 } from './dynamic-published-contract'
 import type { PublishedOperation, RuntimePublishedOperationDescriptor } from '@/modules/capability-supply/public'
+import { executableFixedPrice } from './dynamic-published-contract'
 
 export type DynamicPublishedExecutionToken = Readonly<{
   attemptRef: string
@@ -28,6 +29,7 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   runtime: RouteTransportRuntime
   markReleased(): void
 }>): Promise<DynamicPublishedInvocationResult> {
+  const price = executableFixedPrice(input.operation)
   const observation = await invokeRegisteredRouteTransport({
     binding: {
       adapterId: input.operation.binding.adapter.adapterId,
@@ -42,7 +44,7 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
       mandateDigest: input.token.mandateDigest,
       grantDigest: input.token.grantDigest,
       capabilityContractDigest: input.operation.identity.contractDigest,
-      maximumSpend: { currency: 'USD', amountMinor: 1 },
+      maximumSpend: price,
       expiresAt: input.token.expiresAt,
       callIdentity: {
         keyId: `invocation:${input.token.authorityRef}`,
@@ -66,12 +68,16 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
     ...(observation.responseDigest === undefined ? {} : { responseDigest: observation.responseDigest }),
     ...(observation.providerReceipt === undefined ? {} : { providerReceipt: observation.providerReceipt }),
     ...(observation.paymentProof === undefined ? {} : { paymentProof: observation.paymentProof }),
+    ...(observation.paymentChallengeDigest === undefined
+      ? {}
+      : { paymentChallengeDigest: observation.paymentChallengeDigest }),
     ...(observation.failureCode === undefined ? {} : { failureCode: observation.failureCode }),
   }
   if (observation.disposition !== 'succeeded' || observation.outputJson === undefined) {
     return {
       kind: 'published_operation_refused',
       sourceDisposition: 'refused',
+      release: observation.releaseStarted ? 'released' : 'not_released',
       ...common,
     }
   }
@@ -80,6 +86,7 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
     return {
       kind: 'published_operation_invalid_evidence',
       sourceDisposition: 'refused',
+      release: 'released',
       ...common,
       failureCode: 'output_schema_invalid',
     }
@@ -87,6 +94,7 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   return {
     kind: 'published_operation_succeeded',
     sourceDisposition: 'succeeded',
+    release: 'released',
     ...common,
     output,
   }

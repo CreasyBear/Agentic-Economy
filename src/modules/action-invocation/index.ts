@@ -39,7 +39,14 @@ export {
   buildDynamicPublishedInput,
   dynamicPublishedSourceDigest,
 } from './dynamic-published-contract'
-export { createDevelopmentDynamicPublishedSource } from './dynamic-published-source'
+export {
+  createDevelopmentDynamicPublishedSource,
+  dynamicPublishedOperationSlot,
+} from './dynamic-published-source'
+export {
+  assertDynamicPublishedSnapshotShape,
+  verifyDynamicPublishedSnapshot,
+} from './dynamic-published-snapshot-verifier'
 
 export type {
   ActionInvocationOrigin,

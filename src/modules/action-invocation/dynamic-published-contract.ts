@@ -22,6 +22,7 @@ export type DynamicPublishedInvocationResult = ActionResult & Readonly<{
     | 'published_operation_refused'
     | 'published_operation_invalid_evidence'
   sourceDisposition: 'succeeded' | 'refused'
+  release: 'not_released' | 'released'
   operationId: string
   operationVersion: string
   requestDigest: string
@@ -29,6 +30,7 @@ export type DynamicPublishedInvocationResult = ActionResult & Readonly<{
   output?: StableHashValue
   providerReceipt?: string
   paymentProof?: string
+  paymentChallengeDigest?: string
   failureCode?: string
 }>
 
@@ -41,7 +43,7 @@ export type DynamicPublishedAuthorityTarget = Readonly<{
     readiness: PublishedOperation['readiness']
   }>
   effect: Readonly<{
-    amount: Readonly<{ currency: string; amountMinor: number }>
+      amount: Readonly<{ currency: string; amountMinor: number }>
     payment: PublishedOperation['identity']['payment']
     data: readonly Readonly<{ inputPointer: string; recipient: string; purposes: readonly string[] }>[]
   }>
@@ -67,7 +69,7 @@ export function buildDynamicPublishedInput(input: Readonly<{
       readiness: input.operation.readiness,
     },
     effect: {
-      amount: exactFixedPrice(input.operation),
+      amount: executableFixedPrice(input.operation),
       payment: input.operation.identity.payment,
       data: input.descriptor.dataUse.map((use) => ({
         inputPointer: use.inputPointer,
@@ -129,7 +131,7 @@ export function assertExactDescriptor(
     || canonicalDigest(descriptor.target as unknown as StableHashValue)
       !== canonicalDigest(operation.identity as unknown as StableHashValue)
   ) throw new Error('published_operation_descriptor_not_exact')
-  exactFixedPrice(operation)
+  executableFixedPrice(operation)
 }
 
 export function createDynamicPublishedAction(input: Readonly<{
@@ -181,7 +183,7 @@ export function createDynamicPublishedAction(input: Readonly<{
         dataUse: {
           fields: descriptor.dataUse.map(({ inputPointer }) => inputPointer),
           limits: {
-            amountMinor: exactFixedPrice(operation).amountMinor,
+            amountMinor: executableFixedPrice(operation).amountMinor,
             publicationRevision: operation.identity.publicationRevision,
             contractVersion: operation.identity.contractVersion,
           },
@@ -194,6 +196,20 @@ export function createDynamicPublishedAction(input: Readonly<{
         referenceable: result.kind === 'published_operation_succeeded',
       }),
     }.classify,
+    classifyInvocationExecution: {
+      classify: (result: DynamicPublishedInvocationResult) => result.release === 'not_released'
+        ? {
+            release: 'not_released' as const,
+            outcome: result.kind,
+            referenceable: false,
+            message: result.failureCode ?? result.kind,
+          }
+        : {
+            release: 'released' as const,
+            outcome: result.kind,
+            referenceable: result.kind === 'published_operation_succeeded',
+          },
+    }.classify,
     preReleaseCheck: {
       check: async ({ data }: { data: DynamicPublishedInvocationInput }) =>
         await input.preReleaseCheck(data),
@@ -202,10 +218,17 @@ export function createDynamicPublishedAction(input: Readonly<{
   }
 }
 
-function exactFixedPrice(operation: PublishedOperation): Readonly<{ currency: string; amountMinor: number }> {
+export function executableFixedPrice(
+  operation: PublishedOperation,
+): Readonly<{ currency: string; amountMinor: number }> {
   const price = operation.identity.price
-  if (price.kind !== 'fixed' || price.currency !== 'USD' || price.amountMinor !== 1) {
-    throw new Error('published_operation_price_not_exact_usd_cent')
+  if (
+    price.kind !== 'fixed'
+    || price.currency.trim().length === 0
+    || !Number.isSafeInteger(price.amountMinor)
+    || price.amountMinor < 0
+  ) {
+    throw new Error('published_operation_price_not_fixed')
   }
   return { currency: price.currency, amountMinor: price.amountMinor }
 }

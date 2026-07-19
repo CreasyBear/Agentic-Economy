@@ -162,12 +162,29 @@ export type ActionInvocationResultClassification = Readonly<{
   referenceable: boolean
 }>
 
+export type ActionInvocationExecutionClassification =
+  | Readonly<{
+      release: 'not_released'
+      outcome: string
+      referenceable: boolean
+      message: string
+    }>
+  | Readonly<{
+      release: 'released'
+      outcome: string
+      referenceable: boolean
+    }>
+
 type ActionPreparationProjector<Input> = {
   project(input: Input): ActionInvocationPreparation
 }['project']
 
 type ActionResultClassifier<Result extends ActionResult> = {
   classify(result: Result): ActionInvocationResultClassification
+}['classify']
+
+type ActionExecutionClassifier<Result extends ActionResult> = {
+  classify(result: Result): ActionInvocationExecutionClassification
 }['classify']
 
 type ActionPreReleaseCheck<Input, Result extends ActionResult> = {
@@ -199,6 +216,8 @@ export type ActionDefinition<
   readonly projectInvocationPreparation?: ActionPreparationProjector<Input>
   /** Action-owned interpretation of its returned business result. */
   readonly classifyInvocationResult?: ActionResultClassifier<Result>
+  /** Action-owned release classification for consequential runner results. */
+  readonly classifyInvocationExecution?: ActionExecutionClassifier<Result>
   /** Action-owned refusal check that runs before an attempt can enter release. */
   readonly preReleaseCheck?: ActionPreReleaseCheck<Input, Result>
   readonly run: ActionRunner<Input, Result>

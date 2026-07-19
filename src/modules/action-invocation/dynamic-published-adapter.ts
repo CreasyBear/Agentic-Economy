@@ -28,9 +28,11 @@ import {
 } from './dynamic-published-execution'
 import {
   requalifyDynamicPublishedSource,
+  dynamicPublishedOperationSlot,
   type DynamicPublishedSourcePort,
 } from './dynamic-published-source'
 import { createDurableActionInvocationTracer } from './durable'
+import { readCompletedResultIdentity, type CompletedResultIdentity } from './durable'
 import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
@@ -43,6 +45,7 @@ import type {
   PersistControlResult,
 } from './internal/durable-contracts'
 import type { DynamicPublishedSourceRow } from './dynamic-published-source'
+import { assertDynamicPublishedSnapshotShape } from './dynamic-published-snapshot-verifier'
 
 export type DynamicPublishedAdapterSnapshot = Readonly<{
   format: 'dynamic-published-action-invocation:development:v1'
@@ -108,6 +111,10 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
     DynamicPublishedInvocationResult
   >>['reconcile']
   inspect(invocationRef: string): ActionInvocationView<DynamicPublishedInvocationResult> | undefined
+  readCompletedResult(
+    invocationRef: string,
+    actor: InvocationActor,
+  ): CompletedResultIdentity
   exportSnapshot(): DynamicPublishedAdapterSnapshot
 }>
 
@@ -134,13 +141,14 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       const reason = requalifyDynamicPublishedSource({
         preparedOperation: input.operation,
         descriptor,
-        currentOperation: input.source.current(input.operation.operationId),
+        currentOperation: input.source.current(dynamicPublishedOperationSlot(input.operation)),
         value: value.input,
         now: input.now(),
       })
       return reason === undefined ? undefined : {
         kind: 'published_operation_refused',
         sourceDisposition: 'refused',
+        release: 'not_released',
         operationId: input.operation.operationId,
         operationVersion: descriptor.version,
         requestDigest: value.operationKey,
@@ -164,9 +172,12 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
           ...row,
           observedResolution: {
             state: 'returned',
-            execution: 'runner_returned',
+            execution: result.release === 'not_released'
+              ? 'pre_release_refused'
+              : 'runner_returned',
             businessOutcome: result.kind,
-            resultReferenceable: result.kind === 'published_operation_succeeded',
+            resultReferenceable:
+              result.release === 'released' && result.kind === 'published_operation_succeeded',
             result,
           },
           resultIdentity: {
@@ -217,7 +228,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         descriptor,
         value: request.value,
       })
-      const current = input.source.current(input.operation.operationId)
+      const current = input.source.current(dynamicPublishedOperationSlot(input.operation))
       const reason = requalifyDynamicPublishedSource({
         preparedOperation: input.operation,
         descriptor,
@@ -285,7 +296,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       }
     },
     cancel(request) {
-      const operation = input.source.current(input.operation.operationId)
+      const operation = input.source.current(dynamicPublishedOperationSlot(input.operation))
       if (operation?.binding.cancellation.kind === 'unsupported') {
         const view = tracer.inspect(request.invocationRef)
         return {
@@ -298,8 +309,27 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     },
     reconcile: tracer.reconcile,
     inspect: tracer.inspect,
+    readCompletedResult(invocationRef, actor) {
+      return readCompletedResultIdentity(
+        durablePort,
+        invocationRef,
+        actor,
+        (operationKey) => {
+          const row = input.source.read(operationKey)
+          const returned = row?.observedResolution.state === 'returned'
+            ? row.observedResolution.result
+            : undefined
+          return {
+            ...(row?.resultIdentity?.sourceResultRef === undefined
+              ? {}
+              : { sourceResultRef: row.resultIdentity.sourceResultRef }),
+            ...(returned === undefined ? {} : { result: returned }),
+          }
+        },
+      )
+    },
     exportSnapshot() {
-      return {
+      const snapshot: DynamicPublishedAdapterSnapshot = {
         format: 'dynamic-published-action-invocation:development:v1',
         sourceRows: input.source.list(),
         controls: [...durableState.controls.values()],
@@ -310,19 +340,18 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         history: [...durableState.history].map(([invocationRef, rows]) => ({ invocationRef, rows })),
         commands: [...durableState.commands].map(([commandId, value]) => ({ commandId, value })),
       }
+      return JSON.parse(JSON.stringify(snapshot)) as DynamicPublishedAdapterSnapshot
     },
   }
 }
 
 export function loadDynamicPublishedAdapterSnapshot(
-  snapshot: DynamicPublishedAdapterSnapshot,
+  snapshot: unknown,
 ): Readonly<{
   durableState: DevelopmentDurableState<DynamicPublishedInvocationResult>
   sourceRows: Map<string, DynamicPublishedSourceRow>
 }> {
-  if (snapshot.format !== 'dynamic-published-action-invocation:development:v1') {
-    throw new Error('dynamic_published_snapshot_format_invalid')
-  }
+  assertDynamicPublishedSnapshotShape(snapshot)
   const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
   for (const row of snapshot.controls) durableState.controls.set(row.invocationRef, row)
   for (const group of snapshot.attempts) {

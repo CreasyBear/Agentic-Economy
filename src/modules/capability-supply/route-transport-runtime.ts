@@ -444,7 +444,7 @@ async function invokeX402(
   } catch (error) {
     return unknown('x402', requestDigest, false, `payment_challenge_${errorName(error)}`)
   }
-  if (first.status !== 402) return await normalizeJsonResponse('x402', first, requestDigest, true)
+  if (first.status !== 402) return await normalizeJsonResponse('x402', first, requestDigest, false)
   const challenge = decodeX402Challenge(first.headers.get('payment-required'))
   if (challenge === undefined) return refused('x402', requestDigest, false, 'payment_challenge_invalid')
   const paymentChallengeDigest = canonicalDigest(challenge as StableHashValue)

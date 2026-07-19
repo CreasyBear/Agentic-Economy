@@ -45,6 +45,29 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
           }),
         ])
     const classification = classifyActionResult(input.action, result)
+    const execution = input.action.classifyInvocationExecution?.(result)
+    if (execution?.release === 'not_released') {
+      return {
+        attempts: replaceAttempt(attempts, {
+          ...attempt,
+          release: { state: 'not_released' },
+          outcome: {
+            state: 'failed',
+            retry: 'safe_before_release',
+            message: execution.message,
+          },
+        }),
+        observedResolution: {
+          state: 'returned',
+          execution: 'pre_release_refused',
+          businessOutcome: execution.outcome,
+          resultReferenceable: execution.referenceable,
+          result,
+        },
+        freshness: { state: 'current', observedAt: input.now() },
+        control: { state: 'retryable', reason: 'pre_release_failure' },
+      }
+    }
     const returnedAttempt = {
       ...attempt,
       release: input.releaseSignal?.wasReleased()

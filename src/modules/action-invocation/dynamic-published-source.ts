@@ -25,11 +25,20 @@ export type DynamicPublishedSourceRow = Readonly<{
 }>
 
 export type DynamicPublishedSourcePort = Readonly<{
-  current(operationId: string): PublishedOperation | undefined
+  current(slot: string): PublishedOperation | undefined
   read(operationKey: string): DynamicPublishedSourceRow | undefined
   write(row: DynamicPublishedSourceRow): void
   list(): readonly DynamicPublishedSourceRow[]
 }>
+
+export function dynamicPublishedOperationSlot(operation: PublishedOperation): string {
+  return [
+    operation.identity.businessId,
+    operation.identity.publicationRef,
+    operation.identity.contractId,
+    operation.identity.contractVersion,
+  ].join('\u0000')
+}
 
 export function createDevelopmentDynamicPublishedSource(
   operations: readonly PublishedOperation[],
@@ -38,14 +47,14 @@ export function createDevelopmentDynamicPublishedSource(
   rows: Map<string, DynamicPublishedSourceRow>
   setCurrent(operation: PublishedOperation): void
 }> {
-  const current = new Map(operations.map((operation) => [operation.operationId, operation]))
+  const current = new Map(operations.map((operation) => [dynamicPublishedOperationSlot(operation), operation]))
   return {
     rows,
     current: (operationId) => current.get(operationId),
     read: (operationKey) => rows.get(operationKey),
     write: (row) => rows.set(row.operationKey, row),
     list: () => [...rows.values()],
-    setCurrent: (operation) => current.set(operation.operationId, operation),
+    setCurrent: (operation) => current.set(dynamicPublishedOperationSlot(operation), operation),
   }
 }
 
