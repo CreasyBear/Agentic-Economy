@@ -1,5 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 
+const { directReadFixture } = vi.hoisted(() => ({
+  directReadFixture: {
+    kind: 'not_found' as const,
+    code: 'business_not_found' as const,
+    reason: 'MOCK/DEVELOPMENT ONLY: no public listing for the development slug.',
+  },
+}))
+
+vi.mock('@/modules/registry/registry.functions', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/modules/registry/registry.functions')>(),
+  readPublicRegistryBusinessDetail: vi.fn().mockResolvedValue(directReadFixture),
+}))
+
 import { listActions } from '@/modules/actions'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
@@ -28,6 +41,10 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { resolveActionContract } from '@/modules/common/action'
 import { registryDetailAction } from '@/modules/registry/registry.actions'
 import {
+  actionToHarnessToolContract,
+  createHarnessToolBoundaryInstrumentation,
+} from '@/modules/harness/tool-contract'
+import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
   createDevelopmentReleaseSignal,
@@ -51,6 +68,8 @@ import {
 } from '@/modules/customer-request/compiler'
 import { aggregateIsInternallyConsistent } from '@/modules/customer-request/v2-write'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
+import { evaluateAdr009Transfer } from '../../eval/support/adr009-transfer-comparison'
+import type { TransferBoundaryEvent } from '../../eval/support/adr009-transfer-comparison'
 
 const nowMs = Date.parse('2026-07-19T08:00:00.000Z')
 const nowIso = () => new Date(nowMs).toISOString()
@@ -287,25 +306,16 @@ function inMemoryTracer(
 
 describe('ADR-009 supplied-candidate development quote collection', () => {
   it('MOCK/DEVELOPMENT ONLY: transfer eval keeps direct reads direct and earns quote control through safety and continuity', async () => {
-    // Preregistered falsifiers:
-    // F1: narrow the seam if the consequential arm adds control burden without
-    //     exact authority before release or attributable effect attempts.
-    // F2: narrow the seam if possible release can be retried without reconciliation.
-    // F3: narrow the seam if a fresh process cannot continue from durable records.
-    // F4: reject universal orchestration if a read-only direct arm gains any
-    //     invocation, authority, attempt, history, or supervisor record.
     const directReadContract = resolveActionContract(registryDetailAction)
-    const directRead = {
-      workflow: 'MOCK/DEVELOPMENT ONLY: inspect a field-service business before contact',
-      controlRecords: 0,
-      attributableEffectAttempts: 0,
-      runnerCalls: 1,
-      effectCalls: 0,
-      authorityDecisions: 0,
-      userOrSupervisorDecisions: 0,
-      requiredContinuations: 0,
-      logicalTransitions: 1,
-    }
+    const directReadEvents: TransferBoundaryEvent[] = []
+    const directReadInstrumentation = createHarnessToolBoundaryInstrumentation(
+      (event) => directReadEvents.push(event),
+    )
+    const directReadResult = await actionToHarnessToolContract(
+      registryDetailAction,
+      directReadInstrumentation,
+    ).execute({ input: { slug: 'development-direct-read' }, context: {} })
+    expect(directReadResult).toEqual(directReadFixture)
     expect(directReadContract).toMatchObject({
       consequenceClass: 'read_only',
       authorityRequirement: 'none',
@@ -341,19 +351,32 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       },
       operationKey: 'dev:transfer:strata-repair:quote:1',
     }
-    const directAdapter = vi.fn().mockResolvedValue({
-      kind: 'quote_returned',
-      environment: 'MOCK/DEVELOPMENT ONLY',
-      quote: {
-        quoteRef: 'dev:transfer:quote:direct',
-        price: { amountMinor: 24_500, currency: 'AUD' },
-        validUntil: nowMs + 3_600_000,
-        terms: ['Development fixture only; no provider commitment or fulfilment.'],
-        evidenceRefs: ['dev:evidence:transfer-contract'],
-      },
+    const directConsequentialEvents: TransferBoundaryEvent[] = []
+    const directAdapter = vi.fn().mockImplementation(async () => {
+      directConsequentialEvents.push({
+        kind: 'effect_call',
+        actionId: collectSuppliedCandidateQuoteAction.id,
+      })
+      return {
+        kind: 'quote_returned' as const,
+        environment: 'MOCK/DEVELOPMENT ONLY' as const,
+        quote: {
+          quoteRef: 'dev:transfer:quote:direct',
+          price: { amountMinor: 24_500, currency: 'AUD' },
+          validUntil: nowMs + 3_600_000,
+          terms: ['Development fixture only; no provider commitment or fulfilment.'],
+          evidenceRefs: ['dev:evidence:transfer-contract'],
+        },
+      }
     })
-    const directResult = await collectSuppliedCandidateQuoteAction.run({
-      data: quoteInput,
+    const directConsequentialInstrumentation = createHarnessToolBoundaryInstrumentation(
+      (event) => directConsequentialEvents.push(event),
+    )
+    const directResult = await actionToHarnessToolContract(
+      collectSuppliedCandidateQuoteAction,
+      directConsequentialInstrumentation,
+    ).execute({
+      input: quoteInput,
       context: {
         developmentOnlySuppliedQuoteAdapter: directAdapter,
         developmentOnlySuppliedQuoteQualificationPorts: ports,
@@ -361,19 +384,6 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       },
     })
     expect(directResult).toMatchObject({ kind: 'quote_returned' })
-    const directConsequential = {
-      workflow: 'MOCK/DEVELOPMENT ONLY: direct registered quote runner',
-      controlRecords: 0,
-      attributableEffectAttempts: 0,
-      runnerCalls: 1,
-      effectCalls: directAdapter.mock.calls.length,
-      authorityDecisions: 0,
-      userOrSupervisorDecisions: 0,
-      requiredContinuations: 0,
-      logicalTransitions: 1,
-      safety: 'not established: no exact authority or attributable attempt',
-      continuity: 'not established: no durable reference',
-    }
 
     const durableState = createDevelopmentDurableState<SuppliedCandidateQuoteResult>()
     const durablePort = createDevelopmentDurablePort(durableState)
@@ -385,8 +395,22 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         quoteRef: 'dev:transfer:quote:controlled',
       },
     }
+    const controlledEvents: TransferBoundaryEvent[] = []
     const controlledAdapter = vi.fn().mockImplementation(async () => {
+      controlledEvents.push({
+        kind: 'direct_runner_started',
+        actionId: collectSuppliedCandidateQuoteAction.id,
+      })
+      controlledEvents.push({
+        kind: 'effect_call',
+        actionId: collectSuppliedCandidateQuoteAction.id,
+      })
       controlledRelease.markReleased()
+      controlledEvents.push({
+        kind: 'direct_runner_returned',
+        actionId: collectSuppliedCandidateQuoteAction.id,
+        outcome: controlledResult.kind,
+      })
       return controlledResult
     })
     const source = {
@@ -438,6 +462,19 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       accept: true,
     })
     if (accepted.kind !== 'accepted') throw new Error(accepted.code)
+    controlledEvents.push({
+      kind: 'approval_policy',
+      policy: 'ask',
+      reason: 'exact invocation authority accepted before release',
+    })
+    controlledEvents.push({
+      kind: 'authority_decision',
+      invocationRef: prepared.view.invocationRef,
+    })
+    controlledEvents.push({
+      kind: 'user_or_supervisor_decision',
+      invocationRef: prepared.view.invocationRef,
+    })
     const completed = await tracer.execute({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: accepted.view.invocationVersion,
@@ -456,7 +493,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
 
     const cold = tracer.coldResume(prepared.view.invocationRef)
-    expect(cold.inspect(prepared.view.invocationRef)).toMatchObject({
+    const coldView = cold.inspect(prepared.view.invocationRef)
+    expect(coldView).toMatchObject({
       persistence: 'durable_control',
       origin,
       observedResolution: { state: 'returned', businessOutcome: 'completed' },
@@ -594,21 +632,55 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       /authority|attempt|control|raw quote|quoteRef|price|terms|evidenceRefs|RoutePlan|Bundle/u,
     )
     expect(coldRequest.plan.actions).toEqual([])
-    const controlled = {
-      workflow: 'MOCK/DEVELOPMENT ONLY: controlled strata-repair quote',
-      controlRecords: durableState.controls.size,
-      attributableEffectAttempts: durableState.attempts.get(prepared.view.invocationRef)?.size ?? 0,
-      runnerCalls: controlledAdapter.mock.calls.length,
-      effectCalls: controlledAdapter.mock.calls.length,
-      authorityDecisions: 1,
-      userOrSupervisorDecisions: 1,
-      requiredContinuations: resolveActionContract(
-        collectSuppliedCandidateQuoteAction,
-      ).safeContinuations.length,
-      logicalTransitions: completed.view.invocationVersion,
-      durableHistoryRecords: durableState.history.get(prepared.view.invocationRef)?.length ?? 0,
-      safety: 'earned: exact authority precedes one attributable release',
-      continuity: 'earned: fresh process reconstructs the terminal result, canonical Request reference, and reference-only next step without another effect',
+    controlledEvents.push({
+      kind: 'action_invocation',
+      invocationRef: prepared.view.invocationRef,
+    })
+    for (const control of durableState.controls.values()) {
+      controlledEvents.push({ kind: 'control', invocationRef: control.invocationRef })
+    }
+    for (const attempt of durableState.attempts.get(prepared.view.invocationRef)?.values() ?? []) {
+      controlledEvents.push({
+        kind: 'attempt',
+        invocationRef: prepared.view.invocationRef,
+        attemptRef: attempt.attemptRef,
+      })
+    }
+    for (const history of durableState.history.get(prepared.view.invocationRef) ?? []) {
+      controlledEvents.push({
+        kind: 'history',
+        invocationRef: prepared.view.invocationRef,
+        commandId: history.commandId,
+      })
+    }
+    const comparison = evaluateAdr009Transfer({
+      events: {
+        direct_read: directReadEvents,
+        direct_consequential: directConsequentialEvents,
+        controlled: controlledEvents,
+      },
+      requiredContinuations: {
+        direct_read: directReadContract.safeContinuations.length,
+        direct_consequential: resolveActionContract(
+          collectSuppliedCandidateQuoteAction,
+        ).safeContinuations.length,
+        controlled: resolveActionContract(
+          collectSuppliedCandidateQuoteAction,
+        ).safeContinuations.length,
+      },
+      controlledReadback: {
+        invocationVersion: coldView?.invocationVersion ?? 0,
+        controlRecords: durableState.controls.size,
+        attributableAttempts: durableState.attempts.get(prepared.view.invocationRef)?.size ?? 0,
+        durableHistoryRecords: durableState.history.get(prepared.view.invocationRef)?.length ?? 0,
+        terminalResultReconstructed:
+          coldView?.observedResolution.state === 'returned'
+          && coldView.observedResolution.businessOutcome === 'completed',
+        exactAuthorityBeforeRelease:
+          accepted.view.control.state === 'authorized'
+          && completed.view.attempts[0]?.release.state === 'released',
+        retryClass: resolveActionContract(collectSuppliedCandidateQuoteAction).retryClass,
+      },
       referenceReuse: {
         completedReferences: coldRequest.completedTaskReferences?.length ?? 0,
         completedNodes: projection.kind === 'projected'
@@ -618,53 +690,43 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
           ? projection.projection.nodes.filter(({ state }) => state === 'current').length
           : 0,
         effectsBeforeReuse: effectCountBeforeReferenceReuse,
-        effectsAfterColdReadbackAndProjection: controlledAdapter.mock.calls.length,
-        copiedLifecycleOrRawResultFields: 0,
-        persistedRoutePlansOrBundles: 0,
+        effectsAfterReuse: controlledAdapter.mock.calls.length,
+        copiedLifecycleOrResultFields: referenceAndProjection.match(
+          /authority|attempt|control|quoteRef|price|terms|evidenceRefs/u,
+        )?.length ?? 0,
+        persistedRoutePlansOrBundles: coldRequest.plan.actions.length,
       },
-    }
+    })
 
-    expect(controlled).toMatchObject({
+    expect(comparison.measurements.controlled).toMatchObject({
       controlRecords: 1,
-      attributableEffectAttempts: 1,
+      attributableAttempts: 1,
       runnerCalls: 1,
       effectCalls: 1,
       authorityDecisions: 1,
       userOrSupervisorDecisions: 1,
-      referenceReuse: {
-        completedReferences: 1,
-        completedNodes: 1,
-        currentNodes: 1,
-        effectsBeforeReuse: 1,
-        effectsAfterColdReadbackAndProjection: 1,
-        copiedLifecycleOrRawResultFields: 0,
-        persistedRoutePlansOrBundles: 0,
-      },
     })
-    expect(controlled.logicalTransitions).toBeGreaterThan(directConsequential.logicalTransitions)
-    expect(controlled.requiredContinuations).toBeGreaterThan(0)
-    expect(directRead).toMatchObject({
+    expect(comparison.measurements.referenceReuse).toEqual({
+      completedReferences: 1,
+      completedNodes: 1,
+      currentNodes: 1,
+      effectsBeforeReuse: 1,
+      effectsAfterReuse: 1,
+      copiedLifecycleOrResultFields: 0,
+      persistedRoutePlansOrBundles: 0,
+    })
+    expect(comparison.measurements.controlled.logicalTransitions)
+      .toBeGreaterThan(comparison.measurements.directConsequential.logicalTransitions)
+    expect(comparison.measurements.controlled.requiredContinuations).toBeGreaterThan(0)
+    expect(comparison.measurements.directRead).toMatchObject({
       controlRecords: 0,
-      attributableEffectAttempts: 0,
-      authorityDecisions: 0,
+      attributableAttempts: 0,
       userOrSupervisorDecisions: 0,
     })
-
-    console.info(JSON.stringify({
-      environment: 'MOCK/DEVELOPMENT ONLY',
-      latencyMeasure: 'deterministic logical transitions; wall-clock/provider latency unproven',
-      fixtureOutcome: 'structured development quote returned; no provider commitment or fulfilment',
-      directRead,
-      directConsequential,
-      controlled,
-      falsifiers: {
-        F1: 'does_not_hold: exact authority and attributable release earn the added control',
-        F2: 'does_not_hold: action contract requires reconcile_before_retry',
-        F3: 'does_not_hold: cold resume reconstructed durable terminal control',
-        F4: 'does_not_hold: read-only registry detail remains direct with zero control burden',
-      },
-      recommendation: 'retain Action Invocation for consequential quote release; bypass it for read-only direct work',
-    }, null, 2))
+    expect(comparison.failedFalsifiers).toEqual([])
+    expect(comparison.recommendation)
+      .toBe('retain_control_for_consequential_and_bypass_read_only')
+    console.info(JSON.stringify(comparison, null, 2))
   })
 
   it('keeps exact authority isolated across two independently qualified quote invocations', async () => {
