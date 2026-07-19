@@ -1,7 +1,7 @@
 # External Integrations
 
-**Analysis Date:** 2026-07-18  
-**last_mapped_commit:** `9d8faa04`
+**Analysis Date:** 2026-07-19
+**last_mapped_commit:** `77ec35ac`
 
 ## APIs & External Services
 
@@ -66,7 +66,7 @@
 - Hosted sandbox route resolver/quoter — Convex HTTP (`convex/http.ts`) and TanStack routes under `src/routes/api.sandbox.*`; seeded via Convex (`sandboxAcceptanceSupply` in release workflow).
 - Examples: `examples/routing-provider` (Vercel Node 22), `examples/routing-edge` / `routing-agent-directory` (Cloudflare Workers), `examples/routing-agent-bridge`, `examples/agent-experience`.
 
-**In-process ports (not external SaaS — Waves 38–42):**
+**In-process ports (not external SaaS):**
 - Customer Request V2 write and route-execution port families deepen Convex-backed domain logic behind ports (`src/modules/customer-request/v2-write/`, `src/modules/customer-request/route-execution/`, adapters under `convex/customerRequest*Ports.ts`). They call Convex tables/functions and capability-supply graph code — they do **not** introduce OpenRouter, payment, or notification clients of their own.
 
 ## Data Storage
@@ -180,4 +180,4 @@
 
 ---
 
-*Integration audit: 2026-07-18 (commit 9d8faa04)*
+*Integration audit: 2026-07-19 (commit 77ec35ac)*
