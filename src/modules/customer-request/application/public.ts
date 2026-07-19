@@ -13,9 +13,13 @@ export type {
 
 export {
   attachCompletedTaskReference,
+  persistCompletedTaskReference,
   type AttachCompletedTaskReferenceInput,
   type AttachCompletedTaskReferencePorts,
   type AttachCompletedTaskReferenceResult,
+  type PersistCompletedTaskReferenceInput,
+  type PersistCompletedTaskReferencePorts,
+  type PersistCompletedTaskReferenceResult,
 } from './completed-task-reference'
 
 export {

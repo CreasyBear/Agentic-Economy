@@ -8,13 +8,19 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ActionResult } from '@/modules/common/action'
 import {
   attachCompletedTaskReference,
+  persistCompletedTaskReference,
   type AttachCompletedTaskReferencePorts,
+  type PersistCompletedTaskReferencePorts,
 } from '@/modules/customer-request/application/public'
 import {
   compileCustomerRequest,
   type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
-import { aggregateIsInternallyConsistent } from '@/modules/customer-request/v2-write'
+import {
+  aggregateIsInternallyConsistent,
+  commitAggregate,
+  type CustomerRequestV2WritePorts,
+} from '@/modules/customer-request/v2-write'
 
 const NOW = 1_753_000_000_000
 const result: ActionResult = { kind: 'inquiry_queued', inquiryRef: 'mock:inquiry:completed' }
@@ -197,5 +203,153 @@ describe('completed standalone result reference in Customer Request V2', () => {
     expect(reconstructed).toEqual(historical)
     expect(reconstructed.completedTaskReferences).toBeUndefined()
     expect(aggregateIsInternallyConsistent(reconstructed, 0)).toBe(true)
+  })
+
+  it('commits one canonical revision, supersedes prior route authority, and cold-replays without another effect', async () => {
+    const initial = aggregate()
+    const revisions = new Map([[1, initial]])
+    const commands = new Map<string, {
+      commandDigest: string
+      aggregateDigest: string
+      requestId: string
+      expectedRouteGeneration: number
+      resultingRevision: number
+      resultingRouteGenerationRef?: string
+    }>()
+    let head = {
+      id: 'head:development:one',
+      requestId: initial.snapshot.requestId,
+      principalId: initial.snapshot.principalId,
+      delegatedAgentId: initial.snapshot.delegatedAgentId,
+      currentRevision: 1,
+      currentAggregateDigest: initial.aggregateDigest,
+    }
+    let superseded = 0
+    const writePorts = {
+      loadCommitCommand: async (key: string) => commands.get(key) ?? null,
+      verifyCommitCommandReplay: async (command: { resultingRevision: number }) => ({
+        kind: 'current' as const,
+        aggregate: revisions.get(command.resultingRevision)!,
+      }),
+      validateAggregateAgainstCurrentCapabilityGraph: async () => 'current' as const,
+      loadRequestHead: async () => head,
+      loadRoutePlanHead: async () => null,
+      loadRevision: async (_requestId: string, revision: number) => {
+        const stored = revisions.get(revision)
+        return stored === undefined ? null : {
+          requestId: initial.snapshot.requestId,
+          requestRevision: revision,
+          aggregate: stored,
+        }
+      },
+      loadGenerationByNumber: async () => null,
+      supersedeCurrentRouteMandate: async () => { superseded += 1 },
+      insertRevision: async (stored: { requestRevision: number; aggregate: CustomerRequestV2Aggregate }) => {
+        revisions.set(stored.requestRevision, structuredClone(stored.aggregate))
+      },
+      patchRequestHead: async (patch: {
+        currentRevision: number
+        currentAggregateDigest: string
+      }) => {
+        head = { ...head, ...patch }
+      },
+      insertCommitCommand: async (command: {
+        commandKey: string
+        commandDigest: string
+        aggregateDigest: string
+        requestId: string
+        expectedRouteGeneration: number
+        resultingRevision: number
+        resultingRouteGenerationRef?: string
+      }) => {
+        commands.set(command.commandKey, command)
+      },
+      loadExactRoutePlanGeneration: async () => ({ kind: 'not_found' as const }),
+      insertRoutePlanGeneration: async () => {},
+      insertRoutePlanHead: async () => {},
+      patchRoutePlanHead: async () => {},
+      insertRequestHead: async () => {},
+      loadGenerationCommand: async () => null,
+      readGenerationRefreshCommandResult: async () => ({ kind: 'request_conflict' as const }),
+      insertGenerationCommand: async () => {},
+    } as unknown as CustomerRequestV2WritePorts
+    const identityPorts = ports()
+    const applicationPorts: PersistCompletedTaskReferencePorts = {
+      ...identityPorts,
+      replayCommittedAttachment: async ({ commandKey, commandDigest }) => {
+        const command = commands.get(commandKey)
+        if (command === undefined) return { kind: 'not_found' }
+        if (command.commandDigest !== commandDigest) return { kind: 'conflict' }
+        return { kind: 'found', aggregate: revisions.get(command.resultingRevision)! }
+      },
+      loadCurrent: async () => ({
+        kind: 'current',
+        aggregate: revisions.get(head.currentRevision)!,
+        routeGenerationNumber: 0,
+      }),
+      loadRequestGraph: async () => ({
+        kind: 'available',
+        models: [],
+        descriptors: [],
+        bindings: [],
+        registrySnapshotDigest: initial.evaluation.registrySnapshotDigest,
+      }),
+      commitAggregate: async (candidate) => commitAggregate(candidate, writePorts),
+      loadPersistedRevision: async ({ revision }) => revisions.get(revision) ?? null,
+    }
+    const command = {
+      requestRef: initial.snapshot.requestId,
+      expectedRevision: 1,
+      expectedRouteGeneration: 0,
+      principalRef: initial.snapshot.principalId,
+      callerRef: 'agent:development:one',
+      invocationRef: 'invocation:development:one',
+      commandKey: 'attach:development:one',
+      commandDigest: 'sha256:attach-development-one',
+      referencedAt: NOW + 2,
+    }
+    const stored = await persistCompletedTaskReference(command, applicationPorts)
+    expect(stored).toMatchObject({
+      kind: 'stored',
+      revision: 2,
+      noEffect: true,
+      matchingEffect: 'provenance_only',
+      aggregate: {
+        snapshot: { revision: 2 },
+        plan: { actions: [] },
+        completedTaskReferences: [{ invocationRef: command.invocationRef }],
+      },
+    })
+    expect(head.currentRevision).toBe(2)
+    expect(revisions.size).toBe(2)
+    expect(superseded).toBe(1)
+    expect(stored.kind === 'stored' && stored.routeGeneration).toBeUndefined()
+    expect(stored.kind === 'stored' && stored.aggregate.outcome).toBe('unsupported')
+    expect(stored.kind === 'stored' && stored.aggregate.snapshot.facts).toEqual([])
+
+    const replayed = await persistCompletedTaskReference(command, applicationPorts)
+    expect(replayed).toMatchObject({ kind: 'replayed', revision: 2, noEffect: true })
+    expect(revisions.size).toBe(2)
+    expect(superseded).toBe(1)
+    const cold = structuredClone(revisions.get(2)!)
+    expect(cold.completedTaskReferences).toHaveLength(1)
+    expect(aggregateIsInternallyConsistent(cold, 1)).toBe(true)
+
+    await expect(persistCompletedTaskReference({
+      ...command,
+      commandDigest: 'sha256:conflicting-command',
+    }, applicationPorts)).resolves.toEqual({
+      kind: 'conflict',
+      reason: 'idempotency_key_reused',
+    })
+    await expect(persistCompletedTaskReference({
+      ...command,
+      commandKey: 'attach:stale',
+      commandDigest: 'sha256:stale',
+      expectedRevision: 1,
+    }, applicationPorts)).resolves.toEqual({
+      kind: 'conflict',
+      reason: 'revision_changed',
+    })
   })
 })
