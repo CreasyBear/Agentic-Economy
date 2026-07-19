@@ -506,10 +506,6 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       requestRef: coldRequest.snapshot.requestId,
       revision: coldRequest.snapshot.revision,
       aggregate: coldRequest,
-      registeredActions: listActions().map((action) => ({
-        actionId: action.id,
-        actionVersion: resolveActionContract(action).version,
-      })),
       nodes: [
         {
           nodeRef: 'dev:transfer:node:completed-quote',
@@ -520,10 +516,9 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
           inspection: {
             kind: 'completed_task',
             referenceRef: attached.reference.referenceRef,
+            invocationRef: attached.reference.invocationRef,
+            sourceResultRef: attached.reference.sourceResultRef,
           },
-          nextOwner: 'customer',
-          continuation: 'Inspect the completed development quote.',
-          outcome: 'A development quote result is available to inspect.',
         },
         {
           nodeRef: 'dev:transfer:node:next-review',
@@ -534,12 +529,49 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
           inspection: {
             kind: 'invocation',
             invocationRef: 'dev:transfer:direct-review',
+            invocationVersion: 1,
+            sourceRef: 'dev:transfer:source:direct-review',
           },
-          nextOwner: 'customer',
-          continuation: 'Review the business information before deciding what to do next.',
-          outcome: 'The next direct review is ready.',
         },
       ],
+    }, {
+      resolveRegisteredAction: (actionId) => {
+        const action = listActions().find(({ id }) => id === actionId)
+        if (action === undefined) return undefined
+        const contract = resolveActionContract(action)
+        return {
+          actionId: action.id,
+          actionVersion: contract.version,
+          name: action.name,
+          summary: action.summary,
+          boundaries: action.boundaries,
+          safeContinuations: contract.safeContinuations,
+        }
+      },
+      resolveCompletedResult: (referenceRef) =>
+        referenceRef === attached.reference.referenceRef ? attached.reference : undefined,
+      resolveInvocation: (invocationRef) => invocationRef === 'dev:transfer:direct-review'
+        ? {
+            sourceRef: 'dev:transfer:source:direct-review',
+            view: {
+              invocationRef,
+              invocationVersion: 1,
+              environment: 'MOCK/DEVELOPMENT ONLY',
+              persistence: 'durable_control',
+              origin,
+              owner: actor,
+              action: {
+                id: registryDetailAction.id,
+                contractVersion: resolveActionContract(registryDetailAction).version,
+              },
+              desired: { state: 'invoke' },
+              attempts: [],
+              observedResolution: { state: 'pending' },
+              freshness: { state: 'current', observedAt: nowIso() },
+              control: { state: 'authorized', decidedAt: nowIso() },
+            },
+          }
+        : undefined,
     })
     expect(projection).toMatchObject({
       kind: 'projected',

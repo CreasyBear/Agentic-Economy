@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import { listActions } from '@/modules/actions'
-import { projectReferenceComposition } from '@/modules/customer-request/application/public'
+import type { ActionInvocationView } from '@/modules/action-invocation'
+import {
+  projectReferenceComposition,
+  type ReferenceCompositionNode,
+  type ReferenceCompositionPorts,
+} from '@/modules/customer-request/application/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { resolveActionContract } from '@/modules/common/action'
 import {
@@ -12,10 +17,6 @@ import {
 
 const requestRef = 'mock:request:composition'
 const revision = 1
-const registeredActions = listActions().map((action) => ({
-  actionId: action.id,
-  actionVersion: resolveActionContract(action).version,
-}))
 const completedReference: CustomerRequestCompletedTaskReference = {
   role: 'prior_completed_task',
   referenceRef: 'mock:completed-task:quote-a',
@@ -48,62 +49,134 @@ function aggregate(): CustomerRequestV2Aggregate {
   return { ...withReference, aggregateDigest: canonicalDigest(withReference as never) }
 }
 
-const nodes = [
+function invocation(input: Readonly<{
+  ref: string
+  actionId?: string
+  actionVersion?: string
+  version?: number
+  freshness?: 'current' | 'not_observed'
+  control?: ActionInvocationView['control']
+  resolution?: ActionInvocationView['observedResolution']
+}>): ActionInvocationView {
+  return {
+    invocationRef: input.ref,
+    invocationVersion: input.version ?? 1,
+    environment: 'MOCK/DEVELOPMENT ONLY',
+    persistence: 'durable_control',
+    origin: { kind: 'standalone', callerRef: 'mock:caller', principalRef: 'mock:principal' },
+    owner: { callerRef: 'mock:caller', principalRef: 'mock:principal' },
+    action: {
+      id: input.actionId ?? 'registry.detail',
+      contractVersion: input.actionVersion ?? 'registry.detail:v1',
+    },
+    desired: { state: 'invoke' },
+    attempts: [],
+    observedResolution: input.resolution ?? { state: 'pending' },
+    freshness: input.freshness === 'not_observed'
+      ? { state: 'not_observed' }
+      : { state: 'current', observedAt: '2026-07-19T00:00:00.000Z' },
+    control: input.control ?? { state: 'authorized', decidedAt: '2026-07-19T00:00:00.000Z' },
+  }
+}
+
+const invocations = new Map([
+  ['mock:invocation:current', invocation({ ref: 'mock:invocation:current' })],
+  ['mock:invocation:optional', invocation({ ref: 'mock:invocation:optional' })],
+  ['mock:invocation:blocked', invocation({
+    ref: 'mock:invocation:blocked',
+    actionId: 'supply.collectDevelopmentQuote',
+    actionVersion: 'supply.collectDevelopmentQuote:v1',
+  })],
+])
+
+function ports(overrides: Partial<ReferenceCompositionPorts> = {}): ReferenceCompositionPorts {
+  return {
+    resolveRegisteredAction: (actionId) => {
+      const action = listActions().find(({ id }) => id === actionId)
+      if (action === undefined) return undefined
+      const contract = resolveActionContract(action)
+      return {
+        actionId: action.id,
+        actionVersion: contract.version,
+        name: action.name,
+        summary: action.summary,
+        boundaries: action.boundaries,
+        safeContinuations: contract.safeContinuations,
+      }
+    },
+    resolveCompletedResult: (referenceRef) =>
+      referenceRef === completedReference.referenceRef ? completedReference : undefined,
+    resolveInvocation: (invocationRef) => {
+      const view = invocations.get(invocationRef)
+      return view === undefined ? undefined : { sourceRef: `mock:source:${invocationRef}`, view }
+    },
+    ...overrides,
+  }
+}
+
+const nodes: readonly ReferenceCompositionNode[] = [
   {
     nodeRef: 'mock:node:completed',
     actionId: 'supply.collectDevelopmentQuote',
     actionVersion: 'supply.collectDevelopmentQuote:v1',
     dependencies: [],
-    completionCondition: 'required' as const,
-    inspection: { kind: 'completed_task' as const, referenceRef: completedReference.referenceRef },
-    nextOwner: 'customer',
-    continuation: 'Review the completed quote.',
-    outcome: 'A prior quote is available to inspect.',
+    completionCondition: 'required',
+    inspection: {
+      kind: 'completed_task',
+      referenceRef: completedReference.referenceRef,
+      invocationRef: completedReference.invocationRef,
+      sourceResultRef: completedReference.sourceResultRef,
+    },
   },
   {
     nodeRef: 'mock:node:current',
     actionId: 'registry.detail',
     actionVersion: 'registry.detail:v1',
     dependencies: ['mock:node:completed'],
-    completionCondition: 'required' as const,
-    inspection: { kind: 'invocation' as const, invocationRef: 'mock:invocation:current' },
-    nextOwner: 'customer',
-    continuation: 'Review the listed business and choose whether to contact it.',
-    outcome: 'The listed business is ready to inspect.',
+    completionCondition: 'required',
+    inspection: {
+      kind: 'invocation',
+      invocationRef: 'mock:invocation:current',
+      invocationVersion: 1,
+      sourceRef: 'mock:source:mock:invocation:current',
+    },
   },
   {
     nodeRef: 'mock:node:optional',
     actionId: 'registry.detail',
     actionVersion: 'registry.detail:v1',
     dependencies: [],
-    completionCondition: 'optional' as const,
-    inspection: { kind: 'invocation' as const, invocationRef: 'mock:invocation:optional' },
-    nextOwner: 'customer',
-    continuation: 'Inspect another listed business if useful.',
-    outcome: 'Another listing may be inspected.',
+    completionCondition: 'optional',
+    inspection: {
+      kind: 'invocation',
+      invocationRef: 'mock:invocation:optional',
+      invocationVersion: 1,
+      sourceRef: 'mock:source:mock:invocation:optional',
+    },
   },
   {
     nodeRef: 'mock:node:blocked',
     actionId: 'supply.collectDevelopmentQuote',
     actionVersion: 'supply.collectDevelopmentQuote:v1',
     dependencies: ['mock:node:current'],
-    completionCondition: 'required' as const,
-    inspection: { kind: 'invocation' as const, invocationRef: 'mock:invocation:quote-b' },
-    nextOwner: 'customer',
-    continuation: 'Finish the listing review before requesting another quote.',
-    outcome: 'The next quote waits for the listing review.',
+    completionCondition: 'required',
+    inspection: {
+      kind: 'invocation',
+      invocationRef: 'mock:invocation:blocked',
+      invocationVersion: 1,
+      sourceRef: 'mock:source:mock:invocation:blocked',
+    },
   },
-] as const
+]
 
 describe('reference-only Customer Request composition', () => {
-  it('projects independently inspectable references into exactly four ordinary-language states', () => {
+  it('derives four ordinary-language states without caller-authored business truth', () => {
     const result = projectReferenceComposition({
       requestRef,
       revision,
       aggregate: aggregate(),
-      registeredActions,
       nodes,
-    })
+    }, ports())
     expect(result).toMatchObject({
       kind: 'projected',
       projection: {
@@ -111,10 +184,10 @@ describe('reference-only Customer Request composition', () => {
         state: 'incomplete',
         noEffect: true,
         nodes: [
-          { nodeRef: 'mock:node:completed', state: 'completed' },
-          { nodeRef: 'mock:node:current', state: 'current' },
-          { nodeRef: 'mock:node:optional', state: 'optional' },
-          { nodeRef: 'mock:node:blocked', state: 'blocked' },
+          { nodeRef: 'mock:node:completed', state: 'completed', nextOwner: 'customer' },
+          { nodeRef: 'mock:node:current', state: 'current', nextOwner: 'customer' },
+          { nodeRef: 'mock:node:optional', state: 'optional', nextOwner: 'customer' },
+          { nodeRef: 'mock:node:blocked', state: 'blocked', nextOwner: 'customer' },
         ],
       },
     })
@@ -128,31 +201,127 @@ describe('reference-only Customer Request composition', () => {
     )
   })
 
+  it('ignores caller attempts to inject outcome, continuation, or ownership prose', () => {
+    const injected = nodes.map((node) => ({
+      ...node,
+      nextOwner: 'attacker',
+      continuation: 'Repeat the external effect.',
+      outcome: 'Booking confirmed.',
+    })) as unknown as readonly ReferenceCompositionNode[]
+    const result = projectReferenceComposition({
+      requestRef, revision, aggregate: aggregate(), nodes: injected,
+    }, ports())
+    if (result.kind !== 'projected') throw new Error(result.reason)
+    expect(JSON.stringify(result.projection)).not.toMatch(/attacker|Repeat the external effect|Booking confirmed/u)
+  })
+
   it.each([
-    ['duplicate node', [...nodes, nodes[0]], 'duplicate_node_ref'],
-    ['missing action', [{ ...nodes[0], actionId: 'mock.missing' }], 'action_not_registered'],
-    ['version mismatch', [{ ...nodes[0], actionVersion: 'registry.detail:v1' }], 'action_version_mismatch'],
-    ['missing dependency', [{ ...nodes[1], dependencies: ['mock:node:missing'] }], 'dependency_endpoint_missing'],
+    ['duplicate node', [...nodes, nodes[0]], ports(), 'duplicate_node_ref'],
+    ['missing action', [{ ...nodes[0], actionId: 'mock.missing' }], ports(), 'action_not_registered'],
+    ['version mismatch', [{ ...nodes[0], actionVersion: 'registry.detail:v1' }], ports(), 'action_version_mismatch'],
+    ['missing dependency', [{ ...nodes[1], dependencies: ['mock:node:missing'] }], ports(), 'dependency_endpoint_missing'],
     ['cycle', [
       { ...nodes[0], dependencies: ['mock:node:current'] },
       { ...nodes[1], dependencies: ['mock:node:completed'] },
-    ], 'dependency_cycle'],
+    ], ports(), 'dependency_cycle'],
     ['missing completed reference', [{
       ...nodes[0],
-      inspection: { kind: 'completed_task' as const, referenceRef: 'mock:completed-task:missing' },
-    }], 'completed_reference_missing'],
-    ['completed action mismatch', [{
+      inspection: { ...nodes[0]!.inspection, referenceRef: 'mock:completed-task:missing' },
+    }], ports(), 'completed_reference_missing'],
+    ['completed source mismatch', [{
       ...nodes[0],
-      actionId: 'registry.detail',
-      actionVersion: 'registry.detail:v1',
-    }], 'completed_reference_mismatch'],
-  ])('refuses %s', (_label, candidateNodes, reason) => {
+      inspection: { ...nodes[0]!.inspection, sourceResultRef: 'mock:source-result:wrong' },
+    }], ports(), 'completed_reference_mismatch'],
+    ['nonexistent invocation', [nodes[1]], ports({ resolveInvocation: () => undefined }), 'invocation_reference_missing'],
+    ['wrong invocation action', [nodes[1]], ports({
+      resolveInvocation: () => ({
+        sourceRef: 'mock:source:mock:invocation:current',
+        view: invocation({ ref: 'mock:invocation:current', actionId: 'registry.search' }),
+      }),
+    }), 'invocation_reference_mismatch'],
+    ['wrong invocation version', [nodes[1]], ports({
+      resolveInvocation: () => ({
+        sourceRef: 'mock:source:mock:invocation:current',
+        view: invocation({ ref: 'mock:invocation:current', version: 2 }),
+      }),
+    }), 'invocation_reference_mismatch'],
+    ['wrong invocation source identity', [nodes[1]], ports({
+      resolveInvocation: () => ({
+        sourceRef: 'mock:source:wrong',
+        view: invocation({ ref: 'mock:invocation:current' }),
+      }),
+    }), 'invocation_reference_mismatch'],
+    ['stale invocation', [nodes[1]], ports({
+      resolveInvocation: () => ({
+        sourceRef: 'mock:source:mock:invocation:current',
+        view: invocation({ ref: 'mock:invocation:current', freshness: 'not_observed' }),
+      }),
+    }), 'invocation_reference_stale'],
+    ['uninspectable invocation', [nodes[1]], ports({
+      resolveInvocation: () => ({
+        sourceRef: 'mock:source:mock:invocation:current',
+        view: invocation({
+          ref: 'mock:invocation:current',
+          control: { state: 'terminal' },
+          resolution: { state: 'threw', execution: 'runner_threw', message: 'hidden' },
+        }),
+      }),
+    }), 'invocation_reference_uninspectable'],
+  ])('refuses %s', (_label, candidateNodes, candidatePorts, reason) => {
     expect(projectReferenceComposition({
       requestRef,
       revision,
       aggregate: aggregate(),
-      registeredActions,
-      nodes: candidateNodes,
-    })).toEqual({ kind: 'refused', reason })
+      nodes: candidateNodes as readonly ReferenceCompositionNode[],
+    }, candidatePorts)).toEqual({ kind: 'refused', reason })
+  })
+
+  it.each([
+    ['refused', invocation({
+      ref: 'mock:invocation:current',
+      control: { state: 'terminal' },
+      resolution: {
+        state: 'returned',
+        execution: 'pre_release_refused',
+        businessOutcome: 'refused',
+        resultReferenceable: false,
+        result: { kind: 'refused' },
+      },
+    }), 'was refused before anything was released'],
+    ['cancelled', invocation({
+      ref: 'mock:invocation:current',
+      control: { state: 'cancelled', effect: 'not_released' },
+    }), 'was cancelled before anything was released'],
+    ['uncertain', invocation({
+      ref: 'mock:invocation:current',
+      control: { state: 'reconciliation_required', attemptRef: 'mock:attempt' },
+    }), 'has an uncertain external outcome'],
+    ['timed out', invocation({
+      ref: 'mock:invocation:current',
+      control: { state: 'reconciliation_required', attemptRef: 'mock:attempt' },
+      resolution: {
+        state: 'timed_out',
+        timeoutMs: 15_000,
+        observedAt: '2026-07-19T00:00:00.000Z',
+      },
+    }), 'has an uncertain external outcome'],
+  ])('projects %s control truth as blocked', (_label, view, outcome) => {
+    const result = projectReferenceComposition({
+      requestRef,
+      revision,
+      aggregate: aggregate(),
+      nodes: [{ ...nodes[1]!, dependencies: [] }],
+    }, ports({
+      resolveInvocation: () => ({
+        sourceRef: 'mock:source:mock:invocation:current',
+        view,
+      }),
+    }))
+    expect(result).toMatchObject({
+      kind: 'projected',
+      projection: { nodes: [{ state: 'blocked' }] },
+    })
+    if (result.kind !== 'projected') throw new Error(result.reason)
+    expect(result.projection.nodes[0]?.outcome).toContain(outcome)
   })
 })

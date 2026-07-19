@@ -47,20 +47,21 @@ vi.mock('@/modules/registry/public-inquiry-projection', () => ({
 
 import { findAction } from '@/modules/actions'
 import {
-  createDevelopmentDurableState,
-  type ActionInvocationView,
-} from '@/modules/action-invocation'
-import type { ActionResult } from '@/modules/common/action'
+  actionToHarnessToolContract,
+  type HarnessToolBoundaryEvent,
+} from '@/modules/harness/tool-contract'
 
 describe('ADR-009 direct-path negative control', () => {
-  it('hands a public first-contact continuation directly to the customer with zero control or approval records', async () => {
-    const control = createDevelopmentDurableState<ActionResult>()
-    let approvalCount = 0
+  it('instruments the selected direct first-contact/read path; Founder must supersede stale direct-booking wording', async () => {
     const action = findAction('registry.detail')
     if (action === undefined) throw new Error('registry.detail is not registered')
+    const emissions: HarnessToolBoundaryEvent[] = []
+    const contract = actionToHarnessToolContract(action, {
+      record: (event) => emissions.push(event),
+    })
 
-    const result = await action.run({
-      data: { slug: detailFixture.business.slug },
+    const result = await contract.execute({
+      input: { slug: detailFixture.business.slug },
       context: {},
     })
     const found = result as typeof detailFixture
@@ -77,27 +78,24 @@ describe('ADR-009 direct-path negative control', () => {
         }],
       },
     })
-    const persistedControlCount = control.controls.size
-    const persistedAttemptCount = [...control.attempts.values()]
-      .reduce((count, attempts) => count + attempts.size, 0)
-    const persistedHistoryCount = [...control.history.values()]
-      .reduce((count, history) => count + history.length, 0)
-    const invocations: readonly ActionInvocationView<ActionResult>[] = []
-    expect({
-      persistedControlCount,
-      persistedAttemptCount,
-      persistedHistoryCount,
-      approvalCount,
-      invocations,
-    }).toEqual({
-      persistedControlCount: 0,
-      persistedAttemptCount: 0,
-      persistedHistoryCount: 0,
-      approvalCount: 0,
-      invocations: [],
-    })
+    expect(emissions).toEqual([
+      { kind: 'approval_policy', policy: 'allow', reason: 'owner_read_requires_auth' },
+      { kind: 'direct_runner_started', actionId: 'registry.detail' },
+      { kind: 'direct_runner_returned', actionId: 'registry.detail', outcome: 'found' },
+      {
+        kind: 'direct_control_snapshot',
+        actionInvocationEmissions: 0,
+        controlEmissions: 0,
+        attemptEmissions: 0,
+        historyEmissions: 0,
+        approvalPolicyEmissions: 1,
+      },
+    ])
     expect(action.readOnly).toBe(true)
     expect(action.invocationContract?.authorityRequirement).toBe('none')
-    approvalCount += 0
+    expect(contract.policy).toMatchObject({
+      tier: 'read',
+      approval: { policy: 'allow' },
+    })
   })
 })

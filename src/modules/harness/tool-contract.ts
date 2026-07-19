@@ -93,6 +93,23 @@ export type HarnessToolContract<Input = unknown, Output = unknown> = {
   projection: HarnessToolProjection<Output>
 }
 
+export type HarnessToolBoundaryEvent =
+  | Readonly<{ kind: 'approval_policy'; policy: HarnessApprovalPolicy; reason: string }>
+  | Readonly<{ kind: 'direct_runner_started'; actionId: string }>
+  | Readonly<{ kind: 'direct_runner_returned'; actionId: string; outcome: string }>
+  | Readonly<{
+      kind: 'direct_control_snapshot'
+      actionInvocationEmissions: 0
+      controlEmissions: 0
+      attemptEmissions: 0
+      historyEmissions: 0
+      approvalPolicyEmissions: 1
+    }>
+
+export type HarnessToolBoundaryInstrumentation = Readonly<{
+  record(event: HarnessToolBoundaryEvent): void
+}>
+
 export type HarnessAnswerModelToolDescriptor = {
   type: 'function'
   function: {
@@ -127,7 +144,10 @@ export type HarnessToolEvalFixture = {
   providerViolations: readonly string[]
 }
 
-export function actionToHarnessToolContract(action: AnyAction): HarnessToolContract<unknown, unknown> {
+export function actionToHarnessToolContract(
+  action: AnyAction,
+  instrumentation?: HarnessToolBoundaryInstrumentation,
+): HarnessToolContract<unknown, unknown> {
   const schemas = buildHarnessToolSchemaBundle({
     id: action.id,
     inputSchema: action.schema,
@@ -135,6 +155,30 @@ export function actionToHarnessToolContract(action: AnyAction): HarnessToolContr
   })
   const exposure = exposureForAction(action)
   const policy = policyForAction(action, exposure)
+
+  const execute: HarnessToolContract<unknown, unknown>['execute'] = async ({ input, context }) => {
+    instrumentation?.record({
+      kind: 'approval_policy',
+      policy: policy.approval.policy,
+      reason: policy.approval.reason,
+    })
+    instrumentation?.record({ kind: 'direct_runner_started', actionId: action.id })
+    const result = await action.run({ data: input, context })
+    instrumentation?.record({
+      kind: 'direct_runner_returned',
+      actionId: action.id,
+      outcome: result.kind,
+    })
+    instrumentation?.record({
+      kind: 'direct_control_snapshot',
+      actionInvocationEmissions: 0,
+      controlEmissions: 0,
+      attemptEmissions: 0,
+      historyEmissions: 0,
+      approvalPolicyEmissions: 1,
+    })
+    return result
+  }
 
   return {
     id: action.id,
@@ -145,7 +189,7 @@ export function actionToHarnessToolContract(action: AnyAction): HarnessToolContr
     exposure,
     policy,
     schemas,
-    execute: async ({ input, context }) => action.run({ data: input, context }),
+    execute,
     projection: {
       publicProjection: exposure.publicProjection,
       summarizeOutput: summarizeActionOutput,

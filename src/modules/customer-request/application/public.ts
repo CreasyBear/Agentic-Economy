@@ -36,9 +36,11 @@ export {
   projectReferenceComposition,
   type ReferenceCompositionNode,
   type ReferenceCompositionProjection,
+  type ReferenceCompositionPorts,
   type ReferenceCompositionResult,
   type ReferenceCompositionState,
-  type RegisteredActionIdentity,
+  type RegisteredActionDescriptor,
+  type ResolvedInvocationReference,
 } from './reference-composition'
 
 export {
