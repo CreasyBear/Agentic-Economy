@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `0dc146e8`
+**Current accepted revision:** `9dd406be`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -64,7 +64,7 @@ parallel plan.
 | 10. Earned persistence | Implemented and re-audited in labelled development execution; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d`, `d7ee9fe1` |
 | 11. Request reuse | Implemented and re-audited in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0`, `249a247f` |
 | 12. Composition and direct control | Implemented in labelled local/development execution | `0dc146e8` |
-| 13. Transfer | Not implemented | — |
+| 13. Transfer | Implemented in labelled local/development execution | `edc82390`, `9dd406be` |
 
 Phase 2 may not start until slices 1–13, all eleven ADR-009 gates, and the
 Founder ADR-009 decision are complete. Existing reconstruction or projection
@@ -725,8 +725,62 @@ Not established:
 
 - persisted composition, a RoutePlan, public route choice, provider routing,
   direct booking, deployment, hosted readback, external fulfilment, or customer
-  value;
-- a contrasting transfer workflow, which remains canonical slice 13.
+  value.
+
+### Canonical slice 13 — transfer
+
+**Accepted commits:** `edc82390`, `9dd406be`
+**Child commits:** `a6a6a68b79375a387e8af584eff17dde7f0689d6`,
+`070c7d28edb4b105557a21e7604b5aad1efe8b8a`
+**Child task:** `019f7a11-9bfb-7af2-be94-807a7c665301`
+**Assigned base:** `c19f8e96`
+**Evidence class:** deterministic labelled local/development transfer fixture;
+no network, provider, Convex, or production execution
+
+Decision:
+
+- retain Action Invocation for consequential quote release because exact
+  authority, attributable release, reconcile-before-retry, durable cold
+  continuation, and no-effect result reuse earn the added control;
+- bypass Action Invocation for read-only/direct work. The seam is not a
+  universal orchestration layer.
+
+Measured contrast:
+
+| Measure | Direct read | Direct consequential | Action Invocation |
+|---|---:|---:|---:|
+| Control records | 0 | 0 | 1 |
+| Attributable attempts | 0 | 0 | 1 |
+| Effect calls | 0 | 1 | 1 |
+| Authority/supervisor decisions | 0 | 0 | 1 |
+| Required continuations | 0 | 0 | 2 |
+| Deterministic logical transitions | 1 | 1 | 5 |
+| Durable history records | 0 | 0 | 5 |
+
+Implemented proof:
+
+- a labelled strata-repair quote fixture reuses the registered
+  `supply.collectDevelopmentQuote:v1` action, exact qualification/disclosure,
+  authority, attempt, idempotency, and durable control source owners;
+- the read-only `registry.detail:v1` arm remains direct with zero invocation,
+  authority, attempt, history, or supervisor burden;
+- cold resume reconstructs the completed consequential result;
+- the source-owned completed-result identity is verified and attached to a
+  canonical Customer Request as one immutable reference;
+- cold Request readback and reference-only composition expose one completed
+  quote node and one current next-review node without copying quote, authority,
+  attempt, control, evidence, or recovery fields;
+- effect count remains exactly one before and after attachment, cold readback,
+  and composition;
+- no RoutePlan, persisted Bundle, schema, or neutral domain-specific contract
+  was added;
+- parent-focused transfer, result-reference, composition, and direct-control
+  checks passed 38/38 with diff checks green.
+
+Not established:
+
+- wall-clock or provider latency, real strata-repair supply, provider response,
+  fulfilment, deployment, hosted behavior, or customer value.
 
 ## Evidence position
 
@@ -770,8 +824,8 @@ implementation gate substitute.
 
 ## Next decision
 
-Execute canonical slice 13 against the cheaper contrasting workflow. Keep the
-same registered action and source-owned control meaning; reject or narrow the
-seam if it adds control records, latency, or supervision without a demonstrated
-safety or continuity benefit. After that slice, audit all eleven ADR-009 gates
-at the accepted revision before requesting the Founder disposition.
+Run the source-backed Phase 1 completion audit against all thirteen canonical
+slices and all eleven ADR-009 gates at the accepted revision. Any `Partial`,
+indirect, or fixture-inflated claim returns to the earliest failed transition.
+Only a fully evidenced development implementation advances to the Founder
+ADR-009 disposition and Phase 2 entry review.
