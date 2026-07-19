@@ -87,21 +87,16 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     prohibitedClaim: 'Do not claim independently operated supply, approval, availability, booking, payment, dispatch, certification, fulfilment, or real customer value.',
     steps: Object.freeze([
       step('event-requirements', 'Ideal Event Requirements Adviser', 'Prepare sourced event requirements', 'request', 'requirementsPacket', undefined, 'ae.event-requirements-packet:v1', false, 400, 'retry_safe', {
-        contractVersion: 3,
+        contractVersion: 4,
         decisionInputs: [
           { field: 'proposedSite', label: 'Proposed site', prompt: 'What exact site is proposed?', pattern: '^.{3,200}$' },
           { field: 'operatingWindow', label: 'Operating window', prompt: 'What date and operating times are proposed?', pattern: '^.{8,200}$' },
           { field: 'expectedAttendance', label: 'Expected attendance', prompt: 'How many visitors are expected?', pattern: '^[1-9]\\d{0,5}$' },
-          { field: 'eventProfile', label: 'Event profile', prompt: 'Is it public or private; which activities are included and excluded; and what ISO evidence-cutoff date applies?', pattern: '^.{20,1200}$' },
+          { field: 'eventProfile', label: 'Event profile', prompt: 'Is it public or private; which activities are included and excluded; what ISO evidence-cutoff date applies; which fictional recipients and purposes are authorized; and what is the ISO response deadline?', pattern: '^(?=.*authorized:)(?=.*response deadline \\d{4}-\\d{2}-\\d{2}).{40,1600}$' },
         ],
       }),
       step('event-site-evidence', 'Ideal Site and Safety Evidence Planner', 'Prepare site and safety evidence', 'requirementsPacket', 'siteEvidencePacket', 'ae.event-requirements-packet:v1', 'ae.event-site-evidence-packet:v1', false, 650, 'retry_safe'),
-      step('event-business-readiness', 'Ideal Event Business Readiness Desk', 'Prepare participating-business readiness evidence', 'siteEvidencePacket', 'participationEvidencePacket', 'ae.event-site-evidence-packet:v1', undefined, true, 750, 'reconcile_required', {
-        decisionInputs: [
-          { field: 'disclosureAuthority', label: 'Disclosure authority', prompt: 'Which fictional recipients and purposes may receive the packet?', pattern: '^authorized:.{3,500}$' },
-          { field: 'responseDeadline', label: 'Response deadline', prompt: 'What ISO date is the fictional response deadline?', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
-        ],
-      }),
+      step('event-business-readiness', 'Ideal Event Business Readiness Desk', 'Prepare participating-business readiness evidence', 'siteEvidencePacket', 'participationEvidencePacket', 'ae.event-site-evidence-packet:v1', undefined, true, 750, 'reconcile_required'),
     ]),
     curveballs: Object.freeze(['upstream packet becomes stale', 'disclosure authority is absent', 'a business refuses or does not respond', 'final outcome is unknown']),
   }),

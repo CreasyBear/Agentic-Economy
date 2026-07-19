@@ -375,8 +375,8 @@ describe('labelled sandbox V2 capability supply', () => {
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
-        publicationRef: 'offering:sandbox-event-requirements:v4',
-        bindingId: 'binding:sandbox-event-requirements:http-json:v4',
+        publicationRef: 'offering:sandbox-event-requirements:v5',
+        bindingId: 'binding:sandbox-event-requirements:http-json:v5',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
@@ -427,7 +427,7 @@ describe('labelled sandbox V2 capability supply', () => {
       'binding:sandbox-accessible-transfer:http-json:v2',
       'binding:sandbox-dinner-plan:http-json:v2',
       'binding:sandbox-event-business-readiness:http-json:v2',
-      'binding:sandbox-event-requirements:http-json:v4',
+      'binding:sandbox-event-requirements:http-json:v5',
       'binding:sandbox-event-site-evidence:http-json:v2',
       'binding:sandbox-itinerary-builder:http-json:v3',
       'binding:sandbox-itinerary-readiness:http-json:v2',

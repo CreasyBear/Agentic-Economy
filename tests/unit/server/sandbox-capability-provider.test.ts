@@ -259,7 +259,7 @@ describe('sandbox capability provider', () => {
       proposedSite: 'Fictional Riverside Community Forecourt',
       operatingWindow: '2026-10-17 08:00-16:00',
       expectedAttendance: '350',
-      eventProfile: 'Public; 24 stalls; packaged and hot food; acoustic music; temporary marquees; no alcohol; evidence cutoff 2026-07-19.',
+      eventProfile: 'Public; 24 stalls; packaged and hot food; acoustic music; temporary marquees; no alcohol; evidence cutoff 2026-07-19; authorized: fictional stallholders for readiness comparison only; response deadline 2026-09-30.',
     })
     expect(requirements.status).toBe(200)
     const requirementsValue = (await requirements.json() as { requirementsPacket: string }).requirementsPacket
@@ -285,8 +285,6 @@ describe('sandbox capability provider', () => {
 
     const readiness = await workflowCall('event-business-readiness', {
       siteEvidencePacket: siteValue,
-      disclosureAuthority: 'authorized: fictional stallholders for readiness comparison only',
-      responseDeadline: '2026-09-30',
     })
     expect(readiness.status).toBe(200)
     const readinessValue = (await readiness.json() as { participationEvidencePacket: string }).participationEvidencePacket
@@ -310,10 +308,12 @@ describe('sandbox capability provider', () => {
   it('fails closed before event readiness when disclosure authority is absent', async () => {
     const response = await workflowCall('event-business-readiness', {
       siteEvidencePacket: JSON.stringify({ packetRef: 'synthetic-site:one', version: 1 }),
-      responseDeadline: '2026-09-30',
     })
-    expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toEqual({ kind: 'refused', reason: 'request_invalid' })
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      kind: 'refused',
+      reason: 'synthetic_disclosure_authority_missing',
+    })
   })
 
   it('refuses stale event evidence rather than silently rebuilding downstream work', async () => {

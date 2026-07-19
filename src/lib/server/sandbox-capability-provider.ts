@@ -258,6 +258,7 @@ function sandboxEventWorkflowOutput(
 ): string | undefined {
   const upstream = parseEvidencePacket(parsedInput.requirementsPacket ?? parsedInput.siteEvidencePacket)
   if (providerKey === 'event-requirements') {
+    const responseDeadline = extractEventResponseDeadline(parsedInput.eventProfile)
     return JSON.stringify({
       format: 'ae.synthetic-event-requirements:v1',
       packetRef: `synthetic-requirements:${digest}`,
@@ -273,6 +274,8 @@ function sandboxEventWorkflowOutput(
         { item: 'Confirm food-business obligations for declared hot-food stalls', kind: 'requires_authority_confirmation', nextOwner: 'fictional local authority' },
       ],
       suppliedFacts: parsedInput,
+      disclosureAuthority: parsedInput.eventProfile,
+      responseDeadline,
       unresolved: ['Site permission is unknown', 'No authority approval has been sought'],
       effects: [],
       boundary: 'Synthetic preparation only; not approval, permission, certification, booking, or fulfilment.',
@@ -284,6 +287,8 @@ function sandboxEventWorkflowOutput(
       packetRef: `synthetic-site-evidence:${digest}`,
       version: 1,
       upstream: { packetRef: upstream.packetRef, version: upstream.version },
+      disclosureAuthority: upstream.disclosureAuthority,
+      responseDeadline: upstream.responseDeadline,
       checkedAt: '2026-07-19T00:00:00.000Z',
       responsibilityRows: [
         { item: 'Site plan', status: 'missing', nextOwner: 'fictional coordinator' },
@@ -302,14 +307,14 @@ function sandboxEventWorkflowOutput(
       packetRef: `synthetic-business-readiness:${digest}`,
       version: 1,
       upstream: { packetRef: upstream.packetRef, version: upstream.version },
-      disclosureAuthority: parsedInput.disclosureAuthority,
+      disclosureAuthority: upstream.disclosureAuthority,
       checkedAt: '2026-07-19T00:00:00.000Z',
-      expiresAt: parsedInput.responseDeadline,
+      expiresAt: upstream.responseDeadline,
       responses: [
-        { businessRole: 'packaged-food stall', state: 'can_respond', conditions: ['subject to site-owner and authority confirmation'], checkedAt: '2026-07-19T00:00:00.000Z', expiresAt: parsedInput.responseDeadline, evidence: ['synthetic:evidence:food-registration'], nextOwner: 'fictional stallholder' },
-        { businessRole: 'hot-food stall', state: 'needs_confirmation', conditions: ['food obligations unresolved'], checkedAt: '2026-07-19T00:00:00.000Z', expiresAt: parsedInput.responseDeadline, evidence: [], nextOwner: 'fictional stallholder' },
-        { businessRole: 'acoustic musician', state: 'no_response', conditions: [], checkedAt: '2026-07-19T00:00:00.000Z', expiresAt: parsedInput.responseDeadline, evidence: [], nextOwner: 'fictional coordinator' },
-        { businessRole: 'temporary-structure supplier', state: 'declined', conditions: ['site plan unavailable'], checkedAt: '2026-07-19T00:00:00.000Z', expiresAt: parsedInput.responseDeadline, evidence: [], nextOwner: 'fictional coordinator' },
+        { businessRole: 'packaged-food stall', state: 'can_respond', conditions: ['subject to site-owner and authority confirmation'], checkedAt: '2026-07-19T00:00:00.000Z', expiresAt: upstream.responseDeadline, evidence: ['synthetic:evidence:food-registration'], nextOwner: 'fictional stallholder' },
+        { businessRole: 'hot-food stall', state: 'needs_confirmation', conditions: ['food obligations unresolved'], checkedAt: '2026-07-19T00:00:00.000Z', expiresAt: upstream.responseDeadline, evidence: [], nextOwner: 'fictional stallholder' },
+        { businessRole: 'acoustic musician', state: 'no_response', conditions: [], checkedAt: '2026-07-19T00:00:00.000Z', expiresAt: upstream.responseDeadline, evidence: [], nextOwner: 'fictional coordinator' },
+        { businessRole: 'temporary-structure supplier', state: 'declined', conditions: ['site plan unavailable'], checkedAt: '2026-07-19T00:00:00.000Z', expiresAt: upstream.responseDeadline, evidence: [], nextOwner: 'fictional coordinator' },
       ],
       operatorInterventions: [],
       unresolved: ['Availability is unknown', 'No booking or quote acceptance has occurred'],
@@ -330,22 +335,40 @@ function eventWorkflowFailure(
   if (Object.values(input).some((value) => value.includes('[synthetic-scenario:stale_upstream]'))) {
     return 'synthetic_upstream_packet_stale'
   }
-  if (providerKey === 'event-business-readiness' && !input.disclosureAuthority?.startsWith('authorized:')) {
+  if (providerKey === 'event-business-readiness'
+    && (upstream?.disclosureAuthority?.includes('authorized:') !== true
+      || upstream.responseDeadline === undefined)) {
     return 'synthetic_disclosure_authority_missing'
   }
   return undefined
 }
 
-function parseEvidencePacket(value: string | undefined): { packetRef: string; version: number } | undefined {
+function parseEvidencePacket(value: string | undefined): {
+  packetRef: string
+  version: number
+  disclosureAuthority?: string
+  responseDeadline?: string
+} | undefined {
   if (value === undefined) return undefined
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>
     return typeof parsed.packetRef === 'string' && typeof parsed.version === 'number'
-      ? { packetRef: parsed.packetRef, version: parsed.version }
+      ? {
+          packetRef: parsed.packetRef,
+          version: parsed.version,
+          ...(typeof parsed.disclosureAuthority === 'string'
+            ? { disclosureAuthority: parsed.disclosureAuthority } : {}),
+          ...(typeof parsed.responseDeadline === 'string'
+            ? { responseDeadline: parsed.responseDeadline } : {}),
+        }
       : undefined
   } catch {
     return undefined
   }
+}
+
+function extractEventResponseDeadline(eventProfile: string | undefined): string | undefined {
+  return /response deadline (\d{4}-\d{2}-\d{2})/iu.exec(eventProfile ?? '')?.[1]
 }
 
 function hasWorkflowProviderDenialScenario(input: Readonly<Record<string, string>>): boolean {
