@@ -22,6 +22,10 @@ export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly
   developmentTimeoutSignal?: DevelopmentTimeoutSignal
   verifyReconciliationEvidence?: ReconciliationEvidenceVerifier
   contextForExecution?: (context: ActionContext) => ActionContext
+  beforeEffectRelease?: (
+    view: ActionInvocationView<Result>,
+    effectGeneration: number,
+  ) => DecisionRefusalCode | undefined
   initialSnapshot?: InMemoryControlSnapshot<Input, Result>
   resolveSourceState?: (sourceRef: string) => Readonly<{
     input: Input

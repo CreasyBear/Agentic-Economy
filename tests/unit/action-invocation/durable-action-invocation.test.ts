@@ -18,6 +18,8 @@ import {
   type ActionInvocationOrigin,
   type InvocationActor,
   type PreparedInvocation,
+  type ReconciliationEvidence,
+  type ReconciliationEvidenceMaterial,
   type AsyncDurableActionInvocationPort,
 } from '@/modules/action-invocation'
 
@@ -41,7 +43,271 @@ const input = {
   operationKey: 'mock:source:inquiry:durable',
 }
 
+function createEvidenceSource() {
+  const issued = new Set<string>()
+  return {
+    issue(material: ReconciliationEvidenceMaterial): ReconciliationEvidence {
+      const evidence = { ...material, digest: canonicalDigest(material as never) }
+      issued.add(canonicalDigest(evidence as never))
+      return evidence
+    },
+    verify: (evidence: ReconciliationEvidence) =>
+      issued.has(canonicalDigest(evidence as never)),
+  }
+}
+
 describe('durable Action Invocation control', () => {
+  it.each(origins)('persists the release fence before running and rejects late completion for $kind', async (origin) => {
+    let resolveRunner!: (value: { kind: 'error'; code: string; retryable: false; reason: string }) => void
+    const runner = new Promise<{ kind: 'error'; code: string; retryable: false; reason: string }>(
+      (resolve) => { resolveRunner = resolve },
+    )
+    const action = findAction('inquiry.submit')!
+    const state = createDevelopmentDurableState()
+    const source = {
+      input,
+      context: { developmentOnlyInquirySubmitAdapter: vi.fn(() => runner) },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+    }
+    const create = (resumeRef?: string) => createDurableActionInvocationTracer({
+      action,
+      port: createDevelopmentDurablePort(state),
+      now: () => '2026-07-19T11:30:00.000Z',
+      nextInvocationRef: () => `dev:durable:release-fence:${origin.kind}`,
+      nextAuthorityRef: () => `opaque:durable:release-fence:${origin.kind}`,
+      nextAttemptRef: () => `dev:attempt:release-fence:${origin.kind}`,
+      resolveSourceState: () => source,
+    }, resumeRef)
+    const tracer = create()
+    const prepared = tracer.prepare({
+      origin, actor, input, context: source.context, freshnessMs: 300_000,
+    })
+    source.prepared = prepared.prepared!
+    const decided = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const acquired = tracer.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:worker:release-fence',
+      leaseMs: 30_000,
+    })
+    if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+      throw new Error('Expected release-fence lease.')
+    }
+    const pending = tracer.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: acquired.view.control.attemptRef,
+      leaseOwner: acquired.view.control.leaseOwner,
+      effectGeneration: acquired.view.control.effectGeneration,
+    })
+    expect(source.context.developmentOnlyInquirySubmitAdapter).toHaveBeenCalledTimes(1)
+    const cold = create(prepared.invocationRef)
+    const releaseStarted = cold.inspect(prepared.invocationRef)
+    expect(releaseStarted).toMatchObject({
+      control: { state: 'leased', release: 'possibly_released' },
+    })
+    if (releaseStarted === undefined) throw new Error('Expected persisted release fence.')
+    const cancelled = cold.cancel({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: releaseStarted.invocationVersion,
+      actor, origin,
+    })
+    expect(cancelled).toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'reconciliation_required' } },
+    })
+    resolveRunner({
+      kind: 'error',
+      code: 'mock_late_completion',
+      retryable: false,
+      reason: 'MOCK late completion after cancellation',
+    })
+    await expect(pending).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'stale_invocation_version',
+      view: { control: { state: 'reconciliation_required' } },
+    })
+    expect(create(prepared.invocationRef).inspect(prepared.invocationRef)?.control)
+      .toEqual(cancelled.kind === 'accepted' ? cancelled.view.control : undefined)
+  })
+
+  it.each(origins)('expires a real lease, fails closed, reconciles, and cold-resumes takeover for $kind', (origin) => {
+    let now = '2026-07-19T12:00:00.000Z'
+    let attemptSequence = 0
+    const action = findAction('inquiry.submit')!
+    const state = createDevelopmentDurableState()
+    const evidenceSource = createEvidenceSource()
+    const source = {
+      input,
+      context: { developmentOnlyInquirySubmitAdapter: vi.fn() },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+    }
+    const create = (resumeRef?: string) => createDurableActionInvocationTracer({
+      action,
+      port: createDevelopmentDurablePort(state),
+      now: () => now,
+      nextInvocationRef: () => `dev:durable:expiry:${origin.kind}`,
+      nextAuthorityRef: () => `opaque:durable:expiry:${origin.kind}`,
+      nextAttemptRef: () => `dev:attempt:expiry:${origin.kind}:${++attemptSequence}`,
+      verifyReconciliationEvidence: evidenceSource.verify,
+      resolveSourceState: () => source,
+    }, resumeRef)
+    const firstProcess = create()
+    const prepared = firstProcess.prepare({
+      origin, actor, input, context: source.context, freshnessMs: 300_000,
+    })
+    source.prepared = prepared.prepared!
+    const decided = firstProcess.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const firstLease = firstProcess.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:worker:expired',
+      leaseMs: 1_000,
+    })
+    if (firstLease.kind !== 'accepted' || firstLease.view.control.state !== 'leased') {
+      throw new Error('Expected initial lease.')
+    }
+    const firstToken = firstLease.view.control
+
+    now = '2026-07-19T12:00:02.000Z'
+    const expiry = create(prepared.invocationRef).acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: firstLease.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:worker:blocked-takeover',
+      leaseMs: 1_000,
+    })
+    expect(expiry).toMatchObject({
+      kind: 'refused',
+      code: 'reconciliation_required',
+      view: {
+        persistence: 'durable_control',
+        control: { state: 'reconciliation_required', attemptRef: firstToken.attemptRef },
+        attempts: [{
+          release: { state: 'possibly_released' },
+          outcome: { state: 'uncertain', retry: 'reconcile_before_retry' },
+        }],
+      },
+    })
+    if (expiry.view === undefined) throw new Error('Expected durable expiry view.')
+    expect(create(prepared.invocationRef).acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: expiry.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:worker:still-blocked',
+      leaseMs: 1_000,
+    })).toMatchObject({ kind: 'refused', code: 'invalid_control_state' })
+    expect(source.context.developmentOnlyInquirySubmitAdapter).not.toHaveBeenCalled()
+
+    const material: ReconciliationEvidenceMaterial = {
+      kind: 'action_invocation_reconciliation',
+      version: 1,
+      evidenceRef: `mock:evidence:expiry:${origin.kind}:not-released`,
+      source: 'inquiry.submit:delivery-observer:v1',
+      invocationRef: prepared.invocationRef,
+      attemptRef: firstToken.attemptRef,
+      effectGeneration: firstToken.effectGeneration,
+      resolution: 'not_released',
+      observedAt: now,
+    }
+    const reconciled = create(prepared.invocationRef).reconcile({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: expiry.view.invocationVersion,
+      attemptRef: firstToken.attemptRef,
+      actor, origin,
+      evidence: evidenceSource.issue(material),
+    })
+    if (reconciled.kind !== 'accepted') throw new Error(reconciled.code)
+    expect(reconciled.view.attempts[0]).toMatchObject({
+      release: { state: 'not_released' },
+      outcome: { state: 'reconciled_not_released', retry: 'safe_after_reconciliation' },
+    })
+
+    const takeover = create(prepared.invocationRef).acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: reconciled.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:worker:new-generation',
+      leaseMs: 30_000,
+    })
+    if (takeover.kind !== 'accepted' || takeover.view.control.state !== 'leased') {
+      throw new Error('Expected reconciled takeover.')
+    }
+    expect(takeover.view.control.effectGeneration).toBe(firstToken.effectGeneration + 1)
+    const staleWorkerProcess = create(prepared.invocationRef)
+    expect(staleWorkerProcess.publishObservation({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: takeover.view.invocationVersion,
+      attemptRef: firstToken.attemptRef,
+      leaseOwner: firstToken.leaseOwner,
+      effectGeneration: firstToken.effectGeneration,
+      release: 'released',
+    })).toMatchObject({ kind: 'refused', code: 'effect_generation_stale' })
+    expect(staleWorkerProcess.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: takeover.view.invocationVersion,
+      attemptRef: firstToken.attemptRef,
+      leaseOwner: firstToken.leaseOwner,
+      effectGeneration: firstToken.effectGeneration,
+    })).resolves.toMatchObject({ kind: 'refused', code: 'effect_generation_stale' })
+    expect(source.context.developmentOnlyInquirySubmitAdapter).not.toHaveBeenCalled()
+
+    const late = create(prepared.invocationRef).recordLateObservation({
+      invocationRef: prepared.invocationRef,
+      commandId: `mock:late:expiry:${origin.kind}`,
+      effectGeneration: firstToken.effectGeneration,
+      actorRef: firstToken.leaseOwner,
+      sourceEvidenceRef: `mock:evidence:late:${origin.kind}`,
+      release: 'released',
+      evidenceDigest: canonicalDigest('MOCK late completion evidence'),
+    })
+    expect(late.kind).toBe('applied')
+    const port = createDevelopmentDurablePort(state)
+    expect(port.readHistory(prepared.invocationRef, 0, 50)).toContainEqual(
+      expect.objectContaining({
+        kind: 'late_observation',
+        current: false,
+        effectGeneration: firstToken.effectGeneration,
+      }),
+    )
+    expect(create(prepared.invocationRef).inspect(prepared.invocationRef)).toMatchObject({
+      origin,
+      owner: actor,
+      persistence: 'durable_control',
+      control: {
+        state: 'leased',
+        leaseOwner: 'mock:worker:new-generation',
+        effectGeneration: firstToken.effectGeneration + 1,
+      },
+    })
+    expect(JSON.stringify({
+      control: port.readControl(prepared.invocationRef),
+      attempts: port.readAttempts(prepared.invocationRef, 10),
+      history: port.readHistory(prepared.invocationRef, 0, 50),
+    })).not.toContain(input.body)
+  })
+
   it('reconstructs through the async runtime contract with a fresh port instance', async () => {
     const action = findAction('inquiry.submit')!
     const state = createDevelopmentDurableState()

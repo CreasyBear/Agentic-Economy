@@ -6,7 +6,7 @@ import type {
 } from './contracts'
 import type { DevelopmentReleaseSignal, DevelopmentTimeoutSignal } from './attempts'
 import { executeConsequentialAttempt } from './attempt-execution'
-import { currentLease, leaseIsExpired } from './lease-control'
+import { currentLease, expireLease, leaseIsExpired } from './lease-control'
 
 type AcquiredToken = Readonly<{
   expectedInvocationVersion: number
@@ -25,7 +25,7 @@ export function beginAcquiredRelease<Result extends ActionResult>(input: Readonl
   const refusal = currentLease(input.view, input)
   if (refusal !== undefined) return { kind: 'refused', code: refusal, view: input.view }
   if (input.view.control.state !== 'leased' || leaseIsExpired(input.view.control, input.now())) {
-    return refusalAfterExpiry(input.view, input.attemptRef)
+    return refusalAfterExpiry(input.view, input.attemptRef, input.now())
   }
   const attempt = input.view.attempts.find(({ attemptRef }) => attemptRef === input.attemptRef)
   if (attempt === undefined) {
@@ -82,11 +82,13 @@ export function checkReleaseCompletionFence<Result extends ActionResult>(
 function refusalAfterExpiry<Result extends ActionResult>(
   view: ActionInvocationView<Result>,
   attemptRef: string,
+  observedAt: string,
 ): Readonly<{ kind: 'refused'; code: DecisionRefusalCode; view: ActionInvocationView<Result> }> {
   return {
     kind: 'refused',
     code: 'reconciliation_required',
-    view: nextView(view, { control: { state: 'reconciliation_required', attemptRef } }),
+    view: expireLease(view, observedAt)
+      ?? nextView(view, { control: { state: 'reconciliation_required', attemptRef } }),
   }
 }
 

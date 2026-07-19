@@ -55,6 +55,19 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
     : reconstructSnapshot(options.port, resumeInvocationRef)
   const makeMemory = (snapshot = resumed) => createInMemoryActionInvocationTracer({
     ...options,
+    beforeEffectRelease: (view, effectGeneration) => {
+      const durableVersion = options.port.readControl(view.invocationRef)?.invocationVersion
+      if (durableVersion === undefined) return 'stale_invocation_version'
+      const durableGeneration =
+        options.port.readControl(view.invocationRef)?.currentEffectGeneration
+      const result = persist(
+        durableVersion,
+        view,
+        'begin_release',
+        durableGeneration === undefined ? undefined : effectGeneration,
+      )
+      return result.kind === 'refused' ? result.code : undefined
+    },
     ...(snapshot === undefined ? {} : { initialSnapshot: snapshot }),
     resolveSourceState: (sourceRef) => {
       const source = options.resolveSourceState(sourceRef)
@@ -187,8 +200,30 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
     kind: string,
     generation?: number,
   ): InvocationDecision<Result> => {
-    if (decision.kind !== 'accepted') return decision
-    const result = persist(beforeVersion, decision.view, kind, generation)
+    if (decision.kind === 'refused') {
+      if (
+        decision.view !== undefined &&
+        decision.view.invocationVersion > beforeVersion &&
+        decision.code === 'reconciliation_required'
+      ) {
+        const result = persist(beforeVersion, decision.view, `${kind}_expired`, generation)
+        if (result.kind === 'refused') {
+          memory = makeMemory(reconstructSnapshot(options.port, decision.view.invocationRef))
+          const durableView = memory.inspect(decision.view.invocationRef)
+          return durableView === undefined
+            ? { kind: 'refused', code: result.code }
+            : { kind: 'refused', code: result.code, view: durableView }
+        }
+        return { ...decision, view: { ...decision.view, persistence: 'durable_control' } }
+      }
+      return decision
+    }
+    const persistenceVersion =
+      (kind === 'execute' || kind === 'execute_acquired') &&
+        decision.view.invocationVersion > beforeVersion + 1
+        ? decision.view.invocationVersion - 1
+        : beforeVersion
+    const result = persist(persistenceVersion, decision.view, kind, generation)
     if (result.kind === 'refused') {
       memory = makeMemory(reconstructSnapshot(options.port, decision.view.invocationRef))
       const durableView = memory.inspect(decision.view.invocationRef)

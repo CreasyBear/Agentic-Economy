@@ -61,7 +61,7 @@ export function cancelInvocation<Input, Result extends ActionResult>(
   if (
     current.state === 'authorized' ||
     current.state === 'retryable' ||
-    (current.state === 'leased' && current.release === 'not_released')
+    (current.state === 'leased' && (current.release === 'not_started' || current.release === 'not_released'))
   ) {
     owned.record.view = nextView(owned.record.view, {
       control: { state: 'cancelled', effect: 'not_released' },

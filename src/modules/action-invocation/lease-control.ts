@@ -40,6 +40,35 @@ export function leaseIsExpired(
   return Date.parse(now) >= Date.parse(control.leaseExpiresAt)
 }
 
+export function expireLease<Result extends { kind: string }>(
+  view: ActionInvocationView<Result>,
+  observedAt: string,
+): ActionInvocationView<Result> | undefined {
+  const control = view.control
+  if (control.state !== 'leased' || !leaseIsExpired(control, observedAt)) {
+    return undefined
+  }
+  const attempt = view.attempts.find(({ attemptRef }) => attemptRef === control.attemptRef)
+  if (attempt === undefined) return undefined
+  const expiredAttempt: ActionAttemptView = {
+    ...attempt,
+    release: { state: 'possibly_released' },
+    outcome: {
+      state: 'uncertain',
+      retry: 'reconcile_before_retry',
+      message: 'Lease expired without final source evidence of non-release.',
+      reconciliationRequiredAt: observedAt,
+    },
+  }
+  return {
+    ...view,
+    invocationVersion: view.invocationVersion + 1,
+    attempts: replaceAttempt(view.attempts, expiredAttempt),
+    freshness: { state: 'current', observedAt },
+    control: { state: 'reconciliation_required', attemptRef: attempt.attemptRef },
+  }
+}
+
 export function acquireLease<Result extends { kind: string }>(input: Readonly<{
   view: ActionInvocationView<Result>
   actionId: string

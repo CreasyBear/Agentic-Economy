@@ -27,6 +27,7 @@ import {
 } from './fenced-execution'
 import {
   acquireLease,
+  expireLease,
   leaseIsExpired,
   nextEffectGeneration,
 } from './lease-control'
@@ -123,6 +124,13 @@ export function createInMemoryActionInvocationTracer<
       return releaseStart
     }
     record.view = releaseStart.view
+    const durableReleaseRefusal = options.beforeEffectRelease?.(
+      releaseStart.view,
+      input.effectGeneration,
+    )
+    if (durableReleaseRefusal !== undefined) {
+      return { kind: 'refused', code: durableReleaseRefusal, view: record.view }
+    }
     const completed = await executeReleasedAttempt({
       action: options.action,
       actionInput: record.input,
@@ -320,9 +328,11 @@ export function createInMemoryActionInvocationTracer<
       const record = checked.record
       const control = record.view.control
       if (control.state === 'leased' && leaseIsExpired(control, options.now())) {
-        record.view = nextView(record.view, {
-          control: { state: 'reconciliation_required', attemptRef: control.attemptRef },
-        })
+        const expired = expireLease(record.view, options.now())
+        if (expired === undefined) {
+          return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+        }
+        record.view = expired
         return { kind: 'refused', code: 'reconciliation_required', view: record.view }
       }
       const canAcquire = control.state === 'authorized' || control.state === 'retryable'
