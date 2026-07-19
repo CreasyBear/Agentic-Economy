@@ -252,3 +252,41 @@ The strongest permitted conclusion is:
 > task. It did not demonstrate independently operated supply, real business
 > behavior, field freshness, customer/provider value, fulfilment, production
 > reachability, or market selection.
+
+## Development execution record — 2026-07-19
+
+**Latest exact source revision:** `77ec35ac8c22c869a237fbc184d2af139f87af34`
+
+**Named development deployment:** `loyal-peacock-107`
+
+**Production deployment:** Not attempted
+
+**Supply:** Three fictional labelled-sandbox registrations using one shared
+deterministic adapter
+
+The source loop produced structured, attributable JSON evidence envelopes and
+passed the focused workflow, provider, registration, Request integration, and
+lint gates. The development backend was updated with deploy-time TypeScript
+checking disabled because the shared tree had 37 pre-existing type failures
+outside this slice; this is not release evidence.
+
+The cold development journey found and moved through these earliest failures:
+
+1. local `/llms.txt` advertised a configured non-local canonical origin;
+2. the ordinary dev seed omitted workflow capability supply;
+3. the all-workflow acceptance seed was blocked by a historical contract
+   identity conflict;
+4. the runner required facts keyed by opaque post-response identifiers;
+5. the six-question v2 contract exceeded the stable clarification path and its
+   superseded binding remained eligible after v3 registration; and
+6. after those source transitions were corrected, scheduled readiness probes
+   repeatedly changed `capabilityPublications` while Request compilation tried
+   to commit its registry snapshot, exhausting Convex transaction retries and
+   returning `503 request_unavailable` from the public `/facts` transition.
+
+**Verdict:** `FAIL_RECOVERY_OR_EVIDENCE` for the declared development journey.
+The current earliest failing transition is clarification answer → durable
+Request revision under concurrent publication-readiness writes. No completed
+packet, direct-path advantage, customer value, independently operated supply,
+production reachability, booking, approval, certification, dispatch, payment,
+or fulfilment is claimed.
