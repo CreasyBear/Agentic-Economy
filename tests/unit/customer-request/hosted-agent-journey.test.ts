@@ -1562,7 +1562,7 @@ describe('hosted Customer Request journey', () => {
       agent: { name: 'cold-external-agent', version: '1.0.0' },
       scenario: {
         request: 'Find the cheapest labelled sandbox option',
-        facts: { 'sandbox.request_context': 'Find the cheapest labelled sandbox option' },
+        facts: { 'Request details': 'Find the cheapest labelled sandbox option' },
         messages: [],
       },
       sandbox: true, fetch, now: () => 10_000,

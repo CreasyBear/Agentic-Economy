@@ -114,7 +114,9 @@ export async function runHostedCustomerRequestJourney(
       } else {
         const fact = clarification.requirementKey in input.scenario.facts
           ? input.scenario.facts[clarification.requirementKey]
-          : input.scenario.facts['*']
+          : clarification.prompt in input.scenario.facts
+            ? input.scenario.facts[clarification.prompt]
+            : input.scenario.facts['*']
         if (fact === undefined) {
           throw new Error(`hosted_journey_fact_missing:${clarification.requirementKey}`)
         }
