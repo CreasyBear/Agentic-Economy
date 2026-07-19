@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `b8942e8b`
+**Current accepted revision:** `d916d28d`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -59,9 +59,9 @@ parallel plan.
 | 5. Two-caller in-memory tracer | Implemented | `72351a80` |
 | 6. Preparation and exact authority | Implemented | `ccd21ad2` |
 | 7. Attributable effect attempt | Implemented | `f4b77026`, `f1cc1fb6` |
-| 8. Interruption and uncertainty | Partial: refusal and pre/post-release paths proven; timeout and malformed-evidence audit remain | `f4b77026`, `8d3fe91a`, `e5079e23` |
-| 9. Concurrency and recovery | Implemented in labelled development execution | `f1cc1fb6`, `8d3fe91a`, `0d5131a3` |
-| 10. Earned persistence | Implemented in labelled development execution; private Convex runtime not invoked | `622115e9`, `0d5131a3` |
+| 8. Interruption and uncertainty | Implemented in deterministic labelled development execution | `f4b77026`, `8d3fe91a`, `e5079e23`, `2bb08013`, `98ccb155` |
+| 9. Concurrency and recovery | Partial: in-memory fencing/recovery proven; true expired-lease takeover and durable both-origin parity remain | `f1cc1fb6`, `8d3fe91a`, `0d5131a3` |
+| 10. Earned persistence | Implemented in labelled development execution; current attempt reconstruction repaired; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d` |
 | 11. Request reuse | Implemented in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0` |
 | 12. Composition and direct control | Not implemented | — |
 | 13. Transfer | Not implemented | — |
@@ -203,6 +203,60 @@ Not established:
 - restart, cold resume, or durable persistence;
 - provider/network execution, delivery, fulfilment, hosted, or production
   behavior.
+
+### Canonical slice 8 completion — timeout and attributable reconciliation
+
+**Accepted commits:** `2bb08013`, `98ccb155`, `d916d28d`
+**Child commits:** `056f043b06d7f33718cf9760bc07d49a73d6704b`,
+`cce208d67098f6f1cf97d096ce6d396b272c4069`,
+`835f023e72efc6d7c2f90ed6633c53d7bf39ff81`
+**Child task:** `019f79c1-3ca4-76d3-b5d7-be5aed587365`
+**Assigned base:** `087ceada`
+**Evidence class:** source plus deterministic labelled local-development
+control execution; private Convex handlers statically checked but not invoked
+
+Implemented:
+
+- a manually triggered, action-parameterized development timeout transition
+  that never claims elapsed-time enforcement or cancellation of the runner;
+- every timeout of a still-running consequential attempt remains
+  `possibly_released` and `reconciliation_required`, including when the runner
+  had not yet signalled release at the timeout boundary;
+- late runner completion cannot overwrite the timed-out control view or create
+  retry permission;
+- reconciliation evidence binds source, invocation, attempt, effect generation,
+  observation time, evidence identity, and canonical digest;
+- shape and digest are insufficient: a dependency-injected source verifier must
+  attest the evidence before either release or non-release can move control;
+- malformed, tampered, wrong-source, cross-attempt, stale-generation,
+  pre-uncertainty, future, and correctly shaped but forged evidence fail closed
+  without control mutation;
+- exact evidence replay is idempotent and conflicting material under the same
+  evidence identity is refused;
+- the durable current attempt projection advances with reconciliation while
+  append-only neutral history retains the prior and next attribution digests
+  and release/outcome states;
+- fresh processes reconstruct exact current attempt release, outcome, effect
+  generation, and control after both released and proven-not-released evidence
+  for Request-owned and standalone origins;
+- the private Convex transaction contract accepts the same current-attempt
+  write and transition-history shape as the development port, with immutable
+  attribution checks before writes and existing CAS/idempotency fences retained.
+
+Master verification:
+
+- focused Action Invocation, private-handler contract, supplied-quote, and
+  Request-reuse checks passed 49/49;
+- scoped Oxlint and `git diff --check` passed;
+- no live Convex call, code generation, deployment, hosted endpoint, seed, or
+  provider effect was run.
+
+Not established:
+
+- a production elapsed-time timeout mechanism or worker termination;
+- production evidence credentials or provider-origin authentication;
+- execution of the private Convex handlers or deployed cold resume;
+- provider fulfilment, production safety, or customer value.
 
 ### Canonical slice 9 — concurrency fencing, cancellation, and recovery
 
