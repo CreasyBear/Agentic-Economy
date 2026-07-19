@@ -55,6 +55,26 @@ export const durableAttemptOutcomeValue = v.union(
   v.object({ state: v.literal('reconciled_not_released'), retry: v.literal('safe_after_reconciliation'), observedAt: v.string() }),
   v.object({ state: v.literal('reconciled_released'), externalOutcome: v.literal('unknown'), observedAt: v.string() }),
 )
+export const attemptTransitionValue = v.object({
+  attemptRef: v.string(),
+  effectGeneration: v.number(),
+  priorDigest: v.string(),
+  nextDigest: v.string(),
+  priorReleaseState: v.union(
+    v.literal('not_released'), v.literal('released'), v.literal('possibly_released'),
+  ),
+  nextReleaseState: v.union(
+    v.literal('not_released'), v.literal('released'), v.literal('possibly_released'),
+  ),
+  priorOutcomeState: v.union(
+    v.literal('running'), v.literal('returned'), v.literal('failed'), v.literal('uncertain'),
+    v.literal('timed_out'), v.literal('reconciled_not_released'), v.literal('reconciled_released'),
+  ),
+  nextOutcomeState: v.union(
+    v.literal('running'), v.literal('returned'), v.literal('failed'), v.literal('uncertain'),
+    v.literal('timed_out'), v.literal('reconciled_not_released'), v.literal('reconciled_released'),
+  ),
+})
 export const authorityBindingValue = v.object({
   reference: v.string(), invocationRef: v.string(), actor: invocationActorValue, origin: actionInvocationOriginValue,
   invocationVersion: v.number(), actionId: v.string(), contractVersion: v.string(),
@@ -131,26 +151,7 @@ export const actionInvocationTables = {
       release: v.union(v.literal('not_released'), v.literal('released'), v.literal('possibly_released')),
       evidenceDigest: v.string(),
     })),
-    attemptTransition: v.optional(v.object({
-      attemptRef: v.string(),
-      effectGeneration: v.number(),
-      priorDigest: v.string(),
-      nextDigest: v.string(),
-      priorReleaseState: v.union(
-        v.literal('not_released'), v.literal('released'), v.literal('possibly_released'),
-      ),
-      nextReleaseState: v.union(
-        v.literal('not_released'), v.literal('released'), v.literal('possibly_released'),
-      ),
-      priorOutcomeState: v.union(
-        v.literal('running'), v.literal('returned'), v.literal('failed'), v.literal('uncertain'),
-        v.literal('timed_out'), v.literal('reconciled_not_released'), v.literal('reconciled_released'),
-      ),
-      nextOutcomeState: v.union(
-        v.literal('running'), v.literal('returned'), v.literal('failed'), v.literal('uncertain'),
-        v.literal('timed_out'), v.literal('reconciled_not_released'), v.literal('reconciled_released'),
-      ),
-    })),
+    attemptTransition: v.optional(attemptTransitionValue),
     recordedAt: v.string(),
   })
     .index('by_invocationRef_and_commandId', ['invocationRef', 'commandId'])

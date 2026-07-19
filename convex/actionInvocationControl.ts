@@ -4,6 +4,7 @@ import { internalMutation, internalQuery } from './_generated/server'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
   actionInvocationOriginValue,
+  attemptTransitionValue,
   attemptReleaseValue,
   authorityBindingValue,
   durableControlProjectionValue,
@@ -45,6 +46,7 @@ const historyInput = v.object({
     release: v.union(v.literal('not_released'), v.literal('released'), v.literal('possibly_released')),
     evidenceDigest: v.string(),
   })),
+  attemptTransition: v.optional(attemptTransitionValue),
 })
 
 /**
@@ -59,7 +61,7 @@ export const transact = internalMutation({
     expectedInvocationVersion: v.union(v.number(), v.null()),
     expectedEffectGeneration: v.optional(v.number()),
     row: controlRow,
-    newAttempt: v.optional(attemptRow),
+    currentAttemptWrite: v.optional(attemptRow),
     history: historyInput,
   },
   handler: async (ctx, args) => {
@@ -84,14 +86,43 @@ export const transact = internalMutation({
       current?.currentEffectGeneration !== args.expectedEffectGeneration
     ) return { kind: 'refused' as const, code: 'effect_generation_stale' as const }
 
+    const attemptWrite = args.currentAttemptWrite
+    const existingAttempt = attemptWrite === undefined
+      ? null
+      : await ctx.db.query('actionInvocationAttempts')
+        .withIndex('by_invocationRef_and_attemptRef', (q) =>
+          q.eq('invocationRef', attemptWrite.invocationRef).eq('attemptRef', attemptWrite.attemptRef))
+        .unique()
+    if (
+      attemptWrite !== undefined &&
+      (
+        attemptWrite.invocationRef !== args.row.invocationRef ||
+        (
+          existingAttempt !== null &&
+          canonicalDigest({
+            attemptNumber: existingAttempt.attemptNumber,
+            actor: existingAttempt.actor,
+            effectGeneration: existingAttempt.effectGeneration,
+            idempotency: existingAttempt.idempotency,
+            lease: existingAttempt.lease,
+          }) !== canonicalDigest({
+            attemptNumber: attemptWrite.attemptNumber,
+            actor: attemptWrite.actor,
+            effectGeneration: attemptWrite.effectGeneration,
+            idempotency: attemptWrite.idempotency,
+            lease: attemptWrite.lease,
+          })
+        )
+      )
+    ) {
+      return { kind: 'refused' as const, code: 'command_identity_conflict' as const }
+    }
     if (current === null) await ctx.db.insert('actionInvocationControls', args.row)
     else await ctx.db.replace(current._id, args.row)
-    for (const attempt of args.newAttempt === undefined ? [] : [args.newAttempt]) {
-      const existing = await ctx.db.query('actionInvocationAttempts')
-        .withIndex('by_invocationRef_and_attemptRef', (q) =>
-          q.eq('invocationRef', attempt.invocationRef).eq('attemptRef', attempt.attemptRef))
-        .unique()
-      if (existing === null) await ctx.db.insert('actionInvocationAttempts', attempt)
+    if (attemptWrite !== undefined && existingAttempt === null) {
+      await ctx.db.insert('actionInvocationAttempts', attemptWrite)
+    } else if (attemptWrite !== undefined && existingAttempt !== null) {
+      await ctx.db.replace(existingAttempt._id, attemptWrite)
     }
     await ctx.db.insert('actionInvocationHistory', {
       ...args.history,
@@ -102,7 +133,7 @@ export const transact = internalMutation({
       current: true,
       recordedAt: args.row.updatedAt,
     })
-    return { kind: 'applied' as const }
+    return { kind: 'applied' as const, invocationVersion: args.row.invocationVersion }
   },
 })
 
@@ -161,10 +192,26 @@ export const readAttempts = internalQuery({
     .paginate(args.paginationOpts),
 })
 
+export const readAttempt = internalQuery({
+  args: { invocationRef: v.string(), attemptRef: v.string() },
+  handler: (ctx, args) => ctx.db.query('actionInvocationAttempts')
+    .withIndex('by_invocationRef_and_attemptRef', (q) =>
+      q.eq('invocationRef', args.invocationRef).eq('attemptRef', args.attemptRef))
+    .unique(),
+})
+
 export const readHistory = internalQuery({
   args: { invocationRef: v.string(), paginationOpts: paginationOptsValidator },
   handler: (ctx, args) => ctx.db.query('actionInvocationHistory')
     .withIndex('by_invocationRef_and_invocationVersion', (q) =>
       q.eq('invocationRef', args.invocationRef))
     .paginate(args.paginationOpts),
+})
+
+export const readHistoryCommand = internalQuery({
+  args: { invocationRef: v.string(), commandId: v.string() },
+  handler: (ctx, args) => ctx.db.query('actionInvocationHistory')
+    .withIndex('by_invocationRef_and_commandId', (q) =>
+      q.eq('invocationRef', args.invocationRef).eq('commandId', args.commandId))
+    .unique(),
 })
