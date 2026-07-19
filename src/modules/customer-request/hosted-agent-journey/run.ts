@@ -118,7 +118,9 @@ export async function runHostedCustomerRequestJourney(
             ? input.scenario.facts[clarification.prompt]
             : input.scenario.facts['*']
         if (fact === undefined) {
-          throw new Error(`hosted_journey_fact_missing:${clarification.requirementKey}`)
+          throw new Error(
+            `hosted_journey_fact_missing:${clarification.requirementKey}:prompt=${clarification.prompt}`,
+          )
         }
         view = await callObservedAgent(runtimeInput, view, 'answer_clarification', {
           '<unique string>': `acceptance:fact:${nonce}:${clarification.requirementKey}`,

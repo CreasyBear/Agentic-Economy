@@ -163,7 +163,7 @@ export const seedSyntheticEventWorkflowSupply = internalMutation({
         .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.priorBindingId))
         .unique(),
     ])
-    if (priorOffering !== null && priorBinding !== null && priorBinding.eligibility === 'eligible') {
+    if (priorOffering !== null && priorBinding !== null) {
       const evidenceRef = 'seed:synthetic-event-contract-replaced'
       const retired = await setCapabilitySupplyEligibilityCommand(ctx.db, {
         actor: { kind: 'system', ref: 'system:dev-seed' },
