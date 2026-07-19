@@ -25,3 +25,11 @@ export {
   type CapabilityGraphNode,
   type QueryCapabilityGraphResult,
 } from './query-graph'
+
+export {
+  qualifySuppliedCandidate,
+  type SuppliedCandidateQualification,
+  type SuppliedCandidateQualificationReason,
+  type SuppliedCandidateRef,
+  type SuppliedCandidateSourceReference,
+} from './qualify-candidate'
