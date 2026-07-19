@@ -57,6 +57,532 @@ function createEvidenceSource() {
 }
 
 describe('durable Action Invocation control', () => {
+  it('fences the sync release transaction to the stale worker token and rehydrates the winner', async () => {
+    const origin = origins[1]!
+    const action = findAction('inquiry.submit')!
+    const state = createDevelopmentDurableState()
+    const base = createDevelopmentDurablePort(state)
+    const adapter = vi.fn()
+    const racingPort = {
+      ...base,
+      transact(command: Parameters<typeof base.transact>[0]) {
+        if (command.history.kind === 'begin_release') {
+          const current = base.readControl(command.row.invocationRef)
+          if (current === undefined) throw new Error('Missing sync race row.')
+          const winnerVersion = current.invocationVersion + 1
+          const winnerDigest = canonicalDigest({ winner: command.commandDigest })
+          expect(base.transact({
+            ...command,
+            commandId: `${command.commandId}:sync-winner`,
+            commandDigest: winnerDigest,
+            expectedInvocationVersion: current.invocationVersion,
+            ...(current.currentEffectGeneration === undefined ? {} : {
+              expectedEffectGeneration: current.currentEffectGeneration,
+            }),
+            row: {
+              ...current,
+              invocationVersion: winnerVersion,
+              control: {
+                ...current.control,
+                invocationVersion: winnerVersion,
+                control: { state: 'cancelled', effect: 'not_released' },
+              },
+              updatedAt: '2026-07-19T12:40:00.000Z',
+            },
+            history: {
+              invocationRef: command.row.invocationRef,
+              commandId: `${command.commandId}:sync-winner`,
+              commandDigest: winnerDigest,
+              commandResult: 'applied',
+              kind: 'forced_sync_cas_winner',
+            },
+          })).toMatchObject({ kind: 'applied' })
+        }
+        return base.transact(command)
+      },
+    }
+    const source = {
+      input,
+      context: { developmentOnlyInquirySubmitAdapter: adapter },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+    }
+    const tracer = createDurableActionInvocationTracer({
+      action, port: racingPort,
+      now: () => '2026-07-19T12:40:00.000Z',
+      nextInvocationRef: () => 'dev:durable:sync-cas-race',
+      nextAuthorityRef: () => 'opaque:durable:sync-cas-race',
+      nextAttemptRef: () => 'dev:attempt:sync-cas-race',
+      resolveSourceState: () => source,
+    })
+    const prepared = tracer.prepare({
+      origin, actor, input, context: source.context, freshnessMs: 300_000,
+    })
+    source.prepared = prepared.prepared!
+    const decided = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const acquired = tracer.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:sync:cas-loser',
+      leaseMs: 30_000,
+    })
+    if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+      throw new Error('Expected sync race lease.')
+    }
+    const refused = await tracer.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: acquired.view.control.attemptRef,
+      leaseOwner: acquired.view.control.leaseOwner,
+      effectGeneration: acquired.view.control.effectGeneration,
+    })
+    expect(refused).toMatchObject({
+      kind: 'refused',
+      code: 'stale_invocation_version',
+      view: { control: { state: 'cancelled', effect: 'not_released' } },
+    })
+    expect(adapter).not.toHaveBeenCalled()
+    expect(tracer.inspect(prepared.invocationRef)).toEqual(refused.view)
+  })
+
+  it('reconstructs the exact current attempt beyond the bounded first 100 rows in sync and async ports', async () => {
+    const origin = origins[1]!
+    const action = findAction('inquiry.submit')!
+    const state = createDevelopmentDurableState()
+    const port = createDevelopmentDurablePort(state)
+    const source = {
+      input, context: {},
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+    }
+    const tracer = createDurableActionInvocationTracer({
+      action, port,
+      now: () => '2026-07-19T12:42:00.000Z',
+      nextInvocationRef: () => 'dev:durable:attempt-boundary',
+      nextAuthorityRef: () => 'opaque:durable:attempt-boundary',
+      nextAttemptRef: () => 'dev:attempt:boundary:1',
+      resolveSourceState: () => source,
+    })
+    const prepared = tracer.prepare({
+      origin, actor, input, context: source.context, freshnessMs: 300_000,
+    })
+    source.prepared = prepared.prepared!
+    const decided = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const acquired = tracer.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:worker:boundary',
+      leaseMs: 30_000,
+    })
+    if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+      throw new Error('Expected boundary lease.')
+    }
+    const attemptRows = state.attempts.get(prepared.invocationRef)
+    const firstAttempt = attemptRows?.get(acquired.view.control.attemptRef)
+    const control = state.controls.get(prepared.invocationRef)
+    if (attemptRows === undefined || firstAttempt === undefined || control === undefined) {
+      throw new Error('Missing fixture rows.')
+    }
+    for (let number = 2; number <= 101; number += 1) {
+      attemptRows.set(`dev:attempt:boundary:${number}`, {
+        ...firstAttempt,
+        attemptRef: `dev:attempt:boundary:${number}`,
+        attemptNumber: number,
+        effectGeneration: number,
+      })
+    }
+    const currentAttemptRef = 'dev:attempt:boundary:101'
+    state.controls.set(prepared.invocationRef, {
+      ...control,
+      currentAttemptRef,
+      currentEffectGeneration: 101,
+      currentLeaseOwner: 'mock:worker:boundary',
+      control: {
+        ...control.control,
+        control: {
+          ...acquired.view.control,
+          attemptRef: currentAttemptRef,
+          effectGeneration: 101,
+        },
+      },
+    })
+    const syncResumed = createDurableActionInvocationTracer({
+      action, port: createDevelopmentDurablePort(state),
+      now: () => '2026-07-19T12:42:00.000Z',
+      nextInvocationRef: () => 'unused',
+      resolveSourceState: () => source,
+    }, prepared.invocationRef)
+    expect(syncResumed.inspect(prepared.invocationRef)).toMatchObject({
+      control: { state: 'leased', attemptRef: currentAttemptRef, effectGeneration: 101 },
+      attempts: expect.arrayContaining([
+        expect.objectContaining({ attemptRef: currentAttemptRef, effectGeneration: 101 }),
+      ]),
+    })
+    const asyncPort: AsyncDurableActionInvocationPort = {
+      transact: async (command) => createDevelopmentDurablePort(state).transact(command),
+      readControl: async (ref) => createDevelopmentDurablePort(state).readControl(ref),
+      readAttempts: async ({ invocationRef, numItems }) => ({
+        page: createDevelopmentDurablePort(state).readAttempts(invocationRef, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      readAttempt: async (invocationRef, attemptRef) =>
+        createDevelopmentDurablePort(state).readAttempt(invocationRef, attemptRef),
+      readHistory: async ({ invocationRef, numItems }) => ({
+        page: createDevelopmentDurablePort(state).readHistory(invocationRef, 0, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      recordLateObservation: async (observation) =>
+        createDevelopmentDurablePort(state).recordLateObservation(observation),
+    }
+    const asyncResumed = await createAsyncDurableActionInvocationTracer({
+      action, port: asyncPort,
+      now: () => '2026-07-19T12:42:00.000Z',
+      nextInvocationRef: () => 'unused',
+      resolveSourceState: () => source,
+    }, prepared.invocationRef)
+    expect(await asyncResumed.inspect(prepared.invocationRef)).toEqual(
+      syncResumed.inspect(prepared.invocationRef),
+    )
+  })
+
+  it.each(origins)('persists pre-release refusal without inventing a begin_release version for $kind', async (origin) => {
+    const baseAction = findAction('inquiry.submit')!
+    const runner = vi.fn()
+    const action = {
+      ...baseAction,
+      preReleaseCheck: vi.fn().mockResolvedValue({
+        kind: 'error' as const,
+        code: 'mock_pre_release_refusal',
+        retryable: false,
+        reason: 'MOCK refusal before release',
+      }),
+      run: runner,
+    }
+    const state = createDevelopmentDurableState()
+    const source = {
+      input, context: {},
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+    }
+    const tracer = createDurableActionInvocationTracer({
+      action,
+      port: createDevelopmentDurablePort(state),
+      now: () => '2026-07-19T12:45:00.000Z',
+      nextInvocationRef: () => `dev:durable:pre-release-refusal:${origin.kind}`,
+      nextAuthorityRef: () => `opaque:durable:pre-release-refusal:${origin.kind}`,
+      nextAttemptRef: () => `dev:attempt:pre-release-refusal:${origin.kind}`,
+      resolveSourceState: () => source,
+    })
+    const prepared = tracer.prepare({
+      origin, actor, input, context: source.context, freshnessMs: 300_000,
+    })
+    source.prepared = prepared.prepared!
+    const decided = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const refused = await tracer.execute({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+    })
+    expect(refused).toMatchObject({
+      kind: 'accepted',
+      view: {
+        observedResolution: { execution: 'pre_release_refused' },
+        control: { state: 'terminal' },
+      },
+    })
+    expect(runner).not.toHaveBeenCalled()
+    expect(createDurableActionInvocationTracer({
+      action,
+      port: createDevelopmentDurablePort(state),
+      now: () => '2026-07-19T12:45:00.000Z',
+      nextInvocationRef: () => 'unused',
+      resolveSourceState: () => source,
+    }, prepared.invocationRef).inspect(prepared.invocationRef)).toMatchObject({
+      control: { state: 'terminal' },
+      attempts: [{ release: { state: 'not_released' } }],
+    })
+    expect(createDevelopmentDurablePort(state).readHistory(prepared.invocationRef, 0, 20)
+      .map(({ kind }) => kind)).not.toContain('begin_release')
+
+    const asyncState = createDevelopmentDurableState()
+    const asyncSync = () => createDevelopmentDurablePort(asyncState)
+    const asyncPort: AsyncDurableActionInvocationPort = {
+      transact: async (command) => asyncSync().transact(command),
+      readControl: async (ref) => asyncSync().readControl(ref),
+      readAttempts: async ({ invocationRef, numItems }) => ({
+        page: asyncSync().readAttempts(invocationRef, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      readAttempt: async (invocationRef, attemptRef) =>
+        asyncSync().readAttempt(invocationRef, attemptRef),
+      readHistory: async ({ invocationRef, numItems }) => ({
+        page: asyncSync().readHistory(invocationRef, 0, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      recordLateObservation: async (observation) => asyncSync().recordLateObservation(observation),
+    }
+    const asyncSource = {
+      ...source,
+      prepared: undefined as PreparedInvocation | undefined,
+    }
+    const asyncTracer = await createAsyncDurableActionInvocationTracer({
+      action, port: asyncPort,
+      now: () => '2026-07-19T12:46:00.000Z',
+      nextInvocationRef: () => `dev:async:pre-release-refusal:${origin.kind}`,
+      nextAuthorityRef: () => `opaque:async:pre-release-refusal:${origin.kind}`,
+      nextAttemptRef: () => `dev:async:attempt:pre-release-refusal:${origin.kind}`,
+      resolveSourceState: () => asyncSource,
+    })
+    const asyncPrepared = await asyncTracer.prepare({
+      origin, actor, input, context: asyncSource.context, freshnessMs: 300_000,
+    })
+    asyncSource.prepared = asyncPrepared.prepared!
+    const asyncDecided = await asyncTracer.decide({
+      invocationRef: asyncPrepared.invocationRef,
+      expectedInvocationVersion: asyncPrepared.invocationVersion,
+      authorityRef: asyncPrepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (asyncDecided.kind !== 'accepted') throw new Error(asyncDecided.code)
+    await expect(asyncTracer.execute({
+      invocationRef: asyncPrepared.invocationRef,
+      expectedInvocationVersion: asyncDecided.view.invocationVersion,
+      authorityRef: asyncPrepared.authority!.reference,
+      actor, origin, materialInput: input,
+    })).resolves.toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'terminal' } },
+    })
+    expect((await asyncPort.readControl(asyncPrepared.invocationRef))?.control.control)
+      .toEqual({ state: 'terminal' })
+    expect(asyncSync().readHistory(asyncPrepared.invocationRef, 0, 20)
+      .map(({ kind }) => kind)).not.toContain('begin_release')
+  })
+
+  it.each(origins)('flushes async begin_release before the runner and completion for $kind', async (origin) => {
+    const events: string[] = []
+    let resolveRunner!: (value: { kind: 'error'; code: string; retryable: false; reason: string }) => void
+    const runner = new Promise<{ kind: 'error'; code: string; retryable: false; reason: string }>(
+      (resolve) => { resolveRunner = resolve },
+    )
+    const action = findAction('inquiry.submit')!
+    const state = createDevelopmentDurableState()
+    const sync = () => createDevelopmentDurablePort(state)
+    const asyncPort: AsyncDurableActionInvocationPort = {
+      transact: async (command) => {
+        events.push(`durable:${command.history.kind}`)
+        return sync().transact(command)
+      },
+      readControl: async (ref) => sync().readControl(ref),
+      readAttempts: async ({ invocationRef, numItems }) => ({
+        page: sync().readAttempts(invocationRef, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      readAttempt: async (invocationRef, attemptRef) =>
+        sync().readAttempt(invocationRef, attemptRef),
+      readHistory: async ({ invocationRef, numItems }) => ({
+        page: sync().readHistory(invocationRef, 0, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      recordLateObservation: async (observation) => sync().recordLateObservation(observation),
+    }
+    const source = {
+      input,
+      context: {
+        developmentOnlyInquirySubmitAdapter: vi.fn(() => {
+          events.push('adapter:called')
+          return runner
+        }),
+      },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+    }
+    const tracer = await createAsyncDurableActionInvocationTracer({
+      action, port: asyncPort,
+      now: () => '2026-07-19T13:00:00.000Z',
+      nextInvocationRef: () => `dev:async:release-order:${origin.kind}`,
+      nextAuthorityRef: () => `opaque:async:release-order:${origin.kind}`,
+      nextAttemptRef: () => `dev:async:release-order:attempt:${origin.kind}`,
+      resolveSourceState: () => source,
+    })
+    const prepared = await tracer.prepare({
+      origin, actor, input, context: source.context, freshnessMs: 300_000,
+    })
+    source.prepared = prepared.prepared!
+    const decided = await tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const acquired = await tracer.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:async:release-order',
+      leaseMs: 30_000,
+    })
+    if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+      throw new Error('Expected async lease.')
+    }
+    events.length = 0
+    const completion = tracer.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: acquired.view.control.attemptRef,
+      leaseOwner: acquired.view.control.leaseOwner,
+      effectGeneration: acquired.view.control.effectGeneration,
+    })
+    await vi.waitFor(() => expect(source.context.developmentOnlyInquirySubmitAdapter).toHaveBeenCalledTimes(1))
+    expect(events).toEqual(['durable:begin_release', 'adapter:called'])
+    expect((await asyncPort.readControl(prepared.invocationRef))?.control.control).toEqual(
+      expect.objectContaining({ state: 'leased', release: 'possibly_released' }),
+    )
+    resolveRunner({
+      kind: 'error',
+      code: 'mock_async_complete',
+      retryable: false,
+      reason: 'MOCK async completion',
+    })
+    await expect(completion).resolves.toMatchObject({ kind: 'accepted' })
+    expect(events).toEqual([
+      'durable:begin_release',
+      'adapter:called',
+      'durable:execute_acquired',
+    ])
+  })
+
+  it.each(origins)('rehydrates the durable winner when async begin_release loses CAS for $kind', async (origin) => {
+    const action = findAction('inquiry.submit')!
+    const state = createDevelopmentDurableState()
+    const sync = () => createDevelopmentDurablePort(state)
+    const adapter = vi.fn()
+    const asyncPort: AsyncDurableActionInvocationPort = {
+      transact: async (command) => {
+        if (command.history.kind === 'begin_release') {
+          const current = sync().readControl(command.row.invocationRef)
+          if (current === undefined) throw new Error('Missing race control row.')
+          const winnerVersion = current.invocationVersion + 1
+          const winner = {
+            ...command,
+            commandId: `${command.commandId}:winner`,
+            commandDigest: canonicalDigest({ winner: command.commandDigest }),
+            expectedInvocationVersion: current.invocationVersion,
+            ...(current.currentEffectGeneration === undefined ? {} : {
+              expectedEffectGeneration: current.currentEffectGeneration,
+            }),
+            row: {
+              ...current,
+              invocationVersion: winnerVersion,
+              control: {
+                ...current.control,
+                invocationVersion: winnerVersion,
+                control: { state: 'cancelled' as const, effect: 'not_released' as const },
+              },
+              updatedAt: '2026-07-19T13:30:00.000Z',
+            },
+            history: {
+              invocationRef: command.row.invocationRef,
+              commandId: `${command.commandId}:winner`,
+              commandDigest: canonicalDigest({ winner: command.commandDigest }),
+              commandResult: 'applied' as const,
+              kind: 'forced_cas_winner',
+            },
+          }
+          expect(sync().transact(winner)).toMatchObject({ kind: 'applied' })
+        }
+        return sync().transact(command)
+      },
+      readControl: async (ref) => sync().readControl(ref),
+      readAttempts: async ({ invocationRef, numItems }) => ({
+        page: sync().readAttempts(invocationRef, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      readAttempt: async (invocationRef, attemptRef) =>
+        sync().readAttempt(invocationRef, attemptRef),
+      readHistory: async ({ invocationRef, numItems }) => ({
+        page: sync().readHistory(invocationRef, 0, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      recordLateObservation: async (observation) => sync().recordLateObservation(observation),
+    }
+    const source = {
+      input,
+      context: { developmentOnlyInquirySubmitAdapter: adapter },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' as const },
+    }
+    const tracer = await createAsyncDurableActionInvocationTracer({
+      action, port: asyncPort,
+      now: () => '2026-07-19T13:30:00.000Z',
+      nextInvocationRef: () => `dev:async:cas-race:${origin.kind}`,
+      nextAuthorityRef: () => `opaque:async:cas-race:${origin.kind}`,
+      nextAttemptRef: () => `dev:async:cas-race:attempt:${origin.kind}`,
+      resolveSourceState: () => source,
+    })
+    const prepared = await tracer.prepare({
+      origin, actor, input, context: source.context, freshnessMs: 300_000,
+    })
+    source.prepared = prepared.prepared!
+    const decided = await tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const acquired = await tracer.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, materialInput: input,
+      leaseOwner: 'mock:async:cas-loser',
+      leaseMs: 30_000,
+    })
+    if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+      throw new Error('Expected async race lease.')
+    }
+    const refused = await tracer.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: acquired.view.control.attemptRef,
+      leaseOwner: acquired.view.control.leaseOwner,
+      effectGeneration: acquired.view.control.effectGeneration,
+    })
+    expect(refused).toMatchObject({
+      kind: 'refused',
+      code: 'stale_invocation_version',
+      view: { control: { state: 'cancelled', effect: 'not_released' } },
+    })
+    expect(adapter).not.toHaveBeenCalled()
+    expect(await tracer.inspect(prepared.invocationRef)).toEqual(refused.view)
+  })
+
   it.each(origins)('persists the release fence before running and rejects late completion for $kind', async (origin) => {
     let resolveRunner!: (value: { kind: 'error'; code: string; retryable: false; reason: string }) => void
     const runner = new Promise<{ kind: 'error'; code: string; retryable: false; reason: string }>(
@@ -318,6 +844,8 @@ describe('durable Action Invocation control', () => {
         page: createDevelopmentDurablePort(state).readAttempts(invocationRef, numItems),
         continueCursor: '', isDone: true,
       }),
+      readAttempt: async (invocationRef, attemptRef) =>
+        createDevelopmentDurablePort(state).readAttempt(invocationRef, attemptRef),
       readHistory: async ({ invocationRef, numItems }) => ({
         page: createDevelopmentDurablePort(state).readHistory(invocationRef, 0, numItems),
         continueCursor: '', isDone: true,

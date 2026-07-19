@@ -25,7 +25,7 @@ export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly
   beforeEffectRelease?: (
     view: ActionInvocationView<Result>,
     effectGeneration: number,
-  ) => DecisionRefusalCode | undefined
+  ) => DecisionRefusalCode | undefined | Promise<DecisionRefusalCode | undefined>
   initialSnapshot?: InMemoryControlSnapshot<Input, Result>
   resolveSourceState?: (sourceRef: string) => Readonly<{
     input: Input

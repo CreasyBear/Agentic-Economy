@@ -3,6 +3,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   ActionInvocationTracer,
   ActionInvocationView,
+  DecisionRefusalCode,
   InMemoryControlSnapshot,
   InvocationDecision,
   PreparedInvocation,
@@ -23,6 +24,7 @@ import type { InMemoryTracerOptions } from './in-memory-record-store'
 export type DurableTracerOptions<Input, Result extends ActionResult> =
   Omit<InMemoryTracerOptions<Input, Result>, 'initialSnapshot' | 'resolveSourceState'> & Readonly<{
     port: DurableActionInvocationPort<Result>
+    flushBeforeEffectRelease?: () => Promise<PersistControlResult | undefined>
     resolveSourceState(sourceRef: string): Readonly<{
       input: Input
       context: ActionContext
@@ -56,17 +58,37 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
   const makeMemory = (snapshot = resumed) => createInMemoryActionInvocationTracer({
     ...options,
     beforeEffectRelease: (view, effectGeneration) => {
-      const durableVersion = options.port.readControl(view.invocationRef)?.invocationVersion
-      if (durableVersion === undefined) return 'stale_invocation_version'
-      const durableGeneration =
-        options.port.readControl(view.invocationRef)?.currentEffectGeneration
-      const result = persist(
-        durableVersion,
+      const persistExactRelease = () => persist(
+        view.invocationVersion - 1,
         view,
         'begin_release',
-        durableGeneration === undefined ? undefined : effectGeneration,
+        effectGeneration,
       )
-      return result.kind === 'refused' ? result.code : undefined
+      if (options.flushBeforeEffectRelease === undefined) {
+        const result = persistExactRelease()
+        if (result.kind === 'refused') {
+          releaseRefusals.set(view.invocationRef, result.code)
+          memory = makeMemory(reconstructSnapshot(options.port, view.invocationRef))
+          return result.code
+        }
+        releaseCommitVersions.set(view.invocationRef, view.invocationVersion)
+        return undefined
+      }
+      return options.flushBeforeEffectRelease().then(async (prior) => {
+        if (prior?.kind === 'refused') return prior.code
+        const release = persistExactRelease()
+        if (release.kind === 'refused') {
+          releaseRefusals.set(view.invocationRef, release.code)
+          return release.code
+        }
+        const flushed = await options.flushBeforeEffectRelease?.()
+        if (flushed?.kind === 'refused') {
+          releaseRefusals.set(view.invocationRef, flushed.code)
+          return flushed.code
+        }
+        releaseCommitVersions.set(view.invocationRef, view.invocationVersion)
+        return undefined
+      })
     },
     ...(snapshot === undefined ? {} : { initialSnapshot: snapshot }),
     resolveSourceState: (sourceRef) => {
@@ -75,6 +97,8 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       return { ...source, prepared: source.prepared }
     },
   })
+  const releaseCommitVersions = new Map<string, number>()
+  const releaseRefusals = new Map<string, DecisionRefusalCode>()
   let memory = makeMemory()
 
   const persist = (
@@ -88,10 +112,7 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
     const record = snapshot.records.find(({ control }) => control.invocationRef === view.invocationRef)
     if (record === undefined) throw new Error(`Missing control snapshot for ${view.invocationRef}.`)
     const { attempts: _attempts, ...controlProjection } = record.control
-    const leasedControl = view.control.state === 'leased' ? view.control : undefined
-    const currentAttempt = leasedControl === undefined
-      ? undefined
-      : view.attempts.find(({ attemptRef }) => attemptRef === leasedControl.attemptRef)
+    const currentAttempt = view.attempts.at(-1)
     const sourceState = options.resolveSourceState(record.sourceRef)
     const returned = view.observedResolution.state === 'returned'
       ? view.observedResolution
@@ -201,6 +222,20 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
     generation?: number,
   ): InvocationDecision<Result> => {
     if (decision.kind === 'refused') {
+      const releaseRefusal = decision.view === undefined
+        ? undefined
+        : releaseRefusals.get(decision.view.invocationRef)
+      if (releaseRefusal !== undefined) {
+        releaseRefusals.delete(decision.view!.invocationRef)
+        const current = memory.inspect(decision.view!.invocationRef)
+        return current === undefined
+          ? { kind: 'refused', code: releaseRefusal }
+          : {
+              kind: 'refused',
+              code: releaseRefusal,
+              view: { ...current, persistence: 'durable_control' },
+            }
+      }
       if (
         decision.view !== undefined &&
         decision.view.invocationVersion > beforeVersion &&
@@ -218,11 +253,9 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       }
       return decision
     }
-    const persistenceVersion =
-      (kind === 'execute' || kind === 'execute_acquired') &&
-        decision.view.invocationVersion > beforeVersion + 1
-        ? decision.view.invocationVersion - 1
-        : beforeVersion
+    const committedReleaseVersion = releaseCommitVersions.get(decision.view.invocationRef)
+    const persistenceVersion = committedReleaseVersion ?? beforeVersion
+    releaseCommitVersions.delete(decision.view.invocationRef)
     const result = persist(persistenceVersion, decision.view, kind, generation)
     if (result.kind === 'refused') {
       memory = makeMemory(reconstructSnapshot(options.port, decision.view.invocationRef))
@@ -251,7 +284,34 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       return accept(input.expectedInvocationVersion, memory.decide(input), 'decide')
     },
     async execute(input) {
-      return accept(input.expectedInvocationVersion, await memory.execute(input), 'execute')
+      const acquired = accept(input.expectedInvocationVersion, memory.acquire({
+        ...input,
+        leaseOwner: 'development:execute',
+        leaseMs: 30_000,
+      }), 'acquire')
+      if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+        return acquired
+      }
+      const flushedAcquisition = await options.flushBeforeEffectRelease?.()
+      if (flushedAcquisition?.kind === 'refused') {
+        return {
+          kind: 'refused',
+          code: flushedAcquisition.code,
+          view: acquired.view,
+        }
+      }
+      return accept(
+        acquired.view.invocationVersion,
+        await memory.executeAcquired({
+          invocationRef: input.invocationRef,
+          expectedInvocationVersion: acquired.view.invocationVersion,
+          attemptRef: acquired.view.control.attemptRef,
+          leaseOwner: acquired.view.control.leaseOwner,
+          effectGeneration: acquired.view.control.effectGeneration,
+        }),
+        'execute_acquired',
+        acquired.view.control.effectGeneration,
+      )
     },
     acquire(input) {
       return accept(input.expectedInvocationVersion, memory.acquire(input), 'acquire')
@@ -330,7 +390,17 @@ function reconstructSnapshot<Input, Result extends ActionResult>(
 ): InMemoryControlSnapshot<Input, Result> {
   const row = port.readControl(invocationRef)
   if (row === undefined) throw new Error(`Missing durable invocation ${invocationRef}.`)
-  const attempts = port.readAttempts(invocationRef, 100).map(restoreDurableAttempt)
+  const attemptRows = [...port.readAttempts(invocationRef, 100)]
+  if (
+    row.currentAttemptRef !== undefined &&
+    !attemptRows.some(({ attemptRef }) => attemptRef === row.currentAttemptRef)
+  ) {
+    const currentAttempt = port.readAttempt(invocationRef, row.currentAttemptRef)
+    if (currentAttempt !== undefined) attemptRows.push(currentAttempt)
+  }
+  const attempts = attemptRows
+    .sort((left, right) => left.attemptNumber - right.attemptNumber)
+    .map(restoreDurableAttempt)
   return {
     format: 'action-invocation-control:development:v1',
     records: [{

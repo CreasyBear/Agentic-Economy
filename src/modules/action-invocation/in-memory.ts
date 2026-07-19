@@ -124,10 +124,13 @@ export function createInMemoryActionInvocationTracer<
       return releaseStart
     }
     record.view = releaseStart.view
-    const durableReleaseRefusal = options.beforeEffectRelease?.(
+    const releaseFence = options.beforeEffectRelease?.(
       releaseStart.view,
       input.effectGeneration,
     )
+    const durableReleaseRefusal = releaseFence instanceof Promise
+      ? await releaseFence
+      : releaseFence
     if (durableReleaseRefusal !== undefined) {
       return { kind: 'refused', code: durableReleaseRefusal, view: record.view }
     }

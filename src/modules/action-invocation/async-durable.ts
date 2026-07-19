@@ -21,7 +21,7 @@ import type {
 } from './internal/durable-contracts'
 
 export type AsyncDurableTracerOptions<Input, Result extends ActionResult> =
-  Omit<DurableTracerOptions<Input, Result>, 'port'> & Readonly<{
+  Omit<DurableTracerOptions<Input, Result>, 'port' | 'flushBeforeEffectRelease'> & Readonly<{
     port: AsyncDurableActionInvocationPort<Result>
   }>
 
@@ -50,6 +50,7 @@ export async function createAsyncDurableActionInvocationTracer<
   if (resumeInvocationRef !== undefined) state = await loadState(options.port, resumeInvocationRef)
   let currentInvocationRef = resumeInvocationRef
   let pending: PersistControlCommand<Result> | undefined
+  let preReleaseRefusal: Extract<PersistControlResult, { kind: 'refused' }> | undefined
 
   const makeTracer = (): DurableActionInvocationTracer<Input, Result> => {
     const cache = createDevelopmentDurablePort(state)
@@ -61,7 +62,18 @@ export async function createAsyncDurableActionInvocationTracer<
       },
     }
     return createDurableActionInvocationTracer(
-      { ...options, port: capture },
+      {
+        ...options,
+        port: capture,
+        flushBeforeEffectRelease: async () => {
+          if (pending === undefined) return undefined
+          const command = pending
+          pending = undefined
+          const result = await options.port.transact(command)
+          if (result.kind === 'refused') preReleaseRefusal = result
+          return result
+        },
+      },
       currentInvocationRef,
     )
   }
@@ -99,13 +111,31 @@ export async function createAsyncDurableActionInvocationTracer<
     return view
   }
 
+  const commitExecution = async (
+    invocationRef: string,
+    decision: InvocationDecision<Result>,
+  ): Promise<InvocationDecision<Result>> => {
+    if (preReleaseRefusal === undefined) return commit(decision)
+    const refusal = preReleaseRefusal
+    preReleaseRefusal = undefined
+    pending = undefined
+    state = await loadState(options.port, invocationRef)
+    currentInvocationRef = invocationRef
+    tracer = makeTracer()
+    const current = tracer.inspect(invocationRef)
+    return current === undefined
+      ? { kind: 'refused', code: refusal.code }
+      : { kind: 'refused', code: refusal.code, view: current }
+  }
+
   return {
     invoke: async (input) => commitView(await tracer.invoke(input)),
     prepare: async (input) => commitView(tracer.prepare(input)),
     decide: async (input) => commit(tracer.decide(input)),
-    execute: async (input) => commit(await tracer.execute(input)),
+    execute: async (input) => commitExecution(input.invocationRef, await tracer.execute(input)),
     acquire: async (input) => commit(tracer.acquire(input)),
-    executeAcquired: async (input) => commit(await tracer.executeAcquired(input)),
+    executeAcquired: async (input) =>
+      commitExecution(input.invocationRef, await tracer.executeAcquired(input)),
     publishObservation: async (input) => commit(tracer.publishObservation(input)),
     cancel: async (input) => commit(tracer.cancel(input)),
     reconcile: async (input) => commit(tracer.reconcile(input)),
@@ -131,6 +161,10 @@ async function loadState<Result extends ActionResult>(
     attemptCursor = page.isDone ? null : page.continueCursor
   } while (attemptCursor !== null)
   state.attempts.set(invocationRef, attempts)
+  if (control.currentAttemptRef !== undefined && !attempts.has(control.currentAttemptRef)) {
+    const currentAttempt = await port.readAttempt(invocationRef, control.currentAttemptRef)
+    if (currentAttempt !== undefined) attempts.set(currentAttempt.attemptRef, currentAttempt)
+  }
   const history = []
   let historyCursor: string | null = null
   do {

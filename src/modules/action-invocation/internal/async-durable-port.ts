@@ -24,6 +24,7 @@ export interface AsyncDurableActionInvocationPort<Result extends ActionResult = 
     continueCursor: string
     isDone: boolean
   }>>
+  readAttempt(invocationRef: string, attemptRef: string): Promise<DurableAttemptRow | undefined>
   readHistory(input: Readonly<{
     invocationRef: string
     cursor: string | null
