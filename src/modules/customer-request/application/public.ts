@@ -12,6 +12,13 @@ export type {
 } from './action-result'
 
 export {
+  attachCompletedTaskReference,
+  type AttachCompletedTaskReferenceInput,
+  type AttachCompletedTaskReferencePorts,
+  type AttachCompletedTaskReferenceResult,
+} from './completed-task-reference'
+
+export {
   assembleRequestGraph,
   bindRequirementAnswer,
   compileCommit,

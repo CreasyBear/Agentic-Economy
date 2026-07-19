@@ -691,6 +691,14 @@ export const customerRequestV2AggregateValue = v.object({
     compilerVersion: v.literal('customer-request-route-compiler:v1'), authority: v.literal('proposal_only'),
     planDigest: v.string(), createdAt: v.number(),
   }),
+  completedTaskReferences: v.optional(v.array(v.object({
+    role: v.literal('prior_completed_task'),
+    referenceRef: v.string(), invocationRef: v.string(),
+    actionId: v.string(), actionVersion: v.string(),
+    sourceResultRef: v.string(), resultDigest: v.string(),
+    businessOutcome: v.union(v.literal('queued_communication'), v.literal('completed')),
+    referencedAt: v.number(),
+  }))),
   outcome: v.union(v.literal('plan_ready'), v.literal('needs_information'), v.literal('unsupported')),
   aggregateDigest: v.string(),
 })

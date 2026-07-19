@@ -490,6 +490,8 @@ describe('durable Action Invocation control', () => {
       sourceResultRef: source.resultIdentity.sourceResultRef, result,
     }))).toMatchObject({
       kind: 'completed_result',
+      actionId: 'inquiry.submit',
+      actionVersion: 'inquiry.submit:v1',
       sourceResultRef: 'mock:inquiry-result:durable',
       businessOutcome: 'queued_communication',
     })
@@ -504,6 +506,7 @@ describe('durable Action Invocation control', () => {
       sourceResultRef: source.resultIdentity.sourceResultRef,
       result: { ...result, code: 'tampered' } as never,
     }))).toEqual({ kind: 'refused', code: 'source_result_mismatch' })
+    expect(source.context.developmentOnlyInquirySubmitAdapter).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(port.readControl(prepared.invocationRef))).not.toContain(result.receipt.accessKey)
   })
 })

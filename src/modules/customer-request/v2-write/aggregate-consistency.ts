@@ -45,6 +45,23 @@ export function aggregateIsInternallyConsistent(
     ))
     && aggregate.evaluation.facts.length <= 128
     && aggregate.plan.actions.length <= 64
+    && (aggregate.completedTaskReferences?.length ?? 0) <= 64
+    && (aggregate.completedTaskReferences ?? []).every((reference) => (
+      reference.role === 'prior_completed_task'
+      && reference.referenceRef === `completed-task:${canonicalDigest({
+        invocationRef: reference.invocationRef,
+        sourceResultRef: reference.sourceResultRef,
+        resultDigest: reference.resultDigest,
+      })}`
+      && reference.invocationRef.length > 0
+      && reference.actionId.length > 0
+      && reference.actionVersion.length > 0
+      && reference.sourceResultRef.length > 0
+      && reference.resultDigest.startsWith('sha256:')
+      && Number.isFinite(reference.referencedAt)
+    ))
+    && new Set((aggregate.completedTaskReferences ?? []).map(({ referenceRef }) => referenceRef)).size
+      === (aggregate.completedTaskReferences?.length ?? 0)
     && aggregate.evaluation.candidates.length <= 256
     && aggregate.snapshot.facts.every(({ value }) => isBoundedJsonValue(value))
     && aggregate.evaluation.facts.every(({ value }) => isBoundedJsonValue(value))

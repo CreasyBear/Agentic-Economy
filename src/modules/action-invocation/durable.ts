@@ -257,12 +257,21 @@ export type CompletedResultIdentity =
   | Readonly<{
       kind: 'completed_result'
       invocationRef: string
+      actionId: string
+      actionVersion: string
       sourceRef: string
       sourceResultRef: string
       resultDigest: string
-      businessOutcome: string
+      businessOutcome: 'queued_communication' | 'completed'
     }>
-  | Readonly<{ kind: 'refused'; code: 'invocation_not_found' | 'cross_principal_refused' | 'request_owned_refused' | 'invocation_not_terminal' | 'source_result_mismatch' }>
+  | Readonly<{ kind: 'refused'; code:
+    | 'invocation_not_found'
+    | 'cross_principal_refused'
+    | 'request_owned_refused'
+    | 'invocation_not_terminal'
+    | 'outcome_not_referenceable'
+    | 'source_result_mismatch'
+  }>
 
 export function readCompletedResultIdentity<Result extends ActionResult>(
   port: DurableActionInvocationPort<Result>,
@@ -285,10 +294,12 @@ export function readCompletedResultIdentity<Result extends ActionResult>(
   if (
     row.control.control.state !== 'terminal' ||
     row.sourceResultRef === undefined ||
-    row.sourceResultDigest === undefined ||
-    (row.terminalBusinessOutcome !== 'queued_communication' &&
-      row.terminalBusinessOutcome !== 'completed')
+    row.sourceResultDigest === undefined
   ) return { kind: 'refused', code: 'invocation_not_terminal' }
+  if (
+    row.terminalBusinessOutcome !== 'queued_communication' &&
+    row.terminalBusinessOutcome !== 'completed'
+  ) return { kind: 'refused', code: 'outcome_not_referenceable' }
   const source = resolve(row.sourceRef)
   if (
     source.sourceResultRef !== row.sourceResultRef ||
@@ -298,6 +309,8 @@ export function readCompletedResultIdentity<Result extends ActionResult>(
   return {
     kind: 'completed_result',
     invocationRef,
+    actionId: row.control.action.id,
+    actionVersion: row.control.action.contractVersion,
     sourceRef: row.sourceRef,
     sourceResultRef: row.sourceResultRef,
     resultDigest: row.sourceResultDigest,

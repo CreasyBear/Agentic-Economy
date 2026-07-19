@@ -158,8 +158,21 @@ export type CustomerRequestV2Aggregate = Readonly<{
   snapshot: CustomerRequestV2Snapshot
   evaluation: RequestEvaluation
   plan: CustomerRequestV2PlanRevision
+  completedTaskReferences?: readonly CustomerRequestCompletedTaskReference[]
   outcome: 'plan_ready' | 'needs_information' | 'unsupported'
   aggregateDigest: string
+}>
+
+export type CustomerRequestCompletedTaskReference = Readonly<{
+  role: 'prior_completed_task'
+  referenceRef: string
+  invocationRef: string
+  actionId: string
+  actionVersion: string
+  sourceResultRef: string
+  resultDigest: string
+  businessOutcome: 'queued_communication' | 'completed'
+  referencedAt: number
 }>
 
 export type CompileCustomerRequestCommand = Readonly<{
@@ -481,6 +494,9 @@ export function writableCustomerRequestV2Aggregate(aggregate: CustomerRequestV2A
       })),
       completionRequirements: aggregate.plan.completionRequirements.map(writableCompletion),
     },
+    ...(aggregate.completedTaskReferences === undefined
+      ? {}
+      : { completedTaskReferences: aggregate.completedTaskReferences.map((reference) => ({ ...reference })) }),
     outcome: aggregate.outcome,
     aggregateDigest: aggregate.aggregateDigest,
   }
