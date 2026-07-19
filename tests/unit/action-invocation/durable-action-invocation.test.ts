@@ -1210,7 +1210,7 @@ describe('durable Action Invocation control', () => {
       .toEqual(cancelled.kind === 'accepted' ? cancelled.view.control : undefined)
   })
 
-  it.each(origins)('expires a real lease, fails closed, reconciles, and cold-resumes takeover for $kind', (origin) => {
+  it.each(origins)('expires a real lease, fails closed, reconciles, and cold-resumes takeover for $kind', async (origin) => {
     let now = '2026-07-19T12:00:00.000Z'
     let attemptSequence = 0
     const action = findAction('inquiry.submit')!
@@ -1334,7 +1334,7 @@ describe('durable Action Invocation control', () => {
       effectGeneration: firstToken.effectGeneration,
       release: 'released',
     })).toMatchObject({ kind: 'refused', code: 'effect_generation_stale' })
-    expect(staleWorkerProcess.executeAcquired({
+    await expect(staleWorkerProcess.executeAcquired({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: takeover.view.invocationVersion,
       attemptRef: firstToken.attemptRef,
@@ -1767,7 +1767,8 @@ describe('durable Action Invocation control', () => {
   it('exposes only a source-verified completed-result identity and refuses tamper or nonterminal reads', async () => {
     const origin = origins[1]!
     const action = findAction('inquiry.submit')!
-    const port = createDevelopmentDurablePort()
+    const durableState = createDevelopmentDurableState()
+    const port = createDevelopmentDurablePort(durableState)
     const result = {
       kind: 'ok' as const,
       code: 'inquiry_submitted' as const,
@@ -1846,5 +1847,12 @@ describe('durable Action Invocation control', () => {
     }))).toEqual({ kind: 'refused', code: 'source_result_mismatch' })
     expect(source.context.developmentOnlyInquirySubmitAdapter).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(port.readControl(prepared.invocationRef))).not.toContain(result.receipt.accessKey)
+    durableState.controls.delete(prepared.invocationRef)
+    expect(port.readControl(prepared.invocationRef)).toBeUndefined()
+    expect(source.resultIdentity).toEqual({
+      sourceResultRef: 'mock:inquiry-result:durable',
+      resultDigest: canonicalDigest(result),
+    })
+    expect(result.receipt.accessKey).toBe('SECRET-MUST-NOT-PERSIST')
   })
 })
