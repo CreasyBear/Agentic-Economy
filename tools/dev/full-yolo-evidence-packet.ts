@@ -14,7 +14,6 @@ import {
   runFullYoloDevelopmentObjective,
 } from '../../src/modules/booking/development-booking-objective'
 import {
-  createDevelopmentBookingOffsetRuleTrust,
   developmentCancellationConfirmationRule,
 } from '../../src/modules/booking/development-booking-offset-rule'
 import {
@@ -187,11 +186,7 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     && cancellation.result.evidenceRef === offset.offsetEvidenceRef
     && cancellationInput.providerRef === booking.result.providerRef
     && cancellationInput.principalRef === booking.principalRef
-  const store = new StandingMandateStore(structuredClone(evidence.mandateSnapshot), {
-    offsetRuleTrust: createDevelopmentBookingOffsetRuleTrust(
-      evidence.coldContinuation.providerSnapshot,
-    ),
-  })
+  const store = new StandingMandateStore(structuredClone(evidence.mandateSnapshot))
   const mandate = evidence.mandateSnapshot.mandates[0]
   if (
     evidence.environment !== 'MOCK/DEVELOPMENT ONLY'
@@ -210,7 +205,7 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     || evidence.objectiveDecisionRecords[1]?.kind !== 'fallback_after_terms_refusal'
     || evidence.invocations.length !== 3
     || canonicalDigest(booking.result) !== booking.resultDigest
-    || canonicalDigest(cancellation.result) !== cancellation.resultDigest
+    || canonicalDigest(cancellation.result as never) !== cancellation.resultDigest
     || canonicalDigest(evidence.invocations[1]?.durable.source.result as never) !== booking.resultDigest
     || evidence.invocations[1]?.durable.source.resultIdentity?.sourceResultRef
       !== (booking.result.kind === 'reservation_confirmed' ? booking.result.reservationRef : '')
@@ -279,6 +274,11 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
       !== developmentCancellationConfirmationRule.source
     || evidence.mandateSnapshot.exposureOffsets?.[0]?.evidenceRuleVersion
       !== developmentCancellationConfirmationRule.version
+    || cancellation.result.kind !== 'reservation_cancellation_confirmed'
+    || cancellation.result.exposureReleaseAttestation === undefined
+    || canonicalDigest(cancellation.result.exposureReleaseAttestation as never)
+      !== canonicalDigest(evidence.mandateSnapshot.exposureOffsets?.[0]?.releaseAttestation as never)
+    || mandate.scope.exposureOffsetVerificationKeys?.length !== 1
     || evidence.mandateSnapshot.exposureOffsets?.[0]?.offsetAction.id
       !== cancelDevelopmentReservationAction.id
     || evidence.safetyEvals.revokeRace !== 'mandate_revoked'

@@ -27,7 +27,7 @@ import {
 import { createDevelopmentBookingProvider } from './development-booking-provider'
 import type { DevelopmentBookingProviderSnapshot } from './development-booking-provider'
 import {
-  createDevelopmentBookingOffsetRuleTrust,
+  developmentBookingOffsetVerificationKey,
   developmentCancellationConfirmationRule,
 } from './development-booking-offset-rule'
 import { runCancellationInvocation, runReservationInvocation } from './development-booking-runner'
@@ -109,6 +109,7 @@ export async function runFullYoloDevelopmentObjective() {
       permittedFallbacks: ['provider_a_primary', 'provider_b_after_terms_refusal', 'none'],
       riskCeiling: 'development_booking_bounded_loss',
       exposureOffsetRules: [developmentCancellationConfirmationRule],
+      exposureOffsetVerificationKeys: [developmentBookingOffsetVerificationKey],
     },
   })
   const verifier = createDevelopmentStandingMandateGrantVerifier({
@@ -331,7 +332,7 @@ export async function runFullYoloDevelopmentObjective() {
         principalRef,
         input: cancellationMaterial,
         result: cancellationResult,
-        resultDigest: canonicalDigest(cancellationResult),
+        resultDigest: canonicalDigest(cancellationResult as never),
       },
     },
     coldContinuation: {
@@ -415,12 +416,9 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
       || input.objectiveState.cancellationResultRef === null
       || reconstructed.at(-1)?.observedResolution.state !== 'returned'
     ) throw new Error('development_booking_terminal_state_refused')
-    const trust = createDevelopmentBookingOffsetRuleTrust(input.providerSnapshot)
     return {
       processRef: input.processRef,
-      store: new StandingMandateStore(structuredClone(input.mandateSnapshot), {
-        offsetRuleTrust: trust,
-      }),
+      store: new StandingMandateStore(structuredClone(input.mandateSnapshot)),
       providerSnapshot: provider.exportSnapshot(),
       objectiveState: input.objectiveState,
       reconstructed,
@@ -441,9 +439,7 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
     || bookingView.observedResolution.result.reservationRef !== input.objectiveState.bookingResultRef
   ) throw new Error('development_booking_objective_booking_result_refused')
   const confirmed = bookingView.observedResolution.result
-  let store = new StandingMandateStore(structuredClone(input.mandateSnapshot), {
-    offsetRuleTrust: createDevelopmentBookingOffsetRuleTrust(input.providerSnapshot),
-  })
+  let store = new StandingMandateStore(structuredClone(input.mandateSnapshot))
   const cancellationMaterial = cancellationInput({
     reservationRef: confirmed.reservationRef,
     providerRef: confirmed.providerRef,
@@ -489,6 +485,19 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
       mandateRef: input.mandate.mandateRef,
       authorityUseRef: 'mock:authority-use:full-yolo:cancel',
       policyDecisionRef: decision.value.policyDecisionRef,
+      releaseAttestationContext: {
+        mandateRef: input.mandate.mandateRef,
+        mandateVersion: input.mandate.version,
+        mandateGeneration: input.mandate.generation,
+        originalAuthorityUseRef: 'mock:authority-use:full-yolo:b',
+        cancellationAuthorityUseRef: 'mock:authority-use:full-yolo:cancel',
+        originalAction: { id: createDevelopmentReservationAction.id, version: 'v1' },
+        cancellationAction: { id: cancelDevelopmentReservationAction.id, version: 'v1' },
+        originalResultRef: confirmed.reservationRef,
+        originalEvidenceRef: confirmed.evidenceRef,
+        releasedAmount: { amountMinor: 5_000, currency: 'AUD' },
+        issuedAt: developmentBookingNow(),
+      },
     },
   })
   if (
@@ -496,10 +505,11 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
     || cancellationRun.view.observedResolution.result.kind !== 'reservation_cancellation_confirmed'
   ) throw new Error('provider_confirmed_cancellation_missing')
   const cancellationResult = cancellationRun.view.observedResolution.result
+  if (cancellationResult.exposureReleaseAttestation === undefined) {
+    throw new Error('provider_release_attestation_missing')
+  }
   const providerSnapshot = provider.exportSnapshot()
-  store = new StandingMandateStore(structuredClone(store.exportSnapshot()), {
-    offsetRuleTrust: createDevelopmentBookingOffsetRuleTrust(providerSnapshot),
-  })
+  store = new StandingMandateStore(structuredClone(store.exportSnapshot()))
   const offset = store.recordExposureOffset({
     authorityUseRef: 'mock:authority-use:full-yolo:b',
     offsetAuthorityUseRef: 'mock:authority-use:full-yolo:cancel',
@@ -521,6 +531,7 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
     evidenceRuleRef: developmentCancellationConfirmationRule.evidenceRuleRef,
     evidenceRuleSource: developmentCancellationConfirmationRule.source,
     evidenceRuleVersion: developmentCancellationConfirmationRule.version,
+    releaseAttestation: cancellationResult.exposureReleaseAttestation,
     offsetGeneration: 1,
     recordedAt: developmentBookingNow(),
   })

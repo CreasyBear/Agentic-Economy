@@ -1,4 +1,14 @@
+import { randomBytes } from 'node:crypto'
+
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  ed25519PublicKey,
+  signEd25519Attestation,
+} from '@/modules/common/ed25519-attestation'
+import type {
+  ExposureOffsetRuleIdentity,
+  ExposureReleaseAttestationMaterial,
+} from '@/modules/action-invocation'
 import type {
   DevelopmentBookingCancellationInput,
   DevelopmentBookingCancellationResult,
@@ -7,6 +17,39 @@ import type {
 } from './development-booking.actions'
 
 export type DevelopmentAvailabilityObservation = DevelopmentBookingInput['slot']
+export const developmentCancellationConfirmationRule: ExposureOffsetRuleIdentity = {
+  evidenceRuleRef: 'development_booking.cancellation_confirmation',
+  source: 'development_booking.provider_records',
+  version: 'v1',
+}
+
+const developmentProviderSigningKey = {
+  keyId: 'mock:development-booking-provider:release:v1',
+  privateKey: randomBytes(32).toString('hex'),
+} as const
+
+export const developmentBookingOffsetVerificationKey = {
+  keyId: developmentProviderSigningKey.keyId,
+  publicKey: ed25519PublicKey(
+    developmentProviderSigningKey.privateKey,
+    'development_booking_release_private_key_invalid',
+  ),
+} as const
+
+export type DevelopmentCancellationAttestationContext = Readonly<{
+  mandateRef: string
+  mandateVersion: number
+  mandateGeneration: number
+  originalAuthorityUseRef: string
+  cancellationAuthorityUseRef: string
+  originalAction: Readonly<{ id: string; version: string }>
+  cancellationAction: Readonly<{ id: string; version: string }>
+  originalResultRef: string
+  originalEvidenceRef: string
+  releasedAmount: Readonly<{ amountMinor: number; currency: string }>
+  issuedAt: string
+}>
+
 export type DevelopmentBookingProviderSnapshot = Readonly<{
   options: Readonly<{ providerRef?: string; slotRef?: string; refusal?: 'terms_changed' | 'provider_refused' }>
   reservations: readonly Readonly<{ operationKey: string; digest: string; input: DevelopmentBookingInput; result: DevelopmentBookingResult }>[]
@@ -111,6 +154,7 @@ export function createDevelopmentBookingProvider(options: Readonly<{
     },
     cancel: async (
       input: DevelopmentBookingCancellationInput,
+      attestationContext?: DevelopmentCancellationAttestationContext,
     ): Promise<DevelopmentBookingCancellationResult> => {
       const digest = canonicalDigest(input)
       const prior = cancellations.get(input.operationKey)
@@ -122,14 +166,43 @@ export function createDevelopmentBookingProvider(options: Readonly<{
           reason: 'Cancellation operation key was already used with different material.',
         }
       }
+      const reservation = [...reservations.values()].find(({ result }) =>
+        result.kind === 'reservation_confirmed'
+        && result.reservationRef === input.reservationRef
+        && result.providerRef === input.providerRef)
+      if (
+        reservation === undefined
+        || reservation.result.kind !== 'reservation_confirmed'
+        || reservation.input.customer.principalRef !== input.principalRef
+      ) {
+        return {
+          kind: 'reservation_cancellation_refused',
+          environment: 'MOCK/DEVELOPMENT ONLY',
+          code: 'provider_record_mismatch',
+          reason: 'Provider-owned reservation state did not authorize cancellation.',
+        }
+      }
       cancellationEffects += 1
       const suffix = canonicalDigest(input.operationKey).slice(-12)
+      const cancellationRef = `mock:cancellation:${suffix}`
+      const evidenceRef = `mock:cancellation-evidence:${suffix}`
+      const exposureReleaseAttestation = attestationContext === undefined
+        ? undefined
+        : issueExposureReleaseAttestation({
+            context: attestationContext,
+            input,
+            reservationRef: reservation.result.reservationRef,
+            providerRef: reservation.result.providerRef,
+            cancellationRef,
+            cancellationEvidenceRef: evidenceRef,
+          })
       const result: DevelopmentBookingCancellationResult = {
         kind: 'reservation_cancellation_confirmed',
         environment: 'MOCK/DEVELOPMENT ONLY',
         reservationRef: input.reservationRef,
-        cancellationRef: `mock:cancellation:${suffix}`,
-        evidenceRef: `mock:cancellation-evidence:${suffix}`,
+        cancellationRef,
+        evidenceRef,
+        ...(exposureReleaseAttestation === undefined ? {} : { exposureReleaseAttestation }),
       }
       cancellations.set(input.operationKey, { digest, input: structuredClone(input), result })
       return result
@@ -149,5 +222,56 @@ export function createDevelopmentBookingProvider(options: Readonly<{
       effects,
       cancellationEffects,
     }),
+  }
+}
+
+function issueExposureReleaseAttestation(input: Readonly<{
+  context: DevelopmentCancellationAttestationContext
+  input: DevelopmentBookingCancellationInput
+  reservationRef: string
+  providerRef: string
+  cancellationRef: string
+  cancellationEvidenceRef: string
+}>) {
+  if (
+    input.context.originalResultRef !== input.reservationRef
+    || input.input.reservationRef !== input.reservationRef
+    || input.input.providerRef !== input.providerRef
+  ) throw new Error('development_booking_release_attestation_linkage_refused')
+  const material: ExposureReleaseAttestationMaterial = {
+    format: 'ae.exposure-release-attestation:v1',
+    evidenceRule: developmentCancellationConfirmationRule,
+    mandateRef: input.context.mandateRef,
+    mandateVersion: input.context.mandateVersion,
+    mandateGeneration: input.context.mandateGeneration,
+    principalRef: input.input.principalRef,
+    originalAuthorityUseRef: input.context.originalAuthorityUseRef,
+    cancellationAuthorityUseRef: input.context.cancellationAuthorityUseRef,
+    providerRef: input.providerRef,
+    originalEffect: {
+      action: input.context.originalAction,
+      subjectRef: input.reservationRef,
+      resultRef: input.context.originalResultRef,
+      evidenceDigest: canonicalDigest(input.context.originalEvidenceRef as never),
+    },
+    cancellationEffect: {
+      action: input.context.cancellationAction,
+      subjectRef: input.reservationRef,
+      resultRef: input.cancellationRef,
+      evidenceDigest: canonicalDigest(input.cancellationEvidenceRef as never),
+    },
+    outcome: 'provider_confirmed_reversal',
+    releasedAmount: input.context.releasedAmount,
+    issuedAt: input.context.issuedAt,
+  }
+  const digest = canonicalDigest(material as never)
+  return {
+    material,
+    digest,
+    signature: signEd25519Attestation(
+      digest,
+      developmentProviderSigningKey,
+      'development_booking_release_signing_key_invalid',
+    ),
   }
 }

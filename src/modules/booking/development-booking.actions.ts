@@ -184,6 +184,47 @@ export const developmentBookingCancellationOutputSchema = z.discriminatedUnion('
     reservationRef: z.string().min(1),
     cancellationRef: z.string().min(1),
     evidenceRef: z.string().min(1),
+    exposureReleaseAttestation: z.object({
+      material: z.object({
+        format: z.literal('ae.exposure-release-attestation:v1'),
+        evidenceRule: z.object({
+          evidenceRuleRef: z.string().min(1),
+          source: z.string().min(1),
+          version: z.string().min(1),
+        }),
+        mandateRef: z.string().min(1),
+        mandateVersion: z.number().int().positive(),
+        mandateGeneration: z.number().int().positive(),
+        principalRef: z.string().min(1),
+        originalAuthorityUseRef: z.string().min(1),
+        cancellationAuthorityUseRef: z.string().min(1),
+        providerRef: z.string().min(1),
+        originalEffect: z.object({
+          action: z.object({ id: z.string().min(1), version: z.string().min(1) }),
+          subjectRef: z.string().min(1),
+          resultRef: z.string().min(1),
+          evidenceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+        }),
+        cancellationEffect: z.object({
+          action: z.object({ id: z.string().min(1), version: z.string().min(1) }),
+          subjectRef: z.string().min(1),
+          resultRef: z.string().min(1),
+          evidenceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+        }),
+        outcome: z.literal('provider_confirmed_reversal'),
+        releasedAmount: z.object({
+          amountMinor: z.number().int().nonnegative(),
+          currency: z.string().min(1),
+        }),
+        issuedAt: z.string().datetime(),
+      }),
+      digest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+      signature: z.object({
+        signingKeyId: z.string().min(1),
+        signingPublicKey: z.string().regex(/^[a-f0-9]{64}$/),
+        signature: z.string().regex(/^ed25519:[a-f0-9]{128}$/),
+      }),
+    }).optional(),
   }),
   z.object({
     kind: z.literal('reservation_cancellation_refused'),

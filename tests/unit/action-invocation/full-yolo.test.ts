@@ -12,10 +12,10 @@ import {
   verifyFullYoloEvidence,
 } from '../../../tools/dev/full-yolo-evidence-packet'
 import {
-  createDevelopmentBookingOffsetRuleTrust,
   developmentCancellationConfirmationRule,
 } from '@/modules/booking/development-booking-offset-rule'
-import { createTrustedExposureOffsetRuleTestCapability } from '../../support/trusted-exposure-offset-rule-test-factory'
+import * as developmentBookingProviderSource from '@/modules/booking/development-booking-provider'
+import { createDevelopmentBookingProvider } from '@/modules/booking/development-booking-provider'
 
 describe('full_yolo bounded authority mode', () => {
   it('executes fallback and cancellation through three exact standing-mandate uses', async () => {
@@ -92,81 +92,85 @@ describe('full_yolo bounded authority mode', () => {
     const snapshot = structuredClone(evidence.mandateSnapshot)
     ;(snapshot as any).exposureOffsets = []
     const { digest: _digest, ...offset } = evidence.mandateSnapshot.exposureOffsets![0]!
-    const authoritativeTrust = createDevelopmentBookingOffsetRuleTrust(
-      evidence.coldContinuation.providerSnapshot,
-    )
-    const store = new StandingMandateStore(snapshot, { offsetRuleTrust: authoritativeTrust })
+    const store = new StandingMandateStore(snapshot)
     expect(store.recordExposureOffset({ ...offset, evidenceRuleRef: 'unknown' })).toEqual({
       kind: 'refused',
       code: 'authority_use_linkage_invalid',
     })
-    const wrongTrust = createTrustedExposureOffsetRuleTestCapability([{
-      identity: {
-        ...developmentCancellationConfirmationRule,
-        source: 'other.source',
-      },
-      resolve: () => true,
-    }])
-    const wrongStore = new StandingMandateStore(snapshot, { offsetRuleTrust: wrongTrust })
-    expect(wrongStore.recordExposureOffset(offset)).toEqual({
+    expect(store.recordExposureOffset({ ...offset, evidenceRuleSource: 'other.source' })).toEqual({
       kind: 'refused',
       code: 'authority_use_linkage_invalid',
     })
-    const wrongVersionStore = new StandingMandateStore(snapshot, {
-      offsetRuleTrust: createTrustedExposureOffsetRuleTestCapability([{
-        identity: {
-          ...developmentCancellationConfirmationRule,
-          version: 'v2',
-        },
-        resolve: () => true,
-      }]),
-    })
-    expect(wrongVersionStore.recordExposureOffset(offset)).toEqual({
+    expect(store.recordExposureOffset({ ...offset, evidenceRuleVersion: 'v2' })).toEqual({
       kind: 'refused',
       code: 'authority_use_linkage_invalid',
     })
   })
 
-  it('requires the trusted resolver and released causal uses during cold reconstruction', async () => {
+  it('reverifies signed release and released causal uses during cold reconstruction', async () => {
     const evidence = await runFullYoloEvidence()
-    expect(() => new StandingMandateStore(structuredClone(evidence.mandateSnapshot))).toThrow(
-      'standing_mandate_snapshot_exposure_offset_refused',
-    )
+    expect(() => new StandingMandateStore(structuredClone(evidence.mandateSnapshot))).not.toThrow()
     for (const state of ['uncertain', 'not_released']) {
       const notReleased = structuredClone(evidence.mandateSnapshot)
       const original = (notReleased.uses as any[]).find(({ authorityUseRef }) =>
         authorityUseRef === notReleased.exposureOffsets![0]!.authorityUseRef)
       original.state = state
       redigest(original)
-      expect(() => new StandingMandateStore(notReleased, {
-        offsetRuleTrust: createDevelopmentBookingOffsetRuleTrust(
-          evidence.coldContinuation.providerSnapshot,
-        ),
-      })).toThrow('standing_mandate_snapshot_exposure_offset_refused')
+      expect(() => new StandingMandateStore(notReleased))
+        .toThrow('standing_mandate_snapshot_exposure_offset_refused')
     }
   })
 
-  it('rejects an exact-identity forged resolver in live and cold paths', async () => {
+  it('rejects exact-identity forged attestations in live and cold paths', async () => {
     expect(actionInvocationPublic).not.toHaveProperty('ExposureOffsetRuleRegistry')
     expect(actionInvocationPublic).not.toHaveProperty('sealSourceOwnedExposureOffsetRules')
     const evidence = await runFullYoloEvidence()
     const withoutOffset = structuredClone(evidence.mandateSnapshot)
     ;(withoutOffset as any).exposureOffsets = []
-    const { digest: _digest, ...offset } = evidence.mandateSnapshot.exposureOffsets![0]!
-    const forged = {
-      identity: developmentCancellationConfirmationRule,
-      resolve: () => true,
-    }
-    const live = new StandingMandateStore(withoutOffset, {
-      offsetRuleTrust: forged as never,
-    })
-    expect(live.recordExposureOffset(offset)).toEqual({
+    const forged = structuredClone(evidence.mandateSnapshot.exposureOffsets![0]!)
+    ;(forged.releaseAttestation.signature as any).signature = `ed25519:${'0'.repeat(128)}`
+    redigest(forged)
+    const { digest: _digest, ...forgedMaterial } = forged
+    const live = new StandingMandateStore(withoutOffset)
+    expect(live.recordExposureOffset(forgedMaterial)).toEqual({
       kind: 'refused',
       code: 'authority_use_linkage_invalid',
     })
-    expect(() => new StandingMandateStore(structuredClone(evidence.mandateSnapshot), {
-      offsetRuleTrust: forged as never,
-    })).toThrow('standing_mandate_snapshot_exposure_offset_refused')
+    const cold = structuredClone(evidence.mandateSnapshot)
+    ;(cold as any).exposureOffsets = [forged]
+    expect(() => new StandingMandateStore(cold))
+      .toThrow('standing_mandate_snapshot_exposure_offset_refused')
+  })
+
+  it('provider signing refuses invented cancellation state', async () => {
+    expect(developmentBookingProviderSource).not.toHaveProperty('developmentProviderSigningKey')
+    expect(developmentBookingProviderSource).not.toHaveProperty('issueExposureReleaseAttestation')
+    const provider = createDevelopmentBookingProvider({
+      providerRef: 'mock:provider:calendar:b',
+      slotRef: 'mock:slot:b',
+    })
+    const result = await provider.cancel({
+      environment: 'MOCK/DEVELOPMENT ONLY',
+      reservationRef: 'invented',
+      providerRef: 'mock:provider:calendar:b',
+      principalRef: 'mock:principal:full-yolo',
+      reason: 'invented',
+      operationKey: 'invented',
+    }, {
+      mandateRef: 'invented',
+      mandateVersion: 1,
+      mandateGeneration: 1,
+      originalAuthorityUseRef: 'invented',
+      cancellationAuthorityUseRef: 'invented',
+      originalAction: { id: 'invented', version: 'v1' },
+      cancellationAction: { id: 'invented', version: 'v1' },
+      originalResultRef: 'invented',
+      originalEvidenceRef: 'invented',
+      releasedAmount: { amountMinor: 5_000, currency: 'AUD' },
+      issuedAt: '2026-07-19T04:00:00.000Z',
+    })
+    expect(result.kind).toBe('reservation_cancellation_refused')
+    expect(result).not.toHaveProperty('exposureReleaseAttestation')
   })
 
   it('proves restart continuation is objective-owned rather than direct provider replay', async () => {
@@ -218,6 +222,33 @@ describe('full_yolo bounded authority mode', () => {
     ['causal use', (copy: any) => {
       copy.mandateSnapshot.exposureOffsets[0].offsetAuthorityUseRef =
         copy.mandateSnapshot.exposureOffsets[0].authorityUseRef
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['attestation payload', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].releaseAttestation.material.principalRef = 'other'
+      redigest(copy.mandateSnapshot.exposureOffsets[0].releaseAttestation)
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['attestation signature', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].releaseAttestation.signature.signature =
+        `ed25519:${'0'.repeat(128)}`
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['attestation cross-use', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].releaseAttestation.material.originalAuthorityUseRef =
+        copy.mandateSnapshot.exposureOffsets[0].offsetAuthorityUseRef
+      redigest(copy.mandateSnapshot.exposureOffsets[0].releaseAttestation)
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['attestation cross-mandate', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].releaseAttestation.material.mandateRef = 'other'
+      redigest(copy.mandateSnapshot.exposureOffsets[0].releaseAttestation)
+      redigest(copy.mandateSnapshot.exposureOffsets[0])
+    }],
+    ['attestation evidence digest', (copy: any) => {
+      copy.mandateSnapshot.exposureOffsets[0].releaseAttestation.material
+        .cancellationEffect.evidenceDigest = `sha256:${'0'.repeat(64)}`
+      redigest(copy.mandateSnapshot.exposureOffsets[0].releaseAttestation)
       redigest(copy.mandateSnapshot.exposureOffsets[0])
     }],
     ['offset reuse', (copy: any) => {

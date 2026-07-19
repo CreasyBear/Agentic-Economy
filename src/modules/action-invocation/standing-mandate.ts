@@ -6,11 +6,11 @@ import {
 import type { StandingMandateAuthorityBasis } from './contracts'
 import type { StandingMandatePolicyDecision } from './standing-mandate-policy'
 import {
-  resolveTrustedExposureOffsetRule,
+  verifyExposureReleaseAttestation,
   type ExposureOffsetRuleIdentity,
-  type ExposureOffsetRuleMaterial,
-  type TrustedExposureOffsetRuleCapability,
+  type ExposureReleaseAttestation,
 } from './exposure-offset-rules'
+import type { Ed25519VerificationKey } from '@/modules/common/ed25519-attestation'
 
 export const STANDING_MANDATE_FORMAT = 'ae.action-invocation-standing-mandate:v1' as const
 
@@ -31,6 +31,7 @@ export type StandingMandateScope = Readonly<{
   riskCeiling: string
   maximumLoss?: Readonly<{ amountMinor: number; currency: string }>
   exposureOffsetRules?: readonly ExposureOffsetRuleIdentity[]
+  exposureOffsetVerificationKeys?: readonly Ed25519VerificationKey[]
 }>
 
 export type StandingMandate = Readonly<{
@@ -88,7 +89,30 @@ export type StandingMandateSnapshot = Readonly<{
   policyDecisions?: readonly StandingMandatePolicyDecision[]
 }>
 
-export type AuthorityExposureOffset = Readonly<ExposureOffsetRuleMaterial & {
+export type AuthorityExposureOffset = Readonly<{
+  authorityUseRef: string
+  offsetAuthorityUseRef: string
+  mandateRef: string
+  mandateVersion: number
+  mandateGeneration: number
+  principalRef: string
+  providerRef: string
+  exposureAction: Readonly<{ id: string; version: string }>
+  offsetAction: Readonly<{ id: string; version: string }>
+  exposureSubjectRef: string
+  exposureResultRef: string
+  exposureEvidenceRef: string
+  offsetSubjectRef: string
+  offsetResultRef: string
+  offsetEvidenceRef: string
+  amountMinor: number
+  currency: string
+  evidenceRuleRef: string
+  evidenceRuleSource: string
+  evidenceRuleVersion: string
+  releaseAttestation: ExposureReleaseAttestation
+  offsetGeneration: 1
+  recordedAt: string
   digest: string
 }>
 
@@ -144,15 +168,7 @@ export class StandingMandateStore {
   readonly #policyDecisions = new Map<string, StandingMandatePolicyDecision>()
   readonly #usedOffsetUses = new Set<string>()
   readonly #usedOffsetEvidence = new Set<string>()
-  readonly #offsetRuleTrust: TrustedExposureOffsetRuleCapability | undefined
-
-  constructor(
-    snapshot?: StandingMandateSnapshot,
-    options?: Readonly<{
-      offsetRuleTrust?: TrustedExposureOffsetRuleCapability
-    }>,
-  ) {
-    this.#offsetRuleTrust = options?.offsetRuleTrust
+  constructor(snapshot?: StandingMandateSnapshot) {
     for (const mandate of snapshot?.mandates ?? []) {
       if (!mandateIntegrityValid(mandate)) throw new Error('standing_mandate_snapshot_integrity_refused')
       this.#mandates.set(mandate.mandateRef, deepFreeze(structuredClone(mandate)))
@@ -205,7 +221,7 @@ export class StandingMandateStore {
         || offsetUse.action.version !== offset.offsetAction.version
         || offsetUse.state !== 'released'
         || !this.#offsetRuleAllowed(offset, use.mandateRef)
-        || !this.#offsetRuleResolves(offset)
+        || !this.#offsetAttestationValid(offset)
         || offset.exposureSubjectRef !== offset.offsetSubjectRef
         || offset.offsetGeneration !== 1
         || this.#usedOffsetUses.has(offset.offsetAuthorityUseRef)
@@ -394,7 +410,7 @@ export class StandingMandateStore {
       || offsetUse.action.id !== input.offsetAction.id
       || offsetUse.action.version !== input.offsetAction.version
       || !this.#offsetRuleAllowed(input, input.mandateRef)
-      || !this.#offsetRuleResolves(input)
+      || !this.#offsetAttestationValid(input)
       || input.exposureSubjectRef !== input.offsetSubjectRef
       || input.exposureResultRef.length === 0
       || input.exposureEvidenceRef.length === 0
@@ -548,7 +564,7 @@ export class StandingMandateStore {
   }
 
   #offsetRuleAllowed(
-    identity: ExposureOffsetRuleIdentity | Pick<ExposureOffsetRuleMaterial,
+    identity: ExposureOffsetRuleIdentity | Pick<AuthorityExposureOffset,
       'evidenceRuleRef' | 'evidenceRuleSource' | 'evidenceRuleVersion'>,
     mandateRef: string,
   ) {
@@ -560,12 +576,37 @@ export class StandingMandateStore {
       && allowed.version === version) === true
   }
 
-  #offsetRuleResolves(material: ExposureOffsetRuleMaterial) {
-    return resolveTrustedExposureOffsetRule(this.#offsetRuleTrust, {
-      evidenceRuleRef: material.evidenceRuleRef,
-      source: material.evidenceRuleSource,
-      version: material.evidenceRuleVersion,
-    }, material)
+  #offsetAttestationValid(offset: Omit<AuthorityExposureOffset, 'digest'> | AuthorityExposureOffset) {
+    const mandate = this.#mandates.get(offset.mandateRef)
+    const attested = offset.releaseAttestation.material
+    return mandate !== undefined
+      && verifyExposureReleaseAttestation(
+        offset.releaseAttestation,
+        mandate.scope.exposureOffsetVerificationKeys ?? [],
+      )
+      && attested.evidenceRule.evidenceRuleRef === offset.evidenceRuleRef
+      && attested.evidenceRule.source === offset.evidenceRuleSource
+      && attested.evidenceRule.version === offset.evidenceRuleVersion
+      && attested.mandateRef === offset.mandateRef
+      && attested.mandateVersion === offset.mandateVersion
+      && attested.mandateGeneration === offset.mandateGeneration
+      && attested.principalRef === offset.principalRef
+      && attested.originalAuthorityUseRef === offset.authorityUseRef
+      && attested.cancellationAuthorityUseRef === offset.offsetAuthorityUseRef
+      && attested.providerRef === offset.providerRef
+      && attested.originalEffect.action.id === offset.exposureAction.id
+      && attested.originalEffect.action.version === offset.exposureAction.version
+      && attested.originalEffect.subjectRef === offset.exposureSubjectRef
+      && attested.originalEffect.resultRef === offset.exposureResultRef
+      && attested.originalEffect.evidenceDigest === canonicalDigest(offset.exposureEvidenceRef as never)
+      && attested.cancellationEffect.action.id === offset.offsetAction.id
+      && attested.cancellationEffect.action.version === offset.offsetAction.version
+      && attested.cancellationEffect.subjectRef === offset.offsetSubjectRef
+      && attested.cancellationEffect.resultRef === offset.offsetResultRef
+      && attested.cancellationEffect.evidenceDigest === canonicalDigest(offset.offsetEvidenceRef as never)
+      && attested.outcome === 'provider_confirmed_reversal'
+      && attested.releasedAmount.amountMinor === offset.amountMinor
+      && attested.releasedAmount.currency === offset.currency
   }
 }
 
@@ -605,6 +646,10 @@ function assertMandateInput(
     || new Set(actions.map((action) => `${action.id}:${action.version}`)).size !== actions.length
     || input.scope.exposureOffsetRules?.some((rule) =>
       rule.evidenceRuleRef.length === 0 || rule.source.length === 0 || rule.version.length === 0)
+    || input.scope.exposureOffsetVerificationKeys?.some((key) =>
+      key.keyId.length === 0 || !/^[0-9a-f]{64}$/.test(key.publicKey))
+    || ((input.scope.exposureOffsetRules?.length ?? 0) > 0
+      && (input.scope.exposureOffsetVerificationKeys?.length ?? 0) === 0)
     || (mode === 'bounded_mandate' && (
       actions.length !== 1
       || actions[0]?.id !== input.scope.action.id

@@ -66,7 +66,8 @@ export type {
 } from './standing-mandate-policy'
 export type {
   ExposureOffsetRuleIdentity,
-  ExposureOffsetRuleMaterial,
+  ExposureReleaseAttestation,
+  ExposureReleaseAttestationMaterial,
 } from './exposure-offset-rules'
 export type {
   DurableActionInvocationPort,
