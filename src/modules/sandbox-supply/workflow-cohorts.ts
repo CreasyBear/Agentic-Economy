@@ -87,14 +87,12 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
     prohibitedClaim: 'Do not claim independently operated supply, approval, availability, booking, payment, dispatch, certification, fulfilment, or real customer value.',
     steps: Object.freeze([
       step('event-requirements', 'Ideal Event Requirements Adviser', 'Prepare sourced event requirements', 'request', 'requirementsPacket', undefined, 'ae.event-requirements-packet:v1', false, 400, 'retry_safe', {
-        contractVersion: 2,
+        contractVersion: 3,
         decisionInputs: [
-          { field: 'eventStatus', label: 'Event access', prompt: 'Is the event public or private?', pattern: '^(?:public|private)$' },
           { field: 'proposedSite', label: 'Proposed site', prompt: 'What exact site is proposed?', pattern: '^.{3,200}$' },
           { field: 'operatingWindow', label: 'Operating window', prompt: 'What date and operating times are proposed?', pattern: '^.{8,200}$' },
           { field: 'expectedAttendance', label: 'Expected attendance', prompt: 'How many visitors are expected?', pattern: '^[1-9]\\d{0,5}$' },
-          { field: 'declaredActivities', label: 'Declared activities', prompt: 'Which food, sound, structures, access and other activities are included or excluded?', pattern: '^.{3,1000}$' },
-          { field: 'evidenceCutoff', label: 'Evidence cutoff', prompt: 'What ISO date should sources be checked against?', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          { field: 'eventProfile', label: 'Event profile', prompt: 'Is it public or private; which activities are included and excluded; and what ISO evidence-cutoff date applies?', pattern: '^.{20,1200}$' },
         ],
       }),
       step('event-site-evidence', 'Ideal Site and Safety Evidence Planner', 'Prepare site and safety evidence', 'requirementsPacket', 'siteEvidencePacket', 'ae.event-requirements-packet:v1', 'ae.event-site-evidence-packet:v1', false, 650, 'retry_safe'),

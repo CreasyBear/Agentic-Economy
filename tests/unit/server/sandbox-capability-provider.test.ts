@@ -256,12 +256,10 @@ describe('sandbox capability provider', () => {
   it('returns attributable structured event evidence and binds each downstream packet', async () => {
     const requirements = await workflowCall('event-requirements', {
       request: 'Prepare the fictional Riverside Makers Market evidence packet.',
-      eventStatus: 'public',
       proposedSite: 'Fictional Riverside Community Forecourt',
       operatingWindow: '2026-10-17 08:00-16:00',
       expectedAttendance: '350',
-      declaredActivities: '24 stalls; packaged and hot food; acoustic music; temporary marquees; no alcohol',
-      evidenceCutoff: '2026-07-19',
+      eventProfile: 'Public; 24 stalls; packaged and hot food; acoustic music; temporary marquees; no alcohol; evidence cutoff 2026-07-19.',
     })
     expect(requirements.status).toBe(200)
     const requirementsValue = (await requirements.json() as { requirementsPacket: string }).requirementsPacket
