@@ -105,6 +105,7 @@ export type {
   RichInvocationTaskProjection,
   StructuredInvocationTaskProjection,
 } from './host-projection'
+export type { ActionInvocationHostSeam } from './host-seam'
 export type { InvocationClarification } from './clarification'
 export type {
   AuthoritativePreparedWork,

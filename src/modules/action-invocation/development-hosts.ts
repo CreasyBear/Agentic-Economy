@@ -6,9 +6,7 @@ import type {
   InvocationActor,
   InvocationDecision,
 } from './contracts'
-import type {
-  DynamicPublishedActionInvocationAdapter,
-} from './dynamic-published-adapter'
+import type { ActionInvocationHostSeam } from './host-seam'
 import type { DynamicPublishedInvocationResult } from './dynamic-published-contract'
 import type { ReconciliationEvidence } from './reconciliation-evidence'
 
@@ -26,7 +24,7 @@ export type DevelopmentInvocationHost = Readonly<{
   recover(invocationRef: string): DevelopmentHostContinuation
   requestCancellation(invocationRef: string): InvocationDecision<DynamicPublishedInvocationResult>
   inspect(invocationRef: string): ActionInvocationView<DynamicPublishedInvocationResult> | undefined
-  exportSnapshot: DynamicPublishedActionInvocationAdapter['exportSnapshot']
+  exportSnapshot: ActionInvocationHostSeam['exportSnapshot']
 }>
 
 export type DevelopmentHostSourceCommands = Readonly<{
@@ -41,7 +39,7 @@ export type DevelopmentHostSourceCommands = Readonly<{
 
 function bindHost(
   host: 'request_owned_human' | 'standalone_external_agent',
-  adapter: DynamicPublishedActionInvocationAdapter,
+  adapter: ActionInvocationHostSeam,
   actor: InvocationActor,
   origin: ActionInvocationOrigin,
   sourceCommands: DevelopmentHostSourceCommands,
@@ -151,7 +149,7 @@ function bindHost(
 }
 
 export function createRequestOwnedDevelopmentHost(input: Readonly<{
-  adapter: DynamicPublishedActionInvocationAdapter
+  adapter: ActionInvocationHostSeam
   actor: InvocationActor
   requestRef: string
   revision: number
@@ -168,7 +166,7 @@ export function createRequestOwnedDevelopmentHost(input: Readonly<{
 }
 
 export function createStandaloneAgentDevelopmentHost(input: Readonly<{
-  adapter: DynamicPublishedActionInvocationAdapter
+  adapter: ActionInvocationHostSeam
   actor: InvocationActor
   sourceCommands: DevelopmentHostSourceCommands
 }>): DevelopmentInvocationHost {

@@ -10,6 +10,7 @@ describe('Action Invocation host boundary', () => {
     const source = readFileSync(path, 'utf8')
     expect(source).not.toMatch(/from ['"]@\/modules\/capability-supply/iu)
     expect(source).not.toMatch(/from ['"].*\/internal\//iu)
+    expect(source).not.toMatch(/dynamic-published-adapter/iu)
     expect(source).not.toMatch(/transport|credential|payment|prepareDynamic|executeDynamic/iu)
   })
 })
