@@ -8,6 +8,13 @@ export {
   type ReadImportedCommitmentResult,
 } from './import-claim'
 export { createDevelopmentImportedCommitmentStore } from './development-record-store'
+export {
+  observeImportedCommitmentAsCurrent,
+  type CurrentImportedCommitmentObservation,
+  type ImportedCommitmentObservationPort,
+  type ImportedCommitmentProviderObservation,
+  type ObserveImportedCommitmentResult,
+} from './observe-current'
 export type {
   ImportedCommitmentActor,
   ImportedCommitmentClaim,
