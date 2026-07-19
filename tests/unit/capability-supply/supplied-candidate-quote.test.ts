@@ -273,6 +273,77 @@ function inMemoryTracer(
 }
 
 describe('ADR-009 supplied-candidate development quote collection', () => {
+  it('keeps exact authority isolated across two independently qualified quote invocations', async () => {
+    const ports = qualificationPorts()
+    const inputA = await quoteInputFor(ports)
+    const inputB = {
+      ...inputA,
+      quoteRequest: {
+        ...inputA.quoteRequest,
+        serviceReference: 'dev:service:independent-quote-b',
+      },
+      operationKey: 'dev:quote-operation:independent-b',
+    }
+    let invocationSequence = 0
+    const tracer = createInMemoryActionInvocationTracer({
+      action: collectSuppliedCandidateQuoteAction,
+      now: nowIso,
+      nextInvocationRef: () => `dev:invocation:authority-isolation:${++invocationSequence}`,
+      nextAuthorityRef: () => `dev:authority:quote:${invocationSequence}`,
+      nextAttemptRef: () => `dev:attempt:quote:${invocationSequence}`,
+    })
+    const prepare = (
+      invocationInput: SuppliedCandidateQuoteInput,
+      origin: ActionInvocationOrigin,
+    ) =>
+      prepareSuppliedCandidateQuote({
+        tracer,
+        qualificationPorts: ports,
+        invocationInput,
+        origin,
+        actor,
+        context: {},
+        now: () => nowMs,
+      })
+    const preparedA = await prepare(inputA, origins[0]!)
+    const preparedB = await prepare(inputB, origins[1]!)
+    if (preparedA.kind !== 'prepared') throw new Error(preparedA.code)
+    if (preparedB.kind !== 'prepared') throw new Error(preparedB.code)
+
+    const acceptedA = tracer.decide({
+      invocationRef: preparedA.view.invocationRef,
+      expectedInvocationVersion: preparedA.view.invocationVersion,
+      authorityRef: preparedA.view.authority!.reference,
+      actor,
+      origin: origins[0]!,
+      accept: true,
+    })
+    expect(acceptedA).toMatchObject({ kind: 'accepted', view: { control: { state: 'authorized' } } })
+    expect(tracer.decide({
+      invocationRef: preparedB.view.invocationRef,
+      expectedInvocationVersion: preparedB.view.invocationVersion,
+      authorityRef: preparedA.view.authority!.reference,
+      actor,
+      origin: origins[1]!,
+      accept: true,
+    })).toMatchObject({ kind: 'refused' })
+    await expect(tracer.execute({
+      invocationRef: preparedA.view.invocationRef,
+      expectedInvocationVersion: acceptedA.kind === 'accepted'
+        ? acceptedA.view.invocationVersion
+        : preparedA.view.invocationVersion,
+      authorityRef: preparedA.view.authority!.reference,
+      actor,
+      origin: origins[0]!,
+      materialInput: inputB,
+    })).resolves.toMatchObject({ kind: 'refused', code: 'material_input_changed' })
+    expect(tracer.inspect(preparedB.view.invocationRef)).toMatchObject({
+      authority: { reference: preparedB.view.authority!.reference },
+      control: { state: 'awaiting_authority' },
+      attempts: [],
+    })
+  })
+
   it.each(origins)('runs the real P1-H qualifier before exact authority for $kind', async (origin) => {
     const ports = qualificationPorts()
     const quoteInput = await quoteInputFor(ports)

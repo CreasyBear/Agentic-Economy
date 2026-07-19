@@ -33,6 +33,15 @@ export {
 } from './persist-completed-task-reference'
 
 export {
+  projectReferenceComposition,
+  type ReferenceCompositionNode,
+  type ReferenceCompositionProjection,
+  type ReferenceCompositionResult,
+  type ReferenceCompositionState,
+  type RegisteredActionIdentity,
+} from './reference-composition'
+
+export {
   assembleRequestGraph,
   bindRequirementAnswer,
   compileCommit,
