@@ -24,6 +24,7 @@
     "smoke:customer-request:development": "tsx tools/dev/customer-request-development-smoke.ts",
     "smoke:customer-request:business-problem": "tsx tools/dev/customer-request-business-problem-smoke.ts",
     "smoke:customer-request:development:surface-parity": "tsx tools/dev/customer-request-development-surface-parity.ts",
+    "evidence:action-invocation:development": "tsx tools/dev/action-invocation-development-evidence.ts",
     "smoke:customer-request:production:temporary-key": "tsx tools/release/customer-request-production-credential.ts",
     "smoke:customer-request:production:human": "playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts",
     "smoke:customer-request:production:preflight": "tsx tools/release/customer-request-production-smoke.ts --preflight",
