@@ -59,3 +59,11 @@ No class silently upgrades another. A local or sandbox pass does not establish
 deployment, independent supply, real fulfilment, human parity, customer value,
 or production safety. An issue or ADR gate can remain externally unproven while
 authorized development implementation continues.
+
+For ADR-019 booking or authority-mode work, the minimum development eval crosses
+one registered booking action through the real Action Invocation seam and
+proves: no effect in `inspect_only`; exact use in `approve_each`; standing-use
+capacity in bounded modes; expiry/revocation/generation fencing; atomic
+reservation and settlement; uncertainty holds; honest cancellation; and
+step-up on every material widening. This proves labelled development contract
+behavior only, never current booking reachability or provider fulfilment.

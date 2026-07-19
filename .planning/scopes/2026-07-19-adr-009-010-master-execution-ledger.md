@@ -6,6 +6,19 @@
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
+## Founder governance rebaseline — 2026-07-19
+
+Accepted ADR-019 supersedes the ledger's recommendation that booking
+contradicts `PRODUCT.md`. The prior inquiry/read controls remain valid scoped
+development evidence; they do not close ADR-009 Gate 7.
+
+Phase 1 now adds a fresh development slot for one registered
+provider-supported booking action, direct Action Invocation proportionality,
+and authority-mode exact-use/revocation evals. Phase 2 selects that booking
+action for human/embedded/external host parity. The required source gap is a
+fresh slot and booking adapter or labelled provider simulator; none exists or
+is claimed by this governance commit.
+
 ## Operating contract
 
 The master owns sequence, dirty-tree arbitration, integration, evidence level,
@@ -45,7 +58,7 @@ commits are reviewed and cherry-picked by the master.
 
 ## Canonical Phase 1 execution map
 
-The governing sequence is the thirteen Phase 1 vertical slices in
+The governing sequence is the fourteen Phase 1 vertical slices in
 `2026-07-18-phase-1-2-completion-contract.md`. Earlier `P1-A` through `P1-J`
 labels were temporary master bookkeeping and are retired. They do not define a
 parallel plan.
@@ -64,9 +77,10 @@ parallel plan.
 | 10. Earned persistence | Implemented and re-audited in labelled development execution; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d`, `d7ee9fe1` |
 | 11. Request reuse | Implemented and re-audited in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0`, `249a247f` |
 | 12. Composition and direct control | Implemented with authoritative record resolution and measured direct control | `0dc146e8`, `a1442309`, `212ea0dd` |
-| 13. Transfer | Implemented with executed measurement and development evidence surface | `edc82390`, `9dd406be`, `bd23435e`, `7bb9836a`, `b933999e` |
+| 13. Booking and authority modes | Open — fresh development slot and provider adapter/simulator required | None |
+| 14. Transfer | Implemented with executed measurement and development evidence surface | `edc82390`, `9dd406be`, `bd23435e`, `7bb9836a`, `b933999e` |
 
-Phase 2 may not start until slices 1–13, all eleven ADR-009 gates, and the
+Phase 2 may not start until slices 1–14, all eleven ADR-009 gates, and the
 Founder ADR-009 decision are complete. Existing reconstruction or projection
 work is Phase 1 evidence only; it is not early Phase 2 completion.
 
@@ -861,7 +875,7 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 | 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Proven | Both origins share the registered runner, authority, effect identity, uncertainty, reconciliation, fencing, transactional durable control, and fresh-process reconstruction in labelled development execution. |
 | 5 | Historical Customer Request traces replay without semantic regression | Proven | A frozen pre-reference V2 aggregate/head/command from exact revision `d15f3b4b` replays through current local persistence/readback with identical digest, proposal-only authority, projection, command outcome, and absent optional fields. |
 | 6 | Composition contains inspectable references and declared dependencies only | Proven | The projector accepts graph structure and exact identities only, resolves authoritative registered-action/completed-result/invocation records, and refuses mismatched, missing, stale, cyclic, or uninspectable references. |
-| 7 | Direct-booking negative control remains unburdened | Governance disposition required | AE explicitly does not book. The selected registered first-contact/read control now executes through the instrumented development harness with one runner call, zero effects, and zero invocation/control/attempt/history emissions. Supersede the stale gate wording rather than invent booking. |
+| 7 | Direct-booking proportionality | Open — fresh development slot required | Historical first-contact/read controls prove only their scoped path. Close this gate with one registered provider-supported booking action and Action Invocation, no synthetic Request/Route orchestration, plus exact authority-use, uncertain-effect, cancellation, and evidence behavior. |
 | 8 | Person or cold agent can stop and continue from a durable result | Proven | Fresh development processes reconstruct durable control and a verified completed result can advance a canonical Request revision without repeating the effect. |
 | 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Proven | Four ordinary-language states and continuations derive from registered descriptors and authoritative invocation/result records; caller prose injection, stale state, and unknown identities are refused. |
 | 10 | Authority never crosses tasks | Proven | Cross-origin/principal/material reuse is refused, completed-result attachment carries no authority, and authority accepted for quote A cannot authorize independently prepared quote B. |
@@ -887,8 +901,9 @@ implementation gate substitute.
 
 ## Next decision
 
-Founder disposition is required for ADR-009 Gate 7. Recommended decision:
-supersede the stale “direct-booking negative control” wording with the executed
-direct first-contact/read control. AE explicitly does not book; adding booking
-to make the document green would contradict `PRODUCT.md`. If the Founder does
-not supersede the gate, ADR-009 remains proposed and Phase 2 entry is blocked.
+Founder disposition was recorded on 2026-07-19 in accepted ADR-019. The prior
+recommendation to replace booking with an executed direct first-contact/read
+control is superseded. AE targets booking as a separate registered action;
+adding that development adapter and closing the proportionality eval is now the
+next source transition. ADR-009 remains proposed and Phase 2 entry is blocked
+until Gate 7 and the remaining acceptance evidence close.

@@ -75,6 +75,14 @@ limits again from the caller at execution time.
 Completion: a changed material input, route, generation, recipient, purpose,
 effect, spend limit, or expiry cannot reuse the prior authority.
 
+ADR-019 adds target authority modes: `inspect_only`, `approve_each`,
+`bounded_mandate`, and `full_yolo`. The latter two are standing mandates, not
+identity privileges. Each use binds objective, action/version, recipient,
+purpose, data, spend/currency, count/time/parallelism, fallback, risk, expiry,
+revocation state, and mandate generation. Reserve capacity atomically before
+release; settle it honestly; hold uncertain reservations until reconciliation;
+step up on any material widening.
+
 ## 4. Extend authority to Action Invocation without weakening it
 
 ADR-009/010 evaluate Action Invocation as the shared control identity for one

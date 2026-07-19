@@ -178,8 +178,10 @@ This ADR may move from proposed to accepted only when evals demonstrate that:
 5. existing Customer Request traces replay without semantic regression;
 6. a bundle consists only of independently inspectable task references and
    declared dependencies;
-7. the direct-booking negative control is not burdened with unnecessary
-   orchestration;
+7. direct-booking proportionality is proven: one simple provider-supported
+   booking uses one registered booking action and Action Invocation without a
+   synthetic Request or RoutePlan, while coordinated booking may compose when
+   real dependencies require it;
 8. a customer or cold agent can stop after one task and later continue from its
    durable result without reconstructing the prior conversation;
 9. the full-route projection explains completed, current, optional and blocked
@@ -233,6 +235,13 @@ or verified work completed elsewhere.
 
 No current product claim, public endpoint or production capability changes as a
 result of this proposed ADR.
+
+## Amendment — 2026-07-19
+
+Accepted ADR-019 supersedes inquiry-only/no-booking as the target posture.
+Booking is now an intended consequential action. Gate 7 is therefore the
+direct-booking proportionality eval above, not a negative control or a reason to
+substitute `inquiry.submit`. Current evidence and ADR status are unchanged.
 
 Additional production-pattern evidence:
 

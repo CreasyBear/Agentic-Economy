@@ -1,7 +1,7 @@
 # AE project knowledge index
 
 **Owner:** Founder
-**Last reconciled:** 2026-07-17
+**Last reconciled:** 2026-07-19
 
 This is the entry point for what the project knows. It points to authority,
 decisions, evidence, and unresolved questions. It does not restate their full
@@ -16,6 +16,7 @@ contents.
 | AE's embedded agent and external agents should use the same registered actions and authoritative work records; their presentation may differ, but business meaning and outcome semantics must remain equivalent. | PROPOSED TARGET | [ADR-010](../adr/ADR-010-one-action-plane-across-human-and-agent-experiences.md); [D-007](./PROJECT-RECORDS.md) |
 | Today AE exposes published business information, comparison, qualified inquiry, and the exact authenticated Request states proven through intended surfaces. | CURRENT | `PRODUCT.md` current evidenced state; production source and hosted evidence |
 | AE does not currently book, charge, dispatch, or automatically fulfil. | CURRENT BOUNDARY | `PRODUCT.md`; `AGENTS.md`; executable copy gates |
+| AE targets registered booking and later high-autonomy consequential operation through exact, revocable authority modes; `full_yolo` is a broad bounded standing mandate, never ambient or unlimited authority. | ACCEPTED TARGET | [ADR-019](../adr/ADR-019-authority-modes-and-consequential-operations-target.md); D-010; `PRODUCT.md`; `DESIGN.md` |
 | Internal workflow machinery is not the public product explanation. | ACCEPTED | `DESIGN.md`; [D-003](./PROJECT-RECORDS.md) |
 
 ## Calling agents

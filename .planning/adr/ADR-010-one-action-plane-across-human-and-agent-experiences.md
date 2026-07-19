@@ -115,9 +115,16 @@ The agent may propose useful next tasks or a complete route. It may not silently
 expand the objective, relax constraints, select optional work or infer authority
 for later tasks.
 
-Every consequential action requires explicit authority bound to its exact
-inputs, target, consequence and freshness window. Approval of one task does not
-authorize another task, a material revision or a fallback branch.
+Every consequential action requires one exact authority use from either a
+per-action decision or a valid standing mandate. It binds the mode, mandate
+generation, objective, action/version, inputs, target, purpose, consequence,
+data, spend/currency, count/time/parallelism, fallback, risk, and freshness
+window. Approval of one task does not authorize another task, a material
+revision, or an undeclared fallback branch.
+
+Human, embedded-agent, and external-agent hosts preserve parity for authority
+mode, scope, remaining capacity, expiry, revocation, generation fencing,
+step-up, uncertainty, cancellation, evidence, and safe continuation.
 
 ## Generative UI boundary
 
@@ -193,6 +200,14 @@ This ADR may move from proposed to accepted only when evals demonstrate that:
 
 Failure requires narrowing the supported cross-surface contract or superseding
 this ADR. It does not justify building a second lifecycle.
+
+## Amendment — 2026-07-19
+
+Accepted ADR-019 makes registered booking the first consequential parity target
+after Phase 1 closes its direct-booking Gate 7. `inquiry.submit` remains a
+first-contact communication and is not the Phase 2 booking substitute. This
+amendment changes the target and eval selection; it does not claim an existing
+booking adapter, authority-mode UI, or customer-reachable operation.
 
 ## Consequences
 

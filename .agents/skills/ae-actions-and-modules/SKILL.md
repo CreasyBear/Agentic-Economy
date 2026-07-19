@@ -71,6 +71,11 @@ not as host-owned rules.
 Completion: every supported host invokes the same source-owned transition, and
 unsupported surfaces are absent rather than aspirational.
 
+Target scope and current reachability are separate. ADR-019 permits registered
+booking, payment, dispatch, cancellation, and later high-autonomy operations as
+implementation targets. It does not make them current surfaces. Trace the live
+adapter before a reachability claim.
+
 ## 4. Keep the trust boundary exact
 
 Identity attributes a caller; it does not authorize a verb. Possession of an
@@ -85,6 +90,15 @@ For a consequential transition:
 - represent uncertain external effects explicitly and reconcile before retry;
 - keep cancellation honest after provider release;
 - preserve existing Request-owned lineage while standalone lineage is added.
+
+Simple provider-supported booking is one registered booking action and Action
+Invocation; do not fabricate a Customer Request or RoutePlan. Coordinated
+booking may compose only when real dependencies earn orchestration.
+
+Authority mode is `inspect_only`, `approve_each`, `bounded_mandate`, or
+`full_yolo`. Every effect still consumes one exact authority use. `full_yolo`
+is a broad explicit standing mandate with ceilings, expiry, revocation,
+generation fencing, reservation/settlement, and step-up—not ambient authority.
 
 An Action Invocation is a narrow continuity/control identity for one registered
 action version. It does not replace the action-specific business result,

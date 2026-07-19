@@ -83,7 +83,7 @@ real task + caller/provider cohorts + incumbent control
   -> architecture + investment eval decision
   -> approved task-first product/engineering handoff
   -> Phase 1 two-caller vertical slices
-  -> ADR-009 eleven-gate decision
+  -> ADR-009 eleven-gate decision, including development booking Gate 7
   -> Phase 2 cross-surface vertical slices
   -> ADR-010 ten-gate decision
   -> cross-phase transfer/direct-control review
@@ -185,7 +185,13 @@ The slices are:
 12. **Composition and direct control.** Prove independently inspectable
     references and dependencies, per-action authority, a truthful route roll-up,
     and no unnecessary persistence/approval on the direct negative control.
-13. **Transfer.** Run the cheaper contrasting workflow and reject or narrow the
+13. **Booking and authority modes.** Run one simple provider-supported booking
+    through one registered booking action and Action Invocation without a
+    synthetic Request/Route. Prove `inspect_only`, `approve_each`, bounded
+    standing use, expiry, revocation, generation fencing, atomic
+    reservation/settlement, uncertainty holds, cancellation honesty, and
+    material-widening step-up.
+14. **Transfer.** Run the cheaper contrasting workflow and reject or narrow the
     seam if it adds control records, latency, or supervision without safety or
     continuity benefit.
 
@@ -202,7 +208,10 @@ ADR-009 may be accepted only when executable evidence proves all eleven gates:
    evidence, and recovery meaning;
 5. historical Request traces replay without semantic regression;
 6. composition contains inspectable references and declared dependencies only;
-7. the direct-booking negative control remains unburdened;
+7. direct-booking proportionality is proven: one provider-supported booking
+   crosses one registered booking action and Action Invocation without
+   synthetic Request/Route orchestration; coordinated booking composes only
+   when genuine dependencies require it;
 8. a person or cold agent can stop and later continue from the durable result;
 9. the full-route projection explains completed, current, optional, and blocked
    work without exposing kernel machinery;
@@ -210,6 +219,15 @@ ADR-009 may be accepted only when executable evidence proves all eleven gates:
 11. no domain nouns enter neutral contracts.
 
 There are no silently deferred ADR-009 gates.
+
+ADR-019 also extends Phase 1 with the authority-mode contract and evals for
+exact use, reservation/settlement, expiry, revocation, generation fencing,
+step-up, and uncertainty holds. `approve_each` is the implementation baseline;
+standing modes do not pass on schema or fixture evidence alone.
+
+Phase 2 uses the registered booking action from Gate 7 for consequential host
+parity. `inquiry.submit` may remain a first-contact regression control, but it
+cannot substitute for booking or discharge mode/revocation parity.
 
 ## Phase 2 — complete ADR-010
 
