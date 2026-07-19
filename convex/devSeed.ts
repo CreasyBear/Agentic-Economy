@@ -596,14 +596,15 @@ function sandboxRouteProviderOrigin(
 export async function registerSandboxWorkflowSupplyRegistrations(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
   registeredAt: number,
+  cohortIds: readonly string[] = [
+    'procurement',
+    'itinerary',
+    'public-event-activation',
+    'journey-management',
+  ],
 ): Promise<SandboxV2SupplyRegistration[]> {
   const workflowProfiles = Object.entries(SANDBOX_WORKFLOW_PROVIDER_PROFILES)
-    .filter(([, profile]) => (
-      profile.cohortId === 'procurement'
-      || profile.cohortId === 'itinerary'
-      || profile.cohortId === 'journey-management'
-      || profile.cohortId === 'public-event-activation'
-    ))
+    .filter(([, profile]) => cohortIds.includes(profile.cohortId))
   const siteUrl = process.env.AE_SANDBOX_WORKFLOW_ORIGIN?.trim()
     || process.env.AE_SANDBOX_ROUTE_RESOLVER_ORIGIN?.trim()
     || process.env.AE_SITE_URL?.trim()

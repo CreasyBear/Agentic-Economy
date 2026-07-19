@@ -138,6 +138,36 @@ export const seedLabelledSandboxSupply = internalMutation({
   },
 })
 
+export const seedSyntheticEventWorkflowSupply = internalMutation({
+  args: {},
+  returns: v.object({
+    bindings: v.array(v.string()),
+    publicationRefs: v.array(v.string()),
+  }),
+  handler: async (ctx) => {
+    const registeredAt = Date.now()
+    const registrations = await registerSandboxWorkflowSupplyRegistrations(
+      ctx.db,
+      registeredAt,
+      ['public-event-activation'],
+    )
+    const bindings = await admitSandboxV2Supply(ctx.db, registrations, registeredAt + 500)
+    const publicationRefs = await Promise.all(registrations.map(async (registration, index) => {
+      const publicationRef = await seedSandboxCapabilityPublication(
+        ctx.db,
+        registration,
+        registeredAt + 1_000 + index,
+      )
+      await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+        publicationRef,
+        expectedRevision: 1,
+      })
+      return publicationRef
+    }))
+    return { bindings, publicationRefs }
+  },
+})
+
 async function bindLabelledSandboxBusinessesToOwner(
   db: MutationCtx['db'],
   slugs: readonly string[],
