@@ -12,6 +12,7 @@ vi.mock('@/modules/registry/registry.functions', () => ({
 
 import { findAction } from '@/modules/actions'
 import {
+  createDevelopmentReleaseSignal,
   createInMemoryActionInvocationTracer,
   type ActionInvocationOrigin,
   type InvocationActor,
@@ -240,5 +241,212 @@ describe('in-memory Action Invocation tracer', () => {
       view: { control: { state: 'invalidated', reason: 'material_input_changed' } },
     })
     expect(developmentAdapter).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['Request-owned', requestOrigin],
+    ['standalone', standaloneOrigin],
+  ])('records attributable pre-release retry and post-release uncertainty for %s origin', async (_label, origin) => {
+    const action = findAction('inquiry.submit')!
+    const release = createDevelopmentReleaseSignal()
+    const developmentAdapter = vi.fn()
+      .mockRejectedValueOnce(new Error('MOCK pre-release connection refusal'))
+      .mockImplementationOnce(async () => {
+        release.markReleased()
+        throw new Error('MOCK response lost after possible release')
+      })
+    const tracer = createInMemoryActionInvocationTracer({
+      action,
+      now: () => '2026-07-19T07:00:00.000Z',
+      nextInvocationRef: () => `dev:action-invocation:attempts:${origin.kind}`,
+      nextAuthorityRef: () => `opaque:authority:attempts:${origin.kind}`,
+      nextAttemptRef: (() => {
+        let sequence = 0
+        return () => `dev:attempt:${origin.kind}:${++sequence}`
+      })(),
+      developmentReleaseSignal: release,
+    })
+    const prepared = tracer.prepare({
+      origin,
+      actor,
+      input: inquiryInput,
+      context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+      freshnessMs: 60_000,
+    })
+    const decision = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin,
+      accept: true,
+    })
+    if (decision.kind !== 'accepted') throw new Error('Expected accepted authority')
+
+    const preRelease = await tracer.execute({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decision.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin,
+      materialInput: inquiryInput,
+    })
+    if (preRelease.kind !== 'accepted') throw new Error('Expected attributable failed attempt')
+    expect(preRelease.view).toMatchObject({
+      control: { state: 'retryable', reason: 'pre_release_failure' },
+      attempts: [{
+        attemptRef: `dev:attempt:${origin.kind}:1`,
+        attemptNumber: 1,
+        actor,
+        idempotency: {
+          operationKey: inquiryInput.operationKey,
+          materialInputDigest: preRelease.view.prepared!.materialInputDigest,
+          effectIdentity: expect.any(String),
+        },
+        release: { state: 'not_released' },
+        outcome: { state: 'failed', retry: 'safe_before_release' },
+      }],
+    })
+
+    const uncertain = await tracer.execute({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: preRelease.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin,
+      materialInput: inquiryInput,
+    })
+    if (uncertain.kind !== 'accepted') throw new Error('Expected attributable uncertain attempt')
+    expect(uncertain.view).toMatchObject({
+      control: {
+        state: 'reconciliation_required',
+        attemptRef: `dev:attempt:${origin.kind}:2`,
+      },
+      attempts: [
+        { attemptRef: `dev:attempt:${origin.kind}:1`, release: { state: 'not_released' } },
+        {
+          attemptRef: `dev:attempt:${origin.kind}:2`,
+          attemptNumber: 2,
+          release: { state: 'possibly_released' },
+          outcome: { state: 'uncertain', retry: 'reconcile_before_retry' },
+        },
+      ],
+    })
+
+    const refusedReplay = await tracer.execute({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: uncertain.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin,
+      materialInput: inquiryInput,
+    })
+    expect(refusedReplay).toMatchObject({
+      kind: 'refused',
+      code: 'reconciliation_required',
+    })
+    expect(developmentAdapter).toHaveBeenCalledTimes(2)
+    const reconciled = tracer.reconcile({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: uncertain.view.invocationVersion,
+      attemptRef: `dev:attempt:${origin.kind}:2`,
+      actor,
+      origin,
+      resolution: 'released',
+    })
+    expect(reconciled).toMatchObject({
+      kind: 'accepted',
+      view: {
+        control: { state: 'terminal' },
+        attempts: [
+          {},
+          {
+            release: { state: 'released', observedAt: '2026-07-19T07:00:00.000Z' },
+            outcome: {
+              state: 'reconciled_released',
+              externalOutcome: 'unknown',
+              observedAt: '2026-07-19T07:00:00.000Z',
+            },
+          },
+        ],
+      },
+    })
+
+    console.log(JSON.stringify({
+      label: 'MOCK/DEVELOPMENT ONLY - in-memory attempt and uncertainty transitions',
+      origin: origin.kind,
+      preRelease: preRelease.view,
+      postRelease: uncertain.view,
+      refusedReplay,
+      reconciled,
+    }, null, 2))
+  })
+
+  it('fails closed when no release observer can prove a runner throw happened before release', async () => {
+    const action = findAction('inquiry.submit')!
+    const developmentAdapter = vi.fn().mockRejectedValue(new Error('MOCK unobserved interruption'))
+    const tracer = createInMemoryActionInvocationTracer({
+      action,
+      now: () => '2026-07-19T08:00:00.000Z',
+      nextInvocationRef: () => 'dev:action-invocation:missing-observer',
+      nextAuthorityRef: () => 'opaque:authority:missing-observer',
+      nextAttemptRef: () => 'dev:attempt:missing-observer:1',
+    })
+    const prepared = tracer.prepare({
+      origin: standaloneOrigin,
+      actor,
+      input: inquiryInput,
+      context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+      freshnessMs: 60_000,
+    })
+    const decision = tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin: standaloneOrigin,
+      accept: true,
+    })
+    if (decision.kind !== 'accepted') throw new Error('Expected accepted authority')
+    const uncertain = await tracer.execute({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decision.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin: standaloneOrigin,
+      materialInput: inquiryInput,
+    })
+    expect(uncertain).toMatchObject({
+      kind: 'accepted',
+      view: {
+        control: { state: 'reconciliation_required', attemptRef: 'dev:attempt:missing-observer:1' },
+        attempts: [{
+          release: { state: 'possibly_released' },
+          outcome: { state: 'uncertain', retry: 'reconcile_before_retry' },
+        }],
+      },
+    })
+    if (uncertain.kind !== 'accepted') throw new Error('Expected uncertain attempt')
+    expect(tracer.reconcile({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: uncertain.view.invocationVersion,
+      attemptRef: 'dev:attempt:missing-observer:1',
+      actor,
+      origin: standaloneOrigin,
+      resolution: 'not_released',
+    })).toMatchObject({
+      kind: 'accepted',
+      view: {
+        control: { state: 'retryable', reason: 'pre_release_failure' },
+        attempts: [{
+          release: { state: 'not_released' },
+          outcome: {
+            state: 'reconciled_not_released',
+            retry: 'safe_after_reconciliation',
+            observedAt: '2026-07-19T08:00:00.000Z',
+          },
+        }],
+      },
+    })
   })
 })

@@ -20,12 +20,20 @@ import {
   materialDigest,
   readPath,
 } from './preparation'
+import {
+  reconcileAttempt,
+  replaceAttempt,
+  type DevelopmentReleaseSignal,
+} from './attempts'
+import { executeConsequentialAttempt } from './attempt-execution'
 
 type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly<{
   action: Action<Input, Result>
   now: () => string
   nextInvocationRef: () => string
   nextAuthorityRef?: () => string
+  nextAttemptRef?: () => string
+  developmentReleaseSignal?: DevelopmentReleaseSignal
   contextForExecution?: (context: ActionContext) => ActionContext
 }>
 
@@ -51,8 +59,8 @@ type StoredInvocation<Input, Result extends ActionResult> = {
 
 /**
  * Development-only in-memory control seam. It proves preparation, exact
- * authority and registered-runner reuse; it makes no durability, delivery,
- * attempt, retry or external-effect claim.
+ * authority, attributable attempt transitions and registered-runner reuse. It
+ * makes no durability, delivery or real external-effect claim.
  */
 export function createInMemoryActionInvocationTracer<
   Input,
@@ -61,36 +69,59 @@ export function createInMemoryActionInvocationTracer<
   const records = new Map<string, StoredInvocation<Input, Result>>()
   const contract = resolveActionContract(options.action)
   let authoritySequence = 0
+  let attemptSequence = 0
 
   const executeRunner = async (
     record: StoredInvocation<Input, Result>,
   ): Promise<ActionInvocationView<Result>> => {
+    if (record.view.prepared === undefined) {
+      const running = nextView(record.view, { control: { state: 'in_progress' } })
+      record.view = running
+      try {
+        const context = options.contextForExecution?.(record.context) ?? record.context
+        const result = await options.action.run({ data: record.input, context })
+        record.view = nextView(running, {
+          observedResolution: {
+            state: 'returned',
+            execution: 'runner_returned',
+            businessOutcome: classifyBusinessOutcome(result),
+            result,
+          },
+          freshness: { state: 'current', observedAt: options.now() },
+          control: { state: 'terminal' },
+        })
+      } catch (error) {
+        record.view = nextView(running, {
+          observedResolution: {
+            state: 'threw',
+            execution: 'runner_threw',
+            message: error instanceof Error ? error.message : 'Unknown runner failure',
+          },
+          freshness: { state: 'current', observedAt: options.now() },
+          control: { state: 'terminal' },
+        })
+      }
+      return record.view
+    }
+    const operationKey = readPath(record.input, 'operationKey')
+    if (typeof operationKey !== 'string') {
+      throw new Error('Consequential inquiry attempt requires operationKey and prepared material digest.')
+    }
     const running = nextView(record.view, { control: { state: 'in_progress' } })
     record.view = running
-    try {
-      const context = options.contextForExecution?.(record.context) ?? record.context
-      const result = await options.action.run({ data: record.input, context })
-      record.view = nextView(running, {
-        observedResolution: {
-          state: 'returned',
-          execution: 'runner_returned',
-          businessOutcome: classifyBusinessOutcome(result),
-          result,
-        },
-        freshness: { state: 'current', observedAt: options.now() },
-        control: { state: 'terminal' },
-      })
-    } catch (error) {
-      record.view = nextView(running, {
-        observedResolution: {
-          state: 'threw',
-          execution: 'runner_threw',
-          message: error instanceof Error ? error.message : 'Unknown runner failure',
-        },
-        freshness: { state: 'current', observedAt: options.now() },
-        control: { state: 'terminal' },
-      })
-    }
+    const transition = await executeConsequentialAttempt({
+      action: options.action,
+      actionInput: record.input,
+      context: options.contextForExecution?.(record.context) ?? record.context,
+      currentView: running,
+      attemptRef: options.nextAttemptRef?.() ?? `dev:attempt:${++attemptSequence}`,
+      operationKey,
+      now: options.now,
+      ...(options.developmentReleaseSignal === undefined
+        ? {}
+        : { releaseSignal: options.developmentReleaseSignal }),
+    })
+    record.view = nextView(running, transition)
     return record.view
   }
 
@@ -167,7 +198,10 @@ export function createInMemoryActionInvocationTracer<
       const checked = checkBinding(records.get(input.invocationRef), input, options.now())
       if (checked.kind === 'refused') return checked
       const record = checked.record
-      if (record.view.control.state !== 'authorized') {
+      if (record.view.control.state === 'reconciliation_required') {
+        return { kind: 'refused', code: 'reconciliation_required', view: record.view }
+      }
+      if (record.view.control.state !== 'authorized' && record.view.control.state !== 'retryable') {
         return { kind: 'refused', code: 'authority_not_accepted', view: record.view }
       }
       const digest = materialDigest(input.materialInput, contract.materialInputPaths)
@@ -179,6 +213,34 @@ export function createInMemoryActionInvocationTracer<
       }
       record.input = input.materialInput
       return { kind: 'accepted', view: await executeRunner(record) }
+    },
+    reconcile(input) {
+      const record = records.get(input.invocationRef)
+      if (record === undefined) return { kind: 'refused', code: 'invocation_not_found' }
+      if (record.view.invocationVersion !== input.expectedInvocationVersion) {
+        return { kind: 'refused', code: 'stale_invocation_version', view: record.view }
+      }
+      if (
+        record.view.owner.callerRef !== input.actor.callerRef ||
+        record.view.owner.principalRef !== input.actor.principalRef
+      ) return { kind: 'refused', code: 'cross_principal_refused', view: record.view }
+      if (JSON.stringify(record.view.origin) !== JSON.stringify(input.origin)) {
+        return { kind: 'refused', code: 'cross_origin_refused', view: record.view }
+      }
+      if (
+        record.view.control.state !== 'reconciliation_required' ||
+        record.view.control.attemptRef !== input.attemptRef
+      ) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      const attempt = record.view.attempts.find((candidate) => candidate.attemptRef === input.attemptRef)
+      if (attempt === undefined) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      const reconciled = reconcileAttempt(attempt, input.resolution, options.now())
+      record.view = nextView(record.view, {
+        attempts: replaceAttempt(record.view.attempts, reconciled),
+        control: input.resolution === 'not_released'
+          ? { state: 'retryable', reason: 'pre_release_failure' }
+          : { state: 'terminal' },
+      })
+      return { kind: 'accepted', view: record.view }
     },
     inspect(invocationRef) {
       return records.get(invocationRef)?.view
@@ -206,6 +268,7 @@ function createRecord<Input, Result extends ActionResult>(
       owner: actor,
       action: { id: options.action.id, contractVersion },
       desired: { state: 'invoke' },
+      attempts: [],
       observedResolution: { state: 'pending' },
       freshness: { state: 'not_observed' },
       control: { state: 'in_progress' },
