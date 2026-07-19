@@ -31,7 +31,6 @@ export {
 } from './standing-mandate-grant'
 export { evaluateStandingMandatePolicy } from './standing-mandate-policy'
 export { materialDigest } from './preparation'
-export { ExposureOffsetRuleRegistry } from './exposure-offset-rules'
 
 export type {
   ActionInvocationOrigin,
@@ -68,7 +67,6 @@ export type {
 export type {
   ExposureOffsetRuleIdentity,
   ExposureOffsetRuleMaterial,
-  ExposureOffsetRuleResolver,
 } from './exposure-offset-rules'
 export type {
   DurableActionInvocationPort,

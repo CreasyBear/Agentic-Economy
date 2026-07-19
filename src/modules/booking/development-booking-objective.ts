@@ -27,7 +27,7 @@ import {
 import { createDevelopmentBookingProvider } from './development-booking-provider'
 import type { DevelopmentBookingProviderSnapshot } from './development-booking-provider'
 import {
-  createDevelopmentBookingOffsetRuleRegistry,
+  createDevelopmentBookingOffsetRuleTrust,
   developmentCancellationConfirmationRule,
 } from './development-booking-offset-rule'
 import { runCancellationInvocation, runReservationInvocation } from './development-booking-runner'
@@ -415,11 +415,11 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
       || input.objectiveState.cancellationResultRef === null
       || reconstructed.at(-1)?.observedResolution.state !== 'returned'
     ) throw new Error('development_booking_terminal_state_refused')
-    const registry = createDevelopmentBookingOffsetRuleRegistry(input.providerSnapshot)
+    const trust = createDevelopmentBookingOffsetRuleTrust(input.providerSnapshot)
     return {
       processRef: input.processRef,
       store: new StandingMandateStore(structuredClone(input.mandateSnapshot), {
-        offsetRuleRegistry: registry,
+        offsetRuleTrust: trust,
       }),
       providerSnapshot: provider.exportSnapshot(),
       objectiveState: input.objectiveState,
@@ -442,7 +442,7 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
   ) throw new Error('development_booking_objective_booking_result_refused')
   const confirmed = bookingView.observedResolution.result
   let store = new StandingMandateStore(structuredClone(input.mandateSnapshot), {
-    offsetRuleRegistry: createDevelopmentBookingOffsetRuleRegistry(input.providerSnapshot),
+    offsetRuleTrust: createDevelopmentBookingOffsetRuleTrust(input.providerSnapshot),
   })
   const cancellationMaterial = cancellationInput({
     reservationRef: confirmed.reservationRef,
@@ -498,7 +498,7 @@ export async function resumeDevelopmentBookingObjective(input: Readonly<{
   const cancellationResult = cancellationRun.view.observedResolution.result
   const providerSnapshot = provider.exportSnapshot()
   store = new StandingMandateStore(structuredClone(store.exportSnapshot()), {
-    offsetRuleRegistry: createDevelopmentBookingOffsetRuleRegistry(providerSnapshot),
+    offsetRuleTrust: createDevelopmentBookingOffsetRuleTrust(providerSnapshot),
   })
   const offset = store.recordExposureOffset({
     authorityUseRef: 'mock:authority-use:full-yolo:b',

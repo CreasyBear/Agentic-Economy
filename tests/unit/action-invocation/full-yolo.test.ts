@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
+import * as actionInvocationPublic from '@/modules/action-invocation'
 import {
   evaluateStandingMandatePolicy,
-  ExposureOffsetRuleRegistry,
   StandingMandateStore,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -12,9 +12,10 @@ import {
   verifyFullYoloEvidence,
 } from '../../../tools/dev/full-yolo-evidence-packet'
 import {
-  createDevelopmentBookingOffsetRuleRegistry,
+  createDevelopmentBookingOffsetRuleTrust,
   developmentCancellationConfirmationRule,
 } from '@/modules/booking/development-booking-offset-rule'
+import { createTrustedExposureOffsetRuleTestCapability } from '../../support/trusted-exposure-offset-rule-test-factory'
 
 describe('full_yolo bounded authority mode', () => {
   it('executes fallback and cancellation through three exact standing-mandate uses', async () => {
@@ -91,28 +92,28 @@ describe('full_yolo bounded authority mode', () => {
     const snapshot = structuredClone(evidence.mandateSnapshot)
     ;(snapshot as any).exposureOffsets = []
     const { digest: _digest, ...offset } = evidence.mandateSnapshot.exposureOffsets![0]!
-    const authoritativeRegistry = createDevelopmentBookingOffsetRuleRegistry(
+    const authoritativeTrust = createDevelopmentBookingOffsetRuleTrust(
       evidence.coldContinuation.providerSnapshot,
     )
-    const store = new StandingMandateStore(snapshot, { offsetRuleRegistry: authoritativeRegistry })
+    const store = new StandingMandateStore(snapshot, { offsetRuleTrust: authoritativeTrust })
     expect(store.recordExposureOffset({ ...offset, evidenceRuleRef: 'unknown' })).toEqual({
       kind: 'refused',
       code: 'authority_use_linkage_invalid',
     })
-    const wrongRegistry = new ExposureOffsetRuleRegistry([{
+    const wrongTrust = createTrustedExposureOffsetRuleTestCapability([{
       identity: {
         ...developmentCancellationConfirmationRule,
         source: 'other.source',
       },
       resolve: () => true,
     }])
-    const wrongStore = new StandingMandateStore(snapshot, { offsetRuleRegistry: wrongRegistry })
+    const wrongStore = new StandingMandateStore(snapshot, { offsetRuleTrust: wrongTrust })
     expect(wrongStore.recordExposureOffset(offset)).toEqual({
       kind: 'refused',
       code: 'authority_use_linkage_invalid',
     })
     const wrongVersionStore = new StandingMandateStore(snapshot, {
-      offsetRuleRegistry: new ExposureOffsetRuleRegistry([{
+      offsetRuleTrust: createTrustedExposureOffsetRuleTestCapability([{
         identity: {
           ...developmentCancellationConfirmationRule,
           version: 'v2',
@@ -138,11 +139,34 @@ describe('full_yolo bounded authority mode', () => {
       original.state = state
       redigest(original)
       expect(() => new StandingMandateStore(notReleased, {
-        offsetRuleRegistry: createDevelopmentBookingOffsetRuleRegistry(
+        offsetRuleTrust: createDevelopmentBookingOffsetRuleTrust(
           evidence.coldContinuation.providerSnapshot,
         ),
       })).toThrow('standing_mandate_snapshot_exposure_offset_refused')
     }
+  })
+
+  it('rejects an exact-identity forged resolver in live and cold paths', async () => {
+    expect(actionInvocationPublic).not.toHaveProperty('ExposureOffsetRuleRegistry')
+    expect(actionInvocationPublic).not.toHaveProperty('sealSourceOwnedExposureOffsetRules')
+    const evidence = await runFullYoloEvidence()
+    const withoutOffset = structuredClone(evidence.mandateSnapshot)
+    ;(withoutOffset as any).exposureOffsets = []
+    const { digest: _digest, ...offset } = evidence.mandateSnapshot.exposureOffsets![0]!
+    const forged = {
+      identity: developmentCancellationConfirmationRule,
+      resolve: () => true,
+    }
+    const live = new StandingMandateStore(withoutOffset, {
+      offsetRuleTrust: forged as never,
+    })
+    expect(live.recordExposureOffset(offset)).toEqual({
+      kind: 'refused',
+      code: 'authority_use_linkage_invalid',
+    })
+    expect(() => new StandingMandateStore(structuredClone(evidence.mandateSnapshot), {
+      offsetRuleTrust: forged as never,
+    })).toThrow('standing_mandate_snapshot_exposure_offset_refused')
   })
 
   it('proves restart continuation is objective-owned rather than direct provider replay', async () => {

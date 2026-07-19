@@ -14,7 +14,7 @@ import {
   runFullYoloDevelopmentObjective,
 } from '../../src/modules/booking/development-booking-objective'
 import {
-  createDevelopmentBookingOffsetRuleRegistry,
+  createDevelopmentBookingOffsetRuleTrust,
   developmentCancellationConfirmationRule,
 } from '../../src/modules/booking/development-booking-offset-rule'
 import {
@@ -188,7 +188,7 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     && cancellationInput.providerRef === booking.result.providerRef
     && cancellationInput.principalRef === booking.principalRef
   const store = new StandingMandateStore(structuredClone(evidence.mandateSnapshot), {
-    offsetRuleRegistry: createDevelopmentBookingOffsetRuleRegistry(
+    offsetRuleTrust: createDevelopmentBookingOffsetRuleTrust(
       evidence.coldContinuation.providerSnapshot,
     ),
   })

@@ -6,9 +6,10 @@ import {
 import type { StandingMandateAuthorityBasis } from './contracts'
 import type { StandingMandatePolicyDecision } from './standing-mandate-policy'
 import {
-  ExposureOffsetRuleRegistry,
+  resolveTrustedExposureOffsetRule,
   type ExposureOffsetRuleIdentity,
   type ExposureOffsetRuleMaterial,
+  type TrustedExposureOffsetRuleCapability,
 } from './exposure-offset-rules'
 
 export const STANDING_MANDATE_FORMAT = 'ae.action-invocation-standing-mandate:v1' as const
@@ -143,15 +144,15 @@ export class StandingMandateStore {
   readonly #policyDecisions = new Map<string, StandingMandatePolicyDecision>()
   readonly #usedOffsetUses = new Set<string>()
   readonly #usedOffsetEvidence = new Set<string>()
-  readonly #offsetRuleRegistry: ExposureOffsetRuleRegistry
+  readonly #offsetRuleTrust: TrustedExposureOffsetRuleCapability | undefined
 
   constructor(
     snapshot?: StandingMandateSnapshot,
     options?: Readonly<{
-      offsetRuleRegistry?: ExposureOffsetRuleRegistry
+      offsetRuleTrust?: TrustedExposureOffsetRuleCapability
     }>,
   ) {
-    this.#offsetRuleRegistry = options?.offsetRuleRegistry ?? new ExposureOffsetRuleRegistry()
+    this.#offsetRuleTrust = options?.offsetRuleTrust
     for (const mandate of snapshot?.mandates ?? []) {
       if (!mandateIntegrityValid(mandate)) throw new Error('standing_mandate_snapshot_integrity_refused')
       this.#mandates.set(mandate.mandateRef, deepFreeze(structuredClone(mandate)))
@@ -560,11 +561,11 @@ export class StandingMandateStore {
   }
 
   #offsetRuleResolves(material: ExposureOffsetRuleMaterial) {
-    return this.#offsetRuleRegistry.resolve({
+    return resolveTrustedExposureOffsetRule(this.#offsetRuleTrust, {
       evidenceRuleRef: material.evidenceRuleRef,
       source: material.evidenceRuleSource,
       version: material.evidenceRuleVersion,
-    })?.resolve(material) === true
+    }, material)
   }
 }
 

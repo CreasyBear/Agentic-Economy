@@ -1,8 +1,8 @@
 import {
-  ExposureOffsetRuleRegistry,
   type ExposureOffsetRuleIdentity,
   type ExposureOffsetRuleMaterial,
 } from '@/modules/action-invocation'
+import { sealSourceOwnedExposureOffsetRules } from '../action-invocation/exposure-offset-rules'
 import type { DevelopmentBookingProviderSnapshot } from './development-booking-provider'
 
 export const developmentCancellationConfirmationRule: ExposureOffsetRuleIdentity = {
@@ -11,10 +11,10 @@ export const developmentCancellationConfirmationRule: ExposureOffsetRuleIdentity
   version: 'v1',
 }
 
-export function createDevelopmentBookingOffsetRuleRegistry(
+export function createDevelopmentBookingOffsetRuleTrust(
   snapshot: DevelopmentBookingProviderSnapshot,
 ) {
-  return new ExposureOffsetRuleRegistry([{
+  return sealSourceOwnedExposureOffsetRules([{
     identity: developmentCancellationConfirmationRule,
     resolve: (material) => resolvesAuthoritativeCancellation(snapshot, material),
   }])

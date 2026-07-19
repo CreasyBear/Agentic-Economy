@@ -34,27 +34,46 @@ export type ExposureOffsetRuleResolver = Readonly<{
   resolve: (material: ExposureOffsetRuleMaterial) => boolean
 }>
 
-export class ExposureOffsetRuleRegistry {
-  readonly #resolvers = new Map<string, ExposureOffsetRuleResolver>()
+declare const trustedExposureOffsetRules: unique symbol
 
-  constructor(resolvers: readonly ExposureOffsetRuleResolver[] = []) {
-    for (const resolver of resolvers) this.register(resolver)
-  }
+export type TrustedExposureOffsetRuleCapability = Readonly<{
+  [trustedExposureOffsetRules]: true
+}>
 
-  register(resolver: ExposureOffsetRuleResolver) {
+const trustedCapabilities = new WeakSet<object>()
+const resolversByCapability = new WeakMap<object, ReadonlyMap<string, ExposureOffsetRuleResolver>>()
+
+/**
+ * Source-composition seam. Deliberately absent from the action-invocation public
+ * index: invocation callers cannot mint or submit this capability.
+ */
+export function sealSourceOwnedExposureOffsetRules(
+  resolvers: readonly ExposureOffsetRuleResolver[],
+): TrustedExposureOffsetRuleCapability {
+  const indexed = new Map<string, ExposureOffsetRuleResolver>()
+  for (const resolver of resolvers) {
     const key = ruleKey(resolver.identity)
     if (
       resolver.identity.evidenceRuleRef.length === 0
       || resolver.identity.source.length === 0
       || resolver.identity.version.length === 0
-      || this.#resolvers.has(key)
+      || indexed.has(key)
     ) throw new Error('exposure_offset_rule_registration_refused')
-    this.#resolvers.set(key, resolver)
+    indexed.set(key, resolver)
   }
+  const capability = Object.freeze({}) as TrustedExposureOffsetRuleCapability
+  trustedCapabilities.add(capability)
+  resolversByCapability.set(capability, indexed)
+  return capability
+}
 
-  resolve(identity: ExposureOffsetRuleIdentity) {
-    return this.#resolvers.get(ruleKey(identity))
-  }
+export function resolveTrustedExposureOffsetRule(
+  capability: TrustedExposureOffsetRuleCapability | undefined,
+  identity: ExposureOffsetRuleIdentity,
+  material: ExposureOffsetRuleMaterial,
+) {
+  if (capability === undefined || !trustedCapabilities.has(capability)) return false
+  return resolversByCapability.get(capability)?.get(ruleKey(identity))?.resolve(material) === true
 }
 
 function ruleKey(identity: ExposureOffsetRuleIdentity) {
