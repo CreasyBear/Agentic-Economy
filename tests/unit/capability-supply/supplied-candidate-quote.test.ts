@@ -232,13 +232,17 @@ async function quoteInputFor(ports = qualificationPorts()): Promise<SuppliedCand
   }
 }
 
-function inMemoryTracer(adapter: ReturnType<typeof vi.fn>) {
+function inMemoryTracer(
+  adapter: ReturnType<typeof vi.fn>,
+  releaseSignal = createDevelopmentReleaseSignal(),
+) {
   return createInMemoryActionInvocationTracer({
     action: collectSuppliedCandidateQuoteAction,
     now: nowIso,
     nextInvocationRef: () => `dev:invocation:${Math.random()}`,
     nextAuthorityRef: () => 'dev:authority:quote',
     nextAttemptRef: () => 'dev:attempt:quote',
+    developmentReleaseSignal: releaseSignal,
   })
 }
 
@@ -336,6 +340,93 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
     expect(blocked).toEqual({ kind: 'refused', code: 'qualification_blocked' })
     expect(tracer.exportSnapshot().records).toEqual([])
+  })
+
+  it('returns a structured provider refusal without converting it into a thrown failure', async () => {
+    const ports = qualificationPorts()
+    const quoteInput = await quoteInputFor(ports)
+    const adapter = vi.fn().mockResolvedValue({
+      kind: 'refused',
+      environment: 'MOCK/DEVELOPMENT ONLY',
+      code: 'development_provider_declined',
+      reason: 'The labelled development provider declined this quote request.',
+    })
+    const tracer = inMemoryTracer(adapter)
+    const prepared = await prepareSuppliedCandidateQuote({
+      tracer, qualificationPorts: ports, invocationInput: quoteInput,
+      origin: origins[1]!, actor,
+      context: { developmentOnlySuppliedQuoteAdapter: adapter },
+      now: nowMs,
+    })
+    if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+    const accepted = tracer.decide({
+      invocationRef: prepared.view.invocationRef,
+      expectedInvocationVersion: prepared.view.invocationVersion,
+      authorityRef: prepared.view.authority!.reference,
+      actor, origin: origins[1]!, accept: true,
+    })
+    if (accepted.kind !== 'accepted') throw new Error(accepted.code)
+    const refused = await tracer.execute({
+      invocationRef: prepared.view.invocationRef,
+      expectedInvocationVersion: accepted.view.invocationVersion,
+      authorityRef: prepared.view.authority!.reference,
+      actor, origin: origins[1]!, materialInput: quoteInput,
+    })
+    expect(adapter).toHaveBeenCalledTimes(1)
+    expect(refused).toMatchObject({
+      kind: 'accepted',
+      view: {
+        control: { state: 'terminal' },
+        attempts: [{ outcome: { state: 'returned', businessOutcome: 'refused' } }],
+        observedResolution: {
+          state: 'returned',
+          businessOutcome: 'refused',
+          result: { kind: 'refused', code: 'development_provider_declined' },
+        },
+      },
+    })
+  })
+
+  it('makes a demonstrably pre-release adapter failure safely retryable with one attributable attempt', async () => {
+    const ports = qualificationPorts()
+    const quoteInput = await quoteInputFor(ports)
+    const releaseSignal = createDevelopmentReleaseSignal()
+    const adapter = vi.fn().mockRejectedValue(new Error('development_transport_failed_before_release'))
+    const tracer = inMemoryTracer(adapter, releaseSignal)
+    const prepared = await prepareSuppliedCandidateQuote({
+      tracer, qualificationPorts: ports, invocationInput: quoteInput,
+      origin: origins[1]!, actor,
+      context: { developmentOnlySuppliedQuoteAdapter: adapter },
+      now: nowMs,
+    })
+    if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+    const accepted = tracer.decide({
+      invocationRef: prepared.view.invocationRef,
+      expectedInvocationVersion: prepared.view.invocationVersion,
+      authorityRef: prepared.view.authority!.reference,
+      actor, origin: origins[1]!, accept: true,
+    })
+    if (accepted.kind !== 'accepted') throw new Error(accepted.code)
+    const failed = await tracer.execute({
+      invocationRef: prepared.view.invocationRef,
+      expectedInvocationVersion: accepted.view.invocationVersion,
+      authorityRef: prepared.view.authority!.reference,
+      actor, origin: origins[1]!, materialInput: quoteInput,
+    })
+    expect(adapter).toHaveBeenCalledTimes(1)
+    expect(releaseSignal.wasReleased()).toBe(false)
+    expect(failed).toMatchObject({
+      kind: 'accepted',
+      view: {
+        control: { state: 'retryable', reason: 'pre_release_failure' },
+        attempts: [{
+          attemptNumber: 1,
+          actor,
+          release: { state: 'not_released' },
+          outcome: { state: 'failed', retry: 'safe_before_release' },
+        }],
+      },
+    })
   })
 
   it('refuses tampered digest and source changes after the client read', async () => {
@@ -485,12 +576,27 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
       actor,
       origin,
-      resolution: 'not_released',
+      resolution: 'released',
     })
     expect(reconciled).toMatchObject({
       kind: 'accepted',
-      view: { control: { state: 'retryable', reason: 'pre_release_failure' } },
+      view: {
+        control: { state: 'terminal' },
+        attempts: [{
+          release: { state: 'released' },
+          outcome: { state: 'reconciled_released', externalOutcome: 'unknown' },
+        }],
+      },
     })
+    if (reconciled.kind !== 'accepted') throw new Error(reconciled.code)
+    const unsafeRetry = await freshProcess.execute({
+      invocationRef: reconciled.view.invocationRef,
+      expectedInvocationVersion: reconciled.view.invocationVersion,
+      authorityRef: reconciled.view.authority!.reference,
+      actor, origin, materialInput: quoteInput,
+    })
+    expect(unsafeRetry).toMatchObject({ kind: 'refused', code: 'authority_not_accepted' })
+    expect(adapter).toHaveBeenCalledTimes(1)
 
     const port = createDevelopmentDurablePort(durableState)
     const persisted = JSON.stringify({
