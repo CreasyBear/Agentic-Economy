@@ -62,12 +62,31 @@ export type DevelopmentHostSourceCommands = Readonly<{
   ): void | Promise<void>
 }>
 
+export type DevelopmentHostCommandEvent = Readonly<{
+  host: 'request_owned_human' | 'standalone_external_agent'
+  phase: 'before' | 'after'
+  command:
+    | 'begin'
+    | 'answer'
+    | 'prepare'
+    | 'correct'
+    | 'decide'
+    | 'continue'
+    | 'recover'
+    | 'request_cancellation'
+  invocationRef?: string
+  detail: Readonly<Record<string, StableHashValue>>
+}>
+
+export type DevelopmentHostCommandObserver = (event: DevelopmentHostCommandEvent) => void
+
 function bindHost(
   host: 'request_owned_human' | 'standalone_external_agent',
   adapter: DynamicPublishedActionInvocationAdapter,
   actor: InvocationActor,
   origin: ActionInvocationOrigin,
   sourceCommands: DevelopmentHostSourceCommands,
+  observer: DevelopmentHostCommandObserver,
 ): DevelopmentInvocationHost {
   const current = (invocationRef: string) => {
     const view = adapter.inspect(invocationRef)
@@ -77,22 +96,57 @@ function bindHost(
     }
     return { kind: 'current', view } as const
   }
+  const emit = (
+    phase: DevelopmentHostCommandEvent['phase'],
+    command: DevelopmentHostCommandEvent['command'],
+    detail: Readonly<Record<string, StableHashValue>>,
+    invocationRef?: string,
+  ) => observer({ host, phase, command, ...(invocationRef === undefined ? {} : { invocationRef }), detail })
   return Object.freeze({
     origin,
     actor,
-    begin: (partial) => adapter.begin({ actor, origin, partial }),
-    answer: (invocationRef, answers, freshnessMs) =>
-      adapter.answer({ invocationRef, actor, answers, freshnessMs }),
-    prepare: (value, freshnessMs) => adapter.prepare({ actor, origin, value, freshnessMs }),
-    correct: (invocationRef, corrections, freshnessMs) =>
-      adapter.correct({ invocationRef, actor, corrections, freshnessMs }),
+    begin: (partial) => {
+      emit('before', 'begin', { partial })
+      const result = adapter.begin({ actor, origin, partial })
+      emit('after', 'begin', { state: result.state, missingFields: result.missingFields }, result.invocationRef)
+      return result
+    },
+    answer: (invocationRef, answers, freshnessMs) => {
+      emit('before', 'answer', { answers, freshnessMs }, invocationRef)
+      const result = adapter.answer({ invocationRef, actor, answers, freshnessMs })
+      emit('after', 'answer', {
+        state: 'control' in result ? result.control.state : result.state,
+      }, invocationRef)
+      return result
+    },
+    prepare: (value, freshnessMs) => {
+      emit('before', 'prepare', { value, freshnessMs })
+      const result = adapter.prepare({ actor, origin, value, freshnessMs })
+      emit('after', 'prepare', { state: result.control.state }, result.invocationRef)
+      return result
+    },
+    correct: (invocationRef, corrections, freshnessMs) => {
+      emit('before', 'correct', { corrections, freshnessMs }, invocationRef)
+      const result = adapter.correct({ invocationRef, actor, corrections, freshnessMs })
+      emit('after', 'correct', {
+        result: result.kind,
+        ...(result.kind === 'refused' ? { code: result.code } : { state: result.view.control.state }),
+      }, invocationRef)
+      return result
+    },
     decide: (invocationRef, accept) => {
+      emit('before', 'decide', { accept }, invocationRef)
       const found = current(invocationRef)
-      if (found.kind === 'refused') return found
-      if (found.view.authority === undefined) {
-        return { kind: 'refused', code: 'invalid_control_state', view: found.view }
+      if (found.kind === 'refused') {
+        emit('after', 'decide', { result: 'refused', code: found.code }, invocationRef)
+        return found
       }
-      return adapter.decide({
+      if (found.view.authority === undefined) {
+        const refused = { kind: 'refused', code: 'invalid_control_state', view: found.view } as const
+        emit('after', 'decide', { result: 'refused', code: refused.code }, invocationRef)
+        return refused
+      }
+      const result = adapter.decide({
         invocationRef,
         expectedInvocationVersion: found.view.invocationVersion,
         authorityRef: found.view.authority.reference,
@@ -100,13 +154,24 @@ function bindHost(
         origin,
         accept,
       })
+      emit('after', 'decide', {
+        result: result.kind,
+        ...(result.kind === 'refused' ? { code: result.code } : { state: result.view.control.state }),
+      }, invocationRef)
+      return result
     },
     continue: async (invocationRef) => {
+      emit('before', 'continue', {}, invocationRef)
       const found = current(invocationRef)
-      if (found.kind === 'refused') return found
+      if (found.kind === 'refused') {
+        emit('after', 'continue', { result: 'refused', code: found.code }, invocationRef)
+        return found
+      }
       let view = found.view
       if (view.control.state === 'reconciliation_required') {
-        return { kind: 'refused', code: 'reconcile_before_retry', view }
+        const refused = { kind: 'refused', code: 'reconcile_before_retry', view } as const
+        emit('after', 'continue', { result: 'refused', code: refused.code }, invocationRef)
+        return refused
       }
       if (view.control.state === 'authorized') {
         const acquired = adapter.acquire({
@@ -118,11 +183,16 @@ function bindHost(
           leaseOwner: sourceCommands.leaseOwner(host, invocationRef),
           leaseMs: 30_000,
         })
-        if (acquired.kind === 'refused') return acquired
+        if (acquired.kind === 'refused') {
+          emit('after', 'continue', { result: 'refused', code: acquired.code }, invocationRef)
+          return acquired
+        }
         view = acquired.view
       }
       if (view.control.state !== 'leased') {
-        return { kind: 'refused', code: 'invalid_control_state', view }
+        const refused = { kind: 'refused', code: 'invalid_control_state', view } as const
+        emit('after', 'continue', { result: 'refused', code: refused.code }, invocationRef)
+        return refused
       }
       await sourceCommands.beforeExecute?.(view)
       const executed = await adapter.executeAcquired({
@@ -132,16 +202,27 @@ function bindHost(
         leaseOwner: view.control.leaseOwner,
         effectGeneration: view.control.effectGeneration,
       })
-      return executed.kind === 'accepted'
+      const result: DevelopmentHostContinuation = executed.kind === 'accepted'
         ? { kind: 'completed', view: executed.view }
         : executed
+      emit('after', 'continue', {
+        result: result.kind,
+        ...('view' in result ? { state: result.view?.control.state ?? 'missing' } : {}),
+      }, invocationRef)
+      return result
     },
     recover: (invocationRef) => {
+      emit('before', 'recover', {}, invocationRef)
       const found = current(invocationRef)
-      if (found.kind === 'refused') return found
+      if (found.kind === 'refused') {
+        emit('after', 'recover', { result: 'refused', code: found.code }, invocationRef)
+        return found
+      }
       const view = found.view
       if (view.control.state !== 'reconciliation_required') {
-        return { kind: 'refused', code: 'invalid_control_state', view }
+        const refused = { kind: 'refused', code: 'invalid_control_state', view } as const
+        emit('after', 'recover', { result: 'refused', code: refused.code }, invocationRef)
+        return refused
       }
       const attemptRef = view.control.attemptRef
       const evidence = sourceCommands.reconciliationEvidence(view)
@@ -149,7 +230,9 @@ function bindHost(
         (entry) => entry.attemptRef === attemptRef,
       )
       if (evidence === undefined || attempt === undefined) {
-        return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }
+        const refused = { kind: 'refused', code: 'reconciliation_evidence_unavailable', view } as const
+        emit('after', 'recover', { result: 'refused', code: refused.code }, invocationRef)
+        return refused
       }
       const reconciled = adapter.reconcile({
         invocationRef,
@@ -159,19 +242,33 @@ function bindHost(
         origin,
         evidence,
       })
-      return reconciled.kind === 'accepted'
+      const result: DevelopmentHostContinuation = reconciled.kind === 'accepted'
         ? { kind: 'reconciled', view: reconciled.view }
         : reconciled
+      emit('after', 'recover', {
+        result: result.kind,
+        ...('view' in result ? { state: result.view?.control.state ?? 'missing' } : {}),
+      }, invocationRef)
+      return result
     },
     requestCancellation: (invocationRef) => {
+      emit('before', 'request_cancellation', {}, invocationRef)
       const found = current(invocationRef)
-      if (found.kind === 'refused') return found
-      return adapter.cancel({
+      if (found.kind === 'refused') {
+        emit('after', 'request_cancellation', { result: 'refused', code: found.code }, invocationRef)
+        return found
+      }
+      const result = adapter.cancel({
         invocationRef,
         expectedInvocationVersion: found.view.invocationVersion,
         actor,
         origin,
       })
+      emit('after', 'request_cancellation', {
+        result: result.kind,
+        ...(result.kind === 'refused' ? { code: result.code } : { state: result.view.control.state }),
+      }, invocationRef)
+      return result
     },
     inspect: adapter.inspect,
     projectRich: (invocationRef, expectedInvocationVersion) => {
@@ -223,11 +320,13 @@ export type DevelopmentInvocationApplication = Readonly<{
 export function createDevelopmentInvocationApplication(input: Readonly<{
   adapter: DynamicPublishedActionInvocationAdapter
   sourceCommands: DevelopmentHostSourceCommands
+  observer?: DevelopmentHostCommandObserver
 }>): DevelopmentInvocationApplication {
   return Object.freeze({
     bindRequestOwned: ({ actor, requestRef, revision }) => bindRequestOwned({
       adapter: input.adapter,
       sourceCommands: input.sourceCommands,
+      observer: input.observer ?? (() => undefined),
       actor,
       requestRef,
       revision,
@@ -235,6 +334,7 @@ export function createDevelopmentInvocationApplication(input: Readonly<{
     bindStandalone: ({ actor }) => bindStandalone({
       adapter: input.adapter,
       sourceCommands: input.sourceCommands,
+      observer: input.observer ?? (() => undefined),
       actor,
     }),
   })
@@ -246,6 +346,7 @@ function bindRequestOwned(input: Readonly<{
   requestRef: string
   revision: number
   sourceCommands: DevelopmentHostSourceCommands
+  observer: DevelopmentHostCommandObserver
 }>): DevelopmentInvocationHost {
   if (input.requestRef.length === 0 || !Number.isInteger(input.revision) || input.revision < 0) {
     throw new Error('request_owned_lineage_invalid')
@@ -254,17 +355,18 @@ function bindRequestOwned(input: Readonly<{
     kind: 'request_owned',
     requestRef: input.requestRef,
     revision: input.revision,
-  }, input.sourceCommands)
+  }, input.sourceCommands, input.observer)
 }
 
 function bindStandalone(input: Readonly<{
   adapter: DynamicPublishedActionInvocationAdapter
   actor: InvocationActor
   sourceCommands: DevelopmentHostSourceCommands
+  observer: DevelopmentHostCommandObserver
 }>): DevelopmentInvocationHost {
   return bindHost('standalone_external_agent', input.adapter, input.actor, {
     kind: 'standalone',
     callerRef: input.actor.callerRef,
     principalRef: input.actor.principalRef,
-  }, input.sourceCommands)
+  }, input.sourceCommands, input.observer)
 }

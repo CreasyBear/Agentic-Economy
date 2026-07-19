@@ -94,6 +94,8 @@ export type {
 export type { DynamicPublishedSnapshotAnchors } from './dynamic-published-snapshot-verifier'
 export type {
   DevelopmentHostContinuation,
+  DevelopmentHostCommandEvent,
+  DevelopmentHostCommandObserver,
   DevelopmentHostSourceCommands,
   DevelopmentInvocationApplication,
   DevelopmentInvocationHost,
