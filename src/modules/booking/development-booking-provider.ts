@@ -8,7 +8,11 @@ import type {
 
 export type DevelopmentAvailabilityObservation = DevelopmentBookingInput['slot']
 
-export function createDevelopmentBookingProvider() {
+export function createDevelopmentBookingProvider(options: Readonly<{
+  providerRef?: string
+  slotRef?: string
+  refusal?: 'terms_changed' | 'provider_refused'
+}> = {}) {
   const reservations = new Map<string, Readonly<{
     digest: string
     input: DevelopmentBookingInput
@@ -21,8 +25,8 @@ export function createDevelopmentBookingProvider() {
   let effects = 0
   let cancellationEffects = 0
   const availability: DevelopmentAvailabilityObservation = {
-    slotRef: 'mock:slot:2026-07-21T02:00Z',
-    providerRef: 'mock:provider:calendar',
+    slotRef: options.slotRef ?? 'mock:slot:2026-07-21T02:00Z',
+    providerRef: options.providerRef ?? 'mock:provider:calendar',
     offeringRef: 'mock:offering:consultation',
     bindingRef: 'mock:binding:calendar-create-reservation',
     contractRef: 'calendar.create-reservation@1',
@@ -60,6 +64,16 @@ export function createDevelopmentBookingProvider() {
         return prior.result
       }
       effects += 1
+      if (options.refusal !== undefined) {
+        const result: DevelopmentBookingResult = {
+          kind: 'reservation_refused',
+          environment: 'MOCK/DEVELOPMENT ONLY',
+          code: options.refusal,
+          reason: 'The development provider refused under its current terms.',
+        }
+        reservations.set(input.operationKey, { digest, input: structuredClone(input), result })
+        return result
+      }
       const result: DevelopmentBookingResult = {
         kind: 'reservation_confirmed',
         environment: 'MOCK/DEVELOPMENT ONLY',

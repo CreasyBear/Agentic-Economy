@@ -7,7 +7,13 @@ import {
   type MandateRefusalCode,
   type StandingMandateAuthorityBasis,
 } from '@/modules/action-invocation'
-import type { DevelopmentBookingInput, DevelopmentBookingResult } from './development-booking.actions'
+import type {
+  DevelopmentBookingCancellationResult,
+  DevelopmentBookingInput,
+  DevelopmentBookingResult,
+} from './development-booking.actions'
+
+type BookingEffectResult = DevelopmentBookingResult | DevelopmentBookingCancellationResult
 
 export type DevelopmentBookingReleaseToken = Readonly<{
   authorityUseRef: string
@@ -32,7 +38,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
 
     settleExecutionException(args: Readonly<{
       authorityUseRef: string
-      view: ActionInvocationView<DevelopmentBookingResult> | undefined
+      view: ActionInvocationView<BookingEffectResult> | undefined
       attemptRef: string
       releaseSignalObserved: boolean
     }>): MandateDecision<AuthorityUse> {
@@ -66,6 +72,10 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
       origin: ActionInvocationOrigin
       booking: DevelopmentBookingInput
       effectGeneration: number
+      fallbackRef?: string | null
+      reservedSpendMinor?: number
+      reservedLossMinor?: number
+      risk?: string
     }>): MandateDecision<Readonly<{ use: AuthorityUse; basis: StandingMandateAuthorityBasis }>> {
       const mandate = input.store.inspectMandate(args.mandateRef)
       const grant = input.store.inspectGrant(args.mandateRef)
@@ -94,9 +104,18 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
         recipientRef: args.booking.disclosure.recipient,
         purpose: args.booking.disclosure.purpose,
         dataFields: args.booking.disclosure.fields,
-        reservedSpend: { amountMinor: 0, currency: mandate.scope.maximumSpend.currency },
-        fallbackRef: null,
-        risk: 'development_booking_zero_charge',
+        reservedSpend: {
+          amountMinor: args.reservedSpendMinor ?? 0,
+          currency: mandate.scope.maximumSpend.currency,
+        },
+        ...(args.reservedLossMinor === undefined ? {} : {
+          reservedLoss: {
+            amountMinor: args.reservedLossMinor,
+            currency: mandate.scope.maximumLoss?.currency ?? mandate.scope.maximumSpend.currency,
+          },
+        }),
+        fallbackRef: args.fallbackRef ?? null,
+        risk: args.risk ?? 'development_booking_zero_charge',
         effectGeneration: args.effectGeneration,
       }, input.now())
       if (reserved.kind === 'refused') return reserved
@@ -111,9 +130,67 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
       return { kind: 'accepted', value: { use: reserved.value, basis } }
     },
 
+    reserveCancellationAndAuthorize(args: Readonly<{
+      mandateRef: string
+      authorityUseRef: string
+      actor: Readonly<{ callerRef: string; principalRef: string }>
+      providerRef: string
+      recipientRef: string
+      purpose: string
+      dataFields: readonly string[]
+      preparedMaterialDigest: string
+      invocationRef: string
+      action: Readonly<{ id: string; version: string }>
+      effectGeneration: number
+      risk: string
+    }>): MandateDecision<Readonly<{ use: AuthorityUse; basis: StandingMandateAuthorityBasis }>> {
+      const mandate = input.store.inspectMandate(args.mandateRef)
+      const grant = input.store.inspectGrant(args.mandateRef)
+      if (mandate === undefined || grant === undefined) return { kind: 'refused', code: 'mandate_not_found' }
+      const reserved = input.store.reserve({
+        authorityUseRef: args.authorityUseRef,
+        mandateRef: mandate.mandateRef,
+        mandateVersion: mandate.version,
+        mandateGeneration: mandate.generation,
+        callerRef: args.actor.callerRef,
+        principalRef: args.actor.principalRef,
+        delegateRef: input.authenticatedDelegate.delegateRef,
+        invocationRef: args.invocationRef,
+        action: args.action,
+        preparedMaterialDigest: args.preparedMaterialDigest,
+        providerRef: args.providerRef,
+        recipientRef: args.recipientRef,
+        purpose: args.purpose,
+        dataFields: args.dataFields,
+        reservedSpend: { amountMinor: 0, currency: mandate.scope.maximumSpend.currency },
+        reservedLoss: {
+          amountMinor: 0,
+          currency: mandate.scope.maximumLoss?.currency ?? mandate.scope.maximumSpend.currency,
+        },
+        fallbackRef: null,
+        risk: args.risk,
+        effectGeneration: args.effectGeneration,
+      }, input.now())
+      if (reserved.kind === 'refused') return reserved
+      return {
+        kind: 'accepted',
+        value: {
+          use: reserved.value,
+          basis: {
+            kind: 'standing_mandate_use',
+            mandateRef: mandate.mandateRef,
+            mandateVersion: mandate.version,
+            mandateGeneration: mandate.generation,
+            authorityUseRef: reserved.value.authorityUseRef,
+            grantEvidenceRef: grant.evidenceRef,
+          },
+        },
+      }
+    },
+
     recheckRelease(args: Readonly<{
       authorityUseRef: string
-      view: ActionInvocationView<DevelopmentBookingResult>
+      view: ActionInvocationView<BookingEffectResult>
       effectGeneration: number
     }>): MandateDecision<AuthorityUse> {
       const token = reconstructReleaseToken(input.store, args.authorityUseRef, args.view, args.effectGeneration)
@@ -126,7 +203,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
 
     settleFromInvocation(args: Readonly<{
       authorityUseRef: string
-      view: ActionInvocationView<DevelopmentBookingResult>
+      view: ActionInvocationView<BookingEffectResult>
       attemptRef: string
     }>): MandateDecision<AuthorityUse> {
       const use = input.store.inspectUse(args.authorityUseRef)
@@ -157,7 +234,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
 export function reconstructReleaseToken(
   store: StandingMandateStore,
   authorityUseRef: string,
-  view: ActionInvocationView<DevelopmentBookingResult>,
+  view: ActionInvocationView<BookingEffectResult>,
   effectGeneration: number,
 ): MandateDecision<DevelopmentBookingReleaseToken> {
   const use = store.inspectUse(authorityUseRef)

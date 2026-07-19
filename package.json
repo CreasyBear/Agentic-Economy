@@ -27,6 +27,7 @@
     "evidence:action-invocation:development": "tsx tools/dev/action-invocation-development-evidence.ts",
     "evidence:booking:development": "tsx tools/dev/development-booking-evidence.ts",
     "evidence:bounded-mandate:development": "tsx tools/dev/bounded-mandate-evidence-packet.ts",
+    "evidence:full-yolo:development": "tsx tools/dev/full-yolo-evidence-packet.ts",
     "smoke:customer-request:production:temporary-key": "tsx tools/release/customer-request-production-credential.ts",
     "smoke:customer-request:production:human": "playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts",
     "smoke:customer-request:production:preflight": "tsx tools/release/customer-request-production-smoke.ts --preflight",

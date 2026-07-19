@@ -29,6 +29,7 @@ export {
   createDevelopmentStandingMandateGrantVerifier,
   verifiedGrantMatchesMandate,
 } from './standing-mandate-grant'
+export { evaluateStandingMandatePolicy } from './standing-mandate-policy'
 
 export type {
   ActionInvocationOrigin,
@@ -47,6 +48,7 @@ export type {
 export type {
   AuthorityUse,
   AuthorityUseMaterial,
+  AuthorityExposureOffset,
   MandateDecision,
   MandateRefusalCode,
   StandingMandate,
@@ -57,6 +59,10 @@ export type {
   StandingMandateGrantVerifier,
   VerifiedStandingMandateGrant,
 } from './standing-mandate-grant'
+export type {
+  StandingMandatePolicyDecision,
+  StandingMandatePolicyProposal,
+} from './standing-mandate-policy'
 export type {
   DurableActionInvocationPort,
   DurableActionInvocationTracer,

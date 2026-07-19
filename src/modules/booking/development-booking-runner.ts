@@ -69,6 +69,10 @@ export async function runReservationInvocation(input: Readonly<{
     developmentAcquisitionVersionOverride?: number
     throwDuringReconstruction?: boolean
     throwFromReleaseFenceBeforeProvider?: boolean
+    fallbackRef?: string | null
+    reservedSpendMinor?: number
+    reservedLossMinor?: number
+    risk?: string
   }>
 }>): Promise<BookingInvocationRun<DevelopmentBookingResult>> {
   const events: BookingInvocationEvent[] = []
@@ -181,6 +185,10 @@ export async function runReservationInvocation(input: Readonly<{
     origin: input.origin,
     booking: input.booking,
     effectGeneration: prepared.attempts.length + 1,
+    ...(bounded.fallbackRef === undefined ? {} : { fallbackRef: bounded.fallbackRef }),
+    ...(bounded.reservedSpendMinor === undefined ? {} : { reservedSpendMinor: bounded.reservedSpendMinor }),
+    ...(bounded.reservedLossMinor === undefined ? {} : { reservedLossMinor: bounded.reservedLossMinor }),
+    ...(bounded.risk === undefined ? {} : { risk: bounded.risk }),
   })
   if (reserved.kind === 'refused') throw new Error(reserved.code)
   let standingAuthorization
@@ -316,8 +324,13 @@ export async function runCancellationInvocation(input: Readonly<{
   cancellation: DevelopmentBookingCancellationInput
   origin: ActionInvocationOrigin
   ref: string
+  fullYoloMandate?: Readonly<{
+    service: DevelopmentBookingMandateService
+    mandateRef: string
+    authorityUseRef: string
+  }>
 }>): Promise<BookingInvocationRun<DevelopmentBookingCancellationResult>> {
-  const events: TransferBoundaryEvent[] = []
+  const events: BookingInvocationEvent[] = []
   const source: {
     input: DevelopmentBookingCancellationInput
     prepared: PreparedInvocation | undefined
@@ -352,6 +365,16 @@ export async function runCancellationInvocation(input: Readonly<{
     nextInvocationRef: () => `mock:cancellation-invocation:${input.ref}`,
     nextAuthorityRef: () => `mock:cancellation-authority:${input.ref}`,
     nextAttemptRef: () => `mock:cancellation-attempt:${input.ref}`,
+    ...(input.fullYoloMandate === undefined ? {} : {
+      beforeEffectRelease: (current, effectGeneration) => {
+        const checked = input.fullYoloMandate!.service.recheckRelease({
+          authorityUseRef: input.fullYoloMandate!.authorityUseRef,
+          view: current,
+          effectGeneration,
+        })
+        return checked.kind === 'accepted' ? undefined : mandateRefusalToInvocationRefusal(checked.code)
+      },
+    }),
     resolveSourceState: () => ({
       input: source.input, context, prepared: source.prepared,
       observedResolution: source.result === undefined
@@ -369,6 +392,67 @@ export async function runCancellationInvocation(input: Readonly<{
     origin: input.origin, actor: owner, input: input.cancellation, context, freshnessMs: 900_000,
   })
   source.prepared = prepared.prepared
+  if (input.fullYoloMandate !== undefined) {
+    const configured = input.fullYoloMandate
+    const reserved = configured.service.reserveCancellationAndAuthorize({
+      mandateRef: configured.mandateRef,
+      authorityUseRef: configured.authorityUseRef,
+      actor: owner,
+      providerRef: input.cancellation.providerRef,
+      recipientRef: input.cancellation.providerRef,
+      purpose: 'cancel_development_reservation',
+      dataFields: ['reason'],
+      preparedMaterialDigest: prepared.prepared!.materialInputDigest,
+      invocationRef: prepared.invocationRef,
+      action: { id: cancelDevelopmentReservationAction.id, version: 'v1' },
+      effectGeneration: 1,
+      risk: 'development_booking_bounded_loss',
+    })
+    if (reserved.kind === 'refused') throw new Error(reserved.code)
+    const authorized = tracer.authorizeStandingMandateUse({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor: owner,
+      origin: input.origin,
+      basis: reserved.value.basis,
+    })
+    if (authorized.kind === 'refused') {
+      configured.service.compensateNotReleased(configured.authorityUseRef)
+      throw new Error(authorized.code)
+    }
+    events.push({ kind: 'standing_mandate_authorization', invocationRef: prepared.invocationRef })
+    const acquired = tracer.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: authorized.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor: owner,
+      origin: input.origin,
+      materialInput: input.cancellation,
+      leaseOwner: `mock:cancellation-worker:${input.ref}`,
+      leaseMs: 30_000,
+      acceptedAuthorityBasis: reserved.value.basis,
+    })
+    if (acquired.kind === 'refused' || acquired.view.control.state !== 'leased') {
+      configured.service.compensateNotReleased(configured.authorityUseRef)
+      throw new Error(acquired.kind === 'refused' ? acquired.code : 'cancellation_acquisition_failed')
+    }
+    const executed = await tracer.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: acquired.view.control.attemptRef,
+      leaseOwner: acquired.view.control.leaseOwner,
+      effectGeneration: acquired.view.control.effectGeneration,
+    })
+    if (executed.kind !== 'accepted') throw new Error(executed.code)
+    const settled = configured.service.settleFromInvocation({
+      authorityUseRef: configured.authorityUseRef,
+      view: executed.view,
+      attemptRef: acquired.view.control.attemptRef,
+    })
+    if (settled.kind === 'refused') throw new Error(settled.code)
+    return { view: executed.view, origin: input.origin, owner, state, tracer: tracer as never, source, events }
+  }
   const decision = tracer.decide({
     invocationRef: prepared.invocationRef,
     expectedInvocationVersion: prepared.invocationVersion,
