@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `d7ee9fe1`
+**Current accepted revision:** `249a247f`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -62,7 +62,7 @@ parallel plan.
 | 8. Interruption and uncertainty | Implemented in deterministic labelled development execution | `f4b77026`, `8d3fe91a`, `e5079e23`, `2bb08013`, `98ccb155` |
 | 9. Concurrency and recovery | Implemented in deterministic labelled development execution | `f1cc1fb6`, `8d3fe91a`, `0d5131a3`, `4a8e215b`, `8b57b2f1`, `890404d4`, `8ac11190` |
 | 10. Earned persistence | Implemented and re-audited in labelled development execution; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d`, `d7ee9fe1` |
-| 11. Request reuse | Implemented in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0` |
+| 11. Request reuse | Implemented and re-audited in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0`, `249a247f` |
 | 12. Composition and direct control | Not implemented | — |
 | 13. Transfer | Not implemented | — |
 
@@ -470,7 +470,7 @@ Not established:
 
 ### Canonical slice 11 — completed standalone result reference in Customer Request
 
-**Accepted commits:** `92d57aeb`, `f7c978b5`, `f1808da0`
+**Accepted commits:** `92d57aeb`, `f7c978b5`, `f1808da0`, `249a247f`
 **Child commits:** `3caaf430ca976267b34b57c840f72f0c9a06e142`,
 `46677c9819bb93db59afba4aad266e48f7628c64`,
 `1a8f61e79858053f1e27db7847bfb9973ce559b9`
@@ -504,6 +504,22 @@ Implemented:
   input to candidate selection;
 - historical V2 aggregates remain valid without the additive reference;
 - master focused checks passed 82/82 with scoped lint and diff checks.
+
+Re-audit acceptance:
+
+- the producer now runs the real registered `inquiry.submit` development action
+  through durable Action Invocation exactly once before attachment;
+- one attributable Action Attempt and one source-owned result identity exist
+  before Request reuse;
+- attachment, exact replay, and cold readback leave runner count, attempt count,
+  and Action Invocation history count unchanged;
+- the actual persistence/application seam refuses an unknown invocation before
+  replay lookup, while changed referenced material under the same command
+  identity remains an idempotency conflict;
+- the committed Request advances exactly once to `N+1`, contains no source
+  access key or raw result, and remains internally consistent after cold
+  reconstruction;
+- focused producer-plus-attachment checks passed 36/36.
 
 Not established:
 
