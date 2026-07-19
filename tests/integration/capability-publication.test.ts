@@ -172,8 +172,26 @@ describe('capability publication', () => {
     expect(graph).toMatchObject({
       kind: 'available',
       nodes: expect.arrayContaining([
-        expect.objectContaining({ publicationRef: firstPublished.publicationRef, businessId: first.businessId }),
-        expect.objectContaining({ publicationRef: secondPublished.publicationRef, businessId: second.businessId }),
+        expect.objectContaining({
+          publicationRef: firstPublished.publicationRef,
+          businessId: first.businessId,
+          trust: expect.objectContaining({
+            publicStatus: 'published',
+            claimStatus: 'published',
+            suppressed: false,
+            currentlyPublished: true,
+          }),
+        }),
+        expect.objectContaining({
+          publicationRef: secondPublished.publicationRef,
+          businessId: second.businessId,
+          trust: expect.objectContaining({
+            publicStatus: 'published',
+            claimStatus: 'published',
+            suppressed: false,
+            currentlyPublished: true,
+          }),
+        }),
       ]),
     })
     expect(graph.nodes).toHaveLength(2)

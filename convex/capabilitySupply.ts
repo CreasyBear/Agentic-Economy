@@ -306,7 +306,13 @@ const capabilityGraphNodeValue = v.object({
     }),
   }),
   cost: v.object({ price: priceValue, commercialRelationship: commercialRelationshipValue }),
-  trust: v.object({ tier: v.string(), publicStatus: v.string() }),
+  trust: v.object({
+    tier: v.string(),
+    publicStatus: v.literal('published'),
+    claimStatus: v.literal('published'),
+    suppressed: v.literal(false),
+    currentlyPublished: v.literal(true),
+  }),
   liveness: v.object({
     credentialState: v.union(v.literal('unobserved'), v.literal('ready'), v.literal('unavailable')),
     healthState: v.union(v.literal('unobserved'), v.literal('healthy'), v.literal('unhealthy')),

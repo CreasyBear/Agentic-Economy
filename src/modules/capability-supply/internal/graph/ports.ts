@@ -24,7 +24,10 @@ export type GraphPublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
 export type GraphPublishedBusiness = Readonly<{
   businessId: string
   trustTier: string
-  publicStatus: string
+  publicStatus: 'published'
+  claimStatus: 'published'
+  suppressed: false
+  currentlyPublished: true
 }>
 
 export type ProbeReadinessPatch = Readonly<{
@@ -35,6 +38,18 @@ export type ProbeReadinessPatch = Readonly<{
   readinessEvidenceRefs: readonly string[]
   updatedAt: number
 }>
+
+export type GraphActiveExactCapabilityContractResult =
+  | Readonly<{
+    kind: 'found'
+    ref: CapabilityContractRef
+    documentJson: string
+    registeredAt: number
+  }>
+  | Readonly<{
+    kind: 'unavailable'
+    reason: 'not_found' | 'not_active' | 'integrity_failure'
+  }>
 
 export type CapabilityGraphPorts = Readonly<{
   loadPublicationAtRevision: (
@@ -50,7 +65,7 @@ export type CapabilityGraphPorts = Readonly<{
   loadPublishedBusiness: (businessId: string) => Promise<GraphPublishedBusiness | null>
   getActiveExactCapabilityContract: (
     ref: CapabilityContractRef,
-  ) => Promise<ExactCapabilityContractResult>
+  ) => Promise<GraphActiveExactCapabilityContractResult>
   getExactRegisteredCapabilityContract: (
     ref: CapabilityContractRef,
   ) => Promise<ExactCapabilityContractResult>

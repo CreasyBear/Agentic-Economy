@@ -69,7 +69,10 @@ function toPublishedBusiness(doc: Doc<'businesses'>): GraphPublishedBusiness {
   return {
     businessId: String(doc._id),
     trustTier: doc.trustTier,
-    publicStatus: doc.publicStatus,
+    publicStatus: 'published',
+    claimStatus: 'published',
+    suppressed: false,
+    currentlyPublished: true,
   }
 }
 

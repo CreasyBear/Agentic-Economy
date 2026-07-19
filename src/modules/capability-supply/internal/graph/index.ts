@@ -1,5 +1,6 @@
 export type {
   CapabilityGraphPorts,
+  GraphActiveExactCapabilityContractResult,
   GraphPublicationRow,
   GraphPublishedBusiness,
   ProbeReadinessPatch,

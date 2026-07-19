@@ -7,6 +7,7 @@ import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/
 import type {
   CapabilityGraphPorts,
   GraphPublicationRow,
+  GraphPublishedBusiness,
 } from '@/modules/capability-supply/internal/graph'
 import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
 import {
@@ -159,10 +160,14 @@ function ports(overrides: Partial<CapabilityGraphPorts> = {}): CapabilityGraphPo
       businessId: candidate.businessId,
       trustTier: 'fixture_only',
       publicStatus: 'published',
+      claimStatus: 'published',
+      suppressed: false,
+      currentlyPublished: true,
     }),
     getActiveExactCapabilityContract: async () => ({
       kind: 'found',
-      contract,
+      ref: contract.ref,
+      documentJson: '{}',
       registeredAt: 1_000,
     }),
     getExactRegisteredCapabilityContract: async () => ({
@@ -197,6 +202,12 @@ describe('ADR-009 supplied-candidate qualification', () => {
     ['listing only', {
       loadPublicationAtRevision: async (): Promise<GraphPublicationRow | null> => null,
     }, ['publication_missing']],
+    ['non-current publication', {
+      loadPublicationAtRevision: async () => publication({ disposition: 'superseded' }),
+    }, ['publication_not_current']],
+    ['mismatched candidate references', {
+      loadPublicationAtRevision: async () => publication({ businessId: 'business:other' }),
+    }, ['candidate_reference_mismatch']],
     ['missing offering', {
       loadOfferingByOfferingId: async (): Promise<CapabilityOfferingRow | null> => null,
     }, ['offering_missing']],
@@ -208,7 +219,7 @@ describe('ADR-009 supplied-candidate qualification', () => {
     }, ['contract_missing_or_inactive']],
     ['unpublished business', {
       loadPublishedBusiness: async () => null,
-    }, ['business_not_currently_admitted']],
+    }, ['business_not_currently_published']],
     ['ineligible offering', {
       loadOfferingByOfferingId: async () => offering({ status: 'inactive' }),
     }, ['offering_ineligible_or_unpublished']],
@@ -248,6 +259,59 @@ describe('ADR-009 supplied-candidate qualification', () => {
     expect(results[0]).toEqual(results[1])
   })
 
+  it('blocks a tampered business-currentness projection and changes its source evidence', async () => {
+    const current = await qualifySuppliedCandidate(ports(), { candidate, now })
+    const tamperedBusiness = {
+      businessId: candidate.businessId,
+      trustTier: 'fixture_only',
+      publicStatus: 'published',
+      claimStatus: 'unpublished',
+      suppressed: false,
+      currentlyPublished: false,
+    } as unknown as GraphPublishedBusiness
+    const tampered = await qualifySuppliedCandidate(ports({
+      loadPublishedBusiness: async () => tamperedBusiness,
+    }), { candidate, now })
+
+    expect(tampered).toMatchObject({
+      status: 'blocked',
+      reasons: ['business_not_currently_published'],
+    })
+    expect(sourceDigest(tampered, 'business')).toBeUndefined()
+    expect(sourceDigest(current, 'business')).toMatch(/^sha256:/)
+  })
+
+  it('binds active contract registration metadata and blocks a mismatched returned contract', async () => {
+    const first = await qualifySuppliedCandidate(ports(), { candidate, now })
+    const changedRegistration = await qualifySuppliedCandidate(ports({
+      getActiveExactCapabilityContract: async () => ({
+        kind: 'found',
+        ref: contract.ref,
+        documentJson: '{}',
+        registeredAt: 1_001,
+      }),
+    }), { candidate, now })
+    const mismatchedContract = defineCapabilityContract(capabilityContractV2({
+      version: 2,
+    }))
+    const mismatched = await qualifySuppliedCandidate(ports({
+      getActiveExactCapabilityContract: async () => ({
+        kind: 'found',
+        ref: mismatchedContract.ref,
+        documentJson: '{}',
+        registeredAt: 1_000,
+      }),
+    }), { candidate, now })
+
+    expect(sourceDigest(changedRegistration, 'contract'))
+      .not.toBe(sourceDigest(first, 'contract'))
+    expect(changedRegistration.qualificationDigest).not.toBe(first.qualificationDigest)
+    expect(mismatched).toMatchObject({
+      status: 'blocked',
+      reasons: ['source_integrity_failure'],
+    })
+  })
+
   it('is deterministic, reference-only, and does not introduce an action runner or effect path', async () => {
     const first = await qualifySuppliedCandidate(ports(), { candidate, now })
     const second = await qualifySuppliedCandidate(ports(), { candidate, now })
@@ -262,3 +326,10 @@ describe('ADR-009 supplied-candidate qualification', () => {
     expect(source).not.toMatch(/defineAction|ActionInvocationTracer|\.run\(|execute|fetch\(/)
   })
 })
+
+function sourceDigest(
+  result: Awaited<ReturnType<typeof qualifySuppliedCandidate>>,
+  kind: 'business' | 'contract',
+): string | undefined {
+  return result.sources.find((source) => source.kind === kind)?.digest
+}

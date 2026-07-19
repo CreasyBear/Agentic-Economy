@@ -57,7 +57,13 @@ export type CapabilityGraphNode = Readonly<{
     price: CapabilityOfferingRow['presentation']['price']
     commercialRelationship: CapabilityOfferingRow['presentation']['commercialRelationship']
   }>
-  trust: Readonly<{ tier: string; publicStatus: string }>
+  trust: Readonly<{
+    tier: string
+    publicStatus: 'published'
+    claimStatus: 'published'
+    suppressed: false
+    currentlyPublished: true
+  }>
   liveness: Readonly<{
     credentialState: GraphPublicationRow['credentialState']
     healthState: GraphPublicationRow['healthState']
@@ -193,7 +199,13 @@ function projectGraphNode(input: Readonly<{
       price: offering.presentation.price,
       commercialRelationship: offering.presentation.commercialRelationship,
     },
-    trust: { tier: business.trustTier, publicStatus: business.publicStatus },
+    trust: {
+      tier: business.trustTier,
+      publicStatus: business.publicStatus,
+      claimStatus: business.claimStatus,
+      suppressed: business.suppressed,
+      currentlyPublished: business.currentlyPublished,
+    },
     liveness: {
       credentialState: publication.credentialState,
       healthState: publication.healthState,

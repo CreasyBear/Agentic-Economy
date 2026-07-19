@@ -25,7 +25,7 @@ export type SuppliedCandidateQualificationReason =
   | 'publication_missing'
   | 'publication_not_current'
   | 'candidate_reference_mismatch'
-  | 'business_not_currently_admitted'
+  | 'business_not_currently_published'
   | 'contract_missing_or_inactive'
   | 'offering_missing'
   | 'offering_ineligible_or_unpublished'
@@ -94,8 +94,8 @@ export async function qualifySuppliedCandidate(
     ports.loadOfferingByOfferingId(candidate.offeringId),
     ports.loadBindingByBindingId(candidate.bindingId),
   ])
-  if (business === null) {
-    reasons.push('business_not_currently_admitted')
+  if (business === null || !businessIsCurrentlyPublished(business)) {
+    reasons.push('business_not_currently_published')
   } else {
     sources.push(source('business', `business:${business.businessId}`, business, []))
   }
@@ -104,10 +104,13 @@ export async function qualifySuppliedCandidate(
   } else {
     sources.push(source(
       'contract',
-      `contract:${candidate.contractRef.capabilityId}@${candidate.contractRef.version}`,
-      candidate.contractRef,
+      `contract:${contract.ref.capabilityId}@${contract.ref.version}`,
+      { ref: contract.ref, registeredAt: contract.registeredAt },
       [],
     ))
+    if (!sameRef(contract.ref, candidate.contractRef)) {
+      reasons.push('source_integrity_failure')
+    }
   }
   if (offering === null) {
     reasons.push('offering_missing')
@@ -237,4 +240,13 @@ function sameRef(left: CapabilityContractRef, right: CapabilityContractRef): boo
   return left.capabilityId === right.capabilityId
     && left.version === right.version
     && left.contractDigest === right.contractDigest
+}
+
+function businessIsCurrentlyPublished(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false
+  const business = value as Record<string, unknown>
+  return business.publicStatus === 'published'
+    && business.claimStatus === 'published'
+    && business.suppressed === false
+    && business.currentlyPublished === true
 }
