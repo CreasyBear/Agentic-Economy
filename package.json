@@ -28,6 +28,8 @@
     "evidence:published-operation:development": "tsx tools/dev/published-operation-development-evidence.ts",
     "evidence:dynamic-published-invocation:development": "tsx tools/dev/dynamic-published-invocation-evidence.ts",
     "verify:dynamic-published-invocation:development": "tsx tools/dev/verify-dynamic-published-invocation-evidence.ts",
+    "evidence:action-invocation:host-parity:development": "tsx tools/dev/action-invocation-host-parity-evidence.ts",
+    "verify:action-invocation:host-parity:development": "tsx tools/dev/verify-action-invocation-host-parity-evidence.ts",
     "evidence:booking:development": "tsx tools/dev/development-booking-evidence.ts",
     "evidence:bounded-mandate:development": "tsx tools/dev/bounded-mandate-evidence-packet.ts",
     "evidence:full-yolo:development": "tsx tools/dev/full-yolo-evidence-packet.ts",

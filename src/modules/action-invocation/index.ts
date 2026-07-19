@@ -47,6 +47,14 @@ export {
   assertDynamicPublishedSnapshotShape,
   verifyDynamicPublishedSnapshot,
 } from './dynamic-published-snapshot-verifier'
+export {
+  createRequestOwnedDevelopmentHost,
+  createStandaloneAgentDevelopmentHost,
+} from './development-hosts'
+export {
+  readDevelopmentHostSnapshot,
+  verifyDevelopmentHostReadReceipt,
+} from './development-host-read'
 
 export type {
   ActionInvocationOrigin,
@@ -76,6 +84,14 @@ export type {
   DynamicPublishedSourceRow,
 } from './dynamic-published-source'
 export type { DynamicPublishedSnapshotAnchors } from './dynamic-published-snapshot-verifier'
+export type {
+  DevelopmentInvocationHost,
+} from './development-hosts'
+export type {
+  DevelopmentHostKind,
+  DevelopmentHostReadReceipt,
+  DevelopmentHostSemanticRead,
+} from './development-host-read'
 export type {
   AuthorityUse,
   AuthorityUseMaterial,

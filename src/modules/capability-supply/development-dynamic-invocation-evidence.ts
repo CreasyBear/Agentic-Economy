@@ -27,8 +27,12 @@ import {
 } from './published-operation'
 
 const actor: InvocationActor = {
-  callerRef: 'agent:dynamic-published-development',
+  callerRef: 'agent:standalone-dynamic-published-development',
   principalRef: 'principal:dynamic-published-development',
+}
+const requestActor: InvocationActor = {
+  callerRef: 'human:request-owned-dynamic-published-development',
+  principalRef: actor.principalRef,
 }
 
 const developmentOrigins: readonly ActionInvocationOrigin[] = [
@@ -44,6 +48,7 @@ function snapshotAnchors(
   expectedEffectCount: number,
   expectedChallengeDigest?: string,
   expectedSemanticClaim?: DynamicPublishedSnapshotAnchors['expectedSemanticClaim'],
+  anchoredActor: InvocationActor = actor,
 ): DynamicPublishedSnapshotAnchors {
   const prepared = buildDynamicPublishedInput({
     operation,
@@ -53,7 +58,7 @@ function snapshotAnchors(
   return {
     operation,
     descriptor,
-    actor,
+    actor: anchoredActor,
     origin,
     issuedAuthority: {
       reference: authorityRef,
@@ -144,6 +149,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
     const origins = developmentOrigins
     const cases = []
     for (const origin of origins) {
+      const hostActor = origin.kind === 'request_owned' ? requestActor : actor
       const effects = { payment: 0, provider: 0 }
       const source = createDevelopmentDynamicPublishedSource([fixture.operation])
       let invocationSequence = 0
@@ -159,21 +165,21 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         nextAttemptRef: () => `dynamic:attempt:${++attemptSequence}`,
       })
       const prepared = adapter.prepare({
-        origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+        origin, actor: hostActor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
       })
       const sourceRow = source.list()[0]!
       const decided = adapter.decide({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: prepared.invocationVersion,
         authorityRef: prepared.authority!.reference,
-        actor, origin, accept: true,
+        actor: hostActor, origin, accept: true,
       })
       if (decided.kind !== 'accepted') throw new Error(decided.code)
       const acquired = adapter.acquire({
         invocationRef: prepared.invocationRef,
         expectedInvocationVersion: decided.view.invocationVersion,
         authorityRef: prepared.authority!.reference,
-        actor, origin, leaseOwner: `worker:${origin.kind}`, leaseMs: 30_000,
+        actor: hostActor, origin, leaseOwner: `worker:${origin.kind}`, leaseMs: 30_000,
       })
       if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
         throw new Error('dynamic_published_evidence_not_leased')
@@ -216,6 +222,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
             status: 'completed',
             outcomeResultRef: `published-result:${sourceRow.semanticIdentityDigest}`,
           },
+          hostActor,
         ),
       )
       const coldSource = createDevelopmentDynamicPublishedSource(
@@ -566,6 +573,7 @@ export function verifyDevelopmentDynamicInvocationEvidence(
         status: 'completed',
         outcomeResultRef: entry.snapshot.sourceRows[0]!.resultIdentity!.sourceResultRef,
       },
+      expectedOrigin.kind === 'request_owned' ? requestActor : actor,
     )
     verifyDynamicPublishedSnapshot({
       snapshot: entry.snapshot,
