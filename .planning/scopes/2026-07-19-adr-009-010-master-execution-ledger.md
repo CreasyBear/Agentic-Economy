@@ -821,8 +821,8 @@ npm run evidence:action-invocation:development -- run /tmp/ae-phase1-evidence-b9
 npm run evidence:action-invocation:development -- verify /tmp/ae-phase1-evidence-b933999e.json
 ```
 
-Observed at exact revision
-`b933999e3c9ba61c1ec90c24edbe50f19c4f4ae4`:
+Observed again after the ledger update at exact revision
+`61b3e60ee1e06b00571acd6eb94cca737a150505`:
 
 - Request-owned and standalone invocations both completed through
   `supply.collectDevelopmentQuote:v1`;
@@ -838,9 +838,9 @@ Observed at exact revision
 - transfer verdict:
   `retain_control_for_consequential_and_bypass_read_only`;
 - packet checksum:
-  `sha256:a45c783062be2b5c7d55f88f2a5f5adabfdeb8564c1e7d3a987b1b4849623b15`;
+  `sha256:699646346618de8fa8c4631f7f2e5bdc9d6a896a9b480bd2e81a9ac395773e2a`;
 - artifact SHA-256:
-  `f86cffe4d0d0ef8c111e702dab046748090cc5dc455e18b3f0631b0e32232484`.
+  `7015487807229ceaedc4284380ccb1e6540a6024db7ffb4ac227b8d49c0d7b8d`.
 
 The artifact remains outside Git. It contains labelled fixture data and no
 production credential or real customer/provider record.
