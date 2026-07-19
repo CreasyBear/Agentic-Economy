@@ -34,14 +34,25 @@ export type DynamicPublishedSharedOutcome = Readonly<{
   resultIdentity?: DynamicPublishedSourceRow['resultIdentity']
 }>
 
+export type DynamicPublishedSemanticClaim = Readonly<{
+  semanticBaseKey: string
+  semanticIdentityDigest: string
+  principalRef: string
+  ownerInvocationRef: string
+  status: 'pending' | 'completed' | 'uncertain'
+  outcome?: DynamicPublishedSharedOutcome
+}>
+
 export type DynamicPublishedSourcePort = Readonly<{
   current(slot: string): PublishedOperation | undefined
   read(invocationRef: string): DynamicPublishedSourceRow | undefined
   write(row: DynamicPublishedSourceRow): void
   list(): readonly DynamicPublishedSourceRow[]
+  listSemanticClaims(): readonly DynamicPublishedSemanticClaim[]
   claimSemanticEffect(input: Readonly<{
     semanticBaseKey: string
     semanticIdentityDigest: string
+    principalRef: string
     invocationRef: string
   }>):
     | Readonly<{ kind: 'owner' }>
@@ -66,30 +77,19 @@ export function dynamicPublishedOperationSlot(operation: PublishedOperation): st
 export function createDevelopmentDynamicPublishedSource(
   operations: readonly PublishedOperation[],
   rows: Map<string, DynamicPublishedSourceRow> = new Map(),
+  restoredClaims: readonly DynamicPublishedSemanticClaim[] = [],
 ): DynamicPublishedSourcePort & Readonly<{
   rows: Map<string, DynamicPublishedSourceRow>
   setCurrent(operation: PublishedOperation): void
 }> {
   const current = new Map(operations.map((operation) => [dynamicPublishedOperationSlot(operation), operation]))
   const semantic = new Map<string, {
-    semanticIdentityDigest: string
-    ownerInvocationRef: string
-    outcome?: DynamicPublishedSharedOutcome
+    claim: DynamicPublishedSemanticClaim
+    active: boolean
     waiters: ((outcome: DynamicPublishedSharedOutcome) => void)[]
   }>()
-  for (const row of rows.values()) {
-    if (row.resultIdentity === undefined || row.observedResolution.state === 'pending') continue
-    semantic.set(row.semanticBaseKey, {
-      semanticIdentityDigest: row.semanticIdentityDigest,
-      ownerInvocationRef: row.invocationRef,
-      outcome: {
-        semanticIdentityDigest: row.semanticIdentityDigest,
-        ownerInvocationRef: row.invocationRef,
-        observedResolution: row.observedResolution,
-        resultIdentity: row.resultIdentity,
-      },
-      waiters: [],
-    })
+  for (const claim of restoredClaims) {
+    semantic.set(claim.semanticBaseKey, { claim, active: false, waiters: [] })
   }
   return {
     rows,
@@ -97,18 +97,43 @@ export function createDevelopmentDynamicPublishedSource(
     read: (invocationRef) => rows.get(invocationRef),
     write: (row) => rows.set(row.invocationRef, row),
     list: () => [...rows.values()],
-    claimSemanticEffect: ({ semanticBaseKey, semanticIdentityDigest, invocationRef }) => {
+    listSemanticClaims: () => [...semantic.values()].map(({ claim }) => claim),
+    claimSemanticEffect: ({ semanticBaseKey, semanticIdentityDigest, principalRef, invocationRef }) => {
       const prior = semantic.get(semanticBaseKey)
       if (prior === undefined) {
         semantic.set(semanticBaseKey, {
-          semanticIdentityDigest,
-          ownerInvocationRef: invocationRef,
+          claim: {
+            semanticBaseKey,
+            semanticIdentityDigest,
+            principalRef,
+            ownerInvocationRef: invocationRef,
+            status: 'pending',
+          },
+          active: true,
           waiters: [],
         })
         return { kind: 'owner' }
       }
-      if (prior.semanticIdentityDigest !== semanticIdentityDigest) return { kind: 'conflict' }
-      if (prior.outcome !== undefined) return { kind: 'reuse', outcome: prior.outcome }
+      if (prior.claim.semanticIdentityDigest !== semanticIdentityDigest
+        || prior.claim.principalRef !== principalRef) return { kind: 'conflict' }
+      if (prior.claim.outcome !== undefined) return { kind: 'reuse', outcome: prior.claim.outcome }
+      if (prior.claim.ownerInvocationRef === invocationRef) {
+        prior.active = true
+        return { kind: 'owner' }
+      }
+      if (!prior.active) {
+        const outcome: DynamicPublishedSharedOutcome = {
+          semanticIdentityDigest,
+          ownerInvocationRef: prior.claim.ownerInvocationRef,
+          observedResolution: {
+            state: 'threw',
+            execution: 'runner_threw',
+            message: 'semantic_effect_owner_process_lost',
+          },
+        }
+        prior.claim = { ...prior.claim, status: 'uncertain', outcome }
+        return { kind: 'reuse', outcome }
+      }
       return {
         kind: 'wait',
         outcome: new Promise((resolve) => prior.waiters.push(resolve)),
@@ -117,11 +142,16 @@ export function createDevelopmentDynamicPublishedSource(
     completeSemanticEffect: ({ semanticBaseKey, outcome }) => {
       const prior = semantic.get(semanticBaseKey)
       if (prior === undefined
-        || prior.ownerInvocationRef !== outcome.ownerInvocationRef
-        || prior.semanticIdentityDigest !== outcome.semanticIdentityDigest) {
+        || prior.claim.ownerInvocationRef !== outcome.ownerInvocationRef
+        || prior.claim.semanticIdentityDigest !== outcome.semanticIdentityDigest) {
         throw new Error('dynamic_semantic_effect_owner_mismatch')
       }
-      prior.outcome = outcome
+      prior.claim = {
+        ...prior.claim,
+        status: outcome.observedResolution.state === 'returned' ? 'completed' : 'uncertain',
+        outcome,
+      }
+      prior.active = false
       for (const resolve of prior.waiters.splice(0)) resolve(outcome)
     },
     setCurrent: (operation) => current.set(dynamicPublishedOperationSlot(operation), operation),

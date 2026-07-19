@@ -13,17 +13,23 @@ import {
   executableFixedPrice,
 } from './dynamic-published-contract'
 import type { DynamicPublishedAdapterSnapshot } from './dynamic-published-adapter'
+import type { DynamicPublishedSourceRow } from './dynamic-published-source'
 
 export function assertDynamicPublishedSnapshotShape(value: unknown): asserts value is DynamicPublishedAdapterSnapshot {
   if (!isRecord(value)
-    || value.format !== 'dynamic-published-action-invocation:development:v1'
+    || value.format !== 'dynamic-published-action-invocation:development:v2'
     || !Array.isArray(value.sourceRows)
+    || !Array.isArray(value.semanticClaims)
     || !Array.isArray(value.controls)
     || !Array.isArray(value.attempts)
     || !Array.isArray(value.history)
     || !Array.isArray(value.commands)
-    || !exactKeys(value, ['format', 'sourceRows', 'controls', 'attempts', 'history', 'commands'])
+    || !exactKeys(value, [
+      'format', 'sourceRows', 'semanticClaims', 'controls', 'attempts', 'history', 'commands',
+    ])
     || value.sourceRows.length !== 1
+    || value.semanticClaims.length > 1
+    || value.semanticClaims.some((claim) => !semanticClaimShapeValid(claim))
     || value.controls.length !== 1
     || value.attempts.length !== 1
     || value.history.length !== 1
@@ -45,6 +51,39 @@ export function assertDynamicPublishedSnapshotShape(value: unknown): asserts val
   }
 }
 
+function semanticClaimShapeValid(value: unknown): boolean {
+  if (!isRecord(value)
+    || typeof value.semanticBaseKey !== 'string'
+    || typeof value.semanticIdentityDigest !== 'string'
+    || typeof value.principalRef !== 'string'
+    || typeof value.ownerInvocationRef !== 'string'
+    || !['pending', 'completed', 'uncertain'].includes(String(value.status))
+    || !exactKeys(value, [
+      'semanticBaseKey',
+      'semanticIdentityDigest',
+      'principalRef',
+      'ownerInvocationRef',
+      'status',
+      ...(value.outcome === undefined ? [] : ['outcome']),
+    ])) return false
+  if (value.status === 'pending') return value.outcome === undefined
+  if (!isRecord(value.outcome)
+    || typeof value.outcome.semanticIdentityDigest !== 'string'
+    || typeof value.outcome.ownerInvocationRef !== 'string'
+    || !isRecord(value.outcome.observedResolution)
+    || !exactKeys(value.outcome, [
+      'semanticIdentityDigest',
+      'ownerInvocationRef',
+      'observedResolution',
+      ...(value.outcome.resultIdentity === undefined ? [] : ['resultIdentity']),
+    ])) return false
+  return value.outcome.resultIdentity === undefined
+    || (isRecord(value.outcome.resultIdentity)
+      && typeof value.outcome.resultIdentity.sourceResultRef === 'string'
+      && typeof value.outcome.resultIdentity.resultDigest === 'string'
+      && exactKeys(value.outcome.resultIdentity, ['sourceResultRef', 'resultDigest']))
+}
+
 export type DynamicPublishedSnapshotAnchors = Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
@@ -57,6 +96,11 @@ export type DynamicPublishedSnapshotAnchors = Readonly<{
   }>
   expectedEffectCount: number
   expectedChallengeDigest?: string
+  expectedSemanticClaim?: Readonly<{
+    ownerInvocationRef: string
+    status: 'pending' | 'completed' | 'uncertain'
+    outcomeResultRef?: string
+  }>
 }>
 
 export function verifyDynamicPublishedSnapshot(input: Readonly<{
@@ -73,6 +117,7 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     issuedAuthority,
   } = input.anchors
   const source = snapshot.sourceRows[0]!
+  const semanticClaim = snapshot.semanticClaims[0]
   const control = snapshot.controls[0]!
   const attemptGroup = snapshot.attempts[0]!
   const historyGroup = snapshot.history[0]!
@@ -103,6 +148,15 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     || source.operationKey !== recomputedInput.operationKey
     || source.semanticBaseKey !== semanticBaseKey
     || source.semanticIdentityDigest !== semanticIdentityDigest
+    || !semanticClaimValid(
+      semanticClaim,
+      input.anchors.expectedSemanticClaim,
+      semanticBaseKey,
+      semanticIdentityDigest,
+      actor.principalRef,
+      source.observedResolution,
+      source.resultIdentity,
+    )
     || source.invocationRef !== control.invocationRef
     || control.sourceRef !== control.invocationRef
     || control.control.owner.callerRef !== actor.callerRef
@@ -120,6 +174,11 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     || control.control.authority?.reference !== issuedAuthority.reference
     || control.authorityBinding.reference !== issuedAuthority.reference
     || control.authorityBinding.digest !== issuedAuthority.materialInputDigest
+    || source.prepared?.materialInputDigest !== issuedAuthority.materialInputDigest
+    || canonicalDigest(source.prepared.target)
+      !== canonicalDigest(recomputedInput.target)
+    || control.preparedMaterialDigest !== issuedAuthority.materialInputDigest
+    || control.preparedTargetDigest !== canonicalDigest(recomputedInput.target)
     || control.authorityBinding.targetDigest !== canonicalDigest(recomputedInput.target)
     || control.authorityBinding.limits.amountMinor !== price.amountMinor
     || canonicalDigest(control.control.acceptedAuthority as unknown as StableHashValue)
@@ -182,6 +241,43 @@ function attemptsValid(
   ))
 }
 
+function semanticClaimValid(
+  claim: DynamicPublishedAdapterSnapshot['semanticClaims'][number] | undefined,
+  expected: DynamicPublishedSnapshotAnchors['expectedSemanticClaim'],
+  semanticBaseKey: string,
+  semanticIdentityDigest: string,
+  principalRef: string,
+  observedResolution: DynamicPublishedSourceRow['observedResolution'],
+  resultIdentity: DynamicPublishedSourceRow['resultIdentity'],
+): boolean {
+  if (expected === undefined) return claim === undefined
+  return claim !== undefined
+    && claim.semanticBaseKey === semanticBaseKey
+    && claim.semanticIdentityDigest === semanticIdentityDigest
+    && claim.principalRef === principalRef
+    && claim.ownerInvocationRef === expected.ownerInvocationRef
+    && claim.status === expected.status
+    && claim.outcome?.semanticIdentityDigest === (
+      claim.status === 'pending' ? undefined : semanticIdentityDigest
+    )
+    && claim.outcome?.ownerInvocationRef === (
+      claim.status === 'pending' ? undefined : expected.ownerInvocationRef
+    )
+    && claim.outcome?.resultIdentity?.sourceResultRef === expected.outcomeResultRef
+    && (claim.status === 'pending'
+      || claim.status === 'completed'
+        && claim.outcome?.observedResolution.state === 'returned'
+        && observedResolution.state === 'returned'
+        && canonicalDigest(
+          claim.outcome.observedResolution.result as unknown as StableHashValue,
+        ) === canonicalDigest(observedResolution.result as unknown as StableHashValue)
+      || claim.status === 'uncertain'
+        && claim.outcome?.observedResolution.state !== 'returned'
+        && observedResolution.state !== 'returned')
+    && canonicalDigest((claim.outcome?.resultIdentity ?? null) as unknown as StableHashValue)
+      === canonicalDigest((resultIdentity ?? null) as unknown as StableHashValue)
+}
+
 function historyValid(
   history: DynamicPublishedAdapterSnapshot['history'][number]['rows'],
   currentVersion: number,
@@ -196,14 +292,15 @@ function historyValid(
     ...(includesRelease ? ['begin_release'] : []),
     'execute_acquired',
   ]
-  if (history.length !== expectedKinds.length || attempts.length !== 1) return false
+  if (history.length < 1 || history.length > expectedKinds.length) return false
+  const actualExpectedKinds = expectedKinds.slice(0, history.length)
   const commands = new Set<string>()
   let priorRecordedAt = Number.NEGATIVE_INFINITY
   for (const [index, row] of history.entries()) {
     const recordedAt = Date.parse(row.recordedAt)
     if (
       row.invocationVersion !== index + 1
-      || row.kind !== expectedKinds[index]
+      || row.kind !== actualExpectedKinds[index]
       || commands.has(row.commandId)
       || !Number.isFinite(recordedAt)
       || recordedAt < priorRecordedAt
@@ -213,6 +310,14 @@ function historyValid(
     priorRecordedAt = recordedAt
     commands.add(row.commandId)
   }
+  if (currentVersion !== history.length) return false
+  if (history.length <= 2) return attempts.length === 0
+  if (history.length === 3) {
+    return attempts.length === 1
+      && attempts[0]?.release.state === 'not_released'
+      && attempts[0]?.outcome.state === 'running'
+  }
+  if (attempts.length !== 1) return false
   const transition = history.at(-1)?.attemptTransition
   const attempt = attempts[0]!
   if (transition === undefined
@@ -228,8 +333,7 @@ function historyValid(
     release: { state: 'not_released' as const },
     outcome: { state: 'running' as const },
   }
-  return currentVersion === history.length
-    && transition.priorDigest === canonicalDigest(priorAttempt as unknown as StableHashValue)
+  return transition.priorDigest === canonicalDigest(priorAttempt as unknown as StableHashValue)
 }
 
 function commandsValid(

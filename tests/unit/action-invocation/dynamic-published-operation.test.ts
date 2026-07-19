@@ -401,9 +401,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
           ),
         },
         expectedEffectCount: 1,
+        expectedSemanticClaim: {
+          ownerInvocationRef: prepared.invocationRef,
+          status: 'uncertain',
+        },
       },
     )
-    const coldSource = createDevelopmentDynamicPublishedSource([fixture.operation], loaded.sourceRows)
+    const coldSource = createDevelopmentDynamicPublishedSource(
+      [fixture.operation],
+      loaded.sourceRows,
+      loaded.semanticClaims,
+    )
     const cold = createAdapter(
       fixture.operation,
       successRuntime(fixture.operation.binding.endpointUrl, effects),
@@ -934,17 +942,170 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     )).toBe(true)
   })
 
+  it('cold-reuses shared uncertainty with separate attribution and zero new effect', async () => {
+    const fixture = buildDevelopmentPublishedOperationEvidence()
+    const clock = fixture.operation.readiness.observedAt + 1_000
+    vi.spyOn(Date, 'now').mockReturnValue(clock)
+    const effects = { payment: 0, provider: 0 }
+    const source = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const adapter = createAdapter(
+      fixture.operation,
+      lostResponseRuntime(fixture.operation.binding.endpointUrl, effects),
+      clock,
+      source,
+    )
+    const origin = origins[1]!
+    const first = adapter.prepare({
+      origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+    })
+    const firstDecided = adapter.decide({
+      invocationRef: first.invocationRef,
+      expectedInvocationVersion: first.invocationVersion,
+      authorityRef: first.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (firstDecided.kind !== 'accepted') throw new Error(firstDecided.code)
+    const firstLease = adapter.acquire({
+      invocationRef: first.invocationRef,
+      expectedInvocationVersion: firstDecided.view.invocationVersion,
+      authorityRef: first.authority!.reference,
+      actor, origin, leaseOwner: 'worker:cold:owner', leaseMs: 30_000,
+    })
+    if (firstLease.kind !== 'accepted' || firstLease.view.control.state !== 'leased') throw new Error('not leased')
+    const uncertain = await adapter.executeAcquired({
+      invocationRef: first.invocationRef,
+      expectedInvocationVersion: firstLease.view.invocationVersion,
+      attemptRef: firstLease.view.control.attemptRef,
+      leaseOwner: firstLease.view.control.leaseOwner,
+      effectGeneration: firstLease.view.control.effectGeneration,
+    })
+    expect(uncertain.kind === 'accepted' && uncertain.view.control)
+      .toMatchObject({ state: 'reconciliation_required' })
+    const snapshot = adapter.exportSnapshot()
+    const loaded = loadDynamicPublishedAdapterSnapshot(
+      JSON.parse(JSON.stringify(snapshot)),
+      dynamicSnapshotAnchors(fixture, first, origin, 'uncertain', 1),
+    )
+    const coldSource = createDevelopmentDynamicPublishedSource(
+      [fixture.operation],
+      loaded.sourceRows,
+      loaded.semanticClaims,
+    )
+    const cold = createAdapter(
+      fixture.operation,
+      successRuntime(fixture.operation.binding.endpointUrl, effects),
+      clock + 1,
+      coldSource,
+      loaded.durableState,
+    )
+    const second = cold.prepare({
+      origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+    })
+    const secondDecided = cold.decide({
+      invocationRef: second.invocationRef,
+      expectedInvocationVersion: second.invocationVersion,
+      authorityRef: second.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (secondDecided.kind !== 'accepted') throw new Error(secondDecided.code)
+    const secondLease = cold.acquire({
+      invocationRef: second.invocationRef,
+      expectedInvocationVersion: secondDecided.view.invocationVersion,
+      authorityRef: second.authority!.reference,
+      actor, origin, leaseOwner: 'worker:cold:reuse', leaseMs: 30_000,
+    })
+    if (secondLease.kind !== 'accepted' || secondLease.view.control.state !== 'leased') throw new Error('not leased')
+    const shared = await cold.executeAcquired({
+      invocationRef: second.invocationRef,
+      expectedInvocationVersion: secondLease.view.invocationVersion,
+      attemptRef: secondLease.view.control.attemptRef,
+      leaseOwner: secondLease.view.control.leaseOwner,
+      effectGeneration: secondLease.view.control.effectGeneration,
+    })
+    expect(shared.kind === 'accepted' && shared.view.control)
+      .toMatchObject({ state: 'reconciliation_required' })
+    expect(shared.kind === 'accepted' && shared.view.acceptedAuthority)
+      .not.toEqual(uncertain.kind === 'accepted' ? uncertain.view.acceptedAuthority : undefined)
+    expect(effects).toEqual({ payment: 1, provider: 1 })
+  })
+
+  it('cold-continues an acquired owner after process loss between claim and release', async () => {
+    const fixture = buildDevelopmentPublishedOperationEvidence()
+    const clock = fixture.operation.readiness.observedAt + 1_000
+    vi.spyOn(Date, 'now').mockReturnValue(clock)
+    const source = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const adapter = createAdapter(
+      fixture.operation,
+      successRuntime(fixture.operation.binding.endpointUrl, { payment: 0, provider: 0 }),
+      clock,
+      source,
+    )
+    const origin = origins[1]!
+    const prepared = adapter.prepare({
+      origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
+    })
+    const decided = adapter.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, accept: true,
+    })
+    if (decided.kind !== 'accepted') throw new Error(decided.code)
+    const acquired = adapter.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decided.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor, origin, leaseOwner: 'worker:process-kill', leaseMs: 30_000,
+    })
+    if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') throw new Error('not leased')
+    const row = source.read(prepared.invocationRef)!
+    expect(source.claimSemanticEffect({
+      semanticBaseKey: row.semanticBaseKey,
+      semanticIdentityDigest: row.semanticIdentityDigest,
+      principalRef: actor.principalRef,
+      invocationRef: prepared.invocationRef,
+    })).toEqual({ kind: 'owner' })
+    const loaded = loadDynamicPublishedAdapterSnapshot(
+      JSON.parse(JSON.stringify(adapter.exportSnapshot())),
+      dynamicSnapshotAnchors(fixture, prepared, origin, 'pending', 1),
+    )
+    const coldSource = createDevelopmentDynamicPublishedSource(
+      [fixture.operation],
+      loaded.sourceRows,
+      loaded.semanticClaims,
+    )
+    const effects = { payment: 0, provider: 0 }
+    const cold = createAdapter(
+      fixture.operation,
+      successRuntime(fixture.operation.binding.endpointUrl, effects),
+      clock + 1,
+      coldSource,
+      loaded.durableState,
+    )
+    const completed = await cold.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: acquired.view.control.attemptRef,
+      leaseOwner: acquired.view.control.leaseOwner,
+      effectGeneration: acquired.view.control.effectGeneration,
+    })
+    expect(completed.kind === 'accepted' && completed.view.control).toEqual({ state: 'terminal' })
+    expect(effects).toEqual({ payment: 1, provider: 1 })
+  })
+
   it('conflicts changed semantic material and isolates different principals', async () => {
     const fixture = buildDevelopmentPublishedOperationEvidence()
     const source = createDevelopmentDynamicPublishedSource([fixture.operation])
     expect(source.claimSemanticEffect({
       semanticBaseKey: 'semantic:base',
       semanticIdentityDigest: 'sha256:first',
+      principalRef: actor.principalRef,
       invocationRef: 'invocation:first',
     })).toEqual({ kind: 'owner' })
     expect(source.claimSemanticEffect({
       semanticBaseKey: 'semantic:base',
       semanticIdentityDigest: 'sha256:changed-target-or-material',
+      principalRef: actor.principalRef,
       invocationRef: 'invocation:second',
     })).toEqual({ kind: 'conflict' })
 
@@ -1075,11 +1236,34 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         packet.semanticReuse.invocations[1].snapshot.sourceRows[0].semanticIdentityDigest =
           'sha256:forged-semantic-index'
       }],
+      ['semantic owner', (packet) => {
+        packet.semanticReuse.invocations[1].snapshot.semanticClaims[0].ownerInvocationRef =
+          packet.semanticReuse.invocations[1].invocationRef
+      }],
+      ['semantic base', (packet) => {
+        const snapshot = packet.semanticReuse.invocations[1].snapshot
+        snapshot.sourceRows[0].semanticBaseKey = 'sha256:forged-base'
+        snapshot.semanticClaims[0].semanticBaseKey = 'sha256:forged-base'
+      }],
+      ['semantic status', (packet) => {
+        packet.semanticReuse.invocations[1].snapshot.semanticClaims[0].status = 'uncertain'
+      }],
+      ['semantic outcome', (packet) => {
+        packet.semanticReuse.invocations[1].snapshot.semanticClaims[0].outcome.observedResolution =
+          { state: 'threw', execution: 'runner_threw', message: 'forged' }
+      }],
       ['semantic result reference', (packet) => {
         const entry = packet.semanticReuse.invocations[1]
         entry.snapshot.sourceRows[0].resultIdentity.sourceResultRef = 'result:forged'
         entry.snapshot.controls[0].sourceResultRef = 'result:forged'
         packet.semanticReuse.sharedOutcomeRef = 'result:forged'
+      }],
+      ['prepared continuation material', (packet) => {
+        const snapshot = packet.processKill.snapshot
+        snapshot.sourceRows[0].prepared.materialInputDigest = 'sha256:forged-prepared'
+        snapshot.controls[0].preparedMaterialDigest = 'sha256:forged-prepared'
+        snapshot.controls[0].authorityBinding.digest = 'sha256:forged-prepared'
+        snapshot.attempts[0].rows[0].idempotency.materialInputDigest = 'sha256:forged-prepared'
       }],
       ['schema', (packet) => { packet.cases[0].snapshot.untrusted = true }],
     ]
@@ -1093,6 +1277,56 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
   })
 })
 
+function dynamicSnapshotAnchors(
+  fixture: ReturnType<typeof buildDevelopmentPublishedOperationEvidence>,
+  prepared: ReturnType<ReturnType<typeof createAdapter>['prepare']>,
+  origin: ActionInvocationOrigin,
+  status: 'pending' | 'completed' | 'uncertain',
+  expectedEffectCount: number,
+) {
+  const material = buildDynamicPublishedInput({
+    operation: fixture.operation,
+    descriptor: fixture.descriptor,
+    value: { symbol: 'BTC', convert: 'USD' },
+  })
+  return {
+    operation: fixture.operation,
+    descriptor: fixture.descriptor,
+    actor,
+    origin,
+    issuedAuthority: {
+      reference: prepared.authority!.reference,
+      accepted: { kind: 'approve_each' as const, authorityRef: prepared.authority!.reference },
+      materialInputDigest: materialDigest(
+        material,
+        ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+      ),
+    },
+    expectedEffectCount,
+    expectedSemanticClaim: {
+      ownerInvocationRef: prepared.invocationRef,
+      status,
+      ...(status === 'completed'
+        ? {
+            outcomeResultRef: `published-result:${canonicalDigest({
+              semanticBaseKey: canonicalDigest({
+                principalRef: actor.principalRef,
+                actionId: fixture.operation.operationId,
+                actionVersion: fixture.descriptor.version,
+                operationKey: material.operationKey,
+              }),
+              target: material.target,
+              preparedMaterialDigest: materialDigest(
+                material,
+                ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+              ),
+            })}`,
+          }
+        : {}),
+    },
+  }
+}
+
 function createAdapter(
   operation: ReturnType<typeof buildDevelopmentPublishedOperationEvidence>['operation'],
   runtime: RouteTransportRuntime,
@@ -1100,9 +1334,10 @@ function createAdapter(
   source = createDevelopmentDynamicPublishedSource([operation]),
   durableState?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['durableState'],
 ) {
-  let invocation = 0
-  let authority = 0
-  let attempt = 0
+  const priorCount = durableState?.controls.size ?? 0
+  let invocation = priorCount
+  let authority = priorCount
+  let attempt = priorCount
   return createDynamicPublishedActionInvocationAdapter({
     operation,
     source,

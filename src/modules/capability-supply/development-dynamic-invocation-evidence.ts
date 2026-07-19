@@ -43,6 +43,7 @@ function snapshotAnchors(
   authorityRef: string,
   expectedEffectCount: number,
   expectedChallengeDigest?: string,
+  expectedSemanticClaim?: DynamicPublishedSnapshotAnchors['expectedSemanticClaim'],
 ): DynamicPublishedSnapshotAnchors {
   const prepared = buildDynamicPublishedInput({
     operation,
@@ -63,6 +64,7 @@ function snapshotAnchors(
       ),
     },
     expectedEffectCount,
+    ...(expectedSemanticClaim === undefined ? {} : { expectedSemanticClaim }),
     ...(expectedChallengeDigest === undefined ? {} : { expectedChallengeDigest }),
   }
 }
@@ -115,6 +117,13 @@ export type DevelopmentDynamicInvocationEvidence = Readonly<{
       effectGeneration: 1
       snapshot: DynamicPublishedAdapterSnapshot
     }>[]
+  }>
+  processKill: Readonly<{
+    invocationRef: string
+    authorityRef: string
+    attemptRef: string
+    status: 'pending'
+    snapshot: DynamicPublishedAdapterSnapshot
   }>
   sourceDigest: string
   evidenceContract: Readonly<{
@@ -202,9 +211,18 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
           canonicalDigest(
             developmentChallenge(fixture.operation.binding.endpointUrl) as unknown as StableHashValue,
           ),
+          {
+            ownerInvocationRef: prepared.invocationRef,
+            status: 'completed',
+            outcomeResultRef: `published-result:${sourceRow.semanticIdentityDigest}`,
+          },
         ),
       )
-      const coldSource = createDevelopmentDynamicPublishedSource([fixture.operation], loaded.sourceRows)
+      const coldSource = createDevelopmentDynamicPublishedSource(
+        [fixture.operation],
+        loaded.sourceRows,
+        loaded.semanticClaims,
+      )
       const cold = createDynamicPublishedActionInvocationAdapter({
         operation: fixture.operation,
         source: coldSource,
@@ -421,6 +439,58 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         snapshot: invocationSnapshot(semanticSnapshot, entry.invocationRef),
       })),
     }
+    const killSource = createDevelopmentDynamicPublishedSource([fixture.operation])
+    const killAdapter = createDynamicPublishedActionInvocationAdapter({
+      operation: fixture.operation,
+      source: killSource,
+      runtime: successRuntime(fixture.operation.binding.endpointUrl, { payment: 0, provider: 0 }),
+      now: () => now,
+      nextInvocationRef: () => 'process-kill:invocation:1',
+      nextAuthorityRef: () => 'process-kill:authority:1',
+      nextAttemptRef: () => 'process-kill:attempt:1',
+    })
+    const killPrepared = killAdapter.prepare({
+      origin: developmentOrigins[1]!,
+      actor,
+      value: { symbol: 'BTC', convert: 'USD' },
+      freshnessMs: 60_000,
+    })
+    const killDecided = killAdapter.decide({
+      invocationRef: killPrepared.invocationRef,
+      expectedInvocationVersion: killPrepared.invocationVersion,
+      authorityRef: killPrepared.authority!.reference,
+      actor,
+      origin: developmentOrigins[1]!,
+      accept: true,
+    })
+    if (killDecided.kind !== 'accepted') throw new Error(killDecided.code)
+    const killAcquired = killAdapter.acquire({
+      invocationRef: killPrepared.invocationRef,
+      expectedInvocationVersion: killDecided.view.invocationVersion,
+      authorityRef: killPrepared.authority!.reference,
+      actor,
+      origin: developmentOrigins[1]!,
+      leaseOwner: 'worker:process-kill',
+      leaseMs: 30_000,
+    })
+    if (killAcquired.kind !== 'accepted' || killAcquired.view.control.state !== 'leased') {
+      throw new Error('process_kill_not_leased')
+    }
+    const killRow = killSource.read(killPrepared.invocationRef)!
+    const killClaim = killSource.claimSemanticEffect({
+      semanticBaseKey: killRow.semanticBaseKey,
+      semanticIdentityDigest: killRow.semanticIdentityDigest,
+      principalRef: actor.principalRef,
+      invocationRef: killPrepared.invocationRef,
+    })
+    if (killClaim.kind !== 'owner') throw new Error('process_kill_claim_failed')
+    const processKill = {
+      invocationRef: killPrepared.invocationRef,
+      authorityRef: killPrepared.authority!.reference,
+      attemptRef: killAcquired.view.control.attemptRef,
+      status: 'pending' as const,
+      snapshot: killAdapter.exportSnapshot(),
+    }
     const sourceDigest = canonicalDigest({
       operation: fixture.operation,
       descriptor: {
@@ -438,6 +508,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
       cases,
       recovery,
       semanticReuse,
+      processKill,
       sourceDigest,
       evidenceContract: {
         anchored: 'semantic_identity_authority_material_effect_reconstruction' as const,
@@ -490,13 +561,22 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       canonicalDigest(
         developmentChallenge(rebuiltOperation.binding.endpointUrl) as unknown as StableHashValue,
       ),
+      {
+        ownerInvocationRef: entry.invocationRef,
+        status: 'completed',
+        outcomeResultRef: entry.snapshot.sourceRows[0]!.resultIdentity!.sourceResultRef,
+      },
     )
     verifyDynamicPublishedSnapshot({
       snapshot: entry.snapshot,
       anchors,
     })
     const loaded = loadDynamicPublishedAdapterSnapshot(entry.snapshot, anchors)
-    const source = createDevelopmentDynamicPublishedSource([rebuiltOperation], loaded.sourceRows)
+    const source = createDevelopmentDynamicPublishedSource(
+      [rebuiltOperation],
+      loaded.sourceRows,
+      loaded.semanticClaims,
+    )
     const adapter = createDynamicPublishedActionInvocationAdapter({
       operation: rebuiltOperation,
       source,
@@ -521,6 +601,11 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       developmentOrigins[1]!,
       'dynamic:authority:recovery',
       1,
+      undefined,
+      {
+        ownerInvocationRef: packet.recovery.snapshot.controls[0]!.invocationRef,
+        status: 'uncertain',
+      },
     ),
   })
   const semanticInvocationsValid = packet.semanticReuse.invocations.length === 2
@@ -536,6 +621,11 @@ export function verifyDevelopmentDynamicInvocationEvidence(
           canonicalDigest(
             developmentChallenge(rebuiltOperation.binding.endpointUrl) as unknown as StableHashValue,
           ),
+          {
+            ownerInvocationRef: packet.semanticReuse.invocations[0]!.invocationRef,
+            status: 'completed',
+            outcomeResultRef: packet.semanticReuse.sharedOutcomeRef,
+          },
         ),
       })
       const source = entry.snapshot.sourceRows[0]
@@ -551,6 +641,42 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     })
   const [semanticFirst, semanticSecond] = packet.semanticReuse.invocations
   const semanticRows = packet.semanticReuse.invocations.map((entry) => entry.snapshot.sourceRows[0]!)
+  const processKillAnchors = snapshotAnchors(
+    rebuiltOperation,
+    rebuiltDescriptor,
+    developmentOrigins[1]!,
+    packet.processKill.authorityRef,
+    1,
+    undefined,
+    {
+      ownerInvocationRef: packet.processKill.invocationRef,
+      status: 'pending',
+    },
+  )
+  verifyDynamicPublishedSnapshot({
+    snapshot: packet.processKill.snapshot,
+    anchors: processKillAnchors,
+  })
+  const loadedProcessKill = loadDynamicPublishedAdapterSnapshot(
+    packet.processKill.snapshot,
+    processKillAnchors,
+  )
+  const processKillSource = createDevelopmentDynamicPublishedSource(
+    [rebuiltOperation],
+    loadedProcessKill.sourceRows,
+    loadedProcessKill.semanticClaims,
+  )
+  const processKillAdapter = createDynamicPublishedActionInvocationAdapter({
+    operation: rebuiltOperation,
+    source: processKillSource,
+    runtime: verifierRuntime(),
+    now: () => rebuiltOperation.readiness.observedAt + 2_000,
+    nextInvocationRef: () => 'verifier:unused',
+    nextAuthorityRef: () => 'verifier:unused',
+    nextAttemptRef: () => 'verifier:unused',
+    durableState: loadedProcessKill.durableState,
+  })
+  const processKillView = processKillAdapter.inspect(packet.processKill.invocationRef)
   if (
     canonicalDigest(material as unknown as StableHashValue) !== packetDigest
     || recomputedSource !== packet.sourceDigest
@@ -574,6 +700,10 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     || semanticFirst?.attemptRef === semanticSecond?.attemptRef
     || semanticRows[0]?.semanticBaseKey !== semanticRows[1]?.semanticBaseKey
     || semanticRows[0]?.semanticIdentityDigest !== semanticRows[1]?.semanticIdentityDigest
+    || packet.processKill.status !== 'pending'
+    || processKillView?.control.state !== 'leased'
+    || processKillView.control.attemptRef !== packet.processKill.attemptRef
+    || processKillView.authority?.reference !== packet.processKill.authorityRef
     || packet.evidenceContract.anchored
       !== 'semantic_identity_authority_material_effect_reconstruction'
     || packet.evidenceContract.reconstructionMetadataOnly
@@ -615,9 +745,13 @@ function invocationSnapshot(
 ): DynamicPublishedAdapterSnapshot {
   const history = snapshot.history.filter((group) => group.invocationRef === invocationRef)
   const commandIds = new Set(history.flatMap((group) => group.rows.map(({ commandId }) => commandId)))
+  const sourceRows = snapshot.sourceRows.filter((row) => row.invocationRef === invocationRef)
   return {
     ...snapshot,
-    sourceRows: snapshot.sourceRows.filter((row) => row.invocationRef === invocationRef),
+    sourceRows,
+    semanticClaims: snapshot.semanticClaims.filter(
+      (claim) => claim.semanticBaseKey === sourceRows[0]?.semanticBaseKey,
+    ),
     controls: snapshot.controls.filter((row) => row.invocationRef === invocationRef),
     attempts: snapshot.attempts.filter((group) => group.invocationRef === invocationRef),
     history,

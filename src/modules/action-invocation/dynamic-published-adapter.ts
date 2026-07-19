@@ -47,15 +47,19 @@ import type {
   DurableHistoryRow,
   PersistControlResult,
 } from './internal/durable-contracts'
-import type { DynamicPublishedSourceRow } from './dynamic-published-source'
+import type {
+  DynamicPublishedSemanticClaim,
+  DynamicPublishedSourceRow,
+} from './dynamic-published-source'
 import {
   verifyDynamicPublishedSnapshot,
   type DynamicPublishedSnapshotAnchors,
 } from './dynamic-published-snapshot-verifier'
 
 export type DynamicPublishedAdapterSnapshot = Readonly<{
-  format: 'dynamic-published-action-invocation:development:v1'
+  format: 'dynamic-published-action-invocation:development:v2'
   sourceRows: readonly DynamicPublishedSourceRow[]
+  semanticClaims: readonly DynamicPublishedSemanticClaim[]
   controls: readonly DurableControlRow<DynamicPublishedInvocationResult>[]
   attempts: readonly Readonly<{ invocationRef: string; rows: readonly DurableAttemptRow[] }>[]
   history: readonly Readonly<{ invocationRef: string; rows: readonly DurableHistoryRow[] }>[]
@@ -143,7 +147,6 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   const durablePort = createDevelopmentDurablePort(durableState)
   const executionTokens = new Map<string, DynamicPublishedExecutionToken>()
   const preparedTransports = new Map<string, DynamicPublishedPreparedTransport>()
-  const executionContexts = new Map<string, ActionContext>()
   const semanticClaims = new Map<string, Readonly<{
     kind: 'owner' | 'reuse'
     semanticBaseKey: string
@@ -219,6 +222,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       const claim = input.source.claimSemanticEffect({
         semanticBaseKey: row.semanticBaseKey,
         semanticIdentityDigest: row.semanticIdentityDigest,
+        principalRef: durableState.controls.get(execution.invocationRef)?.control.owner.principalRef ?? '',
         invocationRef: execution.invocationRef,
       })
       if (claim.kind === 'conflict') return {
@@ -296,7 +300,6 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       const pending = pendingSource
       if (pending === undefined) throw new Error('dynamic_published_source_not_reserved')
       input.source.write({ ...pending.row, invocationRef })
-      executionContexts.set(invocationRef, pending.context)
       return invocationRef
     },
     nextAuthorityRef: input.nextAuthorityRef,
@@ -460,7 +463,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         || view.control.leaseOwner !== request.leaseOwner) {
         return { kind: 'refused', code: 'lease_not_current', view }
       }
-      const context = executionContexts.get(request.invocationRef)
+      const sourceRow = input.source.read(request.invocationRef)
+      const context = sourceRow?.context
       if (context === undefined) return { kind: 'refused', code: 'invocation_not_found' }
       context.actionInvocationExecution = {
         invocationRef: request.invocationRef,
@@ -524,8 +528,9 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     },
     exportSnapshot() {
       const snapshot: DynamicPublishedAdapterSnapshot = {
-        format: 'dynamic-published-action-invocation:development:v1',
+        format: 'dynamic-published-action-invocation:development:v2',
         sourceRows: input.source.list(),
+        semanticClaims: input.source.listSemanticClaims(),
         controls: [...durableState.controls.values()],
         attempts: [...durableState.attempts].map(([invocationRef, rows]) => ({
           invocationRef,
@@ -551,6 +556,7 @@ export function loadDynamicPublishedAdapterSnapshot(
 ): Readonly<{
   durableState: DevelopmentDurableState<DynamicPublishedInvocationResult>
   sourceRows: Map<string, DynamicPublishedSourceRow>
+  semanticClaims: readonly DynamicPublishedSemanticClaim[]
 }> {
   verifyDynamicPublishedSnapshot({ snapshot, anchors })
   const verified = snapshot as DynamicPublishedAdapterSnapshot
@@ -570,5 +576,6 @@ export function loadDynamicPublishedAdapterSnapshot(
   return {
     durableState,
     sourceRows: new Map(verified.sourceRows.map((row) => [row.invocationRef, row])),
+    semanticClaims: verified.semanticClaims,
   }
 }
