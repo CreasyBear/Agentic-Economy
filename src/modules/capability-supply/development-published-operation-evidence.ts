@@ -24,6 +24,8 @@ const expectedPayment = {
   payTo: '0xmock-provider-recipient',
   currency: 'USD',
 } as const
+const claimCeiling =
+  'Fixture and labelled local development evidence only; no execution or host parity, no hosted route, independent provider, settlement, fulfilment, production safety, or customer value.'
 
 export const developmentPublishedEndpointCards = [
   { method: 'GET', path: endpointPath, summary: 'Latest cryptocurrency quotes' },
@@ -231,8 +233,7 @@ export function buildDevelopmentPublishedOperationEvidence() {
     },
     readinessObservation: { status: 402, observedAt, validUntil, evidenceRef: 'mock:evidence:fresh-402' },
     usageLabel: '8 calls · 2 distinct payers · rolling 30 days',
-    claimCeiling:
-      'Fixture and labelled local development evidence only; no hosted route, independent provider, settlement, fulfilment, production safety, or customer value.',
+    claimCeiling,
   }
 }
 
@@ -278,6 +279,7 @@ export function verifyDevelopmentPublishedOperationEvidence(
     || packet.operation.usageObservation.window.days !== 30
     || packet.operation.usageObservation.observedAt !== observedAt
     || packet.usageLabel !== '8 calls · 2 distinct payers · rolling 30 days'
+    || packet.claimCeiling !== claimCeiling
     || packet.descriptor.retryClass !== 'reconcile_before_retry'
     || packet.descriptor.authorityRequirement !== 'principal'
     || !packet.descriptor.validateInput({ symbol: 'BTC', convert: 'USD' })

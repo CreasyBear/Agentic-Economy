@@ -29,15 +29,6 @@ export {
   materializePublishedOperation,
   materializeRuntimePublishedOperation,
 } from './published-operation'
-export {
-  comparePublishedOperationHostSemantics,
-  observeEmbeddedPublishedOperation,
-  observeExternalPublishedOperation,
-} from './published-operation-hosts'
-export type {
-  PublishedOperationHostCommand,
-  PublishedOperationHostObservation,
-} from './published-operation-hosts'
 export type {
   PublishedOperation,
   PublishedOperationUsageObservation,
