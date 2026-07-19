@@ -77,6 +77,8 @@ export type ActionContext = {
   developmentOnlySuppliedQuoteQualificationPorts?: unknown
   /** Fixed development clock paired with the supplied-quote source ports. */
   developmentOnlySuppliedQuoteNow?: () => number
+  /** Booking-owned deterministic provider port for labelled development evidence only. */
+  developmentOnlyBookingAdapter?: (data: unknown) => Promise<ActionResult>
 }
 
 export type ActionRunArgs<Input> = {

@@ -12,6 +12,7 @@
  */
 
 import type { AnyAction } from '@/modules/common/action'
+import { createDevelopmentReservationAction } from '@/modules/booking/development-booking.actions'
 import { collectSuppliedCandidateQuoteAction } from '@/modules/capability-supply/supplied-quote.actions'
 import {
   customerRequestCancelAction,
@@ -37,6 +38,7 @@ import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/set
 import { storefrontImportDraftAction } from '@/modules/storefront/storefront.actions'
 
 const actions: readonly AnyAction[] = [
+  createDevelopmentReservationAction,
   collectSuppliedCandidateQuoteAction,
   customerRequestConfirmAction,
   customerRequestRunAction,

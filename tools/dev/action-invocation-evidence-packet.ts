@@ -73,6 +73,29 @@ export async function readAndVerifyEvidencePacket(path: string, expectedRevision
   }
 }
 
+export async function readAndVerifyDevelopmentPacket(
+  path: string,
+  expectedRevision: string,
+  expectedAction: Readonly<{ id: string; version: string }>,
+) {
+  const envelope = JSON.parse(await readFile(path, 'utf8')) as EvidenceEnvelope
+  if (envelope.schema !== 'ae.action-invocation-development-evidence:v1') throw new Error('packet_schema_refused')
+  if (envelope.checksum !== `sha256:${checksum(envelope.packet)}`) throw new Error('packet_checksum_refused')
+  if (envelope.packet.environment !== 'MOCK/DEVELOPMENT ONLY') throw new Error('packet_environment_refused')
+  if (envelope.packet.gitRevision !== expectedRevision) throw new Error('packet_revision_refused')
+  const action = envelope.packet.action as { id?: string; version?: string }
+  if (action.id !== expectedAction.id || action.version !== expectedAction.version) {
+    throw new Error('packet_action_identity_refused')
+  }
+  return {
+    environment: envelope.packet.environment,
+    gitRevision: expectedRevision,
+    checksum: envelope.checksum,
+    action,
+    claimCeiling: envelope.packet.claimCeiling,
+  }
+}
+
 type PacketDurable = Readonly<{
   controls: readonly Record<string, unknown>[]
   attempts: readonly Record<string, unknown>[]
