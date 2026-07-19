@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `8d3fe91a`
+**Current accepted revision:** `0d5131a3`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -225,6 +225,52 @@ Not established:
 - provider/network release, delivery, fulfilment, hosted, or production
   behavior.
 
+### P1-F — earned durable control and cold resume
+
+**Accepted commits:** `622115e9`, `0d5131a3`
+**Child commits:** `82805c97c3e00349067d7c8af7ac1cacc67c4080`,
+`3800a167a32b2efd2f4a1c8558bff8656a12c55d`
+**Child task:** `019f7957-a084-78e3-961e-1f76c8b95fa8`
+**Assigned base:** `19dc48b5`
+**Evidence class:** source plus labelled local/mock durable-control execution;
+private Convex handlers inspected but not invoked
+
+Target transition:
+
+`typed control snapshot -> transactional durable control/history -> fresh process reconstruction`
+
+Implemented:
+
+- module-owned current control, immutable attempt, and append-only history
+  tables with indexed bounded reads;
+- transactional invocation-version and effect-generation fencing, stable
+  command identity, idempotent duplicates, and conflict refusal;
+- typed late observations remain attributable and non-current;
+- a separate asynchronous runtime port matches private Convex handlers while
+  the deterministic development port remains explicitly a test double;
+- fresh port/process reconstruction works for Request-owned and standalone
+  origins through source references rather than transcript or copied input;
+- cryptographic canonical SHA-256 digests protect material, target, effect,
+  command, and source-result identities;
+- persisted failure and uncertainty records contain typed state and optional
+  error digest, never raw adapter error text, body, contact, access key, or
+  copied provider result;
+- competing-process CAS refusal rehydrates the losing process to exact current
+  durable control;
+- standalone completed-result identity is same-principal, terminal,
+  source-verified, allowed-outcome constrained, and carries no authority;
+- master focused checks passed 17/17, scoped lint and diff checks passed, and
+  the persistence boundary contains no `stableHash`, `v.any()`, raw-message
+  validator, or unbounded attempt write.
+
+Not established:
+
+- execution of the private Convex handlers, deployment, code generation, or
+  hosted cold-process behavior;
+- Customer Request attachment or reuse of a completed standalone result;
+- provider/network release, delivery, fulfilment, or customer value;
+- ADR acceptance.
+
 ## Persistence source map
 
 Static source inspection under the AE Convex guardrails established:
@@ -246,18 +292,21 @@ deployment or hosted readback.
 
 ## Active slice
 
-### P1-F — earned durable control and cold resume
+### P1-G — completed standalone result reference in Customer Request
 
-**Status:** ready to dispatch from `8d3fe91a`
+**Status:** ready to dispatch from `0d5131a3`
 
 Target transition:
 
-`typed control snapshot -> transactional durable control/history -> fresh process reconstruction`
+`completed standalone result -> immutable Request reference -> replay without repeated effect`
 
-The durable adapter must implement the same Action Invocation interface meaning
-for both origins, enforce CAS/generation fencing transactionally, keep growing
-attempt/transition history in child rows, and resolve inquiry business facts by
-source reference. No public endpoint or deployment is authorized.
+The Request aggregate may attach only a same-principal, standalone, terminal,
+source-verified result identity. It must reference rather than copy the result,
+must inherit no authority or control state, and must not fabricate a plan
+action, Request fact, capability result, or legacy V1 output mapping. The eval
+must prove one runner call, idempotent replay/attachment, cold reconstruction,
+historical Request replay compatibility, and refusal for cross-principal,
+nonterminal, or tampered identities.
 
 ## Evidence position
 
