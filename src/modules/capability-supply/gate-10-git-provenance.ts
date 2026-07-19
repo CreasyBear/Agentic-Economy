@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 export const gate10SourceBaseCommit = '43c7151a1f11a3c3db870cc2a275af8fdc019460'
-export const gate10BaselineCommit = '69aea42cb27598cd208bcea3491f5d8e344fdaad'
+export const gate10BaselineCommit = '1873de02b20fe548671f506315e23dbe693bd1e7'
 export const gate10BaselineTree = 'a993430d77d5b60aea7b1b9a45c9ef934a782ad8'
 export const gate10BaselineExecutableDigest =
   'sha256:749fc5dfb370463b580e40986981f0351ce48edb05bc7f0fa6705b86ebf82152'

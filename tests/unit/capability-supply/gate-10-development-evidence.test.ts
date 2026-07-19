@@ -19,7 +19,7 @@ describe('ADR-010 Gate 10 independent evidence verifier', () => {
     expect(original.disposition).toBe('NARROW_OR_REDESIGN')
     expect(original.provenance).toMatchObject({
       sourceBaseCommit: '43c7151a1f11a3c3db870cc2a275af8fdc019460',
-      baselineCommit: '69aea42cb27598cd208bcea3491f5d8e344fdaad',
+      baselineCommit: '1873de02b20fe548671f506315e23dbe693bd1e7',
       baselineTree: 'a993430d77d5b60aea7b1b9a45c9ef934a782ad8',
       baselineExecutableDigest:
         'sha256:749fc5dfb370463b580e40986981f0351ce48edb05bc7f0fa6705b86ebf82152',
