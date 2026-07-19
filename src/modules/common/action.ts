@@ -79,6 +79,14 @@ export type ActionContext = {
   developmentOnlySuppliedQuoteNow?: () => number
   /** Booking-owned deterministic provider port for labelled development evidence only. */
   developmentOnlyBookingAdapter?: (data: unknown) => Promise<ActionResult>
+  developmentOnlyBookingNow?: () => number
+  developmentOnlyBookingAuthorityPrincipalRef?: string
+  developmentOnlyBookingAvailabilityCheck?: (
+    data: unknown,
+    now: number,
+  ) => Promise<Readonly<{ kind: 'current' } | { kind: 'stale'; reason: string }>>
+  developmentOnlyBookingAvailabilityAdapter?: () => Promise<unknown>
+  developmentOnlyBookingCancellationAdapter?: (data: unknown) => Promise<ActionResult>
 }
 
 export type ActionRunArgs<Input> = {

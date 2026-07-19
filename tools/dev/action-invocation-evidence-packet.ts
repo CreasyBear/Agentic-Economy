@@ -28,6 +28,11 @@ import {
   type SuppliedCandidateQuoteInput,
   type SuppliedCandidateQuoteResult,
 } from '../../src/modules/capability-supply/server'
+import {
+  createDevelopmentReservationAction,
+  type DevelopmentBookingInput,
+  type DevelopmentBookingResult,
+} from '../../src/modules/booking/development-booking.actions'
 
 export type EvidenceEnvelope = Readonly<{
   schema: 'ae.action-invocation-development-evidence:v1'
@@ -94,6 +99,97 @@ export async function readAndVerifyDevelopmentPacket(
     action,
     claimCeiling: envelope.packet.claimCeiling,
   }
+}
+
+export async function readAndVerifyBookingPacket(path: string, expectedRevision: string) {
+  const basic = await readAndVerifyDevelopmentPacket(path, expectedRevision, {
+    id: createDevelopmentReservationAction.id,
+    version: 'v1',
+  })
+  const envelope = JSON.parse(await readFile(path, 'utf8')) as EvidenceEnvelope
+  const durable = envelope.packet.durable as {
+    terminal: PacketDurable
+    uncertain: PacketDurable & { source: {
+      input: DevelopmentBookingInput
+      prepared: PreparedInvocation
+      before: ActionInvocationView<DevelopmentBookingResult>
+      after: ActionInvocationView<DevelopmentBookingResult>
+    } }
+  }
+  const terminal = reconstructBookingRows(durable.terminal, true)
+  const uncertain = reconstructBookingRows(durable.uncertain, false)
+  if (
+    durable.uncertain.source.before.control.state !== 'reconciliation_required'
+    || durable.uncertain.source.before.attempts[0]?.release.state !== 'possibly_released'
+    || durable.uncertain.source.after.control.state !== 'terminal'
+    || uncertain.control.state !== 'terminal'
+  ) throw new Error('packet_booking_reconciliation_refused')
+  if (
+    terminal.observedResolution.state !== 'returned'
+    || terminal.observedResolution.result.kind !== 'reservation_confirmed'
+  ) throw new Error('packet_booking_terminal_refused')
+  return {
+    ...basic,
+    reconstructed: {
+      terminalControl: terminal.control,
+      uncertainBefore: durable.uncertain.source.before.control,
+      reconciledControl: uncertain.control,
+      terminalHistoryRecords: durable.terminal.history.length,
+      reconciliationHistoryRecords: durable.uncertain.history.length,
+    },
+  }
+}
+
+function reconstructBookingRows(durable: PacketDurable, terminal: boolean) {
+  if (!durable.controls?.length || !durable.history?.length) {
+    throw new Error('packet_booking_durable_rows_refused')
+  }
+  const state = createDevelopmentDurableState<DevelopmentBookingResult>()
+  for (const row of durable.controls) state.controls.set(String(row.invocationRef), row as never)
+  const invocationRef = String(durable.controls[0]!.invocationRef)
+  const attempts = new Map()
+  for (const row of durable.attempts) attempts.set(String(row.attemptRef), row as never)
+  state.attempts.set(invocationRef, attempts)
+  state.history.set(invocationRef, durable.history as never)
+  const source = durable.source as unknown as {
+    input: DevelopmentBookingInput
+    prepared: PreparedInvocation
+    result?: DevelopmentBookingResult
+  }
+  const result = source.result
+  const tracer = createDurableActionInvocationTracer({
+    action: createDevelopmentReservationAction,
+    port: createDevelopmentDurablePort(state),
+    now: developmentEvidenceNow,
+    nextInvocationRef: () => 'verify:unused',
+    nextAuthorityRef: () => 'verify:unused',
+    nextAttemptRef: () => 'verify:unused',
+    resolveSourceState: () => ({
+      input: source.input,
+      context: {},
+      prepared: source.prepared,
+      observedResolution: result === undefined
+        ? { state: 'pending' }
+        : {
+            state: 'returned',
+            execution: 'runner_returned',
+            result,
+            businessOutcome: 'completed',
+            resultReferenceable: true,
+          },
+      ...(result === undefined ? {} : {
+        resultIdentity: {
+          sourceResultRef: result.kind === 'reservation_confirmed' ? result.reservationRef : 'refused',
+          resultDigest: canonicalDigest(result),
+        },
+      }),
+    }),
+  }, invocationRef)
+  const view = tracer.inspect(invocationRef)
+  if (view === undefined || (terminal && view.control.state !== 'terminal')) {
+    throw new Error('packet_booking_control_reconstruction_refused')
+  }
+  return view
 }
 
 type PacketDurable = Readonly<{
