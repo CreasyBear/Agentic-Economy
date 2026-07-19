@@ -13,11 +13,11 @@ import {
 } from '../../../tools/dev/full-yolo-evidence-packet'
 import {
   developmentCancellationConfirmationRule,
-} from '@/modules/booking/development-booking-offset-rule'
-import * as developmentBookingProviderSource from '@/modules/booking/development-booking-provider'
-import { createDevelopmentBookingProvider } from '@/modules/booking/development-booking-provider'
-import { resumeDevelopmentBookingObjective } from '@/modules/booking/development-booking-objective'
-import { createDevelopmentBookingSigningCustody } from '@/modules/booking/development-booking-signing-custody'
+} from '@/modules/provider-operation-fixture/development-provider-operation-offset-rule'
+import * as developmentProviderOperationProviderSource from '@/modules/provider-operation-fixture/development-provider-operation-provider'
+import { createDevelopmentProviderOperationProvider } from '@/modules/provider-operation-fixture/development-provider-operation-provider'
+import { resumeDevelopmentProviderOperationObjective } from '@/modules/provider-operation-fixture/development-provider-operation-objective'
+import { createDevelopmentProviderOperationSigningCustody } from '@/modules/provider-operation-fixture/development-provider-operation-signing-custody'
 
 describe('full_yolo bounded authority mode', () => {
   it('executes fallback and cancellation through three exact standing-mandate uses', async () => {
@@ -145,10 +145,10 @@ describe('full_yolo bounded authority mode', () => {
   })
 
   it('provider signing ignores caller-authored authority claims and refuses invented state', async () => {
-    expect(developmentBookingProviderSource).not.toHaveProperty('developmentProviderSigningKey')
-    expect(developmentBookingProviderSource).not.toHaveProperty('issueExposureReleaseAttestation')
+    expect(developmentProviderOperationProviderSource).not.toHaveProperty('developmentProviderSigningKey')
+    expect(developmentProviderOperationProviderSource).not.toHaveProperty('issueExposureReleaseAttestation')
     const evidence = await runFullYoloEvidence()
-    const provider = createDevelopmentBookingProvider({
+    const provider = createDevelopmentProviderOperationProvider({
       ...evidence.coldContinuation.providerSnapshot.options,
       snapshot: evidence.coldContinuation.providerSnapshot,
     })
@@ -163,28 +163,28 @@ describe('full_yolo bounded authority mode', () => {
       evidence.authoritativeResults.cancellation.input,
       maliciousAuthorityClaims,
     )
-    expect(replayed.kind).toBe('reservation_cancellation_confirmed')
-    if (replayed.kind !== 'reservation_cancellation_confirmed') throw new Error('expected_confirmation')
+    expect(replayed.kind).toBe('effect_cancellation_confirmed')
+    if (replayed.kind !== 'effect_cancellation_confirmed') throw new Error('expected_confirmation')
     expect(replayed.exposureReleaseAttestation?.material).not.toHaveProperty('mandateRef')
     expect(replayed.exposureReleaseAttestation?.material).not.toHaveProperty('principalRef')
     expect(replayed.exposureReleaseAttestation?.material).not.toHaveProperty('originalAuthorityUseRef')
     expect(replayed.exposureReleaseAttestation?.material).not.toHaveProperty('cancellationAuthorityUseRef')
     const invented = await provider.cancel({
       environment: 'MOCK/DEVELOPMENT ONLY',
-      reservationRef: 'invented',
+      effectRef: 'invented',
       providerRef: 'mock:provider:calendar:b',
       principalRef: 'mock:principal:full-yolo',
       reason: 'invented',
       operationKey: 'invented',
     })
-    expect(invented.kind).toBe('reservation_cancellation_refused')
+    expect(invented.kind).toBe('effect_cancellation_refused')
     expect(invented).not.toHaveProperty('exposureReleaseAttestation')
   })
 
   it('proves restart continuation is objective-owned rather than direct provider replay', async () => {
     const evidence = await runFullYoloEvidence()
     expect(evidence.coldContinuation.continuationKind).toBe('source_owned_objective_resume')
-    expect(evidence.coldContinuation).not.toHaveProperty('replayedBooking')
+    expect(evidence.coldContinuation).not.toHaveProperty('replayedOperation')
     expect(evidence.coldContinuation).not.toHaveProperty('replayedCancellation')
     expect(evidence.coldContinuation.freshObjectGraphRefs[0]).not.toBe(
       evidence.coldContinuation.freshObjectGraphRefs[1],
@@ -194,13 +194,13 @@ describe('full_yolo bounded authority mode', () => {
     )
     expect(new Set([
       evidence.processColdProof.parentProcessId,
-      evidence.processColdProof.bookingProcessId,
+      evidence.processColdProof.operationProcessId,
       evidence.processColdProof.cancellationProcessId,
       evidence.processColdProof.replayProcessId,
     ])).toHaveProperty('size', 4)
     expect(evidence.processColdProof.privateKeySerializedInState).toBe(false)
     expect(evidence.processColdProof.cancellationEffectCounts).toEqual({
-      booking: 1,
+      operation: 1,
       cancellation: 1,
     })
     expect(evidence.processColdProof.replayEffectCounts).toEqual(
@@ -210,15 +210,15 @@ describe('full_yolo bounded authority mode', () => {
 
   it('refuses cancellation continuation under the wrong custody key', async () => {
     const evidence = await runFullYoloEvidence()
-    await expect(resumeDevelopmentBookingObjective({
+    await expect(resumeDevelopmentProviderOperationObjective({
       processRef: 'wrong-custody-test',
       mandate: evidence.mandateSnapshot.mandates[0]!,
       mandateSnapshot: evidence.coldContinuation.midRun.mandateSnapshot,
       providerSnapshot: evidence.coldContinuation.midRun.providerSnapshot,
       objectiveState: evidence.coldContinuation.midRun.objectiveState,
       durableInvocations: evidence.coldContinuation.midRun.durableInvocations,
-      signingCustody: createDevelopmentBookingSigningCustody({
-        keyId: 'mock:development-booking-provider:release:v1',
+      signingCustody: createDevelopmentProviderOperationSigningCustody({
+        keyId: 'mock:development-provider-operation-provider:release:v1',
         privateKey: '2222222222222222222222222222222222222222222222222222222222222222',
       }),
     })).rejects.toThrow('authority_use_linkage_invalid')
@@ -233,7 +233,7 @@ describe('full_yolo bounded authority mode', () => {
     ['action-use linkage', (copy: any) => { copy.invocations[1].acceptedAuthority.authorityUseRef = 'other' }],
     ['evidence', (copy: any) => { copy.mandateSnapshot.exposureOffsets[0].evidenceRef = 'other' }],
     ['event order', (copy: any) => { copy.invocations[0].events.reverse() }],
-    ['causal reservation', (copy: any) => {
+    ['causal effect', (copy: any) => {
       copy.mandateSnapshot.exposureOffsets[0].exposureSubjectRef = 'other'
       redigest(copy.mandateSnapshot.exposureOffsets[0])
     }],
@@ -298,7 +298,7 @@ describe('full_yolo bounded authority mode', () => {
       copy.invocations[1].durable.source.result.providerRef = 'other'
     }],
     ['cold provider effect count', (copy: any) => {
-      copy.coldContinuation.effectsAfterReplay.booking += 1
+      copy.coldContinuation.effectsAfterReplay.operation += 1
     }],
     ['objective stage', (copy: any) => {
       copy.coldContinuation.midRun.objectiveState.stage = 'completed'
@@ -317,7 +317,7 @@ describe('full_yolo bounded authority mode', () => {
       redigest(copy.coldContinuation.finalObjectiveState)
     }],
     ['direct provider replay evidence', (copy: any) => {
-      copy.coldContinuation.replayedBooking = copy.authoritativeResults.booking.result
+      copy.coldContinuation.replayedOperation = copy.authoritativeResults.operation.result
     }],
   ])('rejects valid outer-checksum tampering of %s', async (_label, mutate) => {
     const evidence = structuredClone(await runFullYoloEvidence())

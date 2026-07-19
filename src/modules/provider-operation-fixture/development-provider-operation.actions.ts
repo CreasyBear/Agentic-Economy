@@ -4,7 +4,7 @@ import { defineAction } from '@/modules/common/action'
 
 const developmentLabel = z.literal('MOCK/DEVELOPMENT ONLY')
 
-export const developmentBookingInputSchema = z.object({
+export const developmentProviderOperationInputSchema = z.object({
   environment: developmentLabel,
   slot: z.object({
     slotRef: z.string().min(1),
@@ -31,51 +31,51 @@ export const developmentBookingInputSchema = z.object({
   disclosure: z.object({
     fields: z.tuple([z.literal('customer.name'), z.literal('customer.email')]),
     recipient: z.string().min(1),
-    purpose: z.literal('create_development_reservation'),
+    purpose: z.literal('create_development_effect'),
   }),
   operationKey: z.string().min(1),
 })
 
-export type DevelopmentBookingInput = z.infer<typeof developmentBookingInputSchema>
+export type DevelopmentProviderOperationInput = z.infer<typeof developmentProviderOperationInputSchema>
 
-export const developmentBookingOutputSchema = z.discriminatedUnion('kind', [
+export const developmentProviderOperationOutputSchema = z.discriminatedUnion('kind', [
   z.object({
-    kind: z.literal('reservation_confirmed'),
+    kind: z.literal('effect_confirmed'),
     environment: developmentLabel,
-    reservationRef: z.string().min(1),
+    effectRef: z.string().min(1),
     providerRef: z.string().min(1),
     slotRef: z.string().min(1),
     evidenceRef: z.string().min(1),
   }),
   z.object({
-    kind: z.literal('reservation_refused'),
+    kind: z.literal('effect_refused'),
     environment: developmentLabel,
     code: z.enum(['slot_unavailable', 'terms_changed', 'provider_refused']),
     reason: z.string().min(1),
   }),
 ])
 
-export type DevelopmentBookingResult = z.infer<typeof developmentBookingOutputSchema>
+export type DevelopmentProviderOperationResult = z.infer<typeof developmentProviderOperationOutputSchema>
 
-export const createDevelopmentReservationAction = defineAction({
-  id: 'booking.createDevelopmentReservation',
-  name: 'Create development reservation',
-  summary: 'Creates one reservation against a fresh provider-supplied development slot.',
+export const executeDevelopmentProviderOperationAction = defineAction({
+  id: 'provider_operation.executeDevelopmentCancellable',
+  name: 'Create development effect',
+  summary: 'Creates one effect against a fresh provider-supplied development slot.',
   boundaries: [
     'MOCK/DEVELOPMENT ONLY; this action has no customer-reachable surface.',
     'A confirmed result proves only the deterministic development provider response.',
     'A possible release must be reconciled before retry; cancellation is not reversal.',
   ],
-  schema: developmentBookingInputSchema,
+  schema: developmentProviderOperationInputSchema,
   parameters: [
     { name: 'slot', type: 'object', description: 'Fresh provider slot and exact supply identity.', required: true },
-    { name: 'customer', type: 'object', description: 'Customer material disclosed for this reservation.', required: true },
+    { name: 'customer', type: 'object', description: 'Customer material disclosed for this effect.', required: true },
     { name: 'disclosure', type: 'object', description: 'Exact recipient, fields and purpose.', required: true },
-    { name: 'operationKey', type: 'string', description: 'Stable idempotency meaning for this exact reservation.', required: true },
+    { name: 'operationKey', type: 'string', description: 'Stable idempotency meaning for this exact effect.', required: true },
   ],
   readOnly: false,
   surfaces: [],
-  outputSchema: developmentBookingOutputSchema,
+  outputSchema: developmentProviderOperationOutputSchema,
   invocationContract: {
     version: 'v1',
     consequenceClass: 'external_effect',
@@ -88,9 +88,9 @@ export const createDevelopmentReservationAction = defineAction({
     ],
     authorityRequirement: 'principal',
     retryClass: 'reconcile_before_retry',
-    expectedEvidence: ['provider reservation reference', 'attributable provider refusal'],
+    expectedEvidence: ['provider effect reference', 'attributable provider refusal'],
     safeContinuations: [
-      'inspect the confirmed reservation or refusal',
+      'inspect the confirmed effect or refusal',
       'reconcile a possible provider release before retry',
       'request provider cancellation when the provider contract supports it',
     ],
@@ -100,40 +100,40 @@ export const createDevelopmentReservationAction = defineAction({
       'terms digest, principal, invocation, action version, or operation key changes',
     ],
     developmentAttemptTimeoutMs: 15_000,
-    reconciliationEvidenceSource: 'booking.createDevelopmentReservation:mock-provider-observer:v1',
+    reconciliationEvidenceSource: 'provider_operation.executeDevelopmentCancellable:mock-provider-observer:v1',
   },
   projectInvocationPreparation: (input) => ({
     dataUse: { fields: input.disclosure.fields, limits: { recipients: 1 } },
   }),
-  classifyInvocationResult: (result) => result.kind === 'reservation_confirmed'
+  classifyInvocationResult: (result) => result.kind === 'effect_confirmed'
     ? { outcome: 'completed', referenceable: true }
     : { outcome: 'refused', referenceable: false },
   preReleaseCheck: async ({ data, context }) => {
-    const input = developmentBookingInputSchema.parse(data)
-    const now = context.developmentOnlyBookingNow?.()
-    const check = context.developmentOnlyBookingAvailabilityCheck
+    const input = developmentProviderOperationInputSchema.parse(data)
+    const now = context.developmentOnlyProviderOperationNow?.()
+    const check = context.developmentOnlyProviderOperationAvailabilityCheck
     if (now === undefined || check === undefined) {
       return {
-        kind: 'reservation_refused' as const,
+        kind: 'effect_refused' as const,
         environment: 'MOCK/DEVELOPMENT ONLY' as const,
         code: 'slot_unavailable' as const,
         reason: 'Trusted current availability could not be checked before provider release.',
       }
     }
     if (
-      context.developmentOnlyBookingAuthorityPrincipalRef === undefined
-      || input.customer.principalRef !== context.developmentOnlyBookingAuthorityPrincipalRef
+      context.developmentOnlyProviderOperationAuthorityPrincipalRef === undefined
+      || input.customer.principalRef !== context.developmentOnlyProviderOperationAuthorityPrincipalRef
     ) {
       return {
-        kind: 'reservation_refused' as const,
+        kind: 'effect_refused' as const,
         environment: 'MOCK/DEVELOPMENT ONLY' as const,
         code: 'provider_refused' as const,
-        reason: 'The disclosed booking principal does not match the authority-bound principal.',
+        reason: 'The disclosed operation principal does not match the authority-bound principal.',
       }
     }
     if (now >= Date.parse(input.slot.expiresAt)) {
       return {
-        kind: 'reservation_refused' as const,
+        kind: 'effect_refused' as const,
         environment: 'MOCK/DEVELOPMENT ONLY' as const,
         code: 'slot_unavailable' as const,
         reason: 'The development slot expired before provider release.',
@@ -141,7 +141,7 @@ export const createDevelopmentReservationAction = defineAction({
     }
     if (input.disclosure.recipient !== input.slot.providerRef) {
       return {
-        kind: 'reservation_refused' as const,
+        kind: 'effect_refused' as const,
         environment: 'MOCK/DEVELOPMENT ONLY' as const,
         code: 'provider_refused' as const,
         reason: 'The disclosed recipient does not match the selected provider.',
@@ -150,7 +150,7 @@ export const createDevelopmentReservationAction = defineAction({
     const availability = await check(input, now)
     if (availability.kind !== 'current') {
       return {
-        kind: 'reservation_refused' as const,
+        kind: 'effect_refused' as const,
         environment: 'MOCK/DEVELOPMENT ONLY' as const,
         code: 'terms_changed' as const,
         reason: availability.reason,
@@ -159,29 +159,29 @@ export const createDevelopmentReservationAction = defineAction({
     return undefined
   },
   run: async ({ data, context }) => {
-    const input = developmentBookingInputSchema.parse(data)
-    const adapter = context.developmentOnlyBookingAdapter
-    if (adapter === undefined) throw new Error('development_booking_adapter_unavailable')
-    return developmentBookingOutputSchema.parse(await adapter(input))
+    const input = developmentProviderOperationInputSchema.parse(data)
+    const adapter = context.developmentOnlyProviderOperationAdapter
+    if (adapter === undefined) throw new Error('development_provider_operation_adapter_unavailable')
+    return developmentProviderOperationOutputSchema.parse(await adapter(input))
   },
 })
 
-export const developmentBookingCancellationInputSchema = z.object({
+export const developmentProviderOperationCancellationInputSchema = z.object({
   environment: developmentLabel,
-  reservationRef: z.string().min(1),
+  effectRef: z.string().min(1),
   providerRef: z.string().min(1),
   principalRef: z.string().min(1),
   reason: z.string().min(1),
   operationKey: z.string().min(1),
 })
 
-export type DevelopmentBookingCancellationInput = z.infer<typeof developmentBookingCancellationInputSchema>
+export type DevelopmentProviderOperationCancellationInput = z.infer<typeof developmentProviderOperationCancellationInputSchema>
 
-export const developmentBookingCancellationOutputSchema = z.discriminatedUnion('kind', [
+export const developmentProviderOperationCancellationOutputSchema = z.discriminatedUnion('kind', [
   z.object({
-    kind: z.literal('reservation_cancellation_confirmed'),
+    kind: z.literal('effect_cancellation_confirmed'),
     environment: developmentLabel,
-    reservationRef: z.string().min(1),
+    effectRef: z.string().min(1),
     cancellationRef: z.string().min(1),
     evidenceRef: z.string().min(1),
     exposureReleaseAttestation: z.object({
@@ -221,86 +221,86 @@ export const developmentBookingCancellationOutputSchema = z.discriminatedUnion('
     }).optional(),
   }),
   z.object({
-    kind: z.literal('reservation_cancellation_refused'),
+    kind: z.literal('effect_cancellation_refused'),
     environment: developmentLabel,
     code: z.enum(['principal_mismatch', 'provider_record_unavailable', 'provider_record_mismatch', 'operation_key_conflict']),
     reason: z.string().min(1),
   }),
 ])
 
-export type DevelopmentBookingCancellationResult = z.infer<typeof developmentBookingCancellationOutputSchema>
+export type DevelopmentProviderOperationCancellationResult = z.infer<typeof developmentProviderOperationCancellationOutputSchema>
 
-export const cancelDevelopmentReservationAction = defineAction({
-  id: 'booking.cancelDevelopmentReservation',
-  name: 'Cancel development reservation',
-  summary: 'Requests and records provider-confirmed cancellation of one development reservation.',
+export const cancelDevelopmentProviderOperationAction = defineAction({
+  id: 'provider_operation.cancelDevelopmentCancellable',
+  name: 'Cancel development effect',
+  summary: 'Requests and records provider-confirmed cancellation of one development effect.',
   boundaries: [
     'MOCK/DEVELOPMENT ONLY; this action has no customer-reachable surface.',
-    'Cancellation is a separate provider effect and never rewrites the original reservation.',
+    'Cancellation is a separate provider effect and never rewrites the original effect.',
   ],
-  schema: developmentBookingCancellationInputSchema,
+  schema: developmentProviderOperationCancellationInputSchema,
   parameters: [
-    { name: 'reservationRef', type: 'string', description: 'Reservation to cancel.', required: true },
-    { name: 'providerRef', type: 'string', description: 'Provider holding the reservation.', required: true },
-    { name: 'principalRef', type: 'string', description: 'Principal who owns the reservation.', required: true },
+    { name: 'effectRef', type: 'string', description: 'Effect to cancel.', required: true },
+    { name: 'providerRef', type: 'string', description: 'Provider holding the effect.', required: true },
+    { name: 'principalRef', type: 'string', description: 'Principal who owns the effect.', required: true },
     { name: 'reason', type: 'string', description: 'Reason disclosed to the provider.', required: true },
     { name: 'operationKey', type: 'string', description: 'Stable cancellation operation identity.', required: true },
   ],
   readOnly: false,
   surfaces: [],
-  outputSchema: developmentBookingCancellationOutputSchema,
+  outputSchema: developmentProviderOperationCancellationOutputSchema,
   invocationContract: {
     version: 'v1',
     consequenceClass: 'external_effect',
-    materialInputPaths: ['reservationRef', 'providerRef', 'principalRef', 'reason', 'operationKey'],
+    materialInputPaths: ['effectRef', 'providerRef', 'principalRef', 'reason', 'operationKey'],
     authorityRequirement: 'principal',
     retryClass: 'reconcile_before_retry',
     expectedEvidence: ['provider cancellation reference'],
-    safeContinuations: ['inspect the original reservation and separate cancellation evidence'],
-    invalidationConditions: ['reservation, provider, principal, reason, or operation key changes'],
+    safeContinuations: ['inspect the original effect and separate cancellation evidence'],
+    invalidationConditions: ['effect, provider, principal, reason, or operation key changes'],
     developmentAttemptTimeoutMs: 15_000,
-    reconciliationEvidenceSource: 'booking.cancelDevelopmentReservation:mock-provider-observer:v1',
+    reconciliationEvidenceSource: 'provider_operation.cancelDevelopmentCancellable:mock-provider-observer:v1',
   },
   projectInvocationPreparation: () => ({
     dataUse: { fields: ['reason'], limits: { recipients: 1 } },
   }),
-  classifyInvocationResult: (result) => result.kind === 'reservation_cancellation_confirmed'
+  classifyInvocationResult: (result) => result.kind === 'effect_cancellation_confirmed'
     ? { outcome: 'completed', referenceable: true }
     : { outcome: 'refused', referenceable: false },
   preReleaseCheck: async ({ data, context }) => {
-    const input = developmentBookingCancellationInputSchema.parse(data)
+    const input = developmentProviderOperationCancellationInputSchema.parse(data)
     if (
-      context.developmentOnlyBookingAuthorityPrincipalRef === undefined
-      || input.principalRef !== context.developmentOnlyBookingAuthorityPrincipalRef
+      context.developmentOnlyProviderOperationAuthorityPrincipalRef === undefined
+      || input.principalRef !== context.developmentOnlyProviderOperationAuthorityPrincipalRef
     ) {
       return {
-        kind: 'reservation_cancellation_refused' as const,
+        kind: 'effect_cancellation_refused' as const,
         environment: 'MOCK/DEVELOPMENT ONLY' as const,
         code: 'principal_mismatch' as const,
         reason: 'Cancellation principal does not match the authority-bound principal.',
       }
     }
-    const check = context.developmentOnlyBookingCancellationCheck
+    const check = context.developmentOnlyProviderOperationCancellationCheck
     if (check === undefined) {
       return {
-        kind: 'reservation_cancellation_refused' as const,
+        kind: 'effect_cancellation_refused' as const,
         environment: 'MOCK/DEVELOPMENT ONLY' as const,
         code: 'provider_record_unavailable' as const,
-        reason: 'Provider reservation ownership could not be checked before release.',
+        reason: 'Provider effect ownership could not be checked before release.',
       }
     }
     const result = await check(input)
     return result.kind === 'current' ? undefined : {
-      kind: 'reservation_cancellation_refused' as const,
+      kind: 'effect_cancellation_refused' as const,
       environment: 'MOCK/DEVELOPMENT ONLY' as const,
       code: 'provider_record_mismatch' as const,
       reason: result.reason,
     }
   },
   run: async ({ data, context }) => {
-    const input = developmentBookingCancellationInputSchema.parse(data)
-    const adapter = context.developmentOnlyBookingCancellationAdapter
-    if (adapter === undefined) throw new Error('development_booking_cancellation_adapter_unavailable')
-    return developmentBookingCancellationOutputSchema.parse(await adapter(input))
+    const input = developmentProviderOperationCancellationInputSchema.parse(data)
+    const adapter = context.developmentOnlyProviderOperationCancellationAdapter
+    if (adapter === undefined) throw new Error('development_provider_operation_cancellation_adapter_unavailable')
+    return developmentProviderOperationCancellationOutputSchema.parse(await adapter(input))
   },
 })

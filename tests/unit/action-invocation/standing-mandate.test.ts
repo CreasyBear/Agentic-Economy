@@ -6,21 +6,21 @@ import {
   StandingMandateStore,
   type AuthorityUseMaterial,
 } from '@/modules/action-invocation'
-import { createDevelopmentReservationAction } from '@/modules/booking/development-booking.actions'
+import { executeDevelopmentProviderOperationAction } from '@/modules/provider-operation-fixture/development-provider-operation.actions'
 import {
-  bookingActor,
-  bookingInput,
-  developmentBookingNow,
-} from '@/modules/booking/development-booking-fixture'
-import { createDevelopmentBookingProvider } from '@/modules/booking/development-booking-provider'
-import { runReservationInvocation } from '@/modules/booking/development-booking-runner'
-import { createDevelopmentBookingMandateService } from '@/modules/booking/development-booking-mandate'
+  providerOperationActor,
+  providerOperationInput,
+  developmentProviderOperationNow,
+} from '@/modules/provider-operation-fixture/development-provider-operation-fixture'
+import { createDevelopmentProviderOperationProvider } from '@/modules/provider-operation-fixture/development-provider-operation-provider'
+import { runProviderOperationInvocation } from '@/modules/provider-operation-fixture/development-provider-operation-runner'
+import { createDevelopmentProviderOperationMandateService } from '@/modules/provider-operation-fixture/development-provider-operation-mandate'
 
-const now = developmentBookingNow()
+const now = developmentProviderOperationNow()
 const principalRef = 'request-owner:mock:request:mandated'
 const callerRef = 'request:mock:request:mandated'
 const mandate = issueStandingMandate({
-  mandateRef: 'mock:standing-mandate:booking',
+  mandateRef: 'mock:standing-mandate:operation',
   version: 1,
   generation: 1,
   grantorRef: 'mock:grantor:customer',
@@ -30,18 +30,18 @@ const mandate = issueStandingMandate({
   issuedAt: now,
   scope: {
     objective: 'Reserve suitable development consultation times.',
-    action: { id: createDevelopmentReservationAction.id, version: 'v1' },
+    action: { id: executeDevelopmentProviderOperationAction.id, version: 'v1' },
     providerRefs: ['mock:provider:calendar'],
     recipientRefs: ['mock:provider:calendar'],
-    purposes: ['create_development_reservation'],
+    purposes: ['create_development_effect'],
     allowedDataFields: ['customer.name', 'customer.email'],
     maximumSpend: { amountMinor: 0, currency: 'AUD' },
     maximumActionCount: 3,
-    maximumConcurrentReservations: 1,
+    maximumConcurrentEffects: 1,
     startsAt: now,
     expiresAt: '2026-07-19T05:00:00.000Z',
     permittedFallbacks: ['none'],
-    riskCeiling: 'development_booking_zero_charge',
+    riskCeiling: 'development_provider_operation_zero_charge',
   },
 })
 
@@ -59,11 +59,11 @@ function use(overrides: Partial<AuthorityUseMaterial> = {}): AuthorityUseMateria
     preparedMaterialDigest: 'sha256:prepared',
     providerRef: 'mock:provider:calendar',
     recipientRef: 'mock:provider:calendar',
-    purpose: 'create_development_reservation',
+    purpose: 'create_development_effect',
     dataFields: ['customer.name', 'customer.email'],
     reservedSpend: { amountMinor: 0, currency: 'AUD' },
     fallbackRef: null,
-    risk: 'development_booking_zero_charge',
+    risk: 'development_provider_operation_zero_charge',
     effectGeneration: 1,
     ...overrides,
   }
@@ -84,19 +84,19 @@ function issuedStore() {
   return store
 }
 
-function bookingService(store: StandingMandateStore) {
-  return createDevelopmentBookingMandateService({
+function providerOperationService(store: StandingMandateStore) {
+  return createDevelopmentProviderOperationMandateService({
     store,
     authenticatedDelegate: { delegateRef: mandate.delegateRef, callerRef, principalRef },
-    now: developmentBookingNow,
+    now: developmentProviderOperationNow,
   })
 }
 
 describe('Action Invocation bounded standing mandate', () => {
-  it('executes Request-owned and standalone booking through one mandate and exact authority uses', async () => {
+  it('executes Request-owned and standalone operation through one mandate and exact authority uses', async () => {
     const store = issuedStore()
-    const service = bookingService(store)
-    const provider = createDevelopmentBookingProvider()
+    const service = providerOperationService(store)
+    const provider = createDevelopmentProviderOperationProvider()
     const slot = await provider.availability()
     const requestOrigin = { kind: 'request_owned', requestRef: 'mock:request:mandated', revision: 1 } as const
     const standaloneOrigin = { kind: 'standalone', callerRef, principalRef } as const
@@ -107,9 +107,9 @@ describe('Action Invocation bounded standing mandate', () => {
         authorityUseRef: `mock:authority-use:origin:${index}`,
         invocationRef: `replaced-by-runner:${index}`,
       })
-      const run = await runReservationInvocation({
+      const run = await runProviderOperationInvocation({
         provider,
-        booking: bookingInput(slot, bookingActor(origin).principalRef, `mock:operation:mandated:${index}`),
+        operation: providerOperationInput(slot, providerOperationActor(origin).principalRef, `mock:operation:mandated:${index}`),
         origin,
         ref: `mandated:${index}`,
         boundedMandate: {
@@ -120,7 +120,7 @@ describe('Action Invocation bounded standing mandate', () => {
       })
       expect(run.view.observedResolution).toMatchObject({
         state: 'returned',
-        result: { kind: 'reservation_confirmed' },
+        result: { kind: 'effect_confirmed' },
       })
       expect(store.inspectUse(material.authorityUseRef)).toMatchObject({
         state: 'released',
@@ -146,7 +146,7 @@ describe('Action Invocation bounded standing mandate', () => {
       expect(run.tracer.coldResume(run.view.invocationRef).inspect(run.view.invocationRef))
         .toMatchObject({
           invocationRef: run.view.invocationRef,
-          observedResolution: { state: 'returned', result: { kind: 'reservation_confirmed' } },
+          observedResolution: { state: 'returned', result: { kind: 'effect_confirmed' } },
         })
     }
   })
@@ -172,22 +172,22 @@ describe('Action Invocation bounded standing mandate', () => {
       .toEqual({ kind: 'refused', code: 'mandate_grant_unauthenticated' })
   })
 
-  it('derives actual actor and booking scope instead of trusting caller-supplied use material', async () => {
+  it('derives actual actor and operation scope instead of trusting caller-supplied use material', async () => {
     const store = issuedStore()
-    const provider = createDevelopmentBookingProvider()
+    const provider = createDevelopmentProviderOperationProvider()
     const slot = await provider.availability()
-    const wrongActorService = createDevelopmentBookingMandateService({
+    const wrongActorService = createDevelopmentProviderOperationMandateService({
       store,
       authenticatedDelegate: {
         delegateRef: mandate.delegateRef,
         callerRef: 'mock:caller:wrong',
         principalRef,
       },
-      now: developmentBookingNow,
+      now: developmentProviderOperationNow,
     })
-    await expect(runReservationInvocation({
+    await expect(runProviderOperationInvocation({
       provider,
-      booking: bookingInput(slot, principalRef, 'mock:operation:actual-actor-mismatch'),
+      operation: providerOperationInput(slot, principalRef, 'mock:operation:actual-actor-mismatch'),
       origin: { kind: 'standalone', callerRef, principalRef },
       ref: 'actual-actor-mismatch',
       boundedMandate: {
@@ -198,23 +198,23 @@ describe('Action Invocation bounded standing mandate', () => {
     })).rejects.toThrow('mandate_principal_mismatch')
     expect(provider.effectCount()).toBe(0)
 
-    const service = bookingService(store)
-    await expect(runReservationInvocation({
+    const service = providerOperationService(store)
+    await expect(runProviderOperationInvocation({
       provider,
-      booking: {
-        ...bookingInput(slot, principalRef, 'mock:operation:actual-booking-mismatch'),
+      operation: {
+        ...providerOperationInput(slot, principalRef, 'mock:operation:actual-operation-mismatch'),
         disclosure: {
           fields: ['customer.name', 'customer.email'],
           recipient: 'mock:provider:wrong',
-          purpose: 'create_development_reservation',
+          purpose: 'create_development_effect',
         },
       },
       origin: { kind: 'standalone', callerRef, principalRef },
-      ref: 'actual-booking-mismatch',
+      ref: 'actual-operation-mismatch',
       boundedMandate: {
         service,
         mandateRef: mandate.mandateRef,
-        authorityUseRef: 'mock:authority-use:actual-booking-mismatch',
+        authorityUseRef: 'mock:authority-use:actual-operation-mismatch',
       },
     })).rejects.toThrow('mandate_recipient_mismatch')
     expect(provider.effectCount()).toBe(0)
@@ -225,13 +225,13 @@ describe('Action Invocation bounded standing mandate', () => {
     ['stale_invocation_version', { developmentAcquisitionVersionOverride: 99 }],
   ] as const)('compensates reserved capacity when %s refuses before release', async (code, override) => {
     const store = issuedStore()
-    const service = bookingService(store)
-    const provider = createDevelopmentBookingProvider()
+    const service = providerOperationService(store)
+    const provider = createDevelopmentProviderOperationProvider()
     const slot = await provider.availability()
     const authorityUseRef = `mock:authority-use:compensation:${Object.keys(override)[0]}`
-    await expect(runReservationInvocation({
+    await expect(runProviderOperationInvocation({
       provider,
-      booking: bookingInput(slot, principalRef, `mock:operation:${authorityUseRef}`),
+      operation: providerOperationInput(slot, principalRef, `mock:operation:${authorityUseRef}`),
       origin: { kind: 'standalone', callerRef, principalRef },
       ref: authorityUseRef,
       boundedMandate: {
@@ -251,21 +251,21 @@ describe('Action Invocation bounded standing mandate', () => {
 
   it('reconstructs a cold in-flight release token and refuses missing or mismatched records', async () => {
     const store = issuedStore()
-    const provider = createDevelopmentBookingProvider()
+    const provider = createDevelopmentProviderOperationProvider()
     const slot = await provider.availability()
     let coldStore: StandingMandateStore | undefined
-    await runReservationInvocation({
+    await runProviderOperationInvocation({
       provider,
-      booking: bookingInput(slot, principalRef, 'mock:operation:cold-in-flight'),
+      operation: providerOperationInput(slot, principalRef, 'mock:operation:cold-in-flight'),
       origin: { kind: 'standalone', callerRef, principalRef },
       ref: 'cold-in-flight',
       boundedMandate: {
-        service: bookingService(store),
+        service: providerOperationService(store),
         mandateRef: mandate.mandateRef,
         authorityUseRef: 'mock:authority-use:cold-in-flight',
         reconstructBeforeRelease: () => {
           coldStore = new StandingMandateStore(structuredClone(store.exportSnapshot()))
-          return bookingService(coldStore)
+          return providerOperationService(coldStore)
         },
       },
     })
@@ -279,19 +279,19 @@ describe('Action Invocation bounded standing mandate', () => {
 
   it('compensates a cold reconstruction failure before provider release', async () => {
     const store = issuedStore()
-    const provider = createDevelopmentBookingProvider()
+    const provider = createDevelopmentProviderOperationProvider()
     const slot = await provider.availability()
     const authorityUseRef = 'mock:authority-use:reconstruction-failure'
-    await expect(runReservationInvocation({
+    await expect(runProviderOperationInvocation({
       provider,
-      booking: bookingInput(slot, principalRef, 'mock:operation:reconstruction-failure'),
+      operation: providerOperationInput(slot, principalRef, 'mock:operation:reconstruction-failure'),
       origin: { kind: 'standalone', callerRef, principalRef },
       ref: 'reconstruction-failure',
       boundedMandate: {
-        service: bookingService(store),
+        service: providerOperationService(store),
         mandateRef: mandate.mandateRef,
         authorityUseRef,
-        reconstructBeforeRelease: () => bookingService(store),
+        reconstructBeforeRelease: () => providerOperationService(store),
         throwDuringReconstruction: true,
       },
     })).rejects.toThrow('mock_cold_reconstruction_failed')
@@ -302,16 +302,16 @@ describe('Action Invocation bounded standing mandate', () => {
 
   it('compensates an execution exception only with positive pre-release evidence', async () => {
     const store = issuedStore()
-    const provider = createDevelopmentBookingProvider()
+    const provider = createDevelopmentProviderOperationProvider()
     const slot = await provider.availability()
     const authorityUseRef = 'mock:authority-use:pre-release-exception'
-    await expect(runReservationInvocation({
+    await expect(runProviderOperationInvocation({
       provider,
-      booking: bookingInput(slot, principalRef, 'mock:operation:pre-release-exception'),
+      operation: providerOperationInput(slot, principalRef, 'mock:operation:pre-release-exception'),
       origin: { kind: 'standalone', callerRef, principalRef },
       ref: 'pre-release-exception',
       boundedMandate: {
-        service: bookingService(store),
+        service: providerOperationService(store),
         mandateRef: mandate.mandateRef,
         authorityUseRef,
         throwFromReleaseFenceBeforeProvider: true,
@@ -324,13 +324,13 @@ describe('Action Invocation bounded standing mandate', () => {
 
   it('holds uncertainty after an execution exception following provider release', async () => {
     const store = issuedStore()
-    const service = bookingService(store)
-    const provider = createDevelopmentBookingProvider()
+    const service = providerOperationService(store)
+    const provider = createDevelopmentProviderOperationProvider()
     const slot = await provider.availability()
     const authorityUseRef = 'mock:authority-use:post-release-exception'
-    await expect(runReservationInvocation({
+    await expect(runProviderOperationInvocation({
       provider,
-      booking: bookingInput(slot, principalRef, 'mock:operation:post-release-exception'),
+      operation: providerOperationInput(slot, principalRef, 'mock:operation:post-release-exception'),
       origin: { kind: 'standalone', callerRef, principalRef },
       ref: 'post-release-exception',
       corruptSourceResultAfterRelease: true,
@@ -339,9 +339,9 @@ describe('Action Invocation bounded standing mandate', () => {
     expect(provider.effectCount()).toBe(1)
     expect(store.inspectUse(authorityUseRef)).toMatchObject({ state: 'uncertain' })
     expect(store.capacity(mandate.mandateRef)).toMatchObject({ reservedCount: 1, consumedCount: 0 })
-    await expect(runReservationInvocation({
+    await expect(runProviderOperationInvocation({
       provider,
-      booking: bookingInput(slot, principalRef, 'mock:operation:blocked-by-uncertainty'),
+      operation: providerOperationInput(slot, principalRef, 'mock:operation:blocked-by-uncertainty'),
       origin: { kind: 'standalone', callerRef, principalRef },
       ref: 'blocked-by-uncertainty',
       boundedMandate: {
@@ -355,12 +355,12 @@ describe('Action Invocation bounded standing mandate', () => {
 
   it('validates exact settlement view and attempt and replays immutable terminal settlement', async () => {
     const store = issuedStore()
-    const service = bookingService(store)
-    const provider = createDevelopmentBookingProvider()
+    const service = providerOperationService(store)
+    const provider = createDevelopmentProviderOperationProvider()
     const slot = await provider.availability()
-    const run = await runReservationInvocation({
+    const run = await runProviderOperationInvocation({
       provider,
-      booking: bookingInput(slot, principalRef, 'mock:operation:settlement-linkage'),
+      operation: providerOperationInput(slot, principalRef, 'mock:operation:settlement-linkage'),
       origin: { kind: 'standalone', callerRef, principalRef },
       ref: 'settlement-linkage',
       boundedMandate: {
@@ -419,20 +419,20 @@ describe('Action Invocation bounded standing mandate', () => {
 
   it('rechecks revocation immediately before provider release', async () => {
     const store = issuedStore()
-    const service = bookingService(store)
-    const provider = createDevelopmentBookingProvider()
+    const service = providerOperationService(store)
+    const provider = createDevelopmentProviderOperationProvider()
     const slot = await provider.availability()
     const origin = { kind: 'standalone', callerRef, principalRef } as const
-    await expect(runReservationInvocation({
+    await expect(runProviderOperationInvocation({
       provider,
-      booking: bookingInput(slot, principalRef, 'mock:operation:revoke-before-release'),
+      operation: providerOperationInput(slot, principalRef, 'mock:operation:revoke-before-release'),
       origin,
       ref: 'revoke-before-release',
       boundedMandate: {
         service,
         mandateRef: mandate.mandateRef,
         authorityUseRef: 'mock:authority-use:revoke-before-release',
-        afterReservation: () => {
+        afterEffect: () => {
           store.revoke({
             mandateRef: mandate.mandateRef,
             expectedGeneration: 1,
@@ -468,7 +468,7 @@ describe('Action Invocation bounded standing mandate', () => {
     const revoked = store.revoke({
       mandateRef: mandate.mandateRef,
       expectedGeneration: 1,
-      reason: 'Customer stopped further booking.',
+      reason: 'Customer stopped further operation.',
       revokedAt: '2026-07-19T04:01:00.000Z',
     })
     expect(revoked).toMatchObject({ kind: 'accepted', value: { generation: 2, revoked: { reason: expect.any(String) } } })

@@ -83,17 +83,17 @@ export type ActionContext = {
   developmentOnlySuppliedQuoteQualificationPorts?: unknown
   /** Fixed development clock paired with the supplied-quote source ports. */
   developmentOnlySuppliedQuoteNow?: () => number
-  /** Booking-owned deterministic provider port for labelled development evidence only. */
-  developmentOnlyBookingAdapter?: (data: unknown) => Promise<ActionResult>
-  developmentOnlyBookingNow?: () => number
-  developmentOnlyBookingAuthorityPrincipalRef?: string
-  developmentOnlyBookingAvailabilityCheck?: (
+  /** Provider-operation fixture ports for labelled development evidence only. */
+  developmentOnlyProviderOperationAdapter?: (data: unknown) => Promise<ActionResult>
+  developmentOnlyProviderOperationNow?: () => number
+  developmentOnlyProviderOperationAuthorityPrincipalRef?: string
+  developmentOnlyProviderOperationAvailabilityCheck?: (
     data: unknown,
     now: number,
   ) => Promise<Readonly<{ kind: 'current' } | { kind: 'stale'; reason: string }>>
-  developmentOnlyBookingAvailabilityAdapter?: () => Promise<unknown>
-  developmentOnlyBookingCancellationAdapter?: (data: unknown) => Promise<ActionResult>
-  developmentOnlyBookingCancellationCheck?: (
+  developmentOnlyProviderOperationAvailabilityAdapter?: () => Promise<unknown>
+  developmentOnlyProviderOperationCancellationAdapter?: (data: unknown) => Promise<ActionResult>
+  developmentOnlyProviderOperationCancellationCheck?: (
     data: unknown,
   ) => Promise<Readonly<{ kind: 'current' } | { kind: 'refused'; reason: string }>>
 }

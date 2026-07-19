@@ -25,23 +25,23 @@ describe('bounded mandate executable evidence packet', () => {
     ['use actor', (copy: any) => { copy.mandateSnapshot.uses[0].principalRef = 'tampered' }],
     ['missing reconstructed use', (copy: any) => { copy.mandateSnapshot.uses = copy.mandateSnapshot.uses.slice(1) }],
     ['use material', (copy: any) => { copy.mandateSnapshot.uses[0].preparedMaterialDigest = 'tampered' }],
-    ['effect linkage', (copy: any) => { copy.bookings[0].durable.attempts[0].effectGeneration = 99 }],
+    ['effect linkage', (copy: any) => { copy.operations[0].durable.attempts[0].effectGeneration = 99 }],
     ['capacity settlement', (copy: any) => { copy.mandateSnapshot.uses[0].state = 'not_released' }],
     ['reconciliation', (copy: any) => { copy.observations.reconciliations[0].useState = 'uncertain' }],
     ['revocation', (copy: any) => { copy.observations.revokeRace.providerEffects = 1 }],
-    ['duplicate invocation identity', (copy: any) => { copy.bookings[1].invocationRef = copy.bookings[0].invocationRef }],
+    ['duplicate invocation identity', (copy: any) => { copy.operations[1].invocationRef = copy.operations[0].invocationRef }],
     ['duplicate authority-use identity', (copy: any) => {
       copy.mandateSnapshot.uses[1].authorityUseRef = copy.mandateSnapshot.uses[0].authorityUseRef
     }],
     ['duplicate attempt identity', (copy: any) => {
-      copy.bookings[1].durable.attempts[0].attemptRef = copy.bookings[0].durable.attempts[0].attemptRef
+      copy.operations[1].durable.attempts[0].attemptRef = copy.operations[0].durable.attempts[0].attemptRef
     }],
     ['duplicate evidence identity', (copy: any) => {
       copy.observations.reconciliations[1].evidenceRef = copy.observations.reconciliations[0].evidenceRef
     }],
     ['reordered release event', (copy: any) => {
-      const events = copy.bookings[0].events
-      copy.bookings[0].events = [events[1], events[0]]
+      const events = copy.operations[0].events
+      copy.operations[0].events = [events[1], events[0]]
     }],
     ['exception compensation class', (copy: any) => {
       copy.observations.exceptionCases.find((item: any) => item.stage === 'pre_release_execution').useState = 'uncertain'

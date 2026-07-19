@@ -29,10 +29,10 @@ import {
   type SuppliedCandidateQuoteResult,
 } from '../../src/modules/capability-supply/server'
 import {
-  createDevelopmentReservationAction,
-  type DevelopmentBookingInput,
-  type DevelopmentBookingResult,
-} from '../../src/modules/booking/development-booking.actions'
+  executeDevelopmentProviderOperationAction,
+  type DevelopmentProviderOperationInput,
+  type DevelopmentProviderOperationResult,
+} from '../../src/modules/provider-operation-fixture/development-provider-operation.actions'
 import { materialDigest } from '../../src/modules/action-invocation/preparation'
 import {
   validateReconciliationEvidence,
@@ -106,34 +106,34 @@ export async function readAndVerifyDevelopmentPacket(
   }
 }
 
-export async function readAndVerifyBookingPacket(path: string, expectedRevision: string) {
+export async function readAndVerifyProviderOperationPacket(path: string, expectedRevision: string) {
   const basic = await readAndVerifyDevelopmentPacket(path, expectedRevision, {
-    id: createDevelopmentReservationAction.id,
+    id: executeDevelopmentProviderOperationAction.id,
     version: 'v1',
   })
   const envelope = JSON.parse(await readFile(path, 'utf8')) as EvidenceEnvelope
   const durable = envelope.packet.durable as {
     terminal: PacketDurable
     uncertain: PacketDurable & { source: {
-      input: DevelopmentBookingInput
+      input: DevelopmentProviderOperationInput
       prepared: PreparedInvocation
-      before: ActionInvocationView<DevelopmentBookingResult>
-      after: ActionInvocationView<DevelopmentBookingResult>
+      before: ActionInvocationView<DevelopmentProviderOperationResult>
+      after: ActionInvocationView<DevelopmentProviderOperationResult>
     } }
   }
-  const terminal = reconstructBookingRows(durable.terminal, true)
-  const uncertain = reconstructBookingRows(durable.uncertain, false)
-  validateBookingLinkage(durable.terminal, true)
-  validateBookingLinkage(durable.uncertain, false)
+  const terminal = reconstructProviderOperationRows(durable.terminal, true)
+  const uncertain = reconstructProviderOperationRows(durable.uncertain, false)
+  validateProviderOperationLinkage(durable.terminal, true)
+  validateProviderOperationLinkage(durable.uncertain, false)
   if (
     durable.uncertain.source.before.control.state !== 'reconciliation_required'
     || durable.uncertain.source.before.attempts[0]?.release.state !== 'possibly_released'
     || uncertain.control.state !== 'terminal'
-  ) throw new Error('packet_booking_reconciliation_refused')
+  ) throw new Error('packet_provider_operation_reconciliation_refused')
   if (
     terminal.observedResolution.state !== 'returned'
-    || terminal.observedResolution.result.kind !== 'reservation_confirmed'
-  ) throw new Error('packet_booking_terminal_refused')
+    || terminal.observedResolution.result.kind !== 'effect_confirmed'
+  ) throw new Error('packet_provider_operation_terminal_refused')
   return {
     ...basic,
     reconstructed: {
@@ -146,12 +146,12 @@ export async function readAndVerifyBookingPacket(path: string, expectedRevision:
   }
 }
 
-function validateBookingLinkage(durable: PacketDurable, terminal: boolean) {
+function validateProviderOperationLinkage(durable: PacketDurable, terminal: boolean) {
   const control = durable.controls[0]!
   const source = durable.source as unknown as {
-    input: DevelopmentBookingInput
+    input: DevelopmentProviderOperationInput
     prepared: PreparedInvocation
-    result?: DevelopmentBookingResult
+    result?: DevelopmentProviderOperationResult
     resultIdentity?: { sourceResultRef: string; resultDigest: string }
     reconciliationEvidence?: ReconciliationEvidence
   }
@@ -164,14 +164,14 @@ function validateBookingLinkage(durable: PacketDurable, terminal: boolean) {
     durable.controls.length !== 1
     || typeof control.sourceRef !== 'string'
     || control.sourceRef.length === 0
-    || controlProjection.action?.id !== createDevelopmentReservationAction.id
+    || controlProjection.action?.id !== executeDevelopmentProviderOperationAction.id
     || controlProjection.action.contractVersion !== 'v1'
     || canonicalDigest(controlProjection.origin as never)
       !== canonicalDigest((control.authorityBinding as { origin?: unknown })?.origin as never)
     || control.preparedMaterialDigest !== source.prepared.materialInputDigest
     || control.preparedMaterialDigest
-      !== materialDigest(source.input, createDevelopmentReservationAction.invocationContract!.materialInputPaths)
-  ) throw new Error('packet_booking_control_linkage_refused')
+      !== materialDigest(source.input, executeDevelopmentProviderOperationAction.invocationContract!.materialInputPaths)
+  ) throw new Error('packet_provider_operation_control_linkage_refused')
   const attemptRefs = new Set<string>()
   for (const attempt of durable.attempts) {
     const attemptRef = String(attempt.attemptRef)
@@ -181,7 +181,7 @@ function validateBookingLinkage(durable: PacketDurable, terminal: boolean) {
       || (attempt.idempotency as { materialInputDigest?: string })?.materialInputDigest
         !== control.preparedMaterialDigest
       || !Number.isInteger(attempt.effectGeneration)
-    ) throw new Error('packet_booking_attempt_linkage_refused')
+    ) throw new Error('packet_provider_operation_attempt_linkage_refused')
   }
   let priorVersion = 0
   for (const row of durable.history) {
@@ -198,7 +198,7 @@ function validateBookingLinkage(durable: PacketDurable, terminal: boolean) {
         row.attemptTransition !== undefined
         && !attemptRefs.has(String((row.attemptTransition as { attemptRef?: string }).attemptRef))
       )
-    ) throw new Error('packet_booking_history_linkage_refused')
+    ) throw new Error('packet_provider_operation_history_linkage_refused')
     priorVersion = row.invocationVersion
   }
   if (terminal) {
@@ -208,22 +208,22 @@ function validateBookingLinkage(durable: PacketDurable, terminal: boolean) {
       || control.sourceResultRef !== source.resultIdentity.sourceResultRef
       || control.sourceResultDigest !== source.resultIdentity.resultDigest
       || source.resultIdentity.resultDigest !== canonicalDigest(source.result)
-    ) throw new Error('packet_booking_result_identity_refused')
+    ) throw new Error('packet_provider_operation_result_identity_refused')
   } else {
     const evidence = source.reconciliationEvidence
     const attempt = durable.attempts[0]
     if (
       evidence === undefined
       || attempt === undefined
-      || evidence.source !== createDevelopmentReservationAction.invocationContract!.reconciliationEvidenceSource
+      || evidence.source !== executeDevelopmentProviderOperationAction.invocationContract!.reconciliationEvidenceSource
       || evidence.invocationRef !== invocationRef
       || evidence.attemptRef !== attempt.attemptRef
       || evidence.effectGeneration !== attempt.effectGeneration
       || !durable.history.some((row) => row.sourceEvidenceRef === evidence.evidenceRef)
-    ) throw new Error('packet_booking_reconciliation_linkage_refused')
+    ) throw new Error('packet_provider_operation_reconciliation_linkage_refused')
     const evidenceError = validateReconciliationEvidence({
       evidence,
-      source: createDevelopmentReservationAction.invocationContract!.reconciliationEvidenceSource,
+      source: executeDevelopmentProviderOperationAction.invocationContract!.reconciliationEvidenceSource,
       invocationRef,
       attemptRef: String(attempt.attemptRef),
       effectGeneration: Number(attempt.effectGeneration),
@@ -233,21 +233,21 @@ function validateBookingLinkage(durable: PacketDurable, terminal: boolean) {
         canonicalDigest(candidate) === canonicalDigest(evidence),
     })
     if (evidenceError !== undefined) {
-      throw new Error(`packet_booking_reconciliation_evidence_refused:${evidenceError}`)
+      throw new Error(`packet_provider_operation_reconciliation_evidence_refused:${evidenceError}`)
     }
     if (
       evidence.resolution !== 'released'
       || (attempt.outcome as { state?: string }).state !== 'reconciled_released'
       || (attempt.outcome as { externalOutcome?: string }).externalOutcome !== 'unknown'
-    ) throw new Error('packet_booking_reconciliation_disposition_refused')
+    ) throw new Error('packet_provider_operation_reconciliation_disposition_refused')
   }
 }
 
-function reconstructBookingRows(durable: PacketDurable, terminal: boolean) {
+function reconstructProviderOperationRows(durable: PacketDurable, terminal: boolean) {
   if (!durable.controls?.length || !durable.history?.length) {
-    throw new Error('packet_booking_durable_rows_refused')
+    throw new Error('packet_provider_operation_durable_rows_refused')
   }
-  const state = createDevelopmentDurableState<DevelopmentBookingResult>()
+  const state = createDevelopmentDurableState<DevelopmentProviderOperationResult>()
   for (const row of durable.controls) state.controls.set(String(row.invocationRef), row as never)
   const invocationRef = String(durable.controls[0]!.invocationRef)
   const attempts = new Map()
@@ -255,13 +255,13 @@ function reconstructBookingRows(durable: PacketDurable, terminal: boolean) {
   state.attempts.set(invocationRef, attempts)
   state.history.set(invocationRef, durable.history as never)
   const source = durable.source as unknown as {
-    input: DevelopmentBookingInput
+    input: DevelopmentProviderOperationInput
     prepared: PreparedInvocation
-    result?: DevelopmentBookingResult
+    result?: DevelopmentProviderOperationResult
   }
   const result = source.result
   const tracer = createDurableActionInvocationTracer({
-    action: createDevelopmentReservationAction,
+    action: executeDevelopmentProviderOperationAction,
     port: createDevelopmentDurablePort(state),
     now: developmentEvidenceNow,
     nextInvocationRef: () => 'verify:unused',
@@ -282,7 +282,7 @@ function reconstructBookingRows(durable: PacketDurable, terminal: boolean) {
           },
       ...(result === undefined ? {} : {
         resultIdentity: {
-          sourceResultRef: result.kind === 'reservation_confirmed' ? result.reservationRef : 'refused',
+          sourceResultRef: result.kind === 'effect_confirmed' ? result.effectRef : 'refused',
           resultDigest: canonicalDigest(result),
         },
       }),
@@ -290,7 +290,7 @@ function reconstructBookingRows(durable: PacketDurable, terminal: boolean) {
   }, invocationRef)
   const view = tracer.inspect(invocationRef)
   if (view === undefined || (terminal && view.control.state !== 'terminal')) {
-    throw new Error('packet_booking_control_reconstruction_refused')
+    throw new Error('packet_provider_operation_control_reconstruction_refused')
   }
   return view
 }

@@ -8,32 +8,32 @@ import {
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  createDevelopmentReservationAction,
-  type DevelopmentBookingInput,
-  type DevelopmentBookingResult,
-} from './development-booking.actions'
-import { bookingActor, developmentBookingNow } from './development-booking-fixture'
-import type { createDevelopmentBookingProvider } from './development-booking-provider'
-import { runReservationInvocation } from './development-booking-runner'
-import type { DevelopmentBookingMandateService } from './development-booking-mandate'
+  executeDevelopmentProviderOperationAction,
+  type DevelopmentProviderOperationInput,
+  type DevelopmentProviderOperationResult,
+} from './development-provider-operation.actions'
+import { providerOperationActor, developmentProviderOperationNow } from './development-provider-operation-fixture'
+import type { createDevelopmentProviderOperationProvider } from './development-provider-operation-provider'
+import { runProviderOperationInvocation } from './development-provider-operation-runner'
+import type { DevelopmentProviderOperationMandateService } from './development-provider-operation-mandate'
 
-type Provider = ReturnType<typeof createDevelopmentBookingProvider>
+type Provider = ReturnType<typeof createDevelopmentProviderOperationProvider>
 
-export async function runBookingReconciliation(input: Readonly<{
+export async function runProviderOperationReconciliation(input: Readonly<{
   provider: Provider
-  booking: DevelopmentBookingInput
+  operation: DevelopmentProviderOperationInput
   origin: ActionInvocationOrigin
   resolution?: 'released' | 'not_released'
   ref?: string
   evidenceRef?: string
   boundedMandate?: Readonly<{
-    service: DevelopmentBookingMandateService
+    service: DevelopmentProviderOperationMandateService
     mandateRef: string
     authorityUseRef: string
   }>
 }>) {
   const issued = new Set<string>()
-  const uncertain = await runReservationInvocation({
+  const uncertain = await runProviderOperationInvocation({
     ...input,
     ref: input.ref ?? 'unknown',
     loseResponseAfterRelease: true,
@@ -42,17 +42,17 @@ export async function runBookingReconciliation(input: Readonly<{
     ...(input.boundedMandate === undefined ? {} : { boundedMandate: input.boundedMandate }),
   })
   const attempt = uncertain.view.attempts[0]
-  if (attempt === undefined) throw new Error('booking_reconciliation_attempt_missing')
+  if (attempt === undefined) throw new Error('operation_reconciliation_attempt_missing')
   const material: ReconciliationEvidenceMaterial = {
     kind: 'action_invocation_reconciliation',
     version: 1,
-    evidenceRef: input.evidenceRef ?? 'mock:evidence:booking-observer',
-    source: 'booking.createDevelopmentReservation:mock-provider-observer:v1',
+    evidenceRef: input.evidenceRef ?? 'mock:evidence:operation-observer',
+    source: 'provider_operation.executeDevelopmentCancellable:mock-provider-observer:v1',
     invocationRef: uncertain.view.invocationRef,
     attemptRef: attempt.attemptRef,
     effectGeneration: attempt.effectGeneration,
     resolution: input.resolution ?? 'released',
-    observedAt: developmentBookingNow(),
+    observedAt: developmentProviderOperationNow(),
   }
   const evidence = { ...material, digest: canonicalDigest(material) }
   issued.add(canonicalDigest(evidence))
@@ -77,28 +77,28 @@ export async function runBookingReconciliation(input: Readonly<{
 }
 
 export function runCancelBeforeRelease(input: Readonly<{
-  booking: DevelopmentBookingInput
+  operation: DevelopmentProviderOperationInput
   origin: ActionInvocationOrigin
 }>) {
-  const owner = bookingActor(input.origin)
-  const state = createDevelopmentDurableState<DevelopmentBookingResult>()
+  const owner = providerOperationActor(input.origin)
+  const state = createDevelopmentDurableState<DevelopmentProviderOperationResult>()
   let preparedSource: PreparedInvocation | undefined
   const tracer = createDurableActionInvocationTracer({
-    action: createDevelopmentReservationAction,
+    action: executeDevelopmentProviderOperationAction,
     port: createDevelopmentDurablePort(state),
-    now: developmentBookingNow,
-    nextInvocationRef: () => 'mock:booking-invocation:cancel-before',
-    nextAuthorityRef: () => 'mock:booking-authority:cancel-before',
-    nextAttemptRef: () => 'mock:booking-attempt:cancel-before',
+    now: developmentProviderOperationNow,
+    nextInvocationRef: () => 'mock:operation-invocation:cancel-before',
+    nextAuthorityRef: () => 'mock:operation-authority:cancel-before',
+    nextAttemptRef: () => 'mock:operation-attempt:cancel-before',
     resolveSourceState: () => ({
-      input: input.booking,
+      input: input.operation,
       context: {},
       prepared: preparedSource,
       observedResolution: { state: 'pending' },
     }),
   })
   const prepared = tracer.prepare({
-    origin: input.origin, actor: owner, input: input.booking, context: {}, freshnessMs: 900_000,
+    origin: input.origin, actor: owner, input: input.operation, context: {}, freshnessMs: 900_000,
   })
   preparedSource = prepared.prepared
   const decision = tracer.decide({

@@ -11,31 +11,31 @@ import {
 import type { TransferBoundaryEvent } from '@/modules/action-invocation/transfer-evaluator'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  cancelDevelopmentReservationAction,
-  createDevelopmentReservationAction,
-  type DevelopmentBookingCancellationInput,
-  type DevelopmentBookingCancellationResult,
-  type DevelopmentBookingInput,
-  type DevelopmentBookingResult,
-} from './development-booking.actions'
-import { bookingActor, developmentBookingNow } from './development-booking-fixture'
-import type { createDevelopmentBookingProvider } from './development-booking-provider'
+  cancelDevelopmentProviderOperationAction,
+  executeDevelopmentProviderOperationAction,
+  type DevelopmentProviderOperationCancellationInput,
+  type DevelopmentProviderOperationCancellationResult,
+  type DevelopmentProviderOperationInput,
+  type DevelopmentProviderOperationResult,
+} from './development-provider-operation.actions'
+import { providerOperationActor, developmentProviderOperationNow } from './development-provider-operation-fixture'
+import type { createDevelopmentProviderOperationProvider } from './development-provider-operation-provider'
 import {
   mandateRefusalToInvocationRefusal,
-  type DevelopmentBookingMandateService,
-} from './development-booking-mandate'
+  type DevelopmentProviderOperationMandateService,
+} from './development-provider-operation-mandate'
 
-type Provider = ReturnType<typeof createDevelopmentBookingProvider>
-type BookingInvocationEvent = TransferBoundaryEvent | Readonly<{
+type Provider = ReturnType<typeof createDevelopmentProviderOperationProvider>
+type ProviderOperationInvocationEvent = TransferBoundaryEvent | Readonly<{
   kind: 'standing_mandate_authorization'
   invocationRef: string
 }>
 
-export type BookingInvocationRun<Result extends DevelopmentBookingResult | DevelopmentBookingCancellationResult> =
+export type ProviderOperationInvocationRun<Result extends DevelopmentProviderOperationResult | DevelopmentProviderOperationCancellationResult> =
   Readonly<{
     view: ActionInvocationView<Result>
     origin: ActionInvocationOrigin
-    owner: ReturnType<typeof bookingActor>
+    owner: ReturnType<typeof providerOperationActor>
     state: ReturnType<typeof createDevelopmentDurableState<Result>>
     tracer: ReturnType<typeof createDurableActionInvocationTracer<unknown, Result>>
     source: Readonly<{
@@ -44,12 +44,12 @@ export type BookingInvocationRun<Result extends DevelopmentBookingResult | Devel
       result?: Result
       resultIdentity?: Readonly<{ sourceResultRef: string; resultDigest: string }>
     }>
-    events: readonly BookingInvocationEvent[]
+    events: readonly ProviderOperationInvocationEvent[]
   }>
 
-export async function runReservationInvocation(input: Readonly<{
+export async function runProviderOperationInvocation(input: Readonly<{
   provider: Provider
-  booking: DevelopmentBookingInput
+  operation: DevelopmentProviderOperationInput
   origin: ActionInvocationOrigin
   ref: string
   nowMs?: number
@@ -58,13 +58,13 @@ export async function runReservationInvocation(input: Readonly<{
   corruptSourceResultAfterRelease?: boolean
   verifyReconciliationEvidence?: ReconciliationEvidenceVerifier
   boundedMandate?: Readonly<{
-    service: DevelopmentBookingMandateService
+    service: DevelopmentProviderOperationMandateService
     mandateRef: string
     authorityUseRef: string
-    afterReservation?: () => void
+    afterEffect?: () => void
     reconstructBeforeRelease?: (
-      view: ActionInvocationView<DevelopmentBookingResult>,
-    ) => DevelopmentBookingMandateService
+      view: ActionInvocationView<DevelopmentProviderOperationResult>,
+    ) => DevelopmentProviderOperationMandateService
     developmentAuthorizationVersionOverride?: number
     developmentAcquisitionVersionOverride?: number
     throwDuringReconstruction?: boolean
@@ -75,35 +75,35 @@ export async function runReservationInvocation(input: Readonly<{
     risk?: string
     policyDecisionRef?: string
   }>
-}>): Promise<BookingInvocationRun<DevelopmentBookingResult>> {
-  const events: BookingInvocationEvent[] = []
+}>): Promise<ProviderOperationInvocationRun<DevelopmentProviderOperationResult>> {
+  const events: ProviderOperationInvocationEvent[] = []
   const source: {
-    input: DevelopmentBookingInput
+    input: DevelopmentProviderOperationInput
     prepared: PreparedInvocation | undefined
-    result?: DevelopmentBookingResult
+    result?: DevelopmentProviderOperationResult
     resultIdentity?: { sourceResultRef: string; resultDigest: string }
-  } = { input: input.booking, prepared: undefined }
-  const owner = bookingActor(input.origin)
+  } = { input: input.operation, prepared: undefined }
+  const owner = providerOperationActor(input.origin)
   const release = createDevelopmentReleaseSignal()
-  const nowMs = input.nowMs ?? Date.parse(developmentBookingNow())
+  const nowMs = input.nowMs ?? Date.parse(developmentProviderOperationNow())
   const context = {
-    developmentOnlyBookingNow: () => nowMs,
-    developmentOnlyBookingAuthorityPrincipalRef: owner.principalRef,
-    developmentOnlyBookingAvailabilityCheck: (raw: unknown, now: number) =>
-      input.provider.check(raw as DevelopmentBookingInput, now),
-    developmentOnlyBookingAdapter: async (raw: unknown) => {
+    developmentOnlyProviderOperationNow: () => nowMs,
+    developmentOnlyProviderOperationAuthorityPrincipalRef: owner.principalRef,
+    developmentOnlyProviderOperationAvailabilityCheck: (raw: unknown, now: number) =>
+      input.provider.check(raw as DevelopmentProviderOperationInput, now),
+    developmentOnlyProviderOperationAdapter: async (raw: unknown) => {
       if (input.unknownWithoutProviderRelease === true) {
         throw new Error('mock_transport_failed_before_provider_release_observation')
       }
-      events.push({ kind: 'provider_release' as const, actionId: createDevelopmentReservationAction.id })
+      events.push({ kind: 'provider_release' as const, actionId: executeDevelopmentProviderOperationAction.id })
       release.markReleased()
-      const result = await input.provider.reserve(raw as DevelopmentBookingInput)
+      const result = await input.provider.execute(raw as DevelopmentProviderOperationInput)
       if (input.loseResponseAfterRelease === true) throw new Error('mock_response_lost_after_possible_release')
       source.result = result
       source.resultIdentity = {
-        sourceResultRef: result.kind === 'reservation_confirmed'
-          ? result.reservationRef
-          : `mock:booking-refusal:${input.ref}`,
+        sourceResultRef: result.kind === 'effect_confirmed'
+          ? result.effectRef
+          : `mock:operation-refusal:${input.ref}`,
         resultDigest: canonicalDigest(result as never),
       }
       if (input.corruptSourceResultAfterRelease === true && source.resultIdentity !== undefined) {
@@ -112,20 +112,20 @@ export async function runReservationInvocation(input: Readonly<{
       return result
     },
   }
-  const state = createDevelopmentDurableState<DevelopmentBookingResult>()
+  const state = createDevelopmentDurableState<DevelopmentProviderOperationResult>()
   const configuredMandate = input.boundedMandate
   let activeMandateService = configuredMandate?.service
-  const tracer = createDurableActionInvocationTracer<DevelopmentBookingInput, DevelopmentBookingResult>({
-    action: createDevelopmentReservationAction,
+  const tracer = createDurableActionInvocationTracer<DevelopmentProviderOperationInput, DevelopmentProviderOperationResult>({
+    action: executeDevelopmentProviderOperationAction,
     port: createDevelopmentDurablePort(state),
-    now: developmentBookingNow,
+    now: developmentProviderOperationNow,
     ...(input.unknownWithoutProviderRelease === true ? {} : { developmentReleaseSignal: release }),
     ...(input.verifyReconciliationEvidence === undefined
       ? {}
       : { verifyReconciliationEvidence: input.verifyReconciliationEvidence }),
-    nextInvocationRef: () => `mock:booking-invocation:${input.ref}`,
-    nextAuthorityRef: () => `mock:booking-authority:${input.ref}`,
-    nextAttemptRef: () => `mock:booking-attempt:${input.ref}`,
+    nextInvocationRef: () => `mock:operation-invocation:${input.ref}`,
+    nextAuthorityRef: () => `mock:operation-authority:${input.ref}`,
+    nextAttemptRef: () => `mock:operation-attempt:${input.ref}`,
     ...(configuredMandate === undefined ? {} : {
       beforeEffectRelease: (current, effectGeneration) => {
         if (activeMandateService === undefined) return 'authority_not_accepted' as const
@@ -148,15 +148,15 @@ export async function runReservationInvocation(input: Readonly<{
         ? { state: 'pending' as const }
         : {
             state: 'returned' as const, execution: 'runner_returned' as const,
-            businessOutcome: source.result.kind === 'reservation_confirmed' ? 'completed' : 'refused',
-            resultReferenceable: source.result.kind === 'reservation_confirmed',
+            businessOutcome: source.result.kind === 'effect_confirmed' ? 'completed' : 'refused',
+            resultReferenceable: source.result.kind === 'effect_confirmed',
             result: source.result,
           },
       ...(source.resultIdentity === undefined ? {} : { resultIdentity: source.resultIdentity }),
     }),
   })
   const prepared = tracer.prepare({
-    origin: input.origin, actor: owner, input: input.booking, context, freshnessMs: 900_000,
+    origin: input.origin, actor: owner, input: input.operation, context, freshnessMs: 900_000,
   })
   source.prepared = prepared.prepared
   if (configuredMandate === undefined) {
@@ -172,7 +172,7 @@ export async function runReservationInvocation(input: Readonly<{
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: decision.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
-      actor: owner, origin: input.origin, materialInput: input.booking,
+      actor: owner, origin: input.origin, materialInput: input.operation,
     })
     if (executed.kind !== 'accepted') throw new Error(executed.code)
     return { view: executed.view, origin: input.origin, owner, state, tracer: tracer as never, source, events }
@@ -184,7 +184,7 @@ export async function runReservationInvocation(input: Readonly<{
     authorityUseRef: bounded.authorityUseRef,
     view: prepared,
     origin: input.origin,
-    booking: input.booking,
+    operation: input.operation,
     effectGeneration: prepared.attempts.length + 1,
     ...(bounded.fallbackRef === undefined ? {} : { fallbackRef: bounded.fallbackRef }),
     ...(bounded.reservedSpendMinor === undefined ? {} : { reservedSpendMinor: bounded.reservedSpendMinor }),
@@ -226,8 +226,8 @@ export async function runReservationInvocation(input: Readonly<{
       expectedInvocationVersion: bounded.developmentAcquisitionVersionOverride
         ?? standingAuthorization.view.invocationVersion,
       authorityRef: prepared.authority!.reference,
-      actor: owner, origin: input.origin, materialInput: input.booking,
-      leaseOwner: `mock:booking-worker:${input.ref}`,
+      actor: owner, origin: input.origin, materialInput: input.operation,
+      leaseOwner: `mock:operation-worker:${input.ref}`,
       leaseMs: 30_000,
       acceptedAuthorityBasis: reserved.value.basis,
     })
@@ -242,7 +242,7 @@ export async function runReservationInvocation(input: Readonly<{
     throw compensateAndPreserve(
       bounded.service,
       bounded.authorityUseRef,
-      acquired.kind === 'refused' ? acquired.code : 'booking_acquisition_failed',
+      acquired.kind === 'refused' ? acquired.code : 'operation_acquisition_failed',
     )
   }
   if (bounded.reconstructBeforeRelease !== undefined) {
@@ -262,7 +262,7 @@ export async function runReservationInvocation(input: Readonly<{
     }
   }
   try {
-    bounded.afterReservation?.()
+    bounded.afterEffect?.()
   } catch (error) {
     throw compensateAndPreserve(
       activeMandateService,
@@ -311,7 +311,7 @@ export async function runReservationInvocation(input: Readonly<{
 }
 
 function compensateAndPreserve(
-  service: DevelopmentBookingMandateService,
+  service: DevelopmentProviderOperationMandateService,
   authorityUseRef: string,
   originalRefusal: string,
 ): Error {
@@ -323,50 +323,50 @@ function compensateAndPreserve(
 
 export async function runCancellationInvocation(input: Readonly<{
   provider: Provider
-  cancellation: DevelopmentBookingCancellationInput
+  cancellation: DevelopmentProviderOperationCancellationInput
   origin: ActionInvocationOrigin
   ref: string
   fullYoloMandate?: Readonly<{
-    service: DevelopmentBookingMandateService
+    service: DevelopmentProviderOperationMandateService
     mandateRef: string
     authorityUseRef: string
     policyDecisionRef?: string
   }>
-}>): Promise<BookingInvocationRun<DevelopmentBookingCancellationResult>> {
-  const events: BookingInvocationEvent[] = []
+}>): Promise<ProviderOperationInvocationRun<DevelopmentProviderOperationCancellationResult>> {
+  const events: ProviderOperationInvocationEvent[] = []
   const source: {
-    input: DevelopmentBookingCancellationInput
+    input: DevelopmentProviderOperationCancellationInput
     prepared: PreparedInvocation | undefined
-    result?: DevelopmentBookingCancellationResult
+    result?: DevelopmentProviderOperationCancellationResult
     resultIdentity?: { sourceResultRef: string; resultDigest: string }
   } = { input: input.cancellation, prepared: undefined }
-  const owner = bookingActor(input.origin)
+  const owner = providerOperationActor(input.origin)
   const release = createDevelopmentReleaseSignal()
   const context = {
-    developmentOnlyBookingAuthorityPrincipalRef: owner.principalRef,
-    developmentOnlyBookingCancellationCheck: (raw: unknown) =>
-      input.provider.checkCancellation(raw as DevelopmentBookingCancellationInput),
-    developmentOnlyBookingCancellationAdapter: async (raw: unknown) => {
-      events.push({ kind: 'provider_release' as const, actionId: cancelDevelopmentReservationAction.id })
+    developmentOnlyProviderOperationAuthorityPrincipalRef: owner.principalRef,
+    developmentOnlyProviderOperationCancellationCheck: (raw: unknown) =>
+      input.provider.checkCancellation(raw as DevelopmentProviderOperationCancellationInput),
+    developmentOnlyProviderOperationCancellationAdapter: async (raw: unknown) => {
+      events.push({ kind: 'provider_release' as const, actionId: cancelDevelopmentProviderOperationAction.id })
       release.markReleased()
-      const result = await input.provider.cancel(raw as DevelopmentBookingCancellationInput)
+      const result = await input.provider.cancel(raw as DevelopmentProviderOperationCancellationInput)
       source.result = result
       source.resultIdentity = {
-        sourceResultRef: result.kind === 'reservation_cancellation_confirmed'
+        sourceResultRef: result.kind === 'effect_cancellation_confirmed'
           ? result.cancellationRef : `mock:cancellation-refusal:${input.ref}`,
         resultDigest: canonicalDigest(result as never),
       }
       return result
     },
   }
-  const state = createDevelopmentDurableState<DevelopmentBookingCancellationResult>()
+  const state = createDevelopmentDurableState<DevelopmentProviderOperationCancellationResult>()
   const tracer = createDurableActionInvocationTracer<
-    DevelopmentBookingCancellationInput,
-    DevelopmentBookingCancellationResult
+    DevelopmentProviderOperationCancellationInput,
+    DevelopmentProviderOperationCancellationResult
   >({
-    action: cancelDevelopmentReservationAction,
+    action: cancelDevelopmentProviderOperationAction,
     port: createDevelopmentDurablePort(state),
-    now: developmentBookingNow,
+    now: developmentProviderOperationNow,
     developmentReleaseSignal: release,
     nextInvocationRef: () => `mock:cancellation-invocation:${input.ref}`,
     nextAuthorityRef: () => `mock:cancellation-authority:${input.ref}`,
@@ -387,8 +387,8 @@ export async function runCancellationInvocation(input: Readonly<{
         ? { state: 'pending' as const }
         : {
             state: 'returned' as const, execution: 'runner_returned' as const,
-            businessOutcome: source.result.kind === 'reservation_cancellation_confirmed' ? 'completed' : 'refused',
-            resultReferenceable: source.result.kind === 'reservation_cancellation_confirmed',
+            businessOutcome: source.result.kind === 'effect_cancellation_confirmed' ? 'completed' : 'refused',
+            resultReferenceable: source.result.kind === 'effect_cancellation_confirmed',
             result: source.result,
           },
       ...(source.resultIdentity === undefined ? {} : { resultIdentity: source.resultIdentity }),
@@ -406,13 +406,13 @@ export async function runCancellationInvocation(input: Readonly<{
       actor: owner,
       providerRef: input.cancellation.providerRef,
       recipientRef: input.cancellation.providerRef,
-      purpose: 'cancel_development_reservation',
+      purpose: 'cancel_development_effect',
       dataFields: ['reason'],
       preparedMaterialDigest: prepared.prepared!.materialInputDigest,
       invocationRef: prepared.invocationRef,
-      action: { id: cancelDevelopmentReservationAction.id, version: 'v1' },
+      action: { id: cancelDevelopmentProviderOperationAction.id, version: 'v1' },
       effectGeneration: 1,
-      risk: 'development_booking_bounded_loss',
+      risk: 'development_provider_operation_bounded_loss',
       ...(configured.policyDecisionRef === undefined
         ? {}
         : { policyDecisionRef: configured.policyDecisionRef }),

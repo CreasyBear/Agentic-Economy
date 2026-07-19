@@ -8,14 +8,14 @@ import {
   type StandingMandateAuthorityBasis,
 } from '@/modules/action-invocation'
 import type {
-  DevelopmentBookingCancellationResult,
-  DevelopmentBookingInput,
-  DevelopmentBookingResult,
-} from './development-booking.actions'
+  DevelopmentProviderOperationCancellationResult,
+  DevelopmentProviderOperationInput,
+  DevelopmentProviderOperationResult,
+} from './development-provider-operation.actions'
 
-type BookingEffectResult = DevelopmentBookingResult | DevelopmentBookingCancellationResult
+type ProviderOperationEffectResult = DevelopmentProviderOperationResult | DevelopmentProviderOperationCancellationResult
 
-export type DevelopmentBookingReleaseToken = Readonly<{
+export type DevelopmentProviderOperationReleaseToken = Readonly<{
   authorityUseRef: string
   invocationRef: string
   basis: StandingMandateAuthorityBasis
@@ -26,7 +26,7 @@ export type DevelopmentBookingReleaseToken = Readonly<{
   effectGeneration: number
 }>
 
-export function createDevelopmentBookingMandateService(input: Readonly<{
+export function createDevelopmentProviderOperationMandateService(input: Readonly<{
   store: StandingMandateStore
   authenticatedDelegate: Readonly<{ delegateRef: string; callerRef: string; principalRef: string }>
   now: () => string
@@ -38,7 +38,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
 
     settleExecutionException(args: Readonly<{
       authorityUseRef: string
-      view: ActionInvocationView<BookingEffectResult> | undefined
+      view: ActionInvocationView<ProviderOperationEffectResult> | undefined
       attemptRef: string
       releaseSignalObserved: boolean
     }>): MandateDecision<AuthorityUse> {
@@ -68,9 +68,9 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
     reserveAndAuthorize(args: Readonly<{
       mandateRef: string
       authorityUseRef: string
-      view: ActionInvocationView<DevelopmentBookingResult>
+      view: ActionInvocationView<DevelopmentProviderOperationResult>
       origin: ActionInvocationOrigin
-      booking: DevelopmentBookingInput
+      operation: DevelopmentProviderOperationInput
       effectGeneration: number
       fallbackRef?: string | null
       reservedSpendMinor?: number
@@ -88,7 +88,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
         || mandate.delegateRef !== input.authenticatedDelegate.delegateRef
         || mandate.callerRef !== input.authenticatedDelegate.callerRef
         || mandate.principalRef !== input.authenticatedDelegate.principalRef
-        || args.booking.customer.principalRef !== args.view.owner.principalRef
+        || args.operation.customer.principalRef !== args.view.owner.principalRef
       ) return { kind: 'refused', code: 'mandate_principal_mismatch' }
       const reserved = input.store.reserve({
         authorityUseRef: args.authorityUseRef,
@@ -101,10 +101,10 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
         invocationRef: args.view.invocationRef,
         action: { id: args.view.action.id, version: args.view.action.contractVersion },
         preparedMaterialDigest: args.view.prepared.materialInputDigest,
-        providerRef: args.booking.slot.providerRef,
-        recipientRef: args.booking.disclosure.recipient,
-        purpose: args.booking.disclosure.purpose,
-        dataFields: args.booking.disclosure.fields,
+        providerRef: args.operation.slot.providerRef,
+        recipientRef: args.operation.disclosure.recipient,
+        purpose: args.operation.disclosure.purpose,
+        dataFields: args.operation.disclosure.fields,
         reservedSpend: {
           amountMinor: args.reservedSpendMinor ?? 0,
           currency: mandate.scope.maximumSpend.currency,
@@ -116,7 +116,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
           },
         }),
         fallbackRef: args.fallbackRef ?? null,
-        risk: args.risk ?? 'development_booking_zero_charge',
+        risk: args.risk ?? 'development_provider_operation_zero_charge',
         effectGeneration: args.effectGeneration,
         ...(args.policyDecisionRef === undefined ? {} : { policyDecisionRef: args.policyDecisionRef }),
       }, input.now())
@@ -192,7 +192,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
       }
     },
 
-    recheckRelease<Result extends BookingEffectResult>(args: Readonly<{
+    recheckRelease<Result extends ProviderOperationEffectResult>(args: Readonly<{
       authorityUseRef: string
       view: ActionInvocationView<Result>
       effectGeneration: number
@@ -205,7 +205,7 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
       }, input.now())
     },
 
-    settleFromInvocation<Result extends BookingEffectResult>(args: Readonly<{
+    settleFromInvocation<Result extends ProviderOperationEffectResult>(args: Readonly<{
       authorityUseRef: string
       view: ActionInvocationView<Result>
       attemptRef: string
@@ -235,12 +235,12 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
   }
 }
 
-export function reconstructReleaseToken<Result extends BookingEffectResult>(
+export function reconstructReleaseToken<Result extends ProviderOperationEffectResult>(
   store: StandingMandateStore,
   authorityUseRef: string,
   view: ActionInvocationView<Result>,
   effectGeneration: number,
-): MandateDecision<DevelopmentBookingReleaseToken> {
+): MandateDecision<DevelopmentProviderOperationReleaseToken> {
   const use = store.inspectUse(authorityUseRef)
   const basis = view.acceptedAuthority
   const grant = use === undefined ? undefined : store.inspectGrant(use.mandateRef)
@@ -276,7 +276,7 @@ export function reconstructReleaseToken<Result extends BookingEffectResult>(
   }
 }
 
-export type DevelopmentBookingMandateService = ReturnType<typeof createDevelopmentBookingMandateService>
+export type DevelopmentProviderOperationMandateService = ReturnType<typeof createDevelopmentProviderOperationMandateService>
 
 export function mandateRefusalToInvocationRefusal(_code: MandateRefusalCode) {
   return 'authority_not_accepted' as const

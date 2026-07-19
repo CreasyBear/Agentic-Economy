@@ -1,11 +1,11 @@
 import { readFile, writeFile } from 'node:fs/promises'
 
 import {
-  resumeDevelopmentBookingObjective,
-  runFullYoloDevelopmentBookingPhase,
-} from '../../src/modules/booking/development-booking-objective'
-import { projectDurableRun } from '../../src/modules/booking/development-booking-packet'
-import { createDevelopmentBookingSigningCustody } from '../../src/modules/booking/development-booking-signing-custody'
+  resumeDevelopmentProviderOperationObjective,
+  runFullYoloDevelopmentProviderOperationPhase,
+} from '../../src/modules/provider-operation-fixture/development-provider-operation-objective'
+import { projectDurableRun } from '../../src/modules/provider-operation-fixture/development-provider-operation-packet'
+import { createDevelopmentProviderOperationSigningCustody } from '../../src/modules/provider-operation-fixture/development-provider-operation-signing-custody'
 
 type CustodyFile = Readonly<{ keyId: string; privateKey: string }>
 
@@ -16,17 +16,17 @@ const custodyPath = process.argv[5]
 if (command === undefined || outputPath === undefined || custodyPath === undefined) {
   throw new Error('full_yolo_process_worker_arguments_required')
 }
-const custody = createDevelopmentBookingSigningCustody(
+const custody = createDevelopmentProviderOperationSigningCustody(
   JSON.parse(await readFile(custodyPath, 'utf8')) as CustodyFile,
 )
 
-if (command === 'booking') {
-  const phase = await runFullYoloDevelopmentBookingPhase(custody)
+if (command === 'operation') {
+  const phase = await runFullYoloDevelopmentProviderOperationPhase(custody)
   await writeFile(outputPath, JSON.stringify(phase), { encoding: 'utf8', flag: 'wx' })
 } else if (command === 'resume') {
   if (inputPath === undefined) throw new Error('full_yolo_process_worker_input_required')
   const phase = JSON.parse(await readFile(inputPath, 'utf8')) as any
-  const resumed = await resumeDevelopmentBookingObjective({
+  const resumed = await resumeDevelopmentProviderOperationObjective({
     processRef: `pid:${process.pid}`,
     mandate: phase.mandate,
     mandateSnapshot: phase.midRun.mandateSnapshot,
@@ -65,7 +65,7 @@ if (command === 'booking') {
 } else if (command === 'replay') {
   if (inputPath === undefined) throw new Error('full_yolo_process_worker_input_required')
   const phase = JSON.parse(await readFile(inputPath, 'utf8')) as any
-  const replayed = await resumeDevelopmentBookingObjective({
+  const replayed = await resumeDevelopmentProviderOperationObjective({
     processRef: `pid:${process.pid}`,
     mandate: phase.mandate,
     mandateSnapshot: phase.mandateSnapshot,

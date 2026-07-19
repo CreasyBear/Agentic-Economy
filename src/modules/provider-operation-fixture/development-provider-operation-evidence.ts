@@ -1,45 +1,45 @@
 import { evaluateAdr009Transfer } from '@/modules/action-invocation/transfer-evaluator'
 import {
-  cancelDevelopmentReservationAction,
-  createDevelopmentReservationAction,
-  type DevelopmentBookingResult,
-} from './development-booking.actions'
+  cancelDevelopmentProviderOperationAction,
+  executeDevelopmentProviderOperationAction,
+  type DevelopmentProviderOperationResult,
+} from './development-provider-operation.actions'
 import {
-  bookingActor,
-  bookingInput,
+  providerOperationActor,
+  providerOperationInput,
   cancellationInput,
-  developmentBookingNowMs,
-} from './development-booking-fixture'
-import { projectDurableRun } from './development-booking-packet'
-import { createDevelopmentBookingProvider } from './development-booking-provider'
+  developmentProviderOperationNowMs,
+} from './development-provider-operation-fixture'
+import { projectDurableRun } from './development-provider-operation-packet'
+import { createDevelopmentProviderOperationProvider } from './development-provider-operation-provider'
 import {
-  runBookingReconciliation,
+  runProviderOperationReconciliation,
   runCancelBeforeRelease,
-} from './development-booking-recovery'
+} from './development-provider-operation-recovery'
 import {
   runCancellationInvocation,
-  runReservationInvocation,
-} from './development-booking-runner'
+  runProviderOperationInvocation,
+} from './development-provider-operation-runner'
 
-export async function runDevelopmentBookingEvidence() {
-  const provider = createDevelopmentBookingProvider()
+export async function runDevelopmentProviderOperationEvidence() {
+  const provider = createDevelopmentProviderOperationProvider()
   const availability = await provider.availability()
-  const requestOrigin = { kind: 'request_owned', requestRef: 'mock:request:booking', revision: 1 } as const
+  const requestOrigin = { kind: 'request_owned', requestRef: 'mock:request:operation', revision: 1 } as const
   const standaloneOrigin = {
-    kind: 'standalone', callerRef: 'mock:caller:booking', principalRef: 'mock:principal:booking',
+    kind: 'standalone', callerRef: 'mock:caller:operation', principalRef: 'mock:principal:operation',
   } as const
 
-  const requestBooking = bookingInput(
-    availability, bookingActor(requestOrigin).principalRef, 'mock:operation:request-owned',
+  const requestOperation = providerOperationInput(
+    availability, providerOperationActor(requestOrigin).principalRef, 'mock:operation:request-owned',
   )
-  const standaloneBooking = bookingInput(
-    availability, bookingActor(standaloneOrigin).principalRef, 'mock:operation:standalone',
+  const standaloneOperation = providerOperationInput(
+    availability, providerOperationActor(standaloneOrigin).principalRef, 'mock:operation:standalone',
   )
-  const request = await runReservationInvocation({
-    provider, booking: requestBooking, origin: requestOrigin, ref: 'request-owned',
+  const request = await runProviderOperationInvocation({
+    provider, operation: requestOperation, origin: requestOrigin, ref: 'request-owned',
   })
-  const standalone = await runReservationInvocation({
-    provider, booking: standaloneBooking, origin: standaloneOrigin, ref: 'standalone',
+  const standalone = await runProviderOperationInvocation({
+    provider, operation: standaloneOperation, origin: standaloneOrigin, ref: 'standalone',
   })
 
   const sharedOriginA = {
@@ -48,21 +48,21 @@ export async function runDevelopmentBookingEvidence() {
   const sharedOriginB = {
     kind: 'standalone', callerRef: 'mock:caller:dedupe:b', principalRef: 'mock:principal:dedupe',
   } as const
-  const sharedBooking = bookingInput(
+  const sharedOperation = providerOperationInput(
     availability, sharedOriginA.principalRef, 'mock:operation:dedupe',
   )
   const effectsBeforeDedupe = provider.effectCount()
-  const dedupeA = await runReservationInvocation({
-    provider, booking: sharedBooking, origin: sharedOriginA, ref: 'dedupe-a',
+  const dedupeA = await runProviderOperationInvocation({
+    provider, operation: sharedOperation, origin: sharedOriginA, ref: 'dedupe-a',
   })
   const effectsAfterFirst = provider.effectCount()
-  const dedupeB = await runReservationInvocation({
-    provider, booking: structuredClone(sharedBooking), origin: sharedOriginB, ref: 'dedupe-b',
+  const dedupeB = await runProviderOperationInvocation({
+    provider, operation: structuredClone(sharedOperation), origin: sharedOriginB, ref: 'dedupe-b',
   })
   const effectsAfterReplay = provider.effectCount()
-  const conflict = await runReservationInvocation({
+  const conflict = await runProviderOperationInvocation({
     provider,
-    booking: { ...sharedBooking, customer: { ...sharedBooking.customer, email: 'changed@example.test' } },
+    operation: { ...sharedOperation, customer: { ...sharedOperation.customer, email: 'changed@example.test' } },
     origin: sharedOriginB,
     ref: 'dedupe-conflict',
   })
@@ -71,44 +71,44 @@ export async function runDevelopmentBookingEvidence() {
   const principalOrigin = {
     kind: 'standalone', callerRef: 'mock:caller:principal-refusal', principalRef: 'mock:principal:authority',
   } as const
-  const principalRefusal = await runReservationInvocation({
+  const principalRefusal = await runProviderOperationInvocation({
     provider,
-    booking: bookingInput(availability, 'mock:principal:other', 'mock:operation:principal-refusal'),
+    operation: providerOperationInput(availability, 'mock:principal:other', 'mock:operation:principal-refusal'),
     origin: principalOrigin,
     ref: 'principal-refusal',
   })
-  const expiredBooking = bookingInput(
+  const expiredOperation = providerOperationInput(
     availability, 'mock:principal:expired', 'mock:operation:expired',
   )
-  const expired = await runReservationInvocation({
+  const expired = await runProviderOperationInvocation({
     provider,
-    booking: expiredBooking,
+    operation: expiredOperation,
     origin: {
-      kind: 'standalone', callerRef: 'mock:caller:expired', principalRef: expiredBooking.customer.principalRef,
+      kind: 'standalone', callerRef: 'mock:caller:expired', principalRef: expiredOperation.customer.principalRef,
     },
     ref: 'expired',
-    nowMs: Date.parse(expiredBooking.slot.expiresAt) + 1,
+    nowMs: Date.parse(expiredOperation.slot.expiresAt) + 1,
   })
 
   const unknownOrigin = {
     kind: 'standalone', callerRef: 'mock:caller:unknown', principalRef: 'mock:principal:unknown',
   } as const
-  const recovery = await runBookingReconciliation({
+  const recovery = await runProviderOperationReconciliation({
     provider,
-    booking: bookingInput(availability, unknownOrigin.principalRef, 'mock:operation:unknown'),
+    operation: providerOperationInput(availability, unknownOrigin.principalRef, 'mock:operation:unknown'),
     origin: unknownOrigin,
   })
   const cancelBefore = runCancelBeforeRelease({
-    booking: bookingInput(availability, 'mock:principal:cancel-before', 'mock:operation:cancel-before'),
+    operation: providerOperationInput(availability, 'mock:principal:cancel-before', 'mock:operation:cancel-before'),
     origin: {
       kind: 'standalone', callerRef: 'mock:caller:cancel-before', principalRef: 'mock:principal:cancel-before',
     },
   })
 
-  const reservation = reservationResult(standalone.view.observedResolution)
+  const effect = effectResult(standalone.view.observedResolution)
   const cancellation = cancellationInput({
-    reservationRef: reservation.reservationRef,
-    providerRef: reservation.providerRef,
+    effectRef: effect.effectRef,
+    providerRef: effect.providerRef,
     principalRef: standalone.owner.principalRef,
     operationKey: 'mock:operation:cancellation',
   })
@@ -140,9 +140,9 @@ export async function runDevelopmentBookingEvidence() {
     events: {
       direct_read: [],
       direct_consequential: [
-        { kind: 'direct_runner_started', actionId: createDevelopmentReservationAction.id },
-        { kind: 'provider_release', actionId: createDevelopmentReservationAction.id },
-        { kind: 'direct_runner_returned', actionId: createDevelopmentReservationAction.id, outcome: 'reservation_confirmed' },
+        { kind: 'direct_runner_started', actionId: executeDevelopmentProviderOperationAction.id },
+        { kind: 'provider_release', actionId: executeDevelopmentProviderOperationAction.id },
+        { kind: 'direct_runner_returned', actionId: executeDevelopmentProviderOperationAction.id, outcome: 'effect_confirmed' },
       ],
       controlled: [
         ...standalone.events,
@@ -158,7 +158,7 @@ export async function runDevelopmentBookingEvidence() {
       terminalResultReconstructed: standalone.tracer.coldResume(standalone.view.invocationRef)
         .inspect(standalone.view.invocationRef)?.control.state === 'terminal',
       exactAuthorityBeforeRelease: authorityBeforeRelease,
-      retryClass: createDevelopmentReservationAction.invocationContract!.retryClass,
+      retryClass: executeDevelopmentProviderOperationAction.invocationContract!.retryClass,
     },
     referenceReuse: {
       completedReferences: 1, completedNodes: 1, currentNodes: 0,
@@ -169,25 +169,25 @@ export async function runDevelopmentBookingEvidence() {
   const executableChecks = {
     authorityBeforeRelease,
     dedupeThroughActionPlane:
-      reservationResult(dedupeA.view.observedResolution).reservationRef
-      === reservationResult(dedupeB.view.observedResolution).reservationRef
+      effectResult(dedupeA.view.observedResolution).effectRef
+      === effectResult(dedupeB.view.observedResolution).effectRef
       && effectsAfterFirst === effectsAfterReplay
       && effectsAfterFirst === effectsBeforeDedupe + 1,
     conflictWithoutEffect:
       conflict.view.observedResolution.state === 'returned'
-      && conflict.view.observedResolution.result.kind === 'reservation_refused'
+      && conflict.view.observedResolution.result.kind === 'effect_refused'
       && effectsAfterConflict === effectsAfterReplay,
     providerCancellation:
       cancellationRun.view.observedResolution.state === 'returned'
-      && cancellationRun.view.observedResolution.result.kind === 'reservation_cancellation_confirmed'
+      && cancellationRun.view.observedResolution.result.kind === 'effect_cancellation_confirmed'
       && provider.cancellationEffectCount() === cancellationEffectsBeforePrincipalRefusal,
   }
 
   return {
     environment: 'MOCK/DEVELOPMENT ONLY' as const,
     proofClass: 'labelled_local_development',
-    action: { id: createDevelopmentReservationAction.id, version: 'v1', surfaces: [] },
-    cancellationAction: { id: cancelDevelopmentReservationAction.id, version: 'v1', surfaces: [] },
+    action: { id: executeDevelopmentProviderOperationAction.id, version: 'v1', surfaces: [] },
+    cancellationAction: { id: cancelDevelopmentProviderOperationAction.id, version: 'v1', surfaces: [] },
     availability,
     eventOrder: standalone.events,
     origins: [request.view.origin, standalone.view.origin],
@@ -209,8 +209,8 @@ export async function runDevelopmentBookingEvidence() {
       conflict: cancellationConflict.view,
       principalRefusal: cancellationPrincipalRefusal.view,
       cancellationEffects: provider.cancellationEffectCount(),
-      originalReservation: standalone.view.observedResolution,
-      providerReservationRecord: provider.inspect(standaloneBooking.operationKey),
+      originalEffect: standalone.view.observedResolution,
+      providerEffectRecord: provider.inspect(standaloneOperation.operationKey),
     },
     durable: {
       terminal: projectDurableRun(standalone),
@@ -234,11 +234,11 @@ export async function runDevelopmentBookingEvidence() {
   }
 }
 
-function reservationResult(
-  resolution: import('@/modules/action-invocation').ActionInvocationView<DevelopmentBookingResult>['observedResolution'],
+function effectResult(
+  resolution: import('@/modules/action-invocation').ActionInvocationView<DevelopmentProviderOperationResult>['observedResolution'],
 ) {
-  if (resolution.state !== 'returned' || resolution.result.kind !== 'reservation_confirmed') {
-    throw new Error('confirmed_reservation_missing')
+  if (resolution.state !== 'returned' || resolution.result.kind !== 'effect_confirmed') {
+    throw new Error('confirmed_effect_missing')
   }
   return resolution.result
 }

@@ -4,59 +4,59 @@ import { homedir, tmpdir } from 'node:os'
 
 import { describe, expect, it } from 'vitest'
 
-import { runDevelopmentBookingEvidence } from '@/modules/booking/development-booking-evidence'
+import { runDevelopmentProviderOperationEvidence } from '@/modules/provider-operation-fixture/development-provider-operation-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  readAndVerifyBookingPacket,
+  readAndVerifyProviderOperationPacket,
   writeEvidencePacket,
 } from '../../../tools/dev/action-invocation-evidence-packet'
 
-describe('development booking evidence packet', () => {
+describe('development operation evidence packet', () => {
   it('refuses a checksummed packet whose durable terminal control was semantically tampered', async () => {
-    const scenario = await runDevelopmentBookingEvidence()
-    const gitRevision = 'test:booking-packet-revision'
+    const scenario = await runDevelopmentProviderOperationEvidence()
+    const gitRevision = 'test:operation-packet-revision'
     const packet = structuredClone({ gitRevision, ...scenario }) as Record<string, unknown>
     const durable = packet.durable as {
       terminal: { controls: Array<{ control: { control: unknown } }> }
     }
     durable.terminal.controls[0]!.control.control = { state: 'awaiting_authority' }
-    const path = join(tmpdir(), `ae-booking-tamper-${crypto.randomUUID()}.json`)
+    const path = join(tmpdir(), `ae-operation-tamper-${crypto.randomUUID()}.json`)
     await writeEvidencePacket(path, packet)
-    await expect(readAndVerifyBookingPacket(path, gitRevision))
-      .rejects.toThrow('packet_booking_control_reconstruction_refused')
+    await expect(readAndVerifyProviderOperationPacket(path, gitRevision))
+      .rejects.toThrow('packet_provider_operation_control_reconstruction_refused')
     const trash = join(homedir(), '.Trash')
     await mkdir(trash, { recursive: true })
-    await rename(path, join(trash, `ae-booking-tamper-${crypto.randomUUID()}.json`))
+    await rename(path, join(trash, `ae-operation-tamper-${crypto.randomUUID()}.json`))
   })
 
-  it('refuses recomputed-checksum reservation identity tampering', async () => {
-    const scenario = await runDevelopmentBookingEvidence()
+  it('refuses recomputed-checksum effect identity tampering', async () => {
+    const scenario = await runDevelopmentProviderOperationEvidence()
     const packet = structuredClone({ gitRevision: 'test:result-tamper', ...scenario }) as Record<string, unknown>
     const terminal = (packet.durable as {
       terminal: { source: { resultIdentity: { sourceResultRef: string } } }
     }).terminal
-    terminal.source.resultIdentity.sourceResultRef = 'mock:reservation:tampered'
-    await expectTamperRefused(packet, 'test:result-tamper', 'packet_booking_result_identity_refused')
+    terminal.source.resultIdentity.sourceResultRef = 'mock:effect:tampered'
+    await expectTamperRefused(packet, 'test:result-tamper', 'packet_provider_operation_result_identity_refused')
   })
 
   it('refuses recomputed-checksum attempt linkage tampering', async () => {
-    const scenario = await runDevelopmentBookingEvidence()
+    const scenario = await runDevelopmentProviderOperationEvidence()
     const packet = structuredClone({ gitRevision: 'test:attempt-tamper', ...scenario }) as Record<string, unknown>
     const terminal = (packet.durable as {
       terminal: { attempts: Array<{ invocationRef: string }> }
     }).terminal
     terminal.attempts[0]!.invocationRef = 'mock:invocation:wrong'
-    await expectTamperRefused(packet, 'test:attempt-tamper', 'packet_booking_attempt_linkage_refused')
+    await expectTamperRefused(packet, 'test:attempt-tamper', 'packet_provider_operation_attempt_linkage_refused')
   })
 
   it('refuses recomputed-checksum history invocation linkage tampering', async () => {
-    const scenario = await runDevelopmentBookingEvidence()
+    const scenario = await runDevelopmentProviderOperationEvidence()
     const packet = structuredClone({ gitRevision: 'test:history-tamper', ...scenario }) as Record<string, unknown>
     const terminal = (packet.durable as {
       terminal: { history: Array<{ invocationRef: string }> }
     }).terminal
     terminal.history[0]!.invocationRef = 'mock:invocation:wrong'
-    await expectTamperRefused(packet, 'test:history-tamper', 'packet_booking_history_linkage_refused')
+    await expectTamperRefused(packet, 'test:history-tamper', 'packet_provider_operation_history_linkage_refused')
   })
 
   it('refuses released terminal disposition rewritten to not released', async () => {
@@ -67,7 +67,7 @@ describe('development booking evidence packet', () => {
     await expectTamperRefused(
       packet,
       'test:resolution-tamper',
-      'packet_booking_reconciliation_disposition_refused',
+      'packet_provider_operation_reconciliation_disposition_refused',
     )
   })
 
@@ -77,7 +77,7 @@ describe('development booking evidence packet', () => {
     await expectTamperRefused(
       packet,
       'test:digest-tamper',
-      'packet_booking_reconciliation_evidence_refused:evidence_digest_mismatch',
+      'packet_provider_operation_reconciliation_evidence_refused:evidence_digest_mismatch',
     )
   })
 
@@ -89,7 +89,7 @@ describe('development booking evidence packet', () => {
     await expectTamperRefused(
       packet,
       'test:time-tamper',
-      'packet_booking_reconciliation_evidence_refused:evidence_time_invalid',
+      'packet_provider_operation_reconciliation_evidence_refused:evidence_time_invalid',
     )
   })
 })
@@ -102,7 +102,7 @@ type MutableEvidence = {
 }
 
 async function reconciliationTamperPacket(revision: string) {
-  const scenario = await runDevelopmentBookingEvidence()
+  const scenario = await runDevelopmentProviderOperationEvidence()
   return structuredClone({ gitRevision: revision, ...scenario }) as Record<string, unknown>
 }
 
@@ -122,10 +122,10 @@ async function expectTamperRefused(
   revision: string,
   error: string,
 ) {
-  const path = join(tmpdir(), `ae-booking-tamper-${crypto.randomUUID()}.json`)
+  const path = join(tmpdir(), `ae-operation-tamper-${crypto.randomUUID()}.json`)
   await writeEvidencePacket(path, packet)
-  await expect(readAndVerifyBookingPacket(path, revision)).rejects.toThrow(error)
+  await expect(readAndVerifyProviderOperationPacket(path, revision)).rejects.toThrow(error)
   const trash = join(homedir(), '.Trash')
   await mkdir(trash, { recursive: true })
-  await rename(path, join(trash, `ae-booking-tamper-${crypto.randomUUID()}.json`))
+  await rename(path, join(trash, `ae-operation-tamper-${crypto.randomUUID()}.json`))
 }

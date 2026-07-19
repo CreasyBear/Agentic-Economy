@@ -24,7 +24,7 @@ export type StandingMandateScope = Readonly<{
   allowedDataFields: readonly string[]
   maximumSpend: Readonly<{ amountMinor: number; currency: string }>
   maximumActionCount: number
-  maximumConcurrentReservations: number
+  maximumConcurrentEffects: number
   startsAt: string
   expiresAt: string
   permittedFallbacks: readonly string[]
@@ -520,7 +520,7 @@ export class StandingMandateStore {
     if (consumed.length + held.filter((use) => use.state === 'reserved').length >= mandate.scope.maximumActionCount) {
       return 'mandate_count_exhausted'
     }
-    if (held.length >= mandate.scope.maximumConcurrentReservations) return 'mandate_concurrency_exhausted'
+    if (held.length >= mandate.scope.maximumConcurrentEffects) return 'mandate_concurrency_exhausted'
     const committedSpend = uses
       .filter((use) => use.state !== 'not_released')
       .reduce((sum, use) => sum + use.reservedSpend.amountMinor, 0)
@@ -627,7 +627,7 @@ function assertMandateInput(
   if (
     input.version < 1 || input.generation < 1
     || input.scope.maximumActionCount < 1
-    || input.scope.maximumConcurrentReservations < 1
+    || input.scope.maximumConcurrentEffects < 1
     || input.scope.maximumSpend.amountMinor < 0
     || Date.parse(input.scope.startsAt) >= Date.parse(input.scope.expiresAt)
     || input.scope.providerRefs.length === 0

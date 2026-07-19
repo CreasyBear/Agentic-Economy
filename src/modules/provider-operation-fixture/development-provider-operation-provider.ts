@@ -4,65 +4,65 @@ import type {
   ExposureOffsetRuleIdentity,
   ExposureReleaseAttestationMaterial,
 } from '@/modules/action-invocation'
-import type { DevelopmentBookingSigningCustody } from './development-booking-signing-custody'
+import type { DevelopmentProviderOperationSigningCustody } from './development-provider-operation-signing-custody'
 import type {
-  DevelopmentBookingCancellationInput,
-  DevelopmentBookingCancellationResult,
-  DevelopmentBookingInput,
-  DevelopmentBookingResult,
-} from './development-booking.actions'
+  DevelopmentProviderOperationCancellationInput,
+  DevelopmentProviderOperationCancellationResult,
+  DevelopmentProviderOperationInput,
+  DevelopmentProviderOperationResult,
+} from './development-provider-operation.actions'
 
-export type DevelopmentAvailabilityObservation = DevelopmentBookingInput['slot']
+export type DevelopmentAvailabilityObservation = DevelopmentProviderOperationInput['slot']
 export const developmentCancellationConfirmationRule: ExposureOffsetRuleIdentity = {
-  evidenceRuleRef: 'development_booking.cancellation_confirmation',
-  source: 'development_booking.provider_records',
+  evidenceRuleRef: 'development_provider_operation.cancellation_confirmation',
+  source: 'development_provider_operation.provider_records',
   version: 'v1',
 }
 
-export type DevelopmentBookingProviderSnapshot = Readonly<{
+export type DevelopmentProviderOperationProviderSnapshot = Readonly<{
   options: Readonly<{
     providerRef?: string
     slotRef?: string
     refusal?: 'terms_changed' | 'provider_refused'
     exposureAmount?: Readonly<{ amountMinor: number; currency: string }>
   }>
-  reservations: readonly Readonly<{ operationKey: string; digest: string; input: DevelopmentBookingInput; result: DevelopmentBookingResult }>[]
+  effectRecords: readonly Readonly<{ operationKey: string; digest: string; input: DevelopmentProviderOperationInput; result: DevelopmentProviderOperationResult }>[]
   cancellations: readonly Readonly<{
     operationKey: string
     digest: string
-    input: DevelopmentBookingCancellationInput
-    result: DevelopmentBookingCancellationResult
+    input: DevelopmentProviderOperationCancellationInput
+    result: DevelopmentProviderOperationCancellationResult
   }>[]
   effects: number
   cancellationEffects: number
 }>
 
-export function createDevelopmentBookingProvider(options: Readonly<{
+export function createDevelopmentProviderOperationProvider(options: Readonly<{
   providerRef?: string
   slotRef?: string
   refusal?: 'terms_changed' | 'provider_refused'
   exposureAmount?: Readonly<{ amountMinor: number; currency: string }>
-  signingCustody?: DevelopmentBookingSigningCustody
-  snapshot?: DevelopmentBookingProviderSnapshot
+  signingCustody?: DevelopmentProviderOperationSigningCustody
+  snapshot?: DevelopmentProviderOperationProviderSnapshot
 }> = {}) {
-  const reservations = new Map<string, Readonly<{
+  const effectRecords = new Map<string, Readonly<{
     digest: string
-    input: DevelopmentBookingInput
-    result: DevelopmentBookingResult
-  }>>(options.snapshot?.reservations.map(({ operationKey, ...record }) => [operationKey, record]))
+    input: DevelopmentProviderOperationInput
+    result: DevelopmentProviderOperationResult
+  }>>(options.snapshot?.effectRecords.map(({ operationKey, ...record }) => [operationKey, record]))
   const cancellations = new Map<string, Readonly<{
     digest: string
-    input: DevelopmentBookingCancellationInput
-    result: DevelopmentBookingCancellationResult
+    input: DevelopmentProviderOperationCancellationInput
+    result: DevelopmentProviderOperationCancellationResult
   }>>(options.snapshot?.cancellations.map(({ operationKey, ...record }) => [operationKey, record]))
-  let effects = options.snapshot?.effects ?? 0
+  let effectCount = options.snapshot?.effects ?? 0
   let cancellationEffects = options.snapshot?.cancellationEffects ?? 0
   const availability: DevelopmentAvailabilityObservation = {
     slotRef: options.slotRef ?? 'mock:slot:2026-07-21T02:00Z',
     providerRef: options.providerRef ?? 'mock:provider:calendar',
     offeringRef: 'mock:offering:consultation',
-    bindingRef: 'mock:binding:calendar-create-reservation',
-    contractRef: 'calendar.create-reservation@1',
+    bindingRef: 'mock:binding:calendar-create-effect',
+    contractRef: 'calendar.create-effect@1',
     actionVersion: 'v1',
     startsAt: '2026-07-21T02:00:00.000Z',
     freshAt: '2026-07-19T04:00:00.000Z',
@@ -76,85 +76,85 @@ export function createDevelopmentBookingProvider(options: Readonly<{
   }
   return {
     availability: async () => structuredClone(availability),
-    check: async (input: DevelopmentBookingInput, now: number) => {
+    check: async (input: DevelopmentProviderOperationInput, now: number) => {
       const exact = canonicalDigest(input.slot) === canonicalDigest(availability)
       return exact && now < Date.parse(availability.expiresAt)
         ? { kind: 'current' as const }
         : { kind: 'stale' as const, reason: 'Provider slot identity, terms, provenance, or freshness changed.' }
     },
-    reserve: async (input: DevelopmentBookingInput): Promise<DevelopmentBookingResult> => {
+    execute: async (input: DevelopmentProviderOperationInput): Promise<DevelopmentProviderOperationResult> => {
       const digest = canonicalDigest(input)
-      const prior = reservations.get(input.operationKey)
+      const prior = effectRecords.get(input.operationKey)
       if (prior !== undefined) {
         if (prior.digest !== digest) {
           return {
-            kind: 'reservation_refused',
+            kind: 'effect_refused',
             environment: 'MOCK/DEVELOPMENT ONLY',
             code: 'terms_changed',
-            reason: 'The operation key was already used with different booking material.',
+            reason: 'The operation key was already used with different operation material.',
           }
         }
         return prior.result
       }
-      effects += 1
+      effectCount += 1
       if (options.refusal !== undefined) {
-        const result: DevelopmentBookingResult = {
-          kind: 'reservation_refused',
+        const result: DevelopmentProviderOperationResult = {
+          kind: 'effect_refused',
           environment: 'MOCK/DEVELOPMENT ONLY',
           code: options.refusal,
           reason: 'The development provider refused under its current terms.',
         }
-        reservations.set(input.operationKey, { digest, input: structuredClone(input), result })
+        effectRecords.set(input.operationKey, { digest, input: structuredClone(input), result })
         return result
       }
-      const result: DevelopmentBookingResult = {
-        kind: 'reservation_confirmed',
+      const result: DevelopmentProviderOperationResult = {
+        kind: 'effect_confirmed',
         environment: 'MOCK/DEVELOPMENT ONLY',
-        reservationRef: `mock:reservation:${canonicalDigest(input.operationKey).slice(-12)}`,
+        effectRef: `mock:effect:${canonicalDigest(input.operationKey).slice(-12)}`,
         providerRef: input.slot.providerRef,
         slotRef: input.slot.slotRef,
-        evidenceRef: `mock:reservation-evidence:${canonicalDigest(input.operationKey).slice(-12)}`,
+        evidenceRef: `mock:effect-evidence:${canonicalDigest(input.operationKey).slice(-12)}`,
       }
-      reservations.set(input.operationKey, { digest, input: structuredClone(input), result })
+      effectRecords.set(input.operationKey, { digest, input: structuredClone(input), result })
       return result
     },
-    checkCancellation: async (input: DevelopmentBookingCancellationInput) => {
-      const reservation = [...reservations.values()].find(({ result }) =>
-        result.kind === 'reservation_confirmed' && result.reservationRef === input.reservationRef)
-      return reservation !== undefined
-        && reservation.result.kind === 'reservation_confirmed'
-        && reservation.result.providerRef === input.providerRef
-        && reservation.input.customer.principalRef === input.principalRef
+    checkCancellation: async (input: DevelopmentProviderOperationCancellationInput) => {
+      const effect = [...effectRecords.values()].find(({ result }) =>
+        result.kind === 'effect_confirmed' && result.effectRef === input.effectRef)
+      return effect !== undefined
+        && effect.result.kind === 'effect_confirmed'
+        && effect.result.providerRef === input.providerRef
+        && effect.input.customer.principalRef === input.principalRef
         ? { kind: 'current' as const }
-        : { kind: 'refused' as const, reason: 'Provider reservation, provider, or principal ownership did not match.' }
+        : { kind: 'refused' as const, reason: 'Provider effect, provider, or principal ownership did not match.' }
     },
     cancel: async (
-      input: DevelopmentBookingCancellationInput,
-    ): Promise<DevelopmentBookingCancellationResult> => {
+      input: DevelopmentProviderOperationCancellationInput,
+    ): Promise<DevelopmentProviderOperationCancellationResult> => {
       const digest = canonicalDigest(input)
       const prior = cancellations.get(input.operationKey)
       if (prior !== undefined) {
         return prior.digest === digest ? prior.result : {
-          kind: 'reservation_cancellation_refused',
+          kind: 'effect_cancellation_refused',
           environment: 'MOCK/DEVELOPMENT ONLY',
           code: 'operation_key_conflict',
           reason: 'Cancellation operation key was already used with different material.',
         }
       }
-      const reservation = [...reservations.values()].find(({ result }) =>
-        result.kind === 'reservation_confirmed'
-        && result.reservationRef === input.reservationRef
+      const effect = [...effectRecords.values()].find(({ result }) =>
+        result.kind === 'effect_confirmed'
+        && result.effectRef === input.effectRef
         && result.providerRef === input.providerRef)
       if (
-        reservation === undefined
-        || reservation.result.kind !== 'reservation_confirmed'
-        || reservation.input.customer.principalRef !== input.principalRef
+        effect === undefined
+        || effect.result.kind !== 'effect_confirmed'
+        || effect.input.customer.principalRef !== input.principalRef
       ) {
         return {
-          kind: 'reservation_cancellation_refused',
+          kind: 'effect_cancellation_refused',
           environment: 'MOCK/DEVELOPMENT ONLY',
           code: 'provider_record_mismatch',
-          reason: 'Provider-owned reservation state did not authorize cancellation.',
+          reason: 'Provider-owned effect state did not authorize cancellation.',
         }
       }
       cancellationEffects += 1
@@ -165,18 +165,18 @@ export function createDevelopmentBookingProvider(options: Readonly<{
         ? undefined
         : issueExposureReleaseAttestation({
             input,
-            reservationRef: reservation.result.reservationRef,
-            providerRef: reservation.result.providerRef,
-            originalEvidenceRef: reservation.result.evidenceRef,
+            effectRef: effect.result.effectRef,
+            providerRef: effect.result.providerRef,
+            originalEvidenceRef: effect.result.evidenceRef,
             cancellationRef,
             cancellationEvidenceRef: evidenceRef,
             reversedAmount: options.exposureAmount ?? { amountMinor: 5_000, currency: 'AUD' },
             signingCustody: options.signingCustody,
           })
-      const result: DevelopmentBookingCancellationResult = {
-        kind: 'reservation_cancellation_confirmed',
+      const result: DevelopmentProviderOperationCancellationResult = {
+        kind: 'effect_cancellation_confirmed',
         environment: 'MOCK/DEVELOPMENT ONLY',
-        reservationRef: input.reservationRef,
+        effectRef: input.effectRef,
         cancellationRef,
         evidenceRef,
         ...(exposureReleaseAttestation === undefined ? {} : { exposureReleaseAttestation }),
@@ -184,52 +184,52 @@ export function createDevelopmentBookingProvider(options: Readonly<{
       cancellations.set(input.operationKey, { digest, input: structuredClone(input), result })
       return result
     },
-    effectCount: () => effects,
+    effectCount: () => effectCount,
     cancellationEffectCount: () => cancellationEffects,
-    inspect: (operationKey: string) => reservations.get(operationKey),
+    inspect: (operationKey: string) => effectRecords.get(operationKey),
     inspectCancellation: (operationKey: string) => cancellations.get(operationKey),
-    exportSnapshot: (): DevelopmentBookingProviderSnapshot => ({
+    exportSnapshot: (): DevelopmentProviderOperationProviderSnapshot => ({
       options: {
         ...(options.providerRef === undefined ? {} : { providerRef: options.providerRef }),
         ...(options.slotRef === undefined ? {} : { slotRef: options.slotRef }),
         ...(options.refusal === undefined ? {} : { refusal: options.refusal }),
         ...(options.exposureAmount === undefined ? {} : { exposureAmount: options.exposureAmount }),
       },
-      reservations: [...reservations.entries()].map(([operationKey, record]) => ({ operationKey, ...record })),
+      effectRecords: [...effectRecords.entries()].map(([operationKey, record]) => ({ operationKey, ...record })),
       cancellations: [...cancellations.entries()].map(([operationKey, record]) => ({ operationKey, ...record })),
-      effects,
+      effects: effectCount,
       cancellationEffects,
     }),
   }
 }
 
 function issueExposureReleaseAttestation(input: Readonly<{
-  input: DevelopmentBookingCancellationInput
-  reservationRef: string
+  input: DevelopmentProviderOperationCancellationInput
+  effectRef: string
   providerRef: string
   originalEvidenceRef: string
   cancellationRef: string
   cancellationEvidenceRef: string
   reversedAmount: Readonly<{ amountMinor: number; currency: string }>
-  signingCustody: DevelopmentBookingSigningCustody
+  signingCustody: DevelopmentProviderOperationSigningCustody
 }>) {
   if (
-    input.input.reservationRef !== input.reservationRef
+    input.input.effectRef !== input.effectRef
     || input.input.providerRef !== input.providerRef
-  ) throw new Error('development_booking_release_attestation_linkage_refused')
+  ) throw new Error('development_provider_operation_release_attestation_linkage_refused')
   const material: ExposureReleaseAttestationMaterial = {
     format: 'ae.exposure-release-attestation:v1',
     evidenceRule: developmentCancellationConfirmationRule,
     providerRef: input.providerRef,
     originalEffect: {
-      action: { id: 'booking.createDevelopmentReservation', version: 'v1' },
-      subjectRef: input.reservationRef,
-      resultRef: input.reservationRef,
+      action: { id: 'provider_operation.executeDevelopmentCancellable', version: 'v1' },
+      subjectRef: input.effectRef,
+      resultRef: input.effectRef,
       evidenceDigest: canonicalDigest(input.originalEvidenceRef as never),
     },
     cancellationEffect: {
-      action: { id: 'booking.cancelDevelopmentReservation', version: 'v1' },
-      subjectRef: input.reservationRef,
+      action: { id: 'provider_operation.cancelDevelopmentCancellable', version: 'v1' },
+      subjectRef: input.effectRef,
       resultRef: input.cancellationRef,
       evidenceDigest: canonicalDigest(input.cancellationEvidenceRef as never),
     },
@@ -244,7 +244,7 @@ function issueExposureReleaseAttestation(input: Readonly<{
     signature: signEd25519Attestation(
       digest,
       input.signingCustody.signingKey(),
-      'development_booking_release_signing_key_invalid',
+      'development_provider_operation_release_signing_key_invalid',
     ),
   }
 }

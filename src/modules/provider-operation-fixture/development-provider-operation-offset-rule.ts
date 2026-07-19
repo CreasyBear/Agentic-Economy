@@ -1,3 +1,3 @@
 export {
   developmentCancellationConfirmationRule,
-} from './development-booking-provider'
+} from './development-provider-operation-provider'

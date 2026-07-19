@@ -1,18 +1,18 @@
 import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
 
-import { runDevelopmentBookingEvidence } from '../../src/modules/booking/development-booking-evidence'
-import { readAndVerifyBookingPacket, writeEvidencePacket } from './action-invocation-evidence-packet'
+import { runDevelopmentProviderOperationEvidence } from '../../src/modules/provider-operation-fixture/development-provider-operation-evidence'
+import { readAndVerifyProviderOperationPacket, writeEvidencePacket } from './action-invocation-evidence-packet'
 
 const revision = () => execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
 const [command, rawPath] = process.argv.slice(2)
 if ((command !== 'run' && command !== 'verify') || rawPath === undefined) {
-  throw new Error('usage: npm run evidence:booking:development -- <run|verify> <output-path>')
+  throw new Error('usage: npm run evidence:operation:development -- <run|verify> <output-path>')
 }
 const path = resolve(rawPath)
 const gitRevision = revision()
 if (command === 'run') {
-  const scenario = await runDevelopmentBookingEvidence()
+  const scenario = await runDevelopmentProviderOperationEvidence()
   const envelope = await writeEvidencePacket(path, { gitRevision, ...scenario })
   console.log(JSON.stringify({
     environment: scenario.environment, path, gitRevision, checksum: envelope.checksum,
@@ -21,6 +21,6 @@ if (command === 'run') {
 } else {
   console.log(JSON.stringify({
     environment: 'MOCK/DEVELOPMENT ONLY', command: 'verify', path,
-    ...(await readAndVerifyBookingPacket(path, gitRevision)),
+    ...(await readAndVerifyProviderOperationPacket(path, gitRevision)),
   }, null, 2))
 }

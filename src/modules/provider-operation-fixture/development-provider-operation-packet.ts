@@ -5,12 +5,12 @@ import {
   createDevelopmentDurableState,
   createDurableActionInvocationTracer,
 } from '@/modules/action-invocation'
-import type { BookingInvocationRun } from './development-booking-runner'
+import type { ProviderOperationInvocationRun } from './development-provider-operation-runner'
 
 export function projectDurableRun<Result extends ActionResult>(
-  run: BookingInvocationRun<Result & (
-    import('./development-booking.actions').DevelopmentBookingResult |
-    import('./development-booking.actions').DevelopmentBookingCancellationResult
+  run: ProviderOperationInvocationRun<Result & (
+    import('./development-provider-operation.actions').DevelopmentProviderOperationResult |
+    import('./development-provider-operation.actions').DevelopmentProviderOperationCancellationResult
   )>,
 ) {
   return {
@@ -26,7 +26,7 @@ export function projectDurableRun<Result extends ActionResult>(
   }
 }
 
-export function reconstructDevelopmentBookingInvocation(input: Readonly<{
+export function reconstructDevelopmentProviderOperationInvocation(input: Readonly<{
   invocationRef: string
   action: AnyAction
   durable: ReturnType<typeof projectDurableRun>
@@ -64,6 +64,6 @@ export function reconstructDevelopmentBookingInvocation(input: Readonly<{
     }),
   })
   const view = tracer.coldResume(input.invocationRef).inspect(input.invocationRef)
-  if (view === undefined) throw new Error('development_booking_cold_reconstruction_failed')
+  if (view === undefined) throw new Error('development_provider_operation_cold_reconstruction_failed')
   return { view, state }
 }

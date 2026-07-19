@@ -33,7 +33,7 @@
     "evidence:direct-endpoint-baseline:development": "tsx tools/dev/direct-endpoint-baseline.ts",
     "evidence:adr-010:gate-10:run": "tsx tools/dev/adr-010-gate-10-run.ts",
     "evidence:adr-010:gate-10:verify": "tsx tools/dev/adr-010-gate-10-verify.ts",
-    "evidence:booking:development": "tsx tools/dev/development-booking-evidence.ts",
+    "evidence:operation:development": "tsx tools/dev/development-provider-operation-evidence.ts",
     "evidence:bounded-mandate:development": "tsx tools/dev/bounded-mandate-evidence-packet.ts",
     "evidence:full-yolo:development": "tsx tools/dev/full-yolo-evidence-packet.ts",
     "smoke:customer-request:production:temporary-key": "tsx tools/release/customer-request-production-credential.ts",
