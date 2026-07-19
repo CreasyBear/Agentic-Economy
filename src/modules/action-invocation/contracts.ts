@@ -31,6 +31,7 @@ export type DecisionRefusalCode =
   | 'lease_not_current'
   | 'effect_generation_stale'
   | 'invalid_control_state'
+  | 'command_identity_conflict'
 
 export type ActionAttemptView = Readonly<{
   attemptRef: string
@@ -60,7 +61,7 @@ export type ActionInvocationView<Result extends ActionResult = ActionResult> = R
   invocationRef: string
   invocationVersion: number
   environment: 'MOCK/DEVELOPMENT ONLY'
-  persistence: 'in_memory_only'
+  persistence: 'in_memory_only' | 'durable_control'
   origin: ActionInvocationOrigin
   owner: InvocationActor
   action: Readonly<{ id: string; contractVersion: string }>

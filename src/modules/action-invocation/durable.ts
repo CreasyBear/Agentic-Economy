@@ -1,0 +1,298 @@
+import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
+import { stableHash } from '@/modules/common/stable-hash'
+import type {
+  ActionInvocationTracer,
+  ActionInvocationView,
+  InMemoryControlSnapshot,
+  InvocationDecision,
+  PreparedInvocation,
+} from './contracts'
+import { createInMemoryActionInvocationTracer } from './in-memory'
+import type {
+  DurableActionInvocationPort,
+  DurableAttemptRow,
+  DurableControlRow,
+  PersistControlResult,
+} from './internal/durable-contracts'
+import type { InMemoryTracerOptions } from './in-memory-record-store'
+
+export type DurableTracerOptions<Input, Result extends ActionResult> =
+  Omit<InMemoryTracerOptions<Input, Result>, 'initialSnapshot' | 'resolveSourceState'> & Readonly<{
+    port: DurableActionInvocationPort<Result>
+    resolveSourceState(sourceRef: string): Readonly<{
+      input: Input
+      context: ActionContext
+      prepared: PreparedInvocation | undefined
+      observedResolution: ActionInvocationView<Result>['observedResolution']
+      resultIdentity?: Readonly<{ sourceResultRef: string; resultDigest: string }>
+    }>
+  }>
+
+export type DurableActionInvocationTracer<Input, Result extends ActionResult> =
+  ActionInvocationTracer<Input, Result> & Readonly<{
+    coldResume(invocationRef: string): DurableActionInvocationTracer<Input, Result>
+    recordLateObservation(input: Readonly<{
+      invocationRef: string
+      commandId: string
+      effectGeneration: number
+      actorRef: string
+      sourceEvidenceRef: string
+      release: 'not_released' | 'released' | 'possibly_released'
+      evidenceDigest: string
+    }>): PersistControlResult
+  }>
+
+export function createDurableActionInvocationTracer<Input, Result extends ActionResult>(
+  options: DurableTracerOptions<Input, Result>,
+  resumeInvocationRef?: string,
+): DurableActionInvocationTracer<Input, Result> {
+  const resumed = resumeInvocationRef === undefined
+    ? undefined
+    : reconstructSnapshot(options.port, resumeInvocationRef)
+  const makeMemory = (snapshot = resumed) => createInMemoryActionInvocationTracer({
+    ...options,
+    ...(snapshot === undefined ? {} : { initialSnapshot: snapshot }),
+    resolveSourceState: (sourceRef) => {
+      const source = options.resolveSourceState(sourceRef)
+      if (source.prepared === undefined) throw new Error(`Source ${sourceRef} has no prepared state.`)
+      return { ...source, prepared: source.prepared }
+    },
+  })
+  let memory = makeMemory()
+
+  const persist = (
+    beforeVersion: number | null,
+    view: ActionInvocationView<Result>,
+    kind: string,
+    expectedEffectGeneration?: number,
+  ): PersistControlResult => {
+    const snapshot = memory.exportSnapshot()
+    const record = snapshot.records.find(({ control }) => control.invocationRef === view.invocationRef)
+    if (record === undefined) throw new Error(`Missing control snapshot for ${view.invocationRef}.`)
+    const leasedControl = view.control.state === 'leased' ? view.control : undefined
+    const currentAttempt = leasedControl === undefined
+      ? undefined
+      : view.attempts.find(({ attemptRef }) => attemptRef === leasedControl.attemptRef)
+    const sourceState = options.resolveSourceState(record.sourceRef)
+    const returned = view.observedResolution.state === 'returned'
+      ? view.observedResolution
+      : undefined
+    if (
+      returned !== undefined &&
+      sourceState.resultIdentity !== undefined &&
+      sourceState.resultIdentity.resultDigest !== String(stableHash(returned.result as never))
+    ) throw new Error(`Source result digest mismatch for ${view.invocationRef}.`)
+    const row: DurableControlRow<Result> = {
+      invocationRef: view.invocationRef,
+      invocationVersion: view.invocationVersion,
+      sourceRef: record.sourceRef,
+      ...(returned === undefined || sourceState.resultIdentity === undefined ? {} : {
+        sourceResultRef: sourceState.resultIdentity.sourceResultRef,
+        sourceResultDigest: sourceState.resultIdentity.resultDigest,
+        terminalBusinessOutcome: returned.businessOutcome,
+      }),
+      control: { ...record.control, persistence: 'durable_control' },
+      ...(record.authorityBinding === undefined ? {} : { authorityBinding: record.authorityBinding }),
+      ...(view.prepared === undefined ? {} : {
+        preparedMaterialDigest: view.prepared.materialInputDigest,
+        preparedTargetDigest: String(stableHash(view.prepared.target)),
+        consequence: view.prepared.consequence,
+        dataLimitSummary: view.prepared.dataUse.limits,
+      }),
+      ...(view.control.state === 'authorized' ? { authorityDecisionAt: view.control.decidedAt } : {}),
+      ...(currentAttempt === undefined ? {} : {
+        currentAttemptRef: currentAttempt.attemptRef,
+        currentEffectGeneration: currentAttempt.effectGeneration,
+        currentLeaseOwner: currentAttempt.lease.owner,
+        currentLeaseExpiresAt: currentAttempt.lease.expiresAt,
+      }),
+      updatedAt: options.now(),
+    }
+    const newestAttempt = kind === 'acquire' ? view.attempts.at(-1) : undefined
+    const newAttempt: DurableAttemptRow | undefined = newestAttempt === undefined ? undefined : ({
+      ...newestAttempt,
+      invocationRef: view.invocationRef,
+      recordedAt: options.now(),
+    })
+    const commandIdentity = {
+      invocationRef: view.invocationRef,
+      expectedInvocationVersion: beforeVersion,
+      expectedEffectGeneration: expectedEffectGeneration ?? null,
+      kind,
+      nextInvocationVersion: view.invocationVersion,
+      control: view.control,
+    }
+    const commandDigest = String(stableHash(commandIdentity))
+    const commandId = `${view.invocationRef}:${beforeVersion ?? 'create'}:${kind}`
+    return options.port.transact({
+      commandId,
+      commandDigest,
+      expectedInvocationVersion: beforeVersion,
+      ...(expectedEffectGeneration === undefined ? {} : { expectedEffectGeneration }),
+      row,
+      ...(newAttempt === undefined ? {} : { newAttempt }),
+      history: {
+        invocationRef: view.invocationRef,
+        commandId,
+        commandDigest,
+        commandResult: 'applied',
+        kind,
+      },
+    })
+  }
+
+  const accept = (
+    beforeVersion: number,
+    decision: InvocationDecision<Result>,
+    kind: string,
+    generation?: number,
+  ): InvocationDecision<Result> => {
+    if (decision.kind !== 'accepted') return decision
+    const result = persist(beforeVersion, decision.view, kind, generation)
+    if (result.kind === 'refused') {
+      memory = makeMemory(reconstructSnapshot(options.port, decision.view.invocationRef))
+      const durableView = memory.inspect(decision.view.invocationRef)
+      return durableView === undefined
+        ? { kind: 'refused', code: result.code }
+        : { kind: 'refused', code: result.code, view: durableView }
+    }
+    return { ...decision, view: { ...decision.view, persistence: 'durable_control' } }
+  }
+
+  return {
+    async invoke(input) {
+      const view = await memory.invoke(input)
+      const result = persist(null, view, 'invoke')
+      if (result.kind === 'refused') throw new Error(`Durable invoke refused: ${result.code}`)
+      return { ...view, persistence: 'durable_control' }
+    },
+    prepare(input) {
+      const view = memory.prepare(input)
+      const result = persist(null, view, 'prepare')
+      if (result.kind === 'refused') throw new Error(`Durable prepare refused: ${result.code}`)
+      return { ...view, persistence: 'durable_control' }
+    },
+    decide(input) {
+      return accept(input.expectedInvocationVersion, memory.decide(input), 'decide')
+    },
+    async execute(input) {
+      return accept(input.expectedInvocationVersion, await memory.execute(input), 'execute')
+    },
+    acquire(input) {
+      return accept(input.expectedInvocationVersion, memory.acquire(input), 'acquire')
+    },
+    async executeAcquired(input) {
+      return accept(
+        input.expectedInvocationVersion,
+        await memory.executeAcquired(input),
+        'execute_acquired',
+        input.effectGeneration,
+      )
+    },
+    publishObservation(input) {
+      return accept(
+        input.expectedInvocationVersion,
+        memory.publishObservation(input),
+        'publish_observation',
+        input.effectGeneration,
+      )
+    },
+    cancel(input) {
+      return accept(input.expectedInvocationVersion, memory.cancel(input), 'cancel')
+    },
+    reconcile(input) {
+      return accept(input.expectedInvocationVersion, memory.reconcile(input), 'reconcile')
+    },
+    inspect(invocationRef) {
+      const view = memory.inspect(invocationRef)
+      return view === undefined ? undefined : { ...view, persistence: 'durable_control' }
+    },
+    exportSnapshot: memory.exportSnapshot,
+    coldResume(invocationRef) {
+      return createDurableActionInvocationTracer(options, invocationRef)
+    },
+    recordLateObservation(input) {
+      return options.port.recordLateObservation({ ...input, recordedAt: options.now() })
+    },
+  }
+}
+
+function reconstructSnapshot<Input, Result extends ActionResult>(
+  port: DurableActionInvocationPort<Result>,
+  invocationRef: string,
+): InMemoryControlSnapshot<Input, Result> {
+  const row = port.readControl(invocationRef)
+  if (row === undefined) throw new Error(`Missing durable invocation ${invocationRef}.`)
+  const attempts = port.readAttempts(invocationRef, 100)
+  return {
+    format: 'action-invocation-control:development:v1',
+    records: [{
+      sourceRef: row.sourceRef,
+      control: {
+        ...row.control,
+        persistence: 'in_memory_only',
+        attempts,
+      },
+      ...(row.authorityBinding === undefined ? {} : { authorityBinding: row.authorityBinding }),
+    }],
+  }
+}
+
+export type { DurableActionInvocationPort } from './internal/durable-contracts'
+export {
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
+} from './internal/development-durable-port'
+export type { AsyncDurableActionInvocationPort } from './internal/async-durable-port'
+
+export type CompletedResultIdentity =
+  | Readonly<{
+      kind: 'completed_result'
+      invocationRef: string
+      sourceRef: string
+      sourceResultRef: string
+      resultDigest: string
+      businessOutcome: string
+    }>
+  | Readonly<{ kind: 'refused'; code: 'invocation_not_found' | 'cross_principal_refused' | 'request_owned_refused' | 'invocation_not_terminal' | 'source_result_mismatch' }>
+
+export function readCompletedResultIdentity<Result extends ActionResult>(
+  port: DurableActionInvocationPort<Result>,
+  invocationRef: string,
+  actor: Readonly<{ callerRef: string; principalRef: string }>,
+  resolve: (sourceRef: string) => Readonly<{
+    sourceResultRef?: string
+    result?: Result
+  }>,
+): CompletedResultIdentity {
+  const row = port.readControl(invocationRef)
+  if (row === undefined) return { kind: 'refused', code: 'invocation_not_found' }
+  if (
+    row.control.owner.callerRef !== actor.callerRef ||
+    row.control.owner.principalRef !== actor.principalRef
+  ) return { kind: 'refused', code: 'cross_principal_refused' }
+  if (row.control.origin.kind !== 'standalone') {
+    return { kind: 'refused', code: 'request_owned_refused' }
+  }
+  if (
+    row.control.control.state !== 'terminal' ||
+    row.sourceResultRef === undefined ||
+    row.sourceResultDigest === undefined ||
+    (row.terminalBusinessOutcome !== 'queued_communication' &&
+      row.terminalBusinessOutcome !== 'completed')
+  ) return { kind: 'refused', code: 'invocation_not_terminal' }
+  const source = resolve(row.sourceRef)
+  if (
+    source.sourceResultRef !== row.sourceResultRef ||
+    source.result === undefined ||
+    String(stableHash(source.result as never)) !== row.sourceResultDigest
+  ) return { kind: 'refused', code: 'source_result_mismatch' }
+  return {
+    kind: 'completed_result',
+    invocationRef,
+    sourceRef: row.sourceRef,
+    sourceResultRef: row.sourceResultRef,
+    resultDigest: row.sourceResultDigest,
+    businessOutcome: row.terminalBusinessOutcome,
+  }
+}

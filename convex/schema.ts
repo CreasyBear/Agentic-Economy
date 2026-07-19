@@ -5,6 +5,7 @@ import { catalogTables } from '../src/modules/catalog/internal/schema'
 import { capabilityContractRegistryTables } from '../src/modules/capability-contract-registry/internal/convex-schema'
 import { capabilitySupplyTables } from '../src/modules/capability-supply/internal/convex-schema'
 import { customerRequestTables } from '../src/modules/customer-request/internal/convex-schema'
+import { actionInvocationTables } from '../src/modules/action-invocation/internal/convex-schema'
 import { demandTables } from '../src/modules/demand/internal/schema'
 import { discoveryTables } from '../src/modules/discovery/internal/schema'
 import { harnessTables } from '../src/modules/harness/internal/convex-schema'
@@ -18,6 +19,7 @@ import { securityTables } from '../src/modules/security/internal/schema'
 import { settingsTables } from '../src/modules/settings/internal/schema'
 
 export default defineSchema({
+  ...actionInvocationTables,
   ...answerThreadTables,
   ...businessTables,
   ...catalogTables,
