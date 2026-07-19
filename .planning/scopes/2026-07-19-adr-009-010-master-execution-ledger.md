@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `d916d28d`
+**Current accepted revision:** `8ac11190`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -60,7 +60,7 @@ parallel plan.
 | 6. Preparation and exact authority | Implemented | `ccd21ad2` |
 | 7. Attributable effect attempt | Implemented | `f4b77026`, `f1cc1fb6` |
 | 8. Interruption and uncertainty | Implemented in deterministic labelled development execution | `f4b77026`, `8d3fe91a`, `e5079e23`, `2bb08013`, `98ccb155` |
-| 9. Concurrency and recovery | Partial: in-memory fencing/recovery proven; true expired-lease takeover and durable both-origin parity remain | `f1cc1fb6`, `8d3fe91a`, `0d5131a3` |
+| 9. Concurrency and recovery | Implemented in deterministic labelled development execution | `f1cc1fb6`, `8d3fe91a`, `0d5131a3`, `4a8e215b`, `8b57b2f1`, `890404d4`, `8ac11190` |
 | 10. Earned persistence | Implemented in labelled development execution; current attempt reconstruction repaired; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d` |
 | 11. Request reuse | Implemented in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0` |
 | 12. Composition and direct control | Not implemented | — |
@@ -305,6 +305,61 @@ Not established:
 - completed-result reuse inside Customer Request;
 - provider/network release, delivery, fulfilment, hosted, or production
   behavior.
+
+### Canonical slice 9 completion — durable expiry and single effect permit
+
+**Accepted commits:** `4a8e215b`, `8b57b2f1`, `890404d4`, `8ac11190`
+**Child commits:** `a1da4819dc0999ed1efb891124472d2c3bdccedb`,
+`9c991b851aacf63590379c16dbae65e40d4bae2b`,
+`ba0af72f2d6102fa5bd5d17f804900f2697411b7`,
+`c1eb7e27ae1c3bee3def8b0a60ef9917f3527412`
+**Child task:** `019f79df-dc57-7581-8f4b-eb1f123d63bd`
+**Assigned base:** `eec3bb1e`
+**Evidence class:** deterministic labelled local-development concurrency and
+recovery; private Convex transaction contract inspected but not invoked
+
+Implemented:
+
+- real lease expiry moves the attributable attempt to
+  `possibly_released`/`reconciliation_required`; it is not represented as
+  ordinary retry or a synthetic takeover;
+- source-verified non-release is required before a new owner can acquire a
+  strictly higher effect generation;
+- stale invocation versions, owners, attempts, and effect generations cannot
+  release, run, publish current evidence, or overwrite a newer state;
+- the durable `begin_release` transition is accepted before `action.run`, and
+  completion is a separate transaction fenced to the exact acquired token;
+- only a newly applied `begin_release` transaction grants one effect permit;
+  exact duplicate release commands fail closed and never call the runner;
+- sync and async persistence rehydrate the exact durable winner after a CAS
+  loss rather than exposing locally advanced state;
+- async operations use operation-local command queues and refusal state, so
+  concurrent invocations cannot flush, discard, or consume each other's
+  persistence commands;
+- cancellation before release records no effect; cancellation after durable
+  possible release preserves reconciliation, and late completion cannot become
+  current;
+- late evidence remains attributable, append-only, and non-current;
+- Request-owned and standalone origins reconstruct owner, origin, authority,
+  current attempt, generation, uncertainty/cancellation, and safe continuation
+  through fresh sync and async development ports;
+- the current attempt remains reconstructable beyond the bounded first 100
+  attempt rows through an exact indexed read;
+- non-duplicate control writes must advance invocation version, while exact
+  non-effect command replay remains idempotent.
+
+Master verification:
+
+- focused Action Invocation, private-handler contract, supplied-quote, and
+  Request-reuse checks passed 67/67;
+- scoped Oxlint and `git diff --check` passed;
+- protected dirty files remained untouched.
+
+Not established:
+
+- execution of the private Convex handlers or deployed process-kill recovery;
+- production worker isolation, provider idempotency, fulfilment, or safety;
+- hosted or customer-value evidence.
 
 ### Canonical slice 10 — earned durable control and cold resume
 
