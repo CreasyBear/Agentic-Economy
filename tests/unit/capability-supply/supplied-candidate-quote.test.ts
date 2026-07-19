@@ -1,124 +1,251 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { defineCapabilityContract } from '@/modules/capability-contract/public'
+import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
+import type {
+  CapabilityGraphPorts,
+  GraphPublicationRow,
+} from '@/modules/capability-supply/internal/graph'
+import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
 import {
-  createDevelopmentReleaseSignal,
-  createInMemoryActionInvocationTracer,
-  roundTripControlSnapshot,
-  type ActionInvocationOrigin,
-  type InvocationActor,
-} from '@/modules/action-invocation'
+  capabilityBindingEligibilityHash,
+  capabilityBindingRegistrationHash,
+  capabilityOfferingEligibilityHash,
+  capabilityOfferingRegistrationHash,
+  defineCapabilityOfferingRegistration,
+  defineCapabilityTransportBindingRegistration,
+} from '@/modules/capability-supply/public'
 import {
   collectSuppliedCandidateQuoteAction,
   prepareSuppliedCandidateQuote,
-  type SuppliedCandidateQualification,
+  qualifySuppliedCandidate,
+  suppliedCandidateQuoteInputSchema,
   type SuppliedCandidateQuoteInput,
+  type SuppliedCandidateQuoteResult,
 } from '@/modules/capability-supply/server'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  createDevelopmentDurablePort,
+  createDevelopmentDurableState,
+  createDevelopmentReleaseSignal,
+  createDurableActionInvocationTracer,
+  createInMemoryActionInvocationTracer,
+  type ActionInvocationOrigin,
+  type ActionInvocationView,
+  type InvocationActor,
+  type PreparedInvocation,
+} from '@/modules/action-invocation'
+import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
 
 const nowMs = Date.parse('2026-07-19T08:00:00.000Z')
 const nowIso = () => new Date(nowMs).toISOString()
 const actor: InvocationActor = { callerRef: 'dev:caller', principalRef: 'dev:principal' }
+const contract = defineCapabilityContract(capabilityContractV2({
+  capabilityId: 'sandbox.route.service.quote',
+  lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
+}))
 const candidate = {
   publicationRef: 'dev:publication',
   revision: 3,
   businessId: 'dev:business',
   offeringId: 'dev:offering',
   bindingId: 'dev:binding',
-  contractRef: {
-    capabilityId: 'sandbox.route.service.quote',
-    version: 1,
-    contractDigest: `sha256:${'a'.repeat(64)}`,
-  },
+  contractRef: contract.ref,
 }
-const qualification: SuppliedCandidateQualification = {
-  kind: 'supplied_candidate_qualification',
-  environment: 'SOURCE-OWNED DEVELOPMENT EVIDENCE',
-  candidate,
-  status: 'eligible',
-  reasons: [],
-  observedAt: nowMs - 1_000,
-  validUntil: nowMs + 60_000,
-  qualificationDigest: `sha256:${'b'.repeat(64)}`,
-  sources: [],
-}
-const quoteInput: SuppliedCandidateQuoteInput = {
-  target: candidate,
-  qualificationDigest: qualification.qualificationDigest,
-  qualificationValidUntil: qualification.validUntil!,
-  quoteRequest: {
-    serviceReference: 'dev:service:aircon-assessment',
-    requestedFields: ['price', 'validUntil', 'terms'],
-    constraints: { suburb: 'Perth', timing: 'within 7 days' },
-  },
-  disclosure: {
-    fields: ['quoteRequest.serviceReference', 'quoteRequest.constraints.suburb', 'quoteRequest.constraints.timing'],
-    limits: {
-      'quoteRequest.serviceReference': 500,
-      'quoteRequest.constraints.suburb': 120,
-      'quoteRequest.constraints.timing': 120,
+const offeringRegistration = defineCapabilityOfferingRegistration({
+  offeringId: candidate.offeringId,
+  businessId: candidate.businessId,
+  networkId: 'ae:public',
+  contractRef: contract.ref,
+  presentation: {
+    label: 'Development quote provider',
+    summary: 'Labelled fixture supply for quote collection evaluation.',
+    price: { kind: 'on_request' },
+    materialTerms: [],
+    commercialRelationship: {
+      kind: 'none',
+      summary: 'No commercial influence in this development fixture.',
+      influencesEligibility: false,
+      influencesInclusion: false,
+      influencesOrder: false,
+      evidenceRefs: ['dev:commercial'],
     },
-    purpose: 'request_development_quote',
   },
-  operationKey: 'dev:quote-operation:0001',
-}
+  searchTerms: ['development quote'],
+  registrationEvidenceRefs: ['dev:offering-registration'],
+})
+const bindingRegistration = defineCapabilityTransportBindingRegistration({
+  bindingId: candidate.bindingId,
+  offeringId: candidate.offeringId,
+  networkId: 'ae:public',
+  contractRef: contract.ref,
+  endpointUrl: 'https://development.invalid/quote',
+  credentialRef: 'dev:credential',
+  continuation: { kind: 'single_response', evidenceRefs: ['dev:continuation'] },
+  cancellation: { kind: 'unsupported', evidenceRefs: ['dev:cancellation'] },
+  adapter: { adapterId: 'http-json:v1', config: null },
+  registrationEvidenceRefs: ['dev:binding-registration'],
+})
+const admittedTransport = { configJson: 'null', configDigest: canonicalDigest(null) }
 const origins: readonly ActionInvocationOrigin[] = [
   { kind: 'request_owned', requestRef: 'dev:request', revision: 4 },
   { kind: 'standalone', ...actor },
 ]
 
-function tracer(adapter: ReturnType<typeof vi.fn>, releaseSignal = createDevelopmentReleaseSignal()) {
+function offering(overrides: Partial<CapabilityOfferingRow> = {}): CapabilityOfferingRow {
+  const registrationHash = capabilityOfferingRegistrationHash(offeringRegistration)
+  const status = overrides.status ?? 'active'
+  const admissionEvidenceRefs = ['dev:offering-admission']
   return {
-    control: createInMemoryActionInvocationTracer({
-      action: collectSuppliedCandidateQuoteAction,
-      now: nowIso,
-      nextInvocationRef: () => `dev:invocation:${Math.random()}`,
-      nextAuthorityRef: () => 'dev:authority:quote',
-      nextAttemptRef: () => 'dev:attempt:quote',
-      developmentReleaseSignal: releaseSignal,
+    ...offeringRegistration,
+    ...contract.ref,
+    registrationHash,
+    status,
+    admissionEvidenceRefs,
+    eligibilityHash: capabilityOfferingEligibilityHash({
+      offeringId: candidate.offeringId,
+      registrationHash,
+      status,
+      admissionEvidenceRefs,
     }),
-    context: { developmentOnlySuppliedQuoteAdapter: adapter },
-    releaseSignal,
+    registeredAt: nowMs - 10_000,
+    updatedAt: nowMs - 10_000,
+    ...overrides,
   }
 }
 
-async function authorizeAndExecute(
-  origin: ActionInvocationOrigin,
-  adapter: ReturnType<typeof vi.fn>,
-) {
-  const harness = tracer(adapter)
-  const prepared = prepareSuppliedCandidateQuote({
-    tracer: harness.control,
-    qualification,
-    invocationInput: quoteInput,
-    origin,
-    actor,
-    context: harness.context,
-    now: nowMs,
+function binding(overrides: Partial<CapabilityBindingRow> = {}): CapabilityBindingRow {
+  const registrationHash = capabilityBindingRegistrationHash(bindingRegistration, admittedTransport)
+  const admission = overrides.admission ?? 'admitted'
+  const conformance = overrides.conformance ?? 'conformant'
+  const admissionEvidenceRefs = ['dev:binding-admission']
+  const conformanceEvidenceRefs = ['dev:binding-conformance']
+  return {
+    _id: 'dev:binding-row',
+    _creationTime: nowMs - 10_000,
+    bindingId: candidate.bindingId,
+    offeringId: candidate.offeringId,
+    networkId: 'ae:public',
+    ...contract.ref,
+    endpointUrl: bindingRegistration.endpointUrl,
+    credentialRef: bindingRegistration.credentialRef,
+    continuation: bindingRegistration.continuation,
+    cancellation: bindingRegistration.cancellation,
+    adapterId: bindingRegistration.adapter.adapterId,
+    ...admittedTransport,
+    registrationEvidenceRefs: bindingRegistration.registrationEvidenceRefs,
+    registrationHash,
+    admission,
+    conformance,
+    admissionEvidenceRefs,
+    conformanceEvidenceRefs,
+    eligibilityHash: capabilityBindingEligibilityHash({
+      bindingId: candidate.bindingId,
+      registrationHash,
+      admission,
+      conformance,
+      admissionEvidenceRefs,
+      conformanceEvidenceRefs,
+    }),
+    registeredAt: nowMs - 10_000,
+    updatedAt: nowMs - 10_000,
+    ...overrides,
+  }
+}
+
+function publication(overrides: Partial<GraphPublicationRow> = {}): GraphPublicationRow {
+  return {
+    id: 'dev:publication-row',
+    ...candidate,
+    ...contract.ref,
+    sourceKind: 'openapi_http',
+    sourceDigest: canonicalDigest({ fixture: 'published quote capability' }),
+    disposition: 'current',
+    credentialState: 'ready',
+    healthState: 'healthy',
+    readinessObservedAt: nowMs - 1_000,
+    readinessValidUntil: nowMs + 60_000,
+    registrationEvidenceRefs: ['dev:publication-registration'],
+    readinessEvidenceRefs: ['dev:readiness'],
+    ...overrides,
+  }
+}
+
+function qualificationPorts(overrides: Partial<CapabilityGraphPorts> = {}): CapabilityGraphPorts {
+  return {
+    loadPublicationAtRevision: async () => publication(),
+    listCurrentPublicationsByNetwork: async () => [],
+    loadOfferingByOfferingId: async () => offering(),
+    loadBindingByBindingId: async () => binding(),
+    loadPublishedBusiness: async () => ({
+      businessId: candidate.businessId,
+      trustTier: 'fixture_only',
+      publicStatus: 'published',
+      claimStatus: 'published',
+      suppressed: false,
+      currentlyPublished: true,
+    }),
+    getActiveExactCapabilityContract: async () => ({
+      kind: 'found',
+      ref: contract.ref,
+      documentJson: JSON.stringify(contract),
+      registeredAt: nowMs - 10_000,
+    }),
+    getExactRegisteredCapabilityContract: async () => ({
+      kind: 'found',
+      contract,
+      registeredAt: nowMs - 10_000,
+    }),
+    patchProbeReadiness: async () => undefined,
+    ...overrides,
+  }
+}
+
+async function quoteInputFor(ports = qualificationPorts()): Promise<SuppliedCandidateQuoteInput> {
+  const qualification = await qualifySuppliedCandidate(ports, { candidate, now: nowMs })
+  if (qualification.status !== 'eligible' || qualification.validUntil === undefined) {
+    throw new Error(`Expected eligible fixture: ${qualification.reasons.join(',')}`)
+  }
+  return {
+    target: candidate,
+    qualificationDigest: qualification.qualificationDigest,
+    qualificationValidUntil: qualification.validUntil,
+    quoteRequest: {
+      serviceReference: 'dev:service:aircon-assessment',
+      requestedFields: ['price', 'validUntil', 'terms'],
+      constraints: { suburb: 'Perth', timing: 'within 7 days' },
+    },
+    disclosure: {
+      fields: [
+        'quoteRequest.serviceReference',
+        'quoteRequest.constraints.suburb',
+        'quoteRequest.constraints.timing',
+      ],
+      limits: {
+        'quoteRequest.serviceReference': 500,
+        'quoteRequest.constraints.suburb': 120,
+        'quoteRequest.constraints.timing': 120,
+      },
+      purpose: 'request_development_quote',
+    },
+    operationKey: 'dev:quote-operation:0001',
+  }
+}
+
+function inMemoryTracer(adapter: ReturnType<typeof vi.fn>) {
+  return createInMemoryActionInvocationTracer({
+    action: collectSuppliedCandidateQuoteAction,
+    now: nowIso,
+    nextInvocationRef: () => `dev:invocation:${Math.random()}`,
+    nextAuthorityRef: () => 'dev:authority:quote',
+    nextAttemptRef: () => 'dev:attempt:quote',
   })
-  expect(prepared.kind).toBe('prepared')
-  if (prepared.kind !== 'prepared') throw new Error(prepared.code)
-  const accepted = harness.control.decide({
-    invocationRef: prepared.view.invocationRef,
-    expectedInvocationVersion: prepared.view.invocationVersion,
-    authorityRef: prepared.view.authority!.reference,
-    actor,
-    origin,
-    accept: true,
-  })
-  expect(accepted.kind).toBe('accepted')
-  if (accepted.kind !== 'accepted') throw new Error(accepted.code)
-  const executed = await harness.control.execute({
-    invocationRef: prepared.view.invocationRef,
-    expectedInvocationVersion: accepted.view.invocationVersion,
-    authorityRef: prepared.view.authority!.reference,
-    actor,
-    origin,
-    materialInput: quoteInput,
-  })
-  return { ...harness, prepared: prepared.view, accepted, executed }
 }
 
 describe('ADR-009 supplied-candidate development quote collection', () => {
-  it.each(origins)('keeps exact disclosure and result semantics for $kind origin', async (origin) => {
+  it.each(origins)('runs the real P1-H qualifier before exact authority for $kind', async (origin) => {
+    const ports = qualificationPorts()
+    const quoteInput = await quoteInputFor(ports)
     const adapter = vi.fn().mockResolvedValue({
       kind: 'quote_returned',
       environment: 'MOCK/DEVELOPMENT ONLY',
@@ -130,18 +257,42 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         evidenceRefs: ['dev:evidence:quote-contract'],
       },
     })
-    const result = await authorizeAndExecute(origin, adapter)
-
-    expect(result.prepared.prepared).toMatchObject({
+    const tracer = inMemoryTracer(adapter)
+    const prepared = await prepareSuppliedCandidateQuote({
+      tracer,
+      qualificationPorts: ports,
+      invocationInput: quoteInput,
+      origin,
+      actor,
+      context: { developmentOnlySuppliedQuoteAdapter: adapter },
+      now: nowMs,
+    })
+    expect(prepared.kind).toBe('prepared')
+    if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+    expect(prepared.view.prepared).toMatchObject({
       target: candidate,
-      freshUntil: new Date(qualification.validUntil!).toISOString(),
-      dataUse: {
-        fields: quoteInput.disclosure.fields,
-        limits: quoteInput.disclosure.limits,
-      },
+      freshUntil: new Date(quoteInput.qualificationValidUntil).toISOString(),
+      dataUse: { fields: quoteInput.disclosure.fields, limits: quoteInput.disclosure.limits },
+    })
+    const accepted = tracer.decide({
+      invocationRef: prepared.view.invocationRef,
+      expectedInvocationVersion: prepared.view.invocationVersion,
+      authorityRef: prepared.view.authority!.reference,
+      actor,
+      origin,
+      accept: true,
+    })
+    if (accepted.kind !== 'accepted') throw new Error(accepted.code)
+    const executed = await tracer.execute({
+      invocationRef: prepared.view.invocationRef,
+      expectedInvocationVersion: accepted.view.invocationVersion,
+      authorityRef: prepared.view.authority!.reference,
+      actor,
+      origin,
+      materialInput: quoteInput,
     })
     expect(adapter).toHaveBeenCalledTimes(1)
-    expect(result.executed).toMatchObject({
+    expect(executed).toMatchObject({
       kind: 'accepted',
       view: {
         control: { state: 'terminal' },
@@ -154,67 +305,97 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
   })
 
-  it('returns a structured provider refusal without upgrading it to a thrown failure', async () => {
-    const adapter = vi.fn().mockResolvedValue({
-      kind: 'refused',
-      environment: 'MOCK/DEVELOPMENT ONLY',
-      code: 'development_provider_declined',
-      reason: 'The labelled provider fixture declined this request.',
-    })
-    const result = await authorizeAndExecute(origins[1]!, adapter)
-    expect(result.executed).toMatchObject({
-      kind: 'accepted',
-      view: {
-        attempts: [{ outcome: { state: 'returned', businessOutcome: 'refused' } }],
-        observedResolution: { state: 'returned', businessOutcome: 'refused' },
+  it('does not allow caller assertions to create eligibility', async () => {
+    const currentPorts = qualificationPorts()
+    const quoteInput = await quoteInputFor(currentPorts)
+    const tracer = inMemoryTracer(vi.fn())
+
+    const forgedEnvelope = {
+      ...quoteInput,
+      qualification: {
+        status: 'eligible',
+        sources: [],
+        qualificationDigest: quoteInput.qualificationDigest,
       },
+    }
+    expect(suppliedCandidateQuoteInputSchema.safeParse(forgedEnvelope).success).toBe(false)
+
+    const blocked = await prepareSuppliedCandidateQuote({
+      tracer,
+      qualificationPorts: qualificationPorts({
+        loadPublicationAtRevision: async () => publication({
+          disposition: 'superseded',
+          sourceDigest: canonicalDigest({ changed: true }),
+        }),
+      }),
+      invocationInput: quoteInput,
+      origin: origins[1]!,
+      actor,
+      context: {},
+      now: nowMs,
     })
+    expect(blocked).toEqual({ kind: 'refused', code: 'qualification_blocked' })
+    expect(tracer.exportSnapshot().records).toEqual([])
   })
 
-  it('fails closed before authority for stale, blocked, mismatched, or altered qualification', () => {
-    const adapter = vi.fn()
-    const harness = tracer(adapter)
-    const prepare = (changedQualification: SuppliedCandidateQualification, changedInput = quoteInput) =>
-      prepareSuppliedCandidateQuote({
-        tracer: harness.control, qualification: changedQualification,
-        invocationInput: changedInput, origin: origins[1]!, actor,
-        context: harness.context, now: nowMs,
-      })
-    expect(prepare({ ...qualification, validUntil: nowMs })).toEqual({ kind: 'refused', code: 'qualification_stale' })
-    expect(prepare({ ...qualification, status: 'blocked', reasons: ['readiness_stale'] }))
-      .toEqual({ kind: 'refused', code: 'qualification_blocked' })
-    expect(prepare(qualification, { ...quoteInput, qualificationDigest: `sha256:${'c'.repeat(64)}` }))
-      .toEqual({ kind: 'refused', code: 'qualification_digest_mismatch' })
-    expect(prepare(qualification, { ...quoteInput, target: { ...candidate, bindingId: 'dev:other' } }))
-      .toEqual({ kind: 'refused', code: 'candidate_mismatch' })
-    expect(adapter).not.toHaveBeenCalled()
+  it('refuses tampered digest and source changes after the client read', async () => {
+    const originalPorts = qualificationPorts()
+    const quoteInput = await quoteInputFor(originalPorts)
+    const tracer = inMemoryTracer(vi.fn())
+    const tamperedDigest = await prepareSuppliedCandidateQuote({
+      tracer,
+      qualificationPorts: originalPorts,
+      invocationInput: { ...quoteInput, qualificationDigest: `sha256:${'f'.repeat(64)}` },
+      origin: origins[1]!,
+      actor,
+      context: {},
+      now: nowMs,
+    })
+    expect(tamperedDigest).toEqual({ kind: 'refused', code: 'qualification_digest_mismatch' })
+
+    const changedSources = await prepareSuppliedCandidateQuote({
+      tracer,
+      qualificationPorts: qualificationPorts({
+        loadPublicationAtRevision: async () => publication({
+          readinessObservedAt: nowMs - 500,
+          readinessEvidenceRefs: ['dev:readiness:replacement'],
+        }),
+      }),
+      invocationInput: quoteInput,
+      origin: origins[1]!,
+      actor,
+      context: {},
+      now: nowMs,
+    })
+    expect(changedSources).toEqual({ kind: 'refused', code: 'qualification_digest_mismatch' })
+    expect(tracer.exportSnapshot().records).toEqual([])
   })
 
-  it('invalidates changed disclosure and refuses inherited cross-principal authority', () => {
-    const adapter = vi.fn()
-    const harness = tracer(adapter)
-    const prepared = prepareSuppliedCandidateQuote({
-      tracer: harness.control, qualification, invocationInput: quoteInput,
-      origin: origins[1]!, actor, context: harness.context, now: nowMs,
+  it('invalidates changed disclosure and refuses inherited cross-principal authority', async () => {
+    const ports = qualificationPorts()
+    const quoteInput = await quoteInputFor(ports)
+    const tracer = inMemoryTracer(vi.fn())
+    const prepared = await prepareSuppliedCandidateQuote({
+      tracer, qualificationPorts: ports, invocationInput: quoteInput,
+      origin: origins[1]!, actor, context: {}, now: nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
-    const wrongPrincipal = harness.control.decide({
+    expect(tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
       actor: { ...actor, principalRef: 'dev:other-principal' },
       origin: origins[1]!,
       accept: true,
-    })
-    expect(wrongPrincipal).toMatchObject({ kind: 'refused', code: 'cross_principal_refused' })
-    const accepted = harness.control.decide({
+    })).toMatchObject({ kind: 'refused', code: 'cross_principal_refused' })
+    const accepted = tracer.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
       actor, origin: origins[1]!, accept: true,
     })
     if (accepted.kind !== 'accepted') throw new Error(accepted.code)
-    return expect(harness.control.execute({
+    await expect(tracer.execute({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: accepted.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
@@ -222,66 +403,107 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       origin: origins[1]!,
       materialInput: {
         ...quoteInput,
-        disclosure: { ...quoteInput.disclosure, fields: [...quoteInput.disclosure.fields, 'quoteRequest.constraints.phone'] },
+        disclosure: {
+          ...quoteInput.disclosure,
+          fields: [...quoteInput.disclosure.fields, 'quoteRequest.constraints.phone'],
+        },
       },
     })).resolves.toMatchObject({ kind: 'refused', code: 'material_input_changed' })
   })
 
-  it('distinguishes pre-release retry from possible-release reconciliation and cold-resumes control', async () => {
-    const preReleaseAdapter = vi.fn().mockRejectedValue(new Error('development_transport_unavailable'))
-    const pre = await authorizeAndExecute(origins[1]!, preReleaseAdapter)
-    expect(pre.executed).toMatchObject({ kind: 'accepted', view: { control: { state: 'retryable' } } })
-
-    const releasedSignal = createDevelopmentReleaseSignal()
-    const uncertainAdapter = vi.fn().mockImplementation(() => {
-      releasedSignal.markReleased()
-      throw new Error('development_response_lost')
+  it.each(origins)('durably reconstructs and reconciles possible release for $kind without quote data in neutral rows', async (origin) => {
+    const ports = qualificationPorts()
+    const quoteInput = await quoteInputFor(ports)
+    const durableState = createDevelopmentDurableState<SuppliedCandidateQuoteResult>()
+    const releaseSignal = createDevelopmentReleaseSignal()
+    const adapter = vi.fn().mockImplementation(() => {
+      releaseSignal.markReleased()
+      throw new Error('development_response_lost_after_possible_release')
     })
-    const harness = tracer(uncertainAdapter, releasedSignal)
-    const prepared = prepareSuppliedCandidateQuote({
-      tracer: harness.control, qualification, invocationInput: quoteInput,
-      origin: origins[1]!, actor, context: harness.context, now: nowMs,
+    const source = {
+      input: quoteInput,
+      context: { developmentOnlySuppliedQuoteAdapter: adapter },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: { state: 'pending' } as ActionInvocationView<SuppliedCandidateQuoteResult>['observedResolution'],
+    }
+    const create = (resumeRef?: string) => createDurableActionInvocationTracer({
+      action: collectSuppliedCandidateQuoteAction,
+      port: createDevelopmentDurablePort(durableState),
+      now: nowIso,
+      nextInvocationRef: () => `dev:durable-quote:${origin.kind}`,
+      nextAuthorityRef: () => `dev:durable-authority:${origin.kind}`,
+      nextAttemptRef: () => `dev:durable-attempt:${origin.kind}`,
+      developmentReleaseSignal: releaseSignal,
+      resolveSourceState: () => source,
+    }, resumeRef)
+    const firstProcess = create()
+    const prepared = await prepareSuppliedCandidateQuote({
+      tracer: firstProcess,
+      qualificationPorts: ports,
+      invocationInput: quoteInput,
+      origin,
+      actor,
+      context: source.context,
+      now: nowMs,
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
-    const accepted = harness.control.decide({
+    source.prepared = prepared.view.prepared!
+    const accepted = firstProcess.decide({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: prepared.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
-      actor, origin: origins[1]!, accept: true,
+      actor, origin, accept: true,
     })
     if (accepted.kind !== 'accepted') throw new Error(accepted.code)
-    const uncertain = await harness.control.execute({
+    const uncertain = await firstProcess.execute({
       invocationRef: prepared.view.invocationRef,
       expectedInvocationVersion: accepted.view.invocationVersion,
       authorityRef: prepared.view.authority!.reference,
-      actor, origin: origins[1]!, materialInput: quoteInput,
+      actor, origin, materialInput: quoteInput,
     })
+    expect(adapter).toHaveBeenCalledTimes(1)
     expect(uncertain).toMatchObject({
       kind: 'accepted',
-      view: { control: { state: 'reconciliation_required' }, attempts: [{ release: { state: 'possibly_released' } }] },
+      view: {
+        persistence: 'durable_control',
+        control: { state: 'reconciliation_required' },
+        attempts: [{ release: { state: 'possibly_released' } }],
+      },
     })
     if (uncertain.kind !== 'accepted') throw new Error(uncertain.code)
-    const snapshot = roundTripControlSnapshot(harness.control.exportSnapshot())
-    const resumed = createInMemoryActionInvocationTracer({
-      action: collectSuppliedCandidateQuoteAction,
-      now: nowIso,
-      nextInvocationRef: () => 'unused',
-      initialSnapshot: snapshot,
-      resolveSourceState: () => ({
-        input: quoteInput,
-        context: harness.context,
-        prepared: uncertain.view.prepared!,
-        observedResolution: uncertain.view.observedResolution,
-      }),
+    source.observedResolution = uncertain.view.observedResolution
+
+    const freshProcess = create(uncertain.view.invocationRef)
+    expect(freshProcess.inspect(uncertain.view.invocationRef)).toMatchObject({
+      origin,
+      persistence: 'durable_control',
+      control: { state: 'reconciliation_required' },
     })
-    expect(resumed.inspect(uncertain.view.invocationRef)?.control)
-      .toEqual(uncertain.view.control)
-    const retry = await resumed.execute({
+    const reconciled = freshProcess.reconcile({
       invocationRef: uncertain.view.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
-      authorityRef: uncertain.view.authority!.reference,
-      actor, origin: origins[1]!, materialInput: quoteInput,
+      attemptRef: uncertain.view.attempts[0]!.attemptRef,
+      actor,
+      origin,
+      resolution: 'not_released',
     })
-    expect(retry).toMatchObject({ kind: 'refused', code: 'reconciliation_required' })
+    expect(reconciled).toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'retryable', reason: 'pre_release_failure' } },
+    })
+
+    const port = createDevelopmentDurablePort(durableState)
+    const persisted = JSON.stringify({
+      control: port.readControl(uncertain.view.invocationRef),
+      attempts: port.readAttempts(uncertain.view.invocationRef, 10),
+      history: port.readHistory(uncertain.view.invocationRef, 0, 20),
+    })
+    expect(persisted).not.toContain(quoteInput.quoteRequest.serviceReference)
+    expect(persisted).not.toContain(quoteInput.quoteRequest.constraints.suburb)
+    expect(persisted).not.toContain(quoteInput.disclosure.purpose)
+    expect(persisted).not.toContain('dev:quote:0001')
+    expect(persisted).toContain(quoteInput.operationKey)
+    expect(port.readControl(uncertain.view.invocationRef)?.dataLimitSummary)
+      .toEqual(quoteInput.disclosure.limits)
   })
 })

@@ -6,7 +6,10 @@ import type {
 } from '@/modules/action-invocation'
 import type { ActionContext } from '@/modules/common/action'
 
-import type { SuppliedCandidateQualification } from './internal/graph'
+import {
+  qualifySuppliedCandidate,
+  type CapabilityGraphPorts,
+} from './internal/graph'
 import type {
   SuppliedCandidateQuoteInput,
   SuppliedCandidateQuoteResult,
@@ -19,26 +22,27 @@ export type SuppliedQuotePreparation =
       code: 'qualification_blocked' | 'qualification_stale' | 'candidate_mismatch' | 'qualification_digest_mismatch'
     }>
 
-export function prepareSuppliedCandidateQuote(input: Readonly<{
+export async function prepareSuppliedCandidateQuote(input: Readonly<{
   tracer: ActionInvocationTracer<SuppliedCandidateQuoteInput, SuppliedCandidateQuoteResult>
-  qualification: SuppliedCandidateQualification
+  qualificationPorts: CapabilityGraphPorts
   invocationInput: SuppliedCandidateQuoteInput
   origin: ActionInvocationOrigin
   actor: InvocationActor
   context: ActionContext
   now: number
-}>): SuppliedQuotePreparation {
-  if (input.qualification.status !== 'eligible') return { kind: 'refused', code: 'qualification_blocked' }
+}>): Promise<SuppliedQuotePreparation> {
+  const qualification = await qualifySuppliedCandidate(input.qualificationPorts, {
+    candidate: input.invocationInput.target,
+    now: input.now,
+  })
+  if (qualification.status !== 'eligible') return { kind: 'refused', code: 'qualification_blocked' }
   if (
-    input.qualification.validUntil === undefined
-    || input.now >= input.qualification.validUntil
-    || input.invocationInput.qualificationValidUntil !== input.qualification.validUntil
+    qualification.validUntil === undefined
+    || input.now >= qualification.validUntil
+    || input.invocationInput.qualificationValidUntil !== qualification.validUntil
   ) return { kind: 'refused', code: 'qualification_stale' }
-  if (input.invocationInput.qualificationDigest !== input.qualification.qualificationDigest) {
+  if (input.invocationInput.qualificationDigest !== qualification.qualificationDigest) {
     return { kind: 'refused', code: 'qualification_digest_mismatch' }
-  }
-  if (JSON.stringify(input.invocationInput.target) !== JSON.stringify(input.qualification.candidate)) {
-    return { kind: 'refused', code: 'candidate_mismatch' }
   }
 
   return {
@@ -48,7 +52,7 @@ export function prepareSuppliedCandidateQuote(input: Readonly<{
       actor: input.actor,
       input: input.invocationInput,
       context: input.context,
-      freshnessMs: input.qualification.validUntil - input.now,
+      freshnessMs: qualification.validUntil - input.now,
     }),
   }
 }
