@@ -87,6 +87,9 @@ export type ActionContext = {
   ) => Promise<Readonly<{ kind: 'current' } | { kind: 'stale'; reason: string }>>
   developmentOnlyBookingAvailabilityAdapter?: () => Promise<unknown>
   developmentOnlyBookingCancellationAdapter?: (data: unknown) => Promise<ActionResult>
+  developmentOnlyBookingCancellationCheck?: (
+    data: unknown,
+  ) => Promise<Readonly<{ kind: 'current' } | { kind: 'refused'; reason: string }>>
 }
 
 export type ActionRunArgs<Input> = {

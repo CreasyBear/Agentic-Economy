@@ -177,13 +177,21 @@ export const developmentBookingCancellationInputSchema = z.object({
 
 export type DevelopmentBookingCancellationInput = z.infer<typeof developmentBookingCancellationInputSchema>
 
-export const developmentBookingCancellationOutputSchema = z.object({
-  kind: z.literal('reservation_cancellation_confirmed'),
-  environment: developmentLabel,
-  reservationRef: z.string().min(1),
-  cancellationRef: z.string().min(1),
-  evidenceRef: z.string().min(1),
-})
+export const developmentBookingCancellationOutputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('reservation_cancellation_confirmed'),
+    environment: developmentLabel,
+    reservationRef: z.string().min(1),
+    cancellationRef: z.string().min(1),
+    evidenceRef: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('reservation_cancellation_refused'),
+    environment: developmentLabel,
+    code: z.enum(['principal_mismatch', 'provider_record_unavailable', 'provider_record_mismatch', 'operation_key_conflict']),
+    reason: z.string().min(1),
+  }),
+])
 
 export type DevelopmentBookingCancellationResult = z.infer<typeof developmentBookingCancellationOutputSchema>
 
@@ -221,7 +229,39 @@ export const cancelDevelopmentReservationAction = defineAction({
   projectInvocationPreparation: () => ({
     dataUse: { fields: ['reason'], limits: { recipients: 1 } },
   }),
-  classifyInvocationResult: () => ({ outcome: 'completed', referenceable: true }),
+  classifyInvocationResult: (result) => result.kind === 'reservation_cancellation_confirmed'
+    ? { outcome: 'completed', referenceable: true }
+    : { outcome: 'refused', referenceable: false },
+  preReleaseCheck: async ({ data, context }) => {
+    const input = developmentBookingCancellationInputSchema.parse(data)
+    if (
+      context.developmentOnlyBookingAuthorityPrincipalRef === undefined
+      || input.principalRef !== context.developmentOnlyBookingAuthorityPrincipalRef
+    ) {
+      return {
+        kind: 'reservation_cancellation_refused' as const,
+        environment: 'MOCK/DEVELOPMENT ONLY' as const,
+        code: 'principal_mismatch' as const,
+        reason: 'Cancellation principal does not match the authority-bound principal.',
+      }
+    }
+    const check = context.developmentOnlyBookingCancellationCheck
+    if (check === undefined) {
+      return {
+        kind: 'reservation_cancellation_refused' as const,
+        environment: 'MOCK/DEVELOPMENT ONLY' as const,
+        code: 'provider_record_unavailable' as const,
+        reason: 'Provider reservation ownership could not be checked before release.',
+      }
+    }
+    const result = await check(input)
+    return result.kind === 'current' ? undefined : {
+      kind: 'reservation_cancellation_refused' as const,
+      environment: 'MOCK/DEVELOPMENT ONLY' as const,
+      code: 'provider_record_mismatch' as const,
+      reason: result.reason,
+    }
+  },
   run: async ({ data, context }) => {
     const input = developmentBookingCancellationInputSchema.parse(data)
     const adapter = context.developmentOnlyBookingCancellationAdapter

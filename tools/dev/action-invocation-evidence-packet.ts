@@ -33,6 +33,7 @@ import {
   type DevelopmentBookingInput,
   type DevelopmentBookingResult,
 } from '../../src/modules/booking/development-booking.actions'
+import { materialDigest } from '../../src/modules/action-invocation/preparation'
 
 export type EvidenceEnvelope = Readonly<{
   schema: 'ae.action-invocation-development-evidence:v1'
@@ -118,6 +119,8 @@ export async function readAndVerifyBookingPacket(path: string, expectedRevision:
   }
   const terminal = reconstructBookingRows(durable.terminal, true)
   const uncertain = reconstructBookingRows(durable.uncertain, false)
+  validateBookingLinkage(durable.terminal, true)
+  validateBookingLinkage(durable.uncertain, false)
   if (
     durable.uncertain.source.before.control.state !== 'reconciliation_required'
     || durable.uncertain.source.before.attempts[0]?.release.state !== 'possibly_released'
@@ -137,6 +140,91 @@ export async function readAndVerifyBookingPacket(path: string, expectedRevision:
       terminalHistoryRecords: durable.terminal.history.length,
       reconciliationHistoryRecords: durable.uncertain.history.length,
     },
+  }
+}
+
+function validateBookingLinkage(durable: PacketDurable, terminal: boolean) {
+  const control = durable.controls[0]!
+  const source = durable.source as unknown as {
+    input: DevelopmentBookingInput
+    prepared: PreparedInvocation
+    result?: DevelopmentBookingResult
+    resultIdentity?: { sourceResultRef: string; resultDigest: string }
+    reconciliationEvidence?: {
+      source: string
+      invocationRef: string
+      attemptRef: string
+      effectGeneration: number
+      evidenceRef: string
+      digest: string
+    }
+  }
+  const invocationRef = String(control.invocationRef)
+  const controlProjection = control.control as {
+    origin?: unknown
+    action?: { id?: string; contractVersion?: string }
+  }
+  if (
+    durable.controls.length !== 1
+    || typeof control.sourceRef !== 'string'
+    || control.sourceRef.length === 0
+    || controlProjection.action?.id !== createDevelopmentReservationAction.id
+    || controlProjection.action.contractVersion !== 'v1'
+    || canonicalDigest(controlProjection.origin as never)
+      !== canonicalDigest((control.authorityBinding as { origin?: unknown })?.origin as never)
+    || control.preparedMaterialDigest !== source.prepared.materialInputDigest
+    || control.preparedMaterialDigest
+      !== materialDigest(source.input, createDevelopmentReservationAction.invocationContract!.materialInputPaths)
+  ) throw new Error('packet_booking_control_linkage_refused')
+  const attemptRefs = new Set<string>()
+  for (const attempt of durable.attempts) {
+    const attemptRef = String(attempt.attemptRef)
+    attemptRefs.add(attemptRef)
+    if (
+      attempt.invocationRef !== invocationRef
+      || (attempt.idempotency as { materialInputDigest?: string })?.materialInputDigest
+        !== control.preparedMaterialDigest
+      || !Number.isInteger(attempt.effectGeneration)
+    ) throw new Error('packet_booking_attempt_linkage_refused')
+  }
+  let priorVersion = 0
+  for (const row of durable.history) {
+    if (
+      row.invocationRef !== invocationRef
+      || typeof row.invocationVersion !== 'number'
+      || row.invocationVersion <= priorVersion
+      || row.invocationVersion > Number(control.invocationVersion)
+      || (
+        row.effectGeneration !== undefined
+        && !durable.attempts.some((attempt) => attempt.effectGeneration === row.effectGeneration)
+      )
+      || (
+        row.attemptTransition !== undefined
+        && !attemptRefs.has(String((row.attemptTransition as { attemptRef?: string }).attemptRef))
+      )
+    ) throw new Error('packet_booking_history_linkage_refused')
+    priorVersion = row.invocationVersion
+  }
+  if (terminal) {
+    if (
+      source.result === undefined
+      || source.resultIdentity === undefined
+      || control.sourceResultRef !== source.resultIdentity.sourceResultRef
+      || control.sourceResultDigest !== source.resultIdentity.resultDigest
+      || source.resultIdentity.resultDigest !== canonicalDigest(source.result)
+    ) throw new Error('packet_booking_result_identity_refused')
+  } else {
+    const evidence = source.reconciliationEvidence
+    const attempt = durable.attempts[0]
+    if (
+      evidence === undefined
+      || attempt === undefined
+      || evidence.source !== createDevelopmentReservationAction.invocationContract!.reconciliationEvidenceSource
+      || evidence.invocationRef !== invocationRef
+      || evidence.attemptRef !== attempt.attemptRef
+      || evidence.effectGeneration !== attempt.effectGeneration
+      || !durable.history.some((row) => row.sourceEvidenceRef === evidence.evidenceRef)
+    ) throw new Error('packet_booking_reconciliation_linkage_refused')
   }
 }
 

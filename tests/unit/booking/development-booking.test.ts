@@ -1,12 +1,12 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { findAction } from '@/modules/actions'
-import { runDevelopmentBookingEvidenceV2 } from '@/modules/booking/development-booking-evidence-v2'
+import { runDevelopmentBookingEvidence } from '@/modules/booking/development-booking-evidence'
 
 describe('booking.createDevelopmentReservation', () => {
-  let packet: Awaited<ReturnType<typeof runDevelopmentBookingEvidenceV2>>
+  let packet: Awaited<ReturnType<typeof runDevelopmentBookingEvidence>>
   beforeAll(async () => {
-    packet = await runDevelopmentBookingEvidenceV2()
+    packet = await runDevelopmentBookingEvidence()
   })
 
   it('registers one consequential development-only action with no reachable surface', () => {
@@ -26,15 +26,23 @@ describe('booking.createDevelopmentReservation', () => {
   it('binds each disclosed booking principal to the authority-bound principal before release', () => {
     expect(packet.origins.map((origin) => origin.kind)).toEqual(['request_owned', 'standalone'])
     expect(packet.principalRefusal).toMatchObject({
-      outcome: { state: 'returned', execution: 'pre_release_refused', businessOutcome: 'refused' },
-      effectCalls: 0,
+      observedResolution: { state: 'returned', execution: 'pre_release_refused', businessOutcome: 'refused' },
+      attempts: [{ release: { state: 'not_released' } }],
     })
+  })
+
+  it('derives authority-before-release from ordered emitted events', () => {
+    expect(packet.eventOrder.map(({ kind }) => kind)).toEqual([
+      'authority_decision',
+      'provider_release',
+    ])
+    expect(packet.executableChecks.authorityBeforeRelease).toBe(true)
   })
 
   it('rechecks provider availability against trusted release time with zero stale effect', () => {
     expect(packet.expiryRefusal).toMatchObject({
-      outcome: { state: 'returned', execution: 'pre_release_refused', businessOutcome: 'refused' },
-      effectCalls: 0,
+      observedResolution: { state: 'returned', execution: 'pre_release_refused', businessOutcome: 'refused' },
+      attempts: [{ release: { state: 'not_released' } }],
     })
   })
 
@@ -49,34 +57,53 @@ describe('booking.createDevelopmentReservation', () => {
   })
 
   it('deduplicates same operation material and conflicts changed material', () => {
-    expect(packet.idempotency.first).toEqual(packet.idempotency.duplicate)
-    expect(packet.idempotency.effectsAfterDuplicate).toBe(packet.idempotency.effectsBeforeDuplicate)
-    expect(packet.idempotency.changedMaterial).toMatchObject({
-      kind: 'reservation_refused',
-      code: 'terms_changed',
+    expect(packet.idempotency.first.invocationRef).not.toBe(packet.idempotency.replay.invocationRef)
+    expect(packet.idempotency.first.observedResolution).toEqual(packet.idempotency.replay.observedResolution)
+    expect(packet.idempotency.effectsAfterFirst).toBe(packet.idempotency.effectsBeforeDedupe + 1)
+    expect(packet.idempotency.effectsAfterReplay).toBe(packet.idempotency.effectsAfterFirst)
+    expect(packet.idempotency.conflict).toMatchObject({
+      observedResolution: { result: { kind: 'reservation_refused', code: 'terms_changed' } },
     })
   })
 
   it('reconciles possible release through attributable observer evidence', () => {
     expect(packet.reconciliation).toMatchObject({
-      before: { state: 'reconciliation_required' },
-      release: { state: 'possibly_released' },
-      after: { state: 'terminal' },
+      before: { control: { state: 'reconciliation_required' }, attempts: [{ release: { state: 'possibly_released' } }] },
+      after: { control: { state: 'terminal' } },
     })
   })
 
   it('executes pre-release stop and separate provider-confirmed cancellation without rewriting reservation', () => {
     expect(packet.cancellation).toMatchObject({
-      beforeRelease: { state: 'cancelled', effect: 'not_released' },
-      providerConfirmed: {
-        state: 'returned',
-        result: { kind: 'reservation_cancellation_confirmed' },
+      beforeRelease: { control: { state: 'cancelled', effect: 'not_released' } },
+      confirmed: {
+        observedResolution: { state: 'returned', result: { kind: 'reservation_cancellation_confirmed' } },
       },
-      originalReservationAfterCancellation: {
+      originalReservation: {
         state: 'returned',
         result: { kind: 'reservation_confirmed' },
       },
     })
+    expect(packet.cancellation.replay.observedResolution)
+      .toEqual(packet.cancellation.confirmed.observedResolution)
+    expect(packet.cancellation.conflict).toMatchObject({
+      observedResolution: {
+        result: { kind: 'reservation_cancellation_refused', code: 'operation_key_conflict' },
+      },
+    })
+    expect(packet.cancellation.principalRefusal).toMatchObject({
+      observedResolution: {
+        execution: 'pre_release_refused',
+        result: { kind: 'reservation_cancellation_refused', code: 'principal_mismatch' },
+      },
+      attempts: [{ release: { state: 'not_released' } }],
+    })
+    expect(packet.cancellation.cancellationEffects).toBe(1)
+    if (packet.cancellation.originalReservation.state !== 'returned') {
+      throw new Error('expected original reservation result')
+    }
+    expect(packet.cancellation.providerReservationRecord?.result)
+      .toEqual(packet.cancellation.originalReservation.result)
   })
 
   it('closes Gate 7 only for the labelled development class', () => {

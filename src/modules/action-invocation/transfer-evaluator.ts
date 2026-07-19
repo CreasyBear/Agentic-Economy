@@ -4,6 +4,7 @@ export type TransferArm = 'direct_read' | 'direct_consequential' | 'controlled'
 export type TransferBoundaryEvent =
   | HarnessToolBoundaryEvent
   | Readonly<{ kind: 'effect_call'; actionId: string }>
+  | Readonly<{ kind: 'provider_release'; actionId: string }>
   | Readonly<{ kind: 'authority_decision'; invocationRef: string }>
   | Readonly<{ kind: 'user_or_supervisor_decision'; invocationRef: string }>
 
@@ -68,7 +69,7 @@ function measure(
     controlRecords: controlled?.controlRecords ?? count(events, 'control'),
     attributableAttempts: controlled?.attributableAttempts ?? count(events, 'attempt'),
     runnerCalls: count(events, 'direct_runner_started'),
-    effectCalls: count(events, 'effect_call'),
+    effectCalls: count(events, 'effect_call') + count(events, 'provider_release'),
     authorityDecisions: count(events, 'authority_decision'),
     userOrSupervisorDecisions: count(events, 'user_or_supervisor_decision'),
     requiredContinuations: evidence.requiredContinuations[arm],
