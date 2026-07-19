@@ -194,7 +194,8 @@ export function createInMemoryActionInvocationTracer<
         materialInputDigest: digest,
         target: readPath(input, 'target') ?? null,
         consequence: contract.consequenceClass,
-        dataUse: dataUseFor(options.action.id, input),
+        dataUse: options.action.projectInvocationPreparation?.(input).dataUse
+          ?? dataUseFor(options.action.id, input),
         preparedAt,
         freshUntil,
       }

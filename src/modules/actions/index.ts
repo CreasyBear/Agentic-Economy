@@ -12,6 +12,7 @@
  */
 
 import type { AnyAction } from '@/modules/common/action'
+import { collectSuppliedCandidateQuoteAction } from '@/modules/capability-supply/supplied-quote.actions'
 import {
   customerRequestCancelAction,
   customerRequestConfirmAction,
@@ -36,6 +37,7 @@ import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/set
 import { storefrontImportDraftAction } from '@/modules/storefront/storefront.actions'
 
 const actions: readonly AnyAction[] = [
+  collectSuppliedCandidateQuoteAction,
   customerRequestConfirmAction,
   customerRequestRunAction,
   customerRequestCancelAction,

@@ -66,6 +66,9 @@ export type ActionContext = {
   developmentOnlyInquirySubmitAdapter?: (
     data: unknown,
   ) => Promise<ActionResult>
+  developmentOnlySuppliedQuoteAdapter?: (
+    data: unknown,
+  ) => Promise<ActionResult>
 }
 
 export type ActionRunArgs<Input> = {
@@ -122,6 +125,17 @@ export type ActionInvocationContract = Readonly<{
   invalidationConditions: readonly string[]
 }>
 
+export type ActionInvocationPreparation = Readonly<{
+  dataUse: Readonly<{
+    fields: readonly string[]
+    limits: Readonly<Record<string, number>>
+  }>
+}>
+
+type ActionPreparationProjector<Input> = {
+  project(input: Input): ActionInvocationPreparation
+}['project']
+
 export type ResolvedActionInvocationContract = ActionInvocationContract & Readonly<{
   compatibility: 'explicit' | 'derived_from_legacy_read_only_flag'
 }>
@@ -144,6 +158,7 @@ export type ActionDefinition<
    * contracts existed. New classified actions declare this explicitly.
    */
   readonly invocationContract?: ActionInvocationContract
+  readonly projectInvocationPreparation?: ActionPreparationProjector<Input>
   readonly run: ActionRunner<Input, Result>
 }
 
