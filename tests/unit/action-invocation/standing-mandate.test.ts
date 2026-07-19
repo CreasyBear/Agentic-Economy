@@ -110,7 +110,7 @@ const mandate = issueStandingMandate({
   callerRef,
   issuedAt: now,
   scope: {
-    objective: 'Reserve suitable development consultation times.',
+    objective: 'Complete suitable scheduled provider effects.',
     action: { id: executeDevelopmentProviderOperationAction.id, version: 'v1' },
     providerRefs: ['mock:provider:calendar'],
     recipientRefs: ['mock:provider:calendar'],

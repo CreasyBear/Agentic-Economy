@@ -35,7 +35,7 @@ import {
 } from './development-provider-operation-signing-custody'
 import { runCancellationInvocation, runProviderOperationInvocation } from './development-provider-operation-runner'
 
-const objective = 'Book one development consultation and cancel it if the provider confirms the objective no longer requires attendance.'
+const objective = 'Create one scheduled provider effect and cancel it if the provider confirms the objective no longer requires it.'
 const principalRef = 'mock:principal:full-yolo'
 const callerRef = 'mock:caller:full-yolo'
 const delegateRef = 'mock:delegate:full-yolo'
