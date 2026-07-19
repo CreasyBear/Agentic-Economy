@@ -96,7 +96,9 @@ export const SANDBOX_WORKFLOW_COHORTS: readonly SandboxWorkflowCohort[] = Object
         ],
       }),
       step('event-site-evidence', 'Ideal Site and Safety Evidence Planner', 'Prepare site and safety evidence', 'requirementsPacket', 'siteEvidencePacket', 'ae.event-requirements-packet:v1', 'ae.event-site-evidence-packet:v1', false, 650, 'retry_safe'),
-      step('event-business-readiness', 'Ideal Event Business Readiness Desk', 'Prepare participating-business readiness evidence', 'siteEvidencePacket', 'participationEvidencePacket', 'ae.event-site-evidence-packet:v1', undefined, true, 750, 'reconcile_required'),
+      step('event-business-readiness', 'Ideal Event Business Readiness Desk', 'Prepare participating-business readiness evidence', 'siteEvidencePacket', 'participationEvidencePacket', 'ae.event-site-evidence-packet:v1', undefined, true, 750, 'reconcile_required', {
+        contractVersion: 2,
+      }),
     ]),
     curveballs: Object.freeze(['upstream packet becomes stale', 'disclosure authority is absent', 'a business refuses or does not respond', 'final outcome is unknown']),
   }),

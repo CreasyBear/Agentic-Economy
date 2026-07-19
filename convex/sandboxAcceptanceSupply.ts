@@ -154,42 +154,45 @@ export const seedSyntheticEventWorkflowSupply = internalMutation({
       ['public-event-activation'],
     )
     const bindings = await admitSandboxV2Supply(ctx.db, registrations, registeredAt + 500)
-    const profile = SANDBOX_WORKFLOW_PROVIDER_PROFILES['event-requirements']
-    const [priorOffering, priorBinding] = await Promise.all([
-      ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.priorOfferingId))
-        .unique(),
-      ctx.db.query('capabilityTransportBindings')
-        .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.priorBindingId))
-        .unique(),
-    ])
-    if (priorOffering !== null && priorBinding !== null) {
-      const evidenceRef = 'seed:synthetic-event-contract-replaced'
-      const retired = await setCapabilitySupplyEligibilityCommand(ctx.db, {
-        actor: { kind: 'system', ref: 'system:dev-seed' },
-        context: {
-          operationKey: `seed:synthetic-event-retire:${priorBinding.bindingId}`,
-          correlationId: 'seed:synthetic-event-workflow',
-          reasonCode: 'labelled_sandbox_workflow_contract_replaced',
-          evidenceRefs: [evidenceRef],
-        },
-        eligibility: {
-          offeringId: priorOffering.offeringId,
-          bindingId: priorBinding.bindingId,
-          contractRef: {
-            capabilityId: priorBinding.capabilityId,
-            version: priorBinding.version,
-            contractDigest: priorBinding.contractDigest,
+    const eventProfiles = Object.values(SANDBOX_WORKFLOW_PROVIDER_PROFILES)
+      .filter((profile) => profile.cohortId === 'public-event-activation')
+    for (const [index, profile] of eventProfiles.entries()) {
+      const [priorOffering, priorBinding] = await Promise.all([
+        ctx.db.query('capabilityOfferings')
+          .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.priorOfferingId))
+          .unique(),
+        ctx.db.query('capabilityTransportBindings')
+          .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.priorBindingId))
+          .unique(),
+      ])
+      if (priorOffering !== null && priorBinding !== null) {
+        const evidenceRef = 'seed:synthetic-event-contract-replaced'
+        const retired = await setCapabilitySupplyEligibilityCommand(ctx.db, {
+          actor: { kind: 'system', ref: 'system:dev-seed' },
+          context: {
+            operationKey: `seed:synthetic-event-retire:${priorBinding.bindingId}`,
+            correlationId: 'seed:synthetic-event-workflow',
+            reasonCode: 'labelled_sandbox_workflow_contract_replaced',
+            evidenceRefs: [evidenceRef],
           },
-          decision: 'revoke',
-          expectedOfferingRegistrationHash: priorOffering.registrationHash,
-          expectedBindingRegistrationHash: priorBinding.registrationHash,
-          admissionEvidenceRefs: [evidenceRef],
-          conformanceEvidenceRefs: [evidenceRef],
-        },
-      }, registeredAt + 750)
-      if (retired.kind !== 'ineligible') {
-        throw new Error(`synthetic_event_prior_binding_retirement_${retired.kind}`)
+          eligibility: {
+            offeringId: priorOffering.offeringId,
+            bindingId: priorBinding.bindingId,
+            contractRef: {
+              capabilityId: priorBinding.capabilityId,
+              version: priorBinding.version,
+              contractDigest: priorBinding.contractDigest,
+            },
+            decision: 'revoke',
+            expectedOfferingRegistrationHash: priorOffering.registrationHash,
+            expectedBindingRegistrationHash: priorBinding.registrationHash,
+            admissionEvidenceRefs: [evidenceRef],
+            conformanceEvidenceRefs: [evidenceRef],
+          },
+        }, registeredAt + 750 + index)
+        if (retired.kind !== 'ineligible') {
+          throw new Error(`synthetic_event_prior_binding_retirement_${retired.kind}`)
+        }
       }
     }
     const publicationRefs = await Promise.all(registrations.map(async (registration, index) => {
