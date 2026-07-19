@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { listActions } from '@/modules/actions'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
 import type {
@@ -32,6 +33,7 @@ import {
   createDevelopmentReleaseSignal,
   createDurableActionInvocationTracer,
   createInMemoryActionInvocationTracer,
+  readCompletedResultIdentity,
   type ActionInvocationOrigin,
   type ActionInvocationView,
   type InvocationActor,
@@ -39,6 +41,15 @@ import {
   type ReconciliationEvidence,
   type ReconciliationEvidenceMaterial,
 } from '@/modules/action-invocation'
+import {
+  attachCompletedTaskReference,
+  projectReferenceComposition,
+} from '@/modules/customer-request/application/public'
+import {
+  compileCustomerRequest,
+  type CustomerRequestV2Aggregate,
+} from '@/modules/customer-request/compiler'
+import { aggregateIsInternallyConsistent } from '@/modules/customer-request/v2-write'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
 
 const nowMs = Date.parse('2026-07-19T08:00:00.000Z')
@@ -365,16 +376,18 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     }
 
     const durableState = createDevelopmentDurableState<SuppliedCandidateQuoteResult>()
+    const durablePort = createDevelopmentDurablePort(durableState)
     const controlledRelease = createDevelopmentReleaseSignal()
+    const controlledResult = {
+      ...directResult,
+      quote: {
+        ...(directResult.kind === 'quote_returned' ? directResult.quote : {}),
+        quoteRef: 'dev:transfer:quote:controlled',
+      },
+    }
     const controlledAdapter = vi.fn().mockImplementation(async () => {
       controlledRelease.markReleased()
-      return {
-        ...directResult,
-        quote: {
-          ...(directResult.kind === 'quote_returned' ? directResult.quote : {}),
-          quoteRef: 'dev:transfer:quote:controlled',
-        },
-      }
+      return controlledResult
     })
     const source = {
       input: quoteInput,
@@ -383,10 +396,14 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       observedResolution: {
         state: 'pending',
       } as ActionInvocationView<SuppliedCandidateQuoteResult>['observedResolution'],
+      resultIdentity: {
+        sourceResultRef: 'dev:transfer:source-result:strata-repair',
+        resultDigest: canonicalDigest(controlledResult),
+      },
     }
     const tracer = createDurableActionInvocationTracer({
       action: collectSuppliedCandidateQuoteAction,
-      port: createDevelopmentDurablePort(durableState),
+      port: durablePort,
       now: nowIso,
       nextInvocationRef: () => 'dev:transfer:invocation:strata-repair',
       nextAuthorityRef: () => 'dev:transfer:authority:strata-repair',
@@ -445,6 +462,106 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       observedResolution: { state: 'returned', businessOutcome: 'completed' },
       attempts: [{ attemptRef: 'dev:transfer:attempt:strata-repair' }],
     })
+    const effectCountBeforeReferenceReuse = controlledAdapter.mock.calls.length
+    const compiledRequest = compileCustomerRequest({
+      requestId: 'dev:transfer:request:strata-repair',
+      expectedRevision: 0,
+      principalId: actor.principalRef,
+      delegatedAgentId: actor.callerRef,
+      intent: 'MOCK/DEVELOPMENT ONLY: continue after the strata-repair assessment quote.',
+      networkId: 'dev:network:transfer',
+      proposal: { kind: 'unsupported_request', reason: 'requested_result_not_available' },
+      interpreterId: 'dev:interpreter:transfer',
+      bindings: [],
+      models: [],
+      now: nowMs,
+    })
+    if (compiledRequest.kind !== 'compiled') throw new Error('Expected development aggregate.')
+    const attached = attachCompletedTaskReference({
+      principalRef: actor.principalRef,
+      callerRef: actor.callerRef,
+      invocationRef: prepared.view.invocationRef,
+      referencedAt: nowMs + 1,
+      candidateAggregate: compiledRequest.aggregate,
+    }, {
+      readCompletedResultIdentity: ({ invocationRef, actor: identityActor }) =>
+        readCompletedResultIdentity(
+          durablePort,
+          invocationRef,
+          identityActor,
+          () => ({
+            sourceResultRef: source.resultIdentity.sourceResultRef,
+            result: controlledResult,
+          }),
+        ),
+    })
+    if (attached.kind !== 'attached') throw new Error(attached.reason)
+    const coldRequest = structuredClone(
+      JSON.parse(JSON.stringify(attached.aggregate)) as CustomerRequestV2Aggregate,
+    )
+    expect(aggregateIsInternallyConsistent(coldRequest, 0)).toBe(true)
+    expect(coldRequest.completedTaskReferences).toEqual([attached.reference])
+
+    const projection = projectReferenceComposition({
+      requestRef: coldRequest.snapshot.requestId,
+      revision: coldRequest.snapshot.revision,
+      aggregate: coldRequest,
+      registeredActions: listActions().map((action) => ({
+        actionId: action.id,
+        actionVersion: resolveActionContract(action).version,
+      })),
+      nodes: [
+        {
+          nodeRef: 'dev:transfer:node:completed-quote',
+          actionId: collectSuppliedCandidateQuoteAction.id,
+          actionVersion: resolveActionContract(collectSuppliedCandidateQuoteAction).version,
+          dependencies: [],
+          completionCondition: 'required',
+          inspection: {
+            kind: 'completed_task',
+            referenceRef: attached.reference.referenceRef,
+          },
+          nextOwner: 'customer',
+          continuation: 'Inspect the completed development quote.',
+          outcome: 'A development quote result is available to inspect.',
+        },
+        {
+          nodeRef: 'dev:transfer:node:next-review',
+          actionId: registryDetailAction.id,
+          actionVersion: resolveActionContract(registryDetailAction).version,
+          dependencies: ['dev:transfer:node:completed-quote'],
+          completionCondition: 'required',
+          inspection: {
+            kind: 'invocation',
+            invocationRef: 'dev:transfer:direct-review',
+          },
+          nextOwner: 'customer',
+          continuation: 'Review the business information before deciding what to do next.',
+          outcome: 'The next direct review is ready.',
+        },
+      ],
+    })
+    expect(projection).toMatchObject({
+      kind: 'projected',
+      projection: {
+        state: 'incomplete',
+        noEffect: true,
+        nodes: [
+          { nodeRef: 'dev:transfer:node:completed-quote', state: 'completed' },
+          { nodeRef: 'dev:transfer:node:next-review', state: 'current' },
+        ],
+      },
+    })
+    expect(controlledAdapter).toHaveBeenCalledTimes(effectCountBeforeReferenceReuse)
+    expect(attached.noEffect).toBe(true)
+    const referenceAndProjection = JSON.stringify({
+      references: coldRequest.completedTaskReferences,
+      projection: projection.kind === 'projected' ? projection.projection : projection,
+    })
+    expect(referenceAndProjection).not.toMatch(
+      /authority|attempt|control|raw quote|quoteRef|price|terms|evidenceRefs|RoutePlan|Bundle/u,
+    )
+    expect(coldRequest.plan.actions).toEqual([])
     const controlled = {
       workflow: 'MOCK/DEVELOPMENT ONLY: controlled strata-repair quote',
       controlRecords: durableState.controls.size,
@@ -459,7 +576,20 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       logicalTransitions: completed.view.invocationVersion,
       durableHistoryRecords: durableState.history.get(prepared.view.invocationRef)?.length ?? 0,
       safety: 'earned: exact authority precedes one attributable release',
-      continuity: 'earned: fresh process reconstructs the same terminal reference',
+      continuity: 'earned: fresh process reconstructs the terminal result, canonical Request reference, and reference-only next step without another effect',
+      referenceReuse: {
+        completedReferences: coldRequest.completedTaskReferences?.length ?? 0,
+        completedNodes: projection.kind === 'projected'
+          ? projection.projection.nodes.filter(({ state }) => state === 'completed').length
+          : 0,
+        currentNodes: projection.kind === 'projected'
+          ? projection.projection.nodes.filter(({ state }) => state === 'current').length
+          : 0,
+        effectsBeforeReuse: effectCountBeforeReferenceReuse,
+        effectsAfterColdReadbackAndProjection: controlledAdapter.mock.calls.length,
+        copiedLifecycleOrRawResultFields: 0,
+        persistedRoutePlansOrBundles: 0,
+      },
     }
 
     expect(controlled).toMatchObject({
@@ -469,6 +599,15 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       effectCalls: 1,
       authorityDecisions: 1,
       userOrSupervisorDecisions: 1,
+      referenceReuse: {
+        completedReferences: 1,
+        completedNodes: 1,
+        currentNodes: 1,
+        effectsBeforeReuse: 1,
+        effectsAfterColdReadbackAndProjection: 1,
+        copiedLifecycleOrRawResultFields: 0,
+        persistedRoutePlansOrBundles: 0,
+      },
     })
     expect(controlled.logicalTransitions).toBeGreaterThan(directConsequential.logicalTransitions)
     expect(controlled.requiredContinuations).toBeGreaterThan(0)
