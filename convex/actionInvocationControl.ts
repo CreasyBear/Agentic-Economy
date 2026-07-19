@@ -81,6 +81,9 @@ export const transact = internalMutation({
     if ((current?.invocationVersion ?? null) !== args.expectedInvocationVersion) {
       return { kind: 'refused' as const, code: 'stale_invocation_version' as const }
     }
+    if (current !== null && args.row.invocationVersion <= current.invocationVersion) {
+      return { kind: 'refused' as const, code: 'stale_invocation_version' as const }
+    }
     if (
       args.expectedEffectGeneration !== undefined &&
       current?.currentEffectGeneration !== args.expectedEffectGeneration

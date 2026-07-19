@@ -41,6 +41,9 @@ export function createDevelopmentDurablePort<Result extends ActionResult>(
     if (currentVersion !== command.expectedInvocationVersion) {
       return { kind: 'refused', code: 'stale_invocation_version' }
     }
+    if (current !== undefined && command.row.invocationVersion <= current.invocationVersion) {
+      return { kind: 'refused', code: 'stale_invocation_version' }
+    }
     if (
       command.expectedEffectGeneration !== undefined &&
       current?.currentEffectGeneration !== command.expectedEffectGeneration

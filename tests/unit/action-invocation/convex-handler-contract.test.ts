@@ -20,9 +20,13 @@ describe('private Convex Action Invocation transaction contract', () => {
     expect(handler).not.toContain('newAttempt')
 
     const immutableRefusal = handler.indexOf("code: 'command_identity_conflict'")
+    const monotonicRefusal = handler.indexOf(
+      'args.row.invocationVersion <= current.invocationVersion',
+    )
     const controlWrite = handler.indexOf("ctx.db.insert('actionInvocationControls'")
     expect(immutableRefusal).toBeGreaterThan(-1)
-    expect(controlWrite).toBeGreaterThan(immutableRefusal)
+    expect(monotonicRefusal).toBeGreaterThan(immutableRefusal)
+    expect(controlWrite).toBeGreaterThan(monotonicRefusal)
   })
 
   it('uses the shared transition validator and appends history without dropping it', () => {

@@ -34,113 +34,177 @@ export type AsyncDurableActionInvocationTracer<Input, Result extends ActionResul
   coldResume(invocationRef: string): Promise<AsyncDurableActionInvocationTracer<Input, Result>>
 }>
 
+type OperationContext<Input, Result extends ActionResult> = Readonly<{
+  tracer: DurableActionInvocationTracer<Input, Result>
+  flushNext(): Promise<PersistControlResult | undefined>
+  flushRemaining(): Promise<Extract<PersistControlResult, { kind: 'refused' }> | undefined>
+}>
+
 /**
- * Async runtime adapter for Convex-backed control. The transition engine is the
- * same source owner as the in-memory adapter; a transition becomes caller
- * visible only after the async transaction accepts it.
+ * Async runtime adapter for Convex-backed control. Every public operation owns
+ * its capture queue and refusal state. Long-running effects therefore do not
+ * serialize unrelated invocations or share mutable persistence slots.
  */
 export async function createAsyncDurableActionInvocationTracer<
   Input,
   Result extends ActionResult,
 >(
   options: AsyncDurableTracerOptions<Input, Result>,
-  resumeInvocationRef?: string,
+  boundInvocationRef?: string,
 ): Promise<AsyncDurableActionInvocationTracer<Input, Result>> {
-  let state = createDevelopmentDurableState<Result>()
-  if (resumeInvocationRef !== undefined) state = await loadState(options.port, resumeInvocationRef)
-  let currentInvocationRef = resumeInvocationRef
-  let pending: PersistControlCommand<Result> | undefined
-  let preReleaseRefusal: Extract<PersistControlResult, { kind: 'refused' }> | undefined
-
-  const makeTracer = (): DurableActionInvocationTracer<Input, Result> => {
+  const createOperation = async (
+    invocationRef?: string,
+  ): Promise<OperationContext<Input, Result>> => {
+    const state = invocationRef === undefined
+      ? createDevelopmentDurableState<Result>()
+      : await loadState(options.port, invocationRef)
     const cache = createDevelopmentDurablePort(state)
+    const commands: PersistControlCommand<Result>[] = []
+    let durableRefusal: Extract<PersistControlResult, { kind: 'refused' }> | undefined
     const capture: DurableActionInvocationPort<Result> = {
       ...cache,
       transact(command) {
-        pending = command
-        return cache.transact(command)
+        const result = cache.transact(command)
+        if (result.kind !== 'refused') commands.push(command)
+        return result
       },
     }
-    return createDurableActionInvocationTracer(
-      {
-        ...options,
-        port: capture,
-        flushBeforeEffectRelease: async () => {
-          if (pending === undefined) return undefined
-          const command = pending
-          pending = undefined
-          const result = await options.port.transact(command)
-          if (result.kind === 'refused') preReleaseRefusal = result
-          return result
-        },
-      },
-      currentInvocationRef,
+    const flushNext = async (): Promise<PersistControlResult | undefined> => {
+      if (durableRefusal !== undefined) return durableRefusal
+      const command = commands.shift()
+      if (command === undefined) return undefined
+      const result = await options.port.transact(command)
+      if (result.kind === 'refused') durableRefusal = result
+      return result
+    }
+    const tracer = createDurableActionInvocationTracer(
+      { ...options, port: capture, flushBeforeEffectRelease: flushNext },
+      invocationRef,
     )
-  }
-  let tracer = makeTracer()
-
-  const commit = async (
-    decision: InvocationDecision<Result>,
-  ): Promise<InvocationDecision<Result>> => {
-    if (decision.kind !== 'accepted' || pending === undefined) return decision
-    const result = await options.port.transact(pending)
-    pending = undefined
-    if (result.kind !== 'refused') return decision
-    state = await loadState(options.port, decision.view.invocationRef)
-    currentInvocationRef = decision.view.invocationRef
-    tracer = makeTracer()
-    const current = tracer.inspect(decision.view.invocationRef)
-    return current === undefined
-      ? { kind: 'refused', code: result.code }
-      : { kind: 'refused', code: result.code, view: current }
-  }
-
-  const commitView = async (
-    view: ActionInvocationView<Result>,
-  ): Promise<ActionInvocationView<Result>> => {
-    if (pending === undefined) return view
-    const result = await options.port.transact(pending)
-    pending = undefined
-    if (result.kind === 'refused') {
-      state = await loadState(options.port, view.invocationRef)
-      currentInvocationRef = view.invocationRef
-      tracer = makeTracer()
-      throw new Error(`Durable transaction refused: ${result.code}`)
+    return {
+      tracer,
+      flushNext,
+      async flushRemaining() {
+        while (commands.length > 0 && durableRefusal === undefined) await flushNext()
+        return durableRefusal
+      },
     }
-    currentInvocationRef = view.invocationRef
-    return view
   }
 
-  const commitExecution = async (
+  const currentDecision = async (
     invocationRef: string,
-    decision: InvocationDecision<Result>,
+    refusal: Extract<PersistControlResult, { kind: 'refused' }>,
   ): Promise<InvocationDecision<Result>> => {
-    if (preReleaseRefusal === undefined) return commit(decision)
-    const refusal = preReleaseRefusal
-    preReleaseRefusal = undefined
-    pending = undefined
-    state = await loadState(options.port, invocationRef)
-    currentInvocationRef = invocationRef
-    tracer = makeTracer()
-    const current = tracer.inspect(invocationRef)
+    const currentOperation = await createOperation(invocationRef)
+    const current = currentOperation.tracer.inspect(invocationRef)
     return current === undefined
       ? { kind: 'refused', code: refusal.code }
       : { kind: 'refused', code: refusal.code, view: current }
   }
 
+  const finishDecision = async (
+    operation: OperationContext<Input, Result>,
+    invocationRef: string,
+    decision: InvocationDecision<Result>,
+  ): Promise<InvocationDecision<Result>> => {
+    const refusal = await operation.flushRemaining()
+    return refusal === undefined ? decision : currentDecision(invocationRef, refusal)
+  }
+
+  const finishView = async (
+    operation: OperationContext<Input, Result>,
+    view: ActionInvocationView<Result>,
+  ): Promise<ActionInvocationView<Result>> => {
+    const refusal = await operation.flushRemaining()
+    if (refusal !== undefined) {
+      throw new Error(`Durable transaction refused: ${refusal.code}`)
+    }
+    return view
+  }
+
+  const existingOperation = async <Value>(
+    invocationRef: string,
+    run: (tracer: DurableActionInvocationTracer<Input, Result>) => Value | Promise<Value>,
+  ): Promise<Readonly<{ operation: OperationContext<Input, Result>; value: Awaited<Value> }>> => {
+    if (boundInvocationRef !== undefined && boundInvocationRef !== invocationRef) {
+      throw new Error(`Tracer is bound to ${boundInvocationRef}, not ${invocationRef}.`)
+    }
+    const operation = await createOperation(invocationRef)
+    return { operation, value: await run(operation.tracer) }
+  }
+
   return {
-    invoke: async (input) => commitView(await tracer.invoke(input)),
-    prepare: async (input) => commitView(tracer.prepare(input)),
-    decide: async (input) => commit(tracer.decide(input)),
-    execute: async (input) => commitExecution(input.invocationRef, await tracer.execute(input)),
-    acquire: async (input) => commit(tracer.acquire(input)),
-    executeAcquired: async (input) =>
-      commitExecution(input.invocationRef, await tracer.executeAcquired(input)),
-    publishObservation: async (input) => commit(tracer.publishObservation(input)),
-    cancel: async (input) => commit(tracer.cancel(input)),
-    reconcile: async (input) => commit(tracer.reconcile(input)),
-    inspect: async (invocationRef) => tracer.inspect(invocationRef),
-    exportSnapshot: async () => tracer.exportSnapshot(),
+    async invoke(input) {
+      const operation = await createOperation()
+      return finishView(operation, await operation.tracer.invoke(input))
+    },
+    async prepare(input) {
+      const operation = await createOperation()
+      return finishView(operation, operation.tracer.prepare(input))
+    },
+    async decide(input) {
+      const { operation, value } = await existingOperation(
+        input.invocationRef,
+        (tracer) => tracer.decide(input),
+      )
+      return finishDecision(operation, input.invocationRef, value)
+    },
+    async execute(input) {
+      const { operation, value } = await existingOperation(
+        input.invocationRef,
+        (tracer) => tracer.execute(input),
+      )
+      return finishDecision(operation, input.invocationRef, value)
+    },
+    async acquire(input) {
+      const { operation, value } = await existingOperation(
+        input.invocationRef,
+        (tracer) => tracer.acquire(input),
+      )
+      return finishDecision(operation, input.invocationRef, value)
+    },
+    async executeAcquired(input) {
+      const { operation, value } = await existingOperation(
+        input.invocationRef,
+        (tracer) => tracer.executeAcquired(input),
+      )
+      return finishDecision(operation, input.invocationRef, value)
+    },
+    async publishObservation(input) {
+      const { operation, value } = await existingOperation(
+        input.invocationRef,
+        (tracer) => tracer.publishObservation(input),
+      )
+      return finishDecision(operation, input.invocationRef, value)
+    },
+    async cancel(input) {
+      const { operation, value } = await existingOperation(
+        input.invocationRef,
+        (tracer) => tracer.cancel(input),
+      )
+      return finishDecision(operation, input.invocationRef, value)
+    },
+    async reconcile(input) {
+      const { operation, value } = await existingOperation(
+        input.invocationRef,
+        (tracer) => tracer.reconcile(input),
+      )
+      return finishDecision(operation, input.invocationRef, value)
+    },
+    async inspect(invocationRef) {
+      const { value } = await existingOperation(
+        invocationRef,
+        (tracer) => tracer.inspect(invocationRef),
+      )
+      return value
+    },
+    async exportSnapshot() {
+      if (boundInvocationRef === undefined) {
+        throw new Error('Async snapshot export requires coldResume(invocationRef).')
+      }
+      const operation = await createOperation(boundInvocationRef)
+      return operation.tracer.exportSnapshot()
+    },
     coldResume: (invocationRef) => createAsyncDurableActionInvocationTracer(options, invocationRef),
   }
 }

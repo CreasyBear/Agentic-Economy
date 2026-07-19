@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import schema from '../../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { ActionContext, ActionResult } from '@/modules/common/action'
 
 vi.mock('@/modules/registry/registry.functions', () => ({
   readPublicRegistryBusinessDetail: vi.fn(),
@@ -57,6 +58,349 @@ function createEvidenceSource() {
 }
 
 describe('durable Action Invocation control', () => {
+  it('refuses non-monotonic rows while preserving exact duplicate idempotency', () => {
+    const state = createDevelopmentDurableState()
+    const port = createDevelopmentDurablePort(state)
+    const invocationRef = 'dev:durable:monotonic'
+    const row = {
+      invocationRef,
+      invocationVersion: 1,
+      sourceRef: 'mock:source:monotonic',
+      control: {
+        invocationRef,
+        invocationVersion: 1,
+        environment: 'MOCK/DEVELOPMENT ONLY' as const,
+        persistence: 'durable_control' as const,
+        origin: origins[1]!,
+        owner: actor,
+        action: { id: 'inquiry.submit', contractVersion: 'inquiry.submit:v1' },
+        desired: { state: 'invoke' as const },
+        freshness: { state: 'not_observed' as const },
+        control: { state: 'authorized' as const, decidedAt: '2026-07-19T14:45:00.000Z' },
+      },
+      updatedAt: '2026-07-19T14:45:00.000Z',
+    }
+    const create = {
+      commandId: 'mock:monotonic:create',
+      commandDigest: canonicalDigest({ invocationRef, version: 1 }),
+      expectedInvocationVersion: null,
+      row,
+      history: {
+        invocationRef,
+        commandId: 'mock:monotonic:create',
+        commandDigest: canonicalDigest({ invocationRef, version: 1 }),
+        commandResult: 'applied' as const,
+        kind: 'create',
+      },
+    }
+    expect(port.transact(create)).toEqual({ kind: 'applied', invocationVersion: 1 })
+    const downgrade = {
+      ...create,
+      commandId: 'mock:monotonic:downgrade',
+      commandDigest: canonicalDigest({ invocationRef, version: 1, downgrade: true }),
+      expectedInvocationVersion: 1,
+      history: {
+        ...create.history,
+        commandId: 'mock:monotonic:downgrade',
+        commandDigest: canonicalDigest({ invocationRef, version: 1, downgrade: true }),
+        kind: 'downgrade',
+      },
+    }
+    expect(port.transact(downgrade)).toEqual({
+      kind: 'refused',
+      code: 'stale_invocation_version',
+    })
+    const advance = {
+      ...create,
+      commandId: 'mock:monotonic:advance',
+      commandDigest: canonicalDigest({ invocationRef, version: 2 }),
+      expectedInvocationVersion: 1,
+      row: {
+        ...row,
+        invocationVersion: 2,
+        control: { ...row.control, invocationVersion: 2 },
+      },
+      history: {
+        ...create.history,
+        commandId: 'mock:monotonic:advance',
+        commandDigest: canonicalDigest({ invocationRef, version: 2 }),
+        kind: 'advance',
+      },
+    }
+    expect(port.transact(advance)).toEqual({ kind: 'applied', invocationVersion: 2 })
+    expect(port.transact(advance)).toEqual({ kind: 'duplicate', invocationVersion: 2 })
+  })
+
+  it('keeps concurrent async invocation command queues isolated while one release transaction pauses', async () => {
+    const action = findAction('inquiry.submit')!
+    const state = createDevelopmentDurableState()
+    const sync = () => createDevelopmentDurablePort(state)
+    const events: string[] = []
+    let releaseA!: () => void
+    const releaseAGate = new Promise<void>((resolve) => { releaseA = resolve })
+    let observedAPause!: () => void
+    const aPaused = new Promise<void>((resolve) => { observedAPause = resolve })
+    const asyncPort: AsyncDurableActionInvocationPort = {
+      transact: async (command) => {
+        const ref = command.row.invocationRef.endsWith(':1') ? 'A' : 'B'
+        events.push(`${ref}:durable:${command.history.kind}:start`)
+        if (ref === 'A' && command.history.kind === 'begin_release') {
+          observedAPause()
+          await releaseAGate
+        }
+        const result = sync().transact(command)
+        events.push(`${ref}:durable:${command.history.kind}:done`)
+        return result
+      },
+      readControl: async (ref) => sync().readControl(ref),
+      readAttempts: async ({ invocationRef, numItems }) => ({
+        page: sync().readAttempts(invocationRef, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      readAttempt: async (invocationRef, attemptRef) => sync().readAttempt(invocationRef, attemptRef),
+      readHistory: async ({ invocationRef, numItems }) => ({
+        page: sync().readHistory(invocationRef, 0, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      recordLateObservation: async (observation) => sync().recordLateObservation(observation),
+    }
+    const sources = new Map<string, {
+      input: typeof input
+      context: ActionContext
+      prepared: PreparedInvocation | undefined
+      observedResolution: { state: 'pending' } | {
+        state: 'returned'
+        execution: 'runner_returned' | 'pre_release_refused'
+        businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed'
+        result: ActionResult
+      }
+    }>()
+    const makeInput = (label: 'A' | 'B') => ({
+      ...input,
+      operationKey: `mock:source:concurrent:${label}`,
+    })
+    for (const label of ['A', 'B'] as const) {
+      const selectedInput = makeInput(label)
+      sources.set(selectedInput.operationKey, {
+        input: selectedInput,
+        context: {
+          developmentOnlyInquirySubmitAdapter: vi.fn(async () => {
+            events.push(`${label}:adapter`)
+            return {
+              kind: 'error' as const,
+              code: `mock_${label}_complete`,
+              retryable: false,
+              reason: `MOCK ${label} completion`,
+            }
+          }),
+        },
+        prepared: undefined,
+        observedResolution: { state: 'pending' },
+      })
+    }
+    let invocationSequence = 0
+    let attemptSequence = 0
+    const tracer = await createAsyncDurableActionInvocationTracer({
+      action, port: asyncPort,
+      now: () => '2026-07-19T14:00:00.000Z',
+      nextInvocationRef: () => `dev:async:concurrent:${++invocationSequence}`,
+      nextAuthorityRef: () => `opaque:async:concurrent:${invocationSequence}`,
+      nextAttemptRef: () => `dev:async:concurrent:attempt:${++attemptSequence}`,
+      resolveSourceState: (sourceRef) => {
+        const source = sources.get(sourceRef)
+        if (source === undefined) throw new Error(`Missing source ${sourceRef}.`)
+        return source
+      },
+    })
+    const prepared = await Promise.all((['A', 'B'] as const).map(async (label) => {
+      const source = sources.get(`mock:source:concurrent:${label}`)!
+      const view = await tracer.prepare({
+        origin: origins[1]!, actor, input: source.input,
+        context: source.context, freshnessMs: 300_000,
+      })
+      source.prepared = view.prepared!
+      const decided = await tracer.decide({
+        invocationRef: view.invocationRef,
+        expectedInvocationVersion: view.invocationVersion,
+        authorityRef: view.authority!.reference,
+        actor, origin: origins[1]!, accept: true,
+      })
+      if (decided.kind !== 'accepted') throw new Error(decided.code)
+      return { label, source, prepared: view, decided: decided.view }
+    }))
+    events.length = 0
+    const a = prepared.find(({ label }) => label === 'A')!
+    const b = prepared.find(({ label }) => label === 'B')!
+    const executeA = tracer.execute({
+      invocationRef: a.prepared.invocationRef,
+      expectedInvocationVersion: a.decided.invocationVersion,
+      authorityRef: a.prepared.authority!.reference,
+      actor, origin: origins[1]!, materialInput: a.source.input,
+    })
+    await aPaused
+    const executeB = tracer.execute({
+      invocationRef: b.prepared.invocationRef,
+      expectedInvocationVersion: b.decided.invocationVersion,
+      authorityRef: b.prepared.authority!.reference,
+      actor, origin: origins[1]!, materialInput: b.source.input,
+    })
+    await expect(executeB).resolves.toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'terminal' } },
+    })
+    expect(events).toContain('B:adapter')
+    expect(events).not.toContain('A:adapter')
+    releaseA()
+    await expect(executeA).resolves.toMatchObject({
+      kind: 'accepted',
+      view: { control: { state: 'terminal' } },
+    })
+    expect(events.indexOf('B:durable:begin_release:done'))
+      .toBeLessThan(events.indexOf('B:adapter'))
+    expect(events.indexOf('B:adapter'))
+      .toBeLessThan(events.indexOf('B:durable:execute_acquired:start'))
+    expect(events.indexOf('A:durable:begin_release:done'))
+      .toBeLessThan(events.indexOf('A:adapter'))
+    expect(events.indexOf('A:adapter'))
+      .toBeLessThan(events.indexOf('A:durable:execute_acquired:start'))
+    expect(sync().readControl(a.prepared.invocationRef)?.control.control).toEqual({ state: 'terminal' })
+    expect(sync().readControl(b.prepared.invocationRef)?.control.control).toEqual({ state: 'terminal' })
+  })
+
+  it('scopes a concurrent async begin_release refusal to its exact invocation', async () => {
+    const action = findAction('inquiry.submit')!
+    const state = createDevelopmentDurableState()
+    const sync = () => createDevelopmentDurablePort(state)
+    let refusedInvocationRef = ''
+    const asyncPort: AsyncDurableActionInvocationPort = {
+      transact: async (command) => {
+        if (
+          command.row.invocationRef === refusedInvocationRef &&
+          command.history.kind === 'begin_release'
+        ) {
+          const current = sync().readControl(refusedInvocationRef)
+          if (current === undefined) throw new Error('Missing isolated race row.')
+          const version = current.invocationVersion + 1
+          const digest = canonicalDigest({ isolatedWinner: command.commandDigest })
+          expect(sync().transact({
+            ...command,
+            commandId: `${command.commandId}:isolated-winner`,
+            commandDigest: digest,
+            expectedInvocationVersion: current.invocationVersion,
+            ...(current.currentEffectGeneration === undefined ? {} : {
+              expectedEffectGeneration: current.currentEffectGeneration,
+            }),
+            row: {
+              ...current,
+              invocationVersion: version,
+              control: {
+                ...current.control,
+                invocationVersion: version,
+                control: { state: 'cancelled', effect: 'not_released' },
+              },
+            },
+            history: {
+              invocationRef: refusedInvocationRef,
+              commandId: `${command.commandId}:isolated-winner`,
+              commandDigest: digest,
+              commandResult: 'applied',
+              kind: 'isolated_forced_winner',
+            },
+          })).toMatchObject({ kind: 'applied' })
+        }
+        return sync().transact(command)
+      },
+      readControl: async (ref) => sync().readControl(ref),
+      readAttempts: async ({ invocationRef, numItems }) => ({
+        page: sync().readAttempts(invocationRef, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      readAttempt: async (invocationRef, attemptRef) => sync().readAttempt(invocationRef, attemptRef),
+      readHistory: async ({ invocationRef, numItems }) => ({
+        page: sync().readHistory(invocationRef, 0, numItems),
+        continueCursor: '', isDone: true,
+      }),
+      recordLateObservation: async (observation) => sync().recordLateObservation(observation),
+    }
+    const adapters = { A: vi.fn(), B: vi.fn() }
+    const sources = new Map<string, {
+      input: typeof input
+      context: ActionContext
+      prepared: PreparedInvocation | undefined
+      observedResolution: { state: 'pending' }
+    }>()
+    for (const label of ['A', 'B'] as const) {
+      const selectedInput = { ...input, operationKey: `mock:source:refusal-isolation:${label}` }
+      adapters[label].mockResolvedValue({
+        kind: 'error', code: `mock_${label}`, retryable: false, reason: `MOCK ${label}`,
+      })
+      sources.set(selectedInput.operationKey, {
+        input: selectedInput,
+        context: { developmentOnlyInquirySubmitAdapter: adapters[label] },
+        prepared: undefined,
+        observedResolution: { state: 'pending' },
+      })
+    }
+    let invocationSequence = 0
+    const tracer = await createAsyncDurableActionInvocationTracer({
+      action, port: asyncPort,
+      now: () => '2026-07-19T14:30:00.000Z',
+      nextInvocationRef: () => `dev:async:refusal-isolation:${++invocationSequence}`,
+      nextAuthorityRef: () => `opaque:async:refusal-isolation:${invocationSequence}`,
+      nextAttemptRef: () => `dev:async:refusal-isolation:attempt:${invocationSequence}`,
+      resolveSourceState: (sourceRef) => sources.get(sourceRef)!,
+    })
+    const ready = []
+    for (const label of ['A', 'B'] as const) {
+      const source = sources.get(`mock:source:refusal-isolation:${label}`)!
+      const prepared = await tracer.prepare({
+        origin: origins[1]!, actor, input: source.input,
+        context: source.context, freshnessMs: 300_000,
+      })
+      source.prepared = prepared.prepared!
+      const decided = await tracer.decide({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: prepared.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin: origins[1]!, accept: true,
+      })
+      if (decided.kind !== 'accepted') throw new Error(decided.code)
+      ready.push({ label, source, prepared, decided: decided.view })
+    }
+    const a = ready[0]!
+    const b = ready[1]!
+    refusedInvocationRef = a.prepared.invocationRef
+    const [aResult, bResult] = await Promise.all([
+      tracer.execute({
+        invocationRef: a.prepared.invocationRef,
+        expectedInvocationVersion: a.decided.invocationVersion,
+        authorityRef: a.prepared.authority!.reference,
+        actor, origin: origins[1]!, materialInput: a.source.input,
+      }),
+      tracer.execute({
+        invocationRef: b.prepared.invocationRef,
+        expectedInvocationVersion: b.decided.invocationVersion,
+        authorityRef: b.prepared.authority!.reference,
+        actor, origin: origins[1]!, materialInput: b.source.input,
+      }),
+    ])
+    expect(aResult).toMatchObject({
+      kind: 'refused',
+      code: 'stale_invocation_version',
+      view: { invocationRef: a.prepared.invocationRef, control: { state: 'cancelled' } },
+    })
+    expect(bResult).toMatchObject({
+      kind: 'accepted',
+      view: { invocationRef: b.prepared.invocationRef, control: { state: 'terminal' } },
+    })
+    expect(adapters.A).not.toHaveBeenCalled()
+    expect(adapters.B).toHaveBeenCalledTimes(1)
+    expect(sync().readControl(a.prepared.invocationRef)?.control.control)
+      .toEqual({ state: 'cancelled', effect: 'not_released' })
+    expect(sync().readControl(b.prepared.invocationRef)?.control.control)
+      .toEqual({ state: 'terminal' })
+  })
+
   it('fences the sync release transaction to the stale worker token and rehydrates the winner', async () => {
     const origin = origins[1]!
     const action = findAction('inquiry.submit')!
