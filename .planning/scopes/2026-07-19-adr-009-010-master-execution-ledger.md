@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `e5079e23`
+**Current accepted revision:** `7bca61c8`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -43,9 +43,36 @@ owner explicitly hands them over:
 Every child records its base revision and uses an isolated worktree. Child
 commits are reviewed and cherry-picked by the master.
 
+## Canonical Phase 1 execution map
+
+The governing sequence is the thirteen Phase 1 vertical slices in
+`2026-07-18-phase-1-2-completion-contract.md`. Earlier `P1-A` through `P1-J`
+labels were temporary master bookkeeping and are retired. They do not define a
+parallel plan.
+
+| Canonical slice | Current position | Accepted source |
+|---|---|---|
+| 1. Registered-action contract | Implemented; final audit still required | `72351a80`, `ccd21ad2`, `f744e943` |
+| 2. Supplied-candidate qualification tracer | Implemented and focused-eval green | `4c27d371`, `27e885f6` |
+| 3. Supplied-candidate quote-collection tracer | Implemented and focused-eval green | `f744e943` through `e5079e23` |
+| 4. Imported-commitment observation tracer | Active; no source accepted yet | child `019f79b0-5217-7a12-98af-691a230e6776` |
+| 5. Two-caller in-memory tracer | Implemented | `72351a80` |
+| 6. Preparation and exact authority | Implemented | `ccd21ad2` |
+| 7. Attributable effect attempt | Implemented | `f4b77026`, `f1cc1fb6` |
+| 8. Interruption and uncertainty | Partial: refusal and pre/post-release paths proven; timeout and malformed-evidence audit remain | `f4b77026`, `8d3fe91a`, `e5079e23` |
+| 9. Concurrency and recovery | Implemented in labelled development execution | `f1cc1fb6`, `8d3fe91a`, `0d5131a3` |
+| 10. Earned persistence | Implemented in labelled development execution; private Convex runtime not invoked | `622115e9`, `0d5131a3` |
+| 11. Request reuse | Implemented in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0` |
+| 12. Composition and direct control | Not implemented | — |
+| 13. Transfer | Not implemented | — |
+
+Phase 2 may not start until slices 1–13, all eleven ADR-009 gates, and the
+Founder ADR-009 decision are complete. Existing reconstruction or projection
+work is Phase 1 evidence only; it is not early Phase 2 completion.
+
 ## Accepted slices
 
-### P1-A/B — registered-action compatibility and two-origin read tracer
+### Canonical slices 1 and 5 — registered-action contract and two-caller tracer
 
 **Accepted commit:** `72351a80`  
 **Child commit:** `1a797e77715731c82d56c6c3dedd394f2cade273`  
@@ -104,7 +131,7 @@ reversible proposed-ADR choices, reconstructability and concurrency invariants,
 no-god-file discipline, and safe parent/child isolation. The live surface is now
 discovered from source rather than frozen into this instruction file.
 
-### P1-C — exact in-memory authority for `inquiry.submit`
+### Canonical slice 6 — exact authority for `inquiry.submit`
 
 **Accepted commit:** `ccd21ad2`  
 **Child commit:** `041be4dabd6e48d986fe32977bec6351fc9b0577`  
@@ -142,7 +169,7 @@ Not established:
 - leases, generations, cancellation, recovery, durability, or restart;
 - network send, provider delivery, fulfilment, hosted, or production behavior.
 
-### P1-D — attributable attempt and uncertainty
+### Canonical slices 7 and 8 — attributable attempt and uncertainty
 
 **Accepted commit:** `f4b77026`
 **Child commit:** `95716836689479ae5c0c0fb765be312db5dc4e8f`
@@ -177,7 +204,7 @@ Not established:
 - provider/network execution, delivery, fulfilment, hosted, or production
   behavior.
 
-### P1-E — concurrency fencing, cancellation, and in-memory recovery
+### Canonical slice 9 — concurrency fencing, cancellation, and recovery
 
 **Accepted commits:** `f1cc1fb6`, `8d3fe91a`
 **Child commits:** `3e88da6f84e4b020c8dd7f77f261e8d1a404a0fb`,
@@ -225,7 +252,7 @@ Not established:
 - provider/network release, delivery, fulfilment, hosted, or production
   behavior.
 
-### P1-F — earned durable control and cold resume
+### Canonical slice 10 — earned durable control and cold resume
 
 **Accepted commits:** `622115e9`, `0d5131a3`
 **Child commits:** `82805c97c3e00349067d7c8af7ac1cacc67c4080`,
@@ -290,7 +317,7 @@ Static source inspection under the AE Convex guardrails established:
 This is a source-level development persistence decision. It authorizes no
 deployment or hosted readback.
 
-### P1-G — completed standalone result reference in Customer Request
+### Canonical slice 11 — completed standalone result reference in Customer Request
 
 **Accepted commits:** `92d57aeb`, `f7c978b5`, `f1808da0`
 **Child commits:** `3caaf430ca976267b34b57c840f72f0c9a06e142`,
@@ -336,7 +363,7 @@ Not established:
 
 ## Active slice
 
-### P1-H — supplied-candidate qualification
+### Canonical slice 2 — supplied-candidate qualification
 
 **Accepted commits:** `4c27d371`, `27e885f6`
 **Child commits:** `d993c6cc1f838a5b03da3893b4071a3871d97adf`,
@@ -378,7 +405,7 @@ Not established:
 - quote preparation, disclosure authority, provider attempt, or quote result;
 - deployment, hosted readback, provider fulfilment, or customer value.
 
-### P1-I — supplied-candidate quote collection
+### Canonical slice 3 — supplied-candidate quote collection
 
 **Accepted commits:** `f744e943`, `c4f20455`, `4f0941a7`, `31ec335e`,
 `e5079e23`
@@ -433,9 +460,9 @@ Not established:
 - deployment, hosted readback, or public quote surface;
 - imported-commitment attribution.
 
-### P1-J — imported commitment attribution
+### Canonical slice 4 — imported commitment attribution
 
-**Status:** ready to dispatch from `e5079e23`
+**Status:** paused with uncommitted child work pending canonical-slice review
 
 Target transition:
 
@@ -488,7 +515,7 @@ implementation gate substitute.
 
 ## Next decision
 
-Dispatch imported-commitment attribution. The next decision is whether an
+Resume canonical slice 4 imported-commitment attribution. The next decision is whether an
 external commitment can remain an inspectable attributable claim without being
 silently upgraded into admitted supply, executable authority, a provider quote,
 or a completed effect.
