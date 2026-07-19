@@ -14,8 +14,8 @@ import {
   retireSupersededSandboxRouteSupply,
   retireSupersededSandboxV2Supply,
   seedSandboxCapabilityPublication,
-  setCapabilitySupplyEligibilityCommand,
 } from './devSeed'
+import { setCapabilitySupplyEligibilityCommand } from './capabilitySupply'
 import { runtimeDb } from './source_state'
 import { DEV_SEED_BUSINESS_FIXTURES } from '../src/modules/dev/public'
 import { SANDBOX_WORKFLOW_PROVIDER_PROFILES } from '../src/modules/sandbox-supply/workflow-cohorts'
