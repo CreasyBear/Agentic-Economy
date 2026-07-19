@@ -66,6 +66,25 @@ export function developmentLostResponseRuntime(
   }
 }
 
+export function developmentProviderTimeoutRuntime(
+  endpoint: string,
+  effects: DevelopmentEffectCounts,
+): RouteTransportRuntime {
+  const base = developmentSuccessRuntime(endpoint, effects)
+  let sends = 0
+  return {
+    ...base,
+    send: async (url, init) => {
+      sends += 1
+      if (sends === 2) {
+        effects.provider += 1
+        return await new Promise<never>(() => {})
+      }
+      return await base.send(url, init)
+    },
+  }
+}
+
 export function developmentReleasedRefusalRuntime(
   endpoint: string,
   effects: DevelopmentEffectCounts,

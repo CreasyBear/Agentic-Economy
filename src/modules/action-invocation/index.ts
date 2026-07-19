@@ -55,6 +55,12 @@ export {
   readDevelopmentHostSnapshot,
   verifyDevelopmentHostReadReceipt,
 } from './development-host-read'
+export { projectInvocationTask, requiredFields } from './host-projection'
+export { clarifyInvocationInput, applyClarificationAnswer } from './clarification'
+export {
+  applyPreparedWorkCorrection,
+  createAuthoritativePreparedWork,
+} from './correction'
 
 export type {
   ActionInvocationOrigin,
@@ -94,6 +100,16 @@ export type {
   DevelopmentHostReadReceipt,
   DevelopmentHostSemanticRead,
 } from './development-host-read'
+export type {
+  InvocationTaskSemantics,
+  RichInvocationTaskProjection,
+  StructuredInvocationTaskProjection,
+} from './host-projection'
+export type { InvocationClarification } from './clarification'
+export type {
+  AuthoritativePreparedWork,
+  PreparedWorkCorrection,
+} from './correction'
 export type {
   AuthorityUse,
   AuthorityUseMaterial,

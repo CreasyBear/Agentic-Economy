@@ -14,7 +14,7 @@ import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability
 import { runDevelopmentHostScenarioMatrix } from '@/modules/capability-supply/development-host-scenarios'
 
 const provenance = {
-  sourceBaseCommit: '920989b4451d183d95748b5eaee3cd1da2bdbecb',
+  sourceBaseCommit: 'ebe35bdbd3b4707b356607e8dc615d3e29babe8d',
   evidenceCommit: '1111111111111111111111111111111111111111',
   evidenceTreeDigest: '2222222222222222222222222222222222222222',
 } as const
@@ -32,10 +32,14 @@ describe('ADR-010 development host parity', () => {
     })).not.toThrow()
     expect(packet.evals.every((entry) => entry.passed)).toBe(true)
     expect(packet.evals.map((entry) => entry.name)).toEqual([
+      'clarification_exact_once',
+      'material_correction_invalidation',
+      'rich_structured_task_semantics',
       'success',
       'zero_effect_preflight_refusal',
       'source_refusal',
       'post_release_source_refusal',
+      'provider_timeout_parity',
       'uncertainty_reconcile_before_retry',
       'duplicate_stale_and_cancellation_fences',
       'process_cold_resume_without_transcript_cache',
@@ -116,6 +120,34 @@ describe('ADR-010 development host parity', () => {
     ['released refusal provider evidence', (packet: any) => {
       packet.hosts[0].releasedRefusal.snapshot.sourceRows[0]
         .observedResolution.result.providerReceipt = 'mock:forged-provider-receipt'
+    }],
+    ['rich projection invention', (packet: any) => {
+      packet.hosts[0].projections.rich.semantics.continuations.push('invented_payment')
+      packet.hosts[0].projections.rich.semanticDigest =
+        canonicalDigest(packet.hosts[0].projections.rich.semantics)
+    }],
+    ['structured consequence invention', (packet: any) => {
+      packet.hosts[1].projections.structured.semantics.consequence = 'No consequence'
+      packet.hosts[1].projections.structured.semanticDigest =
+        canonicalDigest(packet.hosts[1].projections.structured.semantics)
+    }],
+    ['stale correction projection', (packet: any) => {
+      packet.hosts[0].correction.material.work.projectionVersion = 1
+    }],
+    ['authority retained after correction', (packet: any) => {
+      packet.hosts[1].correction.material.invalidatedAuthority = false
+    }],
+    ['unnecessary clarification', (packet: any) => {
+      packet.hosts[0].clarification.answered.questions.push({
+        field: 'credential',
+        prompt: 'Which credential?',
+      })
+    }],
+    ['missing required clarification', (packet: any) => {
+      packet.hosts[1].clarification.first.questions = []
+    }],
+    ['timeout reclassified', (packet: any) => {
+      packet.hosts[0].timeout.releaseClassification = 'not_released'
     }],
   ])('rejects coordinated %s tampering after attacker redigests the packet', async (_name, mutate) => {
     const packet = clone(await buildDevelopmentHostParityEvidence(provenance))

@@ -15,6 +15,7 @@ import type {
   InvocationDecision,
   StandingMandateAuthorityBasis,
 } from './contracts'
+import type { DevelopmentTimeoutSignal } from './attempts'
 import {
   buildDynamicPublishedInput,
   createDynamicPublishedAction,
@@ -141,6 +142,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   nextAuthorityRef: () => string
   nextAttemptRef: () => string
   durableState?: DevelopmentDurableState<DynamicPublishedInvocationResult>
+  developmentTimeoutSignal?: DevelopmentTimeoutSignal
 }>): DynamicPublishedActionInvocationAdapter {
   const descriptor = materializeRuntimePublishedOperation(input.operation)
   const durableState = input.durableState ?? createDevelopmentDurableState<DynamicPublishedInvocationResult>()
@@ -351,6 +353,9 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     sourceRefForInvocation: (view) => view.invocationRef,
     verifyReconciliationEvidence: (evidence) =>
       evidence.source === `published-operation:${input.operation.operationId}`,
+    ...(input.developmentTimeoutSignal === undefined
+      ? {}
+      : { developmentTimeoutSignal: input.developmentTimeoutSignal }),
     resolveSourceState: (invocationRef) => {
       const row = input.source.read(invocationRef)
       if (row === undefined) throw new Error(`Missing dynamic published source ${invocationRef}.`)

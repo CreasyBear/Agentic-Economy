@@ -1,17 +1,25 @@
 import {
   buildDynamicPublishedInput,
+  applyClarificationAnswer,
+  applyPreparedWorkCorrection,
+  clarifyInvocationInput,
+  createAuthoritativePreparedWork,
+  createDevelopmentTimeoutSignal,
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
   createRequestOwnedDevelopmentHost,
   createStandaloneAgentDevelopmentHost,
   loadDynamicPublishedAdapterSnapshot,
   materialDigest,
+  projectInvocationTask,
   type DevelopmentHostKind,
   type DevelopmentHostSourceCommands,
   type DevelopmentInvocationHost,
   type DynamicPublishedAdapterSnapshot,
   type DynamicPublishedSnapshotAnchors,
   type InvocationActor,
+  type RichInvocationTaskProjection,
+  type StructuredInvocationTaskProjection,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -27,6 +35,7 @@ import {
 import {
   developmentLostResponseRuntime,
   developmentPreflightRefusalRuntime,
+  developmentProviderTimeoutRuntime,
   developmentReleasedRefusalRuntime,
   developmentSuccessRuntime,
   type DevelopmentEffectCounts,
@@ -37,6 +46,18 @@ type Fixture = ReturnType<typeof buildDevelopmentPublishedOperationEvidence>
 export type DevelopmentHostScenarioRecord = Readonly<{
   host: DevelopmentHostKind
   actor: InvocationActor
+  clarification: Readonly<{
+    first: ReturnType<typeof clarifyInvocationInput>
+    answered: ReturnType<typeof clarifyInvocationInput>
+  }>
+  correction: Readonly<{
+    presentation: ReturnType<typeof applyPreparedWorkCorrection>
+    material: ReturnType<typeof applyPreparedWorkCorrection>
+  }>
+  projections: Readonly<{
+    rich: RichInvocationTaskProjection
+    structured: StructuredInvocationTaskProjection
+  }>
   success: ScenarioOutcome
   preflightRefusal: ScenarioOutcome
   sourceRefusal: ScenarioOutcome
@@ -44,6 +65,10 @@ export type DevelopmentHostScenarioRecord = Readonly<{
   uncertainty: ScenarioOutcome & Readonly<{
     retryBeforeReconcile: string
     reconciledState: string
+  }>
+  timeout: ScenarioOutcome & Readonly<{
+    retryBeforeReconcile: string
+    releaseClassification: string
   }>
   staleFences: Readonly<{
     duplicate: string
@@ -101,14 +126,48 @@ async function runHostScenarios(
   hostKind: DevelopmentHostKind,
 ): Promise<DevelopmentHostScenarioRecord> {
   const success = await successScenario(fixture, hostKind)
+  const firstClarification = clarifyInvocationInput({
+    descriptor: fixture.descriptor,
+    known: { symbol: 'BTC' },
+  })
+  const preparedWork = createAuthoritativePreparedWork({
+    lineageRef: success.outcome.invocationRef,
+    value: { symbol: 'BTC', convert: 'USD' },
+  })
   return {
     host: hostKind,
     actor: actorFor(hostKind),
+    clarification: {
+      first: firstClarification,
+      answered: applyClarificationAnswer({
+        descriptor: fixture.descriptor,
+        current: firstClarification,
+        answers: { convert: 'USD' },
+      }),
+    },
+    correction: {
+      presentation: applyPreparedWorkCorrection({
+        current: preparedWork,
+        value: { density: 'compact' },
+        classification: 'presentation_only',
+      }),
+      material: applyPreparedWorkCorrection({
+        current: preparedWork,
+        value: { symbol: 'ETH', convert: 'USD' },
+        classification: 'material',
+      }),
+    },
+    projections: projectInvocationTask({
+      view: success.context.host.inspect(success.outcome.invocationRef)!,
+      descriptor: fixture.descriptor,
+      suppliedInput: { symbol: 'BTC', convert: 'USD' },
+    }),
     success: success.outcome,
     preflightRefusal: await refusalScenario(fixture, hostKind, 'preflight'),
     sourceRefusal: await refusalScenario(fixture, hostKind, 'source'),
     releasedRefusal: await releasedRefusalScenario(fixture, hostKind),
     uncertainty: await uncertaintyScenario(fixture, hostKind),
+    timeout: await timeoutScenario(fixture, hostKind),
     staleFences: success.staleFences,
     coldResume: await coldResumeScenario(fixture, hostKind),
     completedResultReuse: hostKind === 'standalone_external_agent'
@@ -125,6 +184,34 @@ async function runHostScenarios(
           effectsBefore: { ...success.outcome.effects },
           effectsAfter: { ...success.outcome.effects },
         },
+  }
+}
+
+async function timeoutScenario(
+  fixture: Fixture,
+  hostKind: DevelopmentHostKind,
+): Promise<DevelopmentHostScenarioRecord['timeout']> {
+  const timeout = createDevelopmentTimeoutSignal()
+  const context = createScenario(
+    fixture,
+    hostKind,
+    'provider-timeout',
+    developmentProviderTimeoutRuntime,
+    undefined,
+    timeout.signal,
+  )
+  const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const decided = context.host.decide(prepared.invocationRef, true)
+  if (decided.kind !== 'accepted') throw new Error(`host_timeout_decision:${decided.code}`)
+  timeout.fire()
+  const timedOut = await context.host.continue(prepared.invocationRef)
+  if (timedOut.kind !== 'completed') throw new Error(`host_timeout_execute:${continuationCode(timedOut)}`)
+  const retry = await context.host.continue(prepared.invocationRef)
+  const attempt = timedOut.view.attempts.at(-1)
+  return {
+    ...outcome(prepared.invocationRef, prepared.authority!.reference, timedOut.view, context),
+    retryBeforeReconcile: retry.kind === 'refused' ? retry.code : retry.kind,
+    releaseClassification: attempt?.release.state ?? 'missing',
   }
 }
 
@@ -397,6 +484,7 @@ function createScenario(
     effects: DevelopmentEffectCounts,
   ) => ReturnType<typeof developmentSuccessRuntime>,
   beforeExecute?: DevelopmentHostSourceCommands['beforeExecute'],
+  developmentTimeoutSignal?: ReturnType<typeof createDevelopmentTimeoutSignal>['signal'],
 ) {
   const effects: DevelopmentEffectCounts = { payment: 0, provider: 0 }
   const actor = actorFor(hostKind)
@@ -410,6 +498,7 @@ function createScenario(
     nextInvocationRef: () => `host:${hostKind}:${scenario}:invocation`,
     nextAuthorityRef: () => `host:${hostKind}:${scenario}:authority`,
     nextAttemptRef: () => `host:${hostKind}:${scenario}:attempt`,
+    ...(developmentTimeoutSignal === undefined ? {} : { developmentTimeoutSignal }),
   })
   const commands = sourceCommands(fixture, hostKind, now, beforeExecute)
   return {

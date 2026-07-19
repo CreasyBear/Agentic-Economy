@@ -21,7 +21,7 @@ import {
 export const developmentHostParityClaimCeiling =
   'Labelled local adapter/caller parity over mock transport, payment, and provider effects only; no hosted reachability, real-human usability, independent signing or root provenance, settlement, provider fulfilment, production safety, or customer value.'
 export const developmentHostParitySourceBaseCommit =
-  '920989b4451d183d95748b5eaee3cd1da2bdbecb'
+  'ebe35bdbd3b4707b356607e8dc615d3e29babe8d'
 
 export type DevelopmentHostParityEvidence = Readonly<{
   format: 'action-invocation-host-parity:development:v2'
@@ -103,6 +103,7 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
       sourceRefusal: host.sourceRefusal,
       releasedRefusal: host.releasedRefusal,
       uncertainty: host.uncertainty,
+      timeout: host.timeout,
       coldResume: host.coldResume,
     })) {
       const source = scenario.snapshot.sourceRows[0]
@@ -110,6 +111,7 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
       const effectWasAdmitted = scenarioName === 'success'
         || scenarioName === 'releasedRefusal'
         || scenarioName === 'uncertainty'
+        || scenarioName === 'timeout'
         || scenarioName === 'coldResume'
       try {
         if (scenarioName === 'releasedRefusal') {
@@ -214,6 +216,41 @@ export function evaluateHostMatrix(
 ) {
   const checks = [
     {
+      name: 'clarification_exact_once',
+      passed: hosts.every((host) =>
+        host.clarification.first.missing.join(',') === 'convert'
+        && host.clarification.first.questions.length === 1
+        && host.clarification.answered.missing.length === 0
+        && host.clarification.answered.questions.length === 0
+        && !/method|path|payment|credential|provider/iu.test(
+          JSON.stringify(host.clarification.first.questions),
+        )),
+      evidence: hosts.map((host) => host.clarification),
+    },
+    {
+      name: 'material_correction_invalidation',
+      passed: hosts.every((host) =>
+        host.correction.presentation.kind === 'presentation_only'
+        && host.correction.presentation.invalidatedProjectionVersion === null
+        && host.correction.material.kind === 'material'
+        && host.correction.material.invalidatedAuthority
+        && host.correction.material.work.lineageRef === host.success.invocationRef
+        && host.correction.material.work.version === 2
+        && host.correction.material.work.projectionVersion === 2
+        && host.correction.material.work.authorityState === 'fresh_required'),
+      evidence: hosts.map((host) => host.correction),
+    },
+    {
+      name: 'rich_structured_task_semantics',
+      passed: hosts.every((host) =>
+        host.projections.rich.semanticDigest === host.projections.structured.semanticDigest
+        && canonicalDigest(host.projections.rich.semantics as unknown as StableHashValue)
+          === canonicalDigest(host.projections.structured.semantics as unknown as StableHashValue)
+        && host.projections.structured.semantics.missingInformation.length === 0
+        && host.projections.structured.semantics.authorityBoundary.accepted),
+      evidence: hosts.map((host) => host.projections),
+    },
+    {
       name: 'success',
       passed: hosts.every((host) => host.success.state === 'terminal'
         && host.success.execution.includes('published_operation_succeeded')
@@ -245,6 +282,17 @@ export function evaluateHostMatrix(
         && host.releasedRefusal.snapshot.attempts[0]?.rows[0]?.release.state === 'possibly_released'
         && host.releasedRefusal.snapshot.attempts[0]?.rows[0]?.outcome.state === 'returned'),
       evidence: hosts.map((host) => host.releasedRefusal),
+    },
+    {
+      name: 'provider_timeout_parity',
+      passed: hosts.every((host) =>
+        host.timeout.state === 'reconciliation_required'
+        && host.timeout.execution === 'timed_out'
+        && host.timeout.retryBeforeReconcile === 'reconcile_before_retry'
+        && host.timeout.releaseClassification === 'possibly_released'
+        && host.timeout.effects.payment === 1
+        && host.timeout.effects.provider === 1),
+      evidence: hosts.map((host) => host.timeout),
     },
     {
       name: 'uncertainty_reconcile_before_retry',
