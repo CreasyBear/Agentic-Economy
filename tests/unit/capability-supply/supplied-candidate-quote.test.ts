@@ -24,6 +24,8 @@ import {
   type SuppliedCandidateQuoteResult,
 } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { resolveActionContract } from '@/modules/common/action'
+import { registryDetailAction } from '@/modules/registry/registry.actions'
 import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
@@ -273,6 +275,227 @@ function inMemoryTracer(
 }
 
 describe('ADR-009 supplied-candidate development quote collection', () => {
+  it('MOCK/DEVELOPMENT ONLY: transfer eval keeps direct reads direct and earns quote control through safety and continuity', async () => {
+    // Preregistered falsifiers:
+    // F1: narrow the seam if the consequential arm adds control burden without
+    //     exact authority before release or attributable effect attempts.
+    // F2: narrow the seam if possible release can be retried without reconciliation.
+    // F3: narrow the seam if a fresh process cannot continue from durable records.
+    // F4: reject universal orchestration if a read-only direct arm gains any
+    //     invocation, authority, attempt, history, or supervisor record.
+    const directReadContract = resolveActionContract(registryDetailAction)
+    const directRead = {
+      workflow: 'MOCK/DEVELOPMENT ONLY: inspect a field-service business before contact',
+      controlRecords: 0,
+      attributableEffectAttempts: 0,
+      runnerCalls: 1,
+      effectCalls: 0,
+      authorityDecisions: 0,
+      userOrSupervisorDecisions: 0,
+      requiredContinuations: 0,
+      logicalTransitions: 1,
+    }
+    expect(directReadContract).toMatchObject({
+      consequenceClass: 'read_only',
+      authorityRequirement: 'none',
+      retryClass: 'replayable',
+    })
+
+    const ports = qualificationPorts()
+    const quoteInput = {
+      ...await quoteInputFor(ports),
+      quoteRequest: {
+        serviceReference: 'dev:service:strata-repair-assessment',
+        requestedFields: ['price', 'validUntil', 'terms'],
+        constraints: {
+          siteType: 'strata_common_property',
+          fault: 'water_ingress_assessment',
+          accessWindow: 'weekday_business_hours',
+        },
+      },
+      disclosure: {
+        fields: [
+          'quoteRequest.serviceReference',
+          'quoteRequest.constraints.accessWindow',
+          'quoteRequest.constraints.fault',
+          'quoteRequest.constraints.siteType',
+        ],
+        limits: {
+          'quoteRequest.serviceReference': 500,
+          'quoteRequest.constraints.accessWindow': 120,
+          'quoteRequest.constraints.fault': 120,
+          'quoteRequest.constraints.siteType': 120,
+        },
+        purpose: 'request_development_quote' as const,
+      },
+      operationKey: 'dev:transfer:strata-repair:quote:1',
+    }
+    const directAdapter = vi.fn().mockResolvedValue({
+      kind: 'quote_returned',
+      environment: 'MOCK/DEVELOPMENT ONLY',
+      quote: {
+        quoteRef: 'dev:transfer:quote:direct',
+        price: { amountMinor: 24_500, currency: 'AUD' },
+        validUntil: nowMs + 3_600_000,
+        terms: ['Development fixture only; no provider commitment or fulfilment.'],
+        evidenceRefs: ['dev:evidence:transfer-contract'],
+      },
+    })
+    const directResult = await collectSuppliedCandidateQuoteAction.run({
+      data: quoteInput,
+      context: {
+        developmentOnlySuppliedQuoteAdapter: directAdapter,
+        developmentOnlySuppliedQuoteQualificationPorts: ports,
+        developmentOnlySuppliedQuoteNow: () => nowMs,
+      },
+    })
+    expect(directResult).toMatchObject({ kind: 'quote_returned' })
+    const directConsequential = {
+      workflow: 'MOCK/DEVELOPMENT ONLY: direct registered quote runner',
+      controlRecords: 0,
+      attributableEffectAttempts: 0,
+      runnerCalls: 1,
+      effectCalls: directAdapter.mock.calls.length,
+      authorityDecisions: 0,
+      userOrSupervisorDecisions: 0,
+      requiredContinuations: 0,
+      logicalTransitions: 1,
+      safety: 'not established: no exact authority or attributable attempt',
+      continuity: 'not established: no durable reference',
+    }
+
+    const durableState = createDevelopmentDurableState<SuppliedCandidateQuoteResult>()
+    const controlledRelease = createDevelopmentReleaseSignal()
+    const controlledAdapter = vi.fn().mockImplementation(async () => {
+      controlledRelease.markReleased()
+      return {
+        ...directResult,
+        quote: {
+          ...(directResult.kind === 'quote_returned' ? directResult.quote : {}),
+          quoteRef: 'dev:transfer:quote:controlled',
+        },
+      }
+    })
+    const source = {
+      input: quoteInput,
+      context: { developmentOnlySuppliedQuoteAdapter: controlledAdapter },
+      prepared: undefined as PreparedInvocation | undefined,
+      observedResolution: {
+        state: 'pending',
+      } as ActionInvocationView<SuppliedCandidateQuoteResult>['observedResolution'],
+    }
+    const tracer = createDurableActionInvocationTracer({
+      action: collectSuppliedCandidateQuoteAction,
+      port: createDevelopmentDurablePort(durableState),
+      now: nowIso,
+      nextInvocationRef: () => 'dev:transfer:invocation:strata-repair',
+      nextAuthorityRef: () => 'dev:transfer:authority:strata-repair',
+      nextAttemptRef: () => 'dev:transfer:attempt:strata-repair',
+      developmentReleaseSignal: controlledRelease,
+      resolveSourceState: () => source,
+    })
+    const origin: ActionInvocationOrigin = {
+      kind: 'standalone',
+      callerRef: actor.callerRef,
+      principalRef: actor.principalRef,
+    }
+    const prepared = await prepareSuppliedCandidateQuote({
+      tracer,
+      qualificationPorts: ports,
+      invocationInput: quoteInput,
+      origin,
+      actor,
+      context: source.context,
+      now: () => nowMs,
+    })
+    if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+    source.prepared = prepared.view.prepared!
+    expect(controlledAdapter).not.toHaveBeenCalled()
+
+    const accepted = tracer.decide({
+      invocationRef: prepared.view.invocationRef,
+      expectedInvocationVersion: prepared.view.invocationVersion,
+      authorityRef: prepared.view.authority!.reference,
+      actor,
+      origin,
+      accept: true,
+    })
+    if (accepted.kind !== 'accepted') throw new Error(accepted.code)
+    const completed = await tracer.execute({
+      invocationRef: prepared.view.invocationRef,
+      expectedInvocationVersion: accepted.view.invocationVersion,
+      authorityRef: prepared.view.authority!.reference,
+      actor,
+      origin,
+      materialInput: quoteInput,
+    })
+    if (completed.kind !== 'accepted') throw new Error(completed.code)
+    source.observedResolution = completed.view.observedResolution
+    expect(controlledAdapter).toHaveBeenCalledTimes(1)
+    expect(completed.view).toMatchObject({
+      persistence: 'durable_control',
+      observedResolution: { state: 'returned', businessOutcome: 'completed' },
+      attempts: [{ release: { state: 'released' } }],
+    })
+
+    const cold = tracer.coldResume(prepared.view.invocationRef)
+    expect(cold.inspect(prepared.view.invocationRef)).toMatchObject({
+      persistence: 'durable_control',
+      origin,
+      observedResolution: { state: 'returned', businessOutcome: 'completed' },
+      attempts: [{ attemptRef: 'dev:transfer:attempt:strata-repair' }],
+    })
+    const controlled = {
+      workflow: 'MOCK/DEVELOPMENT ONLY: controlled strata-repair quote',
+      controlRecords: durableState.controls.size,
+      attributableEffectAttempts: durableState.attempts.get(prepared.view.invocationRef)?.size ?? 0,
+      runnerCalls: controlledAdapter.mock.calls.length,
+      effectCalls: controlledAdapter.mock.calls.length,
+      authorityDecisions: 1,
+      userOrSupervisorDecisions: 1,
+      requiredContinuations: resolveActionContract(
+        collectSuppliedCandidateQuoteAction,
+      ).safeContinuations.length,
+      logicalTransitions: completed.view.invocationVersion,
+      durableHistoryRecords: durableState.history.get(prepared.view.invocationRef)?.length ?? 0,
+      safety: 'earned: exact authority precedes one attributable release',
+      continuity: 'earned: fresh process reconstructs the same terminal reference',
+    }
+
+    expect(controlled).toMatchObject({
+      controlRecords: 1,
+      attributableEffectAttempts: 1,
+      runnerCalls: 1,
+      effectCalls: 1,
+      authorityDecisions: 1,
+      userOrSupervisorDecisions: 1,
+    })
+    expect(controlled.logicalTransitions).toBeGreaterThan(directConsequential.logicalTransitions)
+    expect(controlled.requiredContinuations).toBeGreaterThan(0)
+    expect(directRead).toMatchObject({
+      controlRecords: 0,
+      attributableEffectAttempts: 0,
+      authorityDecisions: 0,
+      userOrSupervisorDecisions: 0,
+    })
+
+    console.info(JSON.stringify({
+      environment: 'MOCK/DEVELOPMENT ONLY',
+      latencyMeasure: 'deterministic logical transitions; wall-clock/provider latency unproven',
+      fixtureOutcome: 'structured development quote returned; no provider commitment or fulfilment',
+      directRead,
+      directConsequential,
+      controlled,
+      falsifiers: {
+        F1: 'does_not_hold: exact authority and attributable release earn the added control',
+        F2: 'does_not_hold: action contract requires reconcile_before_retry',
+        F3: 'does_not_hold: cold resume reconstructed durable terminal control',
+        F4: 'does_not_hold: read-only registry detail remains direct with zero control burden',
+      },
+      recommendation: 'retain Action Invocation for consequential quote release; bypass it for read-only direct work',
+    }, null, 2))
+  })
+
   it('keeps exact authority isolated across two independently qualified quote invocations', async () => {
     const ports = qualificationPorts()
     const inputA = await quoteInputFor(ports)
