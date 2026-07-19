@@ -62,6 +62,31 @@ export function aggregateIsInternallyConsistent(
     ))
     && new Set((aggregate.completedTaskReferences ?? []).map(({ referenceRef }) => referenceRef)).size
       === (aggregate.completedTaskReferences?.length ?? 0)
+    && (aggregate.importedCommitmentReferences?.length ?? 0) <= 64
+    && (aggregate.importedCommitmentReferences ?? []).every((reference) => (
+      reference.role === 'imported_commitment_claim'
+      && reference.referenceRef === `imported-commitment:${canonicalDigest({
+        claimRef: reference.claimRef,
+        claimDigest: reference.claimDigest,
+      })}`
+      && reference.claimRef.length > 0
+      && reference.claimDigest.startsWith('sha256:')
+      && reference.issuerRef.length > 0
+      && reference.observerRef.length > 0
+      && reference.subject.kind.length > 0
+      && reference.subject.ref.length > 0
+      && reference.commitmentKind.length > 0
+      && reference.source.system.length > 0
+      && reference.source.reference.length > 0
+      && reference.source.digest.startsWith('sha256:')
+      && reference.evidenceRefs.length > 0
+      && reference.verification === 'imported_unverified'
+      && reference.observationPosture === 'imported_claim_only'
+      && Number.isFinite(reference.observedAt)
+      && Number.isFinite(reference.referencedAt)
+    ))
+    && new Set((aggregate.importedCommitmentReferences ?? []).map(({ referenceRef }) => referenceRef)).size
+      === (aggregate.importedCommitmentReferences?.length ?? 0)
     && aggregate.evaluation.candidates.length <= 256
     && aggregate.snapshot.facts.every(({ value }) => isBoundedJsonValue(value))
     && aggregate.evaluation.facts.every(({ value }) => isBoundedJsonValue(value))

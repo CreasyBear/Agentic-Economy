@@ -159,8 +159,31 @@ export type CustomerRequestV2Aggregate = Readonly<{
   evaluation: RequestEvaluation
   plan: CustomerRequestV2PlanRevision
   completedTaskReferences?: readonly CustomerRequestCompletedTaskReference[]
+  importedCommitmentReferences?: readonly CustomerRequestImportedCommitmentReference[]
   outcome: 'plan_ready' | 'needs_information' | 'unsupported'
   aggregateDigest: string
+}>
+
+export type CustomerRequestImportedCommitmentReference = Readonly<{
+  role: 'imported_commitment_claim'
+  referenceRef: string
+  claimRef: string
+  claimDigest: string
+  issuerRef: string
+  observerRef: string
+  subject: Readonly<{ kind: string; ref: string }>
+  commitmentKind: string
+  source: Readonly<{ system: string; reference: string; digest: string }>
+  observedAt: number
+  assertedAt?: number
+  validity:
+    | Readonly<{ kind: 'valid_until'; validUntil: number }>
+    | Readonly<{ kind: 'unknown' }>
+    | Readonly<{ kind: 'withdrawn'; withdrawnAt: number; evidenceRefs: readonly string[] }>
+  evidenceRefs: readonly string[]
+  verification: 'imported_unverified'
+  observationPosture: 'imported_claim_only'
+  referencedAt: number
 }>
 
 export type CustomerRequestCompletedTaskReference = Readonly<{
@@ -497,6 +520,19 @@ export function writableCustomerRequestV2Aggregate(aggregate: CustomerRequestV2A
     ...(aggregate.completedTaskReferences === undefined
       ? {}
       : { completedTaskReferences: aggregate.completedTaskReferences.map((reference) => ({ ...reference })) }),
+    ...(aggregate.importedCommitmentReferences === undefined
+      ? {}
+      : {
+          importedCommitmentReferences: aggregate.importedCommitmentReferences.map((reference) => ({
+            ...reference,
+            subject: { ...reference.subject },
+            source: { ...reference.source },
+            validity: reference.validity.kind === 'withdrawn'
+              ? { ...reference.validity, evidenceRefs: [...reference.validity.evidenceRefs] }
+              : { ...reference.validity },
+            evidenceRefs: [...reference.evidenceRefs],
+          })),
+        }),
     outcome: aggregate.outcome,
     aggregateDigest: aggregate.aggregateDigest,
   }

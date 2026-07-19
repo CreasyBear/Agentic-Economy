@@ -699,6 +699,27 @@ export const customerRequestV2AggregateValue = v.object({
     businessOutcome: v.union(v.literal('queued_communication'), v.literal('completed')),
     referencedAt: v.number(),
   }))),
+  importedCommitmentReferences: v.optional(v.array(v.object({
+    role: v.literal('imported_commitment_claim'),
+    referenceRef: v.string(), claimRef: v.string(), claimDigest: v.string(),
+    issuerRef: v.string(), observerRef: v.string(),
+    subject: v.object({ kind: v.string(), ref: v.string() }),
+    commitmentKind: v.string(),
+    source: v.object({ system: v.string(), reference: v.string(), digest: v.string() }),
+    observedAt: v.number(), assertedAt: v.optional(v.number()),
+    validity: v.union(
+      v.object({ kind: v.literal('valid_until'), validUntil: v.number() }),
+      v.object({ kind: v.literal('unknown') }),
+      v.object({
+        kind: v.literal('withdrawn'), withdrawnAt: v.number(),
+        evidenceRefs: v.array(v.string()),
+      }),
+    ),
+    evidenceRefs: v.array(v.string()),
+    verification: v.literal('imported_unverified'),
+    observationPosture: v.literal('imported_claim_only'),
+    referencedAt: v.number(),
+  }))),
   outcome: v.union(v.literal('plan_ready'), v.literal('needs_information'), v.literal('unsupported')),
   aggregateDigest: v.string(),
 })

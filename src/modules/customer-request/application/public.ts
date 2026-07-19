@@ -12,6 +12,13 @@ export type {
 } from './action-result'
 
 export {
+  attachImportedCommitmentReference,
+  type AttachImportedCommitmentReferenceInput,
+  type AttachImportedCommitmentReferencePorts,
+  type AttachImportedCommitmentReferenceResult,
+} from './imported-commitment-reference'
+
+export {
   attachCompletedTaskReference,
   type AttachCompletedTaskReferenceInput,
   type AttachCompletedTaskReferencePorts,
