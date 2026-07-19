@@ -272,7 +272,12 @@ export const registryDetailAction = defineAction({
     safeContinuations: ['inspect_result'],
     invalidationConditions: ['action_contract_version_changed', 'slug_changed'],
   },
-  run: async ({ data }) => {
+  run: async ({ data, context }) => {
+    if (context.developmentOnlyRegistryDetailAdapter !== undefined) {
+      return registryDetailOutputSchema.parse(
+        await context.developmentOnlyRegistryDetailAdapter({ slug: data.slug.trim() }),
+      )
+    }
     const result = await projectCurrentPublicInquiryDetail(
       await readPublicRegistryBusinessDetail({ slug: data.slug.trim() }),
     )

@@ -69,6 +69,10 @@ export type ActionContext = {
   developmentOnlySuppliedQuoteAdapter?: (
     data: unknown,
   ) => Promise<ActionResult>
+  /** Deterministic public-detail source used only by the local development evidence CLI. */
+  developmentOnlyRegistryDetailAdapter?: (
+    data: Readonly<{ slug: string }>,
+  ) => Promise<ActionResult>
   /** Opaque source ports consumed only by the supplied-quote action's trusted development hook. */
   developmentOnlySuppliedQuoteQualificationPorts?: unknown
   /** Fixed development clock paired with the supplied-quote source ports. */
