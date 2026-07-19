@@ -26,6 +26,8 @@
     "smoke:customer-request:development:surface-parity": "tsx tools/dev/customer-request-development-surface-parity.ts",
     "evidence:action-invocation:development": "tsx tools/dev/action-invocation-development-evidence.ts",
     "evidence:published-operation:development": "tsx tools/dev/published-operation-development-evidence.ts",
+    "evidence:dynamic-published-invocation:development": "tsx tools/dev/dynamic-published-invocation-evidence.ts",
+    "verify:dynamic-published-invocation:development": "tsx tools/dev/verify-dynamic-published-invocation-evidence.ts",
     "evidence:booking:development": "tsx tools/dev/development-booking-evidence.ts",
     "evidence:bounded-mandate:development": "tsx tools/dev/bounded-mandate-evidence-packet.ts",
     "evidence:full-yolo:development": "tsx tools/dev/full-yolo-evidence-packet.ts",

@@ -31,6 +31,15 @@ export {
 } from './standing-mandate-grant'
 export { evaluateStandingMandatePolicy } from './standing-mandate-policy'
 export { materialDigest } from './preparation'
+export {
+  createDynamicPublishedActionInvocationAdapter,
+  loadDynamicPublishedAdapterSnapshot,
+} from './dynamic-published-adapter'
+export {
+  buildDynamicPublishedInput,
+  dynamicPublishedSourceDigest,
+} from './dynamic-published-contract'
+export { createDevelopmentDynamicPublishedSource } from './dynamic-published-source'
 
 export type {
   ActionInvocationOrigin,
@@ -46,6 +55,19 @@ export type {
   PreparedInvocation,
   StandingMandateAuthorityBasis,
 } from './contracts'
+export type {
+  DynamicPublishedActionInvocationAdapter,
+  DynamicPublishedAdapterSnapshot,
+} from './dynamic-published-adapter'
+export type {
+  DynamicPublishedAuthorityTarget,
+  DynamicPublishedInvocationInput,
+  DynamicPublishedInvocationResult,
+} from './dynamic-published-contract'
+export type {
+  DynamicPublishedSourcePort,
+  DynamicPublishedSourceRow,
+} from './dynamic-published-source'
 export type {
   AuthorityUse,
   AuthorityUseMaterial,
