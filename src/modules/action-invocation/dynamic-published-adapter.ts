@@ -56,6 +56,12 @@ import {
   verifyDynamicPublishedSnapshot,
   type DynamicPublishedSnapshotAnchors,
 } from './dynamic-published-snapshot-verifier'
+import {
+  inspectUserInputContract,
+  type InvocationInputHistory,
+  type InvocationInputWork,
+} from './input-work'
+import { createDynamicPublishedInputApplication } from './input-application'
 
 export type DynamicPublishedAdapterSnapshot = Readonly<{
   format: 'dynamic-published-action-invocation:development:v2'
@@ -72,10 +78,31 @@ export type DynamicPublishedAdapterSnapshot = Readonly<{
       material: StableHashValue
     }>
   }>[]
+  inputWork?: readonly InvocationInputWork[]
+  inputHistory?: readonly InvocationInputHistory[]
+  operations?: readonly PublishedOperation[]
 }>
 
 export type DynamicPublishedActionInvocationAdapter = Readonly<{
   descriptor: RuntimePublishedOperationDescriptor
+  begin(input: Readonly<{
+    origin: ActionInvocationOrigin
+    actor: InvocationActor
+    partial: Readonly<Record<string, StableHashValue>>
+  }>): InvocationInputWork
+  answer(input: Readonly<{
+    invocationRef: string
+    actor: InvocationActor
+    answers: Readonly<Record<string, StableHashValue>>
+    freshnessMs: number
+  }>): InvocationInputWork | ActionInvocationView<DynamicPublishedInvocationResult>
+  correct(input: Readonly<{
+    invocationRef: string
+    actor: InvocationActor
+    corrections: Readonly<Record<string, StableHashValue>>
+    freshnessMs: number
+  }>): InvocationDecision<DynamicPublishedInvocationResult>
+  readInputWork(invocationRef: string): InvocationInputWork | undefined
   prepare(input: Readonly<{
     origin: ActionInvocationOrigin
     actor: InvocationActor
@@ -143,6 +170,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   nextAttemptRef: () => string
   durableState?: DevelopmentDurableState<DynamicPublishedInvocationResult>
   developmentTimeoutSignal?: DevelopmentTimeoutSignal
+  inputWork?: readonly InvocationInputWork[]
+  inputHistory?: readonly InvocationInputHistory[]
 }>): DynamicPublishedActionInvocationAdapter {
   const descriptor = materializeRuntimePublishedOperation(input.operation)
   const durableState = input.durableState ?? createDevelopmentDurableState<DynamicPublishedInvocationResult>()
@@ -155,6 +184,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     semanticIdentityDigest: string
     outcome?: import('./dynamic-published-source').DynamicPublishedSharedOutcome
   }>>()
+  const inputWork = new Map((input.inputWork ?? []).map((row) => [row.invocationRef, row]))
+  const inputHistory = [...(input.inputHistory ?? [])]
   let pendingSource: Readonly<{
     row: Omit<DynamicPublishedSourceRow, 'invocationRef'>
     context: ActionContext
@@ -374,78 +405,148 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       return control === undefined ? undefined : input.source.read(invocationRef)?.input
   }
 
+  const prepareValue = (request: Readonly<{
+    origin: ActionInvocationOrigin
+    actor: InvocationActor
+    value: StableHashValue
+    freshnessMs: number
+    continuation?: Readonly<{ invocationRef: string; expectedInvocationVersion: number; revise: boolean }>
+  }>): ActionInvocationView<DynamicPublishedInvocationResult> => {
+    const material = buildDynamicPublishedInput({
+      operation: input.operation,
+      descriptor,
+      value: request.value,
+    })
+    const current = input.source.current(dynamicPublishedOperationSlot(input.operation))
+    const reason = requalifyDynamicPublishedSource({
+      preparedOperation: input.operation,
+      descriptor,
+      currentOperation: current,
+      value: request.value,
+      now: input.now(),
+    })
+    if (reason !== undefined) throw new Error(`published_operation_not_current:${reason}`)
+    const preparedDigest = materialDigest(
+      material,
+      ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+    )
+    const semanticBaseKey = canonicalDigest({
+      principalRef: request.actor.principalRef,
+      actionId: input.operation.operationId,
+      actionVersion: descriptor.version,
+      operationKey: material.operationKey,
+    })
+    const context: ActionContext = {}
+    pendingSource = {
+      context,
+      row: {
+        operationKey: material.operationKey,
+        semanticBaseKey,
+        semanticIdentityDigest: canonicalDigest({
+          semanticBaseKey,
+          target: material.target,
+          preparedMaterialDigest: preparedDigest,
+        }),
+        operation: input.operation,
+        input: material,
+        context,
+        observedResolution: { state: 'pending' },
+      },
+    }
+    const priorSource = request.continuation === undefined
+      ? undefined
+      : input.source.read(request.continuation.invocationRef)
+    if (request.continuation !== undefined) {
+      input.source.write({
+        ...pendingSource.row,
+        invocationRef: request.continuation.invocationRef,
+      })
+    }
+    const preparation = {
+      origin: request.origin,
+      actor: request.actor,
+      input: material,
+      context,
+      freshnessMs: Math.min(
+        request.freshnessMs,
+        Math.max(1, input.operation.readiness.validUntil - input.now()),
+      ),
+    }
+    let decision: InvocationDecision<DynamicPublishedInvocationResult>
+    try {
+      decision = request.continuation === undefined
+        ? { kind: 'accepted' as const, view: tracer.prepare(preparation) }
+        : request.continuation.revise
+          ? tracer.revisePrepared({ ...preparation, ...request.continuation })
+          : {
+              kind: 'accepted' as const,
+              view: tracer.prepareExisting({ ...preparation, ...request.continuation }),
+            }
+      if (decision.kind === 'refused') {
+        throw new Error(`published_operation_prepare_refused:${decision.code}`)
+      }
+    } catch (error) {
+      if (request.continuation !== undefined) {
+        if (priorSource === undefined) input.source.remove(request.continuation.invocationRef)
+        else input.source.write(priorSource)
+      }
+      throw error
+    } finally {
+      pendingSource = undefined
+    }
+    const view = decision.view
+    input.source.write({
+      invocationRef: view.invocationRef,
+      operationKey: material.operationKey,
+      semanticBaseKey,
+      semanticIdentityDigest: canonicalDigest({
+        semanticBaseKey,
+        target: material.target,
+        preparedMaterialDigest: preparedDigest,
+      }),
+      operation: input.operation,
+      input: material,
+      context,
+      ...(view.prepared === undefined ? {} : { prepared: view.prepared }),
+      observedResolution: { state: 'pending' },
+    })
+    const contract = inspectUserInputContract(input.operation)
+    inputWork.set(view.invocationRef, {
+      invocationRef: view.invocationRef,
+      invocationVersion: view.invocationVersion,
+      origin: view.origin,
+      owner: view.owner,
+      state: 'prepared',
+      operationId: input.operation.operationId,
+      operationVersion: descriptor.version,
+      sourceMaterialDigest: dynamicPublishedSourceDigest(input.operation, descriptor),
+      knownInput: request.value as Readonly<Record<string, StableHashValue>>,
+      requiredFields: contract.requiredFields,
+      missingFields: [],
+      askedFields: inputWork.get(view.invocationRef)?.askedFields ?? [],
+      updatedAt: new Date(input.now()).toISOString(),
+    })
+    return view
+  }
+
+  const inputApplication = createDynamicPublishedInputApplication({
+    operation: input.operation,
+    descriptor,
+    source: input.source,
+    durablePort,
+    durableState,
+    work: inputWork,
+    history: inputHistory,
+    now: input.now,
+    nextInvocationRef: input.nextInvocationRef,
+    prepareValue,
+    inspect: tracer.inspect,
+  })
+
   return {
     descriptor,
-    prepare(request) {
-      const material = buildDynamicPublishedInput({
-        operation: input.operation,
-        descriptor,
-        value: request.value,
-      })
-      const current = input.source.current(dynamicPublishedOperationSlot(input.operation))
-      const reason = requalifyDynamicPublishedSource({
-        preparedOperation: input.operation,
-        descriptor,
-        currentOperation: current,
-        value: request.value,
-        now: input.now(),
-      })
-      if (reason !== undefined) throw new Error(`published_operation_not_current:${reason}`)
-      const preparedDigest = materialDigest(
-        material,
-        ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
-      )
-      const semanticBaseKey = canonicalDigest({
-        principalRef: request.actor.principalRef,
-        actionId: input.operation.operationId,
-        actionVersion: descriptor.version,
-        operationKey: material.operationKey,
-      })
-      const context: ActionContext = {}
-      pendingSource = {
-        context,
-        row: {
-        operationKey: material.operationKey,
-        semanticBaseKey,
-        semanticIdentityDigest: canonicalDigest({
-          semanticBaseKey,
-          target: material.target,
-          preparedMaterialDigest: preparedDigest,
-        }),
-        operation: input.operation,
-        input: material,
-        context,
-        observedResolution: { state: 'pending' },
-        },
-      }
-      const view = tracer.prepare({
-        origin: request.origin,
-        actor: request.actor,
-        input: material,
-        context,
-        freshnessMs: Math.min(
-          request.freshnessMs,
-          Math.max(1, input.operation.readiness.validUntil - input.now()),
-        ),
-      })
-      pendingSource = undefined
-      input.source.write({
-        invocationRef: view.invocationRef,
-        operationKey: material.operationKey,
-        semanticBaseKey,
-        semanticIdentityDigest: canonicalDigest({
-          semanticBaseKey,
-          target: material.target,
-          preparedMaterialDigest: preparedDigest,
-        }),
-        operation: input.operation,
-        input: material,
-        context,
-        ...(view.prepared === undefined ? {} : { prepared: view.prepared }),
-        observedResolution: { state: 'pending' },
-      })
-      return view
-    },
+    ...inputApplication,
+    prepare: prepareValue,
     decide: tracer.decide,
     authorizeStandingMandateUse: tracer.authorizeStandingMandateUse,
     acquire(request) {
@@ -549,6 +650,9 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
             material: durableState.commandMaterials.get(commandId) ?? null,
           },
         })),
+        inputWork: [...inputWork.values()],
+        inputHistory: [...inputHistory],
+        operations: [input.operation],
       }
       return JSON.parse(JSON.stringify(snapshot)) as DynamicPublishedAdapterSnapshot
     },
@@ -562,6 +666,8 @@ export function loadDynamicPublishedAdapterSnapshot(
   durableState: DevelopmentDurableState<DynamicPublishedInvocationResult>
   sourceRows: Map<string, DynamicPublishedSourceRow>
   semanticClaims: readonly DynamicPublishedSemanticClaim[]
+  inputWork: readonly InvocationInputWork[]
+  inputHistory: readonly InvocationInputHistory[]
 }> {
   verifyDynamicPublishedSnapshot({ snapshot, anchors })
   const verified = snapshot as DynamicPublishedAdapterSnapshot
@@ -582,5 +688,7 @@ export function loadDynamicPublishedAdapterSnapshot(
     durableState,
     sourceRows: new Map(verified.sourceRows.map((row) => [row.invocationRef, row])),
     semanticClaims: verified.semanticClaims,
+    inputWork: verified.inputWork ?? [],
+    inputHistory: verified.inputHistory ?? [],
   }
 }

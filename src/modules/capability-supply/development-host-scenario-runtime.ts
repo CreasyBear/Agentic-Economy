@@ -12,11 +12,12 @@ export function developmentSuccessRuntime(
   endpoint: string,
   effects: DevelopmentEffectCounts,
 ): RouteTransportRuntime {
-  const challenge = developmentChallenge(endpoint)
-  const send: RouteTransportFetch = async (_url, init) => {
+  const send: RouteTransportFetch = async (url, init) => {
     if (init?.headers?.['Payment-Signature'] === undefined) {
       return response(402, '', {
-        'payment-required': Buffer.from(JSON.stringify(challenge)).toString('base64'),
+        'payment-required': Buffer.from(JSON.stringify(
+          developmentChallenge(endpoint, url),
+        )).toString('base64'),
       })
     }
     effects.provider += 1
@@ -105,10 +106,10 @@ export function developmentReleasedRefusalRuntime(
   }
 }
 
-function developmentChallenge(endpoint: string) {
+function developmentChallenge(endpoint: string, requestUrl?: string | URL) {
   return {
     x402Version: 2,
-    resource: { url: `${endpoint}?symbol=BTC&convert=USD` },
+    resource: { url: requestUrl === undefined ? `${endpoint}?symbol=BTC&convert=USD` : String(requestUrl) },
     accepts: [{
       scheme: 'exact',
       network: 'eip155:8453',

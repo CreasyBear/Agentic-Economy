@@ -26,7 +26,13 @@ export function assertDynamicPublishedSnapshotShape(value: unknown): asserts val
     || !Array.isArray(value.commands)
     || !exactKeys(value, [
       'format', 'sourceRows', 'semanticClaims', 'controls', 'attempts', 'history', 'commands',
+      ...(value.inputWork === undefined ? [] : ['inputWork']),
+      ...(value.inputHistory === undefined ? [] : ['inputHistory']),
+      ...(value.operations === undefined ? [] : ['operations']),
     ])
+    || (value.inputWork !== undefined && !Array.isArray(value.inputWork))
+    || (value.inputHistory !== undefined && !Array.isArray(value.inputHistory))
+    || (value.operations !== undefined && !Array.isArray(value.operations))
     || value.sourceRows.length !== 1
     || value.semanticClaims.length > 1
     || value.semanticClaims.some((claim) => !semanticClaimShapeValid(claim))

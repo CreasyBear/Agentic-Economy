@@ -1,9 +1,5 @@
 import {
   buildDynamicPublishedInput,
-  applyClarificationAnswer,
-  applyPreparedWorkCorrection,
-  clarifyInvocationInput,
-  createAuthoritativePreparedWork,
   createDevelopmentTimeoutSignal,
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
@@ -11,7 +7,6 @@ import {
   createStandaloneAgentDevelopmentHost,
   loadDynamicPublishedAdapterSnapshot,
   materialDigest,
-  projectInvocationTask,
   type DevelopmentHostKind,
   type DevelopmentHostSourceCommands,
   type DevelopmentInvocationHost,
@@ -47,16 +42,34 @@ export type DevelopmentHostScenarioRecord = Readonly<{
   host: DevelopmentHostKind
   actor: InvocationActor
   clarification: Readonly<{
-    first: ReturnType<typeof clarifyInvocationInput>
-    answered: ReturnType<typeof clarifyInvocationInput>
-  }>
-  correction: Readonly<{
-    presentation: ReturnType<typeof applyPreparedWorkCorrection>
-    material: ReturnType<typeof applyPreparedWorkCorrection>
-  }>
-  projections: Readonly<{
+    invocationRef: string
+    gatheringVersion: number
+    preparedVersion: number
+    missing: readonly string[]
+    sameLineage: boolean
     rich: RichInvocationTaskProjection
     structured: StructuredInvocationTaskProjection
+    gatheringSnapshot: DynamicPublishedAdapterSnapshot
+    snapshot: DynamicPublishedAdapterSnapshot
+  }>
+  correction: Readonly<{
+    invocationRef: string
+    oldVersion: number
+    newVersion: number
+    oldAuthorityRef: string
+    newAuthorityRef: string
+    staleAuthorityDecision: string
+    staleExecution: string
+    staleProjection: string
+    presentationStateUnchanged: boolean
+    correctedInputDigest: string
+    execution: string
+    terminalCorrection: string
+    effects: DevelopmentEffectCounts
+    rich: RichInvocationTaskProjection
+    structured: StructuredInvocationTaskProjection
+    projectionSnapshot: DynamicPublishedAdapterSnapshot
+    snapshot: DynamicPublishedAdapterSnapshot
   }>
   success: ScenarioOutcome
   preflightRefusal: ScenarioOutcome
@@ -126,42 +139,11 @@ async function runHostScenarios(
   hostKind: DevelopmentHostKind,
 ): Promise<DevelopmentHostScenarioRecord> {
   const success = await successScenario(fixture, hostKind)
-  const firstClarification = clarifyInvocationInput({
-    descriptor: fixture.descriptor,
-    known: { symbol: 'BTC' },
-  })
-  const preparedWork = createAuthoritativePreparedWork({
-    lineageRef: success.outcome.invocationRef,
-    value: { symbol: 'BTC', convert: 'USD' },
-  })
   return {
     host: hostKind,
     actor: actorFor(hostKind),
-    clarification: {
-      first: firstClarification,
-      answered: applyClarificationAnswer({
-        descriptor: fixture.descriptor,
-        current: firstClarification,
-        answers: { convert: 'USD' },
-      }),
-    },
-    correction: {
-      presentation: applyPreparedWorkCorrection({
-        current: preparedWork,
-        value: { density: 'compact' },
-        classification: 'presentation_only',
-      }),
-      material: applyPreparedWorkCorrection({
-        current: preparedWork,
-        value: { symbol: 'ETH', convert: 'USD' },
-        classification: 'material',
-      }),
-    },
-    projections: projectInvocationTask({
-      view: success.context.host.inspect(success.outcome.invocationRef)!,
-      descriptor: fixture.descriptor,
-      suppliedInput: { symbol: 'BTC', convert: 'USD' },
-    }),
+    clarification: clarificationScenario(fixture, hostKind),
+    correction: await correctionScenario(fixture, hostKind),
     success: success.outcome,
     preflightRefusal: await refusalScenario(fixture, hostKind, 'preflight'),
     sourceRefusal: await refusalScenario(fixture, hostKind, 'source'),
@@ -184,6 +166,122 @@ async function runHostScenarios(
           effectsBefore: { ...success.outcome.effects },
           effectsAfter: { ...success.outcome.effects },
         },
+  }
+}
+
+function clarificationScenario(
+  fixture: Fixture,
+  hostKind: DevelopmentHostKind,
+): DevelopmentHostScenarioRecord['clarification'] {
+  const context = createScenario(fixture, hostKind, 'clarification', developmentSuccessRuntime)
+  const gathering = context.host.begin({ symbol: 'BTC' })
+  const rich = context.host.projectRich(gathering.invocationRef, gathering.invocationVersion)
+  const structured = context.host.projectStructured(gathering.invocationRef, gathering.invocationVersion)
+  const gatheringSnapshot = JSON.parse(JSON.stringify(context.host.exportSnapshot()))
+  const prepared = context.host.answer(
+    gathering.invocationRef,
+    { convert: 'USD' },
+    60_000,
+  )
+  if (!('control' in prepared) || prepared.control.state !== 'awaiting_authority') {
+    throw new Error('clarification_did_not_prepare')
+  }
+  return {
+    invocationRef: gathering.invocationRef,
+    gatheringVersion: gathering.invocationVersion,
+    preparedVersion: prepared.invocationVersion,
+    missing: gathering.missingFields,
+    sameLineage: prepared.invocationRef === gathering.invocationRef,
+    rich,
+    structured,
+    gatheringSnapshot,
+    snapshot: context.host.exportSnapshot(),
+  }
+}
+
+async function correctionScenario(
+  fixture: Fixture,
+  hostKind: DevelopmentHostKind,
+): Promise<DevelopmentHostScenarioRecord['correction']> {
+  const context = createScenario(fixture, hostKind, 'correction', developmentSuccessRuntime)
+  const prepared = context.host.prepare({ symbol: 'BTC', convert: 'USD' }, 60_000)
+  const accepted = context.host.decide(prepared.invocationRef, true)
+  if (accepted.kind !== 'accepted') throw new Error(`correction_initial_decision:${accepted.code}`)
+  const presentationBefore = canonicalDigest(context.host.exportSnapshot() as unknown as StableHashValue)
+  const presentationPreference = { density: 'compact' }
+  void presentationPreference
+  const presentationAfter = canonicalDigest(context.host.exportSnapshot() as unknown as StableHashValue)
+  const corrected = context.host.correct(
+    prepared.invocationRef,
+    { symbol: 'ETH' },
+    60_000,
+  )
+  if (corrected.kind !== 'accepted' || corrected.view.control.state !== 'awaiting_authority'
+    || corrected.view.authority === undefined) {
+    throw new Error(`correction_refused:${corrected.kind === 'refused' ? corrected.code : 'state'}`)
+  }
+  const staleDecision = context.adapter.decide({
+    invocationRef: prepared.invocationRef,
+    expectedInvocationVersion: accepted.view.invocationVersion,
+    authorityRef: prepared.authority!.reference,
+    actor: context.actor,
+    origin: context.host.origin,
+    accept: true,
+  })
+  const staleExecution = context.adapter.acquire({
+    invocationRef: prepared.invocationRef,
+    expectedInvocationVersion: accepted.view.invocationVersion,
+    authorityRef: prepared.authority!.reference,
+    actor: context.actor,
+    origin: context.host.origin,
+    leaseOwner: 'attacker:stale',
+    leaseMs: 30_000,
+  })
+  let staleProjection = 'accepted'
+  try {
+    context.host.projectStructured(prepared.invocationRef, accepted.view.invocationVersion)
+  } catch (error) {
+    staleProjection = error instanceof Error ? error.message : 'refused'
+  }
+  const rich = context.host.projectRich(
+    corrected.view.invocationRef,
+    corrected.view.invocationVersion,
+  )
+  const structured = context.host.projectStructured(
+    corrected.view.invocationRef,
+    corrected.view.invocationVersion,
+  )
+  const projectionSnapshot = JSON.parse(JSON.stringify(context.host.exportSnapshot()))
+  const fresh = context.host.decide(corrected.view.invocationRef, true)
+  if (fresh.kind !== 'accepted') throw new Error(`correction_fresh_decision:${fresh.code}`)
+  const completed = await context.host.continue(corrected.view.invocationRef)
+  if (completed.kind !== 'completed') throw new Error(`correction_execution:${continuationCode(completed)}`)
+  const source = context.host.exportSnapshot().sourceRows[0]!
+  const terminalCorrection = context.host.correct(
+    corrected.view.invocationRef,
+    { symbol: 'SOL' },
+    60_000,
+  )
+  return {
+    invocationRef: corrected.view.invocationRef,
+    oldVersion: accepted.view.invocationVersion,
+    newVersion: corrected.view.invocationVersion,
+    oldAuthorityRef: prepared.authority!.reference,
+    newAuthorityRef: corrected.view.authority.reference,
+    staleAuthorityDecision: staleDecision.kind === 'refused' ? staleDecision.code : staleDecision.kind,
+    staleExecution: staleExecution.kind === 'refused' ? staleExecution.code : staleExecution.kind,
+    staleProjection,
+    presentationStateUnchanged: presentationBefore === presentationAfter,
+    correctedInputDigest: source.input.inputDigest,
+    execution: completed.view.observedResolution.state,
+    terminalCorrection: terminalCorrection.kind === 'refused'
+      ? terminalCorrection.code
+      : terminalCorrection.kind,
+    effects: { ...context.effects },
+    rich,
+    structured,
+    projectionSnapshot,
+    snapshot: context.host.exportSnapshot(),
   }
 }
 
@@ -390,6 +488,8 @@ async function coldResumeScenario(
     nextAuthorityRef: () => 'cold:unused',
     nextAttemptRef: () => 'cold:unused',
     durableState: loaded.durableState,
+    inputWork: loaded.inputWork,
+    inputHistory: loaded.inputHistory,
   })
   const coldHost = createHost(hostKind, adapter, context.actor, sourceCommands(
     fixture,
@@ -490,13 +590,14 @@ function createScenario(
   const actor = actorFor(hostKind)
   const now = fixture.operation.readiness.observedAt + 1_000
   const source = createDevelopmentDynamicPublishedSource([fixture.operation])
+  let authoritySequence = 0
   const adapter = createDynamicPublishedActionInvocationAdapter({
     operation: fixture.operation,
     source,
     runtime: runtime(fixture.operation.binding.endpointUrl, effects),
     now: () => now,
     nextInvocationRef: () => `host:${hostKind}:${scenario}:invocation`,
-    nextAuthorityRef: () => `host:${hostKind}:${scenario}:authority`,
+    nextAuthorityRef: () => `host:${hostKind}:${scenario}:authority:${++authoritySequence}`,
     nextAttemptRef: () => `host:${hostKind}:${scenario}:attempt`,
     ...(developmentTimeoutSignal === undefined ? {} : { developmentTimeoutSignal }),
   })

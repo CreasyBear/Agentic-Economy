@@ -47,6 +47,7 @@ export type DynamicPublishedSourcePort = Readonly<{
   current(slot: string): PublishedOperation | undefined
   read(invocationRef: string): DynamicPublishedSourceRow | undefined
   write(row: DynamicPublishedSourceRow): void
+  remove(invocationRef: string): void
   list(): readonly DynamicPublishedSourceRow[]
   listSemanticClaims(): readonly DynamicPublishedSemanticClaim[]
   claimSemanticEffect(input: Readonly<{
@@ -96,6 +97,7 @@ export function createDevelopmentDynamicPublishedSource(
     current: (operationId) => current.get(operationId),
     read: (invocationRef) => rows.get(invocationRef),
     write: (row) => rows.set(row.invocationRef, row),
+    remove: (invocationRef) => { rows.delete(invocationRef) },
     list: () => [...rows.values()],
     listSemanticClaims: () => [...semantic.values()].map(({ claim }) => claim),
     claimSemanticEffect: ({ semanticBaseKey, semanticIdentityDigest, principalRef, invocationRef }) => {

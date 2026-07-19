@@ -2,6 +2,8 @@ import {
   buildDynamicPublishedInput,
   assertDynamicPublishedSnapshotShape,
   materialDigest,
+  projectRichInvocationTask,
+  projectStructuredInvocationTask,
   readDevelopmentHostSnapshot,
   verifyDynamicPublishedSnapshot,
   type DevelopmentHostReadReceipt,
@@ -166,6 +168,46 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
         )
       }
     }
+    const correctionSource = host.correction.snapshot.sourceRows[0]
+    const correctionControl = host.correction.snapshot.controls[0]
+    const correctionAttempt = host.correction.snapshot.attempts[0]?.rows[0]
+    const correctedMaterial = buildDynamicPublishedInput({
+      operation: packet.fixture.operation,
+      descriptor: packet.fixture.descriptor,
+      value: { symbol: 'ETH', convert: 'USD' },
+    })
+    const correctedDigest = materialDigest(
+      correctedMaterial,
+      ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+    )
+    if (canonicalDigest(correctionSource?.operation as unknown as StableHashValue)
+        !== canonicalDigest(packet.fixture.operation as unknown as StableHashValue)
+      || canonicalDigest(correctionSource?.input as unknown as StableHashValue)
+        !== canonicalDigest(correctedMaterial as unknown as StableHashValue)
+      || correctionControl?.authorityBinding?.reference !== host.correction.newAuthorityRef
+      || correctionControl.authorityBinding.digest !== correctedDigest
+      || correctionControl.control.acceptedAuthority?.kind !== 'approve_each'
+      || correctionControl.control.acceptedAuthority.authorityRef !== host.correction.newAuthorityRef
+      || correctionAttempt?.idempotency.materialInputDigest !== correctedDigest
+      || correctionAttempt.release.state !== 'possibly_released'
+      || host.correction.snapshot.semanticClaims[0]?.ownerInvocationRef
+        !== host.correction.invocationRef
+      || host.correction.snapshot.semanticClaims[0]?.status !== 'completed') {
+      throw new Error('host_correction_snapshot_invalid')
+    }
+    const gathering = host.clarification.gatheringSnapshot
+    const gatheringWork = gathering.inputWork?.[0]
+    const gatheringControl = gathering.controls[0]
+    if (canonicalDigest(gathering.operations?.[0] as unknown as StableHashValue)
+        !== canonicalDigest(packet.fixture.operation as unknown as StableHashValue)
+      || gatheringWork?.invocationRef !== host.clarification.invocationRef
+      || gatheringWork.missingFields.join(',') !== 'convert'
+      || gatheringWork.knownInput.symbol !== 'BTC'
+      || gatheringControl?.control.control.state !== 'gathering_information'
+      || gatheringControl.authorityBinding !== undefined
+      || gathering.attempts.some(({ rows }) => rows.length > 0)) {
+      throw new Error('host_clarification_snapshot_invalid')
+    }
   }
 }
 
@@ -216,39 +258,52 @@ export function evaluateHostMatrix(
 ) {
   const checks = [
     {
-      name: 'clarification_exact_once',
-      passed: hosts.every((host) =>
-        host.clarification.first.missing.join(',') === 'convert'
-        && host.clarification.first.questions.length === 1
-        && host.clarification.answered.missing.length === 0
-        && host.clarification.answered.questions.length === 0
-        && !/method|path|payment|credential|provider/iu.test(
-          JSON.stringify(host.clarification.first.questions),
-        )),
+      name: 'authoritative_clarification_and_projection',
+      passed: hosts.every((host) => {
+        const rich = projectRichInvocationTask({
+          invocationRef: host.clarification.invocationRef,
+          expectedInvocationVersion: host.clarification.gatheringVersion,
+          resolver: {
+            resolve: () => JSON.parse(JSON.stringify(host.clarification.gatheringSnapshot)),
+          },
+        })
+        return host.clarification.missing.join(',') === 'convert'
+          && host.clarification.sameLineage
+          && host.clarification.preparedVersion > host.clarification.gatheringVersion
+          && host.clarification.rich.semanticDigest === host.clarification.structured.semanticDigest
+          && rich.semanticDigest === host.clarification.rich.semanticDigest
+          && canonicalDigest(rich.semantics as unknown as StableHashValue)
+            === canonicalDigest(host.clarification.structured.semantics as unknown as StableHashValue)
+      }),
       evidence: hosts.map((host) => host.clarification),
     },
     {
-      name: 'material_correction_invalidation',
-      passed: hosts.every((host) =>
-        host.correction.presentation.kind === 'presentation_only'
-        && host.correction.presentation.invalidatedProjectionVersion === null
-        && host.correction.material.kind === 'material'
-        && host.correction.material.invalidatedAuthority
-        && host.correction.material.work.lineageRef === host.success.invocationRef
-        && host.correction.material.work.version === 2
-        && host.correction.material.work.projectionVersion === 2
-        && host.correction.material.work.authorityState === 'fresh_required'),
+      name: 'material_correction_real_authority_fence',
+      passed: hosts.every((host) => {
+        const rich = projectRichInvocationTask({
+          invocationRef: host.correction.invocationRef,
+          expectedInvocationVersion: host.correction.newVersion,
+          resolver: { resolve: () => JSON.parse(JSON.stringify(host.correction.projectionSnapshot)) },
+        })
+        const structured = projectStructuredInvocationTask({
+          invocationRef: host.correction.invocationRef,
+          expectedInvocationVersion: host.correction.newVersion,
+          resolver: { resolve: () => JSON.parse(JSON.stringify(host.correction.projectionSnapshot)) },
+        })
+        return host.correction.newVersion > host.correction.oldVersion
+          && host.correction.oldAuthorityRef !== host.correction.newAuthorityRef
+          && host.correction.staleAuthorityDecision === 'stale_invocation_version'
+          && host.correction.staleExecution === 'stale_invocation_version'
+          && host.correction.staleProjection === 'invocation_projection_stale_or_missing'
+          && host.correction.presentationStateUnchanged
+          && host.correction.effects.payment === 1
+          && host.correction.effects.provider === 1
+          && host.correction.terminalCorrection === 'invalid_control_state'
+          && rich.semanticDigest === structured.semanticDigest
+          && rich.semanticDigest === host.correction.rich.semanticDigest
+          && structured.semanticDigest === host.correction.structured.semanticDigest
+      }),
       evidence: hosts.map((host) => host.correction),
-    },
-    {
-      name: 'rich_structured_task_semantics',
-      passed: hosts.every((host) =>
-        host.projections.rich.semanticDigest === host.projections.structured.semanticDigest
-        && canonicalDigest(host.projections.rich.semantics as unknown as StableHashValue)
-          === canonicalDigest(host.projections.structured.semantics as unknown as StableHashValue)
-        && host.projections.structured.semantics.missingInformation.length === 0
-        && host.projections.structured.semantics.authorityBoundary.accepted),
-      evidence: hosts.map((host) => host.projections),
     },
     {
       name: 'success',

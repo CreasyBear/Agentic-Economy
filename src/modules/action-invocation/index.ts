@@ -50,17 +50,16 @@ export {
 export {
   createRequestOwnedDevelopmentHost,
   createStandaloneAgentDevelopmentHost,
-} from './development-hosts'
+} from './host-application'
 export {
   readDevelopmentHostSnapshot,
   verifyDevelopmentHostReadReceipt,
 } from './development-host-read'
-export { projectInvocationTask, requiredFields } from './host-projection'
-export { clarifyInvocationInput, applyClarificationAnswer } from './clarification'
 export {
-  applyPreparedWorkCorrection,
-  createAuthoritativePreparedWork,
-} from './correction'
+  projectRichInvocationTask,
+  projectStructuredInvocationTask,
+} from './host-projection'
+export { inspectUserInputContract } from './input-work'
 
 export type {
   ActionInvocationOrigin,
@@ -94,23 +93,23 @@ export type {
   DevelopmentHostContinuation,
   DevelopmentHostSourceCommands,
   DevelopmentInvocationHost,
-} from './development-hosts'
+} from './host-application'
 export type {
   DevelopmentHostKind,
   DevelopmentHostReadReceipt,
   DevelopmentHostSemanticRead,
 } from './development-host-read'
+export type { ActionInvocationHostSeam } from './host-seam'
 export type {
+  InvocationProjectionResolver,
   InvocationTaskSemantics,
   RichInvocationTaskProjection,
   StructuredInvocationTaskProjection,
 } from './host-projection'
-export type { ActionInvocationHostSeam } from './host-seam'
-export type { InvocationClarification } from './clarification'
 export type {
-  AuthoritativePreparedWork,
-  PreparedWorkCorrection,
-} from './correction'
+  InvocationInputHistory,
+  InvocationInputWork,
+} from './input-work'
 export type {
   AuthorityUse,
   AuthorityUseMaterial,

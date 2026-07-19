@@ -115,6 +115,7 @@ export type ActionInvocationView<Result extends ActionResult = ActionResult> = R
     | Readonly<{ state: 'not_observed' }>
     | Readonly<{ state: 'current'; observedAt: string }>
   control:
+    | Readonly<{ state: 'gathering_information'; missingFields: readonly string[] }>
     | Readonly<{ state: 'awaiting_authority' }>
     | Readonly<{ state: 'authorized'; decidedAt: string }>
     | Readonly<{
@@ -151,6 +152,14 @@ export type InvocationDecision<Result extends ActionResult> =
 export interface ActionInvocationTracer<Input, Result extends ActionResult> {
   invoke(input: InvokeActionInput<Input>): Promise<ActionInvocationView<Result>>
   prepare(input: PrepareActionInput<Input>): ActionInvocationView<Result>
+  prepareExisting(input: PrepareActionInput<Input> & Readonly<{
+    invocationRef: string
+    expectedInvocationVersion: number
+  }>): ActionInvocationView<Result>
+  revisePrepared(input: PrepareActionInput<Input> & Readonly<{
+    invocationRef: string
+    expectedInvocationVersion: number
+  }>): InvocationDecision<Result>
   decide(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number

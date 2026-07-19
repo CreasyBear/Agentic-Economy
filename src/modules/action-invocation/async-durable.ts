@@ -149,6 +149,20 @@ export async function createAsyncDurableActionInvocationTracer<
       const operation = await createOperation()
       return finishView(operation, operation.tracer.prepare(input))
     },
+    async prepareExisting(input) {
+      const { operation, value } = await existingOperation(
+        input.invocationRef,
+        (tracer) => tracer.prepareExisting(input),
+      )
+      return finishView(operation, value)
+    },
+    async revisePrepared(input) {
+      const { operation, value } = await existingOperation(
+        input.invocationRef,
+        (tracer) => tracer.revisePrepared(input),
+      )
+      return finishDecision(operation, input.invocationRef, value)
+    },
     async decide(input) {
       const { operation, value } = await existingOperation(
         input.invocationRef,

@@ -69,6 +69,62 @@ export function createInMemoryActionInvocationTracer<
   let authoritySequence = 0
   let attemptSequence = 0
 
+  const prepareRecord = (
+    input: import('./contracts').PrepareActionInput<Input>,
+    continuation?: Readonly<{ invocationRef: string; expectedInvocationVersion: number }>,
+  ) => {
+    if (contract.authorityRequirement === 'none') {
+      throw new Error(`Action ${options.action.id} does not require authority.`)
+    }
+    if (continuation !== undefined && records.has(continuation.invocationRef)) {
+      throw new Error('invocation_already_exists')
+    }
+    const record = createRecord(
+      options,
+      contract.version,
+      input.origin,
+      input.actor,
+      input.input,
+      input.context,
+      continuation,
+    )
+    const preparedAt = options.now()
+    const freshUntil = new Date(Date.parse(preparedAt) + input.freshnessMs).toISOString()
+    const digest = materialDigest(input.input, contract.materialInputPaths)
+    const authorityRef = options.nextAuthorityRef?.() ?? `dev:authority:${++authoritySequence}`
+    const prepared: PreparedInvocation = {
+      materialInputDigest: digest,
+      target: readPath(input.input, 'target') ?? null,
+      consequence: contract.consequenceClass,
+      dataUse: options.action.projectInvocationPreparation?.(input.input).dataUse
+        ?? { fields: [], limits: {} },
+      preparedAt,
+      freshUntil,
+    }
+    record.view = {
+      ...record.view,
+      prepared,
+      authority: { reference: authorityRef, expiresAt: freshUntil },
+      control: { state: 'awaiting_authority' },
+    }
+    record.authorityBinding = {
+      reference: authorityRef,
+      invocationRef: record.view.invocationRef,
+      actor: input.actor,
+      origin: input.origin,
+      invocationVersion: record.view.invocationVersion,
+      actionId: options.action.id,
+      contractVersion: contract.version,
+      digest,
+      targetDigest: canonicalDigest(prepared.target),
+      consequence: prepared.consequence,
+      limits: prepared.dataUse.limits,
+      expiresAt: freshUntil,
+    }
+    records.set(record.view.invocationRef, record)
+    return record.view
+  }
+
   const runAcquired = async (
     record: StoredInvocation<Input, Result>,
     input: Readonly<{
@@ -261,45 +317,40 @@ export function createInMemoryActionInvocationTracer<
       return executeRunner(record)
     },
     prepare({ origin, actor, input, context, freshnessMs }) {
-      if (contract.authorityRequirement === 'none') {
-        throw new Error(`Action ${options.action.id} does not require authority.`)
+      return prepareRecord({ origin, actor, input, context, freshnessMs })
+    },
+    prepareExisting(input) {
+      return prepareRecord(input, {
+        invocationRef: input.invocationRef,
+        expectedInvocationVersion: input.expectedInvocationVersion,
+      })
+    },
+    revisePrepared(input) {
+      const existing = records.get(input.invocationRef)
+      if (existing === undefined) return { kind: 'refused', code: 'invocation_not_found' }
+      if (existing.view.invocationVersion !== input.expectedInvocationVersion) {
+        return { kind: 'refused', code: 'stale_invocation_version', view: existing.view }
       }
-      const record = createRecord(options, contract.version, origin, actor, input, context)
-      const preparedAt = options.now()
-      const freshUntil = new Date(Date.parse(preparedAt) + freshnessMs).toISOString()
-      const digest = materialDigest(input, contract.materialInputPaths)
-      const authorityRef = options.nextAuthorityRef?.() ?? `dev:authority:${++authoritySequence}`
-      const prepared: PreparedInvocation = {
-        materialInputDigest: digest,
-        target: readPath(input, 'target') ?? null,
-        consequence: contract.consequenceClass,
-        dataUse: options.action.projectInvocationPreparation?.(input).dataUse
-          ?? { fields: [], limits: {} },
-        preparedAt,
-        freshUntil,
+      if (existing.view.owner.callerRef !== input.actor.callerRef
+        || existing.view.owner.principalRef !== input.actor.principalRef) {
+        return { kind: 'refused', code: 'cross_principal_refused', view: existing.view }
       }
-      record.view = {
-        ...record.view,
-        prepared,
-        authority: { reference: authorityRef, expiresAt: freshUntil },
-        control: { state: 'awaiting_authority' },
+      if (JSON.stringify(existing.view.origin) !== JSON.stringify(input.origin)) {
+        return { kind: 'refused', code: 'cross_origin_refused', view: existing.view }
       }
-      record.authorityBinding = {
-        reference: authorityRef,
-        invocationRef: record.view.invocationRef,
-        actor,
-        origin,
-        invocationVersion: record.view.invocationVersion,
-        actionId: options.action.id,
-        contractVersion: contract.version,
-        digest,
-        targetDigest: canonicalDigest(prepared.target),
-        consequence: prepared.consequence,
-        limits: prepared.dataUse.limits,
-        expiresAt: freshUntil,
+      if ((existing.view.control.state !== 'awaiting_authority'
+          && existing.view.control.state !== 'authorized')
+        || existing.view.attempts.length > 0) {
+        return { kind: 'refused', code: 'invalid_control_state', view: existing.view }
       }
-      records.set(record.view.invocationRef, record)
-      return record.view
+      records.delete(input.invocationRef)
+      return {
+        kind: 'accepted',
+        view: prepareRecord(input, {
+          invocationRef: input.invocationRef,
+          expectedInvocationVersion: input.expectedInvocationVersion,
+        }),
+      }
     },
     decide(input) {
       const checked = checkBinding(records.get(input.invocationRef), input, options.now())

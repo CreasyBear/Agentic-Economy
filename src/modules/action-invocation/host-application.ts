@@ -6,9 +6,18 @@ import type {
   InvocationActor,
   InvocationDecision,
 } from './contracts'
-import type { ActionInvocationHostSeam } from './host-seam'
+import type {
+  DynamicPublishedActionInvocationAdapter,
+} from './dynamic-published-adapter'
 import type { DynamicPublishedInvocationResult } from './dynamic-published-contract'
 import type { ReconciliationEvidence } from './reconciliation-evidence'
+import type { InvocationInputWork } from './input-work'
+import {
+  projectRichInvocationTask,
+  projectStructuredInvocationTask,
+  type RichInvocationTaskProjection,
+  type StructuredInvocationTaskProjection,
+} from './host-projection'
 
 export type DevelopmentHostContinuation =
   | Readonly<{ kind: 'completed'; view: ActionInvocationView<DynamicPublishedInvocationResult> }>
@@ -18,13 +27,29 @@ export type DevelopmentHostContinuation =
 export type DevelopmentInvocationHost = Readonly<{
   origin: ActionInvocationOrigin
   actor: InvocationActor
+  begin(value: Readonly<Record<string, StableHashValue>>): InvocationInputWork
+  answer(
+    invocationRef: string,
+    answers: Readonly<Record<string, StableHashValue>>,
+    freshnessMs: number,
+  ): InvocationInputWork | ActionInvocationView<DynamicPublishedInvocationResult>
   prepare(value: StableHashValue, freshnessMs: number): ActionInvocationView<DynamicPublishedInvocationResult>
+  correct(
+    invocationRef: string,
+    corrections: Readonly<Record<string, StableHashValue>>,
+    freshnessMs: number,
+  ): InvocationDecision<DynamicPublishedInvocationResult>
   decide(invocationRef: string, accept: boolean): InvocationDecision<DynamicPublishedInvocationResult>
   continue(invocationRef: string): Promise<DevelopmentHostContinuation>
   recover(invocationRef: string): DevelopmentHostContinuation
   requestCancellation(invocationRef: string): InvocationDecision<DynamicPublishedInvocationResult>
   inspect(invocationRef: string): ActionInvocationView<DynamicPublishedInvocationResult> | undefined
-  exportSnapshot: ActionInvocationHostSeam['exportSnapshot']
+  projectRich(invocationRef: string, expectedInvocationVersion: number): RichInvocationTaskProjection
+  projectStructured(
+    invocationRef: string,
+    expectedInvocationVersion: number,
+  ): StructuredInvocationTaskProjection
+  exportSnapshot: DynamicPublishedActionInvocationAdapter['exportSnapshot']
 }>
 
 export type DevelopmentHostSourceCommands = Readonly<{
@@ -39,7 +64,7 @@ export type DevelopmentHostSourceCommands = Readonly<{
 
 function bindHost(
   host: 'request_owned_human' | 'standalone_external_agent',
-  adapter: ActionInvocationHostSeam,
+  adapter: DynamicPublishedActionInvocationAdapter,
   actor: InvocationActor,
   origin: ActionInvocationOrigin,
   sourceCommands: DevelopmentHostSourceCommands,
@@ -55,7 +80,12 @@ function bindHost(
   return Object.freeze({
     origin,
     actor,
+    begin: (partial) => adapter.begin({ actor, origin, partial }),
+    answer: (invocationRef, answers, freshnessMs) =>
+      adapter.answer({ invocationRef, actor, answers, freshnessMs }),
     prepare: (value, freshnessMs) => adapter.prepare({ actor, origin, value, freshnessMs }),
+    correct: (invocationRef, corrections, freshnessMs) =>
+      adapter.correct({ invocationRef, actor, corrections, freshnessMs }),
     decide: (invocationRef, accept) => {
       const found = current(invocationRef)
       if (found.kind === 'refused') return found
@@ -144,12 +174,24 @@ function bindHost(
       })
     },
     inspect: adapter.inspect,
+    projectRich: (invocationRef, expectedInvocationVersion) =>
+      projectRichInvocationTask({
+        invocationRef,
+        expectedInvocationVersion,
+        resolver: { resolve: () => JSON.parse(JSON.stringify(adapter.exportSnapshot())) },
+      }),
+    projectStructured: (invocationRef, expectedInvocationVersion) =>
+      projectStructuredInvocationTask({
+        invocationRef,
+        expectedInvocationVersion,
+        resolver: { resolve: () => JSON.parse(JSON.stringify(adapter.exportSnapshot())) },
+      }),
     exportSnapshot: adapter.exportSnapshot,
   })
 }
 
 export function createRequestOwnedDevelopmentHost(input: Readonly<{
-  adapter: ActionInvocationHostSeam
+  adapter: DynamicPublishedActionInvocationAdapter
   actor: InvocationActor
   requestRef: string
   revision: number
@@ -166,7 +208,7 @@ export function createRequestOwnedDevelopmentHost(input: Readonly<{
 }
 
 export function createStandaloneAgentDevelopmentHost(input: Readonly<{
-  adapter: ActionInvocationHostSeam
+  adapter: DynamicPublishedActionInvocationAdapter
   actor: InvocationActor
   sourceCommands: DevelopmentHostSourceCommands
 }>): DevelopmentInvocationHost {

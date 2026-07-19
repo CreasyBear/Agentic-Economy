@@ -93,11 +93,12 @@ export function createRecord<Input, Result extends ActionResult>(
   actor: InvocationActor,
   input: Input,
   context: ActionContext,
+  continuation?: Readonly<{ invocationRef: string; expectedInvocationVersion: number }>,
 ): StoredInvocation<Input, Result> {
-  const invocationRef = options.nextInvocationRef()
+  const invocationRef = continuation?.invocationRef ?? options.nextInvocationRef()
   const provisionalView: ActionInvocationView<Result> = {
     invocationRef,
-    invocationVersion: 1,
+    invocationVersion: (continuation?.expectedInvocationVersion ?? 0) + 1,
     environment: 'MOCK/DEVELOPMENT ONLY',
     persistence: 'in_memory_only',
     origin,

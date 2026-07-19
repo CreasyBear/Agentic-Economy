@@ -32,9 +32,8 @@ describe('ADR-010 development host parity', () => {
     })).not.toThrow()
     expect(packet.evals.every((entry) => entry.passed)).toBe(true)
     expect(packet.evals.map((entry) => entry.name)).toEqual([
-      'clarification_exact_once',
-      'material_correction_invalidation',
-      'rich_structured_task_semantics',
+      'authoritative_clarification_and_projection',
+      'material_correction_real_authority_fence',
       'success',
       'zero_effect_preflight_refusal',
       'source_refusal',
@@ -121,33 +120,30 @@ describe('ADR-010 development host parity', () => {
       packet.hosts[0].releasedRefusal.snapshot.sourceRows[0]
         .observedResolution.result.providerReceipt = 'mock:forged-provider-receipt'
     }],
-    ['rich projection invention', (packet: any) => {
-      packet.hosts[0].projections.rich.semantics.continuations.push('invented_payment')
-      packet.hosts[0].projections.rich.semanticDigest =
-        canonicalDigest(packet.hosts[0].projections.rich.semantics)
-    }],
-    ['structured consequence invention', (packet: any) => {
-      packet.hosts[1].projections.structured.semantics.consequence = 'No consequence'
-      packet.hosts[1].projections.structured.semanticDigest =
-        canonicalDigest(packet.hosts[1].projections.structured.semantics)
-    }],
-    ['stale correction projection', (packet: any) => {
-      packet.hosts[0].correction.material.work.projectionVersion = 1
-    }],
-    ['authority retained after correction', (packet: any) => {
-      packet.hosts[1].correction.material.invalidatedAuthority = false
-    }],
-    ['unnecessary clarification', (packet: any) => {
-      packet.hosts[0].clarification.answered.questions.push({
-        field: 'credential',
-        prompt: 'Which credential?',
-      })
-    }],
-    ['missing required clarification', (packet: any) => {
-      packet.hosts[1].clarification.first.questions = []
-    }],
     ['timeout reclassified', (packet: any) => {
       packet.hosts[0].timeout.releaseClassification = 'not_released'
+    }],
+    ['coordinated rich and structured invention', (packet: any) => {
+      for (const host of packet.hosts) {
+        host.correction.rich.semantics.continuations.push('invented_payment')
+        host.correction.structured.semantics.continuations.push('invented_payment')
+        host.correction.rich.semanticDigest = canonicalDigest(host.correction.rich.semantics)
+        host.correction.structured.semanticDigest =
+          canonicalDigest(host.correction.structured.semantics)
+      }
+    }],
+    ['corrected source material', (packet: any) => {
+      for (const host of packet.hosts) {
+        host.correction.snapshot.sourceRows[0].input.input.symbol = 'DOGE'
+        host.correction.snapshot.sourceRows[0].input.inputDigest =
+          canonicalDigest(host.correction.snapshot.sourceRows[0].input.input)
+      }
+    }],
+    ['reserved clarification question', (packet: any) => {
+      for (const host of packet.hosts) {
+        host.clarification.gatheringSnapshot.inputWork[0].missingFields.push('credential')
+        host.clarification.gatheringSnapshot.inputWork[0].requiredFields.push('credential')
+      }
     }],
   ])('rejects coordinated %s tampering after attacker redigests the packet', async (_name, mutate) => {
     const packet = clone(await buildDevelopmentHostParityEvidence(provenance))

@@ -303,6 +303,19 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       if (result.kind === 'refused') throw new Error(`Durable prepare refused: ${result.code}`)
       return { ...view, persistence: 'durable_control' }
     },
+    prepareExisting(input) {
+      const view = memory.prepareExisting(input)
+      const result = persist(input.expectedInvocationVersion, view, 'prepare_existing')
+      if (result.kind === 'refused') throw new Error(`Durable prepare existing refused: ${result.code}`)
+      return { ...view, persistence: 'durable_control' }
+    },
+    revisePrepared(input) {
+      return accept(
+        input.expectedInvocationVersion,
+        memory.revisePrepared(input),
+        'revise_prepared',
+      )
+    },
     decide(input) {
       return accept(input.expectedInvocationVersion, memory.decide(input), 'decide')
     },
