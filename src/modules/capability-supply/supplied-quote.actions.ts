@@ -176,6 +176,9 @@ export const collectSuppliedCandidateQuoteAction = defineAction({
         : { fields: [], limits: {} }
     })(),
   }),
+  classifyInvocationResult: (result) => result.kind === 'quote_returned'
+    ? { outcome: 'completed', referenceable: true }
+    : { outcome: 'refused', referenceable: false },
   preReleaseCheck: async ({ data, context }) => {
     const input = suppliedCandidateQuoteInputSchema.parse(data)
     const disclosure = validateDevelopmentQuoteDisclosure(input)

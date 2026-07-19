@@ -58,7 +58,7 @@ export type ActionAttemptView = Readonly<{
     | Readonly<{ state: 'possibly_released' }>
   outcome:
     | Readonly<{ state: 'running' }>
-    | Readonly<{ state: 'returned'; businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed' }>
+    | Readonly<{ state: 'returned'; businessOutcome: string }>
     | Readonly<{ state: 'failed'; retry: 'safe_before_release'; message: string }>
     | Readonly<{
         state: 'uncertain'
@@ -93,7 +93,8 @@ export type ActionInvocationView<Result extends ActionResult = ActionResult> = R
     | Readonly<{
         state: 'returned'
         execution: 'runner_returned' | 'pre_release_refused'
-        businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed'
+        businessOutcome: string
+        resultReferenceable: boolean
         result: Result
       }>
     | Readonly<{ state: 'threw'; execution: 'runner_threw'; message: string }>

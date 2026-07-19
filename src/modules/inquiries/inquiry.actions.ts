@@ -243,6 +243,30 @@ export const submitInquiryAction = defineAction({
     developmentAttemptTimeoutMs: 30_000,
     reconciliationEvidenceSource: 'inquiry.submit:delivery-observer:v1',
   },
+  projectInvocationPreparation: (input) => {
+    const contactFields = Object.keys(input.contact)
+      .filter((key) => input.contact[key as keyof typeof input.contact] !== undefined)
+      .map((key) => `contact.${key}`)
+    const allLimits = {
+      body: 2_000,
+      'contact.name': 200,
+      'contact.email': 254,
+      'contact.phone': 32,
+    }
+    const fields = ['body', ...contactFields]
+    return {
+      dataUse: {
+        fields,
+        limits: Object.fromEntries(fields.map((field) => [field, allLimits[field as keyof typeof allLimits]])),
+      },
+    }
+  },
+  classifyInvocationResult: (result) => {
+    if (result.kind === 'error') return { outcome: 'refused', referenceable: false }
+    return result.receipt.notificationStatus === 'queued'
+      ? { outcome: 'queued_communication', referenceable: true }
+      : { outcome: 'completed', referenceable: true }
+  },
   run: async ({ data, context }) =>
     submitPublicInquiryThroughSource(data, context) as Promise<PublicInquirySubmitServerResult>,
 })

@@ -35,10 +35,7 @@ export const durableAttemptOutcomeValue = v.union(
   v.object({ state: v.literal('running') }),
   v.object({
     state: v.literal('returned'),
-    businessOutcome: v.union(
-      v.literal('queued_communication'), v.literal('refused'),
-      v.literal('not_found'), v.literal('completed'),
-    ),
+    businessOutcome: v.string(),
   }),
   v.object({
     state: v.literal('failed'), retry: v.literal('safe_before_release'),
@@ -100,6 +97,7 @@ export const actionInvocationTables = {
     sourceResultRef: v.optional(v.string()),
     sourceResultDigest: v.optional(v.string()),
     terminalBusinessOutcome: v.optional(v.string()),
+    terminalResultReferenceable: v.optional(v.boolean()),
     preparedMaterialDigest: v.optional(v.string()),
     preparedTargetDigest: v.optional(v.string()),
     consequence: v.optional(v.string()),

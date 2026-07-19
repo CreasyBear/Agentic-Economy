@@ -18,6 +18,7 @@ const controlRow = v.object({
   invocationRef: v.string(), invocationVersion: v.number(), sourceRef: v.string(),
   sourceResultRef: v.optional(v.string()), sourceResultDigest: v.optional(v.string()),
   terminalBusinessOutcome: v.optional(v.string()),
+  terminalResultReferenceable: v.optional(v.boolean()),
   control: durableControlProjectionValue,
   authorityBinding: v.optional(authorityBindingValue),
   preparedMaterialDigest: v.optional(v.string()), preparedTargetDigest: v.optional(v.string()),

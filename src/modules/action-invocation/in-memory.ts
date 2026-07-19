@@ -11,8 +11,7 @@ import type {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   actorFromOrigin,
-  classifyBusinessOutcome,
-  dataUseFor,
+  classifyActionResult,
   materialDigest,
   readPath,
 } from './preparation'
@@ -81,7 +80,7 @@ export function createInMemoryActionInvocationTracer<
   ): Promise<InvocationDecision<Result>> => {
     const operationKey = readPath(record.input, 'operationKey')
     if (typeof operationKey !== 'string') {
-      throw new Error('Consequential inquiry attempt requires operationKey and prepared material digest.')
+      throw new Error('Consequential action attempt requires an operation key and prepared material digest.')
     }
     const preReleaseResult = options.action.preReleaseCheck === undefined
       ? undefined
@@ -94,19 +93,21 @@ export function createInMemoryActionInvocationTracer<
       if (attempt === undefined) {
         return { kind: 'refused', code: 'invalid_control_state', view: record.view }
       }
+      const classification = classifyActionResult(options.action, preReleaseResult)
       record.view = nextView(record.view, {
         attempts: replaceAttempt(record.view.attempts, {
           ...attempt,
           release: { state: 'not_released' },
           outcome: {
             state: 'returned',
-            businessOutcome: classifyBusinessOutcome(preReleaseResult),
+            businessOutcome: classification.outcome,
           },
         }),
         observedResolution: {
           state: 'returned',
           execution: 'pre_release_refused',
-          businessOutcome: classifyBusinessOutcome(preReleaseResult),
+          businessOutcome: classification.outcome,
+          resultReferenceable: classification.referenceable,
           result: preReleaseResult,
         },
         freshness: { state: 'current', observedAt: options.now() },
@@ -171,11 +172,13 @@ export function createInMemoryActionInvocationTracer<
       try {
         const context = options.contextForExecution?.(record.context) ?? record.context
         const result = await options.action.run({ data: record.input, context })
+        const classification = classifyActionResult(options.action, result)
         record.view = nextView(running, {
           observedResolution: {
             state: 'returned',
             execution: 'runner_returned',
-            businessOutcome: classifyBusinessOutcome(result),
+            businessOutcome: classification.outcome,
+            resultReferenceable: classification.referenceable,
             result,
           },
           freshness: { state: 'current', observedAt: options.now() },
@@ -196,7 +199,7 @@ export function createInMemoryActionInvocationTracer<
     }
     const operationKey = readPath(record.input, 'operationKey')
     if (typeof operationKey !== 'string') {
-      throw new Error('Consequential inquiry attempt requires operationKey and prepared material digest.')
+      throw new Error('Consequential action attempt requires an operation key and prepared material digest.')
     }
     const leaseOwner = 'development:execute'
     const leaseExpiresAt = new Date(Date.parse(options.now()) + 30_000).toISOString()
@@ -254,7 +257,7 @@ export function createInMemoryActionInvocationTracer<
         target: readPath(input, 'target') ?? null,
         consequence: contract.consequenceClass,
         dataUse: options.action.projectInvocationPreparation?.(input).dataUse
-          ?? dataUseFor(options.action.id, input),
+          ?? { fields: [], limits: {} },
         preparedAt,
         freshUntil,
       }

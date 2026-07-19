@@ -371,7 +371,8 @@ describe('durable Action Invocation control', () => {
       observedResolution: { state: 'pending' } | {
         state: 'returned'
         execution: 'runner_returned' | 'pre_release_refused'
-        businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed'
+        businessOutcome: string
+        resultReferenceable: boolean
         result: ActionResult
       }
     }>()

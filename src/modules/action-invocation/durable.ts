@@ -139,6 +139,7 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
         sourceResultRef: sourceState.resultIdentity.sourceResultRef,
         sourceResultDigest: sourceState.resultIdentity.resultDigest,
         terminalBusinessOutcome: returned.businessOutcome,
+        terminalResultReferenceable: returned.resultReferenceable,
       }),
       control: { ...controlProjection, persistence: 'durable_control' },
       ...(record.authorityBinding === undefined ? {} : { authorityBinding: record.authorityBinding }),
@@ -440,7 +441,7 @@ export type CompletedResultIdentity =
       sourceRef: string
       sourceResultRef: string
       resultDigest: string
-      businessOutcome: 'queued_communication' | 'completed'
+      businessOutcome: string
     }>
   | Readonly<{ kind: 'refused'; code:
     | 'invocation_not_found'
@@ -474,10 +475,12 @@ export function readCompletedResultIdentity<Result extends ActionResult>(
     row.sourceResultRef === undefined ||
     row.sourceResultDigest === undefined
   ) return { kind: 'refused', code: 'invocation_not_terminal' }
-  if (
-    row.terminalBusinessOutcome !== 'queued_communication' &&
-    row.terminalBusinessOutcome !== 'completed'
-  ) return { kind: 'refused', code: 'outcome_not_referenceable' }
+  if (row.terminalBusinessOutcome === undefined) {
+    return { kind: 'refused', code: 'outcome_not_referenceable' }
+  }
+  if (row.terminalResultReferenceable === false) {
+    return { kind: 'refused', code: 'outcome_not_referenceable' }
+  }
   const source = resolve(row.sourceRef)
   if (
     source.sourceResultRef !== row.sourceResultRef ||

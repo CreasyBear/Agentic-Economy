@@ -140,9 +140,18 @@ export type ActionInvocationPreparation = Readonly<{
   }>
 }>
 
+export type ActionInvocationResultClassification = Readonly<{
+  outcome: string
+  referenceable: boolean
+}>
+
 type ActionPreparationProjector<Input> = {
   project(input: Input): ActionInvocationPreparation
 }['project']
+
+type ActionResultClassifier<Result extends ActionResult> = {
+  classify(result: Result): ActionInvocationResultClassification
+}['classify']
 
 type ActionPreReleaseCheck<Input, Result extends ActionResult> = {
   check(input: ActionRunArgs<Input>): Promise<Result | undefined>
@@ -171,6 +180,8 @@ export type ActionDefinition<
    */
   readonly invocationContract?: ActionInvocationContract
   readonly projectInvocationPreparation?: ActionPreparationProjector<Input>
+  /** Action-owned interpretation of its returned business result. */
+  readonly classifyInvocationResult?: ActionResultClassifier<Result>
   /** Action-owned refusal check that runs before an attempt can enter release. */
   readonly preReleaseCheck?: ActionPreReleaseCheck<Input, Result>
   readonly run: ActionRunner<Input, Result>

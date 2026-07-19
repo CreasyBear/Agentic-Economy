@@ -5,7 +5,7 @@ import {
   type DevelopmentReleaseSignal,
   type DevelopmentTimeoutSignal,
 } from './attempts'
-import { classifyBusinessOutcome } from './preparation'
+import { classifyActionResult } from './preparation'
 
 type AttemptTransition<Result extends ActionResult> = Pick<
   ActionInvocationView<Result>,
@@ -44,20 +44,21 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
             throw new AttemptTimeout(timeoutMs)
           }),
         ])
-    const businessOutcome = classifyBusinessOutcome(result)
+    const classification = classifyActionResult(input.action, result)
     const returnedAttempt = {
       ...attempt,
       release: input.releaseSignal?.wasReleased()
         ? { state: 'released' as const, observedAt: input.now() }
         : { state: 'possibly_released' as const },
-      outcome: { state: 'returned' as const, businessOutcome },
+      outcome: { state: 'returned' as const, businessOutcome: classification.outcome },
     }
     return {
       attempts: replaceAttempt(attempts, returnedAttempt),
       observedResolution: {
         state: 'returned',
         execution: 'runner_returned',
-        businessOutcome,
+        businessOutcome: classification.outcome,
+        resultReferenceable: classification.referenceable,
         result,
       },
       freshness: { state: 'current', observedAt: input.now() },

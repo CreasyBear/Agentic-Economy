@@ -13,6 +13,7 @@ export type DurableControlRow<Result extends ActionResult = ActionResult> = Read
   sourceResultRef?: string
   sourceResultDigest?: string
   terminalBusinessOutcome?: string
+  terminalResultReferenceable?: boolean
   control: Omit<ActionInvocationView<Result>, 'prepared' | 'observedResolution' | 'attempts'>
   authorityBinding?: AuthorityBindingSnapshot
   preparedMaterialDigest?: string
@@ -29,7 +30,7 @@ export type DurableControlRow<Result extends ActionResult = ActionResult> = Read
 
 export type DurableAttemptOutcome =
   | Readonly<{ state: 'running' }>
-  | Readonly<{ state: 'returned'; businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed' }>
+  | Readonly<{ state: 'returned'; businessOutcome: string }>
   | Readonly<{ state: 'failed'; retry: 'safe_before_release'; errorDigest?: string }>
   | Readonly<{
       state: 'uncertain'

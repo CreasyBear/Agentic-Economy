@@ -1,4 +1,8 @@
-import type { ActionResult } from '@/modules/common/action'
+import type {
+  Action,
+  ActionInvocationResultClassification,
+  ActionResult,
+} from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type {
@@ -27,34 +31,14 @@ export function actorFromOrigin(origin: ActionInvocationOrigin): InvocationActor
     : { callerRef: `request:${origin.requestRef}`, principalRef: `request-owner:${origin.requestRef}` }
 }
 
-export function dataUseFor(actionId: string, input: unknown): PreparedInvocation['dataUse'] {
-  if (actionId !== 'inquiry.submit') return { fields: [], limits: {} }
-  const contact = readPath(input, 'contact')
-  return {
-    fields: [
-      'body',
-      ...(typeof contact === 'object' && contact !== null
-        ? Object.keys(contact).map((key) => `contact.${key}`)
-        : []),
-    ],
-    limits: { body: 2_000, 'contact.name': 200, 'contact.email': 254, 'contact.phone': 32 },
+export function classifyActionResult<Result extends ActionResult>(
+  action: Action<unknown, Result>,
+  result: Result,
+): ActionInvocationResultClassification {
+  return action.classifyInvocationResult?.(result) ?? {
+    outcome: result.kind,
+    referenceable: false,
   }
-}
-
-export function classifyBusinessOutcome(
-  result: ActionResult,
-): 'queued_communication' | 'refused' | 'not_found' | 'completed' {
-  if (result.kind === 'not_found') return 'not_found'
-  if (result.kind === 'error' || result.kind === 'refused') return 'refused'
-  const receipt = result.receipt
-  if (
-    result.kind === 'ok' &&
-    typeof receipt === 'object' &&
-    receipt !== null &&
-    'notificationStatus' in receipt &&
-    (receipt as { notificationStatus?: unknown }).notificationStatus === 'queued'
-  ) return 'queued_communication'
-  return 'completed'
 }
 
 function toStableValue(value: unknown): StableHashValue {
