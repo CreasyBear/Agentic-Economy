@@ -502,7 +502,7 @@ export async function resumeDevelopmentProviderOperationObjective(input: Readonl
     operationView?.observedResolution.state !== 'returned'
     || operationView.observedResolution.result.kind !== 'effect_confirmed'
     || operationView.observedResolution.result.effectRef !== input.objectiveState.operationResultRef
-  ) throw new Error('development_provider_operation_objective_booking_result_refused')
+  ) throw new Error('development_provider_operation_objective_operation_result_refused')
   const confirmed = operationView.observedResolution.result
   let store = new StandingMandateStore(structuredClone(input.mandateSnapshot))
   const cancellationMaterial = cancellationInput({
