@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `8ac11190`
+**Current accepted revision:** `d7ee9fe1`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -61,7 +61,7 @@ parallel plan.
 | 7. Attributable effect attempt | Implemented | `f4b77026`, `f1cc1fb6` |
 | 8. Interruption and uncertainty | Implemented in deterministic labelled development execution | `f4b77026`, `8d3fe91a`, `e5079e23`, `2bb08013`, `98ccb155` |
 | 9. Concurrency and recovery | Implemented in deterministic labelled development execution | `f1cc1fb6`, `8d3fe91a`, `0d5131a3`, `4a8e215b`, `8b57b2f1`, `890404d4`, `8ac11190` |
-| 10. Earned persistence | Implemented in labelled development execution; current attempt reconstruction repaired; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d` |
+| 10. Earned persistence | Implemented and re-audited in labelled development execution; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d`, `d7ee9fe1` |
 | 11. Request reuse | Implemented in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0` |
 | 12. Composition and direct control | Not implemented | — |
 | 13. Transfer | Not implemented | — |
@@ -425,6 +425,48 @@ Static source inspection under the AE Convex guardrails established:
 
 This is a source-level development persistence decision. It authorizes no
 deployment or hosted readback.
+
+### Canonical slice 10 completion — earned neutral persistence
+
+**Accepted commit:** `d7ee9fe1`
+**Child commit:** `3cf38b9e13ccd00c251e8e122dd508d7fe2d3f44`
+**Child task:** `019f79fd-8653-7192-a4db-4a02dd5b67d5`
+**Assigned base:** `755556bb`
+**Evidence class:** source inspection plus deterministic labelled local/mock
+execution and static private-handler validation
+
+Re-audit disposition:
+
+- Request-owned and standalone callers use the same durable schema, ports,
+  transition engine, authority/attempt/evidence meanings, and cold-resume path;
+- neutral persistence contains control identity, exact attribution, digests,
+  source references, bounded authority and attempt projections, and append-only
+  history, not raw action input, inquiry contact/body/access keys, quote or
+  provider payload, transcript, host state, or copied business results;
+- source-owned action records remain authoritative for business facts and
+  result identity;
+- removing the neutral control projection leaves the source-owned result and
+  its digest intact, while removing process/transcript/cache does not lose
+  reconstructable control meaning;
+- fresh sync and async development processes reconstruct current authority,
+  attempt, generation, uncertainty, cancellation, reconciliation, terminal
+  result reference, and safe continuation;
+- bounded reads retain the exact current attempt beyond the first 100 rows;
+- stale-worker generation fencing is now explicitly awaited in the acceptance
+  evaluator rather than relying on Vitest's deprecated implicit behavior;
+- no new runtime, table, schema, Request lineage, or parallel persistence
+  lifecycle was required.
+
+Master verification:
+
+- focused durable-control and private-handler checks passed 28/28;
+- no live Convex call, code generation, network, deployment, seed, or provider
+  effect was run.
+
+Not established:
+
+- execution of the private Convex handlers or deployed persistence;
+- production recovery, provider fulfilment, safety, or customer value.
 
 ### Canonical slice 11 — completed standalone result reference in Customer Request
 
