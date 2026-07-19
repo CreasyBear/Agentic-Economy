@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `0d5131a3`
+**Current accepted revision:** `f1808da0`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -290,23 +290,64 @@ Static source inspection under the AE Convex guardrails established:
 This is a source-level development persistence decision. It authorizes no
 deployment or hosted readback.
 
-## Active slice
-
 ### P1-G — completed standalone result reference in Customer Request
 
-**Status:** ready to dispatch from `0d5131a3`
+**Accepted commits:** `92d57aeb`, `f7c978b5`, `f1808da0`
+**Child commits:** `3caaf430ca976267b34b57c840f72f0c9a06e142`,
+`46677c9819bb93db59afba4aad266e48f7628c64`,
+`1a8f61e79858053f1e27db7847bfb9973ce559b9`
+**Child task:** `019f7972-dc09-70f2-8a5e-f5567bbefada`
+**Assigned base:** `d15f3b4b`
+**Evidence class:** source plus labelled local/mock canonical Request revision
+and cold-readback execution
 
 Target transition:
 
 `completed standalone result -> immutable Request reference -> replay without repeated effect`
 
-The Request aggregate may attach only a same-principal, standalone, terminal,
-source-verified result identity. It must reference rather than copy the result,
-must inherit no authority or control state, and must not fabricate a plan
-action, Request fact, capability result, or legacy V1 output mapping. The eval
-must prove one runner call, idempotent replay/attachment, cold reconstruction,
-historical Request replay compatibility, and refusal for cross-principal,
-nonterminal, or tampered identities.
+Implemented:
+
+- same-principal, same-caller, standalone, terminal, source-verified result
+  identity is the only attachable input;
+- the V2 aggregate stores an immutable provenance reference containing action,
+  invocation, source-result, digest, outcome, and timestamp only;
+- raw result, authority, attempt, control, body, contact, access key, Request
+  fact, fabricated plan action, and V1 mapping never cross the boundary;
+- attachment recompiles and commits canonical Request revision `N+1`, so prior
+  route decision and authority are superseded rather than inherited;
+- the internally derived semantic command digest binds exact Request,
+  revision/generation, principal/caller, invocation, verified result identity,
+  and reference timestamp;
+- exact replay creates no new revision or effect; changed invocation/material
+  under the same key conflicts, and missing or altered replay provenance fails
+  integrity;
+- persisted readback retains the reference and remains aggregate-consistent;
+- matching effect is explicitly `provenance_only`: the reference is not yet an
+  input to candidate selection;
+- historical V2 aggregates remain valid without the additive reference;
+- master focused checks passed 82/82 with scoped lint and diff checks.
+
+Not established:
+
+- matching or route composition that consumes the prior result;
+- a production Convex adapter call, endpoint, deployment, or hosted cold-agent
+  continuation;
+- provider fulfilment or customer value.
+
+## Active slice
+
+### P1-H — supplied-candidate qualification
+
+**Status:** ready to dispatch from `f1808da0`
+
+Target transition:
+
+`registered supplied candidate -> current admission/evidence qualification -> inspectable eligible or blocked invocation dependency`
+
+Trace one real current capability through contract, offering, binding,
+eligibility/publication, credentials, readiness, and freshness source owners.
+Expose only an inspectable neutral qualification/reference usable by Action
+Invocation; do not copy business lifecycle state or imply independent supply.
 
 ## Evidence position
 
@@ -321,13 +362,13 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 | 1 | Supplied-candidate qualification reuses contracts and supply evidence | Missing | No supplied-candidate tracer through current capability, eligibility, provenance, and freshness seams. |
 | 2 | Supplied-candidate quote collection reuses preparation, disclosure authority, provider attempts, and reconciliation | Missing | P1-C proves generic exact authority only; no provider quote attempt or reconciliation trace. |
 | 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Missing | No imported-commitment observation tracer. |
-| 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Partial | Same registered actions, exact authority, effect identity, retry, uncertainty, reconciliation, fencing, cancellation, and snapshot reconstruction are proven in memory; durable transaction and cold-process evidence remain open. |
-| 5 | Historical Customer Request traces replay without semantic regression | Missing | Discriminated lineage preserves the type boundary, but no historical replay regression has run. |
-| 6 | Composition contains inspectable references and declared dependencies only | Missing | No invocation composition or dependency projection. |
+| 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Proven | Both origins share the registered runner, authority, effect identity, uncertainty, reconciliation, fencing, transactional durable control, and fresh-process reconstruction in labelled development execution. |
+| 5 | Historical Customer Request traces replay without semantic regression | Proven | Additive V2 references preserve historical aggregate integrity and focused historical replay remains green. |
+| 6 | Composition contains inspectable references and declared dependencies only | Partial | Completed standalone work enters Request only as an immutable verified reference; declared multi-action dependencies and route composition remain open. |
 | 7 | Direct-booking negative control remains unburdened | Missing | No contrasting direct-path measurement. |
-| 8 | Person or cold agent can stop and continue from a durable result | Partial | Control-only snapshot reconstruction is proven in memory; durable storage, fresh-process readback, and result continuation remain open. |
+| 8 | Person or cold agent can stop and continue from a durable result | Proven | Fresh development processes reconstruct durable control and a verified completed result can advance a canonical Request revision without repeating the effect. |
 | 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Missing | No Action Invocation route roll-up. |
-| 10 | Authority never crosses tasks | Partial | P1-C refuses cross-origin, cross-principal, stale-version, expired, and material-change reuse for one in-memory action; cross-invocation and durable reuse still require executable proof. |
+| 10 | Authority never crosses tasks | Proven | Cross-origin/principal/material reuse is refused, and completed-result attachment carries no authority while superseding prior Request route authority. |
 | 11 | No domain nouns enter neutral contracts | Partial | Current invocation contracts use neutral action/control vocabulary; later attempt, persistence, composition, and projection contracts remain unaudited. |
 
 ### ADR-010 — ten gates
@@ -336,13 +377,13 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 |---|---|---|---|
 | 1 | One registered action is semantically equivalent through embedded and external-agent surfaces | Missing | Both caller origins currently cross the interface directly, not two real host adapters. |
 | 2 | Both hosts use the same source-owned transition without duplicated rules | Missing | Registered-runner reuse is proven; host import/boundary enforcement is not. |
-| 3 | Task-shaped view reconstructs from records without transcript replay | Missing | No durable record or reconstruction evaluator. |
+| 3 | Task-shaped view reconstructs from records without transcript replay | Proven | Fresh development processes reconstruct control, attempts, uncertainty, cancellation, and completed-result continuity from durable/source records without transcript replay. |
 | 4 | Non-visual form carries the same options, consequences, evidence, and continuations | Missing | No invocation-scoped structured/rich projection pair. |
 | 5 | Corrections update authoritative work and invalidate stale projections | Partial | Material input change invalidates authority in memory; authoritative correction and projection invalidation are absent. |
 | 6 | Missing information is gathered without unnecessary interrogation | Missing | No clarification loop through the action plane. |
 | 7 | Authority binds the exact action and fails after material change | Proven | P1-C binds action/version, actor, origin, invocation, digest, target, consequence, limits, expiry, and CAS version; changed material input is refused before runner execution. |
 | 8 | Interruption, refusal, timeout, uncertain effect, and recovery retain parity | Partial | Local pre-release failure, possible release, replay refusal, reconciliation, cancellation, stale-worker fencing, and late-completion refusal are proven; timeout, durable recovery, and cross-host parity remain open. |
-| 9 | Cold agent continues without hidden first-party context | Missing | No durable reconstruction or cold-host continuation. |
+| 9 | Cold agent continues without hidden first-party context | Partial | Cold development reconstruction and Request continuation are proven; an actual external-agent host has not yet exercised them. |
 | 10 | Human effort improves without worsening correctness, control, privacy, accessibility, or operator burden | Missing | Requires the frozen direct comparison and real host surfaces; local control tests alone are insufficient. |
 
 Customer/provider/operating value remains external evidence and is not an ADR
@@ -350,6 +391,7 @@ implementation gate substitute.
 
 ## Next decision
 
-Dispatch earned durable control and cold resume. Persist only the neutral
-control/history and source references proven by both origins; action-specific
-business facts and results remain source-owned.
+Dispatch supplied-candidate qualification. The next decision is whether the
+current supply graph can produce an honest inspectable Action Invocation
+dependency without promoting admitted fixtures or registry listings into
+independently operated supply.
