@@ -18,6 +18,13 @@ export {
   readCompletedResultIdentity,
 } from './durable'
 export { createAsyncDurableActionInvocationTracer } from './async-durable'
+export {
+  authorityUseIntegrityValid,
+  issueStandingMandate,
+  mandateIntegrityValid,
+  StandingMandateStore,
+  STANDING_MANDATE_FORMAT,
+} from './standing-mandate'
 
 export type {
   ActionInvocationOrigin,
@@ -32,6 +39,15 @@ export type {
   PrepareActionInput,
   PreparedInvocation,
 } from './contracts'
+export type {
+  AuthorityUse,
+  AuthorityUseMaterial,
+  MandateDecision,
+  MandateRefusalCode,
+  StandingMandate,
+  StandingMandateScope,
+  StandingMandateSnapshot,
+} from './standing-mandate'
 export type {
   DurableActionInvocationPort,
   DurableActionInvocationTracer,

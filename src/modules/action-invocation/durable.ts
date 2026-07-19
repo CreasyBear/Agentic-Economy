@@ -59,6 +59,24 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
   const makeMemory = (snapshot = resumed) => createInMemoryActionInvocationTracer({
     ...options,
     beforeEffectRelease: (view, effectGeneration) => {
+      const authorityFence = options.beforeEffectRelease?.(view, effectGeneration)
+      if (authorityFence instanceof Promise) {
+        return authorityFence.then((refusal) => {
+          if (refusal !== undefined) return refusal
+          return persistRelease(view, effectGeneration)
+        })
+      }
+      if (authorityFence !== undefined) return authorityFence
+      return persistRelease(view, effectGeneration)
+    },
+    ...(snapshot === undefined ? {} : { initialSnapshot: snapshot }),
+    resolveSourceState: (sourceRef) => {
+      const source = options.resolveSourceState(sourceRef)
+      if (source.prepared === undefined) throw new Error(`Source ${sourceRef} has no prepared state.`)
+      return { ...source, prepared: source.prepared }
+    },
+  })
+  const persistRelease = (view: ActionInvocationView<Result>, effectGeneration: number) => {
       const persistExactRelease = () => persist(
         view.invocationVersion - 1,
         view,
@@ -99,14 +117,7 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
         releaseCommitVersions.set(view.invocationRef, view.invocationVersion)
         return undefined
       })
-    },
-    ...(snapshot === undefined ? {} : { initialSnapshot: snapshot }),
-    resolveSourceState: (sourceRef) => {
-      const source = options.resolveSourceState(sourceRef)
-      if (source.prepared === undefined) throw new Error(`Source ${sourceRef} has no prepared state.`)
-      return { ...source, prepared: source.prepared }
-    },
-  })
+  }
   const releaseCommitVersions = new Map<string, number>()
   const releaseRefusals = new Map<string, DecisionRefusalCode>()
   let memory = makeMemory()

@@ -3,10 +3,12 @@ import {
   createDevelopmentDurableState,
   createDevelopmentReleaseSignal,
   createDurableActionInvocationTracer,
+  type AuthorityUseMaterial,
   type ActionInvocationOrigin,
   type ActionInvocationView,
   type PreparedInvocation,
   type ReconciliationEvidenceVerifier,
+  StandingMandateStore,
 } from '@/modules/action-invocation'
 import type { TransferBoundaryEvent } from '@/modules/action-invocation/transfer-evaluator'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -47,6 +49,11 @@ export async function runReservationInvocation(input: Readonly<{
   nowMs?: number
   loseResponseAfterRelease?: boolean
   verifyReconciliationEvidence?: ReconciliationEvidenceVerifier
+  boundedMandate?: Readonly<{
+    store: StandingMandateStore
+    material: Omit<AuthorityUseMaterial, 'invocationRef' | 'action' | 'preparedMaterialDigest' | 'effectGeneration'>
+    afterReservation?: () => void
+  }>
 }>): Promise<BookingInvocationRun<DevelopmentBookingResult>> {
   const events: TransferBoundaryEvent[] = []
   const source: {
@@ -90,6 +97,15 @@ export async function runReservationInvocation(input: Readonly<{
     nextInvocationRef: () => `mock:booking-invocation:${input.ref}`,
     nextAuthorityRef: () => `mock:booking-authority:${input.ref}`,
     nextAttemptRef: () => `mock:booking-attempt:${input.ref}`,
+    ...(input.boundedMandate === undefined ? {} : {
+      beforeEffectRelease: () => {
+        const checked = input.boundedMandate!.store.recheckBeforeRelease(
+          input.boundedMandate!.material.authorityUseRef,
+          developmentBookingNow(),
+        )
+        return checked.kind === 'accepted' ? undefined : 'authority_not_accepted' as const
+      },
+    }),
     resolveSourceState: () => ({
       input: source.input, context, prepared: source.prepared,
       observedResolution: source.result === undefined
@@ -115,13 +131,62 @@ export async function runReservationInvocation(input: Readonly<{
   })
   if (decision.kind !== 'accepted') throw new Error(decision.code)
   events.push({ kind: 'authority_decision', invocationRef: prepared.invocationRef })
-  const executed = await tracer.execute({
+  if (input.boundedMandate === undefined) {
+    const executed = await tracer.execute({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: decision.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor: owner, origin: input.origin, materialInput: input.booking,
+    })
+    if (executed.kind !== 'accepted') throw new Error(executed.code)
+    return { view: executed.view, origin: input.origin, owner, state, tracer: tracer as never, source, events }
+  }
+  const acquired = tracer.acquire({
     invocationRef: prepared.invocationRef,
     expectedInvocationVersion: decision.view.invocationVersion,
     authorityRef: prepared.authority!.reference,
     actor: owner, origin: input.origin, materialInput: input.booking,
+    leaseOwner: `mock:booking-worker:${input.ref}`,
+    leaseMs: 30_000,
   })
-  if (executed.kind !== 'accepted') throw new Error(executed.code)
+  if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+    throw new Error(acquired.kind === 'refused' ? acquired.code : 'booking_acquisition_failed')
+  }
+  const authorityUse = input.boundedMandate.store.reserve({
+    ...input.boundedMandate.material,
+    invocationRef: prepared.invocationRef,
+    action: { id: prepared.action.id, version: prepared.action.contractVersion },
+    preparedMaterialDigest: prepared.prepared!.materialInputDigest,
+    effectGeneration: acquired.view.control.effectGeneration,
+  }, developmentBookingNow())
+  if (authorityUse.kind === 'refused') throw new Error(authorityUse.code)
+  input.boundedMandate.afterReservation?.()
+  const executed = await tracer.executeAcquired({
+    invocationRef: prepared.invocationRef,
+    expectedInvocationVersion: acquired.view.invocationVersion,
+    attemptRef: acquired.view.control.attemptRef,
+    leaseOwner: acquired.view.control.leaseOwner,
+    effectGeneration: acquired.view.control.effectGeneration,
+  })
+  if (executed.kind !== 'accepted') {
+    input.boundedMandate.store.settle(
+      authorityUse.value.authorityUseRef,
+      'not_released',
+      developmentBookingNow(),
+    )
+    throw new Error(executed.code)
+  }
+  const attempt = executed.view.attempts.at(-1)
+  const settlement = attempt?.release.state === 'possibly_released'
+    ? 'uncertain'
+    : attempt?.release.state === 'released'
+      ? 'released'
+      : 'not_released'
+  input.boundedMandate.store.settle(
+    authorityUse.value.authorityUseRef,
+    settlement,
+    developmentBookingNow(),
+  )
   return { view: executed.view, origin: input.origin, owner, state, tracer: tracer as never, source, events }
 }
 
