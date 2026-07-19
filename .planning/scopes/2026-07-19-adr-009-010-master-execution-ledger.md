@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `9dd406be`
+**Current accepted revision:** `2cc23984`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -55,7 +55,7 @@ parallel plan.
 | 1. Registered-action contract | Implemented; final audit still required | `72351a80`, `ccd21ad2`, `f744e943` |
 | 2. Supplied-candidate qualification tracer | Implemented and focused-eval green | `4c27d371`, `27e885f6` |
 | 3. Supplied-candidate quote-collection tracer | Implemented and focused-eval green | `f744e943` through `e5079e23` |
-| 4. Imported-commitment observation tracer | Implemented for the claim-only/refusal branch | `0cf42307`, `b8942e8b` |
+| 4. Imported-commitment observation tracer | Partial: claim custody/refusal proven; admitted-provider observation transition missing | `0cf42307`, `b8942e8b` |
 | 5. Two-caller in-memory tracer | Implemented | `72351a80` |
 | 6. Preparation and exact authority | Implemented | `ccd21ad2` |
 | 7. Attributable effect attempt | Implemented | `f4b77026`, `f1cc1fb6` |
@@ -63,8 +63,8 @@ parallel plan.
 | 9. Concurrency and recovery | Implemented in deterministic labelled development execution | `f1cc1fb6`, `8d3fe91a`, `0d5131a3`, `4a8e215b`, `8b57b2f1`, `890404d4`, `8ac11190` |
 | 10. Earned persistence | Implemented and re-audited in labelled development execution; private Convex runtime not invoked | `622115e9`, `0d5131a3`, `98ccb155`, `d916d28d`, `d7ee9fe1` |
 | 11. Request reuse | Implemented and re-audited in labelled development execution | `92d57aeb`, `f7c978b5`, `f1808da0`, `249a247f` |
-| 12. Composition and direct control | Implemented in labelled local/development execution | `0dc146e8` |
-| 13. Transfer | Implemented in labelled local/development execution | `edc82390`, `9dd406be` |
+| 12. Composition and direct control | Partial: initial projection/control eval integrated; authoritative record resolution missing | `0dc146e8` |
+| 13. Transfer | Partial: initial transfer eval integrated; executed measurement instrumentation missing | `edc82390`, `9dd406be` |
 
 Phase 2 may not start until slices 1–13, all eleven ADR-009 gates, and the
 Founder ADR-009 decision are complete. Existing reconstruction or projection
@@ -725,7 +725,10 @@ Not established:
 
 - persisted composition, a RoutePlan, public route choice, provider routing,
   direct booking, deployment, hosted readback, external fulfilment, or customer
-  value.
+  value;
+- authoritative resolution of invocation state, continuation, outcome, and
+  ownership. The initial projector accepts these as caller-authored node input,
+  so it cannot yet support gates 6 or 9.
 
 ### Canonical slice 13 — transfer
 
@@ -780,7 +783,10 @@ Implemented proof:
 Not established:
 
 - wall-clock or provider latency, real strata-repair supply, provider response,
-  fulfilment, deployment, hosted behavior, or customer value.
+  fulfilment, deployment, hosted behavior, or customer value;
+- reusable execution instrumentation for control, supervision, and logical
+  transitions. The initial evaluator derives some counts from stores/calls but
+  still embeds other metrics and the recommendation inside test data.
 
 ## Evidence position
 
@@ -794,15 +800,15 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 |---|---|---|---|
 | 1 | Supplied-candidate qualification reuses contracts and supply evidence | Proven | Labelled development qualification reuses exact publication, business currentness, active contract, offering, binding, eligibility, credential, readiness, and freshness sources with deterministic blockers and no effect. |
 | 2 | Supplied-candidate quote collection reuses preparation, disclosure authority, provider attempts, and reconciliation | Proven | A labelled development quote action requalifies current supply at preparation and pre-release, binds exact disclosure, reuses shared durable attempts/fencing/reconciliation for both origins, and keeps quote data source-owned. |
-| 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Proven | A labelled development claim store and Request reference preserve named-source attribution, raw-byte integrity, unverified posture, validity and evidence while refusing qualification or execution without admitted supply. |
+| 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Partial | Claim custody, attribution, Request reference, and refusal without admitted supply are proven. No positive admitted-provider adapter transition demonstrates when fresh attributable evidence may create a current AE observation. |
 | 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Proven | Both origins share the registered runner, authority, effect identity, uncertainty, reconciliation, fencing, transactional durable control, and fresh-process reconstruction in labelled development execution. |
-| 5 | Historical Customer Request traces replay without semantic regression | Proven | Additive V2 references preserve historical aggregate integrity and focused historical replay remains green. |
-| 6 | Composition contains inspectable references and declared dependencies only | Proven | A pure labelled-development projection validates exact Request identity, registered action/version, completed references, dependencies, and acyclicity while owning no lifecycle or authority state. |
-| 7 | Direct-booking negative control remains unburdened | Proven for the authorized development proxy | The current product does not book. The registered read-only `registry.detail:v1` first-contact path executes with zero invocation-control, attempt, history, or approval records; no booking capability is claimed. |
+| 5 | Historical Customer Request traces replay without semantic regression | Partial | Additive optional fields and current compatibility checks are green, but no frozen pre-change V2 aggregate/head/command fixture has been replayed through current persistence and readback. |
+| 6 | Composition contains inspectable references and declared dependencies only | Contradicted | Completed references and graph shape are validated, but invocation references are not resolved and caller-authored owner/continuation/outcome prose is copied into the projection. |
+| 7 | Direct-booking negative control remains unburdened | Governance disposition required | AE explicitly does not book. The current eval uses read-only first contact and an unrelated empty development store; it neither proves direct booking nor observes a shared instrumentation boundary. Supersede the stale gate to the selected direct-path control rather than invent booking. |
 | 8 | Person or cold agent can stop and continue from a durable result | Proven | Fresh development processes reconstruct durable control and a verified completed result can advance a canonical Request revision without repeating the effect. |
-| 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Proven | The local/development reference projection emits exactly the four required ordinary-language states plus references, dependencies, completion conditions, and continuation ownership; no Action Invocation machinery is exposed. |
+| 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Contradicted | Four labels exist, but `current` is inferred from caller-declared dependencies without resolving actual invocation control/resolution/freshness; caller prose can therefore invent route truth. |
 | 10 | Authority never crosses tasks | Proven | Cross-origin/principal/material reuse is refused, completed-result attachment carries no authority, and authority accepted for quote A cannot authorize independently prepared quote B. |
-| 11 | No domain nouns enter neutral contracts | Proven for Phase 1 source | Action Invocation control and the composition projector use neutral action, reference, dependency, authority, attempt, evidence, and recovery vocabulary; action-specific quote and inquiry facts remain source-owned. |
+| 11 | No domain nouns enter neutral contracts | Contradicted | Neutral Action Invocation preparation/result classification still hard-codes `inquiry.submit`, `body`, `contact`, `notificationStatus`, `queued_communication`, and inquiry-specific errors. Move these rules to registered action/source adapters. |
 
 ### ADR-010 — ten gates
 
@@ -824,8 +830,9 @@ implementation gate substitute.
 
 ## Next decision
 
-Run the source-backed Phase 1 completion audit against all thirteen canonical
-slices and all eleven ADR-009 gates at the accepted revision. Any `Partial`,
-indirect, or fixture-inflated claim returns to the earliest failed transition.
-Only a fully evidenced development implementation advances to the Founder
-ADR-009 disposition and Phase 2 entry review.
+Repair the five bounded audit failures: admitted-provider imported observation,
+frozen historical V2 replay, authoritative composition resolution, neutral
+action-owned data-use/outcome classification, and executed transfer/direct
+instrumentation. Then re-run the eleven-gate audit. The stale direct-booking
+wording remains a Founder governance disposition; implementation must not
+invent booking to make the document green.
