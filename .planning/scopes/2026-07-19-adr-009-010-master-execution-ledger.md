@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `b933999e`
+**Current accepted revision:** `e0d3f2c0`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -10,14 +10,11 @@
 
 Accepted ADR-019 supersedes the ledger's recommendation that booking
 contradicts `PRODUCT.md`. The prior inquiry/read controls remain valid scoped
-development evidence; they do not close ADR-009 Gate 7.
+development evidence. Phase 1 now includes a labelled provider-supported
+booking action and closes ADR-009 Gate 7 for the declared development class.
 
-Phase 1 now adds a fresh development slot for one registered
-provider-supported booking action, direct Action Invocation proportionality,
-and authority-mode exact-use/revocation evals. Phase 2 selects that booking
-action for human/embedded/external host parity. The required source gap is a
-fresh slot and booking adapter or labelled provider simulator; none exists or
-is claimed by this governance commit.
+Authority-mode exact-use/revocation evals remain open. Phase 2 selects the
+booking action for human/embedded/external host parity.
 
 ## Operating contract
 
@@ -859,6 +856,51 @@ Observed again after the ledger update at exact revision
 The artifact remains outside Git. It contains labelled fixture data and no
 production credential or real customer/provider record.
 
+### Direct development booking and Gate 7
+
+**Accepted commits:** `87fb7b35`, `d30493b0`, `1ee5ff6c`, `e0d3f2c0`
+**Evidence class:** source, deterministic local execution, checksummed
+MOCK/DEVELOPMENT ONLY packet; no reachable surface, live provider, network,
+backend, or deployment
+
+The accepted booking vertical provides:
+
+- booking-owned provider availability with exact slot, binding, contract,
+  terms, provenance, and release-time freshness;
+- registered `booking.createDevelopmentReservation:v1` and
+  `booking.cancelDevelopmentReservation:v1` actions with no public surface;
+- Request-owned and standalone callers using the same Action Invocation
+  preparation, exact `approve_each` authority, attempt, release, result,
+  uncertainty, reconciliation, cancellation, fencing, and reconstruction;
+- observed `authority_decision -> provider_release` ordering;
+- provider-owned operation idempotency across separate authorized invocations,
+  with same-material deduplication and changed-material conflict;
+- possible release held at `reconciliation_required` until attributable
+  canonical observer evidence resolves it;
+- cancellation before release plus a separate provider-confirmed cancellation
+  result that preserves the original reservation record;
+- fresh semantic packet reconstruction with valid-checksum tamper rejection for
+  control, result identity, attempt/history linkage, reconciliation resolution,
+  evidence digest, and observation window;
+- measured direct-booking proportionality without a synthetic Customer Request
+  or RoutePlan.
+
+Master execution at exact revision
+`e0d3f2c0335722a1fb3b8be009e3548bd954e8dd`:
+
+```text
+npm run evidence:booking:development -- run /tmp/ae-booking-master-e0d3f2c0.json
+npm run evidence:booking:development -- verify /tmp/ae-booking-master-e0d3f2c0.json
+```
+
+Focused booking and packet checks passed 16/16. Packet checksum:
+`sha256:5226c54f24d7ff41110be71fa93a5d070f0c6427da6e610cf637faa7d704d051`.
+
+This closes Gate 7 only for labelled local development. It does not establish
+customer reachability, hosted behavior, independently operated supply,
+real-provider fulfilment, production safety, cold-agent usability, or customer
+value.
+
 ## Evidence position
 
 `Proven` below means executable development evidence for the gate as written.
@@ -875,7 +917,7 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 | 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Proven | Both origins share the registered runner, authority, effect identity, uncertainty, reconciliation, fencing, transactional durable control, and fresh-process reconstruction in labelled development execution. |
 | 5 | Historical Customer Request traces replay without semantic regression | Proven | A frozen pre-reference V2 aggregate/head/command from exact revision `d15f3b4b` replays through current local persistence/readback with identical digest, proposal-only authority, projection, command outcome, and absent optional fields. |
 | 6 | Composition contains inspectable references and declared dependencies only | Proven | The projector accepts graph structure and exact identities only, resolves authoritative registered-action/completed-result/invocation records, and refuses mismatched, missing, stale, cyclic, or uninspectable references. |
-| 7 | Direct-booking proportionality | Open — fresh development slot required | Historical first-contact/read controls prove only their scoped path. Close this gate with one registered provider-supported booking action and Action Invocation, no synthetic Request/Route orchestration, plus exact authority-use, uncertain-effect, cancellation, and evidence behavior. |
+| 7 | Direct-booking proportionality | Proven | One registered provider-supported development booking action uses Action Invocation without synthetic Request/Route orchestration. Both origins prove exact per-action authority, provider-owned cross-invocation idempotency, uncertain-effect reconciliation, truthful cancellation, semantic reconstruction, and measured proportionality. |
 | 8 | Person or cold agent can stop and continue from a durable result | Proven | Fresh development processes reconstruct durable control and a verified completed result can advance a canonical Request revision without repeating the effect. |
 | 9 | Full-route projection explains completed, current, optional, and blocked work without kernel machinery | Proven | Four ordinary-language states and continuations derive from registered descriptors and authoritative invocation/result records; caller prose injection, stale state, and unknown identities are refused. |
 | 10 | Authority never crosses tasks | Proven | Cross-origin/principal/material reuse is refused, completed-result attachment carries no authority, and authority accepted for quote A cannot authorize independently prepared quote B. |
@@ -901,9 +943,10 @@ implementation gate substitute.
 
 ## Next decision
 
-Founder disposition was recorded on 2026-07-19 in accepted ADR-019. The prior
-recommendation to replace booking with an executed direct first-contact/read
-control is superseded. AE targets booking as a separate registered action;
-adding that development adapter and closing the proportionality eval is now the
-next source transition. ADR-009 remains proposed and Phase 2 entry is blocked
-until Gate 7 and the remaining acceptance evidence close.
+Founder disposition was recorded on 2026-07-19 in accepted ADR-019. Direct
+booking proportionality now passes for labelled development evidence and all
+eleven ADR-009 gates are proven at that evidence class. The next source
+transition is standing-mandate authority use and revocation, beginning with
+`bounded_mandate` and widening to `full_yolo` only through explicit limits and
+generation-fenced revocation. Phase 2 host parity follows on the same registered
+booking action and Action Invocation plane.
