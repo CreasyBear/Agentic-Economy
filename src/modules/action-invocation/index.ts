@@ -1,7 +1,14 @@
 export {
   createInMemoryActionInvocationTracer,
 } from './in-memory'
-export { createDevelopmentReleaseSignal } from './attempts'
+export {
+  createDevelopmentReleaseSignal,
+  createDevelopmentTimeoutSignal,
+} from './attempts'
+export {
+  createReconciliationEvidence,
+  type ReconciliationEvidence,
+} from './reconciliation-evidence'
 export { roundTripControlSnapshot } from './snapshot'
 export {
   createDevelopmentDurablePort,

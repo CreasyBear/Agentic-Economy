@@ -13,6 +13,8 @@ vi.mock('@/modules/registry/registry.functions', () => ({
 import { findAction } from '@/modules/actions'
 import {
   createDevelopmentReleaseSignal,
+  createDevelopmentTimeoutSignal,
+  createReconciliationEvidence,
   createInMemoryActionInvocationTracer,
   roundTripControlSnapshot,
   type ActionInvocationOrigin,
@@ -353,7 +355,17 @@ describe('in-memory Action Invocation tracer', () => {
       attemptRef: `dev:attempt:${origin.kind}:2`,
       actor,
       origin,
-      resolution: 'released',
+      evidence: createReconciliationEvidence({
+        kind: 'action_invocation_reconciliation',
+        version: 1,
+        evidenceRef: `mock:evidence:${origin.kind}:released`,
+        source: 'inquiry.submit:delivery-observer:v1',
+        invocationRef: prepared.invocationRef,
+        attemptRef: `dev:attempt:${origin.kind}:2`,
+        effectGeneration: uncertain.view.attempts[1]!.effectGeneration,
+        resolution: 'released',
+        observedAt: '2026-07-19T07:00:00.000Z',
+      }),
     })
     expect(reconciled).toMatchObject({
       kind: 'accepted',
@@ -434,7 +446,17 @@ describe('in-memory Action Invocation tracer', () => {
       attemptRef: 'dev:attempt:missing-observer:1',
       actor,
       origin: standaloneOrigin,
-      resolution: 'not_released',
+      evidence: createReconciliationEvidence({
+        kind: 'action_invocation_reconciliation',
+        version: 1,
+        evidenceRef: 'mock:evidence:missing-observer:not-released',
+        source: 'inquiry.submit:delivery-observer:v1',
+        invocationRef: prepared.invocationRef,
+        attemptRef: 'dev:attempt:missing-observer:1',
+        effectGeneration: uncertain.view.attempts[0]!.effectGeneration,
+        resolution: 'not_released',
+        observedAt: '2026-07-19T08:00:00.000Z',
+      }),
     })).toMatchObject({
       kind: 'accepted',
       view: {
@@ -449,6 +471,106 @@ describe('in-memory Action Invocation tracer', () => {
         }],
       },
     })
+  })
+
+  it.each([
+    ['Request-owned', requestOrigin],
+    ['standalone', standaloneOrigin],
+  ])('bounds timeout without cancelling or accepting a late result for %s origin', async (_label, origin) => {
+    for (const releasePosture of ['before_release', 'possibly_after_release'] as const) {
+      const release = createDevelopmentReleaseSignal()
+      const timeout = createDevelopmentTimeoutSignal()
+      let finishRunner!: (value: {
+        kind: 'error'
+        code: string
+        retryable: false
+        reason: string
+      }) => void
+      const developmentAdapter = vi.fn().mockImplementation(() => new Promise((resolve) => {
+        finishRunner = resolve
+        if (releasePosture === 'possibly_after_release') release.markReleased()
+      }))
+      const tracer = createInMemoryActionInvocationTracer({
+        action: findAction('inquiry.submit')!,
+        now: () => '2026-07-19T08:30:00.000Z',
+        nextInvocationRef: () => `dev:timeout:${origin.kind}:${releasePosture}`,
+        nextAuthorityRef: () => `opaque:timeout:${origin.kind}:${releasePosture}`,
+        nextAttemptRef: () => `dev:timeout-attempt:${origin.kind}:${releasePosture}`,
+        developmentReleaseSignal: release,
+        developmentTimeoutSignal: timeout.signal,
+      })
+      const prepared = tracer.prepare({
+        origin,
+        actor,
+        input: inquiryInput,
+        context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+        freshnessMs: 60_000,
+      })
+      const authority = tracer.decide({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: prepared.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor,
+        origin,
+        accept: true,
+      })
+      if (authority.kind !== 'accepted') throw new Error(authority.code)
+      const pending = tracer.execute({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: authority.view.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor,
+        origin,
+        materialInput: inquiryInput,
+      })
+      await vi.waitFor(() => expect(developmentAdapter).toHaveBeenCalledTimes(1))
+      timeout.fire()
+      const timedOut = await pending
+      if (timedOut.kind !== 'accepted') throw new Error(timedOut.code)
+      expect(timedOut.view).toMatchObject({
+        observedResolution: {
+          state: 'timed_out',
+          timeoutMs: 30_000,
+          observedAt: '2026-07-19T08:30:00.000Z',
+        },
+        control: releasePosture === 'before_release'
+          ? { state: 'retryable', reason: 'pre_release_failure' }
+          : { state: 'reconciliation_required', attemptRef: `dev:timeout-attempt:${origin.kind}:${releasePosture}` },
+        attempts: [{
+          actor,
+          release: releasePosture === 'before_release'
+            ? { state: 'not_released' }
+            : { state: 'possibly_released' },
+          outcome: {
+            state: 'timed_out',
+            timeoutMs: 30_000,
+            retry: releasePosture === 'before_release'
+              ? 'safe_before_release'
+              : 'reconcile_before_retry',
+          },
+        }],
+      })
+      const currentAtTimeout = tracer.inspect(prepared.invocationRef)
+      finishRunner({
+        kind: 'error',
+        code: 'mock_late_timeout_return',
+        retryable: false,
+        reason: 'MOCK late runner result after timeout',
+      })
+      await Promise.resolve()
+      expect(tracer.inspect(prepared.invocationRef)).toEqual(currentAtTimeout)
+      expect(developmentAdapter).toHaveBeenCalledTimes(1)
+
+      console.log(JSON.stringify({
+        label: 'MOCK/DEVELOPMENT ONLY - deterministic source-declared timeout',
+        origin: origin.kind,
+        releasePosture,
+        timeoutMs: 30_000,
+        runnerCallCount: developmentAdapter.mock.calls.length,
+        control: timedOut.view.control,
+        lateResultCurrent: false,
+      }))
+    }
   })
 
   it.each([

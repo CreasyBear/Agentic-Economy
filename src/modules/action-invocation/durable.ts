@@ -69,6 +69,7 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
     view: ActionInvocationView<Result>,
     kind: string,
     expectedEffectGeneration?: number,
+    evidence?: import('./reconciliation-evidence').ReconciliationEvidence,
   ): PersistControlResult => {
     const snapshot = memory.exportSnapshot()
     const record = snapshot.records.find(({ control }) => control.invocationRef === view.invocationRef)
@@ -130,8 +131,12 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       nextInvocationVersion: view.invocationVersion,
       control: view.control,
     }
-    const commandDigest = canonicalDigest(commandIdentity)
-    const commandId = `${view.invocationRef}:${beforeVersion ?? 'create'}:${kind}`
+    const commandDigest = evidence === undefined
+      ? canonicalDigest(commandIdentity)
+      : canonicalDigest(evidence)
+    const commandId = evidence === undefined
+      ? `${view.invocationRef}:${beforeVersion ?? 'create'}:${kind}`
+      : `${view.invocationRef}:reconciliation-evidence:${evidence.evidenceRef}`
     return options.port.transact({
       commandId,
       commandDigest,
@@ -145,6 +150,15 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
         commandDigest,
         commandResult: 'applied',
         kind,
+        ...(evidence === undefined ? {} : {
+          effectGeneration: evidence.effectGeneration,
+          sourceEvidenceRef: evidence.evidenceRef,
+          observation: {
+            kind: 'release_observation' as const,
+            release: evidence.resolution,
+            evidenceDigest: evidence.digest,
+          },
+        }),
       },
     })
   }
@@ -209,7 +223,39 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
       return accept(input.expectedInvocationVersion, memory.cancel(input), 'cancel')
     },
     reconcile(input) {
-      return accept(input.expectedInvocationVersion, memory.reconcile(input), 'reconcile')
+      const commandId = `${input.invocationRef}:reconciliation-evidence:${input.evidence.evidenceRef}`
+      const prior = options.port.readHistoryCommand(input.invocationRef, commandId)
+      if (prior !== undefined) {
+        const current = memory.inspect(input.invocationRef)
+        if (current === undefined) return { kind: 'refused', code: 'invocation_not_found' }
+        if (
+          current.owner.callerRef !== input.actor.callerRef ||
+          current.owner.principalRef !== input.actor.principalRef
+        ) return { kind: 'refused', code: 'cross_principal_refused', view: current }
+        if (JSON.stringify(current.origin) !== JSON.stringify(input.origin)) {
+          return { kind: 'refused', code: 'cross_origin_refused', view: current }
+        }
+        return prior.commandDigest === canonicalDigest(input.evidence)
+          ? { kind: 'accepted', view: { ...current, persistence: 'durable_control' } }
+          : { kind: 'refused', code: 'command_identity_conflict', view: current }
+      }
+      const decision = memory.reconcile(input)
+      if (decision.kind !== 'accepted') return decision
+      const result = persist(
+        input.expectedInvocationVersion,
+        decision.view,
+        'reconcile',
+        undefined,
+        input.evidence,
+      )
+      if (result.kind === 'refused') {
+        memory = makeMemory(reconstructSnapshot(options.port, input.invocationRef))
+        const durableView = memory.inspect(input.invocationRef)
+        return durableView === undefined
+          ? { kind: 'refused', code: result.code }
+          : { kind: 'refused', code: result.code, view: durableView }
+      }
+      return { kind: 'accepted', view: { ...decision.view, persistence: 'durable_control' } }
     },
     inspect(invocationRef) {
       const view = memory.inspect(invocationRef)

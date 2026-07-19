@@ -240,6 +240,8 @@ export const submitInquiryAction = defineAction({
       'principal or caller changes',
       'origin changes',
     ],
+    attemptTimeoutMs: 30_000,
+    reconciliationEvidenceSource: 'inquiry.submit:delivery-observer:v1',
   },
   run: async ({ data, context }) =>
     submitPublicInquiryThroughSource(data, context) as Promise<PublicInquirySubmitServerResult>,

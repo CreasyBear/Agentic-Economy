@@ -1,6 +1,10 @@
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
 import type { ActionInvocationView } from './contracts'
-import { replaceAttempt, type DevelopmentReleaseSignal } from './attempts'
+import {
+  replaceAttempt,
+  type DevelopmentReleaseSignal,
+  type DevelopmentTimeoutSignal,
+} from './attempts'
 import { classifyBusinessOutcome } from './preparation'
 
 type AttemptTransition<Result extends ActionResult> = Pick<
@@ -17,6 +21,8 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
   operationKey: string
   now: () => string
   releaseSignal?: DevelopmentReleaseSignal
+  timeoutSignal?: DevelopmentTimeoutSignal
+  timeoutMs?: number
   attempt: ActionInvocationView<Result>['attempts'][number]
 }>): Promise<AttemptTransition<Result>> {
   const prepared = input.currentView.prepared
@@ -26,7 +32,18 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
   const attempts = input.currentView.attempts
 
   try {
-    const result = await input.action.run({ data: input.actionInput, context: input.context })
+    const runner = input.action.run({ data: input.actionInput, context: input.context })
+    // The timeout bounds the control decision only. It does not cancel or erase
+    // the runner promise; completion is fenced from mutating the advanced view.
+    const timeoutMs = input.timeoutMs
+    const result = input.timeoutSignal === undefined || timeoutMs === undefined
+      ? await runner
+      : await Promise.race([
+          runner,
+          input.timeoutSignal.wait(timeoutMs).then(() => {
+            throw new AttemptTimeout(timeoutMs)
+          }),
+        ])
     const businessOutcome = classifyBusinessOutcome(result)
     const returnedAttempt = {
       ...attempt,
@@ -47,6 +64,35 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
       control: { state: 'terminal' },
     }
   } catch (error) {
+    if (error instanceof AttemptTimeout) {
+      const explicitlyNotReleased =
+        input.releaseSignal !== undefined && !input.releaseSignal.wasReleased()
+      const timedOutAttempt = {
+        ...attempt,
+        release: explicitlyNotReleased
+          ? { state: 'not_released' as const }
+          : { state: 'possibly_released' as const },
+        outcome: {
+          state: 'timed_out' as const,
+          timeoutMs: error.timeoutMs,
+          retry: explicitlyNotReleased
+            ? 'safe_before_release' as const
+            : 'reconcile_before_retry' as const,
+        },
+      }
+      return {
+        attempts: replaceAttempt(attempts, timedOutAttempt),
+        observedResolution: {
+          state: 'timed_out',
+          timeoutMs: error.timeoutMs,
+          observedAt: input.now(),
+        },
+        freshness: { state: 'current', observedAt: input.now() },
+        control: explicitlyNotReleased
+          ? { state: 'retryable', reason: 'pre_release_failure' }
+          : { state: 'reconciliation_required', attemptRef: attempt.attemptRef },
+      }
+    }
     const message = error instanceof Error ? error.message : 'Unknown runner failure'
     const explicitlyNotReleased = input.releaseSignal !== undefined && !input.releaseSignal.wasReleased()
     const failedAttempt = explicitlyNotReleased
@@ -68,5 +114,11 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
         ? { state: 'retryable', reason: 'pre_release_failure' }
         : { state: 'reconciliation_required', attemptRef: attempt.attemptRef },
     }
+  }
+}
+
+class AttemptTimeout extends Error {
+  constructor(readonly timeoutMs: number) {
+    super(`Action attempt exceeded its declared ${timeoutMs}ms timeout.`)
   }
 }

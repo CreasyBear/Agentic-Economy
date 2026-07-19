@@ -48,6 +48,10 @@ export const durableAttemptOutcomeValue = v.union(
     state: v.literal('uncertain'), retry: v.literal('reconcile_before_retry'),
     errorDigest: v.optional(v.string()),
   }),
+  v.object({
+    state: v.literal('timed_out'), timeoutMs: v.number(),
+    retry: v.union(v.literal('safe_before_release'), v.literal('reconcile_before_retry')),
+  }),
   v.object({ state: v.literal('reconciled_not_released'), retry: v.literal('safe_after_reconciliation'), observedAt: v.string() }),
   v.object({ state: v.literal('reconciled_released'), externalOutcome: v.literal('unknown'), observedAt: v.string() }),
 )

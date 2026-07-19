@@ -25,6 +25,7 @@ import {
 } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
+  createReconciliationEvidence,
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
   createDevelopmentReleaseSignal,
@@ -674,13 +675,68 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       persistence: 'durable_control',
       control: { state: 'reconciliation_required' },
     })
+    const reconciliationEvidence = createReconciliationEvidence({
+      kind: 'action_invocation_reconciliation',
+      version: 1,
+      evidenceRef: `mock:quote-evidence:${origin.kind}:released`,
+      source: 'supply.collectDevelopmentQuote:provider-observer:v1',
+      invocationRef: uncertain.view.invocationRef,
+      attemptRef: uncertain.view.attempts[0]!.attemptRef,
+      effectGeneration: uncertain.view.attempts[0]!.effectGeneration,
+      resolution: 'released',
+      observedAt: nowIso(),
+    })
+    const unchangedBeforeMalformedEvidence = freshProcess.inspect(uncertain.view.invocationRef)
+    const malformedEvidence = { ...reconciliationEvidence }
+    Reflect.set(malformedEvidence, 'kind', 'malformed')
+    const refusedEvidence = [
+      malformedEvidence,
+      {
+        ...reconciliationEvidence,
+        digest: `sha256:${'0'.repeat(64)}`,
+      },
+      createReconciliationEvidence({
+        ...reconciliationEvidence,
+        source: 'mock:wrong-provider-observer:v1',
+      }),
+      createReconciliationEvidence({
+        ...reconciliationEvidence,
+        attemptRef: 'mock:cross-attempt',
+      }),
+      createReconciliationEvidence({
+        ...reconciliationEvidence,
+        effectGeneration: reconciliationEvidence.effectGeneration + 1,
+      }),
+      createReconciliationEvidence({
+        ...reconciliationEvidence,
+        observedAt: '2026-07-19T08:00:00.001Z',
+      }),
+    ].map((evidence) => freshProcess.reconcile({
+      invocationRef: uncertain.view.invocationRef,
+      expectedInvocationVersion: uncertain.view.invocationVersion,
+      attemptRef: uncertain.view.attempts[0]!.attemptRef,
+      actor,
+      origin,
+      evidence,
+    }))
+    expect(refusedEvidence.map((decision) => decision.kind === 'refused' ? decision.code : 'accepted'))
+      .toEqual([
+        'evidence_malformed',
+        'evidence_digest_mismatch',
+        'evidence_source_mismatch',
+        'evidence_attempt_mismatch',
+        'evidence_generation_stale',
+        'evidence_time_invalid',
+      ])
+    expect(freshProcess.inspect(uncertain.view.invocationRef)).toEqual(unchangedBeforeMalformedEvidence)
+
     const reconciled = freshProcess.reconcile({
       invocationRef: uncertain.view.invocationRef,
       expectedInvocationVersion: uncertain.view.invocationVersion,
       attemptRef: uncertain.view.attempts[0]!.attemptRef,
       actor,
       origin,
-      resolution: 'released',
+      evidence: reconciliationEvidence,
     })
     expect(reconciled).toMatchObject({
       kind: 'accepted',
@@ -693,6 +749,25 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       },
     })
     if (reconciled.kind !== 'accepted') throw new Error(reconciled.code)
+    expect(freshProcess.reconcile({
+      invocationRef: uncertain.view.invocationRef,
+      expectedInvocationVersion: uncertain.view.invocationVersion,
+      attemptRef: uncertain.view.attempts[0]!.attemptRef,
+      actor,
+      origin,
+      evidence: reconciliationEvidence,
+    })).toMatchObject({ kind: 'accepted', view: { invocationVersion: reconciled.view.invocationVersion } })
+    expect(freshProcess.reconcile({
+      invocationRef: uncertain.view.invocationRef,
+      expectedInvocationVersion: uncertain.view.invocationVersion,
+      attemptRef: uncertain.view.attempts[0]!.attemptRef,
+      actor,
+      origin,
+      evidence: createReconciliationEvidence({
+        ...reconciliationEvidence,
+        resolution: 'not_released',
+      }),
+    })).toMatchObject({ kind: 'refused', code: 'command_identity_conflict' })
     const unsafeRetry = await freshProcess.execute({
       invocationRef: reconciled.view.invocationRef,
       expectedInvocationVersion: reconciled.view.invocationVersion,
@@ -708,6 +783,17 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       attempts: port.readAttempts(uncertain.view.invocationRef, 10),
       history: port.readHistory(uncertain.view.invocationRef, 0, 20),
     })
+    expect(port.readHistory(uncertain.view.invocationRef, 0, 20)).toContainEqual(
+      expect.objectContaining({
+        kind: 'reconcile',
+        current: true,
+        sourceEvidenceRef: reconciliationEvidence.evidenceRef,
+        observation: expect.objectContaining({
+          release: 'released',
+          evidenceDigest: reconciliationEvidence.digest,
+        }),
+      }),
+    )
     expect(persisted).not.toContain(quoteInput.quoteRequest.serviceReference)
     expect(persisted).not.toContain(quoteInput.quoteRequest.constraints.suburb)
     expect(persisted).not.toContain(quoteInput.disclosure.purpose)

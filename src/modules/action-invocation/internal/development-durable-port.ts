@@ -73,6 +73,8 @@ export function createDevelopmentDurablePort<Result extends ActionResult>(
     readHistory: (ref, afterVersion, limit) => (history.get(ref) ?? [])
       .filter((row) => row.invocationVersion > afterVersion)
       .slice(0, Math.max(0, limit)),
+    readHistoryCommand: (ref, commandId) =>
+      (history.get(ref) ?? []).find((row) => row.commandId === commandId),
     recordLateObservation(input) {
       const digest = canonicalDigest({
         invocationRef: input.invocationRef,

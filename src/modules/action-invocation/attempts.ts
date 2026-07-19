@@ -7,6 +7,19 @@ export type DevelopmentReleaseSignal = {
   wasReleased(): boolean
 }
 
+export type DevelopmentTimeoutSignal = {
+  wait(timeoutMs: number): Promise<void>
+}
+
+export function createDevelopmentTimeoutSignal(): Readonly<{
+  signal: DevelopmentTimeoutSignal
+  fire(): void
+}> {
+  let fire = () => {}
+  const promise = new Promise<void>((resolve) => { fire = resolve })
+  return { signal: { wait: () => promise }, fire }
+}
+
 export function createDevelopmentReleaseSignal(): DevelopmentReleaseSignal {
   let released = false
   return {

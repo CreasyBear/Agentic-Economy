@@ -9,6 +9,11 @@ import type {
 import { reconcileAttempt, replaceAttempt } from './attempts'
 import { currentLease, publishLeaseObservation } from './lease-control'
 import { nextView, type StoredInvocation } from './in-memory-record-store'
+import {
+  validateReconciliationEvidence,
+  type ReconciliationEvidence,
+} from './reconciliation-evidence'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 type OwnedControlInput = Readonly<{
   expectedInvocationVersion: number
@@ -76,12 +81,20 @@ export function reconcileInvocation<Input, Result extends ActionResult>(
   record: StoredInvocation<Input, Result> | undefined,
   input: OwnedControlInput & Readonly<{
     attemptRef: string
-    resolution: 'not_released' | 'released'
+    evidence: ReconciliationEvidence
   }>,
   observedAt: string,
+  evidenceSource: string | undefined,
 ): InvocationDecision<Result> {
   const owned = checkOwned(record, input)
   if (owned.kind === 'refused') return owned
+  const evidenceDigest = canonicalDigest(input.evidence)
+  const priorEvidence = owned.record.reconciliationEvidence?.get(input.evidence.evidenceRef)
+  if (priorEvidence !== undefined) {
+    return priorEvidence === evidenceDigest
+      ? { kind: 'accepted', view: owned.record.view }
+      : { kind: 'refused', code: 'command_identity_conflict', view: owned.record.view }
+  }
   if (
     owned.record.view.control.state !== 'reconciliation_required' ||
     owned.record.view.control.attemptRef !== input.attemptRef
@@ -90,12 +103,24 @@ export function reconcileInvocation<Input, Result extends ActionResult>(
   if (attempt === undefined) {
     return { kind: 'refused', code: 'invalid_control_state', view: owned.record.view }
   }
+  const evidenceRefusal = validateReconciliationEvidence({
+    evidence: input.evidence,
+    source: evidenceSource,
+    invocationRef: owned.record.view.invocationRef,
+    attemptRef: attempt.attemptRef,
+    effectGeneration: attempt.effectGeneration,
+    now: observedAt,
+  })
+  if (evidenceRefusal !== undefined) {
+    return { kind: 'refused', code: evidenceRefusal, view: owned.record.view }
+  }
+  owned.record.reconciliationEvidence?.set(input.evidence.evidenceRef, evidenceDigest)
   owned.record.view = nextView(owned.record.view, {
     attempts: replaceAttempt(
       owned.record.view.attempts,
-      reconcileAttempt(attempt, input.resolution, observedAt),
+      reconcileAttempt(attempt, input.evidence.resolution, input.evidence.observedAt),
     ),
-    control: input.resolution === 'not_released'
+    control: input.evidence.resolution === 'not_released'
       ? { state: 'retryable', reason: 'pre_release_failure' }
       : { state: 'terminal' },
   })

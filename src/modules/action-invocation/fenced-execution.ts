@@ -4,7 +4,7 @@ import type {
   DecisionRefusalCode,
   InvocationDecision,
 } from './contracts'
-import type { DevelopmentReleaseSignal } from './attempts'
+import type { DevelopmentReleaseSignal, DevelopmentTimeoutSignal } from './attempts'
 import { executeConsequentialAttempt } from './attempt-execution'
 import { currentLease, leaseIsExpired } from './lease-control'
 
@@ -45,6 +45,8 @@ export async function executeReleasedAttempt<Input, Result extends ActionResult>
   operationKey: string
   now: () => string
   releaseSignal?: DevelopmentReleaseSignal
+  timeoutSignal?: DevelopmentTimeoutSignal
+  timeoutMs?: number
 }> & Omit<AcquiredToken, 'expectedInvocationVersion'>): Promise<ActionInvocationView<Result>> {
   const attempt = input.releaseStartView.attempts.find(
     ({ attemptRef }) => attemptRef === input.attemptRef,
@@ -59,6 +61,8 @@ export async function executeReleasedAttempt<Input, Result extends ActionResult>
     operationKey: input.operationKey,
     now: input.now,
     ...(input.releaseSignal === undefined ? {} : { releaseSignal: input.releaseSignal }),
+    ...(input.timeoutSignal === undefined ? {} : { timeoutSignal: input.timeoutSignal }),
+    ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     attempt,
   })
   return nextView(input.releaseStartView, transition)

@@ -8,7 +8,7 @@ import type {
   InvocationActor,
   PreparedInvocation,
 } from './contracts'
-import type { DevelopmentReleaseSignal } from './attempts'
+import type { DevelopmentReleaseSignal, DevelopmentTimeoutSignal } from './attempts'
 import { readPath } from './preparation'
 
 export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly<{
@@ -18,6 +18,7 @@ export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly
   nextAuthorityRef?: () => string
   nextAttemptRef?: () => string
   developmentReleaseSignal?: DevelopmentReleaseSignal
+  developmentTimeoutSignal?: DevelopmentTimeoutSignal
   contextForExecution?: (context: ActionContext) => ActionContext
   initialSnapshot?: InMemoryControlSnapshot<Input, Result>
   resolveSourceState?: (sourceRef: string) => Readonly<{
@@ -33,6 +34,7 @@ export type StoredInvocation<Input, Result extends ActionResult> = {
   input: Input
   context: ActionContext
   authorityBinding?: AuthorityBindingSnapshot
+  reconciliationEvidence?: Map<string, string>
 }
 
 export function createRecordStore<Input, Result extends ActionResult>(
@@ -50,6 +52,7 @@ export function createRecordStore<Input, Result extends ActionResult>(
       input: source.input,
       context: source.context,
       ...(record.authorityBinding === undefined ? {} : { authorityBinding: record.authorityBinding }),
+      reconciliationEvidence: new Map(),
     }]
   }) ?? [])
 }
@@ -99,6 +102,7 @@ export function createRecord<Input, Result extends ActionResult>(
       freshness: { state: 'not_observed' },
       control: { state: 'in_progress' },
     },
+    reconciliationEvidence: new Map(),
   }
 }
 

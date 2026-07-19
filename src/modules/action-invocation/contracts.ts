@@ -1,5 +1,6 @@
 import type { ActionContext, ActionResult } from '@/modules/common/action'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import type { ReconciliationEvidence } from './reconciliation-evidence'
 
 export type ActionInvocationOrigin =
   | Readonly<{ kind: 'request_owned'; requestRef: string; revision: number }>
@@ -32,6 +33,12 @@ export type DecisionRefusalCode =
   | 'effect_generation_stale'
   | 'invalid_control_state'
   | 'command_identity_conflict'
+  | 'evidence_malformed'
+  | 'evidence_digest_mismatch'
+  | 'evidence_source_mismatch'
+  | 'evidence_attempt_mismatch'
+  | 'evidence_generation_stale'
+  | 'evidence_time_invalid'
 
 export type ActionAttemptView = Readonly<{
   attemptRef: string
@@ -53,6 +60,11 @@ export type ActionAttemptView = Readonly<{
     | Readonly<{ state: 'returned'; businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed' }>
     | Readonly<{ state: 'failed'; retry: 'safe_before_release'; message: string }>
     | Readonly<{ state: 'uncertain'; retry: 'reconcile_before_retry'; message: string }>
+    | Readonly<{
+        state: 'timed_out'
+        timeoutMs: number
+        retry: 'safe_before_release' | 'reconcile_before_retry'
+      }>
     | Readonly<{ state: 'reconciled_not_released'; retry: 'safe_after_reconciliation'; observedAt: string }>
     | Readonly<{ state: 'reconciled_released'; externalOutcome: 'unknown'; observedAt: string }>
 }>
@@ -78,6 +90,7 @@ export type ActionInvocationView<Result extends ActionResult = ActionResult> = R
         result: Result
       }>
     | Readonly<{ state: 'threw'; execution: 'runner_threw'; message: string }>
+    | Readonly<{ state: 'timed_out'; timeoutMs: number; observedAt: string }>
   freshness:
     | Readonly<{ state: 'not_observed' }>
     | Readonly<{ state: 'current'; observedAt: string }>
@@ -171,7 +184,7 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     attemptRef: string
     actor: InvocationActor
     origin: ActionInvocationOrigin
-    resolution: 'not_released' | 'released'
+    evidence: ReconciliationEvidence
   }>): InvocationDecision<Result>
   inspect(invocationRef: string): ActionInvocationView<Result> | undefined
   exportSnapshot(): InMemoryControlSnapshot<Input, Result>

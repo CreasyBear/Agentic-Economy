@@ -32,6 +32,7 @@ export type DurableAttemptOutcome =
   | Readonly<{ state: 'returned'; businessOutcome: 'queued_communication' | 'refused' | 'not_found' | 'completed' }>
   | Readonly<{ state: 'failed'; retry: 'safe_before_release'; errorDigest?: string }>
   | Readonly<{ state: 'uncertain'; retry: 'reconcile_before_retry'; errorDigest?: string }>
+  | Readonly<{ state: 'timed_out'; timeoutMs: number; retry: 'safe_before_release' | 'reconcile_before_retry' }>
   | Readonly<{ state: 'reconciled_not_released'; retry: 'safe_after_reconciliation'; observedAt: string }>
   | Readonly<{ state: 'reconciled_released'; externalOutcome: 'unknown'; observedAt: string }>
 
@@ -114,6 +115,7 @@ export interface DurableActionInvocationPort<Result extends ActionResult = Actio
   readControl(invocationRef: string): DurableControlRow<Result> | undefined
   readAttempts(invocationRef: string, limit: number): readonly DurableAttemptRow[]
   readHistory(invocationRef: string, afterVersion: number, limit: number): readonly DurableHistoryRow[]
+  readHistoryCommand(invocationRef: string, commandId: string): DurableHistoryRow | undefined
   recordLateObservation(input: Readonly<{
     invocationRef: string
     commandId: string
