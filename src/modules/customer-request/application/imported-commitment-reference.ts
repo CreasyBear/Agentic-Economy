@@ -49,6 +49,7 @@ export type AttachImportedCommitmentReferenceResult =
         | 'cross_principal_refused'
         | 'source_identity_mismatch'
         | 'integrity_failure'
+        | 'reference_integrity_failure'
     }>
 
 /**
@@ -77,26 +78,16 @@ export function attachImportedCommitmentReference(
   const existing = input.candidateAggregate.importedCommitmentReferences?.find(
     (reference) => reference.referenceRef === referenceRef,
   )
-  if (existing !== undefined) return success('replayed', input.candidateAggregate, existing)
+  if (existing !== undefined) {
+    const expected = referenceFromIdentity(identity, existing.referencedAt)
+    if (!Number.isFinite(existing.referencedAt)
+      || canonicalDigest(existing as never) !== canonicalDigest(expected as never)) {
+      return { kind: 'refused', reason: 'reference_integrity_failure' }
+    }
+    return success('replayed', input.candidateAggregate, existing)
+  }
 
-  const reference: CustomerRequestImportedCommitmentReference = Object.freeze({
-    role: 'imported_commitment_claim',
-    referenceRef,
-    claimRef: identity.claimRef,
-    claimDigest: identity.claimDigest,
-    issuerRef: identity.issuerRef,
-    observerRef: identity.observerRef,
-    subject: identity.subject,
-    commitmentKind: identity.commitmentKind,
-    source: identity.source,
-    observedAt: identity.observedAt,
-    ...(identity.assertedAt === undefined ? {} : { assertedAt: identity.assertedAt }),
-    validity: identity.validity,
-    evidenceRefs: identity.evidenceRefs,
-    verification: 'imported_unverified',
-    observationPosture: 'imported_claim_only',
-    referencedAt: input.referencedAt,
-  })
+  const reference = referenceFromIdentity(identity, input.referencedAt)
   const { aggregateDigest: _digest, importedCommitmentReferences: _prior, ...material } =
     input.candidateAggregate
   const nextMaterial = {
@@ -110,6 +101,33 @@ export function attachImportedCommitmentReference(
     ...nextMaterial,
     aggregateDigest: canonicalDigest(nextMaterial as never),
   }), reference)
+}
+
+function referenceFromIdentity(
+  identity: ImportedCommitmentReferenceIdentity,
+  referencedAt: number,
+): CustomerRequestImportedCommitmentReference {
+  return Object.freeze({
+    role: 'imported_commitment_claim',
+    referenceRef: `imported-commitment:${canonicalDigest({
+      claimRef: identity.claimRef,
+      claimDigest: identity.claimDigest,
+    })}`,
+    claimRef: identity.claimRef,
+    claimDigest: identity.claimDigest,
+    issuerRef: identity.issuerRef,
+    observerRef: identity.observerRef,
+    subject: identity.subject,
+    commitmentKind: identity.commitmentKind,
+    source: identity.source,
+    observedAt: identity.observedAt,
+    ...(identity.assertedAt === undefined ? {} : { assertedAt: identity.assertedAt }),
+    validity: identity.validity,
+    evidenceRefs: identity.evidenceRefs,
+    verification: 'imported_unverified',
+    observationPosture: 'imported_claim_only',
+    referencedAt,
+  })
 }
 
 function success(

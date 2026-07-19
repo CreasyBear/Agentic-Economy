@@ -134,7 +134,7 @@ export function importedCommitmentValidityAt(
 ): 'current_by_claim' | 'expired' | 'unknown' | 'withdrawn' {
   if (validity.kind === 'unknown') return 'unknown'
   if (validity.kind === 'withdrawn') return 'withdrawn'
-  return validity.validUntil >= now ? 'current_by_claim' : 'expired'
+  return now < validity.validUntil ? 'current_by_claim' : 'expired'
 }
 
 function claimFromInput(input: ImportCommitmentInput): ImportedCommitmentClaim {
@@ -184,13 +184,15 @@ function validInput(input: ImportCommitmentInput): boolean {
     && input.evidenceRefs.every((ref) => ref.trim().length > 0 && ref.length <= 500)
     && Number.isFinite(input.observedAt)
     && (input.assertedAt === undefined || Number.isFinite(input.assertedAt))
-    && validityIsValid(input.validity)
+    && (input.assertedAt === undefined || input.assertedAt <= input.observedAt)
+    && validityIsValid(input.validity, input.observedAt)
 }
 
-function validityIsValid(validity: ImportedCommitmentValidity): boolean {
+function validityIsValid(validity: ImportedCommitmentValidity, observedAt: number): boolean {
   if (validity.kind === 'unknown') return true
   if (validity.kind === 'valid_until') return Number.isFinite(validity.validUntil)
   return Number.isFinite(validity.withdrawnAt)
+    && validity.withdrawnAt <= observedAt
     && validity.evidenceRefs.length > 0
     && validity.evidenceRefs.every((ref) => ref.trim().length > 0 && ref.length <= 500)
 }

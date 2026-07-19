@@ -10,6 +10,7 @@ import {
 import {
   compileCustomerRequest,
   writableCustomerRequestV2Aggregate,
+  type CustomerRequestImportedCommitmentReference,
   type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
 import { aggregateIsInternallyConsistent } from '@/modules/customer-request/v2-write'
@@ -131,11 +132,32 @@ describe('ADR-009 gate 3 imported commitment attribution', () => {
     expect(importedCommitmentValidityAt({ kind: 'valid_until', validUntil: NOW - 1 }, NOW))
       .toBe('expired')
     expect(importedCommitmentValidityAt({ kind: 'unknown' }, NOW)).toBe('unknown')
+    expect(importedCommitmentValidityAt({ kind: 'valid_until', validUntil: NOW }, NOW))
+      .toBe('expired')
     expect(importedCommitmentValidityAt({
       kind: 'withdrawn',
       withdrawnAt: NOW - 1,
       evidenceRefs: ['fixture:withdrawal'],
     }, NOW)).toBe('withdrawn')
+  })
+
+  it('refuses asserted or withdrawn events dated after observation', () => {
+    expect(importCommitmentClaim(input({
+      assertedAt: NOW + 1,
+    }), createDevelopmentImportedCommitmentStore())).toEqual({
+      kind: 'refused',
+      reason: 'invalid_claim',
+    })
+    expect(importCommitmentClaim(input({
+      validity: {
+        kind: 'withdrawn',
+        withdrawnAt: NOW + 1,
+        evidenceRefs: ['fixture:future-withdrawal'],
+      },
+    }), createDevelopmentImportedCommitmentStore())).toEqual({
+      kind: 'refused',
+      reason: 'invalid_claim',
+    })
   })
 
   it('cold-reconstructs source custody and attaches reference-only meaning to canonical V2', () => {
@@ -186,6 +208,46 @@ describe('ADR-009 gate 3 imported commitment attribution', () => {
     expect(replay.kind).toBe('replayed')
     expect(replay.kind === 'replayed' ? replay.aggregate.aggregateDigest : null)
       .toBe(attached.aggregate.aggregateDigest)
+  })
+
+  it('refuses replay when any source-owned reference semantic was tampered', () => {
+    const store = createDevelopmentImportedCommitmentStore()
+    expect(importCommitmentClaim(input(), store).kind).toBe('imported')
+    const attached = attachImportedCommitmentReference({
+      principalRef: input().actor.principalRef,
+      callerRef: input().actor.callerRef,
+      claimRef: input().claimRef,
+      expectedSourceReference: input().source.reference,
+      expectedSourceDigest: input().source.digest,
+      referencedAt: NOW + 2_000,
+      candidateAggregate: aggregate(),
+    }, { readReference: (readInput) => readImportedCommitmentReference(store, readInput) })
+    if (attached.kind !== 'attached') throw new Error('development attachment refused')
+    const original = attached.reference
+    const { assertedAt: _missingAssertedAt, ...withoutAssertedAt } = original
+    const tampered: readonly CustomerRequestImportedCommitmentReference[] = [
+      { ...original, issuerRef: 'issuer:tampered' },
+      { ...original, observerRef: 'observer:tampered' },
+      { ...original, source: { ...original.source, system: 'tampered_system' } },
+      { ...original, validity: { kind: 'unknown' } },
+      { ...original, evidenceRefs: [] },
+      withoutAssertedAt,
+    ]
+    for (const reference of tampered) {
+      const replay = attachImportedCommitmentReference({
+        principalRef: input().actor.principalRef,
+        callerRef: input().actor.callerRef,
+        claimRef: input().claimRef,
+        expectedSourceReference: input().source.reference,
+        expectedSourceDigest: input().source.digest,
+        referencedAt: NOW + 3_000,
+        candidateAggregate: {
+          ...attached.aggregate,
+          importedCommitmentReferences: [reference],
+        },
+      }, { readReference: (readInput) => readImportedCommitmentReference(store, readInput) })
+      expect(replay).toEqual({ kind: 'refused', reason: 'reference_integrity_failure' })
+    }
   })
 
   it('preserves historical Request replay without manufacturing the new field', () => {
