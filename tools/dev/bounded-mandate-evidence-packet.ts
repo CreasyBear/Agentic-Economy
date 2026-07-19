@@ -6,6 +6,7 @@ import {
   createDevelopmentStandingMandateGrantVerifier,
   issueStandingMandate,
   StandingMandateStore,
+  verifiedGrantMatchesMandate,
   type StandingMandateSnapshot,
   type VerifiedStandingMandateGrant,
 } from '../../src/modules/action-invocation'
@@ -44,8 +45,22 @@ export type BoundedMandatePacketEvidence = Readonly<{
     providerReleases: number
     concurrentRefusal: string
     scopeRefusal: string
+    compensationCases: readonly Readonly<{
+      stage: string
+      refusal: string
+      providerEffects: number
+      heldCount: number
+      useState: string
+    }>[]
     revokeRace: Readonly<{ refusal: string; providerEffects: number; useState: string }>
-    reconciliations: readonly Readonly<{ authorityUseRef: string; resolution: string; useState: string }>[]
+    reconciliations: readonly Readonly<{
+      authorityUseRef: string
+      invocationRef: string
+      attemptRef: string
+      evidenceRef: string
+      resolution: string
+      useState: string
+    }>[]
   }>
   comparison: Readonly<{
     approveEachPrincipalDecisionsForTwoInvocations: 2
@@ -118,6 +133,8 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
   const provider = createDevelopmentBookingProvider()
   const slot = await provider.availability()
   const issued = createIssuedStore()
+  let activeStore = issued.store
+  let activeService = issued.service
   const bookings = []
   for (const [index, origin] of [requestOrigin, standaloneOrigin].entries()) {
     const run = await runReservationInvocation({
@@ -126,9 +143,24 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
       origin,
       ref: `packet-success-${index}`,
       boundedMandate: {
-        service: issued.service,
+        service: activeService,
         mandateRef: issued.mandate.mandateRef,
         authorityUseRef: `mock:packet:use:success:${index}`,
+        ...(index === 0 ? {
+          reconstructBeforeRelease: () => {
+            activeStore = new StandingMandateStore(structuredClone(activeStore.exportSnapshot()))
+            activeService = createDevelopmentBookingMandateService({
+              store: activeStore,
+              authenticatedDelegate: {
+                delegateRef: issued.mandate.delegateRef,
+                principalRef,
+                callerRef,
+              },
+              now: developmentBookingNow,
+            })
+            return activeService
+          },
+        } : {}),
       },
     })
     bookings.push({
@@ -145,10 +177,12 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
     origin: standaloneOrigin,
     resolution: 'released',
     boundedMandate: {
-      service: issued.service,
+      service: activeService,
       mandateRef: issued.mandate.mandateRef,
       authorityUseRef: 'mock:packet:use:unknown-released',
     },
+    ref: 'packet-unknown-released',
+    evidenceRef: 'mock:packet:evidence:unknown-released',
   })
   const unknownNotReleased = await runBookingReconciliation({
     provider,
@@ -156,10 +190,12 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
     origin: standaloneOrigin,
     resolution: 'not_released',
     boundedMandate: {
-      service: issued.service,
+      service: activeService,
       mandateRef: issued.mandate.mandateRef,
       authorityUseRef: 'mock:packet:use:unknown-not-released',
     },
+    ref: 'packet-unknown-not-released',
+    evidenceRef: 'mock:packet:evidence:unknown-not-released',
   })
   for (const recovery of [unknownReleased, unknownNotReleased]) {
     bookings.push({
@@ -191,12 +227,47 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
     invocationRef: 'mock:packet:concurrency-invocation:2',
   }, now)
 
-  const scope = issued.store.reserve({
+  const scope = activeStore.reserve({
     ...firstUse,
     authorityUseRef: 'mock:packet:scope-refusal',
     mandateRef: issued.mandate.mandateRef,
     providerRef: 'mock:provider:wrong',
   }, now)
+
+  const compensationCases = []
+  for (const [stage, override] of [
+    ['standing_authorization', { developmentAuthorizationVersionOverride: 99 }],
+    ['acquisition', { developmentAcquisitionVersionOverride: 99 }],
+  ] as const) {
+    const compensation = createIssuedStore()
+    const compensationProvider = createDevelopmentBookingProvider()
+    const compensationSlot = await compensationProvider.availability()
+    const authorityUseRef = `mock:packet:use:compensation:${stage}`
+    let refusal = 'none'
+    try {
+      await runReservationInvocation({
+        provider: compensationProvider,
+        booking: bookingInput(compensationSlot, principalRef, `mock:packet:operation:compensation:${stage}`),
+        origin: standaloneOrigin,
+        ref: `packet-compensation-${stage}`,
+        boundedMandate: {
+          service: compensation.service,
+          mandateRef: compensation.mandate.mandateRef,
+          authorityUseRef,
+          ...override,
+        },
+      })
+    } catch (error) {
+      refusal = error instanceof Error ? error.message : 'unknown'
+    }
+    compensationCases.push({
+      stage,
+      refusal,
+      providerEffects: compensationProvider.effectCount(),
+      heldCount: compensation.store.capacity(compensation.mandate.mandateRef).reservedCount,
+      useState: compensation.store.inspectUse(authorityUseRef)?.state ?? 'missing',
+    })
+  }
 
   const revoke = createIssuedStore()
   let revokeRefusal = 'none'
@@ -226,7 +297,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
     revokeRefusal = error instanceof Error ? error.message : 'unknown'
   }
 
-  const snapshot = issued.store.exportSnapshot()
+  const snapshot = activeStore.exportSnapshot()
   new StandingMandateStore(structuredClone(snapshot))
   return {
     environment: 'MOCK/DEVELOPMENT ONLY',
@@ -242,6 +313,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
       providerReleases: bookings.flatMap(({ events }) => events).filter(({ kind }) => kind === 'provider_release').length,
       concurrentRefusal: concurrent.kind === 'refused' ? concurrent.code : 'not_refused',
       scopeRefusal: scope.kind === 'refused' ? scope.code : 'not_refused',
+      compensationCases,
       revokeRace: {
         refusal: revokeRefusal,
         providerEffects: provider.effectCount() - effectsBeforeRevoke,
@@ -250,13 +322,19 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
       reconciliations: [
         {
           authorityUseRef: 'mock:packet:use:unknown-released',
+          invocationRef: unknownReleased.reconciled.invocationRef,
+          attemptRef: unknownReleased.attempt.attemptRef,
+          evidenceRef: unknownReleased.evidence.evidenceRef,
           resolution: unknownReleased.evidence.resolution,
-          useState: issued.store.inspectUse('mock:packet:use:unknown-released')?.state ?? 'missing',
+          useState: activeStore.inspectUse('mock:packet:use:unknown-released')?.state ?? 'missing',
         },
         {
           authorityUseRef: 'mock:packet:use:unknown-not-released',
+          invocationRef: unknownNotReleased.reconciled.invocationRef,
+          attemptRef: unknownNotReleased.attempt.attemptRef,
+          evidenceRef: unknownNotReleased.evidence.evidenceRef,
           resolution: unknownNotReleased.evidence.resolution,
-          useState: issued.store.inspectUse('mock:packet:use:unknown-not-released')?.state ?? 'missing',
+          useState: activeStore.inspectUse('mock:packet:use:unknown-not-released')?.state ?? 'missing',
         },
       ],
     },
@@ -272,10 +350,22 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
 
 export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvidence) {
   const reconstructed = new StandingMandateStore(structuredClone(evidence.mandateSnapshot))
+  const unique = (values: readonly string[]) => new Set(values).size === values.length
+  const invocationRefs = evidence.bookings.map(({ invocationRef }) => invocationRef)
+  const useRefs = evidence.mandateSnapshot.uses.map(({ authorityUseRef }) => authorityUseRef)
+  const attemptRefs = evidence.bookings.flatMap(({ durable }) =>
+    durable.attempts.map((attempt) => String((attempt as { attemptRef?: string }).attemptRef)))
+  const evidenceRefs = evidence.observations.reconciliations.map(({ evidenceRef }) => evidenceRef)
   if (
     evidence.environment !== 'MOCK/DEVELOPMENT ONLY'
     || evidence.action.id !== createDevelopmentReservationAction.id
     || evidence.grantEvidence.digest !== evidence.mandateSnapshot.grants[0]?.digest
+    || evidence.mandateSnapshot.mandates[0] === undefined
+    || !verifiedGrantMatchesMandate(
+      evidence.grantEvidence,
+      evidence.mandateSnapshot.mandates[0],
+      evidence.grantEvidence.verifiedAt,
+    )
     || evidence.observations.principalGrantDecisions !== 1
     || evidence.observations.principalGrantDecisions !== evidence.mandateSnapshot.grants.length
     || evidence.comparison.boundedMandatePrincipalGrantDecisions !== evidence.mandateSnapshot.grants.length
@@ -283,11 +373,28 @@ export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvide
     || evidence.observations.standingMandateAuthorizations !== evidence.bookings.length
     || evidence.observations.concurrentRefusal !== 'mandate_concurrency_exhausted'
     || evidence.observations.scopeRefusal !== 'mandate_provider_mismatch'
+    || evidence.observations.compensationCases.length !== 2
+    || evidence.observations.compensationCases.some(({ refusal, providerEffects, heldCount, useState }) =>
+      refusal !== 'stale_invocation_version'
+      || providerEffects !== 0
+      || heldCount !== 0
+      || useState !== 'not_released')
     || evidence.observations.revokeRace.providerEffects !== 0
     || evidence.observations.revokeRace.useState !== 'not_released'
     || evidence.observations.reconciliations.some(({ resolution, useState }) => resolution !== useState)
+    || !unique(invocationRefs)
+    || !unique(useRefs)
+    || !unique(attemptRefs)
+    || !unique(evidenceRefs)
   ) throw new Error('bounded_mandate_semantic_verification_refused')
   for (const booking of evidence.bookings) {
+    const standingAuthorizationIndex = booking.events.findIndex(({ kind }) =>
+      kind === 'standing_mandate_authorization')
+    const providerReleaseIndex = booking.events.findIndex(({ kind }) => kind === 'provider_release')
+    if (
+      standingAuthorizationIndex < 0
+      || (providerReleaseIndex >= 0 && standingAuthorizationIndex >= providerReleaseIndex)
+    ) throw new Error('bounded_mandate_event_order_refused')
     const control = booking.durable.controls[0] as {
       invocationRef: string
       preparedMaterialDigest: string
@@ -332,6 +439,17 @@ export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvide
         && use.state !== 'released'
       )
     ) throw new Error('bounded_mandate_booking_linkage_refused')
+  }
+  for (const reconciliation of evidence.observations.reconciliations) {
+    const booking = evidence.bookings.find(({ invocationRef }) =>
+      invocationRef === reconciliation.invocationRef)
+    if (
+      booking === undefined
+      || !booking.durable.attempts.some((attempt) =>
+        (attempt as { attemptRef?: string }).attemptRef === reconciliation.attemptRef)
+      || reconstructed.inspectUse(reconciliation.authorityUseRef)?.invocationRef
+        !== reconciliation.invocationRef
+    ) throw new Error('bounded_mandate_reconciliation_identity_refused')
   }
   const capacity = reconstructed.capacity(evidence.mandateSnapshot.mandates[0]?.mandateRef ?? '')
   const releasedUses = evidence.mandateSnapshot.uses.filter(({ state }) => state === 'released')

@@ -24,6 +24,8 @@ export async function runBookingReconciliation(input: Readonly<{
   booking: DevelopmentBookingInput
   origin: ActionInvocationOrigin
   resolution?: 'released' | 'not_released'
+  ref?: string
+  evidenceRef?: string
   boundedMandate?: Readonly<{
     service: DevelopmentBookingMandateService
     mandateRef: string
@@ -33,7 +35,7 @@ export async function runBookingReconciliation(input: Readonly<{
   const issued = new Set<string>()
   const uncertain = await runReservationInvocation({
     ...input,
-    ref: 'unknown',
+    ref: input.ref ?? 'unknown',
     loseResponseAfterRelease: true,
     verifyReconciliationEvidence: (evidence) => issued.has(canonicalDigest(evidence)),
     ...(input.resolution === 'not_released' ? { unknownWithoutProviderRelease: true } : {}),
@@ -44,7 +46,7 @@ export async function runBookingReconciliation(input: Readonly<{
   const material: ReconciliationEvidenceMaterial = {
     kind: 'action_invocation_reconciliation',
     version: 1,
-    evidenceRef: 'mock:evidence:booking-observer',
+    evidenceRef: input.evidenceRef ?? 'mock:evidence:booking-observer',
     source: 'booking.createDevelopmentReservation:mock-provider-observer:v1',
     invocationRef: uncertain.view.invocationRef,
     attemptRef: attempt.attemptRef,
@@ -67,6 +69,7 @@ export async function runBookingReconciliation(input: Readonly<{
     const settled = input.boundedMandate.service.settleFromInvocation({
       authorityUseRef: input.boundedMandate.authorityUseRef,
       view: reconciled.view,
+      attemptRef: attempt.attemptRef,
     })
     if (settled.kind === 'refused') throw new Error(settled.code)
   }

@@ -61,6 +61,11 @@ export async function runReservationInvocation(input: Readonly<{
     mandateRef: string
     authorityUseRef: string
     afterReservation?: () => void
+    reconstructBeforeRelease?: (
+      view: ActionInvocationView<DevelopmentBookingResult>,
+    ) => DevelopmentBookingMandateService
+    developmentAuthorizationVersionOverride?: number
+    developmentAcquisitionVersionOverride?: number
   }>
 }>): Promise<BookingInvocationRun<DevelopmentBookingResult>> {
   const events: BookingInvocationEvent[] = []
@@ -97,6 +102,8 @@ export async function runReservationInvocation(input: Readonly<{
     },
   }
   const state = createDevelopmentDurableState<DevelopmentBookingResult>()
+  const configuredMandate = input.boundedMandate
+  let activeMandateService = configuredMandate?.service
   const tracer = createDurableActionInvocationTracer<DevelopmentBookingInput, DevelopmentBookingResult>({
     action: createDevelopmentReservationAction,
     port: createDevelopmentDurablePort(state),
@@ -108,10 +115,11 @@ export async function runReservationInvocation(input: Readonly<{
     nextInvocationRef: () => `mock:booking-invocation:${input.ref}`,
     nextAuthorityRef: () => `mock:booking-authority:${input.ref}`,
     nextAttemptRef: () => `mock:booking-attempt:${input.ref}`,
-    ...(input.boundedMandate === undefined ? {} : {
+    ...(configuredMandate === undefined ? {} : {
       beforeEffectRelease: (current, effectGeneration) => {
-        const checked = input.boundedMandate!.service.recheckRelease({
-          authorityUseRef: input.boundedMandate!.authorityUseRef,
+        if (activeMandateService === undefined) return 'authority_not_accepted' as const
+        const checked = activeMandateService.recheckRelease({
+          authorityUseRef: configuredMandate.authorityUseRef,
           view: current,
           effectGeneration,
         })
@@ -137,7 +145,7 @@ export async function runReservationInvocation(input: Readonly<{
     origin: input.origin, actor: owner, input: input.booking, context, freshnessMs: 900_000,
   })
   source.prepared = prepared.prepared
-  if (input.boundedMandate === undefined) {
+  if (configuredMandate === undefined) {
     const decision = tracer.decide({
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
@@ -155,59 +163,126 @@ export async function runReservationInvocation(input: Readonly<{
     if (executed.kind !== 'accepted') throw new Error(executed.code)
     return { view: executed.view, origin: input.origin, owner, state, tracer: tracer as never, source, events }
   }
-  const reserved = input.boundedMandate.service.reserveAndAuthorize({
-    mandateRef: input.boundedMandate.mandateRef,
-    authorityUseRef: input.boundedMandate.authorityUseRef,
+  const bounded = configuredMandate
+  activeMandateService = bounded.service
+  const reserved = bounded.service.reserveAndAuthorize({
+    mandateRef: bounded.mandateRef,
+    authorityUseRef: bounded.authorityUseRef,
     view: prepared,
     origin: input.origin,
     booking: input.booking,
     effectGeneration: prepared.attempts.length + 1,
   })
   if (reserved.kind === 'refused') throw new Error(reserved.code)
-  const standingAuthorization = tracer.authorizeStandingMandateUse({
-    invocationRef: prepared.invocationRef,
-    expectedInvocationVersion: prepared.invocationVersion,
-    authorityRef: prepared.authority!.reference,
-    actor: owner,
-    origin: input.origin,
-    basis: reserved.value.basis,
-  })
-  if (standingAuthorization.kind === 'refused') throw new Error(standingAuthorization.code)
-  events.push({ kind: 'standing_mandate_authorization', invocationRef: prepared.invocationRef })
-  const acquired = tracer.acquire({
-    invocationRef: prepared.invocationRef,
-    expectedInvocationVersion: standingAuthorization.view.invocationVersion,
-    authorityRef: prepared.authority!.reference,
-    actor: owner, origin: input.origin, materialInput: input.booking,
-    leaseOwner: `mock:booking-worker:${input.ref}`,
-    leaseMs: 30_000,
-    acceptedAuthorityBasis: reserved.value.basis,
-  })
-  if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
-    throw new Error(acquired.kind === 'refused' ? acquired.code : 'booking_acquisition_failed')
+  let standingAuthorization
+  try {
+    standingAuthorization = tracer.authorizeStandingMandateUse({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: bounded.developmentAuthorizationVersionOverride
+        ?? prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor: owner,
+      origin: input.origin,
+      basis: reserved.value.basis,
+    })
+  } catch (error) {
+    throw compensateAndPreserve(
+      bounded.service,
+      bounded.authorityUseRef,
+      error instanceof Error ? error.message : 'standing_authorization_threw',
+    )
   }
-  input.boundedMandate.afterReservation?.()
-  const executed = await tracer.executeAcquired({
-    invocationRef: prepared.invocationRef,
-    expectedInvocationVersion: acquired.view.invocationVersion,
-    attemptRef: acquired.view.control.attemptRef,
-    leaseOwner: acquired.view.control.leaseOwner,
-    effectGeneration: acquired.view.control.effectGeneration,
-  })
+  if (standingAuthorization.kind === 'refused') {
+    throw compensateAndPreserve(
+      bounded.service,
+      bounded.authorityUseRef,
+      standingAuthorization.code,
+    )
+  }
+  events.push({ kind: 'standing_mandate_authorization', invocationRef: prepared.invocationRef })
+  let acquired
+  try {
+    acquired = tracer.acquire({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: bounded.developmentAcquisitionVersionOverride
+        ?? standingAuthorization.view.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor: owner, origin: input.origin, materialInput: input.booking,
+      leaseOwner: `mock:booking-worker:${input.ref}`,
+      leaseMs: 30_000,
+      acceptedAuthorityBasis: reserved.value.basis,
+    })
+  } catch (error) {
+    throw compensateAndPreserve(
+      bounded.service,
+      bounded.authorityUseRef,
+      error instanceof Error ? error.message : 'standing_acquisition_threw',
+    )
+  }
+  if (acquired.kind !== 'accepted' || acquired.view.control.state !== 'leased') {
+    throw compensateAndPreserve(
+      bounded.service,
+      bounded.authorityUseRef,
+      acquired.kind === 'refused' ? acquired.code : 'booking_acquisition_failed',
+    )
+  }
+  if (bounded.reconstructBeforeRelease !== undefined) {
+    activeMandateService = bounded.reconstructBeforeRelease(
+      tracer.coldResume(prepared.invocationRef).inspect(prepared.invocationRef) ?? acquired.view,
+    )
+  }
+  try {
+    bounded.afterReservation?.()
+  } catch (error) {
+    throw compensateAndPreserve(
+      activeMandateService,
+      bounded.authorityUseRef,
+      error instanceof Error ? error.message : 'pre_release_hook_threw',
+    )
+  }
+  let executed
+  try {
+    executed = await tracer.executeAcquired({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: acquired.view.invocationVersion,
+      attemptRef: acquired.view.control.attemptRef,
+      leaseOwner: acquired.view.control.leaseOwner,
+      effectGeneration: acquired.view.control.effectGeneration,
+    })
+  } catch (error) {
+    throw compensateAndPreserve(
+      activeMandateService,
+      bounded.authorityUseRef,
+      error instanceof Error ? error.message : 'pre_release_execution_threw',
+    )
+  }
   if (executed.kind !== 'accepted') {
-    const settlement = input.boundedMandate.service.settleFromInvocation({
-      authorityUseRef: input.boundedMandate.authorityUseRef,
+    const settlement = activeMandateService.settleFromInvocation({
+      authorityUseRef: bounded.authorityUseRef,
       view: executed.view ?? acquired.view,
+      attemptRef: acquired.view.control.attemptRef,
     })
     if (settlement.kind === 'refused') throw new Error(settlement.code)
     throw new Error(executed.code)
   }
-  const settled = input.boundedMandate.service.settleFromInvocation({
-    authorityUseRef: input.boundedMandate.authorityUseRef,
+  const settled = activeMandateService.settleFromInvocation({
+    authorityUseRef: bounded.authorityUseRef,
     view: executed.view,
+    attemptRef: acquired.view.control.attemptRef,
   })
   if (settled.kind === 'refused') throw new Error(settled.code)
   return { view: executed.view, origin: input.origin, owner, state, tracer: tracer as never, source, events }
+}
+
+function compensateAndPreserve(
+  service: DevelopmentBookingMandateService,
+  authorityUseRef: string,
+  originalRefusal: string,
+): Error {
+  const compensation = service.compensateNotReleased(authorityUseRef)
+  return compensation.kind === 'accepted'
+    ? new Error(originalRefusal)
+    : new Error(`${originalRefusal}; compensation_failed:${compensation.code}`)
 }
 
 export async function runCancellationInvocation(input: Readonly<{

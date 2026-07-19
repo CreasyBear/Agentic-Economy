@@ -221,6 +221,103 @@ describe('Action Invocation bounded standing mandate', () => {
   })
 
   it.each([
+    ['stale_invocation_version', { developmentAuthorizationVersionOverride: 99 }],
+    ['stale_invocation_version', { developmentAcquisitionVersionOverride: 99 }],
+  ] as const)('compensates reserved capacity when %s refuses before release', async (code, override) => {
+    const store = issuedStore()
+    const service = bookingService(store)
+    const provider = createDevelopmentBookingProvider()
+    const slot = await provider.availability()
+    const authorityUseRef = `mock:authority-use:compensation:${Object.keys(override)[0]}`
+    await expect(runReservationInvocation({
+      provider,
+      booking: bookingInput(slot, principalRef, `mock:operation:${authorityUseRef}`),
+      origin: { kind: 'standalone', callerRef, principalRef },
+      ref: authorityUseRef,
+      boundedMandate: {
+        service,
+        mandateRef: mandate.mandateRef,
+        authorityUseRef,
+        ...override,
+      },
+    })).rejects.toThrow(code)
+    expect(provider.effectCount()).toBe(0)
+    expect(store.inspectUse(authorityUseRef)).toMatchObject({ state: 'not_released' })
+    expect(store.capacity(mandate.mandateRef)).toMatchObject({
+      reservedCount: 0,
+      reservedSpendMinor: 0,
+    })
+  })
+
+  it('reconstructs a cold in-flight release token and refuses missing or mismatched records', async () => {
+    const store = issuedStore()
+    const provider = createDevelopmentBookingProvider()
+    const slot = await provider.availability()
+    let coldStore: StandingMandateStore | undefined
+    await runReservationInvocation({
+      provider,
+      booking: bookingInput(slot, principalRef, 'mock:operation:cold-in-flight'),
+      origin: { kind: 'standalone', callerRef, principalRef },
+      ref: 'cold-in-flight',
+      boundedMandate: {
+        service: bookingService(store),
+        mandateRef: mandate.mandateRef,
+        authorityUseRef: 'mock:authority-use:cold-in-flight',
+        reconstructBeforeRelease: () => {
+          coldStore = new StandingMandateStore(structuredClone(store.exportSnapshot()))
+          return bookingService(coldStore)
+        },
+      },
+    })
+    expect(coldStore?.inspectUse('mock:authority-use:cold-in-flight')).toMatchObject({ state: 'released' })
+    expect(provider.effectCount()).toBe(1)
+    const tampered = structuredClone(store.exportSnapshot())
+    ;(tampered.uses[0] as { invocationRef: string }).invocationRef = 'tampered'
+    expect(() => new StandingMandateStore(tampered))
+      .toThrow('standing_mandate_snapshot_authority_use_refused')
+  })
+
+  it('validates exact settlement view and attempt and replays immutable terminal settlement', async () => {
+    const store = issuedStore()
+    const service = bookingService(store)
+    const provider = createDevelopmentBookingProvider()
+    const slot = await provider.availability()
+    const run = await runReservationInvocation({
+      provider,
+      booking: bookingInput(slot, principalRef, 'mock:operation:settlement-linkage'),
+      origin: { kind: 'standalone', callerRef, principalRef },
+      ref: 'settlement-linkage',
+      boundedMandate: {
+        service,
+        mandateRef: mandate.mandateRef,
+        authorityUseRef: 'mock:authority-use:settlement-linkage',
+      },
+    })
+    const original = store.inspectUse('mock:authority-use:settlement-linkage')
+    expect(service.settleFromInvocation({
+      authorityUseRef: 'mock:authority-use:settlement-linkage',
+      view: run.view,
+      attemptRef: 'wrong-attempt',
+    })).toEqual({ kind: 'refused', code: 'authority_use_linkage_invalid' })
+    expect(service.settleFromInvocation({
+      authorityUseRef: 'mock:authority-use:settlement-linkage',
+      view: { ...run.view, owner: { ...run.view.owner, principalRef: 'wrong' } },
+      attemptRef: run.view.attempts[0]!.attemptRef,
+    })).toEqual({ kind: 'refused', code: 'authority_use_linkage_invalid' })
+    const replay = store.settle(
+      'mock:authority-use:settlement-linkage',
+      'released',
+      '2026-07-19T04:59:59.000Z',
+    )
+    expect(replay).toEqual({ kind: 'accepted', value: original })
+    expect(store.settle(
+      'mock:authority-use:settlement-linkage',
+      'not_released',
+      '2026-07-19T04:59:59.000Z',
+    )).toEqual({ kind: 'refused', code: 'authority_use_linkage_invalid' })
+  })
+
+  it.each([
     ['mandate_principal_mismatch', { principalRef: 'other' }],
     ['mandate_delegate_mismatch', { delegateRef: 'other' }],
     ['mandate_action_mismatch', { action: { id: 'other.action', version: 'v1' } }],

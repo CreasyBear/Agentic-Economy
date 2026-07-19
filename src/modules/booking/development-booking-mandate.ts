@@ -25,9 +25,11 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
   authenticatedDelegate: Readonly<{ delegateRef: string; callerRef: string; principalRef: string }>
   now: () => string
 }>) {
-  const tokens = new Map<string, DevelopmentBookingReleaseToken>()
-
   return {
+    compensateNotReleased(authorityUseRef: string): MandateDecision<AuthorityUse> {
+      return input.store.settle(authorityUseRef, 'not_released', input.now())
+    },
+
     reserveAndAuthorize(args: Readonly<{
       mandateRef: string
       authorityUseRef: string
@@ -77,16 +79,6 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
         authorityUseRef: reserved.value.authorityUseRef,
         grantEvidenceRef: grant.evidenceRef,
       }
-      tokens.set(reserved.value.authorityUseRef, {
-        authorityUseRef: reserved.value.authorityUseRef,
-        invocationRef: args.view.invocationRef,
-        basis,
-        action: reserved.value.action,
-        preparedMaterialDigest: reserved.value.preparedMaterialDigest,
-        actor: args.view.owner,
-        delegateRef: reserved.value.delegateRef,
-        effectGeneration: args.effectGeneration,
-      })
       return { kind: 'accepted', value: { use: reserved.value, basis } }
     },
 
@@ -95,34 +87,31 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
       view: ActionInvocationView<DevelopmentBookingResult>
       effectGeneration: number
     }>): MandateDecision<AuthorityUse> {
-      const token = tokens.get(args.authorityUseRef)
-      const basis = args.view.acceptedAuthority
-      if (
-        token === undefined
-        || basis?.kind !== 'standing_mandate_use'
-        || token.invocationRef !== args.view.invocationRef
-        || token.effectGeneration !== args.effectGeneration
-        || token.action.id !== args.view.action.id
-        || token.action.version !== args.view.action.contractVersion
-        || token.preparedMaterialDigest !== args.view.prepared?.materialInputDigest
-        || token.actor.callerRef !== args.view.owner.callerRef
-        || token.actor.principalRef !== args.view.owner.principalRef
-        || token.basis.authorityUseRef !== basis.authorityUseRef
-        || token.basis.mandateGeneration !== basis.mandateGeneration
-        || token.basis.grantEvidenceRef !== basis.grantEvidenceRef
-      ) return { kind: 'refused', code: 'authority_use_linkage_invalid' }
+      const token = reconstructReleaseToken(input.store, args.authorityUseRef, args.view, args.effectGeneration)
+      if (token.kind === 'refused') return token
       return input.store.recheckBeforeRelease({
-        ...token,
-        acceptedBasis: basis,
+        ...token.value,
+        acceptedBasis: token.value.basis,
       }, input.now())
     },
 
     settleFromInvocation(args: Readonly<{
       authorityUseRef: string
       view: ActionInvocationView<DevelopmentBookingResult>
+      attemptRef: string
     }>): MandateDecision<AuthorityUse> {
-      const attempt = args.view.attempts.find((candidate) =>
-        candidate.effectGeneration === tokens.get(args.authorityUseRef)?.effectGeneration)
+      const use = input.store.inspectUse(args.authorityUseRef)
+      if (use === undefined) return { kind: 'refused', code: 'authority_use_not_found' }
+      const token = reconstructReleaseToken(input.store, args.authorityUseRef, args.view, use.effectGeneration)
+      if (token.kind === 'refused') return token
+      const matching = args.view.attempts.filter((candidate) =>
+        candidate.attemptRef === args.attemptRef
+        && candidate.effectGeneration === use.effectGeneration
+        && candidate.actor.callerRef === token.value.actor.callerRef
+        && candidate.actor.principalRef === token.value.actor.principalRef
+        && candidate.idempotency.materialInputDigest === token.value.preparedMaterialDigest)
+      if (matching.length !== 1) return { kind: 'refused', code: 'authority_use_linkage_invalid' }
+      const attempt = matching[0]
       if (attempt === undefined) return { kind: 'refused', code: 'authority_use_linkage_invalid' }
       const state = attempt.release.state === 'released'
         || attempt.outcome.state === 'reconciled_released'
@@ -132,6 +121,47 @@ export function createDevelopmentBookingMandateService(input: Readonly<{
           ? 'not_released'
           : 'uncertain'
       return input.store.settle(args.authorityUseRef, state, input.now())
+    },
+  }
+}
+
+export function reconstructReleaseToken(
+  store: StandingMandateStore,
+  authorityUseRef: string,
+  view: ActionInvocationView<DevelopmentBookingResult>,
+  effectGeneration: number,
+): MandateDecision<DevelopmentBookingReleaseToken> {
+  const use = store.inspectUse(authorityUseRef)
+  const basis = view.acceptedAuthority
+  const grant = use === undefined ? undefined : store.inspectGrant(use.mandateRef)
+  if (
+    use === undefined
+    || grant === undefined
+    || basis?.kind !== 'standing_mandate_use'
+    || use.invocationRef !== view.invocationRef
+    || use.effectGeneration !== effectGeneration
+    || use.action.id !== view.action.id
+    || use.action.version !== view.action.contractVersion
+    || use.preparedMaterialDigest !== view.prepared?.materialInputDigest
+    || use.callerRef !== view.owner.callerRef
+    || use.principalRef !== view.owner.principalRef
+    || basis.authorityUseRef !== use.authorityUseRef
+    || basis.mandateRef !== use.mandateRef
+    || basis.mandateVersion !== use.mandateVersion
+    || basis.mandateGeneration !== use.mandateGeneration
+    || basis.grantEvidenceRef !== grant.evidenceRef
+  ) return { kind: 'refused', code: 'authority_use_linkage_invalid' }
+  return {
+    kind: 'accepted',
+    value: {
+      authorityUseRef: use.authorityUseRef,
+      invocationRef: use.invocationRef,
+      basis,
+      action: use.action,
+      preparedMaterialDigest: use.preparedMaterialDigest,
+      actor: { callerRef: use.callerRef, principalRef: use.principalRef },
+      delegateRef: use.delegateRef,
+      effectGeneration: use.effectGeneration,
     },
   }
 }

@@ -243,7 +243,7 @@ export class StandingMandateStore {
       use.state !== 'reserved'
       && !(use.state === 'uncertain' && (state === 'released' || state === 'not_released'))
     ) {
-      return use.state === state && use.settledAt === settledAt
+      return use.state === state
         ? { kind: 'accepted', value: use }
         : { kind: 'refused', code: 'authority_use_linkage_invalid' }
     }
