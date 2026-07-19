@@ -2,7 +2,7 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current accepted revision:** `27e885f6`
+**Current accepted revision:** `e5079e23`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
@@ -380,17 +380,71 @@ Not established:
 
 ### P1-I — supplied-candidate quote collection
 
-**Status:** ready to dispatch from `27e885f6`
+**Accepted commits:** `f744e943`, `c4f20455`, `4f0941a7`, `31ec335e`,
+`e5079e23`
+**Child commits:** `8bac9420587a703f5935092995de8fa0734e6b1b`,
+`0c0882e7f36a728ed4b0cb61db6bb47f9da7efbe`,
+`2bacc7335e5cca1be62041f2704bf8a56a3544bc`,
+`c02e22d38ed186f86ab3c0d1dae9a5fad2b23593`,
+`c9c789b320041fe5897054152c84ed2009cd0d68`
+**Child task:** `019f7996-e667-7b01-8bb2-a087a643e228`
+**Assigned base:** `6fbb0d84`
+**Evidence class:** source plus labelled local/development provider adapter
+and durable-control execution
 
 Target transition:
 
 `eligible candidate -> exact quote preparation/disclosure authority -> attributable provider attempt -> returned quote or reconcile-before-retry`
 
-Reuse the proven qualification reference and Action Invocation authority,
-attempt, uncertainty, fencing, and recovery semantics. Domain-specific quote
-meaning stays in the registered contract/adapter. A labelled development
-provider may return a structured quote result, refusal, or uncertain release;
-it must not imply a real provider response or fulfilment.
+Implemented:
+
+- a registered development-only quote action with no public surface or network
+  adapter; inquiry semantics remain untouched;
+- preparation re-runs the real P1-H source qualifier and binds the exact
+  candidate, qualification digest/horizon, quote request, disclosure, and
+  operation key;
+- immediately before release, the action-owned hook requalifies current source
+  state and refuses changed or expired supply with no adapter call;
+- the provider projection excludes locally requested output fields and contains
+  only target/effect identity plus exact service/constraint data;
+- every provider-visible customer-data path must appear once in disclosure,
+  have one exact limit, and fit that limit; missing, extra, duplicate, or
+  over-limit disclosure fails before effect;
+- Request-owned and standalone origins use the same authority, attempt,
+  idempotency, fencing, uncertainty, reconciliation, cancellation, and durable
+  control source owners;
+- structured development quote and provider refusal are returned outcomes;
+  demonstrated pre-release failure permits retry;
+- possible release survives fresh-port reconstruction, reconciled release
+  becomes terminal with external outcome unknown, and another attempt is
+  refused;
+- neutral durable rows retain only control digests, effect identity, and
+  disclosure-limit summary; request values, disclosure purpose, quote body, and
+  result remain action-owned;
+- pre-release refusal is labelled `pre_release_refused`, not falsely described
+  as a runner return;
+- master focused qualification, quote, invocation, durability, and publication
+  checks passed 56/56 with scoped lint and diff checks.
+
+Not established:
+
+- a real provider call, independently operated quote, availability,
+  commitment, fulfilment, or customer value;
+- deployment, hosted readback, or public quote surface;
+- imported-commitment attribution.
+
+### P1-J — imported commitment attribution
+
+**Status:** ready to dispatch from `e5079e23`
+
+Target transition:
+
+`externally supplied commitment claim -> attributable source observation -> inspectable reference without provider admission or executable authority`
+
+Model one imported commitment as a claim/observation with exact issuer,
+subject, source, observed-at, validity, digest, and evidence references. It must
+never become qualified supply, a provider quote, executable authority, or a
+completed effect without fresh source-owned admission and readiness evidence.
 
 ## Evidence position
 
@@ -403,7 +457,7 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 | # | Gate | Position | Current evidence / next failed transition |
 |---|---|---|---|
 | 1 | Supplied-candidate qualification reuses contracts and supply evidence | Proven | Labelled development qualification reuses exact publication, business currentness, active contract, offering, binding, eligibility, credential, readiness, and freshness sources with deterministic blockers and no effect. |
-| 2 | Supplied-candidate quote collection reuses preparation, disclosure authority, provider attempts, and reconciliation | Missing | P1-C proves generic exact authority only; no provider quote attempt or reconciliation trace. |
+| 2 | Supplied-candidate quote collection reuses preparation, disclosure authority, provider attempts, and reconciliation | Proven | A labelled development quote action requalifies current supply at preparation and pre-release, binds exact disclosure, reuses shared durable attempts/fencing/reconciliation for both origins, and keeps quote data source-owned. |
 | 3 | Imported commitments remain attributable claims without fresh admitted-provider evidence | Missing | No imported-commitment observation tracer. |
 | 4 | Request-owned and standalone calls retain identical authority, idempotency, evidence, and recovery meaning | Proven | Both origins share the registered runner, authority, effect identity, uncertainty, reconciliation, fencing, transactional durable control, and fresh-process reconstruction in labelled development execution. |
 | 5 | Historical Customer Request traces replay without semantic regression | Proven | Additive V2 references preserve historical aggregate integrity and focused historical replay remains green. |
@@ -434,7 +488,7 @@ implementation gate substitute.
 
 ## Next decision
 
-Dispatch supplied-candidate quote collection. The next decision is whether the
-qualified reference can drive exact disclosure authority and an attributable,
-recoverable provider attempt through the shared Action Invocation control
-without promoting a development adapter response into real provider evidence.
+Dispatch imported-commitment attribution. The next decision is whether an
+external commitment can remain an inspectable attributable claim without being
+silently upgraded into admitted supply, executable authority, a provider quote,
+or a completed effect.
