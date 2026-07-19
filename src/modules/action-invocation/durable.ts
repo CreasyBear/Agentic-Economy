@@ -234,6 +234,7 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
           },
         }),
       },
+      canonicalCommandMaterial: (evidence ?? commandIdentity) as never,
     })
   }
 

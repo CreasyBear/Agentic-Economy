@@ -1,5 +1,6 @@
 import {
   invokeRegisteredRouteTransport,
+  type RouteTransportEffectReleaseController,
   type RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -27,7 +28,7 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   invocation: DynamicPublishedInvocationInput
   token: DynamicPublishedExecutionToken
   runtime: RouteTransportRuntime
-  markReleased(): void
+  effectRelease: RouteTransportEffectReleaseController
 }>): Promise<DynamicPublishedInvocationResult> {
   const price = executableFixedPrice(input.operation)
   const observation = await invokeRegisteredRouteTransport({
@@ -56,8 +57,7 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
       },
     },
     inputJson: JSON.stringify(input.invocation.input),
-  }, input.runtime)
-  if (observation.releaseStarted) input.markReleased()
+  }, input.runtime, input.effectRelease)
   if (observation.disposition === 'unknown' && observation.releaseStarted) {
     throw new Error(`published_operation_outcome_unknown:${observation.failureCode ?? 'unknown'}`)
   }
@@ -77,7 +77,6 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
     return {
       kind: 'published_operation_refused',
       sourceDisposition: 'refused',
-      release: observation.releaseStarted ? 'released' : 'not_released',
       ...common,
     }
   }
@@ -86,7 +85,6 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
     return {
       kind: 'published_operation_invalid_evidence',
       sourceDisposition: 'refused',
-      release: 'released',
       ...common,
       failureCode: 'output_schema_invalid',
     }
@@ -94,7 +92,6 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   return {
     kind: 'published_operation_succeeded',
     sourceDisposition: 'succeeded',
-    release: 'released',
     ...common,
     output,
   }

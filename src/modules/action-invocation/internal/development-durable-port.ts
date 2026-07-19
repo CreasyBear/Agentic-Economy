@@ -18,16 +18,23 @@ export type DevelopmentDurableState<Result extends ActionResult> = {
   attempts: Map<string, Map<string, DurableAttemptRow>>
   history: Map<string, DurableHistoryRow[]>
   commands: Map<string, Readonly<{ digest: string; result: PersistControlResult }>>
+  commandMaterials: Map<string, import('@/modules/common/stable-hash').StableHashValue>
 }
 
 export function createDevelopmentDurableState<Result extends ActionResult>(): DevelopmentDurableState<Result> {
-  return { controls: new Map(), attempts: new Map(), history: new Map(), commands: new Map() }
+  return {
+    controls: new Map(),
+    attempts: new Map(),
+    history: new Map(),
+    commands: new Map(),
+    commandMaterials: new Map(),
+  }
 }
 
 export function createDevelopmentDurablePort<Result extends ActionResult>(
   state = createDevelopmentDurableState<Result>(),
 ): DurableActionInvocationPort<Result> {
-  const { controls, attempts, history, commands } = state
+  const { controls, attempts, history, commands, commandMaterials } = state
 
   const transact = (command: PersistControlCommand<Result>): PersistControlResult => {
     const prior = commands.get(command.commandId)
@@ -65,6 +72,9 @@ export function createDevelopmentDurablePort<Result extends ActionResult>(
     history.set(command.row.invocationRef, entries)
     const result = { kind: 'applied' as const, invocationVersion: command.row.invocationVersion }
     commands.set(command.commandId, { digest: command.commandDigest, result })
+    if (command.canonicalCommandMaterial !== undefined) {
+      commandMaterials.set(command.commandId, command.canonicalCommandMaterial)
+    }
     return result
   }
 

@@ -44,7 +44,8 @@ export async function executeReleasedAttempt<Input, Result extends ActionResult>
   releaseStartView: ActionInvocationView<Result>
   operationKey: string
   now: () => string
-  releaseSignal?: DevelopmentReleaseSignal
+  releaseTracking: 'conservative' | 'monotonic_controller'
+  legacyReleaseSignal?: DevelopmentReleaseSignal
   timeoutSignal?: DevelopmentTimeoutSignal
   timeoutMs?: number
 }> & Omit<AcquiredToken, 'expectedInvocationVersion'>): Promise<ActionInvocationView<Result>> {
@@ -60,7 +61,10 @@ export async function executeReleasedAttempt<Input, Result extends ActionResult>
     attemptRef: attempt.attemptRef,
     operationKey: input.operationKey,
     now: input.now,
-    ...(input.releaseSignal === undefined ? {} : { releaseSignal: input.releaseSignal }),
+    releaseTracking: input.releaseTracking,
+    ...(input.legacyReleaseSignal === undefined
+      ? {}
+      : { legacyReleaseSignal: input.legacyReleaseSignal }),
     ...(input.timeoutSignal === undefined ? {} : { timeoutSignal: input.timeoutSignal }),
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     attempt,

@@ -6,6 +6,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { ActionInvocationOrigin, InvocationActor } from './contracts'
+import type { ActionInvocationView } from './contracts'
 import {
   buildDynamicPublishedInput,
   dynamicPublishedSourceDigest,
@@ -44,80 +45,101 @@ export function assertDynamicPublishedSnapshotShape(value: unknown): asserts val
   }
 }
 
-export function verifyDynamicPublishedSnapshot(input: Readonly<{
-  snapshot: unknown
+export type DynamicPublishedSnapshotAnchors = Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
   actor: InvocationActor
   origin: ActionInvocationOrigin
-  expectedAuthorityKind: 'approve_each' | 'standing_mandate_use'
+  issuedAuthority: Readonly<{
+    reference: string
+    accepted: NonNullable<ActionInvocationView['acceptedAuthority']>
+    materialInputDigest: string
+  }>
   expectedEffectCount: number
   expectedChallengeDigest?: string
+}>
+
+export function verifyDynamicPublishedSnapshot(input: Readonly<{
+  snapshot: unknown
+  anchors: DynamicPublishedSnapshotAnchors
 }>): void {
   assertDynamicPublishedSnapshotShape(input.snapshot)
   const snapshot = input.snapshot
+  const {
+    operation,
+    descriptor,
+    actor,
+    origin,
+    issuedAuthority,
+  } = input.anchors
   const source = snapshot.sourceRows[0]!
   const control = snapshot.controls[0]!
   const attemptGroup = snapshot.attempts[0]!
   const historyGroup = snapshot.history[0]!
   const recomputedInput = buildDynamicPublishedInput({
-    operation: input.operation,
-    descriptor: input.descriptor,
+    operation,
+    descriptor,
     value: source.input.input,
   })
-  const price = executableFixedPrice(input.operation)
+  const price = executableFixedPrice(operation)
   if (
     canonicalDigest(source.operation as unknown as StableHashValue)
-      !== canonicalDigest(input.operation as unknown as StableHashValue)
+      !== canonicalDigest(operation as unknown as StableHashValue)
     || source.input.operationKey !== recomputedInput.operationKey
     || source.input.inputDigest !== recomputedInput.inputDigest
-    || source.input.sourceSnapshotDigest !== dynamicPublishedSourceDigest(input.operation, input.descriptor)
+    || source.input.sourceSnapshotDigest !== dynamicPublishedSourceDigest(operation, descriptor)
     || canonicalDigest(source.input.target) !== canonicalDigest(recomputedInput.target)
     || source.operationKey !== recomputedInput.operationKey
     || control.sourceRef !== recomputedInput.operationKey
-    || control.control.owner.callerRef !== input.actor.callerRef
-    || control.control.owner.principalRef !== input.actor.principalRef
+    || control.control.owner.callerRef !== actor.callerRef
+    || control.control.owner.principalRef !== actor.principalRef
     || canonicalDigest(control.control.origin as unknown as StableHashValue)
-      !== canonicalDigest(input.origin as unknown as StableHashValue)
-    || control.control.action.id !== input.operation.operationId
-    || control.control.action.contractVersion !== input.descriptor.version
-    || control.authorityBinding?.actor.callerRef !== input.actor.callerRef
-    || control.authorityBinding.actor.principalRef !== input.actor.principalRef
+      !== canonicalDigest(origin as unknown as StableHashValue)
+    || control.control.action.id !== operation.operationId
+    || control.control.action.contractVersion !== descriptor.version
+    || control.authorityBinding?.actor.callerRef !== actor.callerRef
+    || control.authorityBinding.actor.principalRef !== actor.principalRef
     || canonicalDigest(control.authorityBinding.origin as unknown as StableHashValue)
-      !== canonicalDigest(input.origin as unknown as StableHashValue)
-    || control.authorityBinding.actionId !== input.operation.operationId
-    || control.authorityBinding.contractVersion !== input.descriptor.version
-    || control.authorityBinding.digest
-      !== canonicalDigest({
-        operationKey: recomputedInput.operationKey,
-        inputDigest: recomputedInput.inputDigest,
-        sourceSnapshotDigest: recomputedInput.sourceSnapshotDigest,
-        target: recomputedInput.target,
-      })
+      !== canonicalDigest(origin as unknown as StableHashValue)
+    || control.authorityBinding.actionId !== operation.operationId
+    || control.authorityBinding.contractVersion !== descriptor.version
+    || control.control.authority?.reference !== issuedAuthority.reference
+    || control.authorityBinding.reference !== issuedAuthority.reference
+    || control.authorityBinding.digest !== issuedAuthority.materialInputDigest
     || control.authorityBinding.targetDigest !== canonicalDigest(recomputedInput.target)
     || control.authorityBinding.limits.amountMinor !== price.amountMinor
-    || control.control.acceptedAuthority?.kind !== input.expectedAuthorityKind
-    || control.authorityBinding.acceptedBasis?.kind !== input.expectedAuthorityKind
+    || canonicalDigest(control.control.acceptedAuthority as unknown as StableHashValue)
+      !== canonicalDigest(issuedAuthority.accepted as unknown as StableHashValue)
+    || canonicalDigest(control.authorityBinding.acceptedBasis as unknown as StableHashValue)
+      !== canonicalDigest(issuedAuthority.accepted as unknown as StableHashValue)
     || canonicalDigest(control.control.acceptedAuthority as unknown as StableHashValue)
       !== canonicalDigest(control.authorityBinding.acceptedBasis as unknown as StableHashValue)
-    || (control.control.acceptedAuthority.kind === 'standing_mandate_use'
-      && (!Number.isSafeInteger(control.control.acceptedAuthority.mandateGeneration)
-        || control.control.acceptedAuthority.mandateGeneration < 1))
+    || !acceptedAuthorityGenerationValid(control.control.acceptedAuthority)
     || attemptGroup.invocationRef !== control.invocationRef
     || historyGroup.invocationRef !== control.invocationRef
-    || attemptGroup.rows.length !== input.expectedEffectCount
+    || attemptGroup.rows.length !== input.anchors.expectedEffectCount
     || (attemptGroup.rows.length > 0
       && control.currentAttemptRef !== attemptGroup.rows.at(-1)?.attemptRef)
-    || !attemptsValid(attemptGroup.rows, input.operation.operationId, recomputedInput.operationKey)
+    || !attemptsValid(attemptGroup.rows, operation.operationId, recomputedInput.operationKey)
     || !historyValid(
       historyGroup.rows,
       control.invocationVersion,
-      input.expectedAuthorityKind,
+      issuedAuthority.accepted.kind,
       attemptGroup.rows,
     )
-    || !commandsValid(snapshot.commands, historyGroup.rows)
-    || !resultIdentityValid(source, control, input.expectedChallengeDigest)
+    || !commandsValid(snapshot.commands, historyGroup.rows, control.invocationRef)
+    || !attemptGroup.rows.every((attempt) =>
+      attempt.idempotency.materialInputDigest === issuedAuthority.materialInputDigest)
+    || !resultIdentityValid(source, control, input.anchors.expectedChallengeDigest)
   ) throw new Error('dynamic_published_snapshot_semantics_invalid')
+}
+
+function acceptedAuthorityGenerationValid(
+  accepted: ActionInvocationView['acceptedAuthority'],
+): boolean {
+  return accepted !== undefined
+    && (accepted.kind !== 'standing_mandate_use'
+      || (Number.isSafeInteger(accepted.mandateGeneration) && accepted.mandateGeneration >= 1))
 }
 
 function attemptsValid(
@@ -184,15 +206,54 @@ function historyValid(
 function commandsValid(
   commands: DynamicPublishedAdapterSnapshot['commands'],
   history: DynamicPublishedAdapterSnapshot['history'][number]['rows'],
+  invocationRef: string,
 ): boolean {
   const byId = new Map(history.map((row) => [row.commandId, row]))
   return commands.length === history.length && commands.every(({ commandId, value }) => {
     const row = byId.get(commandId)
+    if (!isRecord(value.material)) return false
+    const expectedVersion = row === undefined ? undefined : row.invocationVersion - 1
+    const material = value.material
     return row !== undefined
+      && canonicalDigest(material) === value.digest
       && row.commandDigest === value.digest
       && value.result.kind === 'applied'
       && value.result.invocationVersion === row.invocationVersion
+      && material.invocationRef === invocationRef
+      && material.kind === row.kind
+      && material.nextInvocationVersion === row.invocationVersion
+      && material.expectedInvocationVersion === (expectedVersion === 0 ? null : expectedVersion)
+      && commandId === `${invocationRef}:${expectedVersion === 0 ? 'create' : expectedVersion}:${row.kind}`
+      && (row.kind !== 'acquire'
+        || material.expectedEffectGeneration === null)
+      && (row.kind !== 'begin_release' && row.kind !== 'execute_acquired'
+        || material.expectedEffectGeneration === 1)
+      && commandControlValid(row.kind, material.control)
   })
+}
+
+function commandControlValid(kind: string, value: unknown): boolean {
+  if (!isRecord(value)) return false
+  if (kind === 'prepare') return value.state === 'awaiting_authority'
+  if (kind === 'decide' || kind === 'authorize_standing_mandate_use') {
+    return value.state === 'authorized' && typeof value.decidedAt === 'string'
+  }
+  if (kind === 'acquire') {
+    return value.state === 'leased'
+      && value.release === 'not_started'
+      && value.effectGeneration === 1
+      && typeof value.attemptRef === 'string'
+      && typeof value.leaseOwner === 'string'
+  }
+  if (kind === 'begin_release') {
+    return value.state === 'leased'
+      && value.release === 'possibly_released'
+      && value.effectGeneration === 1
+      && typeof value.attemptRef === 'string'
+      && typeof value.leaseOwner === 'string'
+  }
+  return kind === 'execute_acquired'
+    && (value.state === 'terminal' || value.state === 'reconciliation_required')
 }
 
 function resultIdentityValid(

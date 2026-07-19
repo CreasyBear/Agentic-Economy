@@ -160,9 +160,11 @@ export function createInMemoryActionInvocationTracer<
       effectGeneration: input.effectGeneration,
       operationKey,
       now: options.now,
-      ...(options.developmentReleaseSignal === undefined
+      releaseTracking: options.releaseTracking ?? 'conservative',
+      ...((options.releaseTracking ?? 'conservative') === 'monotonic_controller'
+        || options.developmentReleaseSignal === undefined
         ? {}
-        : { releaseSignal: options.developmentReleaseSignal }),
+        : { legacyReleaseSignal: options.developmentReleaseSignal }),
       ...(options.developmentTimeoutSignal === undefined
         ? {}
         : { timeoutSignal: options.developmentTimeoutSignal }),

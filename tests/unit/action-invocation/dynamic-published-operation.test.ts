@@ -3,10 +3,15 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
+  createInMemoryActionInvocationTracer,
+  buildDynamicPublishedInput,
   loadDynamicPublishedAdapterSnapshot,
+  materialDigest,
   type ActionInvocationOrigin,
   type InvocationActor,
 } from '@/modules/action-invocation'
+import { defineAction } from '@/modules/common/action'
+import { z } from 'zod'
 import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
 import {
   admitRegisteredTransport,
@@ -37,6 +42,75 @@ const origins: readonly ActionInvocationOrigin[] = [
 ]
 
 describe('dynamic PublishedOperation Action Invocation adapter', () => {
+  it('keeps executor release truth monotonic against malicious result shapes', async () => {
+    const now = () => '2026-07-20T00:00:00.000Z'
+    let sequence = 0
+    const create = (signal: boolean) => createInMemoryActionInvocationTracer({
+      action: defineAction({
+        id: `malicious.release.${signal}`,
+        name: 'Malicious release test',
+        summary: 'Development test only.',
+        boundaries: ['Development only.'],
+        schema: z.object({ operationKey: z.string(), target: z.object({}) }),
+        parameters: [],
+        readOnly: false,
+        surfaces: [],
+        outputSchema: z.object({ kind: z.string(), release: z.string() }),
+        invocationContract: {
+          version: 'v1',
+          consequenceClass: 'external_effect',
+          materialInputPaths: ['operationKey', 'target'],
+          authorityRequirement: 'principal',
+          retryClass: 'reconcile_before_retry',
+          expectedEvidence: [],
+          safeContinuations: ['inspect'],
+          invalidationConditions: [],
+          developmentAttemptTimeoutMs: 1_000,
+        },
+        run: async ({ effectRelease }) => {
+          if (signal) effectRelease?.beginEffectRelease()
+          return { kind: 'malicious_return', release: 'not_released' }
+        },
+      }),
+      now,
+      nextInvocationRef: () => `malicious:invocation:${++sequence}`,
+      nextAuthorityRef: () => `malicious:authority:${sequence}`,
+      nextAttemptRef: () => `malicious:attempt:${sequence}`,
+      releaseTracking: 'monotonic_controller',
+    })
+    const origin = origins[0]!
+    for (const signal of [true, false]) {
+      const tracer = create(signal)
+      const material = { operationKey: `operation:${signal}`, target: {} }
+      const prepared = tracer.prepare({
+        origin, actor, input: material, context: {}, freshnessMs: 60_000,
+      })
+      const decided = tracer.decide({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: prepared.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin, accept: true,
+      })
+      if (decided.kind !== 'accepted') throw new Error(decided.code)
+      const result = await tracer.execute({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: decided.view.invocationVersion,
+        authorityRef: prepared.authority!.reference,
+        actor, origin, materialInput: material,
+      })
+      if (result.kind !== 'accepted') throw new Error(result.code)
+      expect(result.view.attempts[0]).toMatchObject(signal
+        ? { release: { state: 'released' }, outcome: { state: 'returned' } }
+        : {
+            release: { state: 'not_released' },
+            outcome: { state: 'failed', retry: 'safe_before_release' },
+          })
+      expect(result.view.control).toMatchObject(signal
+        ? { state: 'terminal' }
+        : { state: 'retryable', reason: 'pre_release_failure' })
+    }
+  })
+
   it.each([
     'credential_unavailable',
     'challenge_invalid',
@@ -191,7 +265,29 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     })
     expect(effects).toEqual({ payment: 1, provider: 1 })
     const snapshot = adapter.exportSnapshot()
-    const loaded = loadDynamicPublishedAdapterSnapshot(JSON.parse(JSON.stringify(snapshot)))
+    const preparedMaterial = buildDynamicPublishedInput({
+      operation: fixture.operation,
+      descriptor: fixture.descriptor,
+      value: { symbol: 'BTC', convert: 'USD' },
+    })
+    const loaded = loadDynamicPublishedAdapterSnapshot(
+      JSON.parse(JSON.stringify(snapshot)),
+      {
+        operation: fixture.operation,
+        descriptor: fixture.descriptor,
+        actor,
+        origin,
+        issuedAuthority: {
+          reference: prepared.authority!.reference,
+          accepted: { kind: 'approve_each', authorityRef: prepared.authority!.reference },
+          materialInputDigest: materialDigest(
+            preparedMaterial,
+            ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+          ),
+        },
+        expectedEffectCount: 1,
+      },
+    )
     const coldSource = createDevelopmentDynamicPublishedSource([fixture.operation], loaded.sourceRows)
     const cold = createAdapter(
       fixture.operation,
@@ -547,7 +643,32 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       ['owner', (packet) => { packet.cases[0].snapshot.controls[0].control.owner.principalRef = 'principal:attacker' }],
       ['origin', (packet) => { packet.cases[0].snapshot.controls[0].control.origin = { kind: 'standalone', callerRef: 'x', principalRef: 'y' } }],
       ['mode', (packet) => { packet.cases[0].snapshot.controls[0].control.acceptedAuthority.kind = 'standing_mandate_use' }],
+      ['coordinated authority reference', (packet) => {
+        const control = packet.cases[0].snapshot.controls[0]
+        control.control.authority.reference = 'authority:forged'
+        control.control.acceptedAuthority.authorityRef = 'authority:forged'
+        control.authorityBinding.reference = 'authority:forged'
+        control.authorityBinding.acceptedBasis.authorityRef = 'authority:forged'
+      }],
       ['generation', (packet) => { packet.cases[0].snapshot.attempts[0].rows[0].effectGeneration = 7 }],
+      ['coordinated attempt material and effect', (packet) => {
+        const snapshot = packet.cases[0].snapshot
+        const attempt = snapshot.attempts[0].rows[0]
+        attempt.idempotency.materialInputDigest = 'sha256:forged-material'
+        attempt.idempotency.effectIdentity = canonicalDigest({
+          actionId: snapshot.controls[0].control.action.id,
+          operationKey: attempt.idempotency.operationKey,
+          materialInputDigest: attempt.idempotency.materialInputDigest,
+        })
+        const transition = snapshot.history[0].rows.at(-1).attemptTransition
+        const prior = {
+          ...attempt,
+          release: { state: 'not_released' },
+          outcome: { state: 'running' },
+        }
+        transition.priorDigest = canonicalDigest(prior)
+        transition.nextDigest = canonicalDigest(attempt)
+      }],
       ['publication', (packet) => { packet.cases[0].snapshot.sourceRows[0].operation.identity.publicationRevision = 99 }],
       ['config', (packet) => { packet.cases[0].snapshot.sourceRows[0].operation.transport.configJson = '{}' }],
       ['payment', (packet) => { packet.cases[0].snapshot.sourceRows[0].operation.identity.payment.payTo = '0xattacker' }],
@@ -559,6 +680,17 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       ['result', (packet) => { packet.cases[0].snapshot.sourceRows[0].resultIdentity.resultDigest = 'sha256:forged' }],
       ['attempt', (packet) => { packet.cases[0].snapshot.attempts[0].rows[0].attemptRef = 'attempt:forged' }],
       ['effects', (packet) => { packet.cases[0].paymentEffects = 2 }],
+      ['coordinated command material and history', (packet) => {
+        const snapshot = packet.cases[0].snapshot
+        const command = snapshot.commands.at(-1)
+        command.value.material.control = { state: 'awaiting_authority' }
+        command.value.digest = canonicalDigest(command.value.material)
+        const row = snapshot.history[0].rows.find(
+          (candidate: any) => candidate.commandId === command.commandId,
+        )
+        row.commandDigest = command.value.digest
+        command.value.result = { kind: 'applied', invocationVersion: row.invocationVersion }
+      }],
       ['schema', (packet) => { packet.cases[0].snapshot.untrusted = true }],
     ]
     for (const [name, attack] of attacks) {

@@ -92,9 +92,15 @@ export type ActionContext = {
   ) => Promise<Readonly<{ kind: 'current' } | { kind: 'refused'; reason: string }>>
 }
 
+export type ActionEffectReleaseController = Readonly<{
+  beginEffectRelease(): void
+}>
+
 export type ActionRunArgs<Input> = {
   data: Input
   context: ActionContext
+  /** Executor-owned capability; absent for legacy conservative execution. */
+  effectRelease?: ActionEffectReleaseController
 }
 
 export type ActionParameterType = 'string' | 'number' | 'boolean' | 'enum' | 'object'
@@ -162,18 +168,6 @@ export type ActionInvocationResultClassification = Readonly<{
   referenceable: boolean
 }>
 
-export type ActionInvocationExecutionClassification =
-  | Readonly<{
-      release: 'not_released'
-      outcome: string
-      referenceable: boolean
-      message: string
-    }>
-  | Readonly<{
-      release: 'released'
-      outcome: string
-      referenceable: boolean
-    }>
 
 type ActionPreparationProjector<Input> = {
   project(input: Input): ActionInvocationPreparation
@@ -181,10 +175,6 @@ type ActionPreparationProjector<Input> = {
 
 type ActionResultClassifier<Result extends ActionResult> = {
   classify(result: Result): ActionInvocationResultClassification
-}['classify']
-
-type ActionExecutionClassifier<Result extends ActionResult> = {
-  classify(result: Result): ActionInvocationExecutionClassification
 }['classify']
 
 type ActionPreReleaseCheck<Input, Result extends ActionResult> = {
@@ -216,8 +206,6 @@ export type ActionDefinition<
   readonly projectInvocationPreparation?: ActionPreparationProjector<Input>
   /** Action-owned interpretation of its returned business result. */
   readonly classifyInvocationResult?: ActionResultClassifier<Result>
-  /** Action-owned release classification for consequential runner results. */
-  readonly classifyInvocationExecution?: ActionExecutionClassifier<Result>
   /** Action-owned refusal check that runs before an attempt can enter release. */
   readonly preReleaseCheck?: ActionPreReleaseCheck<Input, Result>
   readonly run: ActionRunner<Input, Result>

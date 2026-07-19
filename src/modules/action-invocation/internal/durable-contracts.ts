@@ -1,5 +1,6 @@
 import type { ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import type {
   ActionAttemptView,
   ActionInvocationView,
@@ -135,6 +136,7 @@ export type PersistControlCommand<Result extends ActionResult = ActionResult> = 
   row: DurableControlRow<Result>
   currentAttemptWrite?: DurableAttemptRow
   history: Omit<DurableHistoryRow, 'invocationVersion' | 'recordedAt' | 'current'>
+  canonicalCommandMaterial?: StableHashValue
 }>
 
 export type PersistControlResult =

@@ -74,6 +74,10 @@ export type RouteTransportRuntime = Readonly<{
   createX402PaymentSignature: (request: X402PaymentSignatureRequest) => Promise<string | undefined>
 }>
 
+export type RouteTransportEffectReleaseController = Readonly<{
+  beginEffectRelease(): void
+}>
+
 export type RouteTransportObservation = Readonly<{
   transport: 'http' | 'mcp' | 'x402' | 'unknown'
   disposition: 'succeeded' | 'refused' | 'partial' | 'unknown'
@@ -168,11 +172,12 @@ export type RouteTransportPreparation =
 export async function invokeRegisteredRouteTransport(
   invocation: RouteTransportInvocation,
   runtime: RouteTransportRuntime,
+  effectRelease?: RouteTransportEffectReleaseController,
 ): Promise<RouteTransportObservation> {
   const preparation = prepareRegisteredRouteTransportInvocation(invocation, runtime.resolveCredential)
   return preparation.kind === 'refused'
     ? preparation.observation
-    : await invokePreparedRouteTransport(preparation.prepared, runtime)
+    : await invokePreparedRouteTransport(preparation.prepared, runtime, effectRelease)
 }
 
 export async function invokeRegisteredRouteCancellation(
@@ -297,15 +302,25 @@ export function prepareRegisteredRouteTransportInvocation(
 export async function invokePreparedRouteTransport(
   prepared: PreparedRouteTransportInvocation,
   runtime: RouteTransportRuntime,
+  effectRelease?: RouteTransportEffectReleaseController,
 ): Promise<RouteTransportObservation> {
   const { invocation, endpoint, credential, configuration, requestDigest } = prepared
   switch (invocation.binding.adapterId) {
     case 'http-json:v1':
-      return await invokeHttp(endpoint, configuration as HttpConfiguration, invocation, credential, requestDigest, runtime.send)
+      return await invokeHttp(
+        endpoint, configuration as HttpConfiguration, invocation, credential, requestDigest,
+        runtime.send, effectRelease,
+      )
     case 'mcp-jsonrpc:v1':
-      return await invokeMcp(endpoint, configuration as McpConfiguration, invocation, credential, requestDigest, runtime.send)
+      return await invokeMcp(
+        endpoint, configuration as McpConfiguration, invocation, credential, requestDigest,
+        runtime.send, effectRelease,
+      )
     case 'x402-fetch:v2':
-      return await invokeX402(endpoint, configuration as X402Configuration, invocation, credential, requestDigest, runtime)
+      return await invokeX402(
+        endpoint, configuration as X402Configuration, invocation, credential, requestDigest,
+        runtime, effectRelease,
+      )
     default:
       return refused('unknown', requestDigest, false, 'adapter_not_registered')
   }
@@ -318,10 +333,12 @@ async function invokeHttp(
   credential: string,
   requestDigest: string,
   send: RouteTransportFetch,
+  effectRelease: RouteTransportEffectReleaseController | undefined,
 ): Promise<RouteTransportObservation> {
   try {
     const target = requestTarget(endpoint, configuration.method, configuration.query, invocation.inputJson)
     if (target === undefined) return refused('http', requestDigest, false, 'input_invalid')
+    effectRelease?.beginEffectRelease()
     const response = await send(target, {
       method: configuration.method,
       redirect: 'manual',
@@ -342,6 +359,7 @@ async function invokeMcp(
   credential: string,
   requestDigest: string,
   send: RouteTransportFetch,
+  effectRelease: RouteTransportEffectReleaseController | undefined,
 ): Promise<RouteTransportObservation> {
   const commonHeaders = callHeaders(invocation, credential)
   const initializeId = `initialize:${invocation.authority.operationKeyDigest}`
@@ -388,6 +406,7 @@ async function invokeMcp(
   try {
     const input = parseJson(invocation.inputJson)
     if (!isJsonObject(input)) return refused('mcp', requestDigest, false, 'input_invalid')
+    effectRelease?.beginEffectRelease()
     const response = await send(endpoint, {
       method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       headers: {
@@ -431,6 +450,7 @@ async function invokeX402(
   credential: string,
   requestDigest: string,
   runtime: RouteTransportRuntime,
+  effectRelease: RouteTransportEffectReleaseController | undefined,
 ): Promise<RouteTransportObservation> {
   const headers = callHeaders(invocation, undefined)
   const target = requestTarget(endpoint, configuration.method, configuration.query, invocation.inputJson)
@@ -480,6 +500,7 @@ async function invokeX402(
     return { ...refused('x402', requestDigest, false, 'payment_signature_unavailable'), paymentChallengeDigest }
   }
   try {
+    effectRelease?.beginEffectRelease()
     const paid = await runtime.send(target, {
       method: configuration.method, redirect: 'manual', signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       headers: { ...headers, 'Payment-Signature': paymentSignature },

@@ -7,7 +7,6 @@ import type { RouteTransportRuntime } from '@/modules/capability-supply/route-tr
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
-import { createDevelopmentReleaseSignal } from './attempts'
 import type {
   ActionInvocationOrigin,
   ActionInvocationView,
@@ -45,7 +44,10 @@ import type {
   PersistControlResult,
 } from './internal/durable-contracts'
 import type { DynamicPublishedSourceRow } from './dynamic-published-source'
-import { assertDynamicPublishedSnapshotShape } from './dynamic-published-snapshot-verifier'
+import {
+  verifyDynamicPublishedSnapshot,
+  type DynamicPublishedSnapshotAnchors,
+} from './dynamic-published-snapshot-verifier'
 
 export type DynamicPublishedAdapterSnapshot = Readonly<{
   format: 'dynamic-published-action-invocation:development:v1'
@@ -55,7 +57,11 @@ export type DynamicPublishedAdapterSnapshot = Readonly<{
   history: readonly Readonly<{ invocationRef: string; rows: readonly DurableHistoryRow[] }>[]
   commands: readonly Readonly<{
     commandId: string
-    value: Readonly<{ digest: string; result: PersistControlResult }>
+    value: Readonly<{
+      digest: string
+      result: PersistControlResult
+      material: StableHashValue
+    }>
   }>[]
 }>
 
@@ -129,7 +135,6 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   durableState?: DevelopmentDurableState<DynamicPublishedInvocationResult>
 }>): DynamicPublishedActionInvocationAdapter {
   const descriptor = materializeRuntimePublishedOperation(input.operation)
-  const releaseSignal = createDevelopmentReleaseSignal()
   const durableState = input.durableState ?? createDevelopmentDurableState<DynamicPublishedInvocationResult>()
   const durablePort = createDevelopmentDurablePort(durableState)
   const executionTokens = new Map<string, DynamicPublishedExecutionToken>()
@@ -148,14 +153,14 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       return reason === undefined ? undefined : {
         kind: 'published_operation_refused',
         sourceDisposition: 'refused',
-        release: 'not_released',
         operationId: input.operation.operationId,
         operationVersion: descriptor.version,
         requestDigest: value.operationKey,
         failureCode: reason,
       }
     },
-    run: async (value) => {
+    run: async (value, context, effectRelease) => {
+      if (effectRelease === undefined) throw new Error('effect_release_controller_unavailable')
       const token = executionTokens.get(value.operationKey)
       if (token === undefined) throw new Error('published_operation_attempt_not_leased')
       const result = await executeDynamicPublishedTransport({
@@ -164,25 +169,23 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         invocation: value,
         token,
         runtime: input.runtime,
-        markReleased: releaseSignal.markReleased,
+        effectRelease,
       })
       const row = input.source.read(value.operationKey)
       if (row !== undefined) {
+        const resultDigest = canonicalDigest(result as unknown as StableHashValue)
         input.source.write({
           ...row,
           observedResolution: {
             state: 'returned',
-            execution: result.release === 'not_released'
-              ? 'pre_release_refused'
-              : 'runner_returned',
+            execution: 'runner_returned',
             businessOutcome: result.kind,
-            resultReferenceable:
-              result.release === 'released' && result.kind === 'published_operation_succeeded',
+            resultReferenceable: result.kind === 'published_operation_succeeded',
             result,
           },
           resultIdentity: {
             sourceResultRef: `published-result:${value.operationKey}`,
-            resultDigest: canonicalDigest(result as unknown as StableHashValue),
+            resultDigest,
           },
         })
       }
@@ -199,7 +202,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     nextInvocationRef: input.nextInvocationRef,
     nextAuthorityRef: input.nextAuthorityRef,
     nextAttemptRef: input.nextAttemptRef,
-    developmentReleaseSignal: releaseSignal,
+    releaseTracking: 'monotonic_controller',
     verifyReconciliationEvidence: (evidence) =>
       evidence.source === `published-operation:${input.operation.operationId}`,
     resolveSourceState: (operationKey) => {
@@ -338,7 +341,13 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
           rows: [...rows.values()],
         })),
         history: [...durableState.history].map(([invocationRef, rows]) => ({ invocationRef, rows })),
-        commands: [...durableState.commands].map(([commandId, value]) => ({ commandId, value })),
+        commands: [...durableState.commands].map(([commandId, value]) => ({
+          commandId,
+          value: {
+            ...value,
+            material: durableState.commandMaterials.get(commandId) ?? null,
+          },
+        })),
       }
       return JSON.parse(JSON.stringify(snapshot)) as DynamicPublishedAdapterSnapshot
     },
@@ -347,20 +356,28 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
 
 export function loadDynamicPublishedAdapterSnapshot(
   snapshot: unknown,
+  anchors: DynamicPublishedSnapshotAnchors,
 ): Readonly<{
   durableState: DevelopmentDurableState<DynamicPublishedInvocationResult>
   sourceRows: Map<string, DynamicPublishedSourceRow>
 }> {
-  assertDynamicPublishedSnapshotShape(snapshot)
+  verifyDynamicPublishedSnapshot({ snapshot, anchors })
+  const verified = snapshot as DynamicPublishedAdapterSnapshot
   const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
-  for (const row of snapshot.controls) durableState.controls.set(row.invocationRef, row)
-  for (const group of snapshot.attempts) {
+  for (const row of verified.controls) durableState.controls.set(row.invocationRef, row)
+  for (const group of verified.attempts) {
     durableState.attempts.set(group.invocationRef, new Map(group.rows.map((row) => [row.attemptRef, row])))
   }
-  for (const group of snapshot.history) durableState.history.set(group.invocationRef, [...group.rows])
-  for (const command of snapshot.commands) durableState.commands.set(command.commandId, command.value)
+  for (const group of verified.history) durableState.history.set(group.invocationRef, [...group.rows])
+  for (const command of verified.commands) {
+    durableState.commands.set(command.commandId, {
+      digest: command.value.digest,
+      result: command.value.result,
+    })
+    durableState.commandMaterials.set(command.commandId, command.value.material)
+  }
   return {
     durableState,
-    sourceRows: new Map(snapshot.sourceRows.map((row) => [row.operationKey, row])),
+    sourceRows: new Map(verified.sourceRows.map((row) => [row.operationKey, row])),
   }
 }

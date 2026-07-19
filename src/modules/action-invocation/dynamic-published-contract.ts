@@ -22,7 +22,6 @@ export type DynamicPublishedInvocationResult = ActionResult & Readonly<{
     | 'published_operation_refused'
     | 'published_operation_invalid_evidence'
   sourceDisposition: 'succeeded' | 'refused'
-  release: 'not_released' | 'released'
   operationId: string
   operationVersion: string
   requestDigest: string
@@ -141,6 +140,7 @@ export function createDynamicPublishedAction(input: Readonly<{
   run: (
     value: DynamicPublishedInvocationInput,
     context: ActionContext,
+    effectRelease: import('@/modules/common/action').ActionEffectReleaseController | undefined,
   ) => Promise<DynamicPublishedInvocationResult>
   preReleaseCheck: (
     value: DynamicPublishedInvocationInput,
@@ -196,25 +196,11 @@ export function createDynamicPublishedAction(input: Readonly<{
         referenceable: result.kind === 'published_operation_succeeded',
       }),
     }.classify,
-    classifyInvocationExecution: {
-      classify: (result: DynamicPublishedInvocationResult) => result.release === 'not_released'
-        ? {
-            release: 'not_released' as const,
-            outcome: result.kind,
-            referenceable: false,
-            message: result.failureCode ?? result.kind,
-          }
-        : {
-            release: 'released' as const,
-            outcome: result.kind,
-            referenceable: result.kind === 'published_operation_succeeded',
-          },
-    }.classify,
     preReleaseCheck: {
       check: async ({ data }: { data: DynamicPublishedInvocationInput }) =>
         await input.preReleaseCheck(data),
     }.check,
-    run: async ({ data, context }) => await input.run(data, context),
+    run: async ({ data, context, effectRelease }) => await input.run(data, context, effectRelease),
   }
 }
 

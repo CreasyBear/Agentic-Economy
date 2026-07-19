@@ -75,6 +75,7 @@ export type {
   DynamicPublishedSourcePort,
   DynamicPublishedSourceRow,
 } from './dynamic-published-source'
+export type { DynamicPublishedSnapshotAnchors } from './dynamic-published-snapshot-verifier'
 export type {
   AuthorityUse,
   AuthorityUseMaterial,

@@ -1,11 +1,14 @@
 import {
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
+  buildDynamicPublishedInput,
   loadDynamicPublishedAdapterSnapshot,
+  materialDigest,
   verifyDynamicPublishedSnapshot,
   type ActionInvocationOrigin,
   type DynamicPublishedAdapterSnapshot,
   type InvocationActor,
+  type DynamicPublishedSnapshotAnchors,
 } from '@/modules/action-invocation'
 import type {
   RouteTransportFetch,
@@ -26,6 +29,42 @@ import {
 const actor: InvocationActor = {
   callerRef: 'agent:dynamic-published-development',
   principalRef: 'principal:dynamic-published-development',
+}
+
+const developmentOrigins: readonly ActionInvocationOrigin[] = [
+  { kind: 'request_owned', requestRef: 'request:dynamic-development', revision: 2 },
+  { kind: 'standalone', callerRef: actor.callerRef, principalRef: actor.principalRef },
+]
+
+function snapshotAnchors(
+  operation: ReturnType<typeof materializePublishedOperation>,
+  descriptor: ReturnType<typeof materializeRuntimePublishedOperation>,
+  origin: ActionInvocationOrigin,
+  authorityRef: string,
+  expectedEffectCount: number,
+  expectedChallengeDigest?: string,
+): DynamicPublishedSnapshotAnchors {
+  const prepared = buildDynamicPublishedInput({
+    operation,
+    descriptor,
+    value: { symbol: 'BTC', convert: 'USD' },
+  })
+  return {
+    operation,
+    descriptor,
+    actor,
+    origin,
+    issuedAuthority: {
+      reference: authorityRef,
+      accepted: { kind: 'approve_each', authorityRef },
+      materialInputDigest: materialDigest(
+        prepared,
+        ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+      ),
+    },
+    expectedEffectCount,
+    ...(expectedChallengeDigest === undefined ? {} : { expectedChallengeDigest }),
+  }
 }
 
 export type DevelopmentDynamicInvocationEvidence = Readonly<{
@@ -76,10 +115,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
   const originalNow = Date.now
   Date.now = () => now
   try {
-    const origins: readonly ActionInvocationOrigin[] = [
-      { kind: 'request_owned', requestRef: 'request:dynamic-development', revision: 2 },
-      { kind: 'standalone', callerRef: actor.callerRef, principalRef: actor.principalRef },
-    ]
+    const origins = developmentOrigins
     const cases = []
     for (const origin of origins) {
       const effects = { payment: 0, provider: 0 }
@@ -138,7 +174,19 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         origin,
       })
       const snapshot = adapter.exportSnapshot()
-      const loaded = loadDynamicPublishedAdapterSnapshot(JSON.parse(JSON.stringify(snapshot)))
+      const loaded = loadDynamicPublishedAdapterSnapshot(
+        JSON.parse(JSON.stringify(snapshot)),
+        snapshotAnchors(
+          fixture.operation,
+          fixture.descriptor,
+          origin,
+          'dynamic:authority:1',
+          1,
+          canonicalDigest(
+            developmentChallenge(fixture.operation.binding.endpointUrl) as unknown as StableHashValue,
+          ),
+        ),
+      )
       const coldSource = createDevelopmentDynamicPublishedSource([fixture.operation], loaded.sourceRows)
       const cold = createDynamicPublishedActionInvocationAdapter({
         operation: fixture.operation,
@@ -331,20 +379,24 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       outputSchema: packet.fixture.descriptor.outputSchema,
     },
   } as StableHashValue)
-  const separatelyResumed = packet.cases.every((entry) => {
-    verifyDynamicPublishedSnapshot({
-      snapshot: entry.snapshot,
-      operation: rebuiltOperation,
-      descriptor: rebuiltDescriptor,
-      actor,
-      origin: entry.origin,
-      expectedAuthorityKind: 'approve_each',
-      expectedEffectCount: 1,
-      expectedChallengeDigest: canonicalDigest(
+  const separatelyResumed = packet.cases.every((entry, index) => {
+    const expectedOrigin = developmentOrigins[index]
+    if (expectedOrigin === undefined) return false
+    const anchors = snapshotAnchors(
+      rebuiltOperation,
+      rebuiltDescriptor,
+      expectedOrigin,
+      'dynamic:authority:1',
+      1,
+      canonicalDigest(
         developmentChallenge(rebuiltOperation.binding.endpointUrl) as unknown as StableHashValue,
       ),
+    )
+    verifyDynamicPublishedSnapshot({
+      snapshot: entry.snapshot,
+      anchors,
     })
-    const loaded = loadDynamicPublishedAdapterSnapshot(entry.snapshot)
+    const loaded = loadDynamicPublishedAdapterSnapshot(entry.snapshot, anchors)
     const source = createDevelopmentDynamicPublishedSource([rebuiltOperation], loaded.sourceRows)
     const adapter = createDynamicPublishedActionInvocationAdapter({
       operation: rebuiltOperation,
@@ -364,12 +416,13 @@ export function verifyDevelopmentDynamicInvocationEvidence(
   })
   verifyDynamicPublishedSnapshot({
     snapshot: packet.recovery.snapshot,
-    operation: rebuiltOperation,
-    descriptor: rebuiltDescriptor,
-    actor,
-    origin: packet.cases[1]!.origin,
-    expectedAuthorityKind: 'approve_each',
-    expectedEffectCount: 1,
+    anchors: snapshotAnchors(
+      rebuiltOperation,
+      rebuiltDescriptor,
+      developmentOrigins[1]!,
+      'dynamic:authority:recovery',
+      1,
+    ),
   })
   if (
     canonicalDigest(material as unknown as StableHashValue) !== packetDigest

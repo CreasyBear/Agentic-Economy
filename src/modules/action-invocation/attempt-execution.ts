@@ -1,4 +1,9 @@
-import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
+import type {
+  Action,
+  ActionContext,
+  ActionEffectReleaseController,
+  ActionResult,
+} from '@/modules/common/action'
 import type { ActionInvocationView } from './contracts'
 import {
   replaceAttempt,
@@ -20,19 +25,29 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
   attemptRef: string
   operationKey: string
   now: () => string
-  releaseSignal?: DevelopmentReleaseSignal
+  releaseTracking: 'conservative' | 'monotonic_controller'
+  legacyReleaseSignal?: DevelopmentReleaseSignal
   timeoutSignal?: DevelopmentTimeoutSignal
   timeoutMs?: number
   attempt: ActionInvocationView<Result>['attempts'][number]
 }>): Promise<AttemptTransition<Result>> {
   const prepared = input.currentView.prepared
   if (prepared === undefined) throw new Error('Consequential attempt requires prepared invocation state.')
-  input.releaseSignal?.beginAttempt()
+  let releaseBegan = false
+  const effectRelease: ActionEffectReleaseController | undefined =
+    input.releaseTracking === 'monotonic_controller'
+      ? Object.freeze({ beginEffectRelease: () => { releaseBegan = true } })
+      : undefined
   const attempt = input.attempt
   const attempts = input.currentView.attempts
+  input.legacyReleaseSignal?.beginAttempt()
 
   try {
-    const runner = input.action.run({ data: input.actionInput, context: input.context })
+    const runner = input.action.run({
+      data: input.actionInput,
+      context: input.context,
+      ...(effectRelease === undefined ? {} : { effectRelease }),
+    })
     // The timeout bounds the control decision only. It does not cancel or erase
     // the runner promise; completion is fenced from mutating the advanced view.
     const timeoutMs = input.timeoutMs
@@ -45,8 +60,7 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
           }),
         ])
     const classification = classifyActionResult(input.action, result)
-    const execution = input.action.classifyInvocationExecution?.(result)
-    if (execution?.release === 'not_released') {
+    if (input.releaseTracking === 'monotonic_controller' && !releaseBegan) {
       return {
         attempts: replaceAttempt(attempts, {
           ...attempt,
@@ -54,14 +68,14 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
           outcome: {
             state: 'failed',
             retry: 'safe_before_release',
-            message: execution.message,
+            message: `Action ${input.action.id} returned before effect release.`,
           },
         }),
         observedResolution: {
           state: 'returned',
           execution: 'pre_release_refused',
-          businessOutcome: execution.outcome,
-          resultReferenceable: execution.referenceable,
+          businessOutcome: classification.outcome,
+          resultReferenceable: false,
           result,
         },
         freshness: { state: 'current', observedAt: input.now() },
@@ -70,7 +84,7 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
     }
     const returnedAttempt = {
       ...attempt,
-      release: input.releaseSignal?.wasReleased()
+      release: releaseBegan || input.legacyReleaseSignal?.wasReleased() === true
         ? { state: 'released' as const, observedAt: input.now() }
         : { state: 'possibly_released' as const },
       outcome: { state: 'returned' as const, businessOutcome: classification.outcome },
@@ -112,7 +126,9 @@ export async function executeConsequentialAttempt<Input, Result extends ActionRe
       }
     }
     const message = error instanceof Error ? error.message : 'Unknown runner failure'
-    const explicitlyNotReleased = input.releaseSignal !== undefined && !input.releaseSignal.wasReleased()
+    const explicitlyNotReleased = input.releaseTracking === 'monotonic_controller'
+      ? !releaseBegan
+      : input.legacyReleaseSignal !== undefined && !input.legacyReleaseSignal.wasReleased()
     const failedAttempt = explicitlyNotReleased
       ? {
           ...attempt,
