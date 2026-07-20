@@ -35,9 +35,9 @@ export type BtcUsdQuoteResult = Readonly<{
   quote: 'USD'
   price: number
   source: Readonly<{
-    providerId: typeof developmentBtcUsdQuoteSource.providerId
-    operationId: typeof developmentBtcUsdQuoteSource.operationId
-    operationRevision: typeof developmentBtcUsdQuoteSource.operationRevision
+    providerId: string
+    operationId: string
+    operationRevision: number
   }>
   observedAt: string
   receivedAt: string

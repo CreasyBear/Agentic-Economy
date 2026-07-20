@@ -43,6 +43,14 @@ export type {
   BtcUsdQuoteProjectionDecision,
   BtcUsdQuoteResult,
 } from './btc-usd-quote-result'
+export {
+  developmentAlternateBtcUsdQuoteSource,
+  projectDevelopmentAlternateBtcUsdQuoteResult,
+} from './development-alternate-btc-usd-quote-result'
+export {
+  buildDevelopmentAlternatePublishedOperationEvidence,
+  verifyDevelopmentAlternatePublishedOperationEvidence,
+} from './development-alternate-published-operation-evidence'
 
 const identifier = z.string().trim().min(1).max(200)
 const MAX_OPAQUE_CONFIG_BYTES = 65_536
