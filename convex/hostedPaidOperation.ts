@@ -1,4 +1,4 @@
-import { paginationOptsValidator } from 'convex/server'
+import { makeFunctionReference, paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
@@ -14,6 +14,11 @@ import {
   invocationFreshnessValue,
 } from '../src/modules/action-invocation/internal/convex-schema'
 import { internalMutation, internalQuery } from './_generated/server'
+import { mutation, query } from './_generated/server'
+const internalLoadComplete = makeFunctionReference<'query'>('hostedPaidOperation:loadComplete')
+const internalCreateInitial = makeFunctionReference<'mutation'>('hostedPaidOperation:createInitial')
+const internalTransact = makeFunctionReference<'mutation'>('hostedPaidOperation:transact')
+const internalReserveAdmission = makeFunctionReference<'mutation'>('hostedPaidOperation:reserveAdmission')
 
 const opaqueReference = v.object({
   algorithm: v.literal('sha256'),
@@ -632,3 +637,95 @@ function normalizeAttemptOutcome(outcome: {
   }
   return rest
 }
+
+async function requireTokenIdentity(ctx: { auth: { getUserIdentity(): Promise<{ tokenIdentifier: string } | null> } }) {
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity === null) return null
+  return {
+    principalRef: identity.tokenIdentifier,
+    callerRef: identity.tokenIdentifier,
+  }
+}
+
+export const authenticatedLoadComplete = query({
+  args: {
+    invocationRef: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const identity = await requireTokenIdentity(ctx)
+    if (identity === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
+    return await ctx.runQuery(internalLoadComplete, {
+      ownerPrincipalRef: identity.principalRef,
+      ownerCallerRef: identity.callerRef,
+      invocationRef: args.invocationRef,
+      paginationOpts: args.paginationOpts,
+    })
+  },
+})
+
+export const authenticatedCreateInitial = mutation({
+  args: {
+    creationCommandId: v.string(),
+    creationCommandDigest: v.string(),
+    reservationRef: v.string(),
+    invocationRef: v.string(),
+    invocationVersion: v.number(),
+    selectedSource: sourceRow,
+    control: initialControl,
+    payment: paymentRow,
+    recordedAt: v.string(),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const identity = await requireTokenIdentity(ctx)
+    if (identity === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
+    if (args.control.owner.principalRef !== identity.principalRef
+      || args.control.owner.callerRef !== identity.callerRef) {
+      return { kind: 'refused' as const, code: 'caller_identity_refused' as const }
+    }
+    return await ctx.runMutation(internalCreateInitial, args)
+  },
+})
+
+export const authenticatedTransact = mutation({
+  args: {
+    invocationRef: v.string(),
+    commandId: v.string(),
+    commandDigest: v.string(),
+    expectedInvocationVersion: v.number(),
+    expectedEffectGeneration: v.optional(v.number()),
+    nextInvocationVersion: v.number(),
+    nextEffectGeneration: v.optional(v.number()),
+    selectedSource: sourceRow,
+    payment: v.optional(paymentRow),
+    evidenceReferences: v.array(evidenceReferenceRow),
+    submissionStarted: v.boolean(),
+    recordedAt: v.string(),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const identity = await requireTokenIdentity(ctx)
+    if (identity === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
+    return await ctx.runMutation(internalTransact, {
+      ...args,
+      ownerPrincipalRef: identity.principalRef,
+      ownerCallerRef: identity.callerRef,
+    })
+  },
+})
+
+export const authenticatedReserveAdmission = mutation({
+  args: {
+    policyRef: v.string(),
+    windowKey: v.string(),
+    commandId: v.string(),
+    recordedAt: v.string(),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const identity = await requireTokenIdentity(ctx)
+    if (identity === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
+    return await ctx.runMutation(internalReserveAdmission, {
+      ...args,
+      principalRef: identity.principalRef,
+    })
+  },
+})

@@ -37,6 +37,32 @@
 }
 ```
 
+## 2026-07-20 authenticated runtime/routes completion attempt — narrowed
+
+```json
+{
+  "baseRevision": "f24cf08a351ffdc2b537b8eb758c043764be3ac4",
+  "baseTree": "c9a121db0f70d504a5b687dfb5b2fd8ad5cbdb25",
+  "inheritedManifest": {
+    "path": "/tmp/ae-phase3c-parent-custody-fdb990ac.json",
+    "rawSha256": "3e53d94d419d1ba824d5c8b787c657a8fdb3fa5774864e6429d7c6b45d8aa924",
+    "canonicalSha256": "4d8952bceaba82c5a617be6b1747152e002131d0e5a7375ef5e2620b59060092",
+    "entries": 66,
+    "childInterpretation": "The clean child matches the exact base/tree. All inherited paths are absent and forbidden."
+  },
+  "red": "The new runtime contract test failed because the server composition root and all five generated route registrations were absent.",
+  "observableOutcome": "Authenticated public Convex load/create/transact/admission gateways derive tokenIdentifier server-side and do not accept owner or principal authorization arguments. Five thin route modules are registered by a deterministic two-run generator result.",
+  "adverseAndRecovery": "Unauthenticated Convex access refuses. Public reconcile remains intent-only in the pre-existing adapters and transport ambiguity remains inspect-only. A missing local dependency tree was recovered by reusing an existing ignored local dependency symlink; no install or network occurred.",
+  "verification": "Five focused files and eleven tests passed. The route generator produced SHA-256 95b15655c07de7d722959a60db846d1bcc2725d8f525047d2ae96cf644ab78a4 twice.",
+  "remainingFailure": "The server runtime currently composes authenticated inspection, but creation and consequence-bearing command persistence are fail-closed placeholders. It does not yet map createInitial/transact into working create/authorize/execute/reconcile behavior. Therefore this is not a Plan04 completion candidate.",
+  "evidenceClass": "source inspection and local authenticated/server/generated-route fixtures",
+  "claimCeiling": "Authenticated gateway and deterministic route registration mechanics only.",
+  "explicitNonclaims": "No complete creation or command runtime, browser or hosted reachability, provider fulfilment, real credential/payment/settlement, production safety, accessibility/comprehension, demand or customer value.",
+  "stopReason": "IMPLEMENTATION_INCOMPLETE_AT_RUNTIME_COMMAND_AND_CREATION_MAPPING",
+  "nextSafeAction": "Continue within hosted-paid-operation-runtime.ts by mapping the authenticated createInitial/reserveAdmission/transact references into createHostedPaidOperation and request-scoped command ports, then rerun the focused persistence, creation, reconciliation and route tests before any parent integration."
+}
+```
+
 ### Prior Task1 handoff
 
 {
