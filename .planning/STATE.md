@@ -60,6 +60,15 @@ so reduced effort, real-human value, hosted operation, independent supply,
 provider fulfilment and production safety remain unproved. The canonical
 execution evidence is the ADR-009/010 master ledger.
 
+Control-plane hardening closeout (2026-07-20): exact source revision
+`13158022c7462a7fdae346b548f0ea272a87cefe` passed 235 focused tests and
+clean-checkout generation plus verification of provider-operation,
+bounded-mandate and `full_yolo` packets. Invalid authority material fails
+closed, observers cannot determine command truth, development fixtures are
+outside production ownership, and Gate 10 is archived as the terminal
+`NARROW_OR_REDESIGN` falsification. This is local development evidence only;
+exposure, deployment and production claims remain blocked.
+
 Hosted proof frontier (2026-07-14): the cold external-agent Request journey (#165) is closed at `6c982d0f976bfd37b53394ef6a2770f4ee0b8a27`. GitHub run `29304508882` passed the clean source contract, deployed that exact Git revision to Vercel and Convex, registered exactly two labelled sandbox businesses through production registration, authenticated-read-back deployment `dpl_8ygRkWVAHMehKyVTGrEZNbAsbtqs`, and completed the cold agent journey through typed clarification and both customer-authority stops to `options_ready`. This is sandbox contract and hosted-journey proof only, not real supply, booking, purchase, autonomous execution, or customer value.
 
 RoutePlan supersession frontier (2026-07-14): [Supersede RoutePlan generations on material Request or graph change](https://github.com/CreasyBear/Agentic-Economy/issues/169) is closed at exact deployed revision `9553845e215aa4aa47a08ae72016ed32a28def1d`. GitHub run `29321940577` passed clean source, exact Vercel and Convex deployment, authenticated deployment readback `dpl_3Pmk9Nv4ZRVR2x479cuWMUfYZjZc`, and the sandbox-labelled cold external-agent journey. Immutable generations now converge on identical material, supersede with exact-head CAS on material Request or graph change, preserve terminal Request decisions across resume, and block stale V2 preparation. This remains sandbox contract and hosted-path proof only, not real supply, execution, customer value, booking, payment, or autonomous fulfillment.

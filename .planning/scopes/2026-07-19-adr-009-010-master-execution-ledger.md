@@ -1190,3 +1190,50 @@ new predeclared real-human comparison.
 This pre-hardening evidence remains local/development only. Hosted reachability,
 independent supply, provider fulfilment, production safety, real accessibility
 and customer value are outside this program and unproved.
+
+## Hardening closeout — 2026-07-20
+
+**Integrated source revision:** `13158022c7462a7fdae346b548f0ea272a87cefe`
+**Evidence checkout:** clean detached checkout of that exact revision and commit tree
+**Environment:** `MOCK/DEVELOPMENT ONLY`
+
+Focused integration verification passed 15 files and 235 tests:
+
+```text
+npm exec -- vitest run tests/unit/action-invocation tests/unit/provider-operation-fixture tests/imports/action-invocation-host-boundaries.test.ts
+npm run lint
+git diff --check
+```
+
+The repository-wide typecheck still exits nonzero on pre-existing Convex and
+Customer Request errors. Its output contained no error in the hardening-owned
+Action Invocation, provider fixture, evidence or boundary paths after the
+owned optional-property error was corrected.
+
+Official packets were generated and independently verified with:
+
+```text
+npm run evidence:operation:development -- run /tmp/ae-provider-operation-13158022.json 13158022c7462a7fdae346b548f0ea272a87cefe
+npm run evidence:operation:development -- verify /tmp/ae-provider-operation-13158022.json 13158022c7462a7fdae346b548f0ea272a87cefe
+npm run evidence:bounded-mandate:development -- run /tmp/ae-bounded-mandate-13158022.json 13158022c7462a7fdae346b548f0ea272a87cefe
+npm run evidence:bounded-mandate:development -- verify /tmp/ae-bounded-mandate-13158022.json 13158022c7462a7fdae346b548f0ea272a87cefe
+npm run evidence:full-yolo:development -- run /tmp/ae-full-yolo-13158022.json 13158022c7462a7fdae346b548f0ea272a87cefe
+npm run evidence:full-yolo:development -- verify /tmp/ae-full-yolo-13158022.json 13158022c7462a7fdae346b548f0ea272a87cefe
+```
+
+Packet identities:
+
+- provider operation: `sha256:a15846830f2c15fda68dc37600d77ab4fe956c6df37ef3b4140dd423bbd26594`;
+- bounded mandate: `sha256:23d5928425a60557663bd1c2e8e31f8c94eb984a304b75983131c14e5a3a1a77`;
+- `full_yolo`: `sha256:ebd767f4d3c46a59e74da9a07a903cfb8a364c59d5fd4f6e6ff624ef98843333`.
+
+The provider verifier reconstructs terminal and uncertain durable rows and
+recomputes authority ordering, principal and expiry refusals, duplicate and
+conflict behavior, cancellation, attributable reconciliation, transfer and
+proportionality. The `full_yolo` verifier recomputes embedded child-artifact
+digests, process/phase linkage, effect counts, sequencing and objective
+transitions.
+
+This closes the local exposure-ready source boundary only. No HTTP, MCP, UI,
+Convex, deployment, hosted, independent-provider, fulfilment, customer-value or
+production-safety claim is made.
