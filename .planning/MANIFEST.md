@@ -1,39 +1,51 @@
-# Planning Manifest
+# Planning manifest
 
-**Repo:** `agentic-economy`
-**Created:** 2026-06-27
-**Archive-cut:** 2026-07-04
+**Rebaselined:** 2026-07-20
 
-## Active authority files
+## Authority order
 
-- `PROJECT.md` — product/engineering charter: current slice, source authority, state contracts, and module interfaces.
-- `ENGINEERING-STANDARDS.md` — implementation constitution: TypeScript, Convex, route, audit, tests, and review proof.
-- `ROADMAP.md` — current capability ladder, decision doors, 14-day bootstrap gate, and phase boundaries.
-- `STATE.md` — current state, open blockers, active next action, and proof posture.
-- `AI-SPEC.md` — UCP/llms/agent discovery support matrix and eval controls.
-- `ANSWER-AI-CONTRACT.md` — answer/thread synthesis, retrieval/prose/gate pipeline, SSE contract, and LLM posture.
-- `records/README.md` — project record-keeping lifecycle, authority order, evidence maturity, and review rules.
-- `records/PROJECT-RECORDS.md` — accepted project decisions, testable hypotheses, research provenance, owners, and review dates.
-- `records/KNOWLEDGE-INDEX.md` — concise map of current, target, accepted, observed, hypothetical, and unknown project knowledge.
-- `records/SOURCE-REGISTER.md` — primary external sources, evidence cutoffs, and refresh triggers.
-- `records/RESEARCH-QUEUE.md` — prioritized unresolved questions tied to blocked decisions and hypotheses.
-- `specs/ACTION-INVOCATION-ENGINEERING-SPEC.md` — proposed implementation contract for ADR-009 and ADR-010.
-- `REQUIREMENTS.md` — active requirements baseline.
-- `../PRODUCT.md` — current product evidence and target product contract.
-- `../DESIGN.md` — visual and human-interface authority.
+1. live source and executable behavior for what exists;
+2. `PRODUCT.md` for product destination and maturity;
+3. `DESIGN.md` for human-interface direction;
+4. accepted ADRs for durable architecture;
+5. `.planning/PROJECT.md`, `ROADMAP.md`, `REQUIREMENTS.md` and `STATE.md`;
+6. the current phase and active scope.
 
-## Active decision and gate directories
+Proposed ADRs, research, issues, mocks and tests are evidence under evaluation,
+not product authority.
 
-- `adr/**` — all ADRs stay active, including ADR-003 and the 2026-07-04 strategy-gate ADRs.
-- `records/**` — project record ledger; preserves research and decision provenance but does not override project/product authority, source, or executable evidence.
-- `research/**` — active, maturity-labelled research linked from the project records.
-- `audits/agent-experience/**` — release-gate outside-in agent-experience evidence.
-- `codebase/**` — current codebase maps.
-- `graphs/**` — graphify graph artifacts consumed by graph-freshness checks.
+## Current program
 
-## Historical material
+- `PROJECT.md` — protocol/kernel → product charter;
+- `ROADMAP.md` — current three-phase sequence;
+- `REQUIREMENTS.md` — Phase 3 acceptance baseline;
+- `STATE.md` — current frontier and claim ceiling;
+- `adr/ADR-009...` — accepted Action Invocation architecture;
+- `adr/ADR-010...` — accepted_narrowed shared action plane;
+- `adr/ADR-019...` — accepted authority-mode destination;
+- `adr/ADR-020...` — proposed delegated-work projection;
+- `phases/01.../01-SUMMARY.md` — completed foundation;
+- `phases/02.../02-SUMMARY.md` — completed/narrowed host plane;
+- `phases/03.../03-SUMMARY.md` — current product-conversion phase;
+- `scopes/README.md` — active scope index.
 
-Completed phase plans, superseded studies, generated diagnostics and retired
-scope packets are preserved in Git history rather than kept in the active
-planning tree. Restore a historical file only when a current authority or
-decision record genuinely depends on it.
+## Supporting material
+
+- `ENGINEERING-STANDARDS.md` — implementation standards;
+- `AI-SPEC.md` and `ANSWER-AI-CONTRACT.md` — specialized contracts where their
+  capability is in scope;
+- `records/**` — decision and research provenance;
+- `research/**`, `vision/**`, `wayfinder/**`, `audits/**` — inputs, not current
+  sequencing authority;
+- `codebase/**` — derived maps that must be reconciled against source;
+- `graphs/**` — derived navigation artifacts, never authority.
+
+## Archive
+
+The former marketplace/bootstrap charter, roadmap, requirements, state and
+scopes are under
+`archive/pre-product-conversion-rebaseline-20260720/`.
+
+Pre-hardening ADR-009/010 plans and wording remain under
+`archive/adr-009-010-pre-hardening/`. Gate 10 implementation provenance remains
+under `archive/adr-010-gate-10/`.

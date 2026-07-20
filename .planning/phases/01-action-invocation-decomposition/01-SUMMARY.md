@@ -1,6 +1,6 @@
 ---
 phase: 01-action-invocation-decomposition
-status: hardening
+status: complete
 decision_owner: Founder
 updated: 2026-07-20
 governing_adr: ADR-009
@@ -31,10 +31,11 @@ a synthetic Request or RoutePlan.
 
 ## Current decision
 
-ADR-009 is accepted as architecture. Its eleven gates have labelled local
-development evidence, but exposure is blocked until standing-mandate material
-fails closed at every ingress and official evidence binds to exact committed
-bytes.
+ADR-009 is accepted. Its eleven gates have labelled local development evidence.
+Standing-mandate material now fails closed and official evidence binds exact
+committed bytes at revision
+`13158022c7462a7fdae346b548f0ea272a87cefe`. Exposure is blocked by the Phase 3
+product-projection contract, not unfinished Phase 1 hardening.
 
 ## Evidence and non-claims
 
@@ -43,9 +44,11 @@ It does not prove public reachability, Convex persistence, deployment, real
 provider operation, settlement, fulfilment, customer value or production
 safety.
 
-## Active work
+## Closeout
 
-The active contract is
-[`2026-07-18-phase-1-2-completion-contract.md`](../../scopes/2026-07-18-phase-1-2-completion-contract.md).
+Phase 1 is complete at the labelled local control-plane evidence boundary.
 Historical plans, research and validation are preserved under
 [`adr-009-010-pre-hardening`](../../archive/adr-009-010-pre-hardening/).
+The completion contract and execution ledger are preserved under
+[`pre-product-conversion-rebaseline-20260720`](../../archive/pre-product-conversion-rebaseline-20260720/).
+Phase 3 consumes this foundation without reopening it by default.

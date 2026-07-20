@@ -34,12 +34,16 @@ The architectural result remains useful: one transition, thin hosts and
 semantically equivalent structured projections. No claim is made that embedding
 the operation improves customer experience.
 
-## Active work and non-claims
+## Closeout and non-claims
 
-ADR-010 is accepted with the Gate 10 claim narrowed. Exposure remains blocked
-until authority validation, observer isolation and revision-bound evidence
-custody pass. No hosted, accessibility-in-use, provider, fulfilment,
-customer-value or production-safety claim follows.
+ADR-010 is accepted with the Gate 10 claim narrowed. The authority, observer
+and evidence-custody hardening completed at exact evidence revision
+`13158022c7462a7fdae346b548f0ea272a87cefe`. No hosted,
+accessibility-in-use, provider, fulfilment, customer-value or
+production-safety claim follows.
 
 Historical plans are preserved under
 [`adr-009-010-pre-hardening`](../../archive/adr-009-010-pre-hardening/).
+The completion contract and execution ledger are preserved under
+[`pre-product-conversion-rebaseline-20260720`](../../archive/pre-product-conversion-rebaseline-20260720/).
+Phase 3 consumes the shared host semantics as product projection input.

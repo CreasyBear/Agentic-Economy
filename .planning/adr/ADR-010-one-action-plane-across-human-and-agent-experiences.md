@@ -4,7 +4,7 @@ date: 2026-07-17
 accepted: 2026-07-20
 decision_owner: Founder
 review_by: 2026-08-17
-exposure: blocked_pending_control_plane_hardening
+exposure: blocked_pending_product_projection
 ---
 
 # Use one action plane across human and agent experiences

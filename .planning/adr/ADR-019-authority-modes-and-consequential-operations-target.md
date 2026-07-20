@@ -47,8 +47,9 @@ limit requires a new mandate or principal step-up.
 - the paid x402 PublishedOperation is the current proportional operation;
 - an unregistered provider-operation fixture preserves cancellation,
   exposure-release, fallback and process-recovery evals;
-- malformed mandate and reservation material must pass the active hardening
-  contract before the seam may be exposed.
+- malformed mandate and reservation material now fails closed under the
+  completed hardening contract; customer exposure remains blocked by the
+  product-projection contract in proposed ADR-020.
 
 This ADR establishes product direction and control semantics. It does not prove
 public reachability, deployment, provider fulfilment, settlement, customer
