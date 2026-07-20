@@ -307,6 +307,8 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
       control.invocationRef,
       recomputedInput.operationKey,
       operation,
+      price,
+      input.anchors.expectedChallengeDigest,
     )
     || !resultIdentityValid(
       source,
@@ -328,7 +330,17 @@ function paymentAttemptsValid(
   invocationRef: string,
   operationKey: string,
   operation: PublishedOperation,
+  price: Readonly<{ currency: string; amountMinor: number }>,
+  expectedChallengeDigest: string | undefined,
 ): boolean {
+  const payment = operation.identity.payment
+  const transport = admittedX402Transport(operation)
+  const expectedAmount = payment.kind === 'x402'
+    && price.currency === payment.currency
+    && payment.assetAmountExponent >= payment.routeAmountExponent
+    ? (BigInt(price.amountMinor)
+        * (10n ** BigInt(payment.assetAmountExponent - payment.routeAmountExponent))).toString()
+    : undefined
   const durableAttempts = new Map(attempts.map((attempt) => [
     `${attempt.attemptRef}\u0000${attempt.effectGeneration}`,
     attempt,
@@ -343,6 +355,14 @@ function paymentAttemptsValid(
       && paymentAttempt.paymentIdentifier === operationKey
       && sameProviderEndpoint(paymentAttempt.providerEndpoint, operation.binding.endpointUrl)
       && paymentAttempt.operationRevision === operation.identity.contractDigest
+      && payment.kind === 'x402'
+      && transport !== undefined
+      && paymentAttempt.scheme === transport.scheme
+      && paymentAttempt.network === payment.network
+      && paymentAttempt.asset === payment.asset
+      && paymentAttempt.payTo === payment.payTo
+      && paymentAttempt.amount === expectedAmount
+      && paymentAttempt.challengeDigest === expectedChallengeDigest
       && durableAttempts.has(key)
   })
   if (!paymentRowsValid) return false
@@ -371,6 +391,20 @@ function paymentAttemptsValid(
   return eventsValid
     && eventKeys.size === expectedReleasedKeys.size
     && [...expectedReleasedKeys].every((key) => eventKeys.has(key))
+}
+
+function admittedX402Transport(
+  operation: PublishedOperation,
+): Readonly<{ scheme: string }> | undefined {
+  if (operation.identity.payment.kind !== 'x402') return undefined
+  try {
+    const value = JSON.parse(operation.transport.configJson) as unknown
+    return isRecord(value) && typeof value.scheme === 'string'
+      ? { scheme: value.scheme }
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function sameProviderEndpoint(observed: string, configured: string): boolean {

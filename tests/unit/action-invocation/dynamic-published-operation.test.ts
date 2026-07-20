@@ -646,46 +646,70 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
           ),
         },
         expectedEffectCount: 1,
+        expectedChallengeDigest: snapshot.paymentAttempts[0]!.challengeDigest,
         expectedSemanticClaim: {
           ownerInvocationRef: prepared.invocationRef,
           status: 'uncertain',
         },
       },
     )
-    for (const mutate of [
-      (copy: any) => { copy.paymentAttempts[0].invocationRef = 'invocation:other' },
-      (copy: any) => { copy.paymentAttempts[0].attemptRef = 'attempt:other' },
-      (copy: any) => { copy.paymentAttempts[0].effectGeneration += 1 },
-      (copy: any) => { copy.paymentAttempts.push({ ...copy.paymentAttempts[0] }) },
-      (copy: any) => { copy.paymentAttempts = [] },
-      (copy: any) => { copy.paymentAuthorizationEvents = [] },
-      (copy: any) => {
+    const tamperCases: readonly [string, (copy: any) => void][] = [
+      ['invocationRef', (copy) => { copy.paymentAttempts[0].invocationRef = 'invocation:other' }],
+      ['attemptRef', (copy) => { copy.paymentAttempts[0].attemptRef = 'attempt:other' }],
+      ['effectGeneration', (copy) => { copy.paymentAttempts[0].effectGeneration += 1 }],
+      ['duplicate row', (copy) => { copy.paymentAttempts.push({ ...copy.paymentAttempts[0] }) }],
+      ['missing row', (copy) => { copy.paymentAttempts = [] }],
+      ['missing authorization event', (copy) => { copy.paymentAuthorizationEvents = [] }],
+      ['authorization downgrade', (copy) => {
         copy.paymentAuthorizationEvents[0].authorization = 'not_created'
         delete copy.paymentAuthorizationEvents[0].authorizationDigest
-      },
-    ]) {
+      }],
+      ['payTo', (copy) => { copy.paymentAttempts[0].payTo = '0xother-recipient' }],
+      ['amount', (copy) => { copy.paymentAttempts[0].amount = '999999' }],
+      ['scheme', (copy) => { copy.paymentAttempts[0].scheme = 'other' }],
+      ['network', (copy) => { copy.paymentAttempts[0].network = 'eip155:1' }],
+      ['asset', (copy) => { copy.paymentAttempts[0].asset = '0xother-asset' }],
+      ['challengeDigest', (copy) => {
+        copy.paymentAttempts[0].challengeDigest = 'sha256:other-challenge'
+      }],
+    ]
+    const tamperDispositions = tamperCases.map(([name, mutate]) => {
       const tampered = JSON.parse(JSON.stringify(snapshot))
       mutate(tampered)
-      expect(() => loadDynamicPublishedAdapterSnapshot(tampered, {
-        operation: fixture.operation,
-        descriptor: fixture.descriptor,
-        actor,
-        origin,
-        issuedAuthority: {
-          reference: prepared.authority!.reference,
-          accepted: { kind: 'approve_each', authorityRef: prepared.authority!.reference },
-          materialInputDigest: materialDigest(
-            preparedMaterial,
-            ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
-          ),
-        },
-        expectedEffectCount: 1,
-        expectedSemanticClaim: {
-          ownerInvocationRef: prepared.invocationRef,
-          status: 'uncertain',
-        },
-      })).toThrow('dynamic_published_snapshot_semantics_invalid')
-    }
+      try {
+        loadDynamicPublishedAdapterSnapshot(tampered, {
+          operation: fixture.operation,
+          descriptor: fixture.descriptor,
+          actor,
+          origin,
+          issuedAuthority: {
+            reference: prepared.authority!.reference,
+            accepted: { kind: 'approve_each', authorityRef: prepared.authority!.reference },
+            materialInputDigest: materialDigest(
+              preparedMaterial,
+              ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+            ),
+          },
+          expectedEffectCount: 1,
+          expectedChallengeDigest: snapshot.paymentAttempts[0]!.challengeDigest,
+          expectedSemanticClaim: {
+            ownerInvocationRef: prepared.invocationRef,
+            status: 'uncertain',
+          },
+        })
+        return [name, 'accepted']
+      } catch (error) {
+        return [
+          name,
+          error instanceof Error ? error.message : 'non_error_rejection',
+        ]
+      }
+    })
+    expect(tamperDispositions).toEqual(tamperCases.map(([name]) => [
+      name,
+      'dynamic_published_snapshot_semantics_invalid',
+    ]))
+    expect(effects).toEqual({ payment: 1, provider: 1 })
     const coldSource = createDevelopmentDynamicPublishedSource(
       [fixture.operation],
       loaded.sourceRows,
@@ -816,6 +840,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
           ),
         },
         expectedEffectCount: 1,
+        expectedChallengeDigest: cutSnapshot.paymentAttempts[0]!.challengeDigest,
         expectedSemanticClaim: {
           ownerInvocationRef: prepared.invocationRef,
           status: 'uncertain',
@@ -1397,7 +1422,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     const snapshot = adapter.exportSnapshot()
     const loaded = loadDynamicPublishedAdapterSnapshot(
       JSON.parse(JSON.stringify(snapshot)),
-      dynamicSnapshotAnchors(fixture, first, origin, 'uncertain', 1),
+      {
+        ...dynamicSnapshotAnchors(fixture, first, origin, 'uncertain', 1),
+        expectedChallengeDigest: snapshot.paymentAttempts[0]!.challengeDigest,
+      },
     )
     const coldSource = createDevelopmentDynamicPublishedSource(
       [fixture.operation],
