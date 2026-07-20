@@ -16,6 +16,13 @@ test -x node_modules/.bin/tsx
 test -x node_modules/.bin/playwright
 ```
 
+The parent checkout is the dependency source of record. A managed worktree
+without `node_modules` may create a temporary symlink to the parent checkout's
+already-provisioned `node_modules` only after the parent preflight passes. It
+must move that symlink to macOS Trash before handoff and prove
+`test ! -e node_modules`. No child runs an install or permits package
+acquisition.
+
 Each instance may change only its listed ownership. All other paths are
 forbidden. Before handoff it runs:
 

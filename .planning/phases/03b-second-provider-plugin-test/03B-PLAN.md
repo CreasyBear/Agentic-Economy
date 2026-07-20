@@ -61,7 +61,10 @@ test -x node_modules/.bin/playwright
 ```
 
 Children do not install or acquire packages. A missing binary returns
-`BLOCKED_DEPENDENCIES_NOT_PROVISIONED`.
+`BLOCKED_DEPENDENCIES_NOT_PROVISIONED`. Managed worktrees may use one temporary
+`node_modules` symlink to the parent checkout after the parent proves these
+binaries. The child moves only that symlink to macOS Trash before handoff and
+reports its absence; it never installs, updates or deletes dependencies.
 
 ## Provider B fixture
 
@@ -292,7 +295,8 @@ No official packet exists yet.
 
 ## Wave 5 — Official evidence and closeout
 
-Parent only after Waves 1–3 integrate.
+Parent only after Waves 1–4 integrate and the evidence builder and independent
+verifier are committed in the final integrated revision.
 
 Run one clean detached-checkout proof at the final integrated revision:
 
