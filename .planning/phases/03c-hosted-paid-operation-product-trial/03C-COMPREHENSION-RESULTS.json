@@ -1,0 +1,56 @@
+{
+  "schema": "ae-paid-operation-comprehension-results:v1",
+  "instrumentDigest": "sha256:526b009ddbf476758a06abf5768fe8459a1a5c29411c98ebfd5d131084452719",
+  "generatedAt": null,
+  "administration": {
+    "answerKeyExposedToParticipants": false,
+    "coachingOccurred": false,
+    "containsPii": false,
+    "participantSafePacketOnly": true
+  },
+  "humanCohort": {
+    "class": "declared_human_comprehension_session",
+    "status": "not_run",
+    "sessions": [],
+    "reported": {
+      "decision": "NOT_RUN",
+      "eligibleSessions": 0,
+      "totalAnswers": 0,
+      "correctAnswers": 0,
+      "accuracy": null,
+      "mandatoryGatePassed": false,
+      "goldenJourneyGatePassed": false,
+      "hardFailTriggered": false,
+      "claimStatus": "unproven"
+    }
+  },
+  "automatedModelCohort": {
+    "class": "automated_model_comprehension",
+    "status": "not_run",
+    "sessions": [],
+    "reported": {
+      "decision": "NOT_RUN",
+      "eligibleSessions": 0,
+      "totalAnswers": 0,
+      "correctAnswers": 0,
+      "accuracy": null,
+      "mandatoryGatePassed": false,
+      "goldenJourneyGatePassed": false,
+      "hardFailTriggered": false,
+      "claimStatus": "unproven"
+    }
+  },
+  "overall": {
+    "status": "not_run",
+    "p3cR8HumanComprehensionSatisfied": false,
+    "humanEvidenceClaim": "unproven",
+    "automatedAdjunctClaim": "unproven",
+    "claimCeiling": "Predeclared instrument, scorer, source inspection, and source-linked local fixture evidence only. Human comprehension, automated-model comprehension, hosted reachability, accessibility in use, provider fulfilment, payment, settlement, production safety, customer value, and non-paid compatibility remain unproven."
+  },
+  "founderOverride": {
+    "statement": "Real-human comprehension may remain unproven without blocking the already-authorized Plan07 source/deploy work, but that does not satisfy P3C-R8’s human-comprehension evidence or upgrade the claim.",
+    "plan07MayProceedWithoutHumanPass": true,
+    "satisfiesP3CR8HumanComprehension": false,
+    "upgradesClaim": false
+  }
+}
