@@ -1,6 +1,7 @@
 {
   "schema": "phase-3c-red-report:v1",
-  "generatedAt": "2026-07-20T00:00:00.000Z",
+  "generatedAt": null,
+  "generationNote": "Manual checkpoint report; classifier did not execute because Vitest was unavailable.",
   "command": "npm run test -- tests/unit/action-invocation/hosted-paid-operation-red-harness.test.ts",
   "vitestExitCode": 127,
   "disposition": "rejected",
