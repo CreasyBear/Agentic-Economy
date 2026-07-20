@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
-current_phase: 3B
-current_phase_name: second-provider-plugin-test
-status: complete
-stopped_at: "Phase 3B closed at the labelled local/mock conformance boundary"
+current_phase: 3C
+current_phase_name: hosted-paid-operation-product-trial
+status: awaiting_founder_acceptance
+stopped_at: "Phase 3C Sandbox setup/paid Action Detail golden-goblin contract reconciled; no execution authorized"
 last_updated: "2026-07-20"
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 4
-  total_plans: 1
-  completed_plans: 1
-  percent: 100
+  total_plans: 7
+  completed_plans: 0
+  percent: 0
 ---
 
 # Current state
@@ -28,8 +28,11 @@ stack.
 
 ## Next transition
 
-Choose the next product outcome. Phase 3B does not authorize provider ranking,
-automatic fallback, hosted exposure or a broader workflow product.
+Founder decision: accept or revise the reconciled seven-wave Phase 3C plan,
+evaluator-only Sandbox setup, reusable paid Action Detail, and golden/goblin UI
+contract.
+Execution remains stopped. Deployment and hosted/Convex access have a second,
+later blocking discovery and authorization checkpoint even if accepted.
 
 ## Remaining evidence gaps
 

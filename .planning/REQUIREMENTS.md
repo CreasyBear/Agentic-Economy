@@ -90,3 +90,81 @@ No provider ranking, comparison UI, automatic fallback, cheapest-provider
 selection, load balancing, caching, real provider, real payment, hosted route,
 Convex persistence, new semantic schema, new lifecycle state, new host command
 or customer-value claim.
+
+---
+
+# Requirements — Phase 3C hosted paid-operation product trial
+
+- [ ] **P3C-R1 Durable hosted truth:** source-owned durable records reconstruct
+  invocation, exact actor, authority decision, selected provider, payment
+  preparation/submission, settlement evidence, result delivery, uncertainty
+  and the only safe continuation after process loss.
+- [ ] **P3C-R2 Authenticated application seam:** protected human and
+  structured-agent adapters bind the authenticated principal and expected
+  invocation version to the existing `PaidOperationApplicationService`; routes
+  do not own lifecycle or business rules. Caller ownership is never trusted;
+  direct-bypass, IDOR and revoked access fail closed, while evaluator
+  admission limits remain separate from consequence authority.
+- [ ] **P3C-R3 Shared semantics unchanged:** both surfaces consume the same
+  `agentic-paid-operation:v1` semantic object and digest without BTC,
+  x402 or provider-specific fields in paid-operation lifecycle semantics.
+  This proves query/provider variation within paid operations only, not
+  compatibility with non-paid Action classes.
+- [ ] **P3C-R4 Human trial surface:** an authenticated evaluator can inspect
+  a BTC/USD task, source-bound provider, material input, maximum
+  charge, disclosed data, payment/result truth, evidence class and only safe
+  next action in ordinary customer language. `/actions/paid/new` is
+  evaluator-only Sandbox setup; `/` remains canonical product IA and
+  `/actions/paid/:invocationRef` is reusable paid Action Detail.
+- [ ] **P3C-R5 Structured-agent surface:** an authenticated agent receives the
+  same semantic truth, evaluator-scoped setup/create relation, exact expected
+  version, typed refusal/error and only currently permitted command without
+  manufacturing authority, provider material or reconciliation evidence.
+- [ ] **P3C-R6 Explicit provider consequence:** the source owner selects and
+  durably binds one existing mock provider before authority from the protected
+  evaluator-only Sandbox setup selector.
+  Changing provider from safely terminal truth creates a new invocation,
+  authority, payment identifier and effect lineage. No customer comparison,
+  ranking or fallback is introduced.
+- [ ] **P3C-R7 Golden and goblin paths:** the forward golden path proves
+  evaluator setup, source-owned creation, consequence review, authority, the
+  permission-recorded/not-submitted boundary, one execution, separated
+  payment/settlement/result truth and durable restore. Named goblin paths prove
+  pre-release refusal, payment possibly submitted, invalid result,
+  reconciliation, duplicate delivery, stale/cross-principal refusal, bounded
+  admission exhaustion, read outage, ambiguous transport and crash points
+  around prepared/submission-started custody. Every goblin path has one safe
+  rejoin or visible stop; uncertainty never exposes retry or provider change.
+- [ ] **P3C-R8 Interface quality:** Astryx neutral, persistent labels, visible
+  focus, keyboard operation, 44px targets, non-colour state cues, bounded live
+  announcements, 320px reflow, 400% zoom and reduced motion pass focused
+  checks.
+- [ ] **P3C-R9 Exact hosted evidence:** a clean exact revision passes focused
+  source and browser checks, then hosted readback proves the named deployment,
+  authenticated surfaces, revision, fixture provenance and cold continuation.
+  Deployment command, target, identity and rollback are source-proven and
+  separately authorized before mutation.
+- [ ] **P3C-R10 Comprehension and claim ceiling:** evaluators can correctly
+  identify what was shared, what may have been paid, whether a result was
+  validated and what is safe next; every surface remains labelled hosted
+  sandbox and excludes real-payment, settlement, fulfilment, production-safety,
+  demand and customer-value claims. A frozen independently scored cohort covers
+  human and structured-agent journeys and claims only declared-evaluator
+  comprehension.
+- [ ] **P3C-R11 Trial residue and retirement:** every introduced artifact is
+  classified paid-operation-owned, trial-only, or candidate-shared-after-
+  second-use. Import/deletion gates prove trial routes, mocks and
+  operation-owned persistence can be removed without damaging neutral Action
+  Invocation, and non-paid actions cannot import paid-operation DTOs,
+  semantics or payment panels. Closure records sandbox account/record
+  retention or expiry, kill-switch owner, residual records and retirement
+  trigger; `03C-UI-SPEC.md` becomes phase provenance rather than permanent
+  shared law.
+
+## Phase 3C non-requirements
+
+No public anonymous paid-operation route, real credential or payment,
+independent settlement, independently operated provider, provider onboarding,
+ranking, comparison UI, automatic fallback, workflow composition, broad
+Activity surface, standing-mandate selector, Full autonomy, BTC-specific shared
+component or model-generated executable UI.

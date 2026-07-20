@@ -78,8 +78,57 @@ paid-operation host and `agentic-paid-operation:v1`; uncertainty never falls
 back, and switching providers creates a new invocation, authority, payment and
 effect lineage. Evidence remains local/mock only.
 
+## Phase 3C — Hosted paid-operation product trial
+
+**Status:** awaiting founder acceptance
+**Depends on:** Phase 3A and Phase 3B
+**Goal:** let an authenticated developer or product evaluator run, understand
+and safely recover one hosted-sandbox BTC/USD paid operation through equivalent
+human and structured-agent surfaces.
+
+Phase 3C extends the existing Action Invocation, paid-operation application
+service, `agentic-paid-operation:v1` semantics and query-agnostic renderer. It
+adds production-shaped durable read and command ports, a protected hosted
+sandbox human surface, an equivalent structured-agent surface and
+exact-revision hosted readback.
+
+The two existing mock providers remain labelled sandbox fixtures.
+`/actions/paid/new` is protected evaluator-only Sandbox setup, not canonical
+product IA or comparison. `/` remains canonical and
+`/actions/paid/:invocationRef` is reusable paid Action Detail. Setup selects a
+closed fixture key; the source owner resolves and binds the provider before
+authority. Switching from safely terminal truth creates a new consequence
+identity. No ranking or automatic fallback is added.
+
+**Plan authority:** `.planning/phases/03c-hosted-paid-operation-product-trial/`
+
+Seven sequential waves cover boundary REDs; bounded durable composition;
+source-owned creation, labelled-mock custody/effect and reconciliation;
+authenticated human/agent adapters; paid-operation UI/browser contracts; independent
+comprehension; and a separately authorized exact-revision hosted readback.
+`03C-AGENT-RUNBOOK.md` owns executor, custody and handoff constraints.
+
+The UI/eval contract separates one ordered forward golden path from named
+unhappy “goblin paths.” Each goblin branches at a specific transition and must
+either rejoin through one safe continuation or stop visibly.
+
+Generality is limited to query/provider variation inside the paid-operation
+class. Closure classifies and retires trial residue; it does not promote Phase
+3C behavior to generic Action or permanent DESIGN authority without a second
+validated use.
+
+The phase stops if hosted persistence requires a second lifecycle, human and
+agent surfaces diverge, shared semantics or rendering acquire BTC/provider
+branches, uncertainty becomes retryable, or a hosted readback cannot
+reconstruct the safe continuation from durable source-owned records.
+
+Completion may prove authenticated exact-revision hosted-sandbox reachability,
+durable reconstruction, human/agent semantic parity and product comprehension.
+It does not prove real payment or settlement, independently operated provider
+fulfilment, production safety, customer demand or customer value.
+
 ## Deferred decisions
 
-Hosted sandbox exposure, independently operated supply, real-customer evidence,
-broader authority modes and workflow composition are separate gates after the
-Phase 3A local product proof.
+Independently operated supply, real payment and settlement, real-customer
+evidence, broader authority modes, provider onboarding, comparison and workflow
+composition remain separate gates after the Phase 3C hosted sandbox trial.
