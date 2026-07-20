@@ -53,7 +53,8 @@ describe('paid operation development surfaces', () => {
       projection: projection.agent,
       semanticDigest: projection.agent.semanticDigest,
       commands: [{
-        command: { kind: 'authorize', accept: true },
+        command: 'authorize',
+        requiredInput: ['authorityDecision'],
         expectedInvocationVersion: 4,
       }],
       claimBoundary: expect.objectContaining({
@@ -68,6 +69,30 @@ describe('paid operation development surfaces', () => {
       command: { kind: 'authorize', accept: true },
     })
     expect(command).toHaveBeenCalledTimes(1)
+  })
+
+  it('advertises complete reconciliation input without inventing either evidence envelope', () => {
+    const { service } = serviceFixture([{
+      kind: 'reconcile',
+      command: 'reconcile_paid_operation',
+      requiredInput: ['reconciliationEvidence', 'paymentReconciliationEvidence'],
+      expectedInvocationVersion: 4,
+      authorityRequired: false,
+    }])
+    const read = createStructuredPaidOperationDevelopmentHost(service).inspect({
+      invocationRef: 'invocation:development',
+      expectedInvocationVersion: 4,
+    })
+    expect(read.kind === 'accepted' && read.commands).toEqual([{
+      command: 'reconcile',
+      requiredInput: ['reconciliationEvidence', 'paymentReconciliationEvidence'],
+      inputTemplate: {
+        kind: 'reconcile',
+        reconciliationEvidence: null,
+        paymentReconciliationEvidence: null,
+      },
+      expectedInvocationVersion: 4,
+    }])
   })
 
   it('keeps keyboard, focus, non-colour, touch-target, reflow, and motion semantics explicit', async () => {
@@ -96,7 +121,15 @@ describe('paid operation development surfaces', () => {
   })
 })
 
-function serviceFixture() {
+function serviceFixture(
+  continuations: Parameters<typeof createPaidOperationSemantics>[0]['continuations'] = [{
+    kind: 'authorize',
+    command: 'authorize_paid_operation',
+    requiredInput: ['authorityDecision'],
+    expectedInvocationVersion: 4,
+    authorityRequired: true,
+  }],
+) {
   const semantics = createPaidOperationSemantics({
     identity: {
       invocationRef: 'invocation:development',
@@ -126,13 +159,7 @@ function serviceFixture() {
       claimCeiling: 'mechanism_only_not_provider_fulfilment',
     },
     error: null,
-    continuations: [{
-      kind: 'authorize',
-      command: 'authorize_paid_operation',
-      requiredInput: ['authorityDecision'],
-      expectedInvocationVersion: 4,
-      authorityRequired: true,
-    }],
+    continuations,
   })
   const projection: PaidOperationProjection = {
     semantics,

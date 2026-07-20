@@ -89,6 +89,30 @@ describe('paid operation application service', () => {
       ...evidenceMaterial,
       digest: canonicalDigest(evidenceMaterial),
     }
+    const paymentMaterial = {
+      kind: 'x402_payment_reconciliation' as const,
+      version: 1 as const,
+      evidenceRef: 'evidence:x402-readback',
+      evidenceRefs: ['provider-receipt:x402-readback'],
+      source: 'x402:https://provider.example/paid',
+      paymentIdentifier: 'payment:reconcile',
+      challengeDigest: 'sha256:challenge',
+      providerEndpoint: 'https://provider.example/paid',
+      scheme: 'exact',
+      network: 'eip155:8453',
+      asset: '0xasset',
+      payTo: '0xrecipient',
+      amount: '10000',
+      invocationRef: evidenceMaterial.invocationRef,
+      attemptRef: evidenceMaterial.attemptRef,
+      effectGeneration: 1,
+      resolution: 'not_settled' as const,
+      observedAt: evidenceMaterial.observedAt,
+    }
+    const paymentReconciliationEvidence = {
+      ...paymentMaterial,
+      digest: canonicalDigest(paymentMaterial),
+    }
     const view = {
       invocationRef: evidenceMaterial.invocationRef,
       invocationVersion: 3,
@@ -123,7 +147,7 @@ describe('paid operation application service', () => {
         authorize: () => undefined,
         execute: () => undefined,
         reconcile: (input) => {
-          received = input.reconciliationEvidence
+          received = input
           return { ...view, invocationVersion: 4 }
         },
       },
@@ -134,13 +158,22 @@ describe('paid operation application service', () => {
     })
     expect(current.kind === 'accepted'
       && current.value.semantics.continuations[0]?.requiredInput)
-      .toEqual(['reconciliationEvidence'])
+      .toEqual(['reconciliationEvidence', 'paymentReconciliationEvidence'])
     await service.command({
       invocationRef: view.invocationRef,
       expectedInvocationVersion: 3,
-      command: { kind: 'reconcile', reconciliationEvidence },
+      command: {
+        kind: 'reconcile',
+        reconciliationEvidence,
+        paymentReconciliationEvidence,
+      },
     })
-    expect(received).toEqual(reconciliationEvidence)
+    expect(received).toEqual({
+      reconciliationEvidence,
+      paymentReconciliationEvidence,
+      invocationRef: view.invocationRef,
+      expectedInvocationVersion: 3,
+    })
   })
 })
 

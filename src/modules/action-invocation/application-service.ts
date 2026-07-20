@@ -12,6 +12,7 @@ import type {
 } from './dynamic-published-adapter'
 import type { DynamicPublishedInvocationResult } from './dynamic-published-contract'
 import type { ReconciliationEvidence } from './reconciliation-evidence'
+import type { X402PaymentReconciliationEvidence } from './x402-payment-reconciliation-evidence'
 import type { InvocationInputWork } from './input-work'
 import {
   projectRichInvocationTask,
@@ -56,6 +57,11 @@ export type DevelopmentInvocationHost = Readonly<{
     invocationRef: string,
     reconciliationEvidence?: ReconciliationEvidence,
   ): DevelopmentHostContinuation
+  recoverPaidOperation(
+    invocationRef: string,
+    reconciliationEvidence: ReconciliationEvidence,
+    paymentReconciliationEvidence: X402PaymentReconciliationEvidence,
+  ): Promise<DevelopmentHostContinuation>
   requestCancellation(invocationRef: string): InvocationDecision<DynamicPublishedInvocationResult>
   inspect(invocationRef: string): ActionInvocationView<DynamicPublishedInvocationResult> | undefined
   projectRich(invocationRef: string, expectedInvocationVersion: number): RichInvocationTaskProjection
@@ -325,6 +331,39 @@ function bindHost(
         ...('view' in result ? { state: result.view?.control.state ?? 'missing' } : {}),
       }, invocationRef)
       return result
+    },
+    recoverPaidOperation: async (invocationRef, reconciliationEvidence, paymentEvidence) => {
+      const found = current(invocationRef)
+      if (found.kind === 'refused') return found
+      const view = found.view
+      if (view.control.state !== 'reconciliation_required') {
+        return { kind: 'refused', code: 'invalid_control_state', view }
+      }
+      const paymentValidation = await adapter.reconcilePayment({
+        evidence: paymentEvidence,
+        persist: false,
+      })
+      if (paymentValidation.kind === 'refused') {
+        return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }
+      }
+      const attempt = view.attempts.find(({ attemptRef }) => attemptRef === view.control.attemptRef)
+      if (attempt === undefined) {
+        return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }
+      }
+      const reconciled = adapter.reconcile({
+        invocationRef,
+        expectedInvocationVersion: view.invocationVersion,
+        attemptRef: attempt.attemptRef,
+        actor,
+        origin,
+        evidence: reconciliationEvidence,
+      })
+      if (reconciled.kind === 'refused') return reconciled
+      const payment = await adapter.reconcilePayment({ evidence: paymentEvidence })
+      if (payment.kind === 'refused') {
+        throw new Error(`payment_reconciliation_persistence_failed:${payment.code}`)
+      }
+      return { kind: 'reconciled', view: reconciled.view }
     },
     requestCancellation: (invocationRef) => {
       emit('before', 'request_cancellation', {}, invocationRef)

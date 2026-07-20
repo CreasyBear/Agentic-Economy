@@ -10,6 +10,15 @@ export {
   type ReconciliationEvidenceMaterial,
   type ReconciliationEvidenceVerifier,
 } from './reconciliation-evidence'
+export {
+  validateX402PaymentReconciliationEvidence,
+} from './x402-payment-reconciliation-evidence'
+export type {
+  X402PaymentReconciliationEvidence,
+  X402PaymentReconciliationEvidenceError,
+  X402PaymentReconciliationEvidenceMaterial,
+  X402PaymentReconciliationEvidenceVerifier,
+} from './x402-payment-reconciliation-evidence'
 export { roundTripControlSnapshot } from './snapshot'
 export {
   createDevelopmentDurablePort,

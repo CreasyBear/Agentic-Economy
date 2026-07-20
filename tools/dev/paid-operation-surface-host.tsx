@@ -16,6 +16,7 @@ import type {
   StructuredPaidOperationProjection,
 } from '../../src/modules/action-invocation/paid-operation-semantics'
 import type { ReconciliationEvidence } from '../../src/modules/action-invocation/contracts'
+import type { X402PaymentReconciliationEvidence } from '../../src/modules/action-invocation'
 
 export const PAID_OPERATION_DEVELOPMENT_SURFACE = Object.freeze({
   environment: 'local-development',
@@ -31,7 +32,9 @@ export type PaidOperationSurfaceRef = Readonly<{
 }>
 
 export type StructuredPaidOperationCommandContract = Readonly<{
-  command: PaidOperationCommand
+  command: PaidOperationCommand['kind']
+  requiredInput: readonly string[]
+  inputTemplate?: Readonly<Record<string, unknown>>
   expectedInvocationVersion: number
 }>
 
@@ -67,7 +70,13 @@ export function AePaidOperationDevelopmentSurface({
   initialRef: PaidOperationSurfaceRef
   resolveReconciliationEvidence?: (
     ref: PaidOperationSurfaceRef,
-  ) => Promise<ReconciliationEvidence> | ReconciliationEvidence
+  ) => Promise<Readonly<{
+    reconciliationEvidence: ReconciliationEvidence
+    paymentReconciliationEvidence: X402PaymentReconciliationEvidence
+  }>> | Readonly<{
+    reconciliationEvidence: ReconciliationEvidence
+    paymentReconciliationEvidence: X402PaymentReconciliationEvidence
+  }>
 }>) {
   const initial = service.inspect(initialRef)
   const [result, setResult] = useState(initial)
@@ -148,7 +157,10 @@ export function AePaidOperationDevelopmentSurface({
 
 function continuationCommand(
   continuation: PaidOperationContinuation,
-  reconciliationEvidence?: ReconciliationEvidence,
+  reconciliationEvidence?: Readonly<{
+    reconciliationEvidence: ReconciliationEvidence
+    paymentReconciliationEvidence: X402PaymentReconciliationEvidence
+  }>,
 ): PaidOperationCommand | null {
   switch (continuation.kind) {
     case 'authorize':
@@ -160,7 +172,7 @@ function continuationCommand(
     case 'reconcile':
       return reconciliationEvidence === undefined
         ? null
-        : { kind: 'reconcile', reconciliationEvidence }
+        : { kind: 'reconcile', ...reconciliationEvidence }
     case 'retry':
       return null
   }
@@ -175,13 +187,24 @@ function structuredResponse(
     projection: result.value.agent,
     semanticDigest: result.value.agent.semanticDigest,
     commands: result.value.semantics.continuations.flatMap((continuation) => {
+      if (continuation.kind === 'reconcile') {
+        return [{
+          command: continuation.kind,
+          requiredInput: ['reconciliationEvidence', 'paymentReconciliationEvidence'],
+          inputTemplate: {
+            kind: 'reconcile',
+            reconciliationEvidence: null,
+            paymentReconciliationEvidence: null,
+          },
+          expectedInvocationVersion: continuation.expectedInvocationVersion,
+        }]
+      }
       const command = continuationCommand(continuation)
-      return command === null
-        ? []
-        : [{
-            command,
-            expectedInvocationVersion: continuation.expectedInvocationVersion,
-          }]
+      return command === null ? [] : [{
+        command: command.kind,
+        requiredInput: continuation.requiredInput,
+        expectedInvocationVersion: continuation.expectedInvocationVersion,
+      }]
     }),
     claimBoundary: PAID_OPERATION_DEVELOPMENT_SURFACE,
   }

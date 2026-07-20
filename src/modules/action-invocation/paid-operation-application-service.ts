@@ -19,6 +19,7 @@ import {
 } from './paid-operation-semantics'
 import type { X402PaymentAttempt } from './x402-payment-attempt'
 import type { ReconciliationEvidence } from './reconciliation-evidence'
+import type { X402PaymentReconciliationEvidence } from './x402-payment-reconciliation-evidence'
 
 export type PaidOperationReadPort<Result extends ActionResult> = Readonly<{
   loadInvocation(invocationRef: string): ActionInvocationView<Result> | undefined
@@ -61,7 +62,11 @@ export type PaidOperationApplicationResult<Value> =
 export type PaidOperationCommand =
   | Readonly<{ kind: 'authorize'; accept: boolean }>
   | Readonly<{ kind: 'execute' }>
-  | Readonly<{ kind: 'reconcile'; reconciliationEvidence: ReconciliationEvidence }>
+  | Readonly<{
+      kind: 'reconcile'
+      reconciliationEvidence: ReconciliationEvidence
+      paymentReconciliationEvidence: X402PaymentReconciliationEvidence
+    }>
   | Readonly<{ kind: 'inspect' }>
 
 export type PaidOperationCommandPort<Result extends ActionResult> = Readonly<{
@@ -78,6 +83,7 @@ export type PaidOperationCommandPort<Result extends ActionResult> = Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
     reconciliationEvidence: ReconciliationEvidence
+    paymentReconciliationEvidence: X402PaymentReconciliationEvidence
   }>): Promise<ActionInvocationView<Result> | undefined> | ActionInvocationView<Result> | undefined
 }>
 
@@ -157,6 +163,7 @@ export function createPaidOperationApplicationService<Result extends ActionResul
               invocationRef,
               expectedInvocationVersion,
               reconciliationEvidence: command.reconciliationEvidence,
+              paymentReconciliationEvidence: command.paymentReconciliationEvidence,
             })
       if (updated === undefined) return { kind: 'refused', code: 'continuation_not_allowed' }
       return reconstruct(invocationRef, updated.invocationVersion)
@@ -197,11 +204,20 @@ export function createDevelopmentPaidOperationApplicationService(input: Readonly
         const result = await input.host.continue(invocationRef)
         return 'view' in result ? result.view : undefined
       },
-      reconcile: ({ invocationRef, expectedInvocationVersion, reconciliationEvidence }) => {
+      reconcile: ({
+        invocationRef,
+        expectedInvocationVersion,
+        reconciliationEvidence,
+        paymentReconciliationEvidence,
+      }) => {
         if (input.host.inspect(invocationRef)?.invocationVersion !== expectedInvocationVersion) {
           return undefined
         }
-        const result = input.host.recover(invocationRef, reconciliationEvidence)
+        const result = await input.host.recoverPaidOperation(
+          invocationRef,
+          reconciliationEvidence,
+          paymentReconciliationEvidence,
+        )
         return 'view' in result ? result.view : undefined
       },
     },

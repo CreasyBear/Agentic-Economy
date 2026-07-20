@@ -215,7 +215,7 @@ export function derivePaidOperationSemantics<Result extends ActionResult>(input:
     ? [{
         kind: 'reconcile',
         command: 'reconcile_paid_operation',
-        requiredInput: ['reconciliationEvidence'],
+        requiredInput: ['reconciliationEvidence', 'paymentReconciliationEvidence'],
         expectedInvocationVersion: input.view.invocationVersion,
         authorityRequired: false,
       }]

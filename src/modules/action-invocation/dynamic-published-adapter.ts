@@ -64,10 +64,17 @@ import {
 import { createDynamicPublishedInputApplication } from './input-application'
 import {
   createInMemoryX402PaymentAttemptPort,
+  x402PaymentAttemptKey,
   type X402PaymentAttempt,
   type X402PaymentAttemptPort,
   type X402PaymentAuthorizationEvent,
 } from './x402-payment-attempt'
+import {
+  validateX402PaymentReconciliationEvidence,
+  type X402PaymentReconciliationEvidence,
+  type X402PaymentReconciliationEvidenceError,
+  type X402PaymentReconciliationEvidenceVerifier,
+} from './x402-payment-reconciliation-evidence'
 
 export type DynamicPublishedAdapterSnapshot = Readonly<{
   format: 'dynamic-published-action-invocation:development:v3'
@@ -167,6 +174,13 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
     DynamicPublishedInvocationInput,
     DynamicPublishedInvocationResult
   >>['reconcile']
+  reconcilePayment(input: Readonly<{
+    evidence: X402PaymentReconciliationEvidence
+    persist?: boolean
+  }>): Promise<
+    | Readonly<{ kind: 'accepted'; attempt: X402PaymentAttempt }>
+    | Readonly<{ kind: 'refused'; code: X402PaymentReconciliationEvidenceError | 'payment_attempt_not_found' | 'payment_attempt_reconciliation_not_required' }>
+  >
   inspect(invocationRef: string): ActionInvocationView<DynamicPublishedInvocationResult> | undefined
   readCompletedResult(
     invocationRef: string,
@@ -190,6 +204,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   paymentAttempts?: readonly X402PaymentAttempt[]
   paymentAttemptPort?: X402PaymentAttemptPort
   paymentAuthorizationEvents?: readonly X402PaymentAuthorizationEvent[]
+  verifyPaymentReconciliationEvidence?: X402PaymentReconciliationEvidenceVerifier
 }>): DynamicPublishedActionInvocationAdapter {
   const descriptor = materializeRuntimePublishedOperation(input.operation)
   const durableState = input.durableState ?? createDevelopmentDurableState<DynamicPublishedInvocationResult>()
@@ -659,6 +674,37 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       return tracer.cancel(request)
     },
     reconcile: tracer.reconcile,
+    async reconcilePayment({ evidence, persist = true }) {
+      const key = x402PaymentAttemptKey(evidence)
+      const current = paymentAttemptPort.load(key)
+      if (current === undefined) return { kind: 'refused', code: 'payment_attempt_not_found' }
+      if (current.state !== 'possibly_submitted' && current.state !== 'reconciliation_required') {
+        return { kind: 'refused', code: 'payment_attempt_reconciliation_not_required' }
+      }
+      const code = validateX402PaymentReconciliationEvidence({
+        evidence,
+        attempt: current,
+        source: `x402:${current.providerEndpoint}`,
+        now: input.now(),
+        verifySourceEvidence: input.verifyPaymentReconciliationEvidence,
+      })
+      if (code !== undefined) return { kind: 'refused', code }
+      if (!persist) return { kind: 'accepted', attempt: current }
+      const authorizationEvent = paymentAttemptPort.loadAuthorizationEvent(key)
+      if (authorizationEvent === undefined) {
+        return { kind: 'refused', code: 'payment_attempt_not_found' }
+      }
+      const attempt: X402PaymentAttempt = {
+        ...current,
+        state: evidence.resolution,
+        observedAt: Date.parse(evidence.observedAt),
+        evidenceRefs: [...new Set([evidence.evidenceRef, ...evidence.evidenceRefs])],
+        ...(evidence.settledAmount === undefined ? {} : { settledAmount: evidence.settledAmount }),
+      }
+      await paymentAttemptPort.persist({ attempt, authorizationEvent })
+      paymentAttempts.set(key, attempt)
+      return { kind: 'accepted', attempt }
+    },
     inspect: tracer.inspect,
     readCompletedResult(invocationRef, actor) {
       return readCompletedResultIdentity(
