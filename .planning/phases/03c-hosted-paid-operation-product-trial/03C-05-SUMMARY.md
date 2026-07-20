@@ -29,7 +29,7 @@ was finalized:
 ```json
 {
   "plan": "03C-05",
-  "artifactState": "one child-authored local candidate; not integrated, deployed, hosted-read-back, or a Phase3C completion claim",
+  "artifactState": "two immutable child-authored local candidate commits; not integrated, deployed, hosted-read-back, or a Phase3C completion claim",
   "baseRevision": "71de61fa7fd04c3ed90472d8a2597a8341b9da5f",
   "baseTree": "6dc9a7308636b0ca937fd82851c6c2f81c1eca43",
   "baseParent": "190c929c48304ea408daf80193b83ce3f895c4e0",
@@ -66,6 +66,11 @@ was finalized:
     "tools/dev/paid-operation-browser/paid-operation-browser-fixture.ts",
     "tools/dev/paid-operation-surface-host.tsx"
   ],
+  "followUpChangedPaths": [
+    ".planning/phases/03c-hosted-paid-operation-product-trial/03C-05-SUMMARY.md",
+    "src/routes/actions.paid.$invocationRef.tsx",
+    "tests/unit/server/hosted-paid-operation-api.test.ts"
+  ],
   "forbiddenPathDisposition": "Zero changed paths outside the exact Plan05 allowlist. No setup route, root, route tree, Convex, schema, runtime/gateway, lifecycle/persistence, PRODUCT, DESIGN, AGENTS, package, workflow, CSS, credential, provider or Plan06/07 path changed.",
   "redBefore": [
     {
@@ -79,9 +84,13 @@ was finalized:
     {
       "command": "npm run test:copy",
       "result": "Changed-source RED: the public Settlement label triggered the money-rail overclaim guard. It was translated to Payment outcome while preserving the separate source settlement truth."
+    },
+    {
+      "command": "npx --no-install vitest run tests/unit/server/hosted-paid-operation-api.test.ts -t 'fails closed when a command response is an unrecognized relationless 5xx'",
+      "result": "Follow-up semantic RED: 1 failed and 8 skipped. A relationless aggregate_incomplete 503 announced that the operation was not updated and restored the source card with initiating controls instead of rendering Update not confirmed with read-only reload."
     }
   ],
-  "observableOutcome": "The protected paid Action Detail consumes only the source-issued human semantics and frozen card input. It renders one host h1, one card h2, the locked h3 reading order, separate payment/payment-outcome/result facts, closed operation/result blocks, exact runtime evidence and technical disclosure. It sends only the selected server descriptor, a fresh commandId, expected invocation version and the authority accept decision where applicable. Pending preserves the last durable card, disables and concurrency-fences controls, and never invents payment or result state. Stale responses follow only a validated returned inspect relation. Ambiguous transport exposes only read-only reload and never replays.",
+  "observableOutcome": "The protected paid Action Detail consumes only the source-issued human semantics and frozen card input. It renders one host h1, one card h2, the locked h3 reading order, separate payment/payment-outcome/result facts, closed operation/result blocks, exact runtime evidence and technical disclosure. It sends only the selected server descriptor, a fresh commandId, expected invocation version and the authority accept decision where applicable. Pending preserves the last durable card, disables and concurrency-fences controls, and never invents payment or result state. Stale responses follow only a validated returned inspect relation. A resolved command response is accepted only as a validated readback or a validated inspect relation; every other response fails closed as Update not confirmed using the request commandId and current durable inspect relation. Ambiguous transport exposes only read-only reload and never replays.",
   "legacyDriftRepair": "The local structured reconciliation contract now accepts reconcile intent only. Exact provider and payment observer evidence is resolved only inside the local host composition and never appears in the caller descriptor or template.",
   "cohesionAudit": {
     "cardBeforeLines": 789,
@@ -89,7 +98,7 @@ was finalized:
     "cardReasonToChange": "Rendering only: ordered sections, semantic facts, closed block rendering, icons and accessible controls.",
     "clientContractLines": 472,
     "clientContractReasonToChange": "Client-safe source/card DTO validation plus pure projection, presentation language and command-label derivation; no React, server, route, transport or lifecycle import.",
-    "detailRouteLines": 427,
+    "detailRouteLines": 438,
     "detailRouteReasonToChange": "TanStack loader/POST transport, exact descriptor dispatch, pending fence, safe inspect relation, focus and route-local read recovery; no business lifecycle or persistence.",
     "humanApiLines": 414,
     "humanApiReasonToChange": "Authentication/transport projection owner; the frozen card shape is imported and projected through the client-safe contract rather than duplicated.",
@@ -154,7 +163,7 @@ was finalized:
       "rejoinOrStop": "Source refusal remains outside the card; no invented browser admission state."
     },
     {
-      "branch": "update not confirmed",
+      "branch": "update not confirmed, including relationless or unrecognized command response",
       "evidence": "Route fixture and local browser card mechanics",
       "rejoinOrStop": "Reload operation only; zero command, effect or release replay."
     },
@@ -250,9 +259,45 @@ was finalized:
       "command": "git diff --check; route-tree SHA; exact allowlist and parent-custody intersection",
       "exit": 0,
       "result": "Diff check passes. src/routeTree.gen.ts remains SHA-256 95b15655c07de7d722959a60db846d1bcc2725d8f525047d2ae96cf644ab78a4. Exactly 16 allowed candidate paths change; raw/canonical/66-entry parent custody identities match and intersection is zero."
+    },
+    {
+      "command": "npx --no-install vitest run tests/unit/server/hosted-paid-operation-api.test.ts -t 'fails closed when a command response is an unrecognized relationless 5xx'",
+      "exit": 0,
+      "result": "Follow-up focused GREEN: 1 test passed and 8 skipped. The fixture models a relationless response after one command, effect and release; Payment prepared durable truth remained visible, initiating controls were absent, reload followed version 4, and the second click added zero commands, effects or releases."
+    },
+    {
+      "command": "npm test -- tests/unit/server/hosted-paid-operation-api.test.ts tests/unit/action-invocation/paid-operation-card.test.tsx",
+      "exit": 0,
+      "result": "Follow-up detail-host/card boundary: 2 files and 18 tests passed."
+    },
+    {
+      "command": "npm run test:ui-contract",
+      "exit": 0,
+      "result": "Follow-up UI boundary: 2 files and 5 tests passed."
+    },
+    {
+      "command": "npx --no-install oxlint --deny-warnings 'src/routes/actions.paid.$invocationRef.tsx' tests/unit/server/hosted-paid-operation-api.test.ts",
+      "exit": 0,
+      "result": "Follow-up changed TypeScript paths produced zero warnings."
+    },
+    {
+      "command": "npx --no-install tsc --noEmit --pretty false",
+      "exit": 2,
+      "result": "The inherited repository-wide capability-supply baseline remains. The follow-up route and test have zero diagnostics."
+    },
+    {
+      "command": "npx --no-install react-doctor . --scope changed --base fba8a35ff17d38e4863ab1eee007e5d7f9d0a3bc --include-untracked --verbose --no-supply-chain --no-telemetry --blocking warning --max-duration 120",
+      "exit": 0,
+      "result": "Follow-up changed UI slice has no issues; score/telemetry and supply-chain scan disabled."
+    },
+    {
+      "command": "summary JSON parse; git diff --check; route-tree SHA; exact follow-up allowlist and parent-custody intersection",
+      "exit": 0,
+      "result": "Summary JSON parses. Diff check passes. src/routeTree.gen.ts remains SHA-256 95b15655c07de7d722959a60db846d1bcc2725d8f525047d2ae96cf644ab78a4. Exactly 3 allowed follow-up paths change; the combined candidate remains the same 16 allowed paths. Raw/canonical/66-entry parent custody identities match, with zero follow-up or combined intersection."
     }
   ],
   "adverseFindings": [
+    "Parent audit found that a resolved command response with neither an accepted readback nor a validated inspect relation fell through to the durable source card, re-enabling consequence controls. projectResult can produce this shape as a relationless 503 refusal, and the browser cannot classify whether an unusual response occurred before or after effect. The follow-up treats every such response as ambiguous transport, binds the rescue requestId to the original commandId, preserves durable truth, and exposes only current-version reload.",
     "The installed Astryx Button emits its own polite live region even when idle. Two command buttons plus the host status would create three live regions, so this bounded card/route uses native semantic buttons with Astryx tokens, visible focus and 44px targets. Card, Badge and Text remain Astryx; no competing design system was introduced.",
     "The public Settlement label failed the repository money-rail copy gate. Payment outcome now communicates the same source-issued settlement truth without presenting a rail claim.",
     "The dedicated new golden/goblin spec passed its first execution after the preceding UI and existing-browser REDs drove the harness; it is confirmation evidence, not a separate protected-route RED.",
@@ -263,8 +308,13 @@ was finalized:
   "explicitNonclaims": "No actual protected-route browser E2E, hosted reachability, exact served revision, independent provider operation, real credential/payment/submission/settlement/fulfilment, production safety, screen-reader pass, human comprehension, 400 percent human browser audit, customer demand/value, onboarding, or non-paid Action compatibility.",
   "remainingFailure": "Repository-wide typecheck remains red outside changed paths; two copy tests require the absent inherited .planning/GTM-READINESS.md. Plan07 still owns exact hosted protected-route readback. No changed-source P0/P1 remains.",
   "stopReason": "PLAN05_LOCAL_EVIDENCE_COMPLETE_AT_DECLARED_CLAIM_CEILING",
-  "nextDecision": "Parent audits this single scoped candidate against the exact base/tree and custody manifest. If accepted, parent integrates it into codex/phase3c-execution. Do not deploy, start Plan06, or upgrade the evidence claim.",
-  "candidateRevision": "Set by the one scoped child commit and returned to the parent outside this self-referential artifact.",
-  "resumptionCommand": "git show --stat --oneline HEAD && npm run test:ui-contract && npm test -- tests/unit/action-invocation/paid-operation-card.test.tsx tests/unit/action-invocation/paid-operation-projection.test.ts tests/unit/action-invocation/paid-operation-development-surface.test.tsx tests/unit/server/hosted-paid-operation-api.test.ts tests/imports/hosted-paid-operation-boundaries.test.ts && npx playwright test --config=playwright.paid-operation-hosted.config.ts tests/e2e/paid-operation-hosted-sandbox.spec.ts"
+  "nextDecision": "Parent audits the immutable Plan05 commit plus its one correction commit against the exact base/tree and custody manifest. If accepted, parent integrates the two-commit chain into codex/phase3c-execution. Do not deploy, start Plan06, or upgrade the evidence claim.",
+  "candidateChain": {
+    "plan05Revision": "fba8a35ff17d38e4863ab1eee007e5d7f9d0a3bc",
+    "plan05Tree": "513859981bde3e7ed4988ac58d957e44c0f5d156",
+    "correctionBase": "fba8a35ff17d38e4863ab1eee007e5d7f9d0a3bc",
+    "correctionRevisionAndTree": "Returned to the parent outside this self-referential commit."
+  },
+  "resumptionCommand": "git show --stat --oneline fba8a35ff17d38e4863ab1eee007e5d7f9d0a3bc && git show --stat --oneline HEAD && npm run test:ui-contract && npm test -- tests/unit/server/hosted-paid-operation-api.test.ts tests/unit/action-invocation/paid-operation-card.test.tsx"
 }
 ```

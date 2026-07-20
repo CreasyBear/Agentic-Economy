@@ -218,8 +218,19 @@ function AcceptedPaidOperationDetail({
       return
     }
 
-    setCard(readback.card)
-    setAnnouncement('The operation was not updated. Reload before taking another action.')
+    const inspectRelation = currentInspectRelation(readback)
+    setCard({
+      ...readback.card,
+      pendingCommand: null,
+      transportRescue: {
+        kind: 'update_not_confirmed',
+        requestId: commandId,
+        inspectRelation,
+      },
+    })
+    setAnnouncement(
+      'Update not confirmed. Reload this operation before doing anything else.',
+    )
     focusStatus(statusRef)
   }
 

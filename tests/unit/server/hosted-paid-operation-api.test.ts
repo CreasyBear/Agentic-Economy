@@ -525,6 +525,58 @@ describe('hosted paid-operation authenticated adapters', () => {
     expect(followInspectRelation).toHaveBeenCalledWith(inspect)
     expect(sendCommand).toHaveBeenCalledTimes(1)
   })
+
+  it('fails closed when a command response is an unrecognized relationless 5xx', async () => {
+    const initial = await acceptedHumanReadback(preparedProjection())
+    const inspect = '/actions/paid/invocation%3Apaid?expectedInvocationVersion=4'
+    const counters = {
+      commandAttempts: 0,
+      effectGenerations: 0,
+      releaseAttempts: 0,
+    }
+    let commandId = ''
+    const sendCommand = vi.fn(async (body: Readonly<Record<string, unknown>>) => {
+      counters.commandAttempts += 1
+      counters.effectGenerations += 1
+      counters.releaseAttempts += 1
+      commandId = String(body.commandId)
+      return {
+        status: 503,
+        body: {
+          kind: 'refused',
+          code: 'aggregate_incomplete',
+        },
+      }
+    })
+    const followInspectRelation = vi.fn()
+
+    const { container } = render(createElement(HostedPaidOperationDetailView, {
+      result: { status: 200, body: initial },
+      sendCommand,
+      followInspectRelation,
+    }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue operation' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toMatch(/Update not confirmed/))
+    expect(commandId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu,
+    )
+    expect(screen.getByText('Payment prepared', { exact: true })).toBeTruthy()
+    expect(container.querySelectorAll('[data-command]')).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: /Authorize|Continue|Check existing/i })).toBeNull()
+    expect(counters).toEqual({
+      commandAttempts: 1,
+      effectGenerations: 1,
+      releaseAttempts: 1,
+    })
+
+    const countersBeforeReload = { ...counters }
+    fireEvent.click(screen.getByRole('button', { name: 'Reload operation' }))
+
+    expect(followInspectRelation).toHaveBeenCalledWith(inspect)
+    expect(counters).toEqual(countersBeforeReload)
+  })
 })
 
 async function acceptedHumanReadback(projection: PaidOperationProjection) {
