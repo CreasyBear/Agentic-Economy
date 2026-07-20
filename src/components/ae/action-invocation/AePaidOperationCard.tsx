@@ -229,7 +229,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
       truth: 'The earlier payment was checked and was not settled.',
       nextAction: semantics.continuations.some(({ kind }) => kind === 'retry')
         ? 'Try the operation again with fresh permission.'
-        : 'Review the recorded details.',
+        : 'Review the recorded details. A new result requires a new, explicitly authorized operation.',
     }
   }
 
@@ -270,7 +270,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
       label: 'Not sent',
       badgeVariant: 'error',
       icon: XCircleIcon,
-      truth: 'The request stopped before anything was sent to the provider and before any payment request was submitted.',
+      truth: `The request stopped before anything was sent to the provider and before any payment request was submitted. Reason: ${semantics.error.code.replaceAll('_', ' ')}.`,
       nextAction: semantics.continuations.some(({ kind }) => kind === 'retry')
         ? 'Try again when you are ready.'
         : 'Review why the request stopped.',

@@ -393,6 +393,10 @@ function assertPaidOperationSemantics(value: PaidOperationSemantics): void {
       || !opaqueDigestReferenceValid(value.paymentAuthorization.custodyReference))
   ) throw new Error('paid_operation_authorization_invalid')
   if (
+    value.paymentAuthorization.state === 'created'
+    && value.continuations.some(({ kind }) => kind === 'authorize')
+  ) throw new Error('paid_operation_authorization_state_mismatch')
+  if (
     value.settlement.state === 'settled'
     && (!Number.isSafeInteger(value.settlement.amount.amountMinor)
       || value.settlement.amount.amountMinor < 0

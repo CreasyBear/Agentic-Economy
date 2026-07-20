@@ -82,8 +82,8 @@ describe('paid operation development surfaces', () => {
     expect(document.activeElement).toBe(action)
     expect(action.className).toContain('min-h-11')
     expect(container.querySelector('[role="status"]')?.textContent).toMatch(/projection ready/i)
-    expect(screen.getByText('Prepared')).toBeTruthy()
-    expect(screen.getByText(/no payment request has been submitted/i)).toBeTruthy()
+    expect(screen.getByText('Ready to inspect')).toBeTruthy()
+    expect(screen.getByText(/Nothing has been sent to the provider/i)).toBeTruthy()
     expect(container.querySelector('main')?.className).toContain('w-full')
     expect(container.innerHTML).not.toMatch(/animate-|transition-|motion-/)
 
@@ -116,16 +116,7 @@ function serviceFixture() {
     },
     maximumAuthorizedCharge: { currency: 'AUD', amountMinor: 250 },
     queryRelease: { state: 'not_released' },
-    paymentAuthorization: {
-      state: 'created',
-      paymentIdentifier: 'payment:development',
-      custodyReference: {
-        kind: 'opaque_digest_reference',
-        algorithm: 'sha256',
-        digest: `sha256:${'1'.repeat(64)}`,
-      },
-      evidenceRefs: ['evidence:development'],
-    },
+    paymentAuthorization: { state: 'not_created' },
     paymentSubmission: { state: 'not_submitted' },
     settlement: { state: 'no_evidence' },
     resultDelivery: { state: 'not_delivered' },
