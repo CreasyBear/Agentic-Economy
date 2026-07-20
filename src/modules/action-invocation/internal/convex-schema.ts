@@ -400,5 +400,24 @@ export const actionInvocationTables = {
     policyDigest: v.optional(v.string()),
     state: v.union(v.literal('active'), v.literal('released')),
     updatedAt: v.string(),
-  }).index('by_reservationRef', ['reservationRef']),
+  })
+    .index('by_reservationRef', ['reservationRef'])
+    .index('by_policyRef_and_principalRef_and_reservationRef', [
+      'policyRef', 'principalRef', 'reservationRef',
+    ]),
+
+  hostedPaidOperationDeploymentReceipts: defineTable({
+    receiptRef: v.literal('phase3c-paid-operation-exact-revision-deployment'),
+    sourceRevision: v.string(),
+    sourceTree: v.string(),
+    githubRunId: v.string(),
+    githubRunAttempt: v.number(),
+    githubRepository: v.literal('CreasyBear/Agentic-Economy'),
+    githubRef: v.literal('main'),
+    githubWorkflow: v.literal('.github/workflows/kernel-release-gate.yml'),
+    githubJob: v.literal('Phase 3C exact-revision Convex deployment'),
+    githubStep: v.literal('Record Phase 3C Convex deployment receipt'),
+    sourceClockTimestamp: v.string(),
+    deploymentName: v.string(),
+  }).index('by_receiptRef', ['receiptRef']),
 } as const

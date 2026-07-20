@@ -147,6 +147,18 @@ const phase3CHostedProofObservation = makeFunctionReference<
     }>
   | Readonly<{ kind: 'refused'; code: string }>
 >('hostedPaidOperation:phase3CHostedProofObservation')
+const recordPhase3CDeploymentReceipt = makeFunctionReference<
+  'mutation',
+  {
+    sourceRevision: string
+    sourceTree: string
+    githubRunId: string
+    githubRunAttempt: number
+    sourceClockTimestamp: string
+  },
+  Readonly<{ kind: 'recorded' | 'duplicate'; deploymentName: string }>
+    | Readonly<{ kind: 'refused'; code: string }>
+>('hostedPaidOperation:recordPhase3CDeploymentReceipt')
 
 const ownerIdentity = {
   subject: 'paid-operation-owner',
@@ -1158,6 +1170,9 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     expect(querySource).toContain('export const phase3CHostedProofObservation = internalQuery')
     expect(querySource).toContain(".withIndex('by_policyRef'")
     expect(querySource).toContain('.take(2)')
+    expect(querySource).toContain(".withIndex('by_ownerPrincipalRef_and_invocationRef'")
+    expect(querySource).toContain(".withIndex('by_policyRef_and_principalRef_and_reservationRef'")
+    expect(querySource).toContain('.take(4)')
     expect(querySource).toContain('.take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)')
     expect(querySource).not.toMatch(
       /\.collect\(|\.filter\(|scheduler|\.custodyReference\b|\.evidenceReference\b/iu,
@@ -1174,6 +1189,34 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     await expect(backend.query(phase3CHostedProofObservation, {
       invocationRefs: ['invocation:1', 'invocation:1'],
     })).resolves.toEqual({ kind: 'refused', code: 'invocation_ref_count_invalid' })
+  })
+
+  it('records one exact deployment receipt from live Convex metadata and refuses drift', async () => {
+    expect(moduleSchema).toContain('hostedPaidOperationDeploymentReceipts: defineTable')
+    expect(moduleSchema).toContain(".index('by_receiptRef', ['receiptRef'])")
+    expect(hostedPersistence).toContain(
+      'export const recordPhase3CDeploymentReceipt = internalMutation',
+    )
+    expect(hostedPersistence).toContain('await ctx.meta.getDeploymentMetadata()')
+    expect(hostedPersistence).not.toMatch(/deploymentName:\s*v\.string\(\)/u)
+
+    const backend = convexTest(schema, modules)
+    const args = {
+      sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
+      sourceTree: 'bf3769890c9940ae259fab9777fdca8b25f686d7',
+      githubRunId: '123456789',
+      githubRunAttempt: 1,
+      sourceClockTimestamp: '2026-07-21T00:00:00.000Z',
+    }
+    const first = await backend.mutation(recordPhase3CDeploymentReceipt, args)
+    expect(first.kind).toBe('recorded')
+    await expect(backend.mutation(recordPhase3CDeploymentReceipt, args)).resolves.toMatchObject({
+      kind: 'duplicate',
+    })
+    await expect(backend.mutation(recordPhase3CDeploymentReceipt, {
+      ...args,
+      sourceRevision: 'f'.repeat(40),
+    })).resolves.toEqual({ kind: 'refused', code: 'deployment_receipt_conflict' })
   })
 
   it('observes exactly three closed one-effect invocations and refuses missing or inconsistent rows', async () => {
@@ -1196,6 +1239,21 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       admittedTotal: 3,
       activeReservations: 0,
       admittedInWindow: 3,
+    })
+    expect(observed).toMatchObject({
+      cohort: { headers: 3, reservations: 3 },
+      deployment: {
+        current: expect.objectContaining({ name: expect.any(String) }),
+        receipt: expect.objectContaining({
+          sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
+          sourceTree: 'bf3769890c9940ae259fab9777fdca8b25f686d7',
+          githubRepository: 'CreasyBear/Agentic-Economy',
+          githubRef: 'main',
+          githubWorkflow: '.github/workflows/kernel-release-gate.yml',
+          githubJob: 'Phase 3C exact-revision Convex deployment',
+          githubStep: 'Record Phase 3C Convex deployment receipt',
+        }),
+      },
     })
     expect(observed.invocations).toHaveLength(3)
     expect(observed.invocations).toEqual(expect.arrayContaining([
@@ -1226,7 +1284,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
 
     await expect(backend.query(phase3CHostedProofObservation, {
       invocationRefs: [...invocationRefs.slice(0, 2), 'invocation:missing'],
-    })).resolves.toEqual({ kind: 'refused', code: 'proof_row_missing' })
+    })).resolves.toEqual({ kind: 'refused', code: 'proof_header_cohort_mismatch' })
 
     await backend.run(async (ctx) => {
       const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
@@ -1240,6 +1298,186 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     await expect(backend.query(phase3CHostedProofObservation, {
       invocationRefs,
     })).resolves.toEqual({ kind: 'refused', code: 'proof_rows_inconsistent' })
+  })
+
+  it('refuses hidden headers, sources, payments, reservations, and identity cross-link drift', async () => {
+    const corruptions: Array<Readonly<{
+      expectedCode: string
+      apply: (backend: HostedBackend, invocationRefs: readonly string[]) => Promise<void>
+    }>> = [
+      {
+        expectedCode: 'proof_header_cohort_mismatch',
+        apply: async (backend, invocationRefs) => {
+          await backend.run(async (ctx) => {
+            const header = await ctx.db.query('hostedPaidOperationHeaders')
+              .withIndex('by_invocationRef', (q) => q.eq('invocationRef', invocationRefs[0]!))
+              .unique()
+            if (header === null) throw new Error('test_header_missing')
+            const {
+              _id: _ignoredId,
+              _creationTime: _ignoredCreationTime,
+              ...row
+            } = header
+            await ctx.db.insert('hostedPaidOperationHeaders', {
+              ...row,
+              invocationRef: 'invocation:hidden-fourth',
+            })
+          })
+        },
+      },
+      {
+        expectedCode: 'proof_row_cardinality_mismatch',
+        apply: async (backend, invocationRefs) => {
+          await backend.run(async (ctx) => {
+            const rows = await ctx.db.query('hostedPaidOperationSources')
+              .withIndex('by_invocationRef_and_sourceRef', (q) =>
+                q.eq('invocationRef', invocationRefs[0]!))
+              .take(1)
+            if (rows[0] === undefined) throw new Error('test_source_missing')
+            const {
+              _id: _ignoredId,
+              _creationTime: _ignoredCreationTime,
+              ...row
+            } = rows[0]
+            await ctx.db.insert('hostedPaidOperationSources', {
+              ...row,
+              sourceRef: 'source:hidden-second',
+              prepared: {
+                ...row.prepared,
+                target: { ...row.prepared.target, sourceRef: 'source:hidden-second' },
+              },
+            })
+          })
+        },
+      },
+      {
+        expectedCode: 'proof_row_cardinality_mismatch',
+        apply: async (backend, invocationRefs) => {
+          await backend.run(async (ctx) => {
+            const rows = await ctx.db.query('hostedPaidOperationPayments')
+              .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
+                q.eq('invocationRef', invocationRefs[0]!))
+              .take(1)
+            if (rows[0] === undefined) throw new Error('test_payment_missing')
+            const {
+              _id: _ignoredId,
+              _creationTime: _ignoredCreationTime,
+              ...row
+            } = rows[0]
+            await ctx.db.insert('hostedPaidOperationPayments', {
+              ...row,
+              paymentIdentifier: 'payment:hidden-second',
+            })
+          })
+        },
+      },
+      {
+        expectedCode: 'proof_reservation_cohort_mismatch',
+        apply: async (backend) => {
+          await backend.run(async (ctx) => {
+            const rows = await ctx.db.query('hostedPaidOperationAdmissionReservations')
+              .withIndex('by_policyRef_and_principalRef_and_reservationRef', (q) =>
+                q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial')
+                  .eq('principalRef', ownerIdentity.subject))
+              .take(1)
+            if (rows[0] === undefined) throw new Error('test_reservation_missing')
+            const {
+              _id: _ignoredId,
+              _creationTime: _ignoredCreationTime,
+              ...row
+            } = rows[0]
+            await ctx.db.insert('hostedPaidOperationAdmissionReservations', {
+              ...row,
+              reservationRef: 'reservation:hidden-orphan',
+            })
+          })
+        },
+      },
+      {
+        expectedCode: 'proof_rows_inconsistent',
+        apply: async (backend, invocationRefs) => {
+          await backend.run(async (ctx) => {
+            const control = await ctx.db.query('actionInvocationControls')
+              .withIndex('by_invocationRef', (q) => q.eq('invocationRef', invocationRefs[0]!))
+              .unique()
+            if (control === null) throw new Error('test_control_missing')
+            await ctx.db.patch(control._id, {
+              control: {
+                ...control.control,
+                owner: { ...control.control.owner, callerRef: 'caller:drifted' },
+              },
+            })
+          })
+        },
+      },
+      {
+        expectedCode: 'proof_rows_inconsistent',
+        apply: async (backend, invocationRefs) => {
+          await backend.run(async (ctx) => {
+            const effects = await ctx.db.query('hostedPaidOperationMockEffects')
+              .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (q) =>
+                q.eq('invocationRef', invocationRefs[0]!))
+              .take(1)
+            if (effects[0] === undefined) throw new Error('test_effect_missing')
+            await ctx.db.patch(effects[0]._id, { paymentIdentifier: 'payment:drifted' })
+          })
+        },
+      },
+    ]
+
+    for (const corruption of corruptions) {
+      const cohort = await completedProofCohort()
+      await corruption.apply(cohort.backend, cohort.invocationRefs)
+      await expect(cohort.backend.query(phase3CHostedProofObservation, {
+        invocationRefs: [...cohort.invocationRefs],
+      })).resolves.toEqual({ kind: 'refused', code: corruption.expectedCode })
+    }
+  })
+
+  it('scopes retained identity digests to the exact random invocation cohort', async () => {
+    const first = await completedProofCohort()
+    const second = await completedProofCohort()
+    const firstObservation = await first.backend.query(phase3CHostedProofObservation, {
+      invocationRefs: [...first.invocationRefs],
+    })
+    const secondObservation = await second.backend.query(phase3CHostedProofObservation, {
+      invocationRefs: [...second.invocationRefs],
+    })
+    expect(firstObservation.kind).toBe('observed')
+    expect(secondObservation.kind).toBe('observed')
+    if (firstObservation.kind !== 'observed' || secondObservation.kind !== 'observed') return
+    expect(firstObservation.policy.principalDigest)
+      .not.toBe(secondObservation.policy.principalDigest)
+    expect(firstObservation.invocations[0]!.ownerCallerDigest)
+      .not.toBe(secondObservation.invocations[0]!.ownerCallerDigest)
+  })
+
+  it('refuses missing, source-drifted, or deployment-drifted receipts', async () => {
+    for (const drift of ['missing', 'source', 'deployment'] as const) {
+      const cohort = await completedProofCohort()
+      await cohort.backend.run(async (ctx) => {
+        const rows = await ctx.db.query('hostedPaidOperationDeploymentReceipts')
+          .withIndex('by_receiptRef', (q) =>
+            q.eq('receiptRef', 'phase3c-paid-operation-exact-revision-deployment'))
+          .take(2)
+        if (rows[0] === undefined) throw new Error('test_deployment_receipt_missing')
+        if (drift === 'missing') await ctx.db.delete(rows[0]._id)
+        if (drift === 'source') await ctx.db.patch(rows[0]._id, { sourceRevision: 'f'.repeat(40) })
+        if (drift === 'deployment') {
+          await ctx.db.patch(rows[0]._id, { deploymentName: 'wrong-deployment' })
+        }
+      })
+      await expect(cohort.backend.query(phase3CHostedProofObservation, {
+        invocationRefs: [...cohort.invocationRefs],
+      })).resolves.toEqual({
+        kind: 'refused',
+        code: drift === 'missing'
+          ? 'proof_deployment_receipt_not_exact'
+          : drift === 'deployment'
+            ? 'proof_deployment_receipt_mismatch'
+            : 'proof_rows_inconsistent',
+      })
+    }
   })
 
   it('enumerates hidden prior command, attempt, and effect rows instead of reading only current state', async () => {
@@ -1278,7 +1516,6 @@ describe('authenticated hosted paid-operation intent gateway', () => {
         ...effectRow,
         attemptRef: 'attempt:hidden-prior',
         effectGeneration: 0,
-        paymentIdentifier: 'payment:hidden-prior',
       })
       await ctx.db.insert('hostedPaidOperationCommands', {
         invocationRef: completed.invocationRef,
@@ -1472,6 +1709,14 @@ async function admitPrincipal(backend: HostedBackend, principalRef: string, rate
       recordedAt: '2026-07-20T00:00:00.000Z',
     })
   })
+  const receipt = await backend.mutation(recordPhase3CDeploymentReceipt, {
+    sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
+    sourceTree: 'bf3769890c9940ae259fab9777fdca8b25f686d7',
+    githubRunId: '123456789',
+    githubRunAttempt: 1,
+    sourceClockTimestamp: '2026-07-21T00:00:00.000Z',
+  })
+  if (receipt.kind === 'refused') throw new Error(`Receipt refused: ${receipt.code}.`)
 }
 
 async function createFor(
@@ -1525,6 +1770,22 @@ async function runCompletedEffect(
     }
   }
   return created
+}
+
+async function completedProofCohort(): Promise<Readonly<{
+  backend: HostedBackend
+  invocationRefs: readonly [string, string, string]
+}>> {
+  const backend = convexTest(schema, modules)
+  await admitOwner(backend, 3)
+  const owner = backend.withIdentity(ownerIdentity)
+  const first = await runCompletedEffect(owner, 'A', 'cohort-human-a')
+  const second = await runCompletedEffect(owner, 'A', 'cohort-agent-a')
+  const third = await runCompletedEffect(owner, 'B', 'cohort-goblin-b')
+  return {
+    backend,
+    invocationRefs: [first.invocationRef, second.invocationRef, third.invocationRef],
+  }
 }
 
 async function effectFacts(

@@ -15,9 +15,11 @@ classified as shared.
 
 ## Artifact inventory
 
-The inventory is the exact 77-path Phase 3C delta from
-`2debf4b9f65ce228491f7d3d17ed1654a23bb496` through the Plan 07A base plus the
-nine distinct Plan 07B paths not already in that delta: 86 paths total.
+The inventory is the exact 89-path Git-derived Phase 3C delta from
+`2debf4b9f65ce228491f7d3d17ed1654a23bb496` through this replacement Plan 07B
+tip, including tracked changes and untracked owned files during TDD. The import
+test derives this set directly from Git; there is no second hand-maintained
+inventory capable of hiding an omission.
 
 | Artifact | Classification | Closure treatment |
 | --- | --- | --- |
@@ -106,7 +108,10 @@ nine distinct Plan 07B paths not already in that delta: 86 paths total.
 | `tools/dev/score-paid-operation-comprehension.ts` | `trial-only` | Remove the automated adjunct scorer after review. |
 | `tools/dev/verify-phase-3c-red-contract.ts` | `trial-only` | Remove the Phase 3C-only RED classifier after archival. |
 | `tools/release/customer-request-production-credential.ts` | `trial-only` | Revert only the paid-scope option; preserve default Customer Request behavior. |
-| `tools/release/verify-paid-operation-hosted-release.ts` | `trial-only` | Remove packet collection/admission tooling after the record-review window. |
+| `tools/release/paid-operation-hosted-journey.ts` | `trial-only` | Remove the module-owned three-operation checkpoint journey after the declared review. |
+| `tools/release/paid-operation-hosted-live-collector.ts` | `trial-only` | Remove the temporary-credential, control-plane, and raw-observation admission collector after review. |
+| `tools/release/paid-operation-hosted-proof-contract.ts` | `trial-only` | Remove the packet schema and offline integrity verifier after the retained packet review window. |
+| `tools/release/verify-paid-operation-hosted-release.ts` | `trial-only` | Remove the small offline-integrity CLI/export facade after the record-review window. |
 
 ## Removal boundary
 

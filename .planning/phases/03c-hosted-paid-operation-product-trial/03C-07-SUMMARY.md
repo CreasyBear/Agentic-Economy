@@ -43,7 +43,7 @@ owner.
 | --- | --- | --- |
 | Accept renderer/caller assertions or a checksum as truth | Rejected | A checksum detects packet mutation only; it cannot establish source, deployment, actor, provider, projection, or durable-state truth. |
 | Reuse the Customer Request verifier unchanged | Rejected | Customer Request is a different aggregate and claim. Reuse would either weaken the paid-operation checks or distort the existing verifier. |
-| Add a Phase 3C verifier for `agentic-paid-operation-hosted-proof:v1` | Selected | The verifier independently recomputes checksums and projection semantics, and cross-checks exact Git/deployment identity, both authenticated surfaces, the internal source observation, fixed scenario order, counters, reservations, versions, commands, effects, and the claim ceiling. Only its concrete live collection/admission paths may return `authenticated_exact_revision_hosted_sandbox`, after every independent check succeeds. |
+| Add a Phase 3C verifier for `agentic-paid-operation-hosted-proof:v1` | Selected | The verifier independently recomputes checksums and projection semantics, and cross-checks exact Git/deployment identity, both authenticated surfaces, the internal source observation, fixed scenario order, counters, reservations, versions, commands, effects, and the claim ceiling. Only its one concrete live collection/admission path may return `authenticated_exact_revision_hosted_sandbox`, after every independent check succeeds. |
 
 Parent adversarial review narrowed that selected path further before verifier
 implementation. Packet integrity and live evidence admission are separate
@@ -71,6 +71,70 @@ operations:
 | One mixed human/agent invocation | Rejected | It cannot independently demonstrate the two caller surfaces plus the response-lost recovery path. |
 | Exactly three invocations, total cap 3, concurrency 1, rate 3 | Selected | Ordered scenarios are: shared human/agent Provider A golden; agent Provider A golden; Provider B response-lost uncertainty goblin. Each invocation owns one attempt/effect generation and one effect, for exactly three total effects. Reconciliation is intent-only, no ambiguous retry/provider switch occurs, and all reservations must be released before verification. |
 
+## Candidate-correction decisions recorded before corrected source
+
+Parent audit rejected candidate `222516ae874dad7cddc6c41300828c29ddcffdb0`
+(tree `77ed55733d57652dc14693993d32155115ad5cfb`) as incomplete. The
+replacement remains based on that commit and adds one correction commit; the
+original parent base, 66-entry custody manifest, zero-intersection rule and
+source/local evidence ceiling remain unchanged.
+
+### E. Exact Convex deployment provenance
+
+| Candidate path | Decision | Reason and blast radius |
+| --- | --- | --- |
+| Treat the admission policy `sourceRevision` as deployment provenance | Rejected | The row is useful policy state but is written by application source and cannot independently identify the code installed in the current Convex deployment. |
+| Drop exact-revision admission and describe the run only as a hosted candidate | Rejected | The founder accepted one exact-revision run, and a narrower independently cross-linked provenance path exists. |
+| Persist one exact-SHA GitHub Actions deployment receipt in the target Convex deployment and cross-check it with public run/job metadata plus live `ctx.meta.getDeploymentMetadata()` | Selected | One internal, idempotent, conflict-refusing mutation records the fixed repository, ref, workflow, dedicated job and step contract together with source revision/tree, run identity and the deployment name obtained from `ctx.meta`. The proof query returns that one receipt and current deployment metadata. The collector independently checks the public GitHub run/jobs responses. This cut defines and locally tests the contract only; the workflow remains a separately owned release-safety cut. |
+
+The fixed future workflow contract is repository
+`CreasyBear/Agentic-Economy`, ref `main`, workflow
+`.github/workflows/kernel-release-gate.yml`, dedicated job name
+`Phase 3C exact-revision Convex deployment`, and receipt step name
+`Record Phase 3C Convex deployment receipt`. A later workflow cut must use
+those exact case-sensitive names rather than improvise another provenance
+shape.
+
+### F. Authenticated access to the private proof query
+
+| Candidate path | Decision | Reason and blast radius |
+| --- | --- | --- |
+| Create or require a production admin/deploy key | Rejected | No such local credential exists, creating one is outside this source cut, and the configured authenticated operator account already provides a narrower path. |
+| Make the proof query public | Rejected | That would expand the application surface and authorization policy solely for evidence collection. |
+| Use the existing authenticated Convex CLI account and configured project binding with `npx convex run hostedPaidOperation:phase3CHostedProofObservation ... --prod` | Selected | The function stays internal. The source requires the configured `CONVEX_DEPLOYMENT` project binding, invokes the exact query under `--prod`, and cross-checks the returned `ctx.meta` name and deployment receipt. Tests inject the process runner; this cut never invokes the CLI or reads, prints, copies or packets the local Convex access token/configuration. |
+
+### G. Early lifecycle evidence
+
+| Candidate path | Decision | Reason and blast radius |
+| --- | --- | --- |
+| Infer Ready and Payment prepared checkpoints from a terminal projection | Rejected | A terminal response cannot prove that either pre-command state was served, and it can conceal the known version-2 reconstruction defect. |
+| Accept a caller-supplied transcript | Rejected | A transcript is another self-assertion and is not the authenticated human or agent surface. |
+| Capture module-owned authenticated human DOM and independently parsed agent projections at versions 1 and 2 before each command | Selected | The live journey owns the three invocations and records exact pre-command checkpoints. Admission requires version 1 Ready for permission and version 2 Payment prepared, payment not submitted, no settlement evidence, no result, and only the expected next command. Terminal-only collection has no final-class emitter. |
+
+### H. Raw cohort completeness
+
+The corrected private observation enumerates the evaluator principal's entire
+header cohort with `take(4)` and requires it to equal the three requested
+references. For each invocation it enumerates every source, payment, command,
+attempt, effect and evidence row under cap-plus-one bounds. It also enumerates
+the policy/principal reservation cohort with `take(4)`, requires its exact
+reference set to match the three headers, and derives active reservations from
+those rows. Control/header caller identity and effect/payment identity are
+cross-linked before redacted cohort-scoped digests are returned. This closes
+the prior candidate's ability to hide a fourth header, second source/payment,
+orphan reservation, old generation, caller drift or payment drift.
+
+### I. Temporary credential lifecycle
+
+The final live path itself nests `withTemporaryClerkUserSession` and a
+`withTemporaryClerkApiKey` request whose required and complete scope set is
+exactly `paid_operation:invoke`. Both credentials are revoked in `finally`,
+including when the journey fails. A sanitized admission receipt is accepted
+only after Clerk readback reports the exact observed session and key IDs as
+non-active/revoked for the same subject. Existing Customer Request callers
+retain their default `customer_requests:create` behavior and accepted companion
+scope; secrets and raw tokens never enter the packet, attachment or log.
+
 ## Working contract
 
 The packet remains `hosted_candidate` while it is collected. Local tests may
@@ -90,7 +154,7 @@ source inspection plus local unit/import fixtures only.
 ## Required pre-hosted dependency outside this allowlist
 
 Parent source review found a P1 contradiction at
-`src/modules/action-invocation/paid-operation-application-service.ts:121`.
+`src/modules/action-invocation/paid-operation-application-service.ts:121-129`.
 `createPaidOperationApplicationService.reconstruct` loads payment state only
 when `view.attempts.at(-1)` exists. The durable hosted version-2 aggregate has
 zero attempts and a prepared payment row owned by the hosted
@@ -110,10 +174,14 @@ authorized deployment/live run.
 
 ### Packet integrity and live admission
 
-`tools/release/verify-paid-operation-hosted-release.ts` exports typed packet
-collection, parsing, integrity verification, authoritative-evidence comparison,
-and concrete live collection/admission helpers. The strict packet schema is
-`agentic-paid-operation-hosted-proof:v1`.
+`tools/release/verify-paid-operation-hosted-release.ts` is now a 38-line
+export/CLI facade. `paid-operation-hosted-proof-contract.ts` owns the strict
+`agentic-paid-operation-hosted-proof:v1` schema and offline integrity policy;
+`paid-operation-hosted-journey.ts` owns authenticated human/agent lifecycle
+collection; and `paid-operation-hosted-live-collector.ts` owns Git/Vercel/
+GitHub/Convex transports, temporary credential nesting, authoritative
+comparison and the sole final-class return. The split removes the rejected
+1,592-line combined verifier without adding a second admission seam.
 
 `verifyPacketIntegrity` returns only `packet_integrity_verified` with
 `local_packet_integrity_only`. It recomputes the packet checksum and every
@@ -126,15 +194,20 @@ secret-shaped material. A forged but checksum-valid Vercel section can pass
 offline integrity because a checksum cannot observe Vercel. It is then refused
 when compared with an authoritative control-plane collection.
 
-Only `collectAndAdmitLivePaidOperationHostedEvidence` and
-`admitLivePaidOperationHostedEvidence` can return
-`authenticated_exact_revision_hosted_sandbox`. Both perform a fresh clean Git
-revision/tree read, Vercel deployment/alias/Git/ref/repository collection,
-independently digested structured-agent readbacks, fresh authenticated human
-DOM/readbacks with exact visible payment/settlement/result truth, and the raw
-operator-only Convex observation. `compareAuthoritativeLiveEvidence` is
-exported for falsification but returns only `live_evidence_matches`, never the
-hosted evidence class.
+Only `collectAndAdmitLivePaidOperationHostedEvidence` can return
+`authenticated_exact_revision_hosted_sandbox`. It captures HEAD, derives the
+tree from that captured SHA, then rereads HEAD and status to refuse a torn Git
+observation. It cross-links the Vercel deployment/production alias and exact
+`main`/`CreasyBear/Agentic-Economy` metadata, the public successful GitHub
+run/job/step, the Convex deployment receipt plus current `ctx.meta`, fresh
+authenticated human DOM/readbacks, independently recomputed structured-agent
+semantics, exact v1/v2 checkpoints, and the raw private Convex observation.
+It creates the human session and singleton paid-only key inside the path,
+revokes both in `finally`, requires Clerk revoked-state readback, and only then
+runs the raw observation. Injected dependencies return
+`local_live_collector_fixture_only`; they cannot return the final class.
+`compareAuthoritativeLiveEvidence` returns only `live_evidence_matches`, never
+the hosted evidence class. There is no direct terminal-packet admission helper.
 
 The packet verifier failure codes are:
 
@@ -148,9 +221,13 @@ The packet verifier failure codes are:
   `internal_observation_mismatch`, `effect_count_mismatch`,
   `active_reservation_mismatch`, `unsafe_uncertainty_continuation`;
 - live admission: `live_admission_context_required`,
-  `live_source_mismatch`, `live_vercel_control_plane_mismatch`,
+  `live_source_mismatch`, `live_source_torn`,
+  `live_vercel_control_plane_mismatch`,
+  `live_github_deployment_mismatch`, `convex_cli_binding_mismatch`,
   `live_convex_observation_mismatch`, `live_human_readback_mismatch`,
-  `live_agent_readback_mismatch`, `live_collection_failed`.
+  `live_agent_readback_mismatch`, `journey_checkpoint_mismatch`,
+  `deployment_receipt_mismatch`, `credential_revocation_mismatch`, and
+  `live_collection_failed`.
 
 ### Internal proof observation
 
@@ -158,24 +235,48 @@ The new symbol is
 `hostedPaidOperation:phase3CHostedProofObservation`, declared only as an
 `internalQuery` in `convex/hostedPaidOperation.ts`. It accepts one through
 three non-empty, distinct invocation references. Policy lookup uses
-`by_policyRef` with `take(2)` to reject zero or multiple policies. Exact
-header/source/control/payment/reservation/counter rows use indexed `unique()`
-lookups. Every command, attempt, mock effect and evidence-reference row for
-each invocation prefix uses its existing index and
-`take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)`. A cap-plus-one row, missing row,
-counter mismatch, lineage mismatch, or requested-set mismatch refuses instead
-of projecting a partial aggregate.
+`by_policyRef` with `take(2)` to reject zero or multiple policies. The complete
+evaluator header cohort uses the owner index with `take(4)` and must equal the
+requested reference set. The policy/principal reservation cohort uses the new
+compound index with `take(4)` and must equal the header reservation set; active
+count is derived from those rows. For each exact invocation, source, payment,
+command, attempt, mock effect and evidence-reference prefixes use their indexes
+with `take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)`; the control uses `take(2)`.
+Exactly one source/payment/control is required. The query cross-links the
+control owner caller to the header and every effect payment identifier to its
+payment row. A fourth header, orphan reservation, second source/payment,
+cap-plus-one child, missing row, counter mismatch, lineage mismatch, hidden old
+generation or requested-set mismatch cannot disappear from the observation.
 
-Its refusal codes are `invocation_ref_count_invalid`,
-`proof_policy_not_exact`, `proof_row_missing`,
-`proof_rows_inconsistent`, and `proof_child_cap_exceeded`. Returned material
-is limited to policy/counter posture, dates and digests; exact invocation
-references; principal/caller/command/attempt/reservation digests; provider,
-operation, revision and environment labels; current truth; row counts; and
-sanitized command/attempt/effect observations with canonical digests. It
-returns no raw owner, command ID, custody value, evidence value, credential,
-provider response or payment payload. It contains no `.collect()`, `.filter()`
-or scheduler path.
+`recordPhase3CDeploymentReceipt` is the companion internal mutation. It is
+idempotent for one byte-identical receipt and conflict-refusing otherwise. It
+records exact source revision/tree, GitHub run ID/attempt and canonical source
+clock plus the fixed repo/ref/workflow/job/step constants; the deployment name
+comes only from live `ctx.meta.getDeploymentMetadata()`. The proof query
+requires exactly one receipt, returns its digest and current deployment
+metadata, and refuses deployment-name or fixed-contract drift.
+
+Its refusal codes include `invocation_ref_count_invalid`,
+`proof_deployment_receipt_not_exact`, `proof_deployment_receipt_mismatch`,
+`proof_policy_not_exact`, `proof_header_cohort_mismatch`,
+`proof_reservation_cohort_mismatch`, `proof_row_missing`,
+`proof_row_cardinality_mismatch`, `proof_rows_inconsistent`, and
+`proof_child_cap_exceeded`. Returned material is limited to deployment,
+policy/counter posture, dates and digests; exact invocation references;
+cohort-scoped principal/caller/command/attempt/payment/reservation/kill-owner
+digests; provider, operation, revision and environment labels; current truth;
+row counts; and sanitized command/attempt/effect observations with canonical
+digests. The same principal or caller is intentionally unlinkable across two
+different invocation cohorts. It returns no raw owner, command ID, custody
+value, evidence value, credential, provider response or payment payload. It
+contains no `.collect()`, query `.filter()` or scheduler path.
+
+The collector invokes this still-internal function only as
+`npx convex run hostedPaidOperation:phase3CHostedProofObservation ... --prod`
+with the explicit configured `CONVEX_DEPLOYMENT` binding and the existing
+authenticated CLI account. Its child environment omits deploy/admin keys and
+tokens. No Convex URL, admin key or proof truth is accepted from a packet
+caller, and no CLI or network command ran in this cut.
 
 ### Temporary credential behavior
 
@@ -185,8 +286,15 @@ optional `customer_requests:standing_authority` path. A paid-operation caller
 may require only `paid_operation:invoke`; unrelated Customer Request,
 administrator, wildcard, malformed, missing and oversized scope sets refuse
 before key creation. Duplicate permitted scopes are reduced to one. The
-existing instance/user checks and create/run/finally-revoke behavior are
-unchanged. No Clerk request was made in this cut.
+existing instance/user checks and create/run/finally-revoke behavior remain the
+default for every existing caller. The paid-only evidence overload fixes the
+expiration at 3,600 seconds and returns only credential ID, subject, singleton
+scope and revoked status after an exact Clerk readback. The matching temporary
+user-session overload similarly returns only session ID, subject and revoked
+status after readback; both cleanup paths still run when the journey fails.
+The paid collector may pass its pinned primary email, while legacy callers
+retain the existing acceptance-email default. No Clerk request was made in
+this cut.
 
 ### Hosted smoke source
 
@@ -195,8 +303,11 @@ every exact live input exists. The package command additionally sets
 `AE_PAID_OPERATION_REQUIRE_LIVE=1`, so missing input throws instead of
 skipping. Before the first lifecycle POST, the source checks that the base URL
 is the declared production alias, obtains the exact Vercel deployment and
-confirms production state, alias, Git SHA, branch and repository, then
-authenticates a GET of `/actions/paid/new`.
+confirms production state, alias, Git SHA, `main` and
+`CreasyBear/Agentic-Economy`, cross-checks the successful public GitHub run,
+then authenticates a GET of `/actions/paid/new` and requires the served Vercel
+response binding. Trace, video and screenshots are disabled for this
+secret-bearing spec; its only attachment is the schema-sanitized packet.
 
 The source performs exactly three sequential creations: human Provider A,
 agent Provider A, and agent Provider B response-lost. Each path requires
@@ -207,17 +318,24 @@ receives exactly `{command, commandId, expectedInvocationVersion}`, and then
 exposes only inspect. The human path asserts reload and fresh-context restore;
 the collector obtains warm/cold human and agent readbacks for all three. No
 retry, provider switch, fourth invocation or caller-supplied truth exists in
-the source. Playwright was not run in this cut.
+the source. The smoke accepts no precreated agent key, human session or Convex
+admin key: the collector creates and revokes the first two itself and uses the
+existing configured authenticated Convex CLI account for the private query.
+Playwright was not run in this cut.
 
 ### Closure and residue
 
-`03C-CLOSURE-CLASSIFICATION.md` classifies all 86 Phase 3C/Plan 07B artifacts:
-11 `paid-operation-owned`, 74 `trial-only`, and one
+`03C-CLOSURE-CLASSIFICATION.md` classifies the Git-derived 89-path Phase 3C
+delta: 11 `paid-operation-owned`, 77 `trial-only`, and one
 `candidate-shared-after-second-use`. The candidate card contract remains
 paid-operation-local; neither it nor `03C-UI-SPEC.md` is promoted to
 `DESIGN.md` or a shared contract. The UI spec is phase provenance only.
 
-The no-write import fixture simulates the exact pre-Phase-3C source bytes:
+The no-write import fixture independently derives committed/tracked changes
+from the exact Phase 3B base and unions untracked owned files during TDD. It
+asserts the derived count/set against the classification, and its omission
+falsifier proves a missing classification row cannot be hidden by deleting the
+same path from a second manual list. It then simulates exact pre-Phase-3C bytes:
 added production paths are absent and modified production paths use
 `2debf4b9f65ce228491f7d3d17ed1654a23bb496`. Neutral Action Invocation still
 resolves, the hosted Convex owner and Sandbox setup route are absent, and all
@@ -241,11 +359,11 @@ Focused REDs were written before each source slice:
 
 | Slice | Primary RED | Disposition |
 | --- | --- | --- |
-| Credential helper | Paid-only issuance still required Customer Request authority; broad/unrelated scope sets were admitted. | Two intended failures; source corrected; final credential suite 13/13. |
-| Internal query | Missing query/ref bounds, partial child reads, hidden prior rows and cap-plus-one acceptance. | Four intended failures. One accidental rate-limit fixture mismatch was mechanical and repaired without weakening the assertions; final handler suite 20/20. |
-| Packet/live admission | Missing verifier import was a mechanical file-creation RED; the first typed stub then trusted checksum/self-assertion and missed identity, projection, raw-observation, uncertainty, count and live-context falsifiers. | Mechanical import repaired; intended semantic REDs closed. Later checksum-valid provider/attempt/residue/instrument/command-ID, semantic-continuation, hidden-secret and base-alias REDs all failed before their independent cross-links were added; final release suite 15/15. |
-| Residue | Missing 86-row classification and absent retention/owner/trigger posture. | Two intended failures. Directory-as-file and over-broad paid-route scanning were fixture mechanics and repaired first; final residue suite 4/4. |
-| Package commands | No distinct source, integrity-only packet and required-live smoke commands. | One intended failure; exact scripts added without changing existing release semantics. |
+| Credential helper | Paid-only issuance still required Customer Request authority; broad/unrelated or non-singleton scope sets, active/mismatched revocation readback and journey-failure cleanup were not enforced. | Intended failures closed with paid-only evidence overloads while preserving legacy defaults; final credential suite 16/16. One callback-arity fixture mismatch and one edit-splice parse error were mechanical repairs, not accepted semantic REDs. |
+| Internal query and receipt | The rejected candidate lacked a deployment receipt, admitted an incomplete header/source/payment/reservation cohort, used cross-run-linkable digests, and could hide prior rows. | Receipt/schema tests first failed on the missing table. Cohort tests then produced three intended failures: missing returned cohort/deployment data, accepted fourth header, and equal digests across cohorts. Hidden header/source/payment/orphan-reservation, caller/payment drift, receipt drift, old-row and cap-plus-one falsifiers now close; final handler suite 24/24. A single expected-code mismatch was a fixture repair. |
+| Packet/live admission | The candidate hard-coded the wrong repo/ref, exposed a direct terminal-only admission helper, synthesized early transitions, accepted precreated credentials/admin-key input, and combined all responsibilities in one file. | The correct `main`/`CreasyBear/Agentic-Economy` fixture failed first. Strict receipt/run/job, v1/v2 checkpoint, torn-Git, configured-CLI, post-revocation, journey-failure cleanup, self-consistent-raw-contradiction and single-emitter falsifiers then guided the split. Offline and injected packets remain local-only; final release suite 23/23. |
+| Residue | The candidate's hand-maintained artifact list and classification table could omit the same path together. | Replaced with a Git-derived exact Phase 3B delta including untracked owned files. The derived 89-path set, omission falsifier, no-write removal graph and non-paid import scan pass 4/4. |
+| Package commands | Artifact integrity and live admission naming could still be conflated. | Exact source/local, `hosted-packet-integrity`, and required-live hosted smoke commands remain distinct and fail closed; no deployment/workflow command was added. |
 
 No RED was accepted from an import/configuration/infrastructure accident. No
 network, hosted browser, server, Clerk, Convex CLI/control plane, Vercel,
@@ -255,12 +373,13 @@ provider or payment action was used to turn a RED green.
 
 | Command | Result |
 | --- | --- |
-| `npm run verify:paid-operation:hosted-source-local` | PASS — 4 files, 52 tests. |
+| `npm run verify:paid-operation:hosted-source-local` | PASS — 4 files, 67 tests. |
 | `./node_modules/.bin/vitest run tests/unit/action-invocation/hosted-paid-operation-persistence.test.ts tests/unit/action-invocation/hosted-paid-operation-creation.test.ts tests/unit/server/hosted-paid-operation-runtime.test.ts tests/unit/server/hosted-paid-operation-api.test.ts tests/imports/hosted-paid-operation-boundaries.test.ts` | PASS — 5 affected Plan 07A files, 33 tests. |
-| `./node_modules/.bin/oxlint` over the eight changed TypeScript paths with `--deny-warnings` | PASS — no diagnostics. |
-| `./node_modules/.bin/tsc --noEmit --pretty false` | Broad baseline remains exit 2 with 331 output lines; zero diagnostics match an owned TypeScript path. |
+| `./node_modules/.bin/oxlint` over the twelve changed TypeScript paths with `--deny-warnings` | PASS — no diagnostics. |
+| `./node_modules/.bin/tsc --noEmit --pretty false` | Broad baseline remains exit 2 with 108 diagnostics/331 output lines; zero diagnostics match an owned TypeScript path. |
 | Query-slice scan for `.collect()`, `.filter()`, scheduler, raw custody and raw evidence access | PASS — no matches. |
-| Final-label source scan | PASS — the literal and its two return sites exist only in the verifier's concrete live-admission module; the smoke, Convex owner and package contain no literal. |
+| Final-label source scan | PASS — the literal is declared once in the proof contract and has exactly one return use in the default live collector; facade, journey, smoke, Convex owner and package contain no literal or bypass helper. |
+| Git-derived residue/allowlist/custody audits | PASS — exact 89-path Phase 3C delta; all current changes inside the 15-path allowlist; zero allowlist intersection with the verified 66-entry parent custody manifest. |
 | `env -u AE_PAID_OPERATION_HOSTED_PACKET_JSON npm run verify:paid-operation:hosted-packet-integrity` | Expected fail-closed result — `AE_PAID_OPERATION_HOSTED_PACKET_JSON is required`. |
 | `git diff --check` over the allowlist | PASS before staging; staged form is rechecked in the Git handoff. |
 
@@ -288,11 +407,13 @@ Before any live run the parent must:
 
 1. integrate this bounded commit and the separate P1 payment-reconstruction
    correction described above;
-2. run release-safety review, configure the exact 3/1/3 policy and record its
-   owner/dates without widening it;
-3. create the one temporary human session and paid-only agent key through the
-   existing helper, authorize and perform one exact deployment/run, and revoke
-   them in `finally`;
+2. add the separately owned exact-SHA workflow job/step contract, run
+   release-safety review, configure the exact 3/1/3 policy and owner/dates,
+   deploy the exact revision and persist its internal Convex receipt;
+3. provide the already authorized Clerk creation authority and exact evaluator
+   identity to the smoke. The live path itself must create the one temporary
+   human session and paid-only agent key, run once, revoke both in `finally`,
+   and prove revoked readback before admission;
 4. stop at the first revision, identity, policy, projection, raw-observation,
    counter, reservation, effect or secret contradiction.
 

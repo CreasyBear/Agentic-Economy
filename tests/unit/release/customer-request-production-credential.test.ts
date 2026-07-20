@@ -183,6 +183,129 @@ describe('production cold-agent credential', () => {
     expect(fetch.mock.calls[3]?.[0]).toBe('https://api.clerk.com/v1/api_keys/apikey_paid/revoke')
   })
 
+  it('returns sanitized paid-key evidence only after exact revoked readback', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json(acceptanceUser()))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_paid', secret: 'ak_paid_secret' }))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_paid', revoked: true }))
+      .mockResolvedValueOnce(Response.json({
+        id: 'apikey_paid',
+        subject: 'user_acceptance',
+        scopes: ['paid_operation:invoke'],
+        revoked: true,
+      }))
+
+    const result = await withTemporaryClerkApiKey({
+      clerkSecretKey: 'sk_test_server',
+      expectedInstanceId: 'ins_expected',
+      subject: 'user_acceptance',
+      requiredScope: 'paid_operation:invoke',
+      scopes: ['paid_operation:invoke'],
+      requireRevocationReadback: true,
+      returnEvidence: true,
+      fetch,
+      run: async (_secret, identity) => ({ observedCredentialId: identity.credentialId }),
+    })
+
+    expect(result).toEqual({
+      value: { observedCredentialId: 'apikey_paid' },
+      revocation: {
+        credentialId: 'apikey_paid',
+        subject: 'user_acceptance',
+        scopes: ['paid_operation:invoke'],
+        status: 'revoked',
+        secondsUntilExpiration: 3_600,
+      },
+    })
+    expect(JSON.parse(String(fetch.mock.calls[2]?.[1]?.body))).toMatchObject({
+      scopes: ['paid_operation:invoke'],
+      seconds_until_expiration: 3_600,
+    })
+    expect(fetch.mock.calls[4]?.[0]).toBe('https://api.clerk.com/v1/api_keys/apikey_paid')
+  })
+
+  it('refuses active or identity-drifted credential readback after revocation', async () => {
+    const keyFetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json(acceptanceUser()))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_paid', secret: 'ak_paid_secret' }))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_paid', revoked: true }))
+      .mockResolvedValueOnce(Response.json({
+        id: 'apikey_paid',
+        subject: 'user_acceptance',
+        scopes: ['paid_operation:invoke'],
+        revoked: false,
+      }))
+    await expect(withTemporaryClerkApiKey({
+      clerkSecretKey: 'sk_test_server',
+      expectedInstanceId: 'ins_expected',
+      subject: 'user_acceptance',
+      requiredScope: 'paid_operation:invoke',
+      scopes: ['paid_operation:invoke'],
+      requireRevocationReadback: true,
+      returnEvidence: true,
+      fetch: keyFetch,
+      run: async () => ({ journey: 'complete' }),
+    })).rejects.toThrow()
+
+    const sessionFetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json({
+        ...acceptanceUser(),
+        id: 'user_business',
+        email_addresses: [{
+          id: 'email_primary',
+          email_address: 'business@example.com',
+          verification: { status: 'verified' },
+        }],
+      }))
+      .mockResolvedValueOnce(Response.json({ id: 'sess_business', status: 'active' }))
+      .mockResolvedValueOnce(Response.json({ jwt: 'business_session_jwt' }))
+      .mockResolvedValueOnce(Response.json({ id: 'sess_business', status: 'revoked' }))
+      .mockResolvedValueOnce(Response.json({
+        id: 'sess_business', user_id: 'user_business', status: 'active',
+      }))
+    await expect(withTemporaryClerkUserSession({
+      clerkSecretKey: 'sk_test_server',
+      expectedInstanceId: 'ins_expected',
+      subject: 'user_business',
+      expectedPrimaryEmail: 'business@example.com',
+      requireRevocationReadback: true,
+      returnEvidence: true,
+      fetch: sessionFetch,
+      run: async () => ({ journey: 'complete' }),
+    })).rejects.toThrow()
+  })
+
+  it('still revokes and reads back the paid key when the journey fails', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json(acceptanceUser()))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_paid', secret: 'ak_paid_secret' }))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_paid', revoked: true }))
+      .mockResolvedValueOnce(Response.json({
+        id: 'apikey_paid',
+        subject: 'user_acceptance',
+        scopes: ['paid_operation:invoke'],
+        revoked: true,
+      }))
+
+    await expect(withTemporaryClerkApiKey({
+      clerkSecretKey: 'sk_test_server',
+      expectedInstanceId: 'ins_expected',
+      subject: 'user_acceptance',
+      requiredScope: 'paid_operation:invoke',
+      scopes: ['paid_operation:invoke'],
+      requireRevocationReadback: true,
+      returnEvidence: true,
+      fetch,
+      run: async () => { throw new Error('journey_failed') },
+    })).rejects.toThrow('journey_failed')
+    expect(fetch.mock.calls[3]?.[0]).toContain('/api_keys/apikey_paid/revoke')
+    expect(fetch.mock.calls[4]?.[0]).toBe('https://api.clerk.com/v1/api_keys/apikey_paid')
+  })
+
   it('rejects broad, unrelated, malformed, or oversized paid-operation scope escalation', async () => {
     const invalidScopeSets = [
       ['paid_operation:invoke', 'customer_requests:create'],

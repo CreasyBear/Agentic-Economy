@@ -20,6 +20,13 @@ import { internalMutation, internalQuery } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 
 const PHASE3C_POLICY_REF = 'phase-3c-hosted-paid-operation-trial'
+const PHASE3C_DEPLOYMENT_RECEIPT_REF =
+  'phase3c-paid-operation-exact-revision-deployment' as const
+const PHASE3C_GITHUB_REPOSITORY = 'CreasyBear/Agentic-Economy' as const
+const PHASE3C_GITHUB_REF = 'main' as const
+const PHASE3C_GITHUB_WORKFLOW = '.github/workflows/kernel-release-gate.yml' as const
+const PHASE3C_GITHUB_JOB = 'Phase 3C exact-revision Convex deployment' as const
+const PHASE3C_GITHUB_STEP = 'Record Phase 3C Convex deployment receipt' as const
 const opaqueReference = v.object({
   algorithm: v.literal('sha256'),
   digest: v.string(),
@@ -1078,6 +1085,70 @@ export const phase3CAdmissionStatus = internalQuery({
 })
 
 /**
+ * Written only by the exact-SHA deployment workflow after Convex deployment.
+ * The deployment name is read from the running target and can never be
+ * supplied by the workflow caller. A second, different receipt is a conflict,
+ * not an update.
+ */
+export const recordPhase3CDeploymentReceipt = internalMutation({
+  args: {
+    sourceRevision: v.string(),
+    sourceTree: v.string(),
+    githubRunId: v.string(),
+    githubRunAttempt: v.number(),
+    sourceClockTimestamp: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!/^[0-9a-f]{40}$/u.test(args.sourceRevision)
+      || !/^[0-9a-f]{40}$/u.test(args.sourceTree)
+      || !/^[1-9][0-9]*$/u.test(args.githubRunId)
+      || !Number.isInteger(args.githubRunAttempt)
+      || args.githubRunAttempt < 1
+      || !Number.isFinite(Date.parse(args.sourceClockTimestamp))
+      || new Date(args.sourceClockTimestamp).toISOString()
+        !== args.sourceClockTimestamp) {
+      return { kind: 'refused' as const, code: 'deployment_receipt_input_invalid' as const }
+    }
+    const deployment = await ctx.meta.getDeploymentMetadata()
+    if (deployment.name.trim() === '') {
+      return { kind: 'refused' as const, code: 'deployment_metadata_missing' as const }
+    }
+    const receipt = {
+      receiptRef: PHASE3C_DEPLOYMENT_RECEIPT_REF,
+      sourceRevision: args.sourceRevision,
+      sourceTree: args.sourceTree,
+      githubRunId: args.githubRunId,
+      githubRunAttempt: args.githubRunAttempt,
+      githubRepository: PHASE3C_GITHUB_REPOSITORY,
+      githubRef: PHASE3C_GITHUB_REF,
+      githubWorkflow: PHASE3C_GITHUB_WORKFLOW,
+      githubJob: PHASE3C_GITHUB_JOB,
+      githubStep: PHASE3C_GITHUB_STEP,
+      sourceClockTimestamp: args.sourceClockTimestamp,
+      deploymentName: deployment.name,
+    }
+    const existing = await ctx.db.query('hostedPaidOperationDeploymentReceipts')
+      .withIndex('by_receiptRef', (q) => q.eq('receiptRef', PHASE3C_DEPLOYMENT_RECEIPT_REF))
+      .take(2)
+    if (existing.length > 1) {
+      return { kind: 'refused' as const, code: 'deployment_receipt_conflict' as const }
+    }
+    if (existing[0] !== undefined) {
+      const {
+        _id: _ignoredId,
+        _creationTime: _ignoredCreationTime,
+        ...stored
+      } = existing[0]
+      return canonicalDigest(stored) === canonicalDigest(receipt)
+        ? { kind: 'duplicate' as const, deploymentName: deployment.name }
+        : { kind: 'refused' as const, code: 'deployment_receipt_conflict' as const }
+    }
+    await ctx.db.insert('hostedPaidOperationDeploymentReceipts', receipt)
+    return { kind: 'recorded' as const, deploymentName: deployment.name }
+  },
+})
+
+/**
  * One operator-only proof observation for the exact declared trial rows.
  * Every growing child set is enumerated by invocation-prefix index under the
  * shared cap-plus-one rule. Returned identities and command/effect references
@@ -1095,6 +1166,32 @@ export const phase3CHostedProofObservation = internalQuery({
       return { kind: 'refused' as const, code: 'invocation_ref_count_invalid' as const }
     }
 
+    const cohortDigest = canonicalDigest({
+      schema: 'phase3c-paid-operation-proof-cohort:v1',
+      invocationRefs,
+    })
+    const cohortReferenceDigest = (kind: string, value: StableHashValue) =>
+      proofReferenceDigest(cohortDigest, kind, value)
+    const deployment = await ctx.meta.getDeploymentMetadata()
+    const receiptRows = await ctx.db.query('hostedPaidOperationDeploymentReceipts')
+      .withIndex('by_receiptRef', (q) => q.eq('receiptRef', PHASE3C_DEPLOYMENT_RECEIPT_REF))
+      .take(2)
+    if (receiptRows.length !== 1) {
+      return {
+        kind: 'refused' as const,
+        code: 'proof_deployment_receipt_not_exact' as const,
+      }
+    }
+    const receipt = receiptRows[0]!
+    if (receipt.deploymentName !== deployment.name
+      || receipt.githubRepository !== PHASE3C_GITHUB_REPOSITORY
+      || receipt.githubRef !== PHASE3C_GITHUB_REF
+      || receipt.githubWorkflow !== PHASE3C_GITHUB_WORKFLOW
+      || receipt.githubJob !== PHASE3C_GITHUB_JOB
+      || receipt.githubStep !== PHASE3C_GITHUB_STEP) {
+      return { kind: 'refused' as const, code: 'proof_deployment_receipt_mismatch' as const }
+    }
+
     const policies = await ctx.db.query('hostedPaidOperationAdmissionPolicies')
       .withIndex('by_policyRef', (q) => q.eq('policyRef', PHASE3C_POLICY_REF))
       .take(2)
@@ -1106,7 +1203,8 @@ export const phase3CHostedProofObservation = internalQuery({
       || policy.sourceRevision === undefined
       || policy.admissionEndsAt === undefined
       || policy.retainThrough === undefined
-      || policy.killSwitchOwner === undefined) {
+      || policy.killSwitchOwner === undefined
+      || receipt.sourceRevision !== policy.sourceRevision) {
       return { kind: 'refused' as const, code: 'proof_rows_inconsistent' as const }
     }
     const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
@@ -1117,22 +1215,60 @@ export const phase3CHostedProofObservation = internalQuery({
       return { kind: 'refused' as const, code: 'proof_row_missing' as const }
     }
 
+    const headers = await ctx.db.query('hostedPaidOperationHeaders')
+      .withIndex('by_ownerPrincipalRef_and_invocationRef', (q) =>
+        q.eq('ownerPrincipalRef', policy.principalRef))
+      .take(4)
+    const requestedRefSet = [...invocationRefs].sort().join('\u0000')
+    const headerRefSet = headers.map((header) => header.invocationRef).sort().join('\u0000')
+    if (headers.length !== invocationRefs.length || headerRefSet !== requestedRefSet) {
+      return { kind: 'refused' as const, code: 'proof_header_cohort_mismatch' as const }
+    }
+
+    const reservations = await ctx.db.query('hostedPaidOperationAdmissionReservations')
+      .withIndex('by_policyRef_and_principalRef_and_reservationRef', (q) =>
+        q.eq('policyRef', policy.policyRef).eq('principalRef', policy.principalRef))
+      .take(4)
+    const headerReservationSet = headers
+      .map((header) => header.admissionReservationRef)
+      .sort()
+      .join('\u0000')
+    const reservationSet = reservations
+      .map((reservation) => reservation.reservationRef)
+      .sort()
+      .join('\u0000')
+    if (reservations.length !== headers.length
+      || reservationSet !== headerReservationSet
+      || reservations.some((reservation) =>
+        reservation.policyRef !== policy.policyRef
+        || reservation.principalRef !== policy.principalRef
+        || reservation.policyDigest !== policy.policyDigest)) {
+      return { kind: 'refused' as const, code: 'proof_reservation_cohort_mismatch' as const }
+    }
+
+    const activeReservations = reservations.reduce(
+      (total, reservation) => total + (reservation.state === 'active' ? 1 : 0),
+      0,
+    )
     const invocations: StableHashValue[] = []
-    let activeReservations = 0
     for (const invocationRef of invocationRefs) {
-      const header = await ctx.db.query('hostedPaidOperationHeaders')
-        .withIndex('by_invocationRef', (q) => q.eq('invocationRef', invocationRef))
-        .unique()
-      if (header === null) {
+      const header = headers.find((candidate) => candidate.invocationRef === invocationRef)
+      const reservation = header === undefined
+        ? undefined
+        : reservations.find(
+            (candidate) => candidate.reservationRef === header.admissionReservationRef,
+          )
+      if (header === undefined || reservation === undefined) {
         return { kind: 'refused' as const, code: 'proof_row_missing' as const }
       }
-      const source = await ctx.db.query('hostedPaidOperationSources')
+
+      const sources = await ctx.db.query('hostedPaidOperationSources')
         .withIndex('by_invocationRef_and_sourceRef', (q) =>
-          q.eq('invocationRef', invocationRef).eq('sourceRef', header.selectedSourceRef))
-        .unique()
-      const control = await ctx.db.query('actionInvocationControls')
+          q.eq('invocationRef', invocationRef))
+        .take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)
+      const controls = await ctx.db.query('actionInvocationControls')
         .withIndex('by_invocationRef', (q) => q.eq('invocationRef', invocationRef))
-        .unique()
+        .take(2)
       const attempts = await ctx.db.query('actionInvocationAttempts')
         .withIndex('by_invocationRef_and_attemptNumber', (q) =>
           q.eq('invocationRef', invocationRef))
@@ -1149,56 +1285,59 @@ export const phase3CHostedProofObservation = internalQuery({
         .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (q) =>
           q.eq('invocationRef', invocationRef))
         .take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)
-      const payment = header.currentPaymentIdentifier === undefined
-        ? null
-        : await ctx.db.query('hostedPaidOperationPayments')
-          .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
-            q.eq('invocationRef', invocationRef)
-              .eq('paymentIdentifier', header.currentPaymentIdentifier!))
-          .unique()
-      const reservation = await ctx.db.query('hostedPaidOperationAdmissionReservations')
-        .withIndex('by_reservationRef', (q) =>
-          q.eq('reservationRef', header.admissionReservationRef))
-        .unique()
+      const payments = await ctx.db.query('hostedPaidOperationPayments')
+        .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
+          q.eq('invocationRef', invocationRef))
+        .take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)
 
-      if (attempts.length > HOSTED_PAID_OPERATION_CHILD_CAP
+      if (sources.length > HOSTED_PAID_OPERATION_CHILD_CAP
+        || attempts.length > HOSTED_PAID_OPERATION_CHILD_CAP
         || commands.length > HOSTED_PAID_OPERATION_CHILD_CAP
         || effects.length > HOSTED_PAID_OPERATION_CHILD_CAP
-        || evidenceRows.length > HOSTED_PAID_OPERATION_CHILD_CAP) {
+        || evidenceRows.length > HOSTED_PAID_OPERATION_CHILD_CAP
+        || payments.length > HOSTED_PAID_OPERATION_CHILD_CAP) {
         return { kind: 'refused' as const, code: 'proof_child_cap_exceeded' as const }
       }
-      if (source === null || control === null || payment === null || reservation === null) {
-        return { kind: 'refused' as const, code: 'proof_row_missing' as const }
+      if (sources.length !== 1 || controls.length !== 1 || payments.length !== 1) {
+        return { kind: 'refused' as const, code: 'proof_row_cardinality_mismatch' as const }
       }
-
+      const source = sources[0]!
+      const control = controls[0]!
+      const payment = payments[0]!
       const attemptKeys = new Set(attempts.map(
-        (attempt) => `${attempt.attemptRef}\u0000${attempt.effectGeneration}`,
+        (attempt) => [attempt.attemptRef, attempt.effectGeneration].join('\u0000'),
       ))
       const rowsConsistent = header.ownerPrincipalRef === policy.principalRef
+        && header.ownerCallerRef === control.control.owner.callerRef
         && header.invocationVersion === control.invocationVersion
         && control.control.owner.principalRef === policy.principalRef
         && control.sourceRef === source.sourceRef
+        && header.selectedSourceRef === source.sourceRef
+        && header.currentPaymentIdentifier === payment.paymentIdentifier
         && source.prepared.target.providerId === source.providerId
         && source.prepared.target.sourceRef === source.sourceRef
         && source.prepared.target.operationRevision === source.operationRevision
-        && reservation.policyRef === policy.policyRef
-        && reservation.principalRef === policy.principalRef
-        && reservation.policyDigest === policy.policyDigest
         && counter.policyDigest === policy.policyDigest
         && commands.every((command) =>
-          command.principalRef === undefined || command.principalRef === policy.principalRef)
+          (command.principalRef === undefined || command.principalRef === policy.principalRef)
+          && (command.callerRef === undefined || command.callerRef === header.ownerCallerRef))
+        && attempts.every((attempt) =>
+          attempt.actor.principalRef === policy.principalRef
+          && attempt.actor.callerRef === header.ownerCallerRef)
         && effects.every((effect) =>
-          attemptKeys.has(`${effect.attemptRef}\u0000${effect.effectGeneration}`)
+          attemptKeys.has([effect.attemptRef, effect.effectGeneration].join('\u0000'))
           && effect.providerId === source.providerId
           && effect.operationKey === source.operationKey
-          && effect.operationRevision === source.operationRevision)
+          && effect.operationRevision === source.operationRevision
+          && effect.paymentIdentifier === payment.paymentIdentifier)
         && evidenceRows.every((evidence) =>
-          attemptKeys.has(`${evidence.attemptRef}\u0000${evidence.effectGeneration}`))
+          attemptKeys.has([evidence.attemptRef, evidence.effectGeneration].join('\u0000')))
         && (control.currentAttemptRef === undefined
           ? header.currentEffectGeneration === undefined
-          : attemptKeys.has(
-              `${control.currentAttemptRef}\u0000${control.currentEffectGeneration ?? -1}`,
-            )
+          : attemptKeys.has([
+              control.currentAttemptRef,
+              control.currentEffectGeneration ?? -1,
+            ].join('\u0000'))
             && control.currentEffectGeneration === header.currentEffectGeneration)
         && (control.currentAttemptRef === undefined
           || payment.attemptRef === control.currentAttemptRef)
@@ -1207,36 +1346,35 @@ export const phase3CHostedProofObservation = internalQuery({
       if (!rowsConsistent) {
         return { kind: 'refused' as const, code: 'proof_rows_inconsistent' as const }
       }
-      if (reservation.state === 'active') activeReservations += 1
 
       const commandsObserved = commands
         .map((command) => ({
-          commandIdentityDigest: proofReferenceDigest('command', {
+          commandIdentityDigest: cohortReferenceDigest('command', {
             commandId: command.commandId,
             commandDigest: command.commandDigest,
           }),
-          commandIdDigest: proofReferenceDigest('command-id', command.commandId),
+          commandIdDigest: cohortReferenceDigest('command-id', command.commandId),
           invocationVersion: command.invocationVersion,
           ...(command.effectGeneration === undefined
             ? {}
             : { effectGeneration: command.effectGeneration }),
           principalDigest: command.principalRef === undefined
             ? null
-            : proofReferenceDigest('principal', command.principalRef),
+            : cohortReferenceDigest('principal', command.principalRef),
           callerDigest: command.callerRef === undefined
             ? null
-            : proofReferenceDigest('caller', command.callerRef),
+            : cohortReferenceDigest('caller', command.callerRef),
         }))
         .sort((left, right) =>
           left.invocationVersion - right.invocationVersion
           || left.commandIdentityDigest.localeCompare(right.commandIdentityDigest))
       const attemptsObserved = attempts
         .map((attempt) => ({
-          attemptIdentityDigest: proofReferenceDigest('attempt', attempt.attemptRef),
+          attemptIdentityDigest: cohortReferenceDigest('attempt', attempt.attemptRef),
           attemptNumber: attempt.attemptNumber,
           effectGeneration: attempt.effectGeneration,
-          actorPrincipalDigest: proofReferenceDigest('principal', attempt.actor.principalRef),
-          actorCallerDigest: proofReferenceDigest('caller', attempt.actor.callerRef),
+          actorPrincipalDigest: cohortReferenceDigest('principal', attempt.actor.principalRef),
+          actorCallerDigest: cohortReferenceDigest('caller', attempt.actor.callerRef),
           release: attempt.release.state,
           outcome: attempt.outcome.state,
         }))
@@ -1246,20 +1384,27 @@ export const phase3CHostedProofObservation = internalQuery({
       const effectsObserved = effects
         .map((effect) => ({
           observationDigest: canonicalDigest({
-            invocationRef,
-            attemptRef: effect.attemptRef,
-            effectGeneration: effect.effectGeneration,
-            providerId: effect.providerId,
-            operationKey: effect.operationKey,
-            operationRevision: effect.operationRevision,
-            paymentIdentifier: effect.paymentIdentifier,
-            effect: effect.effect,
-            payment: effect.payment,
-            delivery: effect.delivery,
-            resultKind: effect.resultKind,
-            recordedAt: effect.recordedAt,
+            cohortDigest,
+            observation: {
+              invocationRef,
+              attemptRef: effect.attemptRef,
+              effectGeneration: effect.effectGeneration,
+              providerId: effect.providerId,
+              operationKey: effect.operationKey,
+              operationRevision: effect.operationRevision,
+              paymentIdentifier: effect.paymentIdentifier,
+              effect: effect.effect,
+              payment: effect.payment,
+              delivery: effect.delivery,
+              resultKind: effect.resultKind,
+              recordedAt: effect.recordedAt,
+            },
           }),
-          attemptIdentityDigest: proofReferenceDigest('attempt', effect.attemptRef),
+          attemptIdentityDigest: cohortReferenceDigest('attempt', effect.attemptRef),
+          paymentIdentifierDigest: cohortReferenceDigest(
+            'payment-identifier',
+            effect.paymentIdentifier,
+          ),
           effectGeneration: effect.effectGeneration,
           providerId: effect.providerId,
           operationKey: effect.operationKey,
@@ -1273,8 +1418,20 @@ export const phase3CHostedProofObservation = internalQuery({
           || left.observationDigest.localeCompare(right.observationDigest))
       const invocation = {
         invocationRef,
-        ownerPrincipalDigest: proofReferenceDigest('principal', header.ownerPrincipalRef),
-        ownerCallerDigest: proofReferenceDigest('caller', header.ownerCallerRef),
+        ownerPrincipalDigest: cohortReferenceDigest('principal', header.ownerPrincipalRef),
+        ownerCallerDigest: cohortReferenceDigest('caller', header.ownerCallerRef),
+        controlOwnerPrincipalDigest: cohortReferenceDigest(
+          'principal',
+          control.control.owner.principalRef,
+        ),
+        controlOwnerCallerDigest: cohortReferenceDigest(
+          'caller',
+          control.control.owner.callerRef,
+        ),
+        paymentIdentifierDigest: cohortReferenceDigest(
+          'payment-identifier',
+          payment.paymentIdentifier,
+        ),
         invocationVersion: header.invocationVersion,
         providerId: source.providerId,
         operationKey: source.operationKey,
@@ -1288,9 +1445,13 @@ export const phase3CHostedProofObservation = internalQuery({
         },
         reservation: {
           state: reservation.state,
-          reservationDigest: proofReferenceDigest('reservation', reservation.reservationRef),
+          reservationDigest: cohortReferenceDigest('reservation', reservation.reservationRef),
         },
         counts: {
+          headers: 1,
+          sources: sources.length,
+          payments: payments.length,
+          reservations: 1,
           commands: commandsObserved.length,
           attempts: attemptsObserved.length,
           effects: effectsObserved.length,
@@ -1315,14 +1476,31 @@ export const phase3CHostedProofObservation = internalQuery({
       || counter.active > policy.concurrencyLimit) {
       return { kind: 'refused' as const, code: 'proof_rows_inconsistent' as const }
     }
+    const { _id: _receiptId, _creationTime: _receiptCreationTime, ...receiptValue } = receipt
     const observation = {
       schema: 'phase3c-paid-operation-proof-observation:v1' as const,
+      cohort: {
+        cohortDigest,
+        headers: headers.length,
+        reservations: reservations.length,
+      },
+      deployment: {
+        current: {
+          name: deployment.name,
+          region: deployment.region,
+          class: deployment.class,
+        },
+        receipt: {
+          ...receiptValue,
+          receiptDigest: canonicalDigest(receiptValue),
+        },
+      },
       policy: {
         policyRef: policy.policyRef,
         enabled: policy.enabled,
         policyDigest: policy.policyDigest,
         sourceRevision: policy.sourceRevision,
-        principalDigest: proofReferenceDigest('principal', policy.principalRef),
+        principalDigest: cohortReferenceDigest('principal', policy.principalRef),
         bounds: {
           total: policy.totalLimit,
           concurrency: policy.concurrencyLimit,
@@ -1330,14 +1508,14 @@ export const phase3CHostedProofObservation = internalQuery({
         },
         admissionEndsAt: policy.admissionEndsAt,
         retainThrough: policy.retainThrough,
-        killSwitchOwnerDigest: proofReferenceDigest(
+        killSwitchOwnerDigest: cohortReferenceDigest(
           'kill-switch-owner',
           policy.killSwitchOwner,
         ),
       },
       counters: {
         admittedTotal: counter.admittedTotal,
-        activeReservations: counter.active,
+        activeReservations,
         admittedInWindow: counter.admittedInWindow,
       },
       invocations,
@@ -1349,7 +1527,6 @@ export const phase3CHostedProofObservation = internalQuery({
     }
   },
 })
-
 export const readMockEffectObservation = internalQuery({
   args: {
     principalRef: v.string(),
@@ -1498,8 +1675,12 @@ async function prepareAdmissionRelease(
   }
 }
 
-function proofReferenceDigest(kind: string, value: StableHashValue): string {
-  return canonicalDigest({ kind, value })
+function proofReferenceDigest(
+  cohortDigest: string,
+  kind: string,
+  value: StableHashValue,
+): string {
+  return canonicalDigest({ cohortDigest, kind, value })
 }
 
 function opaqueDigestValid(digest: string): boolean {
