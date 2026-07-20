@@ -7,7 +7,7 @@ import type {
   PaidOperationResultDelivery,
 } from '@/modules/action-invocation'
 
-const isoTimestamp = z.string().datetime({ offset: true })
+const isoTimestamp = z.iso.datetime({ offset: true })
 const finitePositivePrice = z.number().finite().positive()
 
 const providerPayloadSchema = z.strictObject({

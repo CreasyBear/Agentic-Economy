@@ -380,9 +380,11 @@ function assertPaidOperationSemantics(value: PaidOperationSemantics): void {
   ) throw new Error('paid_operation_error_state_mismatch')
   if (
     value.presentation.title.trim().length === 0
+    || !presentationBlocksUnique(value.presentation.blocks)
     || value.presentation.blocks.some((block) => !presentationBlockValid(block))
     || (value.resultDelivery.state === 'valid'
       && (value.resultDelivery.blocks.length === 0
+        || !presentationBlocksUnique(value.resultDelivery.blocks)
         || value.resultDelivery.blocks.some((block) => !presentationBlockValid(block))))
   ) throw new Error('paid_operation_presentation_invalid')
 }
@@ -398,6 +400,11 @@ function continuationCommand(
     case 'retry':
       return 'retry_paid_operation'
   }
+}
+
+function presentationBlocksUnique(blocks: readonly PaidOperationPresentationBlock[]): boolean {
+  const keys = new Set(blocks.map((block) => `${block.kind}:${block.label}`))
+  return keys.size === blocks.length
 }
 
 function presentationBlockValid(block: PaidOperationPresentationBlock): boolean {
@@ -430,7 +437,7 @@ function cloneAndValidate(input: PaidOperationSemantics): PaidOperationSemantics
 }
 
 function clone<T>(input: T): T {
-  return JSON.parse(JSON.stringify(input)) as T
+  return structuredClone(input)
 }
 
 function digest(input: PaidOperationSemantics): string {

@@ -177,9 +177,9 @@ function BlockList({
     <section className="grid gap-2" aria-label={label}>
       <Text type="supporting" color="secondary" display="block">{label}</Text>
       <dl className="grid gap-3 sm:grid-cols-2">
-        {blocks.map((block, index) => (
+        {blocks.map((block) => (
           <Fact
-            key={`${block.kind}:${block.label}:${index}`}
+            key={`${block.kind}:${block.label}`}
             label={block.label}
             value={presentationBlockValue(block)}
           />
@@ -341,24 +341,33 @@ function continuationIcon(continuation: PaidOperationContinuation) {
 }
 
 function money(value: Readonly<{ currency: string; amountMinor: number }>): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: value.currency,
-    minimumFractionDigits: 2,
-  }).format(value.amountMinor / 100)
+  let formatter = moneyFormatters.get(value.currency)
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: value.currency,
+      minimumFractionDigits: 2,
+    })
+    moneyFormatters.set(value.currency, formatter)
+  }
+  return formatter.format(value.amountMinor / 100)
 }
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 8 }).format(value)
+  return numberFormatter.format(value)
 }
 
 function formatTime(value: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  }).format(new Date(value))
+  return timeFormatter.format(new Date(value))
 }
+
+const moneyFormatters = new Map<string, Intl.NumberFormat>()
+const numberFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 8 })
+const timeFormatter = new Intl.DateTimeFormat('en-US', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'UTC',
+})
 
 function queryReleaseLabel(semantics: PaidOperationSemantics): string {
   switch (semantics.queryRelease.state) {
