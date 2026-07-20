@@ -158,7 +158,7 @@ describe('paid operation application service', () => {
     })
     expect(current.kind === 'accepted'
       && current.value.semantics.continuations[0]?.requiredInput)
-      .toEqual(['reconciliationEvidence', 'paymentReconciliationEvidence'])
+      .toEqual([])
     await service.command({
       invocationRef: view.invocationRef,
       expectedInvocationVersion: 3,

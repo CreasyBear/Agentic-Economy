@@ -341,6 +341,8 @@ export const actionInvocationTables = {
     commandDigest: v.string(),
     invocationVersion: v.number(),
     effectGeneration: v.optional(v.number()),
+    principalRef: v.optional(v.string()),
+    callerRef: v.optional(v.string()),
     recordedAt: v.string(),
   })
     .index('by_invocationRef_and_commandId', ['invocationRef', 'commandId'])
@@ -370,11 +372,18 @@ export const actionInvocationTables = {
     totalLimit: v.number(),
     concurrencyLimit: v.number(),
     rateLimit: v.number(),
+    policyDigest: v.optional(v.string()),
+    sourceRevision: v.optional(v.string()),
+    admissionEndsAt: v.optional(v.string()),
+    retainThrough: v.optional(v.string()),
+    killSwitchOwner: v.optional(v.string()),
+    recordedAt: v.optional(v.string()),
   }).index('by_policyRef_and_principalRef', ['policyRef', 'principalRef']),
 
   hostedPaidOperationAdmissionCounters: defineTable({
     policyRef: v.string(),
     principalRef: v.string(),
+    policyDigest: v.optional(v.string()),
     currentWindowKey: v.string(),
     admittedTotal: v.number(),
     active: v.number(),
@@ -386,6 +395,7 @@ export const actionInvocationTables = {
     reservationRef: v.string(),
     policyRef: v.string(),
     principalRef: v.string(),
+    policyDigest: v.optional(v.string()),
     state: v.union(v.literal('active'), v.literal('released')),
     updatedAt: v.string(),
   }).index('by_reservationRef', ['reservationRef']),

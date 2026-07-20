@@ -239,6 +239,24 @@ describe('hosted paid-operation durable boundary', () => {
     expect(attempts[0]).not.toHaveProperty('authority')
   })
 
+  it('allows the same principal to inspect from a different authenticated caller', async () => {
+    const initial = initialAggregate()
+    const port = createInMemoryHostedPaidOperationPort<Result>([initial])
+
+    await expect(port.loadComplete({
+      owner: {
+        principalRef: initial.invocation.owner.principalRef,
+        callerRef: 'caller:paid-operation-api-key',
+      },
+      invocationRef: initial.invocation.invocationRef,
+    })).resolves.toMatchObject({ kind: 'loaded' })
+
+    await expect(port.loadComplete({
+      owner: { principalRef: 'principal:other', callerRef: 'caller:other' },
+      invocationRef: initial.invocation.invocationRef,
+    })).resolves.toEqual({ kind: 'not_found' })
+  })
+
   it('enforces Convex admission totals across windows and releases concurrency idempotently', async () => {
     const backend = convexTest(schema, modules)
     await backend.run(async (ctx) => {
@@ -249,6 +267,12 @@ describe('hosted paid-operation durable boundary', () => {
         totalLimit: 2,
         concurrencyLimit: 1,
         rateLimit: 1,
+        policyDigest: `sha256:${'a'.repeat(64)}`,
+        sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
+        admissionEndsAt: '2026-07-21T00:00:00.000Z',
+        retainThrough: '2026-07-22T00:00:00.000Z',
+        killSwitchOwner: 'operator:phase3c',
+        recordedAt: '2026-07-20T00:00:00.000Z',
       })
     })
     const first = await backend.mutation(reserveAdmission, {

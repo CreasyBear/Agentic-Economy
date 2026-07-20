@@ -27,6 +27,7 @@ export type HostedPaidOperationCreationRecord = Readonly<{
   paymentIdentifier: string
   effectIdentity: string
   terminalTruth: 'active' | 'safely_terminal' | 'uncertain'
+  environment?: Readonly<{ name: string; evidenceClass: string; claimCeiling: string }>
 }>
 
 type CreationResult =
@@ -57,7 +58,11 @@ export function createHostedPaidOperation<Result extends ActionResult>(input: Re
     principalRef: string
     windowKey: string
   }>): Promise<
-    | Readonly<{ kind: 'admitted'; reservationRef: string }>
+    | Readonly<{
+        kind: 'admitted'
+        reservationRef: string
+        environment?: Readonly<{ name: string; evidenceClass: string; claimCeiling: string }>
+      }>
     | Readonly<{
         kind: 'refused'
         code: 'trial_disabled' | 'principal_not_allowlisted' | 'total_exhausted' |
@@ -116,6 +121,7 @@ export function createHostedPaidOperation<Result extends ActionResult>(input: Re
       paymentIdentifier: input.nextIdentity('payment'),
       effectIdentity: input.nextIdentity('effect'),
       terminalTruth: 'active',
+      ...(admission.environment === undefined ? {} : { environment: admission.environment }),
     }
     const aggregate = input.buildInitialAggregate?.(record)
       ?? defaultInitialAggregate(record) as HostedPaidOperationAggregate<Result>
@@ -219,7 +225,7 @@ function defaultInitialAggregate(
       maximumAuthorizedCharge: record.provider.amount,
       queryRecipient: record.provider.recipient,
       resultDelivery: { state: 'not_delivered' },
-      environment: {
+      environment: record.environment ?? {
         name: 'local-labelled-sandbox-fixture',
         evidenceClass: 'local_labelled_sandbox_fixture',
         claimCeiling: 'durable_fixture_mechanics_only',

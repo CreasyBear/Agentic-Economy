@@ -86,7 +86,11 @@ export type HostedPaidOperationTransactionResult =
     }>
 
 export type HostedPaidOperationAdmissionResult =
-  | Readonly<{ kind: 'admitted'; reservationRef: string }>
+  | Readonly<{
+      kind: 'admitted'
+      reservationRef: string
+      environment?: Readonly<{ name: string; evidenceClass: string; claimCeiling: string }>
+    }>
   | Readonly<{
       kind: 'refused'
       code: 'trial_disabled' | 'principal_not_allowlisted' | 'total_exhausted' |
@@ -183,8 +187,7 @@ export function createInMemoryHostedPaidOperationPort<Result extends ActionResul
     loadComplete: async ({ owner, invocationRef }) => {
       const aggregate = records.get(invocationRef)
       if (aggregate === undefined
-        || aggregate.invocation.owner.principalRef !== owner.principalRef
-        || aggregate.invocation.owner.callerRef !== owner.callerRef) {
+        || aggregate.invocation.owner.principalRef !== owner.principalRef) {
         return { kind: 'not_found' }
       }
       const incomplete = aggregateIncomplete(aggregate)
@@ -196,8 +199,7 @@ export function createInMemoryHostedPaidOperationPort<Result extends ActionResul
       assertAggregateSerializable(input.next)
       const current = records.get(input.invocationRef)
       if (current === undefined
-        || current.invocation.owner.principalRef !== input.owner.principalRef
-        || current.invocation.owner.callerRef !== input.owner.callerRef) {
+        || current.invocation.owner.principalRef !== input.owner.principalRef) {
         return { kind: 'refused', code: 'cross_principal_refused' }
       }
       const commandKey = `${input.invocationRef}\u0000${input.commandId}`

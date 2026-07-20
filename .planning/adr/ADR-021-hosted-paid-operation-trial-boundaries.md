@@ -1,7 +1,7 @@
 ---
-status: accepted_for_phase_3c_plan_04_amended
+status: accepted_for_phase_3c_plan_07a_amended
 date: 2026-07-20
-amended: 2026-07-20
+amended: 2026-07-21
 decision_owner: Founder
 applies:
   - ADR-009
@@ -220,6 +220,40 @@ comprehension, or customer value.
   source of record.
 - Provider fallback or lineage reuse: rejected because an uncertain or changed
   provider is a distinct consequence boundary.
+
+## Plan 07A hosted-source-readiness amendment
+
+Hosted access is principal-owned and multi-caller. The invocation's original
+owner caller is immutable, while each new command durably records the actual
+authenticated principal and caller and each attempt remains attributable to
+its executing actor. Same-principal session and `paid_operation:invoke` callers
+may inspect and command the same invocation. This changes neither authentication
+nor consequence authority; cross-principal access remains non-enumerating and
+execute still requires current exact authority, admission, version, generation
+and scope.
+
+One internal operator-owned Phase 3C policy configures exactly one evaluator
+principal, source revision, total/concurrency/rate bounds, admission end,
+retention review date and kill-switch owner. Exact replay is idempotent;
+widening or reconfiguration after use is refused; disable requires the current
+digest and owner; status is bounded and redacted. It is never automatically
+materialized and no public DTO carries policy or environment fields.
+
+Local fixtures retain `local_labelled_sandbox_fixture` and
+`durable_fixture_mechanics_only`. A configured policy reservation instead
+returns and persists `hosted-labelled-mock-sandbox-candidate`,
+`hosted_labelled_mock_candidate`, and
+`pending_authenticated_exact_revision_readback`. These are candidate labels,
+not hosted proof. Only the independent Plan 07 verifier may later emit the
+final hosted evidence class.
+
+Rejected alternatives: caller normalization would erase actual attribution;
+per-invocation access grants would add an unnecessary authority-like lifecycle;
+environment-driven auto-materialization would introduce deployment drift;
+compiled evaluator identity would lack safe history and immediate disable;
+caller/free-form runtime labels are forgeable; and hardcoding hosted labels in
+local fixtures would manufacture a hosted claim. This amendment has only
+source and labelled local-fixture evidence.
 
 ## Plan 01 acceptance
 

@@ -107,6 +107,36 @@ describe('agentic-paid-operation:v1 projections', () => {
     })])
   })
 
+  it('keeps adverse human and agent reconciliation projections intent-only', () => {
+    const semantics = derivePaidOperationSemantics({
+      view: {
+        invocationRef: 'invocation:uncertain',
+        invocationVersion: 4,
+        attempts: [],
+        control: { state: 'reconciliation_required', attemptRef: 'attempt:1' },
+        observedResolution: { state: 'threw', execution: 'runner_threw', message: 'uncertain' },
+      } as any,
+      operation: baseSemantics().operation,
+      presentation: baseSemantics().presentation,
+      maximumAuthorizedCharge: baseSemantics().maximumAuthorizedCharge,
+      queryRecipient: 'provider:development-quote',
+      resultDelivery: { state: 'not_delivered' },
+      environment: baseSemantics().environment,
+    })
+
+    for (const projection of [
+      projectRichPaidOperation(semantics),
+      projectStructuredPaidOperation(semantics),
+    ]) {
+      expect(JSON.stringify(projection)).not.toMatch(
+        /reconciliationEvidence|paymentReconciliationEvidence/u,
+      )
+      expect(projection.semantics.continuations).toEqual([
+        expect.objectContaining({ command: 'reconcile_paid_operation', requiredInput: [] }),
+      ])
+    }
+  })
+
   it('refuses retry while paid submission or settlement remains uncertain', () => {
     const input = baseSemantics()
     expect(() => createPaidOperationSemantics({

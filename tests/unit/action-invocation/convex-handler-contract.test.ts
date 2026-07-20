@@ -664,9 +664,15 @@ async function admitPrincipal(backend: HostedBackend, principalRef: string) {
       policyRef: 'phase-3c-hosted-paid-operation-trial',
       enabled: true,
       principalRef,
-      totalLimit: 10,
-      concurrencyLimit: 10,
-      rateLimit: 10,
+      totalLimit: 3,
+      concurrencyLimit: 1,
+      rateLimit: 2,
+      policyDigest: `sha256:${'a'.repeat(64)}`,
+      sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
+      admissionEndsAt: '9999-12-30T00:00:00.000Z',
+      retainThrough: '9999-12-31T00:00:00.000Z',
+      killSwitchOwner: 'operator:phase3c',
+      recordedAt: '2026-07-20T00:00:00.000Z',
     })
   })
 }

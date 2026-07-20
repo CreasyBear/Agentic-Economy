@@ -178,7 +178,11 @@ export const authenticatedCreate = mutation({
           commandId: `admission:${requestIdentity}`,
           recordedAt,
         }) as
-          | Readonly<{ kind: 'admitted'; reservationRef: string }>
+          | Readonly<{
+              kind: 'admitted'
+              reservationRef: string
+              environment: Readonly<{ name: string; evidenceClass: string; claimCeiling: string }>
+            }>
           | Readonly<{ kind: 'refused'; code: string }>
         if (admission.kind === 'admitted') {
           heldReservationRef = admission.reservationRef
