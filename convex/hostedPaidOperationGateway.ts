@@ -830,6 +830,10 @@ function projectAggregate(
     reads: {
       loadInvocation: (invocationRef) =>
         invocationRef === aggregate.invocation.invocationRef ? aggregate.invocation : undefined,
+      loadPreparedPaymentAttempt: ({ invocationRef }) =>
+        invocationRef === aggregate.invocation.invocationRef
+          ? aggregate.paymentAttempt
+          : undefined,
       loadPaymentAttempt: ({ invocationRef, attemptRef, effectGeneration }) => {
         const attempt = aggregate.invocation.attempts.at(-1)
         return invocationRef === aggregate.invocation.invocationRef

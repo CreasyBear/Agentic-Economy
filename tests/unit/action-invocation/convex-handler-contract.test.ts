@@ -15,6 +15,10 @@ import {
   type HostedPaidOperationAggregate,
 } from '@/modules/action-invocation/hosted-paid-operation-port'
 import type { PaidOperationProjection } from '@/modules/action-invocation/paid-operation-application-service'
+import {
+  projectHostedPaidOperationCardInput,
+  projectHostedPaidOperationCardPresentation,
+} from '@/modules/action-invocation/paid-operation-card-contract'
 import type { ActionResult } from '@/modules/common/action'
 
 const handler = readFileSync('convex/actionInvocationControl.ts', 'utf8')
@@ -536,8 +540,27 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     })
     expect(authorized.kind).toBe('accepted')
     if (authorized.kind !== 'accepted') return
-    expect(authorized.value.semantics.identity.expectedInvocationVersion).toBe(2)
+    expect(authorized.value.semantics).toMatchObject({
+      identity: { expectedInvocationVersion: 2 },
+      paymentAuthorization: { state: 'created' },
+      paymentSubmission: { state: 'not_submitted' },
+      settlement: { state: 'no_evidence' },
+      resultDelivery: { state: 'not_delivered' },
+    })
     expect(authorized.value.semantics.continuations.map(({ kind }) => kind)).toEqual(['execute'])
+    const versionTwo = await owner.query(authenticatedInspect, {
+      invocationRef: created.invocationRef,
+      expectedInvocationVersion: 2,
+    })
+    expect(versionTwo).toEqual(authorized)
+    const card = projectHostedPaidOperationCardInput(
+      authorized.value,
+      'authenticated-convex-local-fixture',
+    )
+    expect(projectHostedPaidOperationCardPresentation(
+      authorized.value.semantics,
+      card,
+    ).label).toBe('Payment prepared')
 
     await expect(owner.action(authenticatedCommand, {
       invocationRef: created.invocationRef,

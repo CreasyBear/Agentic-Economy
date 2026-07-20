@@ -110,6 +110,10 @@ export function createHostedPaidOperationComposition<Result extends ActionResult
       interpreter: { interpret: () => current().interpretation },
       reads: {
         loadInvocation: () => current().invocation,
+        loadPreparedPaymentAttempt: ({ invocationRef }) =>
+          invocationRef === current().invocation.invocationRef
+            ? current().paymentAttempt
+            : undefined,
         loadPaymentAttempt: () => current().paymentAttempt,
       },
       commands,

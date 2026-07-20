@@ -619,33 +619,18 @@ describe('hosted paid-operation durable boundary', () => {
   })
 
   it('reconstructs equal warm and cold semantics and reloads committed state after command', async () => {
-    const base = aggregate()
-    const {
-      currentEffectGeneration: _currentEffectGeneration,
-      ...headerWithoutEffectGeneration
-    } = base.header
-    const initial: HostedPaidOperationAggregate<Result> = {
-      ...base,
-      header: headerWithoutEffectGeneration,
-      invocation: {
-        ...base.invocation,
-        control: { state: 'awaiting_authority' },
-        attempts: [],
-        observedResolution: { state: 'pending' },
-      },
-      paymentAttempt: {
-        ...base.paymentAttempt!,
-        state: 'prepared',
-        evidenceRefs: [],
-      },
-    }
+    const initial = initialAggregate()
     const port = createInMemoryHostedPaidOperationPort<Result>([initial])
     const command = async () => {
       const next: HostedPaidOperationAggregate<Result> = {
         ...initial,
         invocation: {
           ...initial.invocation,
-          invocationVersion: 4,
+          invocationVersion: 2,
+          acceptedAuthority: {
+            kind: 'approve_each',
+            authorityRef: initial.invocation.authority!.reference,
+          },
           control: { state: 'authorized', decidedAt: '2026-07-20T00:01:00.000Z' },
         },
       }
@@ -654,7 +639,7 @@ describe('hosted paid-operation durable boundary', () => {
         invocationRef: initial.invocation.invocationRef,
         commandId: 'command:authorize',
         commandDigest: 'sha256:authorize',
-        expectedInvocationVersion: 3,
+        expectedInvocationVersion: 1,
         next,
       })
       return next.invocation
@@ -670,17 +655,31 @@ describe('hosted paid-operation durable boundary', () => {
     })
     const before = await warm.inspect({
       invocationRef: initial.invocation.invocationRef,
-      expectedInvocationVersion: 3,
+      expectedInvocationVersion: 1,
     })
     const after = await warm.command({
       invocationRef: initial.invocation.invocationRef,
-      expectedInvocationVersion: 3,
+      expectedInvocationVersion: 1,
       command: { kind: 'authorize', accept: true },
     })
     expect(before.kind).toBe('accepted')
+    expect(before.kind === 'accepted' && before.value.semantics).toMatchObject({
+      paymentAuthorization: { state: 'not_created' },
+      paymentSubmission: { state: 'not_submitted' },
+      continuations: [expect.objectContaining({ kind: 'authorize' })],
+    })
     expect(after.kind).toBe('accepted')
     if (after.kind !== 'accepted') return
-    expect(after.value.semantics.identity.expectedInvocationVersion).toBe(4)
+    expect(after.value.semantics).toMatchObject({
+      identity: { expectedInvocationVersion: 2 },
+      paymentAuthorization: {
+        state: 'created',
+        paymentIdentifier: initial.paymentAttempt!.paymentIdentifier,
+      },
+      paymentSubmission: { state: 'not_submitted' },
+      settlement: { state: 'no_evidence' },
+      resultDelivery: { state: 'not_delivered' },
+    })
     expect(after.value.semantics.continuations.map((item) => item.kind)).toEqual(['execute'])
 
     const coldPort = createInMemoryHostedPaidOperationPort<Result>(port.exportDurableFixture())
@@ -695,9 +694,11 @@ describe('hosted paid-operation durable boundary', () => {
     })
     const restored = await cold.inspect({
       invocationRef: initial.invocation.invocationRef,
-      expectedInvocationVersion: 4,
+      expectedInvocationVersion: 2,
     })
     expect(restored).toEqual(after)
+    expect(restored.kind === 'accepted'
+      && restored.value.human.semanticDigest).toBe(after.value.human.semanticDigest)
   })
 
   it('exposes reconcile as the only continuation during uncertainty', async () => {
