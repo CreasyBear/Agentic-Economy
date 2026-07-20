@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   createDevelopmentDynamicPublishedSource,
+  createDevelopmentInvocationApplication,
   createDynamicPublishedActionInvocationAdapter,
   createInMemoryActionInvocationTracer,
   derivePaidOperationSemantics,
@@ -694,6 +695,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       loaded.durableState,
       loaded.paymentAttempts,
       loaded.paymentAuthorizationEvents,
+      () => true,
     )
     expect(cold.inspect(prepared.invocationRef)?.control).toMatchObject({ state: 'reconciliation_required' })
     const cancelled = cold.cancel({
@@ -727,30 +729,143 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       ...evidenceMaterial,
       digest: canonicalDigest(evidenceMaterial),
     }
-    const tampered = cold.reconcile({
-      invocationRef: view.invocationRef,
-      expectedInvocationVersion: view.invocationVersion,
-      attemptRef: attempt.attemptRef,
-      actor,
-      origin,
-      evidence: {
-        ...validEvidence,
-        evidenceRef: 'provider:reconciliation:tampered-after-signing',
+    const paymentEvidenceMaterial = {
+      kind: 'x402_payment_reconciliation' as const,
+      version: 1 as const,
+      evidenceRef: 'payment:reconciliation:one',
+      evidenceRefs: ['provider:payment-readback:one'],
+      source: `x402:${paymentAttempt.providerEndpoint}`,
+      paymentIdentifier: paymentAttempt.paymentIdentifier,
+      challengeDigest: paymentAttempt.challengeDigest,
+      providerEndpoint: paymentAttempt.providerEndpoint,
+      scheme: paymentAttempt.scheme,
+      network: paymentAttempt.network,
+      asset: paymentAttempt.asset,
+      payTo: paymentAttempt.payTo,
+      amount: paymentAttempt.amount,
+      invocationRef: paymentAttempt.invocationRef,
+      attemptRef: paymentAttempt.attemptRef,
+      effectGeneration: paymentAttempt.effectGeneration,
+      resolution: 'not_settled' as const,
+      observedAt: new Date(clock + 1_000).toISOString(),
+    }
+    const paymentEvidence = {
+      ...paymentEvidenceMaterial,
+      digest: canonicalDigest(paymentEvidenceMaterial),
+    }
+    const invalidControlApplication = createDevelopmentInvocationApplication({
+      adapter: cold,
+      sourceCommands: {
+        leaseOwner: () => 'worker:reconciliation',
+        reconciliationEvidence: () => undefined,
       },
     })
-    expect(tampered).toMatchObject({ kind: 'refused', code: 'evidence_digest_mismatch' })
+    const invalidControlHost = invalidControlApplication.bindStandalone({ actor })
+    const invalidControl = await invalidControlHost.recoverPaidOperation(
+      view.invocationRef,
+      { ...validEvidence, evidenceRef: 'provider:reconciliation:tampered-after-signing' },
+      paymentEvidence,
+    )
+    expect(invalidControl).toMatchObject({ kind: 'refused', code: 'evidence_digest_mismatch' })
     expect(cold.inspect(prepared.invocationRef)?.control)
       .toMatchObject({ state: 'reconciliation_required' })
-    expect(effects).toEqual({ payment: 1, provider: 1 })
-    const reconciled = cold.reconcile({
-      invocationRef: view.invocationRef,
-      expectedInvocationVersion: view.invocationVersion,
-      attemptRef: attempt.attemptRef,
-      actor,
-      origin,
-      evidence: validEvidence,
+    expect(cold.exportSnapshot().paymentAttempts[0]).toMatchObject({
+      state: 'reconciliation_required',
     })
-    expect(reconciled.kind === 'accepted' && reconciled.view.control).toEqual({ state: 'terminal' })
+    expect(effects).toEqual({ payment: 1, provider: 1 })
+    const interruptedApplication = createDevelopmentInvocationApplication({
+      adapter: cold,
+      sourceCommands: {
+        leaseOwner: () => 'worker:reconciliation',
+        reconciliationEvidence: () => undefined,
+        afterPaymentReconciliationPersist: () => {
+          throw new Error('development_crash_after_payment_reconciliation_persist')
+        },
+      },
+    })
+    await expect(interruptedApplication.bindStandalone({ actor }).recoverPaidOperation(
+      view.invocationRef,
+      validEvidence,
+      paymentEvidence,
+    )).rejects.toThrow('development_crash_after_payment_reconciliation_persist')
+    const cutSnapshot = cold.exportSnapshot()
+    expect(cutSnapshot.paymentAttempts[0]).toMatchObject({
+      state: 'not_settled',
+      reconciliationEvidenceRef: paymentEvidence.evidenceRef,
+      reconciliationEvidenceDigest: paymentEvidence.digest,
+    })
+    expect(cold.inspect(prepared.invocationRef)?.control)
+      .toMatchObject({ state: 'reconciliation_required' })
+    const cutLoaded = loadDynamicPublishedAdapterSnapshot(
+      JSON.parse(JSON.stringify(cutSnapshot)),
+      {
+        operation: fixture.operation,
+        descriptor: fixture.descriptor,
+        actor,
+        origin,
+        issuedAuthority: {
+          reference: prepared.authority!.reference,
+          accepted: { kind: 'approve_each', authorityRef: prepared.authority!.reference },
+          materialInputDigest: materialDigest(
+            preparedMaterial,
+            ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+          ),
+        },
+        expectedEffectCount: 1,
+        expectedSemanticClaim: {
+          ownerInvocationRef: prepared.invocationRef,
+          status: 'uncertain',
+        },
+      },
+    )
+    const replayAdapter = createAdapter(
+      fixture.operation,
+      successRuntime(fixture.operation.binding.endpointUrl, effects),
+      clock + 1_000,
+      createDevelopmentDynamicPublishedSource(
+        [fixture.operation],
+        cutLoaded.sourceRows,
+        cutLoaded.semanticClaims,
+      ),
+      cutLoaded.durableState,
+      cutLoaded.paymentAttempts,
+      cutLoaded.paymentAuthorizationEvents,
+      () => true,
+    )
+    const replayHost = createDevelopmentInvocationApplication({
+      adapter: replayAdapter,
+      sourceCommands: {
+        leaseOwner: () => 'worker:reconciliation',
+        reconciliationEvidence: () => undefined,
+      },
+    }).bindStandalone({ actor })
+    const conflictingMaterial = {
+      ...paymentEvidenceMaterial,
+      evidenceRef: 'payment:reconciliation:conflict',
+    }
+    const conflicting = await replayHost.recoverPaidOperation(
+      view.invocationRef,
+      validEvidence,
+      { ...conflictingMaterial, digest: canonicalDigest(conflictingMaterial) },
+    )
+    expect(conflicting).toMatchObject({
+      kind: 'refused',
+      code: 'reconciliation_evidence_unavailable',
+    })
+    expect(replayAdapter.inspect(prepared.invocationRef)?.control)
+      .toMatchObject({ state: 'reconciliation_required' })
+    const reconciled = await replayHost.recoverPaidOperation(
+      view.invocationRef,
+      validEvidence,
+      paymentEvidence,
+    )
+    expect(reconciled.kind === 'reconciled' && reconciled.view.control).toEqual({
+      state: 'terminal',
+    })
+    expect(replayAdapter.exportSnapshot().paymentAttempts[0]).toMatchObject({
+      state: 'not_settled',
+      reconciliationEvidenceDigest: paymentEvidence.digest,
+    })
     expect(effects).toEqual({ payment: 1, provider: 1 })
   })
 
@@ -1633,6 +1748,7 @@ function createAdapter(
   durableState?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['durableState'],
   paymentAttempts?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAttempts'],
   paymentAuthorizationEvents?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAuthorizationEvents'],
+  verifyPaymentReconciliationEvidence?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['verifyPaymentReconciliationEvidence'],
 ) {
   const priorCount = durableState?.controls.size ?? 0
   let invocation = priorCount
@@ -1649,6 +1765,9 @@ function createAdapter(
     ...(durableState === undefined ? {} : { durableState }),
     ...(paymentAttempts === undefined ? {} : { paymentAttempts }),
     ...(paymentAuthorizationEvents === undefined ? {} : { paymentAuthorizationEvents }),
+    ...(verifyPaymentReconciliationEvidence === undefined
+      ? {}
+      : { verifyPaymentReconciliationEvidence }),
   })
 }
 

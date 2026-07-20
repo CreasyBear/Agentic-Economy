@@ -23,6 +23,8 @@ export type X402PaymentAttempt = Readonly<{
   authorizationDigest: string
   custodyRef: string
   settledAmount?: Readonly<{ currency: string; amountMinor: number }>
+  reconciliationEvidenceRef?: string
+  reconciliationEvidenceDigest?: string
   state: X402PaymentAttemptState
   preparedAt: number
   submissionStartedAt?: number

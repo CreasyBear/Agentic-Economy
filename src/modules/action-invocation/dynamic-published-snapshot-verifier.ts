@@ -107,6 +107,8 @@ function paymentAttemptShapeValid(value: unknown): boolean {
       ...(value.settledAmount === undefined ? [] : ['settledAmount']),
       ...(value.submissionStartedAt === undefined ? [] : ['submissionStartedAt']),
       ...(value.observedAt === undefined ? [] : ['observedAt']),
+      ...(value.reconciliationEvidenceRef === undefined ? [] : ['reconciliationEvidenceRef']),
+      ...(value.reconciliationEvidenceDigest === undefined ? [] : ['reconciliationEvidenceDigest']),
       'evidenceRefs',
     ])) return false
   return [
@@ -123,6 +125,13 @@ function paymentAttemptShapeValid(value: unknown): boolean {
         && Number.isSafeInteger(value.settledAmount.amountMinor)
         && (value.settledAmount.amountMinor as number) >= 0
         && exactKeys(value.settledAmount, ['currency', 'amountMinor']))
+    && ((value.state === 'not_settled' || value.state === 'settled')
+      ? typeof value.reconciliationEvidenceRef === 'string'
+        && value.reconciliationEvidenceRef.length > 0
+        && typeof value.reconciliationEvidenceDigest === 'string'
+        && /^sha256:[0-9a-f]{64}$/.test(value.reconciliationEvidenceDigest)
+      : value.reconciliationEvidenceRef === undefined
+        && value.reconciliationEvidenceDigest === undefined)
 }
 
 function semanticClaimShapeValid(value: unknown): boolean {

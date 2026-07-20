@@ -15,6 +15,7 @@ import type {
   InvocationDecision,
   StandingMandateAuthorityBasis,
 } from './contracts'
+import { validateReconciliationEvidence, type ReconciliationEvidence } from './reconciliation-evidence'
 import type { DevelopmentTimeoutSignal } from './attempts'
 import {
   buildDynamicPublishedInput,
@@ -174,12 +175,20 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
     DynamicPublishedInvocationInput,
     DynamicPublishedInvocationResult
   >>['reconcile']
+  validateReconciliation(input: Readonly<{
+    invocationRef: string
+    expectedInvocationVersion: number
+    attemptRef: string
+    actor: InvocationActor
+    origin: ActionInvocationOrigin
+    evidence: ReconciliationEvidence
+  }>): DecisionRefusalCode | undefined
   reconcilePayment(input: Readonly<{
     evidence: X402PaymentReconciliationEvidence
     persist?: boolean
   }>): Promise<
     | Readonly<{ kind: 'accepted'; attempt: X402PaymentAttempt }>
-    | Readonly<{ kind: 'refused'; code: X402PaymentReconciliationEvidenceError | 'payment_attempt_not_found' | 'payment_attempt_reconciliation_not_required' }>
+    | Readonly<{ kind: 'refused'; code: X402PaymentReconciliationEvidenceError | 'payment_attempt_not_found' | 'payment_attempt_reconciliation_not_required' | 'command_identity_conflict' }>
   >
   inspect(invocationRef: string): ActionInvocationView<DynamicPublishedInvocationResult> | undefined
   readCompletedResult(
@@ -674,13 +683,45 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       return tracer.cancel(request)
     },
     reconcile: tracer.reconcile,
+    validateReconciliation(request) {
+      const view = tracer.inspect(request.invocationRef)
+      if (view === undefined) return 'invocation_not_found'
+      if (view.invocationVersion !== request.expectedInvocationVersion) {
+        return 'stale_invocation_version'
+      }
+      if (view.owner.callerRef !== request.actor.callerRef
+        || view.owner.principalRef !== request.actor.principalRef) {
+        return 'cross_principal_refused'
+      }
+      if (JSON.stringify(view.origin) !== JSON.stringify(request.origin)) {
+        return 'cross_origin_refused'
+      }
+      if (view.control.state !== 'reconciliation_required'
+        || view.control.attemptRef !== request.attemptRef) {
+        return 'invalid_control_state'
+      }
+      const attempt = view.attempts.find(({ attemptRef }) => attemptRef === request.attemptRef)
+      const notBefore = attempt?.outcome.state === 'uncertain'
+        || attempt?.outcome.state === 'timed_out'
+        ? attempt.outcome.reconciliationRequiredAt
+        : undefined
+      if (attempt === undefined || notBefore === undefined) return 'invalid_control_state'
+      return validateReconciliationEvidence({
+        evidence: request.evidence,
+        source: `published-operation:${input.operation.operationId}`,
+        invocationRef: view.invocationRef,
+        attemptRef: attempt.attemptRef,
+        effectGeneration: attempt.effectGeneration,
+        now: new Date(input.now()).toISOString(),
+        notBefore,
+        verifySourceEvidence: (evidence) =>
+          evidence.source === `published-operation:${input.operation.operationId}`,
+      })
+    },
     async reconcilePayment({ evidence, persist = true }) {
       const key = x402PaymentAttemptKey(evidence)
       const current = paymentAttemptPort.load(key)
       if (current === undefined) return { kind: 'refused', code: 'payment_attempt_not_found' }
-      if (current.state !== 'possibly_submitted' && current.state !== 'reconciliation_required') {
-        return { kind: 'refused', code: 'payment_attempt_reconciliation_not_required' }
-      }
       const code = validateX402PaymentReconciliationEvidence({
         evidence,
         attempt: current,
@@ -689,6 +730,15 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         verifySourceEvidence: input.verifyPaymentReconciliationEvidence,
       })
       if (code !== undefined) return { kind: 'refused', code }
+      if (current.state === 'not_settled' || current.state === 'settled') {
+        return current.reconciliationEvidenceDigest === evidence.digest
+          && current.reconciliationEvidenceRef === evidence.evidenceRef
+          ? { kind: 'accepted', attempt: current }
+          : { kind: 'refused', code: 'command_identity_conflict' }
+      }
+      if (current.state !== 'possibly_submitted' && current.state !== 'reconciliation_required') {
+        return { kind: 'refused', code: 'payment_attempt_reconciliation_not_required' }
+      }
       if (!persist) return { kind: 'accepted', attempt: current }
       const authorizationEvent = paymentAttemptPort.loadAuthorizationEvent(key)
       if (authorizationEvent === undefined) {
@@ -699,6 +749,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         state: evidence.resolution,
         observedAt: Date.parse(evidence.observedAt),
         evidenceRefs: [...new Set([evidence.evidenceRef, ...evidence.evidenceRefs])],
+        reconciliationEvidenceRef: evidence.evidenceRef,
+        reconciliationEvidenceDigest: evidence.digest,
         ...(evidence.settledAmount === undefined ? {} : { settledAmount: evidence.settledAmount }),
       }
       await paymentAttemptPort.persist({ attempt, authorizationEvent })

@@ -15,8 +15,10 @@ import type {
   PaidOperationContinuation,
   StructuredPaidOperationProjection,
 } from '../../src/modules/action-invocation/paid-operation-semantics'
-import type { ReconciliationEvidence } from '../../src/modules/action-invocation/contracts'
-import type { X402PaymentReconciliationEvidence } from '../../src/modules/action-invocation'
+import type {
+  ReconciliationEvidence,
+  X402PaymentReconciliationEvidence,
+} from '../../src/modules/action-invocation'
 
 export const PAID_OPERATION_DEVELOPMENT_SURFACE = Object.freeze({
   environment: 'local-development',

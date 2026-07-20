@@ -80,6 +80,9 @@ export type DevelopmentHostSourceCommands = Readonly<{
   beforeExecute?(
     view: ActionInvocationView<DynamicPublishedInvocationResult>,
   ): void | Promise<void>
+  afterPaymentReconciliationPersist?(
+    view: ActionInvocationView<DynamicPublishedInvocationResult>,
+  ): void | Promise<void>
 }>
 
 export type DevelopmentHostCommandEvent = Readonly<{
@@ -350,6 +353,22 @@ function bindHost(
       if (attempt === undefined) {
         return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }
       }
+      const controlEvidenceRefusal = adapter.validateReconciliation({
+        invocationRef,
+        expectedInvocationVersion: view.invocationVersion,
+        attemptRef: attempt.attemptRef,
+        actor,
+        origin,
+        evidence: reconciliationEvidence,
+      })
+      if (controlEvidenceRefusal !== undefined) {
+        return { kind: 'refused', code: controlEvidenceRefusal, view }
+      }
+      const payment = await adapter.reconcilePayment({ evidence: paymentEvidence })
+      if (payment.kind === 'refused') {
+        return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }
+      }
+      await sourceCommands.afterPaymentReconciliationPersist?.(view)
       const reconciled = adapter.reconcile({
         invocationRef,
         expectedInvocationVersion: view.invocationVersion,
@@ -359,10 +378,6 @@ function bindHost(
         evidence: reconciliationEvidence,
       })
       if (reconciled.kind === 'refused') return reconciled
-      const payment = await adapter.reconcilePayment({ evidence: paymentEvidence })
-      if (payment.kind === 'refused') {
-        throw new Error(`payment_reconciliation_persistence_failed:${payment.code}`)
-      }
       return { kind: 'reconciled', view: reconciled.view }
     },
     requestCancellation: (invocationRef) => {
