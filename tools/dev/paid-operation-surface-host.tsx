@@ -5,6 +5,11 @@ import { useRef, useState } from 'react'
 import { Text } from '@astryxdesign/core/Text'
 
 import { AePaidOperationCard } from '../../src/components/ae/action-invocation/AePaidOperationCard'
+import {
+  projectHostedPaidOperationCardInput,
+  type HostedPaidOperationCardInput,
+  type HostedPaidOperationCommandDescriptor,
+} from '../../src/modules/action-invocation/paid-operation-card-contract'
 import type {
   PaidOperationApplicationResult,
   PaidOperationApplicationService,
@@ -21,9 +26,10 @@ import type {
 } from '../../src/modules/action-invocation'
 
 export const PAID_OPERATION_DEVELOPMENT_SURFACE = Object.freeze({
-  environment: 'local-development',
-  evidenceClass: 'labelled_local_development',
-  claimCeiling: 'mechanism_and_projection_parity_only',
+  environment: 'Local labelled sandbox',
+  provenance: 'Labelled mock provider',
+  evidenceClass: 'local_labelled_sandbox_fixture',
+  claimCeiling: 'Local browser mechanics and projection parity only.',
   humanComprehension:
     'Source and automated accessibility checks do not prove that people understand the operation, consequence, or recovery choice.',
 })
@@ -36,9 +42,14 @@ export type PaidOperationSurfaceRef = Readonly<{
 export type StructuredPaidOperationCommandContract = Readonly<{
   command: PaidOperationCommand['kind']
   requiredInput: readonly string[]
-  inputTemplate?: Readonly<Record<string, unknown>>
   expectedInvocationVersion: number
 }>
+
+export type StructuredPaidOperationPublicCommand =
+  | Readonly<{ kind: 'authorize'; accept: boolean }>
+  | Readonly<{ kind: 'execute' }>
+  | Readonly<{ kind: 'inspect' }>
+  | Readonly<{ kind: 'reconcile' }>
 
 export type StructuredPaidOperationDevelopmentResponse =
   | Readonly<{
@@ -52,13 +63,30 @@ export type StructuredPaidOperationDevelopmentResponse =
 
 export function createStructuredPaidOperationDevelopmentHost(
   service: PaidOperationApplicationService,
+  resolveReconciliationEvidence?: (
+    ref: PaidOperationSurfaceRef,
+  ) => Promise<Readonly<{
+    reconciliationEvidence: ReconciliationEvidence
+    paymentReconciliationEvidence: X402PaymentReconciliationEvidence
+  }>> | Readonly<{
+    reconciliationEvidence: ReconciliationEvidence
+    paymentReconciliationEvidence: X402PaymentReconciliationEvidence
+  }>,
 ) {
   return Object.freeze({
     inspect(ref: PaidOperationSurfaceRef): StructuredPaidOperationDevelopmentResponse {
       return structuredResponse(service.inspect(ref))
     },
-    async command(input: PaidOperationSurfaceRef & Readonly<{ command: PaidOperationCommand }>) {
-      return structuredResponse(await service.command(input))
+    async command(input: PaidOperationSurfaceRef & Readonly<{
+      command: StructuredPaidOperationPublicCommand
+    }>) {
+      const command = await publicDevelopmentCommand(
+        input,
+        resolveReconciliationEvidence,
+      )
+      return command === null
+        ? { kind: 'refused', code: 'continuation_not_allowed' } as const
+        : structuredResponse(await service.command({ ...input, command }))
     },
   })
 }
@@ -67,6 +95,8 @@ export function AePaidOperationDevelopmentSurface({
   service,
   initialRef,
   resolveReconciliationEvidence,
+  transportRescue = null,
+  onReadOnlyInspect,
 }: Readonly<{
   service: PaidOperationApplicationService
   initialRef: PaidOperationSurfaceRef
@@ -79,34 +109,52 @@ export function AePaidOperationDevelopmentSurface({
     reconciliationEvidence: ReconciliationEvidence
     paymentReconciliationEvidence: X402PaymentReconciliationEvidence
   }>
+  transportRescue?: HostedPaidOperationCardInput['transportRescue']
+  onReadOnlyInspect?: (relation: string) => void
 }>) {
   const initial = service.inspect(initialRef)
   const [result, setResult] = useState(initial)
-  const [pending, setPending] = useState(false)
+  const [pendingCommand, setPendingCommand] = useState<
+    HostedPaidOperationCardInput['pendingCommand']
+  >(null)
   const statusRef = useRef<HTMLParagraphElement>(null)
 
   const projection = result.kind === 'accepted' ? result.value : null
+  const pending = pendingCommand !== null
 
-  async function dispatch(continuation: PaidOperationContinuation) {
+  async function dispatch(descriptor: HostedPaidOperationCommandDescriptor) {
+    const continuation = projection?.semantics.continuations.find(({ kind }) =>
+      kind === descriptor.command)
+    if (continuation === undefined) {
+      setResult({ kind: 'refused', code: 'continuation_not_allowed' })
+      return
+    }
     const ref = {
       invocationRef: projection?.semantics.identity.invocationRef ?? initialRef.invocationRef,
-      expectedInvocationVersion: continuation.expectedInvocationVersion,
+      expectedInvocationVersion: descriptor.expectedInvocationVersion,
     }
     const reconciliationEvidence = continuation.kind === 'reconcile'
       ? await resolveReconciliationEvidence?.(ref)
       : undefined
-    const command = continuationCommand(continuation, reconciliationEvidence)
+    const command = continuationCommand(
+      continuation,
+      reconciliationEvidence,
+      descriptor.accept,
+    )
     if (command === null) {
       setResult({ kind: 'refused', code: 'continuation_not_allowed' })
       return
     }
-    setPending(true)
+    setPendingCommand({
+      pendingCommandId: crypto.randomUUID(),
+      kind: descriptor.command,
+    })
     const next = await service.command({
       ...ref,
       command,
     })
     setResult(next)
-    setPending(false)
+    setPendingCommand(null)
     queueMicrotask(() => statusRef.current?.focus())
   }
 
@@ -148,7 +196,16 @@ export function AePaidOperationDevelopmentSurface({
             >
               <AePaidOperationCard
                 semantics={projection.human.semantics}
-                {...(pending ? {} : { onContinue: dispatch })}
+                card={{
+                  ...projectHostedPaidOperationCardInput(
+                    projection,
+                    PAID_OPERATION_DEVELOPMENT_SURFACE.provenance,
+                  ),
+                  pendingCommand,
+                  transportRescue,
+                }}
+                onCommand={dispatch}
+                {...(onReadOnlyInspect === undefined ? {} : { onReadOnlyInspect })}
               />
             </div>
           )}
@@ -166,10 +223,11 @@ function continuationCommand(
     reconciliationEvidence: ReconciliationEvidence
     paymentReconciliationEvidence: X402PaymentReconciliationEvidence
   }>,
+  accept?: boolean,
 ): PaidOperationCommand | null {
   switch (continuation.kind) {
     case 'authorize':
-      return { kind: 'authorize', accept: true }
+      return typeof accept === 'boolean' ? { kind: 'authorize', accept } : null
     case 'execute':
       return { kind: 'execute' }
     case 'inspect':
@@ -192,25 +250,52 @@ function structuredResponse(
     projection: result.value.agent,
     semanticDigest: result.value.agent.semanticDigest,
     commands: result.value.semantics.continuations.flatMap((continuation) => {
-      if (continuation.kind === 'reconcile') {
-        return [{
-          command: continuation.kind,
-          requiredInput: ['reconciliationEvidence', 'paymentReconciliationEvidence'],
-          inputTemplate: {
-            kind: 'reconcile',
-            reconciliationEvidence: null,
-            paymentReconciliationEvidence: null,
-          },
-          expectedInvocationVersion: continuation.expectedInvocationVersion,
-        }]
-      }
-      const command = continuationCommand(continuation)
-      return command === null ? [] : [{
-        command: command.kind,
-        requiredInput: continuation.requiredInput,
-        expectedInvocationVersion: continuation.expectedInvocationVersion,
-      }]
+      const descriptor = structuredCommandContract(continuation)
+      return descriptor === null ? [] : [descriptor]
     }),
     claimBoundary: PAID_OPERATION_DEVELOPMENT_SURFACE,
+  }
+}
+
+function structuredCommandContract(
+  continuation: PaidOperationContinuation,
+): StructuredPaidOperationCommandContract | null {
+  if (continuation.kind === 'retry') return null
+  return {
+    command: continuation.kind,
+    requiredInput: continuation.kind === 'reconcile'
+      ? []
+      : continuation.kind === 'authorize'
+        ? ['accept']
+        : continuation.requiredInput,
+    expectedInvocationVersion: continuation.expectedInvocationVersion,
+  }
+}
+
+async function publicDevelopmentCommand(
+  input: PaidOperationSurfaceRef & Readonly<{
+    command: StructuredPaidOperationPublicCommand
+  }>,
+  resolveReconciliationEvidence?: (
+    ref: PaidOperationSurfaceRef,
+  ) => Promise<Readonly<{
+    reconciliationEvidence: ReconciliationEvidence
+    paymentReconciliationEvidence: X402PaymentReconciliationEvidence
+  }>> | Readonly<{
+    reconciliationEvidence: ReconciliationEvidence
+    paymentReconciliationEvidence: X402PaymentReconciliationEvidence
+  }>,
+): Promise<PaidOperationCommand | null> {
+  switch (input.command.kind) {
+    case 'authorize':
+      return input.command
+    case 'execute':
+      return { kind: 'execute' }
+    case 'inspect':
+      return { kind: 'inspect' }
+    case 'reconcile': {
+      const evidence = await resolveReconciliationEvidence?.(input)
+      return evidence === undefined ? null : { kind: 'reconcile', ...evidence }
+    }
   }
 }

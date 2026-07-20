@@ -1,5 +1,9 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { createElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { isRedirect, type AnyRedirect } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -75,6 +79,7 @@ vi.mock('@tanstack/react-start', () => ({
 }))
 
 afterEach(() => {
+  cleanup()
   clerk.auth.mockReset()
   clerk.client.mockReset()
   runtime.get.mockReset()
@@ -230,7 +235,7 @@ describe('hosted paid-operation authenticated adapters', () => {
       card: {
         disclosure: {
           providerDisplayName: 'Mock provider A',
-          materialFields: ['convert', 'symbol'],
+          materialFields: ['BTC', 'USD'],
           maximumCharge: { currency: 'USD', amountMinor: 1 },
         },
         authorize: expect.objectContaining({ command: 'authorize', accept: true }),
@@ -391,7 +396,254 @@ describe('hosted paid-operation authenticated adapters', () => {
     expect(fabricated.status).toBe(422)
     expect(seen).toHaveLength(1)
   })
+
+  it('renders one source-issued detail and preserves durable truth while an exact command is pending', async () => {
+    const initial = await acceptedHumanReadback(paidProjection())
+    const next = await acceptedHumanReadback(preparedProjection())
+    let resolveCommand: ((value: Readonly<{ status: number; body: unknown }>) => void) | undefined
+    const sendCommand = vi.fn((_body: Readonly<Record<string, unknown>>) =>
+      new Promise<Readonly<{
+      status: number
+      body: unknown
+    }>>((resolve) => {
+      resolveCommand = resolve
+      }))
+
+    const { container } = render(createElement(HostedPaidOperationDetailView, {
+      result: { status: 200, body: initial },
+      sendCommand,
+    }))
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1)
+    expect(container.querySelectorAll('[aria-live="polite"]')).toHaveLength(1)
+    expect(container.querySelector('[aria-live="polite"]')?.getAttribute('aria-atomic')).toBe(
+      'true',
+    )
+    expect(container.querySelector('pre')).toBeNull()
+    expect(screen.getByText('Ready for permission', { exact: true })).toBeTruthy()
+
+    const authorize = screen.getByRole('button', { name: 'Authorize up to $0.01' })
+    fireEvent.click(authorize)
+    await waitFor(() => expect(sendCommand).toHaveBeenCalledTimes(1))
+    const body = sendCommand.mock.calls[0]?.[0]
+    expect(body).toEqual({
+      command: 'authorize',
+      commandId: expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu,
+      ),
+      expectedInvocationVersion: 3,
+      accept: true,
+    })
+    expect(Object.keys(body ?? {}).sort()).toEqual([
+      'accept',
+      'command',
+      'commandId',
+      'expectedInvocationVersion',
+    ])
+    expect(screen.getByText('Ready for permission', { exact: true })).toBeTruthy()
+    expect(screen.queryByText('Payment prepared', { exact: true })).toBeNull()
+    expect(container.querySelector('[data-paid-operation-state]')?.getAttribute('aria-busy')).toBe(
+      'true',
+    )
+    expect(authorize).toHaveProperty('disabled', true)
+    fireEvent.click(authorize)
+    expect(sendCommand).toHaveBeenCalledTimes(1)
+
+    resolveCommand?.({ status: 200, body: next })
+    await waitFor(() =>
+      expect(screen.getByText('Payment prepared', { exact: true })).toBeTruthy())
+    expect(screen.getAllByText(
+      'Permission recorded. Nothing has been submitted yet.',
+      { exact: true },
+    )).toHaveLength(2)
+    expect(screen.getByRole('status').textContent).toBe(
+      'Permission recorded. Nothing has been submitted yet.',
+    )
+    expect(document.activeElement).toBe(screen.getByRole('status'))
+  })
+
+  it('sends public reconciliation intent only and follows stale source relations without replay', async () => {
+    const initial = await acceptedHumanReadback(uncertainProjection())
+    const inspect = '/actions/paid/invocation%3Apaid?expectedInvocationVersion=4'
+    const sendCommand = vi.fn(async (_body: Readonly<Record<string, unknown>>) => ({
+      status: 409,
+      body: {
+        kind: 'refused',
+        code: 'stale_invocation_version',
+        suppliedVersion: 3,
+        currentExpectedInvocationVersion: 4,
+        relation: { inspect },
+      },
+    }))
+    const followInspectRelation = vi.fn()
+
+    render(createElement(HostedPaidOperationDetailView, {
+      result: { status: 200, body: initial },
+      sendCommand,
+      followInspectRelation,
+    }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check existing payment' }))
+
+    await waitFor(() => expect(followInspectRelation).toHaveBeenCalledWith(inspect))
+    expect(sendCommand).toHaveBeenCalledTimes(1)
+    expect(sendCommand).toHaveBeenCalledWith({
+      command: 'reconcile',
+      commandId: expect.any(String),
+      expectedInvocationVersion: 3,
+    })
+    expect(JSON.stringify(sendCommand.mock.calls[0]?.[0])).not.toMatch(
+      /owner|principal|result|resolution|reconciliationEvidence/u,
+    )
+  })
+
+  it('turns ambiguous command transport into one read-only reload continuation', async () => {
+    const initial = await acceptedHumanReadback(paidProjection())
+    const inspect = '/actions/paid/invocation%3Apaid?expectedInvocationVersion=3'
+    const sendCommand = vi.fn(async (_body: Readonly<Record<string, unknown>>) => ({
+      status: 503,
+      body: {
+        kind: 'update_not_confirmed',
+        requestId: 'request:ambiguous',
+        relation: { inspect },
+      },
+    }))
+    const followInspectRelation = vi.fn()
+
+    const { container } = render(createElement(HostedPaidOperationDetailView, {
+      result: { status: 200, body: initial },
+      sendCommand,
+      followInspectRelation,
+    }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize up to $0.01' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toMatch(/Update not confirmed/))
+    expect(container.querySelectorAll('[data-command]')).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: /Authorize|Continue|Check existing/i })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Reload operation' }))
+    expect(followInspectRelation).toHaveBeenCalledWith(inspect)
+    expect(sendCommand).toHaveBeenCalledTimes(1)
+  })
 })
+
+async function acceptedHumanReadback(projection: PaidOperationProjection) {
+  const response = await handleHostedPaidOperationHumanInspect(
+    projection.semantics.identity.invocationRef,
+    projection.semantics.identity.expectedInvocationVersion,
+    {
+      authenticate: async () => ({
+        userId: 'owner:paid',
+        sessionId: 'session:human',
+      }),
+      gateway: {
+        inspect: async () => ({ kind: 'accepted', value: projection }),
+        command: async () => ({ kind: 'accepted', value: projection }),
+      },
+      provenance: 'Labelled mock provider',
+    },
+  )
+  return await response.json()
+}
+
+function preparedProjection(): PaidOperationProjection {
+  const initial = paidProjection()
+  const semantics = {
+    ...initial.semantics,
+    identity: {
+      ...initial.semantics.identity,
+      expectedInvocationVersion: 4,
+    },
+    paymentAuthorization: {
+      state: 'created',
+      paymentIdentifier: 'payment:prepared',
+      custodyReference: {
+        kind: 'opaque_digest_reference',
+        algorithm: 'sha256',
+        digest: `sha256:${'4'.repeat(64)}`,
+      },
+      evidenceRefs: ['evidence:prepared'],
+    },
+    continuations: [{
+      kind: 'execute',
+      command: 'execute_paid_operation',
+      requiredInput: [],
+      expectedInvocationVersion: 4,
+      authorityRequired: true,
+    }],
+  } as const
+  return projectionFromSemantics(semantics)
+}
+
+function uncertainProjection(): PaidOperationProjection {
+  const initial = paidProjection()
+  const semantics = {
+    ...initial.semantics,
+    queryRelease: {
+      state: 'unknown',
+      evidenceRefs: ['evidence:release-unknown'],
+    },
+    paymentAuthorization: {
+      state: 'created',
+      paymentIdentifier: 'payment:uncertain',
+      custodyReference: {
+        kind: 'opaque_digest_reference',
+        algorithm: 'sha256',
+        digest: `sha256:${'5'.repeat(64)}`,
+      },
+      evidenceRefs: ['evidence:prepared'],
+    },
+    paymentSubmission: {
+      state: 'possibly_submitted',
+      evidenceRefs: ['evidence:submission-unknown'],
+    },
+    settlement: {
+      state: 'unknown',
+      evidenceRefs: ['evidence:settlement-unknown'],
+    },
+    error: {
+      code: 'reconciliation_required',
+      phase: 'reconciliation',
+      queryReleaseStatus: 'unknown',
+      paymentSubmissionStatus: 'possibly_submitted',
+      settlementStatus: 'unknown',
+      resultStatus: 'not_delivered',
+      retryability: 'reconcile_before_retry',
+      safeNextAction: 'reconcile',
+      evidenceRefs: ['evidence:submission-unknown'],
+    },
+    continuations: [{
+      kind: 'reconcile',
+      command: 'reconcile_paid_operation',
+      requiredInput: ['reconciliationEvidence', 'paymentReconciliationEvidence'],
+      expectedInvocationVersion: 3,
+      authorityRequired: false,
+    }],
+  } as const
+  return projectionFromSemantics(semantics)
+}
+
+function projectionFromSemantics(
+  semantics: PaidOperationProjection['semantics'],
+): PaidOperationProjection {
+  return {
+    semantics,
+    human: {
+      kind: 'human_rich_paid_operation',
+      title: semantics.presentation.title,
+      sections: [],
+      semantics,
+      semanticDigest: 'sha256:semantic',
+      semanticDigestUse: 'projection_equality_only_not_authority',
+    },
+    agent: {
+      kind: 'external_agent_paid_operation',
+      semantics,
+      semanticDigest: 'sha256:semantic',
+      semanticDigestUse: 'projection_equality_only_not_authority',
+    },
+  }
+}
 
 function paidProjection(): PaidOperationProjection {
   const semantics = {

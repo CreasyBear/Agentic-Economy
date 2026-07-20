@@ -7,10 +7,16 @@ import type {
   PaidOperationApplicationRefusalCode,
   PaidOperationProjection,
 } from '@/modules/action-invocation/paid-operation-application-service'
-import type {
-  PaidOperationContinuation,
-  PaidOperationPresentationBlock,
-} from '@/modules/action-invocation/paid-operation-semantics'
+import {
+  projectHostedPaidOperationCardInput,
+  type HostedPaidOperationCardInput,
+  type HostedPaidOperationCommandDescriptor,
+} from '@/modules/action-invocation/paid-operation-card-contract'
+
+export type {
+  HostedPaidOperationCardInput,
+  HostedPaidOperationCommandDescriptor,
+} from '@/modules/action-invocation/paid-operation-card-contract'
 
 type TransportRefusalCode =
   | PaidOperationApplicationRefusalCode
@@ -97,51 +103,6 @@ export type HostedPaidOperationCreationGateway = Readonly<{
           | 'aggregate_incomplete'
       }>
   >
-}>
-
-export type HostedPaidOperationCardInput = Readonly<{
-  disclosure: Readonly<{
-    providerDisplayName: string
-    materialFields: readonly string[]
-    maximumCharge: Readonly<{ currency: string; amountMinor: number }>
-  }>
-  authorize: HostedPaidOperationCommandDescriptor | null
-  refuse: HostedPaidOperationCommandDescriptor | null
-  pendingCommand: null | Readonly<{ pendingCommandId: string; kind: string }>
-  transportRescue: null | Readonly<{
-    kind: 'update_not_confirmed'
-    requestId: string
-    inspectRelation: string
-  }>
-  paymentTruth: PaidOperationProjection['semantics']['paymentSubmission']
-  settlementTruth: PaidOperationProjection['semantics']['settlement']
-  resultTruth: PaidOperationProjection['semantics']['resultDelivery']
-  safeContinuation: HostedPaidOperationCommandDescriptor | null
-  noActionReason: string | null
-  operationBlocks: readonly PaidOperationPresentationBlock[]
-  runtimeEvidence: Readonly<{
-    environment: string
-    provenance: string
-    evidenceClass: string
-    claimCeiling: string
-  }>
-  technicalDetails: Readonly<{
-    invocationRef: string
-    expectedInvocationVersion: number
-    operationRevision: string
-    providerId: string
-    semanticDigest: string
-    semanticDigestUse: 'projection_equality_only_not_authority'
-    evidenceReferences: readonly string[]
-  }>
-}>
-
-export type HostedPaidOperationCommandDescriptor = Readonly<{
-  command: HostedPaidOperationPublicCommand['kind']
-  commandIdRequired: true
-  expectedInvocationVersion: number
-  requiredInput: readonly string[]
-  accept?: boolean
 }>
 
 type HumanHandlerOptions = Readonly<{
@@ -274,46 +235,7 @@ export function projectHostedPaidOperation(
   audience: 'human' | 'agent',
 ) {
   const semantics = projection.semantics
-  const continuation = safeContinuation(semantics.continuations)
-  const authorize = semantics.continuations.find((item) => item.kind === 'authorize')
-  const evidenceReferences = [
-    ...semantics.queryRelease.state === 'not_released' ? [] : semantics.queryRelease.evidenceRefs,
-    ...semantics.paymentSubmission.state === 'not_submitted' ? [] : semantics.paymentSubmission.evidenceRefs,
-    ...semantics.settlement.state === 'no_evidence' ? [] : semantics.settlement.evidenceRefs,
-    ...semantics.resultDelivery.state === 'not_delivered' ? [] : semantics.resultDelivery.evidenceRefs,
-  ]
-  const card: HostedPaidOperationCardInput = {
-    disclosure: {
-      providerDisplayName: semantics.operation.providerName,
-      materialFields: materialFieldNames(semantics.operation.materialInputs),
-      maximumCharge: semantics.maximumAuthorizedCharge,
-    },
-    authorize: authorize === undefined ? null : descriptor(authorize, true),
-    refuse: authorize === undefined ? null : descriptor(authorize, false),
-    pendingCommand: null,
-    transportRescue: null,
-    paymentTruth: semantics.paymentSubmission,
-    settlementTruth: semantics.settlement,
-    resultTruth: semantics.resultDelivery,
-    safeContinuation: continuation === undefined ? null : descriptor(continuation),
-    noActionReason: continuation === undefined ? 'No further action is available for this operation.' : null,
-    operationBlocks: semantics.presentation.blocks,
-    runtimeEvidence: {
-      environment: semantics.environment.name,
-      provenance,
-      evidenceClass: semantics.environment.evidenceClass,
-      claimCeiling: semantics.environment.claimCeiling,
-    },
-    technicalDetails: {
-      invocationRef: semantics.identity.invocationRef,
-      expectedInvocationVersion: semantics.identity.expectedInvocationVersion,
-      operationRevision: semantics.operation.operationRevision,
-      providerId: semantics.operation.providerId,
-      semanticDigest: projection.human.semanticDigest,
-      semanticDigestUse: projection.human.semanticDigestUse,
-      evidenceReferences: [...new Set(evidenceReferences)].sort(),
-    },
-  }
+  const card = projectHostedPaidOperationCardInput(projection, provenance)
   const selected = audience === 'human' ? projection.human : projection.agent
   return {
     kind: 'accepted',
@@ -394,33 +316,6 @@ async function projectResult(
     }, 409)
   }
   return noStore({ kind: 'refused', code: result.code }, 503)
-}
-
-function descriptor(
-  continuation: PaidOperationContinuation,
-  accept?: boolean,
-): HostedPaidOperationCommandDescriptor {
-  return {
-    command: continuation.kind === 'retry' ? 'inspect' : continuation.kind,
-    commandIdRequired: true,
-    expectedInvocationVersion: continuation.expectedInvocationVersion,
-    requiredInput: continuation.kind === 'reconcile'
-      ? []
-      : continuation.kind === 'authorize'
-        ? ['accept']
-        : continuation.requiredInput,
-    ...(accept === undefined ? {} : { accept }),
-  }
-}
-
-function safeContinuation(continuations: readonly PaidOperationContinuation[]) {
-  if (continuations.length !== 1 || continuations[0]?.kind === 'retry') return undefined
-  return continuations[0]
-}
-
-function materialFieldNames(value: unknown): readonly string[] {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return []
-  return Object.keys(value).sort()
 }
 
 type ParsedCommand =

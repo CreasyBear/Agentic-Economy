@@ -4,9 +4,13 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AePaidOperationCard } from '@/components/ae/action-invocation/AePaidOperationCard'
+import { AePaidOperationCard as SourcePaidOperationCard } from '@/components/ae/action-invocation/AePaidOperationCard'
+import { projectHostedPaidOperationCardInput } from '@/modules/action-invocation/paid-operation-card-contract'
 import {
   createPaidOperationSemantics,
+  projectRichPaidOperation,
+  projectStructuredPaidOperation,
+  type PaidOperationContinuation,
   type PaidOperationSemantics,
 } from '@/modules/action-invocation/paid-operation-semantics'
 
@@ -27,8 +31,8 @@ describe('AePaidOperationCard', () => {
     expect(screen.getByText('Development Quote Provider')).toBeTruthy()
     expect(screen.getByText('$0.01')).toBeTruthy()
     expect(screen.getByText('BTC / USD')).toBeTruthy()
-    expect(screen.getByText(/no payment request has been submitted/)).toBeTruthy()
-    expect(screen.getAllByText('Local mock demonstration')).toHaveLength(2)
+    expect(screen.getByText('Permission recorded. Nothing has been submitted yet.')).toBeTruthy()
+    expect(screen.getAllByText('Local labelled sandbox')).toHaveLength(2)
     expect(document.body.textContent).not.toContain('x402')
   })
 
@@ -119,15 +123,15 @@ describe('AePaidOperationCard', () => {
     })} />)
 
     expect(screen.getByText('67,432.12 USD per BTC')).toBeTruthy()
-    expect(screen.getByText(/Payment of \$0\.01/)).toBeTruthy()
+    expect(screen.getByText(/recorded evidence reports \$0\.01 settled/)).toBeTruthy()
 
     fireEvent.click(screen.getByText('Technical details'))
-    expect(screen.getByText('Result validated')).toBeTruthy()
-    expect(screen.getByText('$0.01 settled')).toBeTruthy()
-    expect(screen.getByText('fixture_contract_only')).toBeTruthy()
+    expect(screen.getByText('Validated')).toBeTruthy()
+    expect(screen.getByText(/\$0\.01 settled in recorded sandbox evidence/)).toBeTruthy()
+    expect(screen.getByText('Local UI fixture contract only.')).toBeTruthy()
   })
 
-  it('states a truthful pre-release refusal and exposes retry only when supplied', () => {
+  it('states a truthful pre-release refusal and fails closed on retry', () => {
     const retry = {
       kind: 'retry',
       command: 'retry_paid_operation',
@@ -155,8 +159,8 @@ describe('AePaidOperationCard', () => {
     />)
 
     expect(screen.getByText('Not sent')).toBeTruthy()
-    expect(screen.getByText(/before anything was sent/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(screen.getByText(/Nothing was sent to the provider/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull()
   })
 
   it('renders running and reconciled-not-paid as distinct non-colour states', () => {
@@ -190,7 +194,7 @@ describe('AePaidOperationCard', () => {
     })} />)
 
     expect(screen.getByText('Checked — not paid')).toBeTruthy()
-    expect(screen.getByText('The earlier payment was checked and was not settled.')).toBeTruthy()
+    expect(screen.getByText('Evidence shows the earlier payment was not settled.')).toBeTruthy()
   })
 
   it('does not hide a settled payment behind an invalid quote result', () => {
@@ -223,7 +227,7 @@ describe('AePaidOperationCard', () => {
     })} />)
 
     expect(screen.getByText('Paid — result unusable')).toBeTruthy()
-    expect(screen.getByText(/Payment of \$0\.01/)).toBeTruthy()
+    expect(screen.getByText(/Recorded evidence supports a payment of \$0\.01/)).toBeTruthy()
     expect(screen.getByText(/Do not assume another result is free/)).toBeTruthy()
   })
 
@@ -308,7 +312,7 @@ describe('AePaidOperationCard', () => {
       semantics={fixture({ continuations: [authorize] })}
       onContinue={onContinue}
     />)
-    fireEvent.click(screen.getByRole('button', { name: 'Authorize payment' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize up to $0.01' }))
     expect(onContinue).toHaveBeenCalledWith(authorize)
 
     const execute = {
@@ -326,6 +330,35 @@ describe('AePaidOperationCard', () => {
     expect(onContinue).toHaveBeenCalledWith(execute)
   })
 })
+
+function AePaidOperationCard({
+  onContinue,
+  semantics,
+}: Readonly<{
+  onContinue?: (continuation: PaidOperationContinuation) => void
+  semantics: PaidOperationSemantics
+}>) {
+  const projection = {
+    semantics,
+    human: projectRichPaidOperation(semantics),
+    agent: projectStructuredPaidOperation(semantics),
+  }
+  return (
+    <SourcePaidOperationCard
+      semantics={semantics}
+      card={projectHostedPaidOperationCardInput(projection, 'Labelled mock provider')}
+      {...(onContinue === undefined
+        ? {}
+        : {
+            onCommand: (descriptor) => {
+              const continuation = semantics.continuations.find(({ kind }) =>
+                kind === descriptor.command)
+              if (continuation !== undefined) onContinue(continuation)
+            },
+          })}
+    />
+  )
+}
 
 function custodyReference(seed: string) {
   return {
@@ -371,9 +404,9 @@ function fixture(
     settlement: { state: 'no_evidence' },
     resultDelivery: { state: 'not_delivered' },
     environment: {
-      name: 'Local mock demonstration',
-      evidenceClass: 'local_fixture',
-      claimCeiling: 'fixture_contract_only',
+      name: 'Local labelled sandbox',
+      evidenceClass: 'local_labelled_sandbox_fixture',
+      claimCeiling: 'Local UI fixture contract only.',
     },
     error: null,
     continuations: [],
