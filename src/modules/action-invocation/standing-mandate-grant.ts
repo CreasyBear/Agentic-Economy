@@ -1,5 +1,10 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StandingMandate } from './standing-mandate'
+import {
+  isoTimestampValid,
+  standingMandateMaterialValid,
+  verifiedGrantMaterialValid,
+} from './standing-mandate-validation'
 
 export type VerifiedStandingMandateGrant = Readonly<{
   format: 'ae.verified-standing-mandate-grant:v1'
@@ -40,6 +45,16 @@ export function createDevelopmentStandingMandateGrantVerifier(input: Readonly<{
   freshUntil: string
 }>): StandingMandateGrantVerifier {
   return (mandate, now) => {
+    if (
+      !standingMandateMaterialValid(mandate)
+      || !isoTimestampValid(now)
+      || !isoTimestampValid(input.freshUntil)
+      || input.evidenceRef.length === 0
+      || input.verifierRef.length === 0
+      || input.source.length === 0
+    ) {
+      return { authenticated: false, reason: 'mismatch' }
+    }
     if (mandate.digest !== input.admittedMandateDigest) {
       return { authenticated: false, reason: 'tampered' }
     }
@@ -76,6 +91,11 @@ export function verifiedGrantMatchesMandate(
   mandate: StandingMandate,
   now: string,
 ): boolean {
+  if (
+    !standingMandateMaterialValid(mandate)
+    || !verifiedGrantMaterialValid(grant)
+    || !isoTimestampValid(now)
+  ) return false
   const { digest, ...material } = grant
   return grant.environment === 'MOCK/DEVELOPMENT ONLY'
     && grant.authenticated

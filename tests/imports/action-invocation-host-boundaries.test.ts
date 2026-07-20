@@ -4,6 +4,11 @@ import { dirname, normalize, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const hostContractFiles = globSync('src/modules/action-invocation/hosts/**/*.ts').sort()
+const productionSourceFiles = globSync([
+  'src/**/*.ts',
+  'src/**/*.tsx',
+  'convex/**/*.ts',
+]).sort()
 const publicTerminals = new Set([
   normalize(resolve('src/modules/action-invocation/application-service.ts')),
   normalize(resolve('src/modules/action-invocation/contracts.ts')),
@@ -75,5 +80,16 @@ describe('Action Invocation public host graph', () => {
       import { createDynamicPublishedActionInvocationAdapter as application } from '../dynamic-published-adapter'
       export const host = application
     `)).toContain('low_level_import_or_rule')
+  })
+
+  it('keeps the development provider-operation fixture outside production graphs', () => {
+    const violations = productionSourceFiles.filter((path) => {
+      const source = readFileSync(path, 'utf8')
+      return /provider-operation-fixture|tools\/dev\/fixtures\/provider-operation/u.test(source)
+    })
+
+    expect(violations).toEqual([])
+    expect(existsSync('src/modules/provider-operation-fixture')).toBe(false)
+    expect(existsSync('tools/dev/fixtures/provider-operation')).toBe(true)
   })
 })

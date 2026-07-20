@@ -2,9 +2,48 @@
 
 **Master task:** `019f790d-9a97-7012-a009-2140c0d6fdba`  
 **Branch:** `codex/shared-tree-checkpoint-20260714`  
-**Current integrated implementation revision:** `90f6ce7c`
+**Pre-hardening implementation revision:** `c4d8f3fe`
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
+
+## Hardening review — 2026-07-20
+
+The earlier implementation-complete disposition is withdrawn. ADR-009 is
+accepted as architecture and ADR-010 is accepted with Gate 10 narrowed, but
+exposure remains blocked.
+
+Trusted current evidence:
+
+- source-owned Action Invocation transitions and discriminated Request-owned /
+  standalone lineage;
+- exact attempt, generation, uncertainty, reconcile-before-retry and
+  cancellation semantics in focused local tests;
+- shared Request-owned and standalone host application/projection seams;
+- labelled local provider-operation, bounded-mandate and `full_yolo` semantic
+  demonstrations;
+- Gate 10's negative result: embedded and direct measured human effort were
+  equal, so no experience-payoff claim passed.
+
+Invalidated or narrowed claims:
+
+- prior packets labelled `gitRevision` do not prove execution of those exact
+  committed bytes when generated from a dirty working tree;
+- the saved `full_yolo` packet does not independently establish process/artifact
+  provenance;
+- the provider-operation verifier does not independently recompute every
+  advertised Gate 7 check;
+- Gate 10's positive protected-dimension parity is not accepted because several
+  metrics were circular or asymmetric;
+- invalid dates, non-finite values and negative spend/loss material must be
+  rejected before this authority seam is reachable.
+
+Active transition:
+
+`authority validation -> observer truth -> revision-bound evidence -> fixture isolation -> documentation closeout`
+
+The governing hardening contract is
+`2026-07-18-phase-1-2-completion-contract.md`. Historical phase plans and ADR
+text are provenance only under `.planning/archive/adr-009-010-pre-hardening/`.
 
 ## Founder governance rebaseline — 2026-07-20
 
@@ -1067,8 +1106,8 @@ or complete production burden parity.
 
 The former `src/modules/booking` bounded context and globally registered
 development booking actions are retired. Cancellation, exposure release,
-standing-mandate and `full_yolo` evidence now lives in an unregistered
-`src/modules/provider-operation-fixture` with `surfaces: []`. Calendar/slot
+standing-mandate and `full_yolo` evidence now lives in the unregistered
+development boundary `tools/dev/fixtures/provider-operation` with `surfaces: []`. Calendar/slot
 material is one provider-defined endpoint example, not neutral AE meaning.
 
 The persisted standing-mandate v1 key
@@ -1077,7 +1116,7 @@ compatibility. Neutral source interprets it as concurrent effect capacity. A
 frozen legacy snapshot proves that a held use survives cold load and a second
 reservation is refused with `mandate_concurrency_exhausted`.
 
-Current master packets:
+Superseded pre-hardening packets (archived provenance only):
 
 - provider operation:
   `sha256:8e36c0efda121e60ff5d629155c257ad1e3c668c8bfa5e2008ba0fd995002afc`;
@@ -1090,7 +1129,9 @@ The `full_yolo` checksum identifies this exact run artifact. It is intentionally
 not a deterministic golden digest because the process-cold proof records the
 distinct operating-system process identities used by that run.
 
-Combined focused master verification passed 16 files and 214 tests.
+These checksums and the former 16-file/214-test result do not satisfy current
+revision custody and are not active completion evidence. Regenerated packet
+revision, commands and checksums are recorded in the hardening closeout below.
 
 ## Evidence position
 
@@ -1132,7 +1173,7 @@ It never means hosted, production, provider-fulfilment, or customer-value proof.
 Customer/provider/operating value remains external evidence and is not an ADR
 implementation gate substitute.
 
-## Next decision
+## Historical pre-hardening conclusion
 
 All eleven ADR-009 gates and ADR-010 Gates 1–9 have executable labelled
 development evidence. `bounded_mandate` and explicit `full_yolo` use the same
@@ -1146,6 +1187,6 @@ human effort. No further source work should attempt to manufacture that gain.
 A future product iteration may change the human interaction itself and rerun a
 new predeclared real-human comparison.
 
-Current evidence remains local/development only. Hosted reachability,
+This pre-hardening evidence remains local/development only. Hosted reachability,
 independent supply, provider fulfilment, production safety, real accessibility
 and customer value are outside this program and unproved.

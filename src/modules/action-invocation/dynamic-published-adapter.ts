@@ -142,6 +142,13 @@ export type DynamicPublishedActionInvocationAdapter = Readonly<{
     leaseOwner: string
     effectGeneration: number
   }>): Promise<InvocationDecision<DynamicPublishedInvocationResult>>
+  abandonAcquired(input: Readonly<{
+    invocationRef: string
+    expectedInvocationVersion: number
+    attemptRef: string
+    leaseOwner: string
+    effectGeneration: number
+  }>): InvocationDecision<DynamicPublishedInvocationResult>
   cancel(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
@@ -602,6 +609,9 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         semanticClaims.delete(request.invocationRef)
         delete context.actionInvocationExecution
       }
+    },
+    abandonAcquired(request) {
+      return tracer.publishObservation({ ...request, release: 'not_released' })
     },
     cancel(request) {
       const operation = input.source.current(dynamicPublishedOperationSlot(input.operation))

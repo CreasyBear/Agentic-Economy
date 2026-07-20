@@ -4,6 +4,15 @@ import type {
   MandateRefusalCode,
   StandingMandate,
 } from './standing-mandate'
+import {
+  authorityUseIntegrityValid,
+  mandateIntegrityValid,
+} from './standing-mandate'
+import {
+  persistedAuthorityUseMaterialValid,
+  policyProposalMaterialValid,
+  standingMandateMaterialValid,
+} from './standing-mandate-validation'
 
 export type StandingMandatePolicyProposal = Readonly<{
   objectiveRef: string
@@ -52,6 +61,15 @@ export function evaluateStandingMandatePolicy(input: Readonly<{
   policyDecisionRef: string
 }>): MandateDecision<StandingMandatePolicyDecision> {
   const { mandate, proposal } = input
+  if (
+    !standingMandateMaterialValid(mandate)
+    || !mandateIntegrityValid(mandate)
+    || !policyProposalMaterialValid(proposal)
+    || input.uses.some((use) => (
+      !persistedAuthorityUseMaterialValid(use) || !authorityUseIntegrityValid(use)
+    ))
+    || input.policyDecisionRef.length === 0
+  ) return { kind: 'refused', code: 'mandate_material_invalid' }
   const refusal = scopeRefusal(mandate, proposal)
   if (refusal !== undefined) return { kind: 'refused', code: refusal }
   const maximumLoss = mandate.scope.maximumLoss ?? mandate.scope.maximumSpend
@@ -59,8 +77,14 @@ export function evaluateStandingMandatePolicy(input: Readonly<{
     .filter((use) => use.mandateRef === mandate.mandateRef && use.state !== 'not_released')
     .reduce((sum, use) => sum + (use.reservedLoss?.amountMinor ?? use.reservedSpend.amountMinor), 0)
   const committedSpendMinor = input.uses
-    .filter((use) => use.state !== 'not_released')
+    .filter((use) => use.mandateRef === mandate.mandateRef && use.state !== 'not_released')
     .reduce((sum, use) => sum + use.reservedSpend.amountMinor, 0)
+  if (
+    !Number.isSafeInteger(heldWorstCaseLossMinor)
+    || !Number.isSafeInteger(committedSpendMinor)
+    || !Number.isSafeInteger(committedSpendMinor + proposal.spend.amountMinor)
+    || !Number.isSafeInteger(heldWorstCaseLossMinor + proposal.worstCaseLoss.amountMinor)
+  ) return { kind: 'refused', code: 'mandate_material_invalid' }
   if (committedSpendMinor + proposal.spend.amountMinor > mandate.scope.maximumSpend.amountMinor) {
     return { kind: 'refused', code: 'mandate_spend_exceeded' }
   }

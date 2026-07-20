@@ -3,9 +3,9 @@ import { readFile, writeFile } from 'node:fs/promises'
 import {
   resumeDevelopmentProviderOperationObjective,
   runFullYoloDevelopmentProviderOperationPhase,
-} from '../../src/modules/provider-operation-fixture/development-provider-operation-objective'
-import { projectDurableRun } from '../../src/modules/provider-operation-fixture/development-provider-operation-packet'
-import { createDevelopmentProviderOperationSigningCustody } from '../../src/modules/provider-operation-fixture/development-provider-operation-signing-custody'
+} from './fixtures/provider-operation/development-provider-operation-objective'
+import { projectDurableRun } from './fixtures/provider-operation/development-provider-operation-packet'
+import { createDevelopmentProviderOperationSigningCustody } from './fixtures/provider-operation/development-provider-operation-signing-custody'
 
 type CustodyFile = Readonly<{ keyId: string; privateKey: string }>
 

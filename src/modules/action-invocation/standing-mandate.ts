@@ -11,6 +11,16 @@ import {
   type ExposureReleaseAttestation,
 } from './exposure-offset-rules'
 import type { Ed25519VerificationKey } from '@/modules/common/ed25519-attestation'
+import {
+  authorityUseMaterialValid,
+  exposureOffsetMaterialValid,
+  isoTimestampValid,
+  parseStandingMandateInput,
+  parseStandingMandateSnapshot,
+  persistedAuthorityUseMaterialValid,
+  policyDecisionMaterialValid,
+  standingMandateMaterialValid,
+} from './standing-mandate-validation'
 
 export const STANDING_MANDATE_FORMAT = 'ae.action-invocation-standing-mandate:v1' as const
 
@@ -118,6 +128,7 @@ export type AuthorityExposureOffset = Readonly<{
 }>
 
 export type MandateRefusalCode =
+  | 'mandate_material_invalid'
   | 'mandate_not_found'
   | 'mandate_integrity_invalid'
   | 'mandate_grant_unauthenticated'
@@ -148,17 +159,39 @@ export type MandateDecision<T> =
   | Readonly<{ kind: 'refused'; code: MandateRefusalCode }>
 
 export function issueStandingMandate(
-  input: Omit<StandingMandate, 'format' | 'mode' | 'revoked' | 'digest'> & { mode?: StandingMandate['mode'] },
-): StandingMandate {
-  assertMandateInput(input)
-  const { mode = 'bounded_mandate', ...rest } = input
+  input: unknown,
+): MandateDecision<StandingMandate> {
+  const parsed = parseStandingMandateInput(input)
+  if (!parsed.success) return { kind: 'refused', code: 'mandate_material_invalid' }
+  const { mode = 'bounded_mandate', ...rest } = parsed.data
   const material = {
     ...rest,
     format: STANDING_MANDATE_FORMAT,
     mode,
     revoked: false as const,
   }
-  return deepFreeze({ ...material, digest: canonicalDigest(material as never) })
+  return {
+    kind: 'accepted',
+    value: deepFreeze({
+      ...material,
+      digest: canonicalDigest(material as never),
+    } as StandingMandate),
+  }
+}
+
+export function restoreStandingMandateStore(
+  snapshot: unknown,
+): MandateDecision<StandingMandateStore> {
+  const parsed = parseStandingMandateSnapshot(snapshot)
+  if (!parsed.success) return { kind: 'refused', code: 'mandate_material_invalid' }
+  try {
+    return {
+      kind: 'accepted',
+      value: new StandingMandateStore(parsed.data as StandingMandateSnapshot),
+    }
+  } catch {
+    return { kind: 'refused', code: 'mandate_material_invalid' }
+  }
 }
 
 export class StandingMandateStore {
@@ -170,6 +203,9 @@ export class StandingMandateStore {
   readonly #usedOffsetUses = new Set<string>()
   readonly #usedOffsetEvidence = new Set<string>()
   constructor(snapshot?: StandingMandateSnapshot) {
+    if (snapshot !== undefined && !parseStandingMandateSnapshot(snapshot).success) {
+      throw new Error('standing_mandate_snapshot_material_refused')
+    }
     for (const mandate of snapshot?.mandates ?? []) {
       if (!mandateIntegrityValid(mandate)) throw new Error('standing_mandate_snapshot_integrity_refused')
       this.#mandates.set(mandate.mandateRef, deepFreeze(structuredClone(mandate)))
@@ -200,6 +236,9 @@ export class StandingMandateStore {
       }
     }
     for (const offset of snapshot?.exposureOffsets ?? []) {
+      if (!exposureOffsetMaterialValid(offset)) {
+        throw new Error('standing_mandate_snapshot_exposure_offset_refused')
+      }
       const { digest, ...material } = offset
       const use = this.#uses.get(offset.authorityUseRef)
       const offsetUse = this.#uses.get(offset.offsetAuthorityUseRef)
@@ -241,7 +280,9 @@ export class StandingMandateStore {
     admission: VerifiedStandingMandateGrant,
     now: string,
   ): MandateDecision<StandingMandate> {
+    if (!standingMandateMaterialValid(mandate)) return { kind: 'refused', code: 'mandate_material_invalid' }
     if (!mandateIntegrityValid(mandate)) return { kind: 'refused', code: 'mandate_integrity_invalid' }
+    if (!isoTimestampValid(now)) return { kind: 'refused', code: 'mandate_material_invalid' }
     if (!verifiedGrantMatchesMandate(admission, mandate, now)) {
       return { kind: 'refused', code: 'mandate_grant_unauthenticated' }
     }
@@ -262,10 +303,20 @@ export class StandingMandateStore {
     reason: string
     revokedAt: string
   }>): MandateDecision<StandingMandate> {
+    if (
+      input.mandateRef.length === 0
+      || !Number.isSafeInteger(input.expectedGeneration)
+      || input.expectedGeneration < 1
+      || input.reason.length === 0
+      || !isoTimestampValid(input.revokedAt)
+    ) return { kind: 'refused', code: 'mandate_material_invalid' }
     const current = this.#mandates.get(input.mandateRef)
     if (current === undefined) return { kind: 'refused', code: 'mandate_not_found' }
     if (current.generation !== input.expectedGeneration) {
       return { kind: 'refused', code: 'mandate_generation_stale' }
+    }
+    if (current.generation === Number.MAX_SAFE_INTEGER) {
+      return { kind: 'refused', code: 'mandate_material_invalid' }
     }
     const material = {
       ...current,
@@ -274,11 +325,17 @@ export class StandingMandateStore {
     }
     const { digest: _digest, ...withoutDigest } = material
     const revoked = deepFreeze({ ...withoutDigest, digest: canonicalDigest(withoutDigest as never) })
+    if (!mandateIntegrityValid(revoked)) {
+      return { kind: 'refused', code: 'mandate_material_invalid' }
+    }
     this.#mandates.set(current.mandateRef, revoked)
     return { kind: 'accepted', value: revoked }
   }
 
   reserve(material: AuthorityUseMaterial, now: string): MandateDecision<AuthorityUse> {
+    if (!authorityUseMaterialValid(material) || !isoTimestampValid(now)) {
+      return { kind: 'refused', code: 'mandate_material_invalid' }
+    }
     const prior = this.#uses.get(material.authorityUseRef)
     if (prior !== undefined) {
       const candidateDigest = canonicalDigest({ ...material, state: 'reserved', reservedAt: now } as never)
@@ -295,6 +352,9 @@ export class StandingMandateStore {
   }
 
   acceptPolicyDecision(decision: StandingMandatePolicyDecision): MandateDecision<StandingMandatePolicyDecision> {
+    if (!policyDecisionMaterialValid(decision)) {
+      return { kind: 'refused', code: 'mandate_material_invalid' }
+    }
     if (!policyDecisionIntegrityValid(decision)) {
       return { kind: 'refused', code: 'authority_use_linkage_invalid' }
     }
@@ -338,6 +398,7 @@ export class StandingMandateStore {
     delegateRef: string
     effectGeneration: number
   }>, now: string): MandateDecision<AuthorityUse> {
+    if (!isoTimestampValid(now)) return { kind: 'refused', code: 'mandate_material_invalid' }
     const use = this.#uses.get(token.authorityUseRef)
     if (use === undefined) return { kind: 'refused', code: 'authority_use_not_found' }
     if (use.state !== 'reserved') return { kind: 'refused', code: 'authority_use_linkage_invalid' }
@@ -367,6 +428,7 @@ export class StandingMandateStore {
     state: 'not_released' | 'released' | 'uncertain',
     settledAt: string,
   ): MandateDecision<AuthorityUse> {
+    if (!isoTimestampValid(settledAt)) return { kind: 'refused', code: 'mandate_material_invalid' }
     const use = this.#uses.get(authorityUseRef)
     if (use === undefined) return { kind: 'refused', code: 'authority_use_not_found' }
     if (
@@ -380,6 +442,9 @@ export class StandingMandateStore {
     const { digest: _digest, ...prior } = use
     const material = { ...prior, state, settledAt }
     const settled = deepFreeze({ ...material, digest: canonicalDigest(material as never) })
+    if (!authorityUseIntegrityValid(settled)) {
+      return { kind: 'refused', code: 'mandate_material_invalid' }
+    }
     this.#uses.set(authorityUseRef, settled)
     return { kind: 'accepted', value: settled }
   }
@@ -391,6 +456,9 @@ export class StandingMandateStore {
   recordExposureOffset(
     input: Omit<AuthorityExposureOffset, 'digest'>,
   ): MandateDecision<AuthorityExposureOffset> {
+    if (!exposureOffsetMaterialValid({ ...input, digest: 'pending' })) {
+      return { kind: 'refused', code: 'mandate_material_invalid' }
+    }
     const use = this.#uses.get(input.authorityUseRef)
     const offsetUse = this.#uses.get(input.offsetAuthorityUseRef)
     if (
@@ -526,6 +594,10 @@ export class StandingMandateStore {
     const committedSpend = uses
       .filter((use) => use.state !== 'not_released')
       .reduce((sum, use) => sum + use.reservedSpend.amountMinor, 0)
+    if (
+      !Number.isSafeInteger(committedSpend)
+      || !Number.isSafeInteger(committedSpend + input.reservedSpend.amountMinor)
+    ) return 'mandate_material_invalid'
     if (committedSpend + input.reservedSpend.amountMinor > mandate.scope.maximumSpend.amountMinor) {
       return 'mandate_spend_exceeded'
     }
@@ -536,7 +608,12 @@ export class StandingMandateStore {
         .reduce((sum, use) =>
           sum + (use.reservedLoss?.amountMinor ?? use.reservedSpend.amountMinor)
           - (this.#exposureOffsets.get(use.authorityUseRef)?.amountMinor ?? 0), 0)
-      if (input.reservedLoss === undefined || heldLoss + input.reservedLoss.amountMinor > maximumLoss.amountMinor) {
+      if (
+        !Number.isSafeInteger(heldLoss)
+        || input.reservedLoss === undefined
+        || !Number.isSafeInteger(heldLoss + input.reservedLoss.amountMinor)
+      ) return 'mandate_material_invalid'
+      if (heldLoss + input.reservedLoss.amountMinor > maximumLoss.amountMinor) {
         return 'mandate_risk_exceeded'
       }
     }
@@ -607,57 +684,21 @@ export class StandingMandateStore {
 }
 
 export function mandateIntegrityValid(mandate: StandingMandate): boolean {
+  if (!standingMandateMaterialValid(mandate)) return false
   const { digest, ...material } = mandate
   return digest === canonicalDigest(material as never)
 }
 
 export function authorityUseIntegrityValid(use: AuthorityUse): boolean {
+  if (!persistedAuthorityUseMaterialValid(use)) return false
   const { digest, ...material } = use
   return digest === canonicalDigest(material as never)
 }
 
 export function policyDecisionIntegrityValid(decision: StandingMandatePolicyDecision): boolean {
+  if (!policyDecisionMaterialValid(decision)) return false
   const { digest, ...material } = decision
   return digest === canonicalDigest(material as never)
-}
-
-function assertMandateInput(
-  input: Omit<StandingMandate, 'format' | 'mode' | 'revoked' | 'digest'> & { mode?: StandingMandate['mode'] },
-) {
-  const mode = input.mode ?? 'bounded_mandate'
-  const actions = input.scope.actions ?? [input.scope.action]
-  if (
-    input.version < 1 || input.generation < 1
-    || input.scope.maximumActionCount < 1
-    || input.scope.maximumConcurrentReservations < 1
-    || input.scope.maximumSpend.amountMinor < 0
-    || Date.parse(input.scope.startsAt) >= Date.parse(input.scope.expiresAt)
-    || input.scope.providerRefs.length === 0
-    || input.scope.recipientRefs.length === 0
-    || input.scope.purposes.length === 0
-    || input.scope.allowedDataFields.length === 0
-    || input.scope.permittedFallbacks.length === 0
-    || actions.length === 0
-    || actions.some((action) => action.id.length === 0 || action.version.length === 0)
-    || new Set(actions.map((action) => `${action.id}:${action.version}`)).size !== actions.length
-    || input.scope.exposureOffsetRules?.some((rule) =>
-      rule.evidenceRuleRef.length === 0 || rule.source.length === 0 || rule.version.length === 0)
-    || input.scope.exposureOffsetVerificationKeys?.some((key) =>
-      key.keyId.length === 0 || !/^[0-9a-f]{64}$/.test(key.publicKey))
-    || ((input.scope.exposureOffsetRules?.length ?? 0) > 0
-      && (input.scope.exposureOffsetVerificationKeys?.length ?? 0) === 0)
-    || (mode === 'bounded_mandate' && (
-      actions.length !== 1
-      || actions[0]?.id !== input.scope.action.id
-      || actions[0]?.version !== input.scope.action.version
-    ))
-    || (mode === 'full_yolo' && (
-      input.scope.actions === undefined
-      || input.scope.maximumLoss === undefined
-      || input.scope.maximumLoss.amountMinor < 0
-      || input.scope.maximumLoss.currency !== input.scope.maximumSpend.currency
-    ))
-  ) throw new Error('standing_mandate_material_invalid')
 }
 
 function allowedActions(mandate: StandingMandate) {

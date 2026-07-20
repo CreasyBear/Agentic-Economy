@@ -14,21 +14,28 @@ import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import {
   developmentProviderOperationObjectiveStateValid,
   runFullYoloDevelopmentObjective,
-} from '../../src/modules/provider-operation-fixture/development-provider-operation-objective'
+} from './fixtures/provider-operation/development-provider-operation-objective'
 import {
   developmentCancellationConfirmationRule,
-} from '../../src/modules/provider-operation-fixture/development-provider-operation-offset-rule'
+} from './fixtures/provider-operation/development-provider-operation-offset-rule'
 import {
   cancelDevelopmentProviderOperationAction,
   executeDevelopmentProviderOperationAction,
-} from '../../src/modules/provider-operation-fixture/development-provider-operation.actions'
-import { createDevelopmentProviderOperationSigningCustody } from '../../src/modules/provider-operation-fixture/development-provider-operation-signing-custody'
+} from './fixtures/provider-operation/development-provider-operation.actions'
+import { createDevelopmentProviderOperationSigningCustody } from './fixtures/provider-operation/development-provider-operation-signing-custody'
+import {
+  captureOfficialEvidenceProvenance,
+  verifyOfficialEvidenceProvenance,
+  type EvidenceProvenanceV1,
+} from './evidence-provenance'
 
 export const developmentEvidenceCustodyFixture = {
   keyId: 'mock:development-provider-operation-provider:release:v1',
   privateKey: '1111111111111111111111111111111111111111111111111111111111111111',
 } as const
 let processColdProofCache: Promise<Awaited<ReturnType<typeof runProcessColdProof>>> | undefined
+const officialClaimCeiling =
+  'Labelled local separate-process mock execution only; no independently operated provider, deployment, production safety, or customer value.'
 
 export type FullYoloEvidence = Awaited<ReturnType<typeof runFullYoloDevelopmentObjective>> & {
   gitRevision: string
@@ -210,6 +217,11 @@ async function runProcessColdProof() {
       cancellation: canonicalDigest(resume as never),
       replay: canonicalDigest(replay as never),
     },
+    phaseArtifacts: {
+      operation,
+      cancellation: resume,
+      replay,
+    },
     custodyRef: 'development-custody.json',
     privateKeySerializedInState: serializedState.includes(
       developmentEvidenceCustodyFixture.privateKey,
@@ -243,6 +255,33 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     evidence.processColdProof.cancellationProcessId,
     evidence.processColdProof.replayProcessId,
   ]
+  const phaseArtifacts = evidence.processColdProof.phaseArtifacts
+  if (
+    canonicalDigest(phaseArtifacts.operation as never)
+      !== evidence.processColdProof.phaseArtifactDigests.operation
+    || canonicalDigest(phaseArtifacts.cancellation as never)
+      !== evidence.processColdProof.phaseArtifactDigests.cancellation
+    || canonicalDigest(phaseArtifacts.replay as never)
+      !== evidence.processColdProof.phaseArtifactDigests.replay
+    || phaseArtifacts.operation.processId !== evidence.processColdProof.operationProcessId
+    || phaseArtifacts.cancellation.processId !== evidence.processColdProof.cancellationProcessId
+    || phaseArtifacts.replay.processId !== evidence.processColdProof.replayProcessId
+    || phaseArtifacts.operation.kind !== 'operation_phase_complete'
+    || phaseArtifacts.cancellation.kind !== 'cancellation_resume_complete'
+    || phaseArtifacts.replay.kind !== 'terminal_replay_complete'
+    || phaseArtifacts.operation.midRun.objectiveState.digest
+      !== evidence.processColdProof.midObjectiveDigest
+    || phaseArtifacts.cancellation.objectiveState.digest
+      !== evidence.processColdProof.finalObjectiveDigest
+    || phaseArtifacts.replay.objectiveState.digest
+      !== evidence.processColdProof.replayObjectiveDigest
+    || phaseArtifacts.cancellation.midRun.objectiveState.digest
+      !== phaseArtifacts.operation.midRun.objectiveState.digest
+    || phaseArtifacts.cancellation.reconstructedInvocationRefs.join(',')
+      !== evidence.processColdProof.cancellationReconstructedInvocationRefs.join(',')
+    || phaseArtifacts.replay.reconstructedInvocationRefs.join(',')
+      !== evidence.processColdProof.replayReconstructedInvocationRefs.join(',')
+  ) throw new Error('full_yolo_process_artifact_verification_refused')
   const providerFacts = evidence.mandateSnapshot.exposureOffsets?.[0]
     ?.releaseAttestation.material
   const verifyOffset = (offset: NonNullable<typeof evidence.mandateSnapshot.exposureOffsets>[number]) =>
@@ -480,18 +519,32 @@ function checksum(evidence: FullYoloEvidence) {
 }
 
 type Packet = Readonly<{
-  schema: 'ae.full-yolo-development-evidence:v1'
+  schema: 'ae.full-yolo-development-evidence:v2'
   checksum: string
+  provenance: EvidenceProvenanceV1
   evidence: FullYoloEvidence
 }>
 
-export async function runCli(command: string, path: string) {
+function commandIdentity(command: 'run' | 'verify', path: string, revision: string) {
+  return `full-yolo-evidence-packet ${command} ${path} ${revision}`
+}
+
+export async function runCli(command: string, path: string, expectedRevision: string) {
   if (command === 'run') {
-    const evidence = await runFullYoloEvidence()
+    const provenance = captureOfficialEvidenceProvenance({
+      expectedRevision,
+      command: commandIdentity('run', path, expectedRevision),
+      claimCeiling: officialClaimCeiling,
+    })
+    const evidence = {
+      ...(await runFullYoloEvidence()),
+      gitRevision: provenance.sourceRevision,
+    }
     verifyFullYoloEvidence(evidence)
     const packet: Packet = {
-      schema: 'ae.full-yolo-development-evidence:v1',
+      schema: 'ae.full-yolo-development-evidence:v2',
       checksum: checksum(evidence),
+      provenance,
       evidence,
     }
     await writeFile(path, `${JSON.stringify(packet, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
@@ -500,9 +553,21 @@ export async function runCli(command: string, path: string) {
   if (command === 'verify') {
     const packet = JSON.parse(await readFile(path, 'utf8')) as Packet
     if (
-      packet.schema !== 'ae.full-yolo-development-evidence:v1'
+      packet.schema !== 'ae.full-yolo-development-evidence:v2'
       || packet.checksum !== checksum(packet.evidence)
     ) throw new Error('full_yolo_packet_checksum_refused')
+    verifyOfficialEvidenceProvenance(packet.provenance, {
+      expectedRevision,
+      command: commandIdentity('run', path, expectedRevision),
+    })
+    if (packet.evidence.gitRevision !== packet.provenance.sourceRevision) {
+      throw new Error('full_yolo_packet_revision_refused')
+    }
+    if (
+      packet.provenance.claimCeiling !== officialClaimCeiling
+      || packet.evidence.claimCeiling !==
+        'Labelled local deterministic development behavior only; no reachable host, live provider, durable multi-worker CAS, deployment, production safety, or customer value.'
+    ) throw new Error('full_yolo_packet_claim_ceiling_refused')
     verifyFullYoloEvidence(packet.evidence)
     return packet
   }
@@ -512,7 +577,10 @@ export async function runCli(command: string, path: string) {
 if (process.argv[1]?.endsWith('full-yolo-evidence-packet.ts')) {
   const command = process.argv[2]
   const path = process.argv[3]
-  if (command === undefined || path === undefined) throw new Error('command_and_path_required')
-  const packet = await runCli(command, path)
+  const expectedRevision = process.argv[4]
+  if (command === undefined || path === undefined || expectedRevision === undefined) {
+    throw new Error('command_path_and_revision_required')
+  }
+  const packet = await runCli(command, path, expectedRevision)
   process.stdout.write(`${packet.checksum}\n${packet.evidence.gitRevision}\n`)
 }

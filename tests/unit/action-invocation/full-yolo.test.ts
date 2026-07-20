@@ -13,11 +13,11 @@ import {
 } from '../../../tools/dev/full-yolo-evidence-packet'
 import {
   developmentCancellationConfirmationRule,
-} from '@/modules/provider-operation-fixture/development-provider-operation-offset-rule'
-import * as developmentProviderOperationProviderSource from '@/modules/provider-operation-fixture/development-provider-operation-provider'
-import { createDevelopmentProviderOperationProvider } from '@/modules/provider-operation-fixture/development-provider-operation-provider'
-import { resumeDevelopmentProviderOperationObjective } from '@/modules/provider-operation-fixture/development-provider-operation-objective'
-import { createDevelopmentProviderOperationSigningCustody } from '@/modules/provider-operation-fixture/development-provider-operation-signing-custody'
+} from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-offset-rule'
+import * as developmentProviderOperationProviderSource from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-provider'
+import { createDevelopmentProviderOperationProvider } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-provider'
+import { resumeDevelopmentProviderOperationObjective } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-objective'
+import { createDevelopmentProviderOperationSigningCustody } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-signing-custody'
 
 describe('full_yolo bounded authority mode', () => {
   it('executes fallback and cancellation through three exact standing-mandate uses', async () => {
@@ -318,6 +318,15 @@ describe('full_yolo bounded authority mode', () => {
     }],
     ['direct provider replay evidence', (copy: any) => {
       copy.coldContinuation.replayedOperation = copy.authoritativeResults.operation.result
+    }],
+    ['raw child phase artifact', (copy: any) => {
+      copy.processColdProof.phaseArtifacts.cancellation.effectCounts.operation += 1
+    }],
+    ['raw child process linkage', (copy: any) => {
+      copy.processColdProof.phaseArtifacts.replay.processId += 1
+      copy.processColdProof.phaseArtifactDigests.replay = canonicalDigest(
+        copy.processColdProof.phaseArtifacts.replay,
+      )
     }],
   ])('rejects valid outer-checksum tampering of %s', async (_label, mutate) => {
     const evidence = structuredClone(await runFullYoloEvidence())

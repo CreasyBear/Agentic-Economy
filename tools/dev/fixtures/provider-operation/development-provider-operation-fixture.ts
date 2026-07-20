@@ -1,4 +1,4 @@
-import type { ActionInvocationOrigin, InvocationActor } from '@/modules/action-invocation'
+import type { ActionInvocationOrigin, InvocationActor } from '../../../../src/modules/action-invocation'
 import type {
   DevelopmentProviderOperationCancellationInput,
   DevelopmentProviderOperationInput,

@@ -1,26 +1,56 @@
-import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import { readFile } from 'node:fs/promises'
 
-import { runDevelopmentProviderOperationEvidence } from '../../src/modules/provider-operation-fixture/development-provider-operation-evidence'
+import { runDevelopmentProviderOperationEvidence } from './fixtures/provider-operation/development-provider-operation-evidence'
 import { readAndVerifyProviderOperationPacket, writeEvidencePacket } from './action-invocation-evidence-packet'
+import {
+  captureOfficialEvidenceProvenance,
+  verifyOfficialEvidenceProvenance,
+} from './evidence-provenance'
 
-const revision = () => execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
-const [command, rawPath] = process.argv.slice(2)
-if ((command !== 'run' && command !== 'verify') || rawPath === undefined) {
-  throw new Error('usage: npm run evidence:operation:development -- <run|verify> <output-path>')
+const [command, rawPath, expectedRevision] = process.argv.slice(2)
+if (
+  (command !== 'run' && command !== 'verify')
+  || rawPath === undefined
+  || expectedRevision === undefined
+) {
+  throw new Error('usage: npm run evidence:operation:development -- <run|verify> <output-path> <revision>')
 }
 const path = resolve(rawPath)
-const gitRevision = revision()
+const commandIdentity = `development-provider-operation-evidence run ${path} ${expectedRevision}`
+const officialClaimCeiling =
+  'Labelled local development evidence only. No customer reachability, hosted behavior, real provider fulfilment, production safety, cold-agent usability, or customer value.'
 if (command === 'run') {
+  const provenance = captureOfficialEvidenceProvenance({
+    expectedRevision,
+    command: commandIdentity,
+    claimCeiling: officialClaimCeiling,
+  })
   const scenario = await runDevelopmentProviderOperationEvidence()
-  const envelope = await writeEvidencePacket(path, { gitRevision, ...scenario })
+  const envelope = await writeEvidencePacket(
+    path,
+    { gitRevision: provenance.sourceRevision, ...scenario },
+    provenance,
+  )
   console.log(JSON.stringify({
-    environment: scenario.environment, path, gitRevision, checksum: envelope.checksum,
+    environment: scenario.environment, path, gitRevision: provenance.sourceRevision, checksum: envelope.checksum,
     gate7: scenario.gate7, claimCeiling: scenario.claimCeiling,
   }, null, 2))
 } else {
+  const verified = await readAndVerifyProviderOperationPacket(path, expectedRevision)
+  const envelope = JSON.parse(await readFile(path, 'utf8')) as {
+    provenance?: Parameters<typeof verifyOfficialEvidenceProvenance>[0]
+  }
+  if (envelope.provenance === undefined) throw new Error('packet_provenance_required')
+  verifyOfficialEvidenceProvenance(envelope.provenance, {
+    expectedRevision,
+    command: commandIdentity,
+  })
+  if (envelope.provenance.claimCeiling !== officialClaimCeiling) {
+    throw new Error('packet_claim_ceiling_refused')
+  }
   console.log(JSON.stringify({
     environment: 'MOCK/DEVELOPMENT ONLY', command: 'verify', path,
-    ...(await readAndVerifyProviderOperationPacket(path, gitRevision)),
+    ...verified,
   }, null, 2))
 }

@@ -1,6 +1,7 @@
 import {
   buildDynamicPublishedInput,
   createDevelopmentTimeoutSignal,
+  DevelopmentProcessInterruption,
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
   createRequestOwnedDevelopmentHost,
@@ -502,7 +503,7 @@ async function coldResumeScenario(
     () => {
       if (interrupt) {
         interrupt = false
-        throw new Error('development_process_interrupted_after_lease')
+        throw new DevelopmentProcessInterruption('development_process_interrupted_after_lease')
       }
     },
   )

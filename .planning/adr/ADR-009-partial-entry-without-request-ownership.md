@@ -1,274 +1,78 @@
 ---
-status: proposed
+status: accepted
 date: 2026-07-17
+accepted: 2026-07-20
 decision_owner: Founder
 review_by: 2026-08-17
+exposure: blocked_pending_control_plane_hardening
 ---
 
 # Allow partial entry without requiring Customer Request ownership
 
-AE proposes that a caller may ask AE to perform one bounded task—such as finding
-businesses, qualifying supplied businesses, obtaining quotes, sending an
-approved order, checking an outcome or attempting recovery—without first
-creating a synthetic end-to-end Customer Request.
+## Decision
 
-Customer Request remains the durable statement of a larger customer outcome and
-may coordinate several such tasks. It is not required to own work that began
-elsewhere.
+A caller may ask AE to perform one independently useful registered action
+without first creating a synthetic Customer Request or RoutePlan. Customer
+Request remains the canonical aggregate for a broader customer outcome and may
+compose invocation and result references when genuine dependencies exist.
 
-This ADR deliberately does **not** introduce an `EconomicOperation` schema,
-table, base class, endpoint, lifecycle or kernel primitive. “Bounded task” is
-descriptive language for the unit a caller is trying to complete. Evals must
-first establish whether different tasks share enough implementation structure
-to justify any common type.
+Action Invocation is the narrow durable control record for one call to one
+registered action and immutable action version. It is not a universal business
+task, `EconomicOperation`, business module or replacement for action-specific
+results.
 
-## Selected engineering architecture under evaluation
+Each invocation preserves:
 
-AE will evaluate **Action Invocation** as the narrow durable control record for
-one independently resumable call to one registered action and action version.
-It is an engineering execution record, not a universal business-task schema.
-It does not contain wedge meaning, replace the action-specific result, or imply
-that every read-only call must be persisted.
+- `request_owned` lineage with exact Request reference and revision; or
+- `standalone` lineage with exact caller and principal attribution.
 
-An Action Invocation has:
+These origins use the same authority, attempt, idempotency, generation,
+uncertainty, reconciliation and recovery semantics. Authority never transfers
+through an invocation, result reference, composition edge or prior approval.
 
-- a stable `invocationRef`;
-- the registered action identifier and immutable action version;
-- caller, principal, ownership scope and optional parent Request or bundle
-  reference;
-- an immutable prepared-input digest and material input provenance;
-- desired state, observed resolution and freshness/reachability as separate
-  values;
-- the current invocation version and effect generation;
-- expected evidence and the action-declared retry/reconciliation class;
-- references to authority, attempts, observations, results and allowed
-  continuations.
+## Accepted architecture
 
-An external-effect attempt has its own `attemptRef`, idempotency identity and
-generation. A lease prevents simultaneous workers from owning the same attempt.
-A generation fence prevents a late worker, cancellation or provider observation
-from overwriting newer state. State changes use compare-and-swap against the
-expected invocation version or generation.
+- business facts and results remain owned by their action/source;
+- shared control state stores continuity and references only;
+- exact authority binds action, version, invocation, prepared material,
+  principal, target, limits, expiry and generation;
+- every consequential attempt has stable idempotency and one current effect
+  generation;
+- possible release requires reconciliation before retry;
+- completed standalone results may be referenced without copying state or
+  repeating effects;
+- domain variation remains in registered contracts and provider adapters.
 
-Existing Action Attempt, authority, evidence and reconciliation machinery
-remains authoritative. The first implementation question is whether Action
-Invocation can be expressed by generalizing an existing source-owned record.
-A new table is permitted only when the source map and eval traces show that an
-existing record would mix incompatible meanings or force optional Request
-lineage back into the design.
+The proportional reference operation is a generic business-published paid
+operation. Booking is not a mandatory AE module. A provider-defined cancellable
+operation may remain a labelled, unregistered fixture when needed to evaluate
+cancellation and recovery semantics.
 
-Customer Request becomes an orchestrating client of Action Invocations. A
-complete route or bundle stores invocation and result references plus declared
-dependencies and completion conditions. It does not copy constituent status,
-inherit their authority, or implement another attempt and recovery lifecycle.
+## Acceptance disposition
 
-Lineage is discriminated rather than weakened:
+The eleven architectural gates have labelled local development evidence:
 
-```text
-request_owned(requestRef, revision)
-standalone(callerRef, principalRef)
-bundle_owned(bundleRef, nodeRef)
-```
+1. current supplied-candidate qualification;
+2. quote preparation and disclosure authority;
+3. attributable external commitments;
+4. identical control meaning across both origins;
+5. historical Request lineage preservation;
+6. reference-only composition;
+7. proportional direct consequential operation;
+8. durable stop and continuation;
+9. truthful route roll-up;
+10. no authority crossing between tasks;
+11. no domain noun in the neutral control plane.
 
-Existing Request-owned traces remain valid. Fields on existing records do not
-become broadly optional as a migration shortcut.
+ADR-009 is accepted as architecture. Exposure remains blocked until malformed
+authority material fails closed and official evidence binds to exact committed
+bytes. Current evidence does not prove deployment, provider fulfilment,
+customer value or production safety.
 
-This direction is proposed because the neutral engine is internally
-compositional while current durable lineage is Request-owned. Action preparation
-requires Request, revision, plan and action lineage; structured quote
-preparation requires a Customer Request owner; route authority requires an
-AE-generated route; inspection and recovery address AE-created runs. Wrapping
-partial entry in synthetic Requests would preserve this coupling and create
-misleading lineage.
+## History
 
-The primary-source lifecycle review in
-[Partial-entry lifecycle crosswalk](../research/2026-07-17-partial-entry-lifecycle-crosswalk.md)
-supports the shape of this proposal. OCDS, UBL, Peppol and the FAR divide
-procurement differently, but repeatedly preserve separately meaningful,
-referenced interactions such as qualification, quotation, order response,
-change, inspection, acceptance, invoice query and termination. The review is
-supporting evidence, not sufficient evidence to accept this ADR.
-
-## Decision constraints
-
-Regardless of its entry point, each independently callable task must preserve:
-
-- the exact capability contract and operation;
-- the caller, principal and ownership scope;
-- its origin and every imported claim's provenance and freshness;
-- the supplied provider or candidate scope;
-- preparation, data, spend and external-effect authority;
-- idempotent attempts and provider releases;
-- expected evidence, cancellation and recovery semantics;
-- an honest resolution, including an unresolved or unknown external effect.
-
-Work may begin from a Customer Request, a direct invocation, a bundle step or an
-external observation. That entry context changes provenance only. It must not
-change the meaning of authority, execution, evidence, cancellation or recovery.
-
-A bundle may coordinate independently callable tasks, their dependencies and
-completion conditions. It must not implement a second authority, attempt,
-evidence or recovery lifecycle.
-
-Customer Request remains the canonical customer-outcome aggregate. RoutePlan and
-RouteMandate remain valid for complete AE-generated routes. This ADR does not
-authorize weakening or replacing them before task-level evidence earns a
-generalized mandate.
-
-## Product journey and composition
-
-Partial entry is the beginning of the product journey, not a lesser version of
-the full route.
-
-AE should first help the customer or calling agent complete the task they
-recognize: find suitable businesses, obtain quotes, compare options, send an
-approved instruction, inspect the result or recover from a problem. After each
-result, AE may show the useful next tasks and offer to coordinate them.
-
-For example:
-
-> Quotes received → compare them → approve one option → send the order → track
-> acknowledgement → inspect completion.
-
-The customer may stop after any completed task, continue task by task, hand the
-result to another system, or ask AE to coordinate the remaining route. Previous
-work must remain usable whichever choice they make.
-
-A full-route experience is therefore a customer-facing composition of
-understandable tasks, decisions and handoffs. It must not expose an internal
-dependency graph as the product, and it must not require the customer to specify
-the entire project before receiving value.
-
-Composition must preserve the identity and evidence of each constituent task.
-The route may explain dependencies, propose what happens next and track overall
-progress. It may not silently combine approvals, infer authority for later
-tasks, or describe the route as complete when one task remains unresolved.
-
-## Considered options
-
-**Keep Customer Request as the universal parent.** Rejected as the target
-direction because agents cannot safely enter with caller-owned candidates,
-offers or external commitments without manufacturing a false full-lifecycle
-history.
-
-**Expose the routing kernel directly.** Rejected because callers would need to
-understand internal routing, authority and recovery ordering, producing a
-shallow and difficult-to-use interface.
-
-**Create separate qualification, quote and commitment products.** Rejected
-because each product would tend to duplicate lineage, authority, attempts,
-evidence and recovery, contaminating the wedge-neutral engine.
-
-**Allow partial entry while preserving the same trust rules.** Proposed because
-it permits independently useful work and optional composition without deciding
-prematurely that every task must share one persisted object.
-
-## Acceptance gates
-
-This ADR may move from proposed to accepted only when evals demonstrate that:
-
-1. supplied-candidate qualification reuses current contracts and supply evidence
-   without a parallel eligibility model;
-2. supplied-candidate quote collection reuses structured preparation, disclosure
-   authority, provider attempts and uncertainty reconciliation;
-3. external commitment observation preserves imported state as attributable
-   claims unless an admitted provider adapter supplies current evidence;
-4. Request-owned and directly invoked tasks retain identical authority,
-   idempotency, evidence and recovery meaning;
-5. existing Customer Request traces replay without semantic regression;
-6. a bundle consists only of independently inspectable task references and
-   declared dependencies;
-7. direct-booking proportionality is proven: one simple provider-supported
-   booking uses one registered booking action and Action Invocation without a
-   synthetic Request or RoutePlan, while coordinated booking may compose when
-   real dependencies require it;
-8. a customer or cold agent can stop after one task and later continue from its
-   durable result without reconstructing the prior conversation;
-9. the full-route projection explains completed, current, optional and blocked
-   tasks without exposing kernel machinery;
-10. approval of one task is never treated as authority for a later task;
-11. no domain nouns enter the neutral contracts.
-
-Failure of these gates requires narrowing or superseding this ADR rather than
-loosening the current guardrails.
-
-## Consequences
-
-If the evals pass, the likely engineering work is to remove unnecessary
-Request ownership from existing lineage, preparation and inspection paths—not
-to add a new universal engine object. The implementation might reuse an
-existing action, run or receipt reference; use a small shared envelope; or keep
-separate task records with common trust rules. This ADR does not choose among
-those designs.
-
-The minimum durable projection for an agent is therefore not a transcript or
-one universal workflow status. It is the task reference, actor and
-principal, input provenance and freshness, version, authority, attempt and
-idempotency identity, attributed observations, resolution including `unknown`,
-expected evidence, allowed continuations and next owner.
-
-Retry policy follows the consequence of the task: computation may repeat;
-communication creates a new attributable attempt; a possibly completed external
-effect must be reconciled before retry unless the provider contract guarantees
-safe idempotent replay.
-
-Registered actions therefore declare one of three retry classes:
-
-```text
-replayable
-attributable_retry
-reconcile_before_retry
-```
-
-The worker may implement backoff and delivery, but it may not choose the retry
-class or convert an unknown external effect into failure.
-
-The product may progressively reveal a complete route, but the engineering
-model must not depend on the customer selecting that route upfront. Route
-coordination is earned through composition of useful tasks rather than imposed
-as the entry contract.
-
-Imported facts, offers and commitments remain claims made by their named source.
-AE owns admission decisions, authority reservations, attempt records, transport
-observations and resolutions. AE does not retroactively claim that it performed
-or verified work completed elsewhere.
-
-No current product claim, public endpoint or production capability changes as a
-result of this proposed ADR.
-
-## Amendment — 2026-07-19
-
-Accepted ADR-019 supersedes inquiry-only/no-booking as the target posture.
-Booking is now an intended consequential action. Gate 7 is therefore the
-direct-booking proportionality eval above, not a negative control or a reason to
-substitute `inquiry.submit`. Current evidence and ADR status are unchanged.
-
-Additional production-pattern evidence:
-
-- [Production agent execution patterns](../research/2026-07-17-production-agent-execution-patterns.md).
-
-Implementation specification:
-
-- [Action Invocation engineering specification](../specs/ACTION-INVOCATION-ENGINEERING-SPEC.md).
-
-## Amendment — 2026-07-20: business-published operations
-
-Founder direction supersedes the booking-specific wording in Gate 7 and the
-2026-07-19 amendment. Booking is not an AE bounded context or privileged
-operation type. It is one possible business-published endpoint shape.
-
-Gate 7 is now read as **direct-operation proportionality**: one
-provider-supported consequential operation uses its exact published contract
-and Action Invocation without a synthetic Request or RoutePlan. A second
-provider-defined cancellable operation may be used as labelled development
-evidence for cancellation and exposure release when the selected x402
-operation does not support cancellation.
-
-The accepted development reference uses the paid business-published
-`GET /x402/v3/cryptocurrency/quotes/latest` operation for the shared invocation
-plane. Historical booking packets remain provenance only. The former
-development booking actions are no longer globally registered, and their
-control evidence has moved to an unregistered provider-operation fixture.
-
-This amendment changes the selected evidence adapter, not the neutral
-Action Invocation architecture or the public claim ceiling.
+The inquiry-first and later booking-specific plans were implementation
+experiments. Founder direction replaced booking as the mandatory evidence
+adapter with a generic PublishedOperation. The complete pre-hardening ADR and
+amendment history is preserved at
+[`ADR-009 pre-hardening`](../archive/adr-009-010-pre-hardening/adrs/ADR-009-partial-entry-without-request-ownership.md).

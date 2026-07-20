@@ -1,4 +1,7 @@
-import { evaluateAdr009Transfer } from '@/modules/action-invocation/transfer-evaluator'
+import {
+  evaluateAdr009Transfer,
+  type TransferBoundaryEvent,
+} from '../../../../src/modules/action-invocation/transfer-evaluator'
 import {
   cancelDevelopmentProviderOperationAction,
   executeDevelopmentProviderOperationAction,
@@ -145,7 +148,10 @@ export async function runDevelopmentProviderOperationEvidence() {
         { kind: 'direct_runner_returned', actionId: executeDevelopmentProviderOperationAction.id, outcome: 'effect_confirmed' },
       ],
       controlled: [
-        ...standalone.events,
+        ...standalone.events.filter(
+          (event): event is TransferBoundaryEvent =>
+            event.kind !== 'standing_mandate_authorization',
+        ),
         { kind: 'attempt', invocationRef: standalone.view.invocationRef, attemptRef: standalone.view.attempts[0]!.attemptRef },
       ],
     },

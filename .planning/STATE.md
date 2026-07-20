@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: customer-product-frontier
+current_phase: adr-009-010-control-plane-hardening
 status: active
-stopped_at: "Anonymous Ask and Clarify proof closed at exact hosted revision 27db6750; resume the open customer choice-comprehension frontier in issue #125"
-last_updated: "2026-07-15"
+stopped_at: "ADR-009 accepted and ADR-010 accepted_narrowed; harden authority material, observer truth, and evidence custody before exposure"
+last_updated: "2026-07-20"
 progress:
   total_phases: 6
   completed_phases: 4
@@ -17,10 +17,22 @@ progress:
 # State — Agentic Economy Fresh Repo
 
 **Created:** 2026-06-27
-**Current execution state:** Customer-product frontier active on wayfinder map #112; kernel choreography stays backstage
+**Current execution state:** ADR-009/010 control-plane hardening active; exposure blocked
 **Last source/local phase closed:** Phase 6 source/local proof only  
-**Status:** active gate with open deployed/provider/demo blockers
+**Status:** architecture accepted; authority and exact-revision evidence hardening in progress
 ## Active decision
+
+ADR-009/010 hardening (2026-07-20): ADR-009 is `accepted` and ADR-010 is
+`accepted_narrowed`. Action Invocation, discriminated standalone/Request
+lineage, one source-owned host plane, uncertainty and recovery remain the
+selected architecture. Gate 10 is terminally `NARROW_OR_REDESIGN` for the
+measured PublishedOperation class and is being retired as an active comparator.
+Exposure is blocked until malformed authority material fails closed, diagnostic
+observers cannot change command truth, and official packets bind to a clean
+exact revision. The active contract is
+[`2026-07-18-phase-1-2-completion-contract.md`](./scopes/2026-07-18-phase-1-2-completion-contract.md).
+Pre-hardening Phase 1/2 plans and ADR text are preserved under
+`.planning/archive/adr-009-010-pre-hardening/`.
 
 Customer-product reset (2026-07-15): [Wayfinder map: Build one customer product over AE's neutral kernel](https://github.com/CreasyBear/Agentic-Economy/issues/112) orders the remaining work by the customer's durable Request lifecycle: Ask, Clarify, Choose, Confirm, Follow and Recover. The neutral kernel remains production authority but is not the public product object. Recommendation, alternatives, confirmation, activity, result and recovery are customer-semantic projections of one Request. Ask and Clarify are now closed through exact hosted human and external-agent evidence in issue #140. The immediate frontier is the unfinished real-human choice-comprehension proof in issue #125. Standing authority, guarantees, marketplace expansion and broad brand claims stay downstream of a real end-to-end Request proof.
 
@@ -30,21 +42,11 @@ SUPERSEDED (2026-07-13): the 14-day bootstrap gate in `.planning/scopes/scope-14
 
 Active frontier (2026-07-13): contradictory #152 was recharted before coding. Action Preparation and authority reservation (#154) now precede concrete disclosure allocation/egress recovery (#155), real Prepared Action persistence (#156), exact approval/run/recovery authority (#153), and V1 quarantine (#149). The tracker enforces the native chain.
 
-Action invocation decomposition frontier (2026-07-17, design-only): Phase `01-action-invocation-decomposition` is PLANNED, not executed. It turns ADR-009, ADR-010, and the Action Invocation engineering spec (#193) into a decision-complete design — `01-SPEC.md`, `01-CONTEXT.md`, `01-RESEARCH.md`, `01-PATTERNS.md`, `01-01-PLAN.md` — committing one buildable answer per axis (seam = adapter-over-handlers with `request_owned | standalone` origin; first action = qualified inquiry `inquiry.submit` + provider simulator for the uncertain-effect path; persistence = in-memory first then one new module-owned `actionInvocations` table; per-action authority binding + material-change invalidation; four-dimension desired/observed/freshness/control state model; barrier hypothesis designed as a two-arm experiment). Plan-checker green (frontmatter valid, structure valid, consistency clean, health errors none). No `src/`/`convex/`/`tests/` edits; no ADR status change; #193 not closed. Source implementation is a separate, explicitly-authorized execute-phase.
-
-One action plane cross-surface parity frontier (2026-07-17, design-only): Phase `02-one-action-plane-cross-surface-parity` is PLANNED, not executed. It turns ADR-010 into a decision-complete design on top of Phase 1's Action Invocation identity — `02-SPEC.md`, `02-CONTEXT.md`, `02-RESEARCH.md`, `02-PATTERNS.md`, `02-01-PLAN.md` — committing one buildable answer per axis (semantic-parity = net-new action/invocation-scoped `compareActionInvocationSurfaces` sibling of the Request check, seven dimensions, proven against `inquiry.submit`; host-adapter boundary = typed interface + new import-boundary test; structured non-visual equivalent addressed to `invocationRef`+version; first generative-UI families = bounded approval + option comparison with an invent-nothing boundary; reconstruct-from-records = view is a pure function of durable records, conversation/component state disposable; parity eval = in-memory-adapter-first suite reusing the fifteen spec behavior suites) plus the ADR-010 ten-gate→falsifiable-test table (gate 10 measured across six sub-metrics, first-slice vs deferred marked). Does not re-decide Phase 1's seam/persistence/authority. No source touched; no ADR status changed; #193 open. Source implementation requires separate authorization.
-
-Phase 1/2 completion rebaseline (2026-07-18): the Founder directed that ADR-009 Phase 1 and ADR-010 Phase 2 be completed in entirety rather than stopping at their original design-only or first-slice boundaries. [`2026-07-18-phase-1-2-completion-contract.md`](./scopes/2026-07-18-phase-1-2-completion-contract.md) now governs that outcome. It retains every ADR acceptance gate, makes the task/provider/security/architecture Wayfinder decisions explicit Gate 0 dependencies, orders the two-caller and cross-surface vertical slices, and permits only `invest`, `narrow`, `deliberate service`, or `stop` as evidence-backed terminal states. The old `<tasks>` blocks remain frozen and are not execution authority. [Map partial-entry constraints through the current AE source](https://github.com/CreasyBear/Agentic-Economy/issues/184) is resolved from the post-deepening source map at exact revision `1b9c1b92366ad75be0970c4f81e178f4ac48a18d`; its selected-task tracer remains later evidence. [Distil the recurring human work across commercial lifecycles](https://github.com/CreasyBear/Agentic-Economy/issues/183) is resolved at exact revision `27b17f98b38fc8b1c2ff1483ca14c648dffed9e4` with four official cases and an eight-property trust rubric that explicitly rejects a shared lifecycle or schema. The task/cohort, provider, continuation, security, architecture, investment and approval decisions remain unresolved, and implementation issue 193 remains unclaimed; no implementation or ADR acceptance is claimed.
-
-Authority-mode governance rebaseline (2026-07-19): accepted
-[`ADR-019`](./adr/ADR-019-authority-modes-and-consequential-operations-target.md)
-supersedes inquiry-only/no-booking as the target posture while preserving
-today's lack of customer-reachable booking, payment, dispatch, or fulfilment as
-current evidence. Phase 1 now requires a fresh development booking slot to
-close ADR-009 Gate 7 proportionally through one registered booking action and
-Action Invocation, plus exact authority-mode/revocation evals. Phase 2 selects
-that booking action for host parity. No source, runtime, deployment, provider,
-or customer capability is claimed by this documentation change.
+Historical Phase 1/2 design-only plans, the prior completion contract and the
+booking-shaped Gate 7 instruction were superseded on 2026-07-20 and moved to
+`.planning/archive/adr-009-010-pre-hardening/`. They are provenance, not active
+implementation authority. The current phase summaries, ADR-009/010 and
+hardening completion contract own the active direction.
 
 Action Invocation implementation rebaseline (2026-07-20): Founder direction
 supersedes booking as AE architecture. The implemented primitive is a generic

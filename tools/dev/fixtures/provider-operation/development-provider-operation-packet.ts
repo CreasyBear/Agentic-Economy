@@ -1,10 +1,10 @@
-import type { ActionResult } from '@/modules/common/action'
-import type { AnyAction } from '@/modules/common/action'
+import type { ActionResult } from '../../../../src/modules/common/action'
+import type { AnyAction } from '../../../../src/modules/common/action'
 import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
   createDurableActionInvocationTracer,
-} from '@/modules/action-invocation'
+} from '../../../../src/modules/action-invocation'
 import type { ProviderOperationInvocationRun } from './development-provider-operation-runner'
 
 export function projectDurableRun<Result extends ActionResult>(

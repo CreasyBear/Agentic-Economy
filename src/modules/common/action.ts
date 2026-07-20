@@ -83,19 +83,6 @@ export type ActionContext = {
   developmentOnlySuppliedQuoteQualificationPorts?: unknown
   /** Fixed development clock paired with the supplied-quote source ports. */
   developmentOnlySuppliedQuoteNow?: () => number
-  /** Provider-operation fixture ports for labelled development evidence only. */
-  developmentOnlyProviderOperationAdapter?: (data: unknown) => Promise<ActionResult>
-  developmentOnlyProviderOperationNow?: () => number
-  developmentOnlyProviderOperationAuthorityPrincipalRef?: string
-  developmentOnlyProviderOperationAvailabilityCheck?: (
-    data: unknown,
-    now: number,
-  ) => Promise<Readonly<{ kind: 'current' } | { kind: 'stale'; reason: string }>>
-  developmentOnlyProviderOperationAvailabilityAdapter?: () => Promise<unknown>
-  developmentOnlyProviderOperationCancellationAdapter?: (data: unknown) => Promise<ActionResult>
-  developmentOnlyProviderOperationCancellationCheck?: (
-    data: unknown,
-  ) => Promise<Readonly<{ kind: 'current' } | { kind: 'refused'; reason: string }>>
 }
 
 export type ActionRunArgs<Input> = {

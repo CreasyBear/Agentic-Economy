@@ -5,8 +5,8 @@ import {
   type ActionInvocationOrigin,
   type PreparedInvocation,
   type ReconciliationEvidenceMaterial,
-} from '@/modules/action-invocation'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+} from '../../../../src/modules/action-invocation'
+import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   executeDevelopmentProviderOperationAction,
   type DevelopmentProviderOperationInput,

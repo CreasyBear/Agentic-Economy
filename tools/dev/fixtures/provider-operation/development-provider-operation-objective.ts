@@ -7,9 +7,9 @@ import {
   type StandingMandatePolicyDecision,
   type StandingMandate,
   type StandingMandateSnapshot,
-} from '@/modules/action-invocation'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { AnyAction } from '@/modules/common/action'
+} from '../../../../src/modules/action-invocation'
+import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
+import type { AnyAction } from '../../../../src/modules/common/action'
 import {
   cancelDevelopmentProviderOperationAction,
   executeDevelopmentProviderOperationAction,
@@ -120,7 +120,7 @@ async function runFullYoloDevelopmentObjectiveInternal(
   })
   const slotA = await providerA.availability()
   const slotB = await providerB.availability()
-  const mandate = issueStandingMandate({
+  const mandateDecision = issueStandingMandate({
     mode: 'full_yolo',
     mandateRef: 'mock:standing-mandate:full-yolo',
     version: 1,
@@ -153,6 +153,8 @@ async function runFullYoloDevelopmentObjectiveInternal(
       exposureOffsetVerificationKeys: [developmentProviderOperationVerificationKey(signingCustody)],
     },
   })
+  if (mandateDecision.kind === 'refused') throw new Error(mandateDecision.code)
+  const mandate = mandateDecision.value
   const verifier = createDevelopmentStandingMandateGrantVerifier({
     admittedMandateDigest: mandate.digest,
     evidenceRef: 'mock:evidence:full-yolo-grant',

@@ -1,9 +1,9 @@
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { signEd25519Attestation } from '@/modules/common/ed25519-attestation'
+import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
+import { signEd25519Attestation } from '../../../../src/modules/common/ed25519-attestation'
 import type {
   ExposureOffsetRuleIdentity,
   ExposureReleaseAttestationMaterial,
-} from '@/modules/action-invocation'
+} from '../../../../src/modules/action-invocation'
 import type { DevelopmentProviderOperationSigningCustody } from './development-provider-operation-signing-custody'
 import type {
   DevelopmentProviderOperationCancellationInput,

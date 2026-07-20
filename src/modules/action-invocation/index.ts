@@ -22,6 +22,7 @@ export {
   authorityUseIntegrityValid,
   issueStandingMandate,
   mandateIntegrityValid,
+  restoreStandingMandateStore,
   StandingMandateStore,
   STANDING_MANDATE_FORMAT,
 } from './standing-mandate'
@@ -48,6 +49,7 @@ export {
   verifyDynamicPublishedSnapshot,
 } from './dynamic-published-snapshot-verifier'
 export {
+  DevelopmentProcessInterruption,
   createDevelopmentInvocationApplication,
 } from './application-service'
 export {
@@ -96,6 +98,7 @@ export type {
   DevelopmentHostContinuation,
   DevelopmentHostCommandEvent,
   DevelopmentHostCommandObserver,
+  DevelopmentHostRefusalCode,
   DevelopmentHostSourceCommands,
   DevelopmentInvocationApplication,
   DevelopmentInvocationHost,

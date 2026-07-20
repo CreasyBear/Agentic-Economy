@@ -2,20 +2,22 @@ import { describe, expect, it } from 'vitest'
 
 import {
   issueStandingMandate,
+  restoreStandingMandateStore,
   createDevelopmentStandingMandateGrantVerifier,
+  evaluateStandingMandatePolicy,
   StandingMandateStore,
   type AuthorityUseMaterial,
   type StandingMandateSnapshot,
 } from '@/modules/action-invocation'
-import { executeDevelopmentProviderOperationAction } from '@/modules/provider-operation-fixture/development-provider-operation.actions'
+import { executeDevelopmentProviderOperationAction } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation.actions'
 import {
   providerOperationActor,
   providerOperationInput,
   developmentProviderOperationNow,
-} from '@/modules/provider-operation-fixture/development-provider-operation-fixture'
-import { createDevelopmentProviderOperationProvider } from '@/modules/provider-operation-fixture/development-provider-operation-provider'
-import { runProviderOperationInvocation } from '@/modules/provider-operation-fixture/development-provider-operation-runner'
-import { createDevelopmentProviderOperationMandateService } from '@/modules/provider-operation-fixture/development-provider-operation-mandate'
+} from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-fixture'
+import { createDevelopmentProviderOperationProvider } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-provider'
+import { runProviderOperationInvocation } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-runner'
+import { createDevelopmentProviderOperationMandateService } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-mandate'
 
 const now = developmentProviderOperationNow()
 const principalRef = 'request-owner:mock:request:mandated'
@@ -100,7 +102,7 @@ const legacyV1HeldCapacitySnapshot = Object.freeze({
   policyDecisions: [],
 } as const satisfies StandingMandateSnapshot)
 
-const mandate = issueStandingMandate({
+const mandateDecision = issueStandingMandate({
   mandateRef: 'mock:standing-mandate:operation',
   version: 1,
   generation: 1,
@@ -125,6 +127,8 @@ const mandate = issueStandingMandate({
     riskCeiling: 'development_provider_operation_zero_charge',
   },
 })
+if (mandateDecision.kind !== 'accepted') throw new Error(mandateDecision.code)
+const mandate = mandateDecision.value
 
 function use(overrides: Partial<AuthorityUseMaterial> = {}): AuthorityUseMaterial {
   return {
@@ -174,6 +178,83 @@ function providerOperationService(store: StandingMandateStore) {
 }
 
 describe('Action Invocation bounded standing mandate', () => {
+  it.each([
+    ['NaN spend', { maximumSpend: { amountMinor: Number.NaN, currency: 'AUD' } }],
+    ['infinite spend', { maximumSpend: { amountMinor: Number.POSITIVE_INFINITY, currency: 'AUD' } }],
+    ['fractional spend', { maximumSpend: { amountMinor: 0.5, currency: 'AUD' } }],
+    ['negative spend', { maximumSpend: { amountMinor: -1, currency: 'AUD' } }],
+    ['unsafe spend', { maximumSpend: { amountMinor: Number.MAX_SAFE_INTEGER + 1, currency: 'AUD' } }],
+    ['invalid start', { startsAt: 'not-a-date' }],
+    ['equal validity window', { startsAt: now, expiresAt: now }],
+    ['reversed validity window', { startsAt: '2026-07-19T06:00:00.000Z' }],
+  ])('refuses malformed mandate material: %s', (_label, scopeOverride) => {
+    expect(issueStandingMandate({
+      mandateRef: 'mock:standing-mandate:invalid',
+      version: 1,
+      generation: 1,
+      grantorRef: 'mock:grantor:customer',
+      principalRef,
+      delegateRef: 'mock:delegate:agent',
+      callerRef,
+      issuedAt: now,
+      scope: { ...mandate.scope, ...scopeOverride },
+    })).toEqual({ kind: 'refused', code: 'mandate_material_invalid' })
+  })
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, 0.5, -1, Number.MAX_SAFE_INTEGER + 1])(
+    'refuses malformed reserved spend before it can change capacity: %s',
+    (amountMinor) => {
+      const store = issuedStore()
+      expect(store.reserve(use({
+        authorityUseRef: `mock:authority-use:invalid:${String(amountMinor)}`,
+        reservedSpend: { amountMinor, currency: 'AUD' },
+      }), now)).toEqual({ kind: 'refused', code: 'mandate_material_invalid' })
+      expect(store.capacity(mandate.mandateRef)).toMatchObject({
+        reservedCount: 0,
+        reservedSpendMinor: 0,
+      })
+    },
+  )
+
+  it('restores valid v1 snapshots through a typed boundary and refuses malformed snapshots', () => {
+    const restored = restoreStandingMandateStore(structuredClone(legacyV1HeldCapacitySnapshot))
+    expect(restored.kind).toBe('accepted')
+
+    const malformed = structuredClone(legacyV1HeldCapacitySnapshot) as unknown as {
+      mandates: Array<{ scope: { maximumSpend: { amountMinor: number } } }>
+    }
+    malformed.mandates[0]!.scope.maximumSpend.amountMinor = -1
+    expect(restoreStandingMandateStore(malformed)).toEqual({
+      kind: 'refused',
+      code: 'mandate_material_invalid',
+    })
+  })
+
+  it('refuses malformed policy money before aggregate capacity arithmetic', () => {
+    expect(evaluateStandingMandatePolicy({
+      mandate,
+      uses: [],
+      policyDecisionRef: 'mock:policy:invalid-money',
+      proposal: {
+        objectiveRef: 'mock:objective:1',
+        objective: mandate.scope.objective,
+        sourceOptionRef: 'mock:option:1',
+        materialDigest: 'sha256:prepared',
+        authorityUseRef: 'mock:authority-use:policy',
+        invocationRef: 'mock:invocation:policy',
+        action: mandate.scope.action,
+        providerRef: mandate.scope.providerRefs[0]!,
+        recipientRef: mandate.scope.recipientRefs[0]!,
+        purpose: mandate.scope.purposes[0]!,
+        dataFields: mandate.scope.allowedDataFields,
+        spend: { amountMinor: -1, currency: 'AUD' },
+        worstCaseLoss: { amountMinor: 0, currency: 'AUD' },
+        fallbackRef: 'none',
+        risk: mandate.scope.riskCeiling,
+      },
+    })).toEqual({ kind: 'refused', code: 'mandate_material_invalid' })
+  })
+
   it('loads a frozen valid v1 snapshot and enforces its held concurrency reservation', () => {
     const cold = new StandingMandateStore(structuredClone(legacyV1HeldCapacitySnapshot))
     expect(cold.reserve({

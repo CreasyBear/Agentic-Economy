@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { findAction } from '@/modules/actions'
-import { executeDevelopmentProviderOperationAction } from '@/modules/provider-operation-fixture/development-provider-operation.actions'
-import { runDevelopmentProviderOperationEvidence } from '@/modules/provider-operation-fixture/development-provider-operation-evidence'
+import { executeDevelopmentProviderOperationAction } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation.actions'
+import { runDevelopmentProviderOperationEvidence } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-evidence'
 
 describe('provider_operation.executeDevelopmentCancellable', () => {
   let packet: Awaited<ReturnType<typeof runDevelopmentProviderOperationEvidence>>

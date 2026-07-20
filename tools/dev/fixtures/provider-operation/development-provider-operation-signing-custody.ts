@@ -2,7 +2,7 @@ import {
   ed25519PublicKey,
   type Ed25519SigningKey,
   type Ed25519VerificationKey,
-} from '@/modules/common/ed25519-attestation'
+} from '../../../../src/modules/common/ed25519-attestation'
 
 export type DevelopmentProviderOperationSigningCustody = Readonly<{
   signingKey: () => Ed25519SigningKey

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
-import { defineAction } from '@/modules/common/action'
+import { defineAction } from '../../../../src/modules/common/action'
+import { developmentProviderOperationDependencies } from './development-provider-operation-context'
 
 const developmentLabel = z.literal('MOCK/DEVELOPMENT ONLY')
 
@@ -110,8 +111,9 @@ export const executeDevelopmentProviderOperationAction = defineAction({
     : { outcome: 'refused', referenceable: false },
   preReleaseCheck: async ({ data, context }) => {
     const input = developmentProviderOperationInputSchema.parse(data)
-    const now = context.developmentOnlyProviderOperationNow?.()
-    const check = context.developmentOnlyProviderOperationAvailabilityCheck
+    const dependencies = developmentProviderOperationDependencies(context)
+    const now = dependencies.now?.()
+    const check = dependencies.checkAvailability
     if (now === undefined || check === undefined) {
       return {
         kind: 'effect_refused' as const,
@@ -121,8 +123,7 @@ export const executeDevelopmentProviderOperationAction = defineAction({
       }
     }
     if (
-      context.developmentOnlyProviderOperationAuthorityPrincipalRef === undefined
-      || input.customer.principalRef !== context.developmentOnlyProviderOperationAuthorityPrincipalRef
+      input.customer.principalRef !== dependencies.authorityPrincipalRef
     ) {
       return {
         kind: 'effect_refused' as const,
@@ -160,7 +161,7 @@ export const executeDevelopmentProviderOperationAction = defineAction({
   },
   run: async ({ data, context }) => {
     const input = developmentProviderOperationInputSchema.parse(data)
-    const adapter = context.developmentOnlyProviderOperationAdapter
+    const adapter = developmentProviderOperationDependencies(context).execute
     if (adapter === undefined) throw new Error('development_provider_operation_adapter_unavailable')
     return developmentProviderOperationOutputSchema.parse(await adapter(input))
   },
@@ -269,9 +270,9 @@ export const cancelDevelopmentProviderOperationAction = defineAction({
     : { outcome: 'refused', referenceable: false },
   preReleaseCheck: async ({ data, context }) => {
     const input = developmentProviderOperationCancellationInputSchema.parse(data)
+    const dependencies = developmentProviderOperationDependencies(context)
     if (
-      context.developmentOnlyProviderOperationAuthorityPrincipalRef === undefined
-      || input.principalRef !== context.developmentOnlyProviderOperationAuthorityPrincipalRef
+      input.principalRef !== dependencies.authorityPrincipalRef
     ) {
       return {
         kind: 'effect_cancellation_refused' as const,
@@ -280,7 +281,7 @@ export const cancelDevelopmentProviderOperationAction = defineAction({
         reason: 'Cancellation principal does not match the authority-bound principal.',
       }
     }
-    const check = context.developmentOnlyProviderOperationCancellationCheck
+    const check = dependencies.checkCancellation
     if (check === undefined) {
       return {
         kind: 'effect_cancellation_refused' as const,
@@ -299,7 +300,7 @@ export const cancelDevelopmentProviderOperationAction = defineAction({
   },
   run: async ({ data, context }) => {
     const input = developmentProviderOperationCancellationInputSchema.parse(data)
-    const adapter = context.developmentOnlyProviderOperationCancellationAdapter
+    const adapter = developmentProviderOperationDependencies(context).cancel
     if (adapter === undefined) throw new Error('development_provider_operation_cancellation_adapter_unavailable')
     return developmentProviderOperationCancellationOutputSchema.parse(await adapter(input))
   },

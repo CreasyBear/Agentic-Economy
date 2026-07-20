@@ -6,7 +6,7 @@ import {
   type MandateDecision,
   type MandateRefusalCode,
   type StandingMandateAuthorityBasis,
-} from '@/modules/action-invocation'
+} from '../../../../src/modules/action-invocation'
 import type {
   DevelopmentProviderOperationCancellationResult,
   DevelopmentProviderOperationInput,

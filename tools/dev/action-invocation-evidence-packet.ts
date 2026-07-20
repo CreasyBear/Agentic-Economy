@@ -32,16 +32,21 @@ import {
   executeDevelopmentProviderOperationAction,
   type DevelopmentProviderOperationInput,
   type DevelopmentProviderOperationResult,
-} from '../../src/modules/provider-operation-fixture/development-provider-operation.actions'
+} from './fixtures/provider-operation/development-provider-operation.actions'
 import { materialDigest } from '../../src/modules/action-invocation/preparation'
 import {
   validateReconciliationEvidence,
   type ReconciliationEvidence,
 } from '../../src/modules/action-invocation/reconciliation-evidence'
+import type { EvidenceProvenanceV1 } from './evidence-provenance'
+import type { runDevelopmentProviderOperationEvidence } from './fixtures/provider-operation/development-provider-operation-evidence'
+
+type ProviderOperationPacket = Awaited<ReturnType<typeof runDevelopmentProviderOperationEvidence>>
 
 export type EvidenceEnvelope = Readonly<{
-  schema: 'ae.action-invocation-development-evidence:v1'
+  schema: 'ae.action-invocation-development-evidence:v2'
   checksum: string
+  provenance?: EvidenceProvenanceV1
   packet: Record<string, unknown>
 }>
 
@@ -49,10 +54,15 @@ function checksum(packet: Record<string, unknown>) {
   return createHash('sha256').update(JSON.stringify(packet)).digest('hex')
 }
 
-export async function writeEvidencePacket(path: string, packet: Record<string, unknown>) {
+export async function writeEvidencePacket(
+  path: string,
+  packet: Record<string, unknown>,
+  provenance?: EvidenceProvenanceV1,
+) {
   const envelope: EvidenceEnvelope = {
-    schema: 'ae.action-invocation-development-evidence:v1',
+    schema: 'ae.action-invocation-development-evidence:v2',
     checksum: `sha256:${checksum(packet)}`,
+    ...(provenance === undefined ? {} : { provenance }),
     packet,
   }
   await writeFile(path, `${JSON.stringify(envelope, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
@@ -61,7 +71,7 @@ export async function writeEvidencePacket(path: string, packet: Record<string, u
 
 export async function readAndVerifyEvidencePacket(path: string, expectedRevision: string) {
   const envelope = JSON.parse(await readFile(path, 'utf8')) as EvidenceEnvelope
-  if (envelope.schema !== 'ae.action-invocation-development-evidence:v1') throw new Error('packet_schema_refused')
+  if (envelope.schema !== 'ae.action-invocation-development-evidence:v2') throw new Error('packet_schema_refused')
   if (envelope.checksum !== `sha256:${checksum(envelope.packet)}`) throw new Error('packet_checksum_refused')
   if (envelope.packet.environment !== 'MOCK/DEVELOPMENT ONLY') throw new Error('packet_environment_refused')
   if (envelope.packet.gitRevision !== expectedRevision) throw new Error('packet_revision_refused')
@@ -89,7 +99,7 @@ export async function readAndVerifyDevelopmentPacket(
   expectedAction: Readonly<{ id: string; version: string }>,
 ) {
   const envelope = JSON.parse(await readFile(path, 'utf8')) as EvidenceEnvelope
-  if (envelope.schema !== 'ae.action-invocation-development-evidence:v1') throw new Error('packet_schema_refused')
+  if (envelope.schema !== 'ae.action-invocation-development-evidence:v2') throw new Error('packet_schema_refused')
   if (envelope.checksum !== `sha256:${checksum(envelope.packet)}`) throw new Error('packet_checksum_refused')
   if (envelope.packet.environment !== 'MOCK/DEVELOPMENT ONLY') throw new Error('packet_environment_refused')
   if (envelope.packet.gitRevision !== expectedRevision) throw new Error('packet_revision_refused')
@@ -134,6 +144,7 @@ export async function readAndVerifyProviderOperationPacket(path: string, expecte
     terminal.observedResolution.state !== 'returned'
     || terminal.observedResolution.result.kind !== 'effect_confirmed'
   ) throw new Error('packet_provider_operation_terminal_refused')
+  validateProviderOperationAdvertisedChecks(envelope.packet, terminal)
   return {
     ...basic,
     reconstructed: {
@@ -144,6 +155,132 @@ export async function readAndVerifyProviderOperationPacket(path: string, expecte
       reconciliationHistoryRecords: durable.uncertain.history.length,
     },
   }
+}
+
+function validateProviderOperationAdvertisedChecks(
+  packet: Record<string, unknown>,
+  terminal: ReturnType<typeof reconstructProviderOperationRows>,
+) {
+  const input = packet as unknown as ProviderOperationPacket
+  const eventOrder = input.eventOrder
+  const authorityIndex = eventOrder.findIndex(({ kind }) => kind === 'authority_decision')
+  const releaseIndex = eventOrder.findIndex(({ kind }) => kind === 'provider_release')
+  const first = input.idempotency.first.observedResolution
+  const replay = input.idempotency.replay.observedResolution
+  const conflict = input.idempotency.conflict.observedResolution
+  const confirmed = input.cancellation.confirmed.observedResolution
+  const recomputed = {
+    authorityBeforeRelease: authorityIndex >= 0 && releaseIndex > authorityIndex,
+    dedupeThroughActionPlane:
+      first.state === 'returned'
+      && replay.state === 'returned'
+      && first.result?.kind === 'effect_confirmed'
+      && replay.result?.kind === 'effect_confirmed'
+      && first.result.effectRef === replay.result.effectRef
+      && input.idempotency.effectsAfterFirst === input.idempotency.effectsAfterReplay
+      && input.idempotency.effectsAfterFirst === input.idempotency.effectsBeforeDedupe + 1,
+    conflictWithoutEffect:
+      conflict.state === 'returned'
+      && conflict.result?.kind === 'effect_refused'
+      && input.idempotency.effectsAfterConflict === input.idempotency.effectsAfterReplay,
+    providerCancellation:
+      confirmed.state === 'returned'
+      && confirmed.result?.kind === 'effect_cancellation_confirmed'
+      && input.cancellation.cancellationEffects === 1,
+  }
+  const principalRefusal = input.principalRefusal
+  const expiryRefusal = input.expiryRefusal
+  const cancellation = input.cancellation
+  const reconciliation = input.reconciliation
+  const advertisedDispositions = {
+    principalRefusal:
+      principalRefusal.observedResolution.state === 'returned'
+      && principalRefusal.observedResolution.execution === 'pre_release_refused'
+      && principalRefusal.observedResolution.businessOutcome === 'refused'
+      && principalRefusal.attempts.every(({ release }) => release.state === 'not_released'),
+    expiryRefusal:
+      expiryRefusal.observedResolution.state === 'returned'
+      && expiryRefusal.observedResolution.execution === 'pre_release_refused'
+      && expiryRefusal.observedResolution.businessOutcome === 'refused'
+      && expiryRefusal.attempts.every(({ release }) => release.state === 'not_released'),
+    cancellationBeforeRelease:
+      cancellation.beforeRelease.control.state === 'cancelled'
+      && cancellation.beforeRelease.control.effect === 'not_released',
+    cancellationReplay:
+      canonicalDigest(cancellation.replay.observedResolution as never)
+      === canonicalDigest(cancellation.confirmed.observedResolution as never),
+    cancellationConflict:
+      cancellation.conflict.observedResolution.state === 'returned'
+      && cancellation.conflict.observedResolution.result.kind === 'effect_cancellation_refused'
+      && cancellation.conflict.observedResolution.result.code === 'operation_key_conflict',
+    cancellationPrincipalRefusal:
+      cancellation.principalRefusal.observedResolution.state === 'returned'
+      && cancellation.principalRefusal.observedResolution.execution === 'pre_release_refused'
+      && cancellation.principalRefusal.observedResolution.result.kind === 'effect_cancellation_refused'
+      && cancellation.principalRefusal.observedResolution.result.code === 'principal_mismatch'
+      && cancellation.principalRefusal.attempts.every(({ release }) => release.state === 'not_released'),
+    originalEffectPreserved:
+      cancellation.originalEffect.state === 'returned'
+      && cancellation.providerEffectRecord !== undefined
+      && canonicalDigest(cancellation.providerEffectRecord.result as never)
+        === canonicalDigest(cancellation.originalEffect.result as never),
+    attributableReconciliation:
+      reconciliation.before.control.state === 'reconciliation_required'
+      && reconciliation.before.attempts[0]?.release.state === 'possibly_released'
+      && reconciliation.after.control.state === 'terminal'
+      && reconciliation.evidence.invocationRef === reconciliation.before.invocationRef
+      && reconciliation.evidence.attemptRef === reconciliation.before.attempts[0]?.attemptRef
+      && reconciliation.evidence.effectGeneration === reconciliation.before.attempts[0]?.effectGeneration,
+  }
+  const transfer = evaluateAdr009Transfer({
+    events: {
+      direct_read: [],
+      direct_consequential: [
+        { kind: 'direct_runner_started', actionId: executeDevelopmentProviderOperationAction.id },
+        { kind: 'provider_release', actionId: executeDevelopmentProviderOperationAction.id },
+        {
+          kind: 'direct_runner_returned',
+          actionId: executeDevelopmentProviderOperationAction.id,
+          outcome: 'effect_confirmed',
+        },
+      ],
+      controlled: [
+        ...eventOrder,
+        {
+          kind: 'attempt',
+          invocationRef: terminal.invocationRef,
+          attemptRef: terminal.attempts[0]!.attemptRef,
+        },
+      ] as TransferBoundaryEvent[],
+    },
+    requiredContinuations: { direct_read: 0, direct_consequential: 1, controlled: 1 },
+    controlledReadback: {
+      invocationVersion: terminal.invocationVersion,
+      controlRecords: 1,
+      attributableAttempts: terminal.attempts.length,
+      durableHistoryRecords: input.durable.terminal.history.length,
+      terminalResultReconstructed: terminal.control.state === 'terminal',
+      exactAuthorityBeforeRelease: recomputed.authorityBeforeRelease,
+      retryClass: executeDevelopmentProviderOperationAction.invocationContract!.retryClass,
+    },
+    referenceReuse: {
+      completedReferences: 1,
+      completedNodes: 1,
+      currentNodes: 0,
+      effectsBeforeReuse: 1,
+      effectsAfterReuse: 1,
+      copiedLifecycleOrResultFields: 0,
+      persistedRoutePlansOrBundles: 0,
+    },
+  })
+  if (
+    canonicalDigest(recomputed as never) !== canonicalDigest(input.executableChecks as never)
+    || !Object.values(recomputed).every(Boolean)
+    || !Object.values(advertisedDispositions).every(Boolean)
+    || canonicalDigest(transfer as never) !== canonicalDigest(input.proportionality as never)
+    || transfer.failedFalsifiers.length !== 0
+    || input.gate7 !== 'passes_for_declared_development_class'
+  ) throw new Error('packet_provider_operation_gate7_reconstruction_refused')
 }
 
 function validateProviderOperationLinkage(durable: PacketDurable, terminal: boolean) {

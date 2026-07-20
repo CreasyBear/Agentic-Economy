@@ -10,20 +10,25 @@ import {
   type StandingMandateSnapshot,
   type VerifiedStandingMandateGrant,
 } from '../../src/modules/action-invocation'
-import { executeDevelopmentProviderOperationAction } from '../../src/modules/provider-operation-fixture/development-provider-operation.actions'
+import { executeDevelopmentProviderOperationAction } from './fixtures/provider-operation/development-provider-operation.actions'
 import {
   providerOperationActor,
   providerOperationInput,
   developmentProviderOperationNow,
-} from '../../src/modules/provider-operation-fixture/development-provider-operation-fixture'
+} from './fixtures/provider-operation/development-provider-operation-fixture'
 import {
   createDevelopmentProviderOperationMandateService,
-} from '../../src/modules/provider-operation-fixture/development-provider-operation-mandate'
-import { projectDurableRun } from '../../src/modules/provider-operation-fixture/development-provider-operation-packet'
-import { createDevelopmentProviderOperationProvider } from '../../src/modules/provider-operation-fixture/development-provider-operation-provider'
-import { runProviderOperationReconciliation } from '../../src/modules/provider-operation-fixture/development-provider-operation-recovery'
-import { runProviderOperationInvocation } from '../../src/modules/provider-operation-fixture/development-provider-operation-runner'
+} from './fixtures/provider-operation/development-provider-operation-mandate'
+import { projectDurableRun } from './fixtures/provider-operation/development-provider-operation-packet'
+import { createDevelopmentProviderOperationProvider } from './fixtures/provider-operation/development-provider-operation-provider'
+import { runProviderOperationReconciliation } from './fixtures/provider-operation/development-provider-operation-recovery'
+import { runProviderOperationInvocation } from './fixtures/provider-operation/development-provider-operation-runner'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
+import {
+  captureOfficialEvidenceProvenance,
+  verifyOfficialEvidenceProvenance,
+  type EvidenceProvenanceV1,
+} from './evidence-provenance'
 
 type ProviderOperationRecord = Readonly<{
   invocationRef: string
@@ -80,8 +85,9 @@ export type BoundedMandatePacketEvidence = Readonly<{
 }>
 
 export type BoundedMandatePacket = Readonly<{
-  schema: 'ae.bounded-mandate-development-evidence:v2'
+  schema: 'ae.bounded-mandate-development-evidence:v3'
   checksum: string
+  provenance: EvidenceProvenanceV1
   evidence: BoundedMandatePacketEvidence
 }>
 
@@ -90,9 +96,11 @@ const requestOrigin = { kind: 'request_owned', requestRef: 'mock:request:packet'
 const principalRef = providerOperationActor(requestOrigin).principalRef
 const callerRef = providerOperationActor(requestOrigin).callerRef
 const standaloneOrigin = { kind: 'standalone', principalRef, callerRef } as const
+const officialClaimCeiling =
+  'Labelled local in-process development semantics only; no deployment, provider fulfilment, production safety, or customer value.'
 
 function createIssuedStore(maximumConcurrentReservations = 2) {
-  const mandate = issueStandingMandate({
+  const mandateDecision = issueStandingMandate({
     mandateRef: 'mock:packet:standing-mandate',
     version: 1,
     generation: 1,
@@ -117,6 +125,10 @@ function createIssuedStore(maximumConcurrentReservations = 2) {
       riskCeiling: 'development_provider_operation_zero_charge',
     },
   })
+  if (mandateDecision.kind === 'refused') {
+    throw new Error(`bounded_mandate_evidence_construction_refused:${mandateDecision.code}`)
+  }
+  const mandate = mandateDecision.value
   const verifier = createDevelopmentStandingMandateGrantVerifier({
     admittedMandateDigest: mandate.digest,
     evidenceRef: 'mock:packet:grant-evidence',
@@ -552,13 +564,26 @@ function checksum(evidence: BoundedMandatePacketEvidence) {
   return `sha256:${createHash('sha256').update(JSON.stringify(evidence)).digest('hex')}`
 }
 
-export async function runCli(command: string, path: string) {
+function commandIdentity(command: 'run' | 'verify', path: string, revision: string) {
+  return `bounded-mandate-evidence-packet ${command} ${path} ${revision}`
+}
+
+export async function runCli(command: string, path: string, expectedRevision: string) {
   if (command === 'run') {
-    const evidence = await runBoundedMandateDevelopmentEvidence()
+    const provenance = captureOfficialEvidenceProvenance({
+      expectedRevision,
+      command: commandIdentity('run', path, expectedRevision),
+      claimCeiling: officialClaimCeiling,
+    })
+    const evidence = {
+      ...(await runBoundedMandateDevelopmentEvidence()),
+      gitRevision: provenance.sourceRevision,
+    }
     verifyBoundedMandateEvidence(evidence)
     const packet: BoundedMandatePacket = {
-      schema: 'ae.bounded-mandate-development-evidence:v2',
+      schema: 'ae.bounded-mandate-development-evidence:v3',
       checksum: checksum(evidence),
+      provenance,
       evidence,
     }
     await writeFile(path, `${JSON.stringify(packet, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
@@ -567,9 +592,19 @@ export async function runCli(command: string, path: string) {
   if (command === 'verify') {
     const packet = JSON.parse(await readFile(path, 'utf8')) as BoundedMandatePacket
     if (
-      packet.schema !== 'ae.bounded-mandate-development-evidence:v2'
+      packet.schema !== 'ae.bounded-mandate-development-evidence:v3'
       || packet.checksum !== checksum(packet.evidence)
     ) throw new Error('bounded_mandate_packet_checksum_refused')
+    verifyOfficialEvidenceProvenance(packet.provenance, {
+      expectedRevision,
+      command: commandIdentity('run', path, expectedRevision),
+    })
+    if (packet.evidence.gitRevision !== packet.provenance.sourceRevision) {
+      throw new Error('bounded_mandate_packet_revision_refused')
+    }
+    if (packet.provenance.claimCeiling !== officialClaimCeiling) {
+      throw new Error('bounded_mandate_packet_claim_ceiling_refused')
+    }
     verifyBoundedMandateEvidence(packet.evidence)
     return packet
   }
@@ -579,7 +614,10 @@ export async function runCli(command: string, path: string) {
 if (process.argv[1]?.endsWith('bounded-mandate-evidence-packet.ts')) {
   const command = process.argv[2]
   const path = process.argv[3]
-  if (command === undefined || path === undefined) throw new Error('command_and_path_required')
-  const packet = await runCli(command, path)
+  const expectedRevision = process.argv[4]
+  if (command === undefined || path === undefined || expectedRevision === undefined) {
+    throw new Error('command_path_and_revision_required')
+  }
+  const packet = await runCli(command, path, expectedRevision)
   process.stdout.write(`${packet.checksum}\n${packet.evidence.gitRevision}\n`)
 }

@@ -4,7 +4,7 @@ import { homedir, tmpdir } from 'node:os'
 
 import { describe, expect, it } from 'vitest'
 
-import { runDevelopmentProviderOperationEvidence } from '@/modules/provider-operation-fixture/development-provider-operation-evidence'
+import { runDevelopmentProviderOperationEvidence } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   readAndVerifyProviderOperationPacket,
@@ -90,6 +90,34 @@ describe('development operation evidence packet', () => {
       packet,
       'test:time-tamper',
       'packet_provider_operation_reconciliation_evidence_refused:evidence_time_invalid',
+    )
+  })
+
+  it('refuses an advertised Gate 7 pass whose executable checks do not recompute', async () => {
+    const scenario = await runDevelopmentProviderOperationEvidence()
+    const packet = structuredClone({
+      gitRevision: 'test:gate7-tamper',
+      ...scenario,
+    }) as Record<string, unknown>
+    ;(packet.executableChecks as Record<string, boolean>).conflictWithoutEffect = false
+    await expectTamperRefused(
+      packet,
+      'test:gate7-tamper',
+      'packet_provider_operation_gate7_reconstruction_refused',
+    )
+  })
+
+  it('refuses an advertised Gate 7 pass whose transfer evidence does not recompute', async () => {
+    const scenario = await runDevelopmentProviderOperationEvidence()
+    const packet = structuredClone({
+      gitRevision: 'test:gate7-transfer-tamper',
+      ...scenario,
+    }) as Record<string, unknown>
+    ;(packet.proportionality as any).measurements.controlled.controlRecords += 1
+    await expectTamperRefused(
+      packet,
+      'test:gate7-transfer-tamper',
+      'packet_provider_operation_gate7_reconstruction_refused',
     )
   })
 })

@@ -3,6 +3,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import type {
   ActionInvocationOrigin,
   ActionInvocationView,
+  DecisionRefusalCode,
   InvocationActor,
   InvocationDecision,
 } from './contracts'
@@ -22,7 +23,17 @@ import {
 export type DevelopmentHostContinuation =
   | Readonly<{ kind: 'completed'; view: ActionInvocationView<DynamicPublishedInvocationResult> }>
   | Readonly<{ kind: 'reconciled'; view: ActionInvocationView<DynamicPublishedInvocationResult> }>
-  | Readonly<{ kind: 'refused'; code: string; view?: ActionInvocationView<DynamicPublishedInvocationResult> }>
+  | Readonly<{
+      kind: 'refused'
+      code: DevelopmentHostRefusalCode
+      view?: ActionInvocationView<DynamicPublishedInvocationResult>
+    }>
+
+export type DevelopmentHostRefusalCode =
+  | DecisionRefusalCode
+  | 'pre_execute_preparation_failed'
+  | 'reconcile_before_retry'
+  | 'reconciliation_evidence_unavailable'
 
 export type DevelopmentInvocationHost = Readonly<{
   origin: ActionInvocationOrigin
@@ -79,6 +90,23 @@ export type DevelopmentHostCommandEvent = Readonly<{
 }>
 
 export type DevelopmentHostCommandObserver = (event: DevelopmentHostCommandEvent) => void
+export type DevelopmentHostObserverFailure = Readonly<{
+  event: DevelopmentHostCommandEvent
+  error: unknown
+}>
+export type DevelopmentHostObserverFailureSink = (failure: DevelopmentHostObserverFailure) => void
+
+/**
+ * Test/process adapters may use this sentinel to model loss of the host process.
+ * Unlike an ordinary preparation failure, an uncatchable process interruption
+ * cannot publish a durable not-released observation from the interrupted host.
+ */
+export class DevelopmentProcessInterruption extends Error {
+  constructor(message = 'development_host_process_interrupted') {
+    super(message)
+    this.name = 'DevelopmentProcessInterruption'
+  }
+}
 
 function bindHost(
   host: 'request_owned_human' | 'standalone_external_agent',
@@ -87,6 +115,7 @@ function bindHost(
   origin: ActionInvocationOrigin,
   sourceCommands: DevelopmentHostSourceCommands,
   observer: DevelopmentHostCommandObserver,
+  observerFailureSink: DevelopmentHostObserverFailureSink,
 ): DevelopmentInvocationHost {
   const current = (invocationRef: string) => {
     const view = adapter.inspect(invocationRef)
@@ -101,7 +130,26 @@ function bindHost(
     command: DevelopmentHostCommandEvent['command'],
     detail: Readonly<Record<string, StableHashValue>>,
     invocationRef?: string,
-  ) => observer({ host, phase, command, ...(invocationRef === undefined ? {} : { invocationRef }), detail })
+  ) => {
+    const event = {
+        host,
+        phase,
+        command,
+        ...(invocationRef === undefined ? {} : { invocationRef }),
+        detail,
+      } satisfies DevelopmentHostCommandEvent
+    try {
+      observer(event)
+    } catch (error) {
+      // Command observers are diagnostic only. They must never change command truth,
+      // including after a provider effect has already completed.
+      try {
+        observerFailureSink({ event, error })
+      } catch {
+        // The diagnostic sink is also observational and cannot affect command truth.
+      }
+    }
+  }
   return Object.freeze({
     origin,
     actor,
@@ -173,7 +221,7 @@ function bindHost(
         emit('after', 'continue', { result: 'refused', code: refused.code }, invocationRef)
         return refused
       }
-      if (view.control.state === 'authorized') {
+      if (view.control.state === 'authorized' || view.control.state === 'retryable') {
         const acquired = adapter.acquire({
           invocationRef,
           expectedInvocationVersion: view.invocationVersion,
@@ -194,7 +242,31 @@ function bindHost(
         emit('after', 'continue', { result: 'refused', code: refused.code }, invocationRef)
         return refused
       }
-      await sourceCommands.beforeExecute?.(view)
+      try {
+        await sourceCommands.beforeExecute?.(view)
+      } catch (error) {
+        if (error instanceof DevelopmentProcessInterruption) throw error
+        const abandoned = adapter.abandonAcquired({
+          invocationRef,
+          expectedInvocationVersion: view.invocationVersion,
+          attemptRef: view.control.attemptRef,
+          leaseOwner: view.control.leaseOwner,
+          effectGeneration: view.control.effectGeneration,
+        })
+        const result: DevelopmentHostContinuation = abandoned.kind === 'accepted'
+          ? {
+              kind: 'refused',
+              code: 'pre_execute_preparation_failed',
+              view: abandoned.view,
+            }
+          : abandoned
+        emit('after', 'continue', {
+          result: result.kind,
+          code: result.code,
+          ...('view' in result ? { state: result.view?.control.state ?? 'missing' } : {}),
+        }, invocationRef)
+        return result
+      }
       const executed = await adapter.executeAcquired({
         invocationRef,
         expectedInvocationVersion: view.invocationVersion,
@@ -321,12 +393,14 @@ export function createDevelopmentInvocationApplication(input: Readonly<{
   adapter: DynamicPublishedActionInvocationAdapter
   sourceCommands: DevelopmentHostSourceCommands
   observer?: DevelopmentHostCommandObserver
+  observerFailureSink?: DevelopmentHostObserverFailureSink
 }>): DevelopmentInvocationApplication {
   return Object.freeze({
     bindRequestOwned: ({ actor, requestRef, revision }) => bindRequestOwned({
       adapter: input.adapter,
       sourceCommands: input.sourceCommands,
       observer: input.observer ?? (() => undefined),
+      observerFailureSink: input.observerFailureSink ?? (() => undefined),
       actor,
       requestRef,
       revision,
@@ -335,6 +409,7 @@ export function createDevelopmentInvocationApplication(input: Readonly<{
       adapter: input.adapter,
       sourceCommands: input.sourceCommands,
       observer: input.observer ?? (() => undefined),
+      observerFailureSink: input.observerFailureSink ?? (() => undefined),
       actor,
     }),
   })
@@ -347,6 +422,7 @@ function bindRequestOwned(input: Readonly<{
   revision: number
   sourceCommands: DevelopmentHostSourceCommands
   observer: DevelopmentHostCommandObserver
+  observerFailureSink: DevelopmentHostObserverFailureSink
 }>): DevelopmentInvocationHost {
   if (input.requestRef.length === 0 || !Number.isInteger(input.revision) || input.revision < 0) {
     throw new Error('request_owned_lineage_invalid')
@@ -355,7 +431,7 @@ function bindRequestOwned(input: Readonly<{
     kind: 'request_owned',
     requestRef: input.requestRef,
     revision: input.revision,
-  }, input.sourceCommands, input.observer)
+  }, input.sourceCommands, input.observer, input.observerFailureSink)
 }
 
 function bindStandalone(input: Readonly<{
@@ -363,10 +439,11 @@ function bindStandalone(input: Readonly<{
   actor: InvocationActor
   sourceCommands: DevelopmentHostSourceCommands
   observer: DevelopmentHostCommandObserver
+  observerFailureSink: DevelopmentHostObserverFailureSink
 }>): DevelopmentInvocationHost {
   return bindHost('standalone_external_agent', input.adapter, input.actor, {
     kind: 'standalone',
     callerRef: input.actor.callerRef,
     principalRef: input.actor.principalRef,
-  }, input.sourceCommands, input.observer)
+  }, input.sourceCommands, input.observer, input.observerFailureSink)
 }

@@ -7,9 +7,9 @@ import {
   type ActionInvocationView,
   type PreparedInvocation,
   type ReconciliationEvidenceVerifier,
-} from '@/modules/action-invocation'
-import type { TransferBoundaryEvent } from '@/modules/action-invocation/transfer-evaluator'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+} from '../../../../src/modules/action-invocation'
+import type { TransferBoundaryEvent } from '../../../../src/modules/action-invocation/transfer-evaluator'
+import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   cancelDevelopmentProviderOperationAction,
   executeDevelopmentProviderOperationAction,
@@ -19,6 +19,7 @@ import {
   type DevelopmentProviderOperationResult,
 } from './development-provider-operation.actions'
 import { providerOperationActor, developmentProviderOperationNow } from './development-provider-operation-fixture'
+import { bindDevelopmentProviderOperationContext } from './development-provider-operation-context'
 import type { createDevelopmentProviderOperationProvider } from './development-provider-operation-provider'
 import {
   mandateRefusalToInvocationRefusal,
@@ -86,18 +87,17 @@ export async function runProviderOperationInvocation(input: Readonly<{
   const owner = providerOperationActor(input.origin)
   const release = createDevelopmentReleaseSignal()
   const nowMs = input.nowMs ?? Date.parse(developmentProviderOperationNow())
-  const context = {
-    developmentOnlyProviderOperationNow: () => nowMs,
-    developmentOnlyProviderOperationAuthorityPrincipalRef: owner.principalRef,
-    developmentOnlyProviderOperationAvailabilityCheck: (raw: unknown, now: number) =>
-      input.provider.check(raw as DevelopmentProviderOperationInput, now),
-    developmentOnlyProviderOperationAdapter: async (raw: unknown) => {
+  const context = bindDevelopmentProviderOperationContext({
+    now: () => nowMs,
+    authorityPrincipalRef: owner.principalRef,
+    checkAvailability: (operation, now) => input.provider.check(operation, now),
+    execute: async (operation) => {
       if (input.unknownWithoutProviderRelease === true) {
         throw new Error('mock_transport_failed_before_provider_release_observation')
       }
       events.push({ kind: 'provider_release' as const, actionId: executeDevelopmentProviderOperationAction.id })
       release.markReleased()
-      const result = await input.provider.execute(raw as DevelopmentProviderOperationInput)
+      const result = await input.provider.execute(operation)
       if (input.loseResponseAfterRelease === true) throw new Error('mock_response_lost_after_possible_release')
       source.result = result
       source.resultIdentity = {
@@ -111,7 +111,7 @@ export async function runProviderOperationInvocation(input: Readonly<{
       }
       return result
     },
-  }
+  })
   const state = createDevelopmentDurableState<DevelopmentProviderOperationResult>()
   const configuredMandate = input.boundedMandate
   let activeMandateService = configuredMandate?.service
@@ -342,14 +342,13 @@ export async function runCancellationInvocation(input: Readonly<{
   } = { input: input.cancellation, prepared: undefined }
   const owner = providerOperationActor(input.origin)
   const release = createDevelopmentReleaseSignal()
-  const context = {
-    developmentOnlyProviderOperationAuthorityPrincipalRef: owner.principalRef,
-    developmentOnlyProviderOperationCancellationCheck: (raw: unknown) =>
-      input.provider.checkCancellation(raw as DevelopmentProviderOperationCancellationInput),
-    developmentOnlyProviderOperationCancellationAdapter: async (raw: unknown) => {
+  const context = bindDevelopmentProviderOperationContext({
+    authorityPrincipalRef: owner.principalRef,
+    checkCancellation: (cancellation) => input.provider.checkCancellation(cancellation),
+    cancel: async (cancellation) => {
       events.push({ kind: 'provider_release' as const, actionId: cancelDevelopmentProviderOperationAction.id })
       release.markReleased()
-      const result = await input.provider.cancel(raw as DevelopmentProviderOperationCancellationInput)
+      const result = await input.provider.cancel(cancellation)
       source.result = result
       source.resultIdentity = {
         sourceResultRef: result.kind === 'effect_cancellation_confirmed'
@@ -358,7 +357,7 @@ export async function runCancellationInvocation(input: Readonly<{
       }
       return result
     },
-  }
+  })
   const state = createDevelopmentDurableState<DevelopmentProviderOperationCancellationResult>()
   const tracer = createDurableActionInvocationTracer<
     DevelopmentProviderOperationCancellationInput,
