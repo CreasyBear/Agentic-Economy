@@ -84,6 +84,24 @@ const recordMockEffect = makeFunctionReference<
   | Readonly<{ kind: 'recorded' | 'duplicate'; observation: unknown }>
   | Readonly<{ kind: 'refused'; code: string }>
 >('hostedPaidOperation:recordMockEffect')
+const readMockEffectObservation = makeFunctionReference<
+  'query',
+  {
+    principalRef: string
+    callerRef: string
+    invocationRef: string
+    attemptRef: string
+    effectGeneration: number
+  },
+  | Readonly<{ kind: 'observed'; observation: unknown }>
+  | Readonly<{ kind: 'refused'; code: string }>
+>('hostedPaidOperation:readMockEffectObservation')
+const disablePhase3CAdmission = makeFunctionReference<
+  'mutation',
+  { evaluatorPrincipalRef: string; policyDigest: string; killSwitchOwner: string },
+  | Readonly<{ kind: 'disabled'; policyDigest: string }>
+  | Readonly<{ kind: 'refused'; code: string }>
+>('hostedPaidOperation:disablePhase3CAdmission')
 
 const ownerIdentity = {
   subject: 'paid-operation-owner',
@@ -156,6 +174,11 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       queryRelease: { state: 'not_released' },
       paymentSubmission: { state: 'not_submitted' },
       resultDelivery: { state: 'not_delivered' },
+      environment: {
+        name: 'hosted-labelled-mock-sandbox-candidate',
+        evidenceClass: 'hosted_labelled_mock_candidate',
+        claimCeiling: 'pending_authenticated_exact_revision_readback',
+      },
     })
     expect(inspected.value.semantics.continuations.map(({ kind }) => kind))
       .toEqual(['authorize'])
@@ -178,7 +201,17 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       const control = await ctx.db.query('actionInvocationControls')
         .withIndex('by_invocationRef', (q) => q.eq('invocationRef', created.invocationRef))
         .unique()
-      return { header, control }
+      const source = await ctx.db.query('hostedPaidOperationSources')
+        .withIndex('by_invocationRef_and_sourceRef', (q) =>
+          q.eq('invocationRef', created.invocationRef))
+        .unique()
+      const reservation = header === null
+        ? null
+        : await ctx.db.query('hostedPaidOperationAdmissionReservations')
+          .withIndex('by_reservationRef', (q) =>
+            q.eq('reservationRef', header.admissionReservationRef))
+          .unique()
+      return { header, control, source, reservation }
     })
     expect(stored.header).toMatchObject({
       ownerPrincipalRef: ownerIdentity.subject,
@@ -189,6 +222,8 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       principalRef: ownerIdentity.subject,
       callerRef: ownerIdentity.tokenIdentifier,
     })
+    expect(stored.source?.environment).toEqual(inspected.value.semantics.environment)
+    expect(stored.reservation?.policyDigest).toBe(`sha256:${'a'.repeat(64)}`)
   })
 
   it('independently verifies a short-lived service token against the exact agent intent', async () => {
@@ -255,6 +290,178 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       providerKey: 'B',
       serviceToken,
     })).resolves.toEqual({ kind: 'refused', code: 'authentication_required' })
+  })
+
+  it('keeps one principal usable across sessions and an API key with actual caller attribution', async () => {
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
+    const backend = convexTest(schema, modules)
+    await admitOwner(backend)
+    const creator = backend.withIdentity(ownerIdentity)
+    const secondSessionIdentity = {
+      ...ownerIdentity,
+      tokenIdentifier: 'https://identity.test|paid-operation-owner:session-2',
+    }
+    const secondSession = backend.withIdentity(secondSessionIdentity)
+    const created = await createFor(creator, 'B')
+
+    await expect(secondSession.query(authenticatedInspect, {
+      invocationRef: created.invocationRef,
+      expectedInvocationVersion: 1,
+    })).resolves.toMatchObject({ kind: 'accepted' })
+
+    const apiKeyCaller = {
+      principalRef: ownerIdentity.subject,
+      callerRef: 'clerk_api_key:key:paid-operation',
+      credentialId: 'key:paid-operation',
+      scopes: [HOSTED_PAID_OPERATION_AGENT_SCOPE],
+    } as const
+    const authorizeIntent = {
+      kind: 'command' as const,
+      invocationRef: created.invocationRef,
+      commandId: 'command:multi-caller:authorize',
+      expectedInvocationVersion: 1,
+      command: 'authorize' as const,
+      accept: true,
+    }
+    const authorizeToken = await createHostedPaidOperationServiceToken({
+      key: serviceKey,
+      principal: apiKeyCaller,
+      intent: authorizeIntent,
+      issuedAt: Date.now(),
+    })
+    const authorized = await backend.action(authenticatedCommand, {
+      invocationRef: created.invocationRef,
+      commandId: authorizeIntent.commandId,
+      expectedInvocationVersion: 1,
+      command: 'authorize',
+      accept: true,
+      serviceToken: authorizeToken,
+    })
+    expect(authorized).toEqual({ kind: 'accepted', value: expect.anything() })
+
+    const executeIntent = {
+      kind: 'command' as const,
+      invocationRef: created.invocationRef,
+      commandId: 'command:multi-caller:execute',
+      expectedInvocationVersion: 2,
+      command: 'execute' as const,
+    }
+    const executeToken = await createHostedPaidOperationServiceToken({
+      key: serviceKey,
+      principal: apiKeyCaller,
+      intent: executeIntent,
+      issuedAt: Date.now(),
+    })
+    const uncertain = await backend.action(authenticatedCommand, {
+      invocationRef: created.invocationRef,
+      commandId: executeIntent.commandId,
+      expectedInvocationVersion: 2,
+      command: 'execute',
+      serviceToken: executeToken,
+    })
+    expect(uncertain).toMatchObject({
+      kind: 'accepted',
+      value: {
+        semantics: {
+          identity: { expectedInvocationVersion: 5 },
+          continuations: [{ kind: 'reconcile', requiredInput: [] }],
+        },
+      },
+    })
+    await expect(backend.action(authenticatedCommand, {
+      invocationRef: created.invocationRef,
+      commandId: executeIntent.commandId,
+      expectedInvocationVersion: 2,
+      command: 'execute',
+      serviceToken: executeToken,
+    })).resolves.toEqual(uncertain)
+    expect(await effectFacts(backend, created.invocationRef)).toMatchObject({
+      attemptCount: 1,
+      effectCount: 1,
+    })
+
+    const reconciled = await secondSession.action(authenticatedCommand, {
+      invocationRef: created.invocationRef,
+      commandId: 'command:multi-caller:reconcile',
+      expectedInvocationVersion: 5,
+      command: 'reconcile',
+    })
+    expect(reconciled).toMatchObject({
+      kind: 'accepted',
+      value: { semantics: { identity: { expectedInvocationVersion: 6 } } },
+    })
+    await expect(secondSession.query(authenticatedInspect, {
+      invocationRef: created.invocationRef,
+      expectedInvocationVersion: 6,
+    })).resolves.toEqual(reconciled)
+
+    const durable = await backend.run(async (ctx) => {
+      const header = await ctx.db.query('hostedPaidOperationHeaders')
+        .withIndex('by_invocationRef', (q) => q.eq('invocationRef', created.invocationRef))
+        .unique()
+      const control = await ctx.db.query('actionInvocationControls')
+        .withIndex('by_invocationRef', (q) => q.eq('invocationRef', created.invocationRef))
+        .unique()
+      const attempts = await ctx.db.query('actionInvocationAttempts')
+        .withIndex('by_invocationRef_and_attemptNumber', (q) =>
+          q.eq('invocationRef', created.invocationRef))
+        .take(2)
+      const commands = await ctx.db.query('hostedPaidOperationCommands')
+        .withIndex('by_invocationRef_and_commandId', (q) =>
+          q.eq('invocationRef', created.invocationRef))
+        .take(10)
+      return { header, control, attempts, commands }
+    })
+    expect(durable.header).toMatchObject({
+      ownerPrincipalRef: ownerIdentity.subject,
+      ownerCallerRef: ownerIdentity.tokenIdentifier,
+    })
+    expect(durable.control?.control.owner).toEqual({
+      principalRef: ownerIdentity.subject,
+      callerRef: ownerIdentity.tokenIdentifier,
+    })
+    expect(durable.attempts[0]?.actor).toEqual({
+      principalRef: ownerIdentity.subject,
+      callerRef: apiKeyCaller.callerRef,
+    })
+    expect(durable.commands).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        commandId: authorizeIntent.commandId,
+        principalRef: ownerIdentity.subject,
+        callerRef: apiKeyCaller.callerRef,
+      }),
+      expect.objectContaining({
+        commandId: 'command:multi-caller:reconcile',
+        principalRef: ownerIdentity.subject,
+        callerRef: secondSessionIdentity.tokenIdentifier,
+      }),
+    ]))
+
+    const stranger = backend.withIdentity({
+      subject: 'paid-operation-stranger',
+      issuer: ownerIdentity.issuer,
+      tokenIdentifier: 'https://identity.test|paid-operation-stranger',
+    })
+    await expect(stranger.query(authenticatedInspect, {
+      invocationRef: created.invocationRef,
+      expectedInvocationVersion: 6,
+    })).resolves.toEqual({ kind: 'refused', code: 'invocation_not_found' })
+    await expect(stranger.action(authenticatedCommand, {
+      invocationRef: created.invocationRef,
+      commandId: 'command:multi-caller:reconcile',
+      expectedInvocationVersion: 5,
+      command: 'reconcile',
+    })).resolves.toEqual({ kind: 'refused', code: 'invocation_not_found' })
+    const attempt = durable.attempts[0]
+    expect(attempt).toBeDefined()
+    if (attempt === undefined) return
+    await expect(backend.query(readMockEffectObservation, {
+      principalRef: 'paid-operation-stranger',
+      callerRef: 'known-caller',
+      invocationRef: created.invocationRef,
+      attemptRef: attempt.attemptRef,
+      effectGeneration: attempt.effectGeneration,
+    })).resolves.toEqual({ kind: 'refused', code: 'invocation_not_found' })
   })
 
   it('CAS-authorizes exact current authority and executes one labelled mock effect once', async () => {
@@ -495,7 +702,14 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     const owner = backend.withIdentity(ownerIdentity)
     const created = await createFor(owner, 'A')
     await authorize(owner, created.invocationRef, 'command:authorize:disabled')
-    await setOwnerPolicyEnabled(backend, false)
+    await expect(backend.mutation(disablePhase3CAdmission, {
+      evaluatorPrincipalRef: ownerIdentity.subject,
+      policyDigest: `sha256:${'a'.repeat(64)}`,
+      killSwitchOwner: 'operator:phase3c',
+    })).resolves.toEqual({
+      kind: 'disabled',
+      policyDigest: `sha256:${'a'.repeat(64)}`,
+    })
 
     await expect(owner.action(authenticatedCommand, {
       invocationRef: created.invocationRef,
@@ -540,7 +754,11 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     })
     expect(begun.kind).toBe('ready')
     if (begun.kind !== 'ready') return
-    await setOwnerPolicyEnabled(backend, false)
+    await expect(backend.mutation(disablePhase3CAdmission, {
+      evaluatorPrincipalRef: ownerIdentity.subject,
+      policyDigest: `sha256:${'a'.repeat(64)}`,
+      killSwitchOwner: 'operator:phase3c',
+    })).resolves.toMatchObject({ kind: 'disabled' })
 
     await expect(backend.mutation(recordMockEffect, {
       principalRef: ownerIdentity.subject,
@@ -575,6 +793,89 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       admissionReservationState: 'active',
       admissionCounterActive: 1,
     })
+  })
+
+  it('atomically refuses expired or digest-drifted effect admission and preserves recovery', async () => {
+    for (const drift of ['expired', 'reservation_digest', 'counter_digest'] as const) {
+      const backend = convexTest(schema, modules)
+      await admitOwner(backend)
+      const owner = backend.withIdentity(ownerIdentity)
+      const created = await createFor(owner, 'A')
+      await authorize(owner, created.invocationRef, `command:authorize:${drift}`)
+      const begun = await backend.mutation(beginAuthenticatedExecute, {
+        principalRef: ownerIdentity.subject,
+        callerRef: ownerIdentity.tokenIdentifier,
+        invocationRef: created.invocationRef,
+        commandId: `command:execute:${drift}`,
+        expectedInvocationVersion: 2,
+      })
+      expect(begun.kind).toBe('ready')
+      if (begun.kind !== 'ready') continue
+      await backend.run(async (ctx) => {
+        const header = await ctx.db.query('hostedPaidOperationHeaders')
+          .withIndex('by_invocationRef', (q) => q.eq('invocationRef', created.invocationRef))
+          .unique()
+        if (header === null) throw new Error('test_header_missing')
+        const reservation = await ctx.db.query('hostedPaidOperationAdmissionReservations')
+          .withIndex('by_reservationRef', (q) =>
+            q.eq('reservationRef', header.admissionReservationRef))
+          .unique()
+        if (reservation === null) throw new Error('test_reservation_missing')
+        if (drift === 'expired') {
+          const policy = await ctx.db.query('hostedPaidOperationAdmissionPolicies')
+            .withIndex('by_policyRef_and_principalRef', (q) =>
+              q.eq('policyRef', reservation.policyRef)
+                .eq('principalRef', reservation.principalRef))
+            .unique()
+          if (policy === null) throw new Error('test_policy_missing')
+          await ctx.db.patch(policy._id, { admissionEndsAt: '2026-07-19T00:00:00.000Z' })
+        } else if (drift === 'reservation_digest') {
+          await ctx.db.patch(reservation._id, { policyDigest: `sha256:${'b'.repeat(64)}` })
+        } else {
+          const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
+            .withIndex('by_policyRef_and_principalRef', (q) =>
+              q.eq('policyRef', reservation.policyRef)
+                .eq('principalRef', reservation.principalRef))
+            .unique()
+          if (counter === null) throw new Error('test_counter_missing')
+          await ctx.db.patch(counter._id, { policyDigest: `sha256:${'c'.repeat(64)}` })
+        }
+      })
+      await expect(backend.mutation(recordMockEffect, {
+        principalRef: ownerIdentity.subject,
+        callerRef: ownerIdentity.tokenIdentifier,
+        invocationRef: created.invocationRef,
+        attemptRef: begun.attemptRef,
+        effectGeneration: begun.effectGeneration,
+        recordedAt: '2026-07-20T00:00:00.000Z',
+      })).resolves.toEqual({ kind: 'refused', code: 'trial_disabled_or_inactive' })
+      expect(await effectFacts(backend, created.invocationRef)).toMatchObject({
+        invocationVersion: 4,
+        effectCount: 0,
+      })
+      const inspected = await owner.query(authenticatedInspect, {
+        invocationRef: created.invocationRef,
+        expectedInvocationVersion: 4,
+      })
+      expect(inspected).toMatchObject({ kind: 'accepted' })
+      if (drift === 'expired') {
+        const reconciled = await owner.action(authenticatedCommand, {
+          invocationRef: created.invocationRef,
+          commandId: 'command:reconcile:expired',
+          expectedInvocationVersion: 4,
+          command: 'reconcile',
+        })
+        expect(reconciled).toMatchObject({
+          kind: 'accepted',
+          value: {
+            semantics: {
+              queryRelease: { state: 'not_released' },
+              paymentSubmission: { state: 'not_submitted' },
+            },
+          },
+        })
+      }
+    }
   })
 
   it('releases admission exactly once when authority is refused with no continuation', async () => {
@@ -674,18 +975,6 @@ async function admitPrincipal(backend: HostedBackend, principalRef: string) {
       killSwitchOwner: 'operator:phase3c',
       recordedAt: '2026-07-20T00:00:00.000Z',
     })
-  })
-}
-
-async function setOwnerPolicyEnabled(backend: HostedBackend, enabled: boolean) {
-  await backend.run(async (ctx) => {
-    const policy = await ctx.db.query('hostedPaidOperationAdmissionPolicies')
-      .withIndex('by_policyRef_and_principalRef', (q) =>
-        q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial')
-          .eq('principalRef', ownerIdentity.subject))
-      .unique()
-    if (policy === null) throw new Error('hosted_paid_operation_test_policy_missing')
-    await ctx.db.patch(policy._id, { enabled })
   })
 }
 

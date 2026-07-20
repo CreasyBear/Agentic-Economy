@@ -378,7 +378,9 @@ export const actionInvocationTables = {
     retainThrough: v.optional(v.string()),
     killSwitchOwner: v.optional(v.string()),
     recordedAt: v.optional(v.string()),
-  }).index('by_policyRef_and_principalRef', ['policyRef', 'principalRef']),
+  })
+    .index('by_policyRef', ['policyRef'])
+    .index('by_policyRef_and_principalRef', ['policyRef', 'principalRef']),
 
   hostedPaidOperationAdmissionCounters: defineTable({
     policyRef: v.string(),

@@ -27,7 +27,12 @@ const reserveAdmission = makeFunctionReference<
     commandId: string
     recordedAt: string
   },
-  { kind: 'admitted'; reservationRef: string } | { kind: 'refused'; code: string }
+  | {
+      kind: 'admitted'
+      reservationRef: string
+      environment?: { name: string; evidenceClass: string; claimCeiling: string }
+    }
+  | { kind: 'refused'; code: string }
 >('hostedPaidOperation:reserveAdmission')
 const releaseAdmission = makeFunctionReference<
   'mutation',
@@ -59,6 +64,33 @@ const loadComplete = makeFunctionReference<
   },
   { kind: string; aggregate?: HostedPaidOperationAggregate<Result>; reason?: string }
 >('hostedPaidOperation:loadComplete')
+const configurePhase3CAdmission = makeFunctionReference<
+  'mutation',
+  {
+    evaluatorPrincipalRef: string
+    sourceRevision: string
+    totalLimit: number
+    concurrencyLimit: number
+    rateLimit: number
+    admissionEndsAt: string
+    retainThrough: string
+    killSwitchOwner: string
+    recordedAt: string
+  },
+  | { kind: 'configured'; policyDigest: string }
+  | { kind: 'refused'; code: string }
+>('hostedPaidOperation:configurePhase3CAdmission')
+const disablePhase3CAdmission = makeFunctionReference<
+  'mutation',
+  { evaluatorPrincipalRef: string; policyDigest: string; killSwitchOwner: string },
+  | { kind: 'disabled'; policyDigest: string }
+  | { kind: 'refused'; code: string }
+>('hostedPaidOperation:disablePhase3CAdmission')
+const phase3CAdmissionStatus = makeFunctionReference<
+  'query',
+  { evaluatorPrincipalRef: string },
+  Record<string, unknown>
+>('hostedPaidOperation:phase3CAdmissionStatus')
 
 describe('hosted paid-operation durable boundary', () => {
   it('atomically creates and cold-loads the exact typed provider-bound aggregate', async () => {
@@ -329,6 +361,106 @@ describe('hosted paid-operation durable boundary', () => {
       commandId: 'admission:3',
       recordedAt: '2026-07-20T00:02:00.000Z',
     })).resolves.toMatchObject({ kind: 'refused', code: 'total_exhausted' })
+  })
+
+  it('configures exactly one bounded Phase3C evaluator policy and disables it by digest and owner', async () => {
+    const invalidBackend = convexTest(schema, modules)
+    const backend = convexTest(schema, modules)
+    const configuration = {
+      evaluatorPrincipalRef: 'principal:phase3c-evaluator',
+      sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
+      totalLimit: 3,
+      concurrencyLimit: 1,
+      rateLimit: 3,
+      admissionEndsAt: '2026-07-21T00:00:00.000Z',
+      retainThrough: '2026-07-22T00:00:00.000Z',
+      killSwitchOwner: 'operator:phase3c',
+      recordedAt: '2026-07-20T00:00:00.000Z',
+    }
+    for (const invalid of [
+      { ...configuration, totalLimit: 4 },
+      { ...configuration, concurrencyLimit: 2 },
+      { ...configuration, rateLimit: 4 },
+      { ...configuration, admissionEndsAt: '2026-07-19T00:00:00.000Z' },
+      { ...configuration, sourceRevision: 'not-a-revision' },
+    ]) {
+      await expect(invalidBackend.mutation(configurePhase3CAdmission, invalid))
+        .resolves.toEqual({ kind: 'refused', code: 'policy_invalid' })
+    }
+    await expect(invalidBackend.query(phase3CAdmissionStatus, {
+      evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
+    })).resolves.toEqual({ kind: 'unconfigured' })
+
+    const configured = await backend.mutation(configurePhase3CAdmission, configuration)
+    expect(configured.kind).toBe('configured')
+    if (configured.kind !== 'configured') return
+    await expect(backend.mutation(configurePhase3CAdmission, configuration))
+      .resolves.toEqual(configured)
+    const reservation = await backend.mutation(reserveAdmission, {
+      policyRef: 'phase-3c-hosted-paid-operation-trial',
+      principalRef: configuration.evaluatorPrincipalRef,
+      windowKey: 'window:configuration',
+      commandId: 'admission:configuration',
+      recordedAt: '2026-07-20T00:01:00.000Z',
+    })
+    expect(reservation).toMatchObject({
+      kind: 'admitted',
+      environment: {
+        name: 'hosted-labelled-mock-sandbox-candidate',
+        evidenceClass: 'hosted_labelled_mock_candidate',
+        claimCeiling: 'pending_authenticated_exact_revision_readback',
+      },
+    })
+    await expect(backend.mutation(configurePhase3CAdmission, {
+      ...configuration,
+      admissionEndsAt: '2026-07-21T12:00:00.000Z',
+    })).resolves.toEqual({ kind: 'refused', code: 'policy_conflict' })
+    await expect(backend.mutation(configurePhase3CAdmission, {
+      ...configuration,
+      evaluatorPrincipalRef: 'principal:second-evaluator',
+    })).resolves.toEqual({ kind: 'refused', code: 'policy_conflict' })
+    const status = await backend.query(phase3CAdmissionStatus, {
+      evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
+    })
+    expect(status).toMatchObject({
+      kind: 'configured',
+      policyDigest: configured.policyDigest,
+      sourceRevision: configuration.sourceRevision,
+      state: 'enabled',
+      bounds: { total: 3, concurrency: 1, rate: 3 },
+      counters: { admittedTotal: 1, activeReservations: 1, admittedInWindow: 1 },
+    })
+    expect(JSON.stringify(status)).not.toMatch(
+      /phase3c-evaluator|operator:phase3c|credential|evidence|secret/u,
+    )
+
+    await expect(backend.mutation(disablePhase3CAdmission, {
+      evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
+      policyDigest: `sha256:${'f'.repeat(64)}`,
+      killSwitchOwner: configuration.killSwitchOwner,
+    })).resolves.toEqual({ kind: 'refused', code: 'policy_disable_mismatch' })
+    await expect(backend.mutation(disablePhase3CAdmission, {
+      evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
+      policyDigest: configured.policyDigest,
+      killSwitchOwner: 'operator:wrong',
+    })).resolves.toEqual({ kind: 'refused', code: 'policy_disable_mismatch' })
+    const disabled = {
+      kind: 'disabled' as const,
+      policyDigest: configured.policyDigest,
+    }
+    await expect(backend.mutation(disablePhase3CAdmission, {
+      evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
+      policyDigest: configured.policyDigest,
+      killSwitchOwner: configuration.killSwitchOwner,
+    })).resolves.toEqual(disabled)
+    await expect(backend.mutation(disablePhase3CAdmission, {
+      evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
+      policyDigest: configured.policyDigest,
+      killSwitchOwner: configuration.killSwitchOwner,
+    })).resolves.toEqual(disabled)
+    await expect(backend.query(phase3CAdmissionStatus, {
+      evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
+    })).resolves.toMatchObject({ state: 'disabled' })
   })
 
   it('rejects raw custody and evidence material and accepts only opaque digest references', async () => {

@@ -458,6 +458,13 @@ export const transact = internalMutation({
     if (args.releaseAdmission && !isAdmissionClosed(args.control.control)) {
       return { kind: 'refused' as const, code: 'admission_release_not_terminal' as const }
     }
+    const header = await ctx.db.query('hostedPaidOperationHeaders')
+      .withIndex('by_ownerPrincipalRef_and_invocationRef', (q) =>
+        q.eq('ownerPrincipalRef', args.ownerPrincipalRef).eq('invocationRef', args.invocationRef))
+      .unique()
+    if (header === null) {
+      return { kind: 'refused' as const, code: 'cross_principal_refused' as const }
+    }
     const duplicate = await ctx.db.query('hostedPaidOperationCommands')
       .withIndex('by_invocationRef_and_commandId', (q) =>
         q.eq('invocationRef', args.invocationRef).eq('commandId', args.commandId))
@@ -471,13 +478,6 @@ export const transact = internalMutation({
         invocationVersion: duplicate.invocationVersion,
         effectGeneration: duplicate.effectGeneration,
       }
-    }
-    const header = await ctx.db.query('hostedPaidOperationHeaders')
-      .withIndex('by_ownerPrincipalRef_and_invocationRef', (q) =>
-        q.eq('ownerPrincipalRef', args.ownerPrincipalRef).eq('invocationRef', args.invocationRef))
-      .unique()
-    if (header === null || header.ownerCallerRef !== args.ownerCallerRef) {
-      return { kind: 'refused' as const, code: 'cross_principal_refused' as const }
     }
     if (header.invocationVersion !== args.expectedInvocationVersion
       || args.nextInvocationVersion <= header.invocationVersion) {
@@ -886,12 +886,22 @@ export const recordMockEffect = internalMutation({
         .withIndex('by_policyRef_and_principalRef', (q) =>
           q.eq('policyRef', reservation.policyRef).eq('principalRef', args.principalRef))
         .unique()
+    const effectRecordedAt = Date.parse(args.recordedAt)
+    const admissionEndsAt = policy?.admissionEndsAt === undefined
+      ? Number.NaN
+      : Date.parse(policy.admissionEndsAt)
     if (reservation === null
       || reservation.principalRef !== args.principalRef
       || reservation.state !== 'active'
+      || reservation.policyDigest === undefined
       || counter === null
+      || counter.policyDigest !== reservation.policyDigest
       || counter.active < 1
-      || policy?.enabled !== true) {
+      || policy?.enabled !== true
+      || policy.policyDigest !== reservation.policyDigest
+      || !Number.isFinite(effectRecordedAt)
+      || !Number.isFinite(admissionEndsAt)
+      || effectRecordedAt >= admissionEndsAt) {
       return { kind: 'refused' as const, code: 'trial_disabled_or_inactive' as const }
     }
     const row = {
@@ -941,14 +951,18 @@ export const configurePhase3CAdmission = internalMutation({
       || !(recordedAt < admissionEndsAt && admissionEndsAt <= retainThrough)
       || !Number.isSafeInteger(args.totalLimit) || args.totalLimit < 1 || args.totalLimit > 3
       || args.concurrencyLimit !== 1
-      || !Number.isSafeInteger(args.rateLimit) || args.rateLimit < 1 || args.rateLimit >= 3) {
+      || !Number.isSafeInteger(args.rateLimit) || args.rateLimit < 1 || args.rateLimit > 3) {
       return { kind: 'refused' as const, code: 'policy_invalid' as const }
     }
     const policyDigest = canonicalDigest({ policyRef: PHASE3C_POLICY_REF, ...args })
-    const existing = await ctx.db.query('hostedPaidOperationAdmissionPolicies')
-      .withIndex('by_policyRef_and_principalRef', (q) =>
-        q.eq('policyRef', PHASE3C_POLICY_REF).eq('principalRef', args.evaluatorPrincipalRef))
-      .unique()
+    const policies = await ctx.db.query('hostedPaidOperationAdmissionPolicies')
+      .withIndex('by_policyRef', (q) => q.eq('policyRef', PHASE3C_POLICY_REF))
+      .take(2)
+    const existing = policies[0] ?? null
+    if (policies.length > 1
+      || (existing !== null && existing.principalRef !== args.evaluatorPrincipalRef)) {
+      return { kind: 'refused' as const, code: 'policy_conflict' as const }
+    }
     if (existing?.policyDigest === policyDigest) return { kind: 'configured' as const, policyDigest }
     const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
       .withIndex('by_policyRef_and_principalRef', (q) =>
@@ -1036,7 +1050,7 @@ export const readMockEffectObservation = internalQuery({
       .withIndex('by_ownerPrincipalRef_and_invocationRef', (q) =>
         q.eq('ownerPrincipalRef', args.principalRef).eq('invocationRef', args.invocationRef))
       .unique()
-    if (header === null || header.ownerCallerRef !== args.callerRef) {
+    if (header === null) {
       return { kind: 'refused' as const, code: 'invocation_not_found' as const }
     }
     const attempt = await ctx.db.query('actionInvocationAttempts')

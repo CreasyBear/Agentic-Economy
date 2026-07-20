@@ -320,7 +320,7 @@ export const applyAuthenticatedAuthorization = internalMutation({
       invocationRef: args.invocationRef,
       expectedInvocationVersion: args.expectedInvocationVersion,
       authorityRef: authority.reference,
-      actor,
+      actor: loaded.aggregate.invocation.owner,
       origin: loaded.aggregate.invocation.origin,
       accept: args.accept,
     })
@@ -391,7 +391,7 @@ export const beginAuthenticatedExecute = internalMutation({
       invocationRef: args.invocationRef,
       expectedInvocationVersion: args.expectedInvocationVersion,
       authorityRef: authority.reference,
-      actor,
+      actor: loaded.aggregate.invocation.owner,
       origin: loaded.aggregate.invocation.origin,
       materialInput: hostedMaterialInput(loaded.aggregate),
       leaseOwner: `hosted:${args.commandId}`,
@@ -408,12 +408,16 @@ export const beginAuthenticatedExecute = internalMutation({
           : 'continuation_not_allowed' as const,
       }
     }
+    const attemptRef = acquired.view.control.attemptRef
+    const leaseOwner = acquired.view.control.leaseOwner
+    const effectGeneration = acquired.view.control.effectGeneration
+    const attributedAcquired = attributeCurrentAttempt(acquired.view, actor)
     const releaseStart = beginAcquiredRelease({
-      view: acquired.view,
-      expectedInvocationVersion: acquired.view.invocationVersion,
-      attemptRef: acquired.view.control.attemptRef,
-      leaseOwner: acquired.view.control.leaseOwner,
-      effectGeneration: acquired.view.control.effectGeneration,
+      view: attributedAcquired,
+      expectedInvocationVersion: attributedAcquired.invocationVersion,
+      attemptRef,
+      leaseOwner,
+      effectGeneration,
       now: () => now,
     })
     if (releaseStart.kind !== 'accepted') {
@@ -439,9 +443,9 @@ export const beginAuthenticatedExecute = internalMutation({
       aggregate: loaded.aggregate,
       releaseStartView: releaseStart.view,
       commandDigest,
-      attemptRef: acquired.view.control.attemptRef,
-      leaseOwner: acquired.view.control.leaseOwner,
-      effectGeneration: acquired.view.control.effectGeneration,
+      attemptRef,
+      leaseOwner,
+      effectGeneration,
     }
   },
 })
@@ -697,7 +701,7 @@ async function reconcileAuthenticatedIntent(
         invocationRef: intent.invocationRef,
         expectedInvocationVersion: intent.expectedInvocationVersion,
         attemptRef: currentAttempt.attemptRef,
-        actor: actorFromInternal(intent),
+        actor: begun.aggregate.invocation.owner,
         origin: begun.aggregate.invocation.origin,
         evidence: trusted.actionEvidence,
       })
@@ -888,6 +892,21 @@ function actorFromInternal(input: Readonly<{
   callerRef: string
 }>): InvocationActor {
   return { principalRef: input.principalRef, callerRef: input.callerRef }
+}
+
+function attributeCurrentAttempt(
+  view: ActionInvocationView<ActionResult>,
+  actor: InvocationActor,
+): ActionInvocationView<ActionResult> {
+  const attempt = view.attempts.at(-1)
+  if (attempt === undefined) return view
+  return {
+    ...view,
+    attempts: [
+      ...view.attempts.slice(0, -1),
+      { ...attempt, actor },
+    ],
+  }
 }
 
 function publicCommandDigest(
