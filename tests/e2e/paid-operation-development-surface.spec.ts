@@ -85,11 +85,17 @@ test('bounds the action announcement to one status update', async ({ page }) => 
   await expect(developmentStatus).toHaveText('Development projection ready.')
   await expect(developmentStatus).toBeFocused()
 
-  const hostAnnouncements = await page.locator('main > [aria-live="polite"]').count()
-  expect(hostAnnouncements).toBe(1)
+  const liveRegions = page.locator('[aria-live]')
+  await expect(liveRegions).toHaveCount(1)
+  await expect(liveRegions).toHaveAttribute('role', 'status')
+  await expect(liveRegions).toHaveAttribute('aria-atomic', 'true')
+
+  const accessibilityTree = await page.locator('main').ariaSnapshot()
+  expect(accessibilityTree).toContain('status')
+  expect(accessibilityTree).toContain('Development projection ready.')
 })
 
-test('has no horizontal overflow at 320 CSS pixels or emulated 400 percent zoom', async ({
+test('has no horizontal overflow at 320 CSS pixels or declared 400 percent zoom emulation', async ({
   page,
   browserName,
 }) => {

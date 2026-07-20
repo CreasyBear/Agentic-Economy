@@ -11,7 +11,6 @@ import {
 } from 'lucide-react'
 
 import { Badge, type BadgeVariant } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Text } from '@astryxdesign/core/Text'
 
@@ -103,12 +102,7 @@ export function AePaidOperationCard({
             >
               Current truth
             </Text>
-            <p
-              className="text-sm text-primary"
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-            >
+            <p className="text-sm text-primary">
               {presentation.truth}
             </p>
           </div>
@@ -125,15 +119,21 @@ export function AePaidOperationCard({
           <Text color="secondary" display="block">{presentation.nextAction}</Text>
         </div>
         {continuation !== null && onContinue !== undefined ? (
-          <Button
+          <button
             type="button"
-            variant={continuation.kind === 'reconcile' ? 'primary' : 'secondary'}
-            size="lg"
-            className="min-h-11 w-full sm:w-fit"
-            label={continuationLabel(continuation)}
-            icon={continuationIcon(continuation)}
+            className={[
+              'inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border px-4 py-2',
+              'text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2',
+              continuation.kind === 'reconcile'
+                ? 'border-accent bg-accent text-on-accent'
+                : 'border-border bg-surface text-primary',
+              'sm:w-fit',
+            ].join(' ')}
             onClick={() => onContinue(continuation)}
-          />
+          >
+            {continuationIcon(continuation)}
+            <span>{continuationLabel(continuation)}</span>
+          </button>
         ) : null}
       </section>
 
