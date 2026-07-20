@@ -72,6 +72,10 @@ export {
   PAID_OPERATION_SEMANTICS_SCHEMA,
   PAID_OPERATION_SEMANTIC_DIGEST_USE,
 } from './paid-operation-semantics'
+export {
+  createDevelopmentPaidOperationApplicationService,
+  createPaidOperationApplicationService,
+} from './paid-operation-application-service'
 export { inspectUserInputContract } from './input-work'
 
 export type {
@@ -138,6 +142,17 @@ export type {
   PaidOperationSemantics,
   PaidOperationSettlement,
 } from './paid-operation-semantics'
+export type {
+  PaidOperationApplicationRefusalCode,
+  PaidOperationApplicationResult,
+  PaidOperationApplicationService,
+  PaidOperationCommand,
+  PaidOperationCommandPort,
+  PaidOperationInterpretation,
+  PaidOperationInterpreter,
+  PaidOperationProjection,
+  PaidOperationReadPort,
+} from './paid-operation-application-service'
 export type {
   InvocationInputHistory,
   InvocationInputWork,
