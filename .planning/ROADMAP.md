@@ -56,11 +56,21 @@ truthful with no unresolved P0/P1 inside the local mock boundary.
 
 ## Phase 3B — Second-provider plug-in test
 
-**Status:** deferred; next product decision
+**Status:** planning
+**Depends on:** Phase 3A
+**Goal:** prove that one second labelled mock BTC/USD provider can be selected
+before authorization and executed through the existing paid-operation host,
+semantics and renderer without automatic fallback or a second product stack.
 
 Add one second provider for the same operation without changing host workflow
 or shared semantics. Do not add automatic fallback while provider A is
 uncertain; changing providers creates a new authority and charge boundary.
+
+**Plan authority:** `.planning/phases/03b-second-provider-plugin-test/`
+
+The phase is a falsification test. If provider B requires a new lifecycle
+state, host command, semantic schema, renderer branch or payment retry rule,
+implementation stops and the abstraction finding returns to the parent.
 
 ## Deferred decisions
 

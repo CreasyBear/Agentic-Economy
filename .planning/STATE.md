@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
-current_phase: 3
-current_phase_name: protocol-kernel-product-conversion
-status: complete
-stopped_at: "Phase 3A closed at labelled local/mock evidence boundary"
+current_phase: 3B
+current_phase_name: second-provider-plugin-test
+status: planning
+stopped_at: "Phase 3B conformance plan drafted for independent review"
 last_updated: "2026-07-20"
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 3
   total_plans: 0
   completed_plans: 0
-  percent: 100
+  percent: 75
 ---
 
 # Current state
@@ -21,13 +21,13 @@ Phases 1 and 2 are complete at the local control-plane evidence boundary.
 ADR-009 is accepted. ADR-010 is accepted with Gate 10 narrowed. ADR-019 owns
 the four-mode product destination.
 
-Phase 3A is complete at the labelled local/mock boundary: one reliable paid
-BTC/USD operation projects equal human and agent semantics under ADR-020.
+Phase 3A is complete at the labelled local/mock boundary. Phase 3B now tests
+whether that paid-operation product seam is genuinely provider-pluggable.
 
 ## Next transition
 
-Decide whether to begin Phase 3B's second-provider plug-in test. It remains
-deferred; no automatic fallback or exposure work is authorized.
+Verify the Phase 3B plan against live source, then execute its conformance
+harness before implementing Provider B.
 
 ## Remaining evidence gaps
 
