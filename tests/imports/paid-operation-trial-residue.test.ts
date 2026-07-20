@@ -4,7 +4,7 @@ import { dirname, normalize, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const PHASE_BASE = '2debf4b9f65ce228491f7d3d17ed1654a23bb496'
-const EXPECTED_PHASE_ARTIFACT_COUNT = 89
+const EXPECTED_PHASE_ARTIFACT_COUNT = 92
 const CLASSIFICATION_PATH =
   '.planning/phases/03c-hosted-paid-operation-product-trial/03C-CLOSURE-CLASSIFICATION.md'
 const CLASSIFICATIONS = [
@@ -166,6 +166,9 @@ describe('Phase 3C paid-operation trial residue boundary', () => {
     expect(PHASE_ARTIFACTS).toContain(
       'tools/release/paid-operation-hosted-proof-contract.ts',
     )
+    expect(PHASE_ARTIFACTS).toContain(
+      '.planning/phases/03c-hosted-paid-operation-product-trial/03C-07D-SUMMARY.md',
+    )
     expect(classificationDelta(PHASE_ARTIFACTS, rows),
       '[P3C_RED:closure_artifact_unclassified]').toEqual({ missing: [], extra: [] })
     expect([...rows.values()].every((value) => CLASSIFICATIONS.includes(value))).toBe(true)
@@ -179,6 +182,11 @@ describe('Phase 3C paid-operation trial residue boundary', () => {
     omitted.delete(omittedPath)
     expect(classificationDelta(PHASE_ARTIFACTS, omitted).missing)
       .toEqual([omittedPath])
+
+    const extraPath = 'synthetic/not-a-phase-artifact.ts'
+    const extra = new Map(rows).set(extraPath, 'trial-only')
+    expect(classificationDelta(PHASE_ARTIFACTS, extra).extra)
+      .toEqual([extraPath])
   })
 
   it('records retention, residual posture, and objective retirement trigger', () => {

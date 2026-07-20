@@ -578,7 +578,10 @@ export function verifyPacketIntegrity(input: unknown): PaidOperationPacketIntegr
       rate: 3,
     })
     || packet.sourceObservation.counters.admittedTotal !== 3
-    || packet.sourceObservation.counters.admittedInWindow !== 3) {
+    || !Number.isSafeInteger(packet.sourceObservation.counters.admittedInWindow)
+    || packet.sourceObservation.counters.admittedInWindow < 1
+    || packet.sourceObservation.counters.admittedInWindow
+      > packet.sourceObservation.policy.bounds.rate) {
     return refused('internal_observation_mismatch')
   }
   if (packet.sourceObservation.counters.activeReservations !== 0

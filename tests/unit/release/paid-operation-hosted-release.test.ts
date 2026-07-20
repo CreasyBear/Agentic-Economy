@@ -41,6 +41,42 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(JSON.stringify(packet)).not.toContain('authenticated_exact_revision_hosted_sandbox')
   })
 
+  it('accepts a complete proof when the three admissions cross an hourly window', () => {
+    for (const admittedInWindow of [1, 2, 3]) {
+      const packet = mutateContent((content) => {
+        content.sourceObservation.counters.admittedInWindow = admittedInWindow
+        refreshObservationDigests(content)
+      })
+
+      expect(verifyPacketIntegrity(packet)).toEqual({
+        kind: 'packet_integrity_verified',
+        evidenceClass: 'local_packet_integrity_only',
+        packetDigest: packet.checksum.digest,
+      })
+    }
+  })
+
+  it('refuses a current hourly window outside the configured positive rate bound', () => {
+    const packets = [
+      mutateContent((content) => {
+        content.sourceObservation.counters.admittedInWindow = 0
+        refreshObservationDigests(content)
+      }),
+      mutateContent((content) => {
+        content.sourceObservation.counters.admittedInWindow
+          = content.sourceObservation.policy.bounds.rate + 1
+        refreshObservationDigests(content)
+      }),
+    ]
+
+    for (const packet of packets) {
+      expect(verifyPacketIntegrity(packet)).toEqual({
+        kind: 'refused',
+        code: 'internal_observation_mismatch',
+      })
+    }
+  })
+
   it('refuses checksum-only forgery, packet tampering, and a self-asserted hosted label', () => {
     const tampered = mutateContent((content) => {
       const operation = content.scenarios[0]!.projections.humanWarm.semantics.operation
