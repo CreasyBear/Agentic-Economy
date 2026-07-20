@@ -23,7 +23,7 @@ not product authority.
 - `adr/ADR-009...` — accepted Action Invocation architecture;
 - `adr/ADR-010...` — accepted_narrowed shared action plane;
 - `adr/ADR-019...` — accepted authority-mode destination;
-- `adr/ADR-020...` — proposed delegated-work projection;
+- `adr/ADR-020...` — accepted Phase 3A paid-operation projection;
 - `phases/01.../01-SUMMARY.md` — completed foundation;
 - `phases/02.../02-SUMMARY.md` — completed/narrowed host plane;
 - `phases/03.../03-SUMMARY.md` — current product-conversion phase;

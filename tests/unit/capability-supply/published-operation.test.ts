@@ -55,12 +55,40 @@ describe('published operation materialization', () => {
   it('rejects a caller attempt to widen the closed operation input', () => {
     const packet = buildDevelopmentPublishedOperationEvidence()
     expect(packet.descriptor.validateInput({ symbol: 'BTC', convert: 'USD' })).toBe(true)
+    expect(packet.descriptor.validateInput({ symbol: 'ETH', convert: 'USD' })).toBe(false)
+    expect(packet.descriptor.validateInput({ symbol: 'BTC', convert: 'EUR' })).toBe(false)
     expect(packet.descriptor.validateInput({
       symbol: 'BTC',
       convert: 'USD',
       method: 'POST',
       payTo: '0xattacker',
     })).toBe(false)
+  })
+
+  it('accepts only the exact BTC/USD provider evidence shape', () => {
+    const { descriptor } = buildDevelopmentPublishedOperationEvidence()
+    const exact = {
+      data: {
+        BTC: {
+          symbol: 'BTC',
+          quote: {
+            USD: { price: 100_000, last_updated: '2026-07-20T08:00:00.000Z' },
+          },
+        },
+      },
+    }
+    expect(descriptor.validateOutput(exact)).toBe(true)
+    expect(descriptor.validateOutput({
+      data: {
+        BTC: {
+          symbol: 'BTC',
+          quote: {
+            EUR: { price: 90_000, last_updated: '2026-07-20T08:00:00.000Z' },
+          },
+        },
+      },
+    })).toBe(false)
+    expect(descriptor.validateOutput({ data: { BTC: { price: 100_000 } } })).toBe(false)
   })
 
   it('runs the admitted GET material rather than a hand-built binding', async () => {
@@ -71,7 +99,16 @@ describe('published operation materialization', () => {
       )
       expect(init?.method).toBe('GET')
       expect(init?.body).toBeUndefined()
-      return Response.json({ data: { BTC: { USD: 100_000 } } })
+      return Response.json({
+        data: {
+          BTC: {
+            symbol: 'BTC',
+            quote: {
+              USD: { price: 100_000, last_updated: '2026-07-20T08:00:00.000Z' },
+            },
+          },
+        },
+      })
     })
     const invocation: RouteTransportInvocation = {
       binding: {
@@ -113,7 +150,16 @@ describe('published operation materialization', () => {
           expect(url.search).toBe('')
           expect(JSON.parse(String(init?.body))).toEqual({ symbol: 'BTC', convert: 'USD' })
         }
-        return Response.json({ data: { BTC: { USD: 100_000 } } })
+        return Response.json({
+          data: {
+            BTC: {
+              symbol: 'BTC',
+              quote: {
+                USD: { price: 100_000, last_updated: '2026-07-20T08:00:00.000Z' },
+              },
+            },
+          },
+        })
       })
       await expect(invokeRegisteredRouteTransport({
         binding: {

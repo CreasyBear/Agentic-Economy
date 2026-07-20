@@ -34,6 +34,15 @@ export type {
   PublishedOperationUsageObservation,
   RuntimePublishedOperationDescriptor,
 } from './published-operation'
+export {
+  developmentBtcUsdQuoteSource,
+  presentDevelopmentBtcUsdQuoteResult,
+  projectDevelopmentBtcUsdQuoteResult,
+} from './btc-usd-quote-result'
+export type {
+  BtcUsdQuoteProjectionDecision,
+  BtcUsdQuoteResult,
+} from './btc-usd-quote-result'
 
 const identifier = z.string().trim().min(1).max(200)
 const MAX_OPAQUE_CONFIG_BYTES = 65_536

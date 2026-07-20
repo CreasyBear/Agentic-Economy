@@ -62,9 +62,13 @@ import {
   type InvocationInputWork,
 } from './input-work'
 import { createDynamicPublishedInputApplication } from './input-application'
+import type {
+  X402PaymentAttempt,
+  X402PaymentAuthorizationEvent,
+} from './x402-payment-attempt'
 
 export type DynamicPublishedAdapterSnapshot = Readonly<{
-  format: 'dynamic-published-action-invocation:development:v2'
+  format: 'dynamic-published-action-invocation:development:v3'
   sourceRows: readonly DynamicPublishedSourceRow[]
   semanticClaims: readonly DynamicPublishedSemanticClaim[]
   controls: readonly DurableControlRow<DynamicPublishedInvocationResult>[]
@@ -81,6 +85,8 @@ export type DynamicPublishedAdapterSnapshot = Readonly<{
   inputWork?: readonly InvocationInputWork[]
   inputHistory?: readonly InvocationInputHistory[]
   operations?: readonly PublishedOperation[]
+  paymentAttempts: readonly X402PaymentAttempt[]
+  paymentAuthorizationEvents: readonly X402PaymentAuthorizationEvent[]
 }>
 
 export type DynamicPublishedActionInvocationAdapter = Readonly<{
@@ -179,12 +185,26 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   developmentTimeoutSignal?: DevelopmentTimeoutSignal
   inputWork?: readonly InvocationInputWork[]
   inputHistory?: readonly InvocationInputHistory[]
+  paymentAttempts?: readonly X402PaymentAttempt[]
+  paymentAuthorizationEvents?: readonly X402PaymentAuthorizationEvent[]
 }>): DynamicPublishedActionInvocationAdapter {
   const descriptor = materializeRuntimePublishedOperation(input.operation)
   const durableState = input.durableState ?? createDevelopmentDurableState<DynamicPublishedInvocationResult>()
   const durablePort = createDevelopmentDurablePort(durableState)
   const executionTokens = new Map<string, DynamicPublishedExecutionToken>()
   const preparedTransports = new Map<string, DynamicPublishedPreparedTransport>()
+  const paymentAttempts = new Map(
+    (input.paymentAttempts ?? []).map((attempt) => [
+      `${attempt.invocationRef}\u0000${attempt.attemptRef}\u0000${attempt.effectGeneration}`,
+      attempt,
+    ]),
+  )
+  const paymentAuthorizationEvents = new Map(
+    (input.paymentAuthorizationEvents ?? []).map((event) => [
+      `${event.invocationRef}\u0000${event.attemptRef}\u0000${event.effectGeneration}`,
+      event,
+    ]),
+  )
   const semanticClaims = new Map<string, Readonly<{
     kind: 'owner' | 'reuse'
     semanticBaseKey: string
@@ -324,6 +344,9 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         descriptor,
         prepared,
         runtime: input.runtime,
+        paymentAttempts,
+        paymentAuthorizationEvents,
+        now: input.now,
       })
       return result
     },
@@ -590,6 +613,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       }
       const key = runtimeKey(request.invocationRef, request.attemptRef, request.effectGeneration)
       executionTokens.set(key, {
+        invocationRef: request.invocationRef,
         attemptRef: request.attemptRef,
         effectGeneration: request.effectGeneration,
         authorityRef: view.authority.reference,
@@ -648,7 +672,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     },
     exportSnapshot() {
       const snapshot: DynamicPublishedAdapterSnapshot = {
-        format: 'dynamic-published-action-invocation:development:v2',
+        format: 'dynamic-published-action-invocation:development:v3',
         sourceRows: input.source.list(),
         semanticClaims: input.source.listSemanticClaims(),
         controls: [...durableState.controls.values()],
@@ -667,6 +691,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         inputWork: [...inputWork.values()],
         inputHistory: [...inputHistory],
         operations: [input.operation],
+        paymentAttempts: [...paymentAttempts.values()],
+        paymentAuthorizationEvents: [...paymentAuthorizationEvents.values()],
       }
       return JSON.parse(JSON.stringify(snapshot)) as DynamicPublishedAdapterSnapshot
     },
@@ -682,6 +708,8 @@ export function loadDynamicPublishedAdapterSnapshot(
   semanticClaims: readonly DynamicPublishedSemanticClaim[]
   inputWork: readonly InvocationInputWork[]
   inputHistory: readonly InvocationInputHistory[]
+  paymentAttempts: readonly X402PaymentAttempt[]
+  paymentAuthorizationEvents: readonly X402PaymentAuthorizationEvent[]
 }> {
   verifyDynamicPublishedSnapshot({ snapshot, anchors })
   const verified = snapshot as DynamicPublishedAdapterSnapshot
@@ -704,5 +732,7 @@ export function loadDynamicPublishedAdapterSnapshot(
     semanticClaims: verified.semanticClaims,
     inputWork: verified.inputWork ?? [],
     inputHistory: verified.inputHistory ?? [],
+    paymentAttempts: verified.paymentAttempts,
+    paymentAuthorizationEvents: verified.paymentAuthorizationEvents,
   }
 }

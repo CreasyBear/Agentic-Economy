@@ -58,7 +58,7 @@ describe('development invocation application observer containment', () => {
 
         const corrected = host.correct(
           gathering.invocationRef,
-          { symbol: 'ETH' },
+          { symbol: 'BTC' },
           60_000,
         )
         expect(corrected.kind).toBe('accepted')

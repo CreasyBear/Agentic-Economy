@@ -1,8 +1,8 @@
-# ADR-020: Product projection of delegated work
+# ADR-020: One reliable paid operation as the first product projection
 
 ## Status
 
-Proposed
+Accepted for labelled local implementation
 
 ## Date
 
@@ -10,75 +10,115 @@ Proposed
 
 ## Context
 
-ADR-009 and ADR-010 established a hardened Action Invocation control plane and
-shared host semantics. ADR-019 established Inspect only, Approve each, Bounded
-mandate and Full autonomy as the product destination.
+ADR-009 and ADR-010 established Action Invocation control and shared human and
+agent host semantics. The first product projection must show why that machinery
+matters without making a mandate dashboard, workflow builder or protocol
+console the product.
 
-The customer interface remains a careful Request-centric
-compare/confirm/start experience. It does not expose the current mode, material
-mandate, consumed authority, standalone actions or mandate-level intervention.
-Exposing autonomous modes through that interface would make correct kernel
-behavior operationally opaque.
+The existing development PublishedOperation supplies one proportionate test:
+get the latest BTC price in USD from one named mock provider for no more than
+$0.01. It combines public-data release, payment exposure, provider uncertainty
+and a useful result while remaining small enough to understand end to end.
 
-The conversion must not make protocol machinery the product and must not reduce
-autonomy to repeated confirmation screens.
+Source review found that x402 challenge, authorization and paid dispatch were
+too compressed: a crash or unusable response could lose whether payment was
+possibly submitted. Product projection is therefore blocked until those facts
+are durable and independently represented.
 
-## Proposed decision
+## Decision
 
-Project Request-owned and standalone actions into one source-owned customer
-work model led by the objective and current work:
+Phase 3A projects one standalone `approve_each` BTC/USD operation through one
+shared versioned semantic object and two equal surfaces:
 
-1. **Work header** — objective, public mode label, attention state, current
-   action/business, material commitment and intervention entry.
-2. **Mandate summary** — permitted actions/recipients/data/purpose, validity,
-   spend/count/concurrency/loss consumption, fallbacks and exclusions.
-3. **Work sequence** — action-specific rows with canonical effect and recovery
-   states. Unresolved external work dominates overall completion.
-4. **Action detail** — consequence, amount, shared information, authority,
-   attempt disposition, evidence class and safe continuations, with protocol
-   detail protected behind operational disclosure.
+- a compact human operation card in customer language;
+- a structured agent contract with typed errors and continuations.
 
-Pause new work, revoke future authority and request provider cancellation are
-distinct commands with distinct durable outcomes.
+The human renderer is query- and operation-agnostic. Chat may host it, but
+chat does not own operation state. Operation-owned adapters translate their
+material input and normalized result into a closed typed block vocabulary;
+the shared renderer owns lifecycle presentation only. Models do not generate
+components or executable UI. BTC/USD remains the first operation fixture, not
+a shared schema or component specialization.
 
-The first slice exposes Inspect only, Approve each and Bounded mandate around
-one labelled development operation. Full autonomy is visible but unavailable
-until multi-action fallback and exception-only step-up pass.
+The operation binds authority to the exact principal, input, provider revision,
+endpoint, price, payment target and invocation generation. It executes once.
+Reload and duplicate delivery resume the same invocation.
 
-## Invariants
+The source of truth distinguishes:
 
-- Projections derive from source records, never transcript or component memory.
-- Request-owned and standalone lineage remain discriminated.
-- No command is enabled from stale generation or stale authority.
-- Authority already granted is not requested again.
-- Uncertainty is not failure and never enables blind retry.
-- Revocation does not imply reversal of released effects.
-- Mock/sandbox evidence remains visibly labelled after navigation and restore.
-- Technical vocabulary stays in builder or protected operational detail.
+1. query/data release;
+2. payment authorization creation;
+3. possible paid-request submission;
+4. settlement evidence;
+5. quote delivery and validation.
 
-## Alternatives rejected
+Payment preparation and possible submission are durably checkpointed. Raw
+credentials, signatures and payloads remain in an injected custody boundary
+and never enter snapshots, projections, logs or evidence packets. Any unusable
+outcome after possible paid submission requires attributable reconciliation
+before another authorization.
 
-**Reskin the existing Request workflow:** preserves Approve-each as the only
-structural model and cannot represent standing authority or standalone work.
+BTC/USD normalization remains operation-owned. Generic Action Invocation and
+hosts consume the normalized result without parsing provider-specific payloads.
 
-**Relabel Repeat Permission:** it authorizes repeated confirmation of one exact
-choice and does not express the broader mandate boundary.
+## Product contract
 
-**Lead with a mandate dashboard:** delegated work is the product; mandate
-information is persistent but subordinate.
+```text
+ask → inspect exact offer → authorize exact consequence → execute once
+    → return normalized result or preserve uncertainty
+    → reconcile → expose only a safe continuation
+```
 
-**Expose Full autonomy first:** combines projection, multi-action fallback and
-exception-only step-up before the narrower contract is proven.
+Both projections must let their caller determine the provider, material input,
+maximum charge, information released, payment/result state, evidence class and
+only safe next action. Protocol vocabulary stays in protected detail.
+
+## Phase boundary
+
+Phase 3A uses one allowlisted mock provider and labelled local execution only.
+It does not add a public endpoint, Convex persistence, real credentials,
+independent settlement, hosted evidence or a production claim.
+
+Phase 3B may add a second provider only as a plug-in and normalization test.
+Provider material remains operation-owned. Automatic fallback is prohibited
+while the first provider is uncertain, and changing providers creates a new
+invocation, authority and charge boundary.
 
 ## Acceptance
 
-ADR-020 may become accepted when Phase 3 demonstrates `.planning/REQUIREMENTS.md`
-and independent review finds no unresolved P0/P1 inside the labelled local
-product-proof boundary.
+ADR-020 closes for Phase 3A when:
+
+- possibly submitted payment can never become an ordinary retryable refusal;
+- payment preparation/submission survive process loss without duplicate signing
+  or dispatch;
+- quote delivery and settlement evidence remain separate;
+- exact BTC/USD output is normalized and validated by its operation owner;
+- human and agent projections share one semantic object and digest;
+- mock provenance survives restoration;
+- focused adverse-state, accessibility and comprehension evals pass; and
+- independent review finds no unresolved P0/P1 inside the local mock boundary.
+
+## Rejected alternatives
+
+**Broad delegated-work dashboard first:** rejected because one paid call does
+not earn mode selectors, mandate summaries, work sequences or global Activity.
+
+**Multi-provider first:** rejected because comparison and fallback would obscure
+whether one paid-operation loop is truthful.
+
+**UI mock before payment truth:** rejected because it would polish states the
+source cannot yet distinguish.
+
+**x402-branded customer flow:** rejected because the rail is adapter detail, not
+the customer task or reusable product primitive.
 
 ## Consequences
 
-Phase 3 is a product-projection phase, not a kernel rewrite or styling pass.
-Activity becomes first-class product information. Existing consequence,
-uncertainty and cancellation language is reused where truthful. Hosted and
-production exposure remain separate decisions.
+The reusable result is a reliable paid-operation loop, not a crypto module or
+universal provider lifecycle. Broader authority modes, workflows and autonomous
+composition remain product direction under ADR-019 but are not Phase 3A
+acceptance.
+
+Completion proves labelled local mechanics and comprehension only. It does not
+prove settlement, provider fulfilment, customer demand, deployment or
+production safety.

@@ -63,7 +63,15 @@ export {
 export {
   projectRichInvocationTask,
   projectStructuredInvocationTask,
+  projectRichPaidOperation,
+  projectStructuredPaidOperation,
 } from './host-projection'
+export {
+  createPaidOperationSemantics,
+  derivePaidOperationSemantics,
+  PAID_OPERATION_SEMANTICS_SCHEMA,
+  PAID_OPERATION_SEMANTIC_DIGEST_USE,
+} from './paid-operation-semantics'
 export { inspectUserInputContract } from './input-work'
 
 export type {
@@ -114,7 +122,21 @@ export type {
   InvocationTaskSemantics,
   RichInvocationTaskProjection,
   StructuredInvocationTaskProjection,
+  RichPaidOperationProjection,
+  StructuredPaidOperationProjection,
 } from './host-projection'
+export type {
+  PaidOperationContinuation,
+  PaidOperationError,
+  PaidOperationPaymentAuthorization,
+  PaidOperationPaymentAttemptSnapshot,
+  PaidOperationPaymentSubmission,
+  PaidOperationPresentationBlock,
+  PaidOperationQueryRelease,
+  PaidOperationResultDelivery,
+  PaidOperationSemantics,
+  PaidOperationSettlement,
+} from './paid-operation-semantics'
 export type {
   InvocationInputHistory,
   InvocationInputWork,

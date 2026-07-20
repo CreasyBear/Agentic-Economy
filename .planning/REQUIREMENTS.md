@@ -4,42 +4,41 @@ status: active
 created: 2026-07-20
 ---
 
-# Requirements — Protocol/kernel → product conversion
+# Requirements — Phase 3A one reliable paid operation
 
-Phase 3 closes only when one labelled development operation demonstrates the
-customer-visible delegated-work contract from mode selection through durable
-recovery. Style hygiene or static mockups cannot close a requirement.
-
-- [ ] **P3-R1 Source-owned work projection:** derive objective, origin, mode,
-  mandate, current action, authority consumption, effect state, evidence class
-  and safe continuations from durable source records.
-- [ ] **P3-R2 Mode comprehension:** Inspect only, Approve each and Bounded
-  mandate explain what AE will and will not do. Full autonomy is truthfully
-  unavailable in the first slice.
-- [ ] **P3-R3 Mandate comprehension:** present actions, recipients, purposes,
-  shared data, spend, count, concurrency, time, fallback, exclusions and risk
-  in ordinary language.
-- [ ] **P3-R4 Active work truth:** show business, consequence, committed amount,
-  rationale, consumed/held/remaining limits, uncertainty and next safe action.
-- [ ] **P3-R5 Control separation:** pause new work, revoke future authority and
-  request provider cancellation are separate durable commands and never imply
-  reversal.
-- [ ] **P3-R6 Lineage parity:** Request-owned and standalone work render
-  equivalent semantic states and continuations without synthetic lineage.
-- [ ] **P3-R7 Adverse-state safety:** exact-limit exhaustion, stale generation,
-  duplicate command, revocation during release, possible release, client
-  timeout, late cancellation and cold restoration preserve one current effect
-  generation and no unsafe retry.
-- [ ] **P3-R8 Evidence honesty:** mock, sandbox, source and hosted evidence
-  classes remain distinct and visible.
-- [ ] **P3-R9 Experience system:** Astryx neutral owns new presentation;
-  keyboard, focus, 44px targets, non-colour cues, bounded announcements,
-  responsive reflow and reduced motion pass focused evals.
-- [ ] **P3-R10 Product-proof closeout:** focused source, projection, browser,
-  accessibility and goblin review has no unresolved P0/P1.
+- [ ] **P3A-R1 Exact offer:** bind BTC/USD, one provider revision, endpoint,
+  price, payment target, principal, input digest and invocation generation.
+- [ ] **P3A-R2 Durable payment custody:** persist prepared and
+  possibly-submitted states before their external boundaries without exposing
+  credential, signature or payment payload material.
+- [ ] **P3A-R3 Separate command truth:** query release, payment authorization,
+  paid submission, settlement evidence and quote delivery remain independently
+  reconstructable.
+- [ ] **P3A-R4 Safe uncertainty:** every unusable result after possible paid
+  submission requires exact reconciliation; no retry or new authorization is
+  available while uncertainty remains.
+- [ ] **P3A-R5 Exact result:** the operation owner normalizes a finite positive
+  BTC/USD price, source, observation/receipt time, freshness and raw evidence
+  reference.
+- [ ] **P3A-R6 Shared semantics:** human and agent hosts consume one versioned
+  `agentic-paid-operation:v1` object with typed errors and continuations.
+- [ ] **P3A-R7 Restore and dedupe:** duplicate delivery, reload and cold restore
+  create zero unintended signatures, paid sends or current effect generations.
+- [ ] **P3A-R8 Evidence honesty:** local/mock environment, evidence class,
+  provider fixture identity and claim ceiling survive every projection and
+  snapshot.
+- [ ] **P3A-R9 Human comprehension:** the compact operation surface makes task,
+  provider, maximum charge, shared data, payment/release truth and safe next
+  action understandable without protocol vocabulary.
+- [ ] **P3A-R10 Experience quality:** Astryx neutral, keyboard, visible focus,
+  44px targets, non-colour states, bounded announcements, responsive reflow,
+  zoom and reduced motion pass focused checks.
+- [ ] **P3A-R11 Product-proof closeout:** focused source, fixture, parity,
+  browser, accessibility and independent review has no unresolved P0/P1.
 
 ## Non-requirements
 
-No hosted execution, production deployment, independent provider fulfilment,
-customer-value proof, Full autonomy exposure, booking bounded context, Convex
-schema expansion, new payment rail or general operations dashboard.
+No real credentials or payment, independent settlement, public endpoint,
+Convex persistence, hosted/provider/customer-value proof, multi-provider
+selection, automatic fallback, caching/resale, workflow builder, booking,
+standing mandate, Full autonomy or production exposure.

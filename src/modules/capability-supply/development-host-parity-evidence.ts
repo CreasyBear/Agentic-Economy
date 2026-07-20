@@ -76,7 +76,9 @@ export async function buildDevelopmentHostParityEvidence(provenance: Readonly<{
   const parity = compareHostSemantics(hostReads, hosts)
   const evals = evaluateHostMatrix(hosts)
   if (evals.some((entry) => !entry.passed)) {
-    throw new Error(`host_matrix_failed:${evals.filter((entry) => !entry.passed).map((entry) => entry.name).join(',')}:${hosts.map((host) => host.sourceRefusal.execution).join('|')}`)
+    throw new Error(
+      `host_matrix_failed:${evals.filter((entry) => !entry.passed).map((entry) => entry.name).join(',')}`,
+    )
   }
   const material = {
     format: 'action-invocation-host-parity:development:v2' as const,
@@ -172,7 +174,7 @@ export function verifyHostSnapshots(packet: DevelopmentHostParityEvidence): void
     const correctedMaterial = buildDynamicPublishedInput({
       operation: packet.fixture.operation,
       descriptor: packet.fixture.descriptor,
-      value: { symbol: 'ETH', convert: 'USD' },
+      value: { symbol: 'BTC', convert: 'USD' },
     })
     const correctedDigest = materialDigest(
       correctedMaterial,
@@ -232,32 +234,24 @@ function verifyReleasedRefusalSnapshot(
   const control = scenario.snapshot.controls[0]!
   const attempt = scenario.snapshot.attempts[0]!.rows[0]!
   const claim = scenario.snapshot.semanticClaims[0]
-  const result = source.observedResolution.state === 'returned'
-    ? source.observedResolution.result
-    : undefined
   if (canonicalDigest(source.operation as unknown as StableHashValue)
       !== canonicalDigest(packet.fixture.operation as unknown as StableHashValue)
     || control.control.owner.callerRef !== host.actor.callerRef
     || control.control.owner.principalRef !== host.actor.principalRef
     || control.authorityBinding?.reference !== scenario.authorityRef
     || control.control.acceptedAuthority?.kind !== 'approve_each'
-    || control.control.control.state !== 'terminal'
-    || control.terminalResultReferenceable !== false
+    || control.control.control.state !== 'reconciliation_required'
+    || control.terminalResultReferenceable === true
     || attempt.release.state !== 'possibly_released'
-    || attempt.outcome.state !== 'returned'
-    || attempt.outcome.businessOutcome !== 'published_operation_invalid_evidence'
-    || result?.kind !== 'published_operation_invalid_evidence'
-    || result.failureCode !== 'output_schema_invalid'
-    || result.providerReceipt !== 'mock:provider-refusal-receipt'
-    || result.paymentProof !== 'mock:payment-proof'
-    || source.resultIdentity === undefined
-    || source.resultIdentity.resultDigest
-      !== canonicalDigest(result as unknown as StableHashValue)
-    || claim?.status !== 'completed'
+    || attempt.outcome.state !== 'uncertain'
+    || source.observedResolution.state === 'returned'
+    || source.resultIdentity !== undefined
+    || claim?.status !== 'uncertain'
     || claim.ownerInvocationRef !== scenario.invocationRef
-    || claim.outcome?.observedResolution.state !== 'returned'
-    || canonicalDigest(claim.outcome.observedResolution.result as unknown as StableHashValue)
-      !== canonicalDigest(result as unknown as StableHashValue)
+    || claim.outcome?.observedResolution.state !== 'threw'
+    || claim.outcome.observedResolution.message
+      !== 'published_operation_payment_reconciliation_required:output_schema_invalid'
+    || scenario.snapshot.paymentAttempts[0]?.state !== 'reconciliation_required'
     || scenario.effects.payment !== 1
     || scenario.effects.provider !== 1) {
     throw new Error('released_refusal_snapshot_semantics_invalid')
@@ -346,13 +340,12 @@ export function evaluateHostMatrix(
     },
     {
       name: 'post_release_source_refusal',
-      passed: hosts.every((host) => host.releasedRefusal.failureCode === 'output_schema_invalid'
-        && host.releasedRefusal.state === 'terminal'
+      passed: hosts.every((host) => host.releasedRefusal.state === 'reconciliation_required'
         && host.releasedRefusal.effects.payment === 1
         && host.releasedRefusal.effects.provider === 1
-        && host.releasedRefusal.retryPosture === 'invalid_control_state'
+        && host.releasedRefusal.retryPosture === 'reconcile_before_retry'
         && host.releasedRefusal.snapshot.attempts[0]?.rows[0]?.release.state === 'possibly_released'
-        && host.releasedRefusal.snapshot.attempts[0]?.rows[0]?.outcome.state === 'returned'),
+        && host.releasedRefusal.snapshot.paymentAttempts[0]?.state === 'reconciliation_required'),
       evidence: hosts.map((host) => host.releasedRefusal),
     },
     {

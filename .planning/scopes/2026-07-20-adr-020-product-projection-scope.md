@@ -1,51 +1,43 @@
-# ADR-020 product projection scope
+# ADR-020 Phase 3A scope
 
-**Status:** scoped; discussion required before planning
+**Status:** implementation authorized
 **Owner:** Founder
 **Phase:** 03-protocol-kernel-product-conversion
 
 ## Decision supported
 
-What is the smallest customer experience that proves AE can accept bounded
-delegation, act without repeated approval and remain understandable and
-controllable through uncertainty and recovery?
+Can AE safely perform and explain one exact paid unit operation through human
+and agent hosts without duplicate payment or protocol theatre?
 
 ## In scope
 
-- source-owned work projection shared by Request-owned and standalone lineage;
-- mode selection and ordinary-language mandate review;
-- Work Header, Mandate Summary, Work Sequence and Action Detail;
-- current consumed, held and remaining limits;
-- pause-new-work, revoke-future-authority and provider-cancel separation;
-- exact-limit, stale-generation, duplicate, uncertainty and cold-restore paths;
-- persistent mock/sandbox provenance;
-- Astryx neutral implementation and focused accessibility/browser evals.
-
-## First vertical slice
-
-Use one unregistered, clearly labelled development provider operation. It
-exists to prove the product contract, not to create a business module or public
-capability.
-
-Full autonomy appears as an unavailable destination. Bounded mandate is the
-autonomous execution proof. Inspect only and Approve each provide truthful
-behavioral comparison.
+- one standalone `approve_each` BTC/USD operation;
+- one allowlisted mock provider revision and exact $0.01 USD ceiling;
+- durable payment preparation and possible-submission custody;
+- separate query, payment, settlement and quote truth;
+- operation-owned normalized BTC/USD result;
+- shared `agentic-paid-operation:v1` semantics;
+- compact human and typed structured-agent projections;
+- uncertainty, attributable reconciliation, duplicate delivery and restore;
+- persistent local/mock provenance;
+- focused accessibility and comprehension evals.
 
 ## Exposure kill rules
 
-Stop exposure if any journey:
+Stop if any path:
 
-- hides the current mode or material mandate;
-- enables a consequential command from stale authority;
-- conflates pause, revocation and provider cancellation;
-- treats possible release as failure or safe retry;
-- loses authority or uncertainty truth after restore;
-- permits two commands to create more than one current effect generation;
-- presents fixture/sandbox work as live admitted supply;
-- gives human and machine callers different safe continuations.
+- signs or dispatches again before exact reconciliation permits it;
+- represents possible paid submission as ordinary refusal or safe retry;
+- claims settlement from an opaque provider header;
+- accepts a wrong or malformed BTC/USD result;
+- reconstructs state from component, transcript or process memory;
+- gives human and agent callers different safe continuations;
+- exposes raw payment material; or
+- presents fixture execution as independent provider or production evidence.
 
-## Completion
+## Explicitly deferred
 
-All P3 requirements pass with labelled local source, projection and browser
-evidence. An independent goblin review has no unresolved P0/P1. Hosted,
-provider, customer-value and production-safety evidence remain outside scope.
+Phase 3B owns the second-provider plug-in test. Provider comparison and automatic
+fallback remain excluded. Workflows, Activity, mandate dashboards, standing
+authority, Full autonomy, public routes, Convex and real payment remain outside
+Phase 3A.

@@ -4,8 +4,8 @@ milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 current_phase: 3
 current_phase_name: protocol-kernel-product-conversion
-status: scoped
-stopped_at: "Phase 3 rebaselined; ADR-020 and UI projection decisions require discussion before planning"
+status: implementing
+stopped_at: "Phase 3A implementation authorized; Wave 1 payment custody is the first source transition"
 last_updated: "2026-07-20"
 progress:
   total_phases: 3
@@ -21,23 +21,22 @@ Phases 1 and 2 are complete at the local control-plane evidence boundary.
 ADR-009 is accepted. ADR-010 is accepted with Gate 10 narrowed. ADR-019 owns
 the four-mode product destination.
 
-Phase 3 is current: convert the protocol/kernel into one customer-visible
-delegated-work experience. Proposed ADR-020 owns the product projection
-decision. No implementation plan is accepted yet.
+Phase 3A is current: prove one reliable paid BTC/USD operation through equal
+human and agent projections. ADR-020 is accepted for labelled local
+implementation.
 
 ## Next transition
 
-Discuss and lock the Phase 3 projection contract, then produce `03-UI-SPEC.md`
-and executable implementation plans.
+Make x402 payment preparation and possible submission durably reconstructable,
+then normalize the exact quote and project shared paid-operation semantics.
 
 ## Current blockers
 
-- no persistent customer mode or mandate projection;
-- no source-derived active-work and remaining-authority view;
-- no mandate-level pause/revoke surface;
-- no standalone customer action journey;
-- no persistent evidence-class label on restored work;
-- current UI tests prove style hygiene, not autonomy comprehension.
+- payment authorization and paid dispatch are not yet durably separated;
+- settlement evidence and quote delivery are not independently projected;
+- the development quote contract is not yet exact BTC/USD product evidence;
+- no compact human paid-operation surface exists;
+- current parity proves generic invocation semantics, not paid-result semantics.
 
 ## Evidence ceiling
 

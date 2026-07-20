@@ -223,7 +223,7 @@ async function correctionScenario(
   const presentationAfter = canonicalDigest(context.host.exportSnapshot() as unknown as StableHashValue)
   const corrected = context.host.correct(
     prepared.invocationRef,
-    { symbol: 'ETH' },
+    { symbol: 'BTC' },
     60_000,
   )
   if (corrected.kind !== 'accepted' || corrected.view.control.state !== 'awaiting_authority'
@@ -380,7 +380,7 @@ async function releasedRefusalScenario(
   const decided = context.host.decide(prepared.invocationRef, true)
   if (decided.kind !== 'accepted') throw new Error(`host_released_refusal_decision:${decided.code}`)
   const refused = await context.host.continue(prepared.invocationRef)
-  if (refused.kind !== 'completed') {
+  if (refused.kind !== 'completed' || refused.view.control.state !== 'reconciliation_required') {
     throw new Error(`host_released_refusal_execute:${continuationCode(refused)}`)
   }
   const retry = await context.host.continue(prepared.invocationRef)
@@ -543,6 +543,8 @@ async function coldResumeScenario(
     durableState: loaded.durableState,
     inputWork: loaded.inputWork,
     inputHistory: loaded.inputHistory,
+    paymentAttempts: loaded.paymentAttempts,
+    paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
   })
   const coldHost = createHost(hostKind, adapter, context.actor, sourceCommands(
     fixture,

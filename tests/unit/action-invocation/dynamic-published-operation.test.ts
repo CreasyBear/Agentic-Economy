@@ -4,6 +4,7 @@ import {
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
   createInMemoryActionInvocationTracer,
+  derivePaidOperationSemantics,
   buildDynamicPublishedInput,
   loadDynamicPublishedAdapterSnapshot,
   materialDigest,
@@ -22,6 +23,8 @@ import {
 import type {
   RouteTransportFetch,
   RouteTransportRuntime,
+  X402PaymentAuthorizationIdentity,
+  X402PaymentSignatureRequest,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -34,6 +37,14 @@ import {
   buildDevelopmentDynamicInvocationEvidence,
   verifyDevelopmentDynamicInvocationEvidence,
 } from '@/modules/capability-supply/development-dynamic-invocation-evidence'
+import {
+  createPaymentAttemptRuntime,
+  type DynamicPublishedPreparedTransport,
+} from '@/modules/action-invocation/dynamic-published-execution'
+import {
+  x402PaymentAttemptKey,
+  type X402PaymentAttempt,
+} from '@/modules/action-invocation/x402-payment-attempt'
 
 const actor: InvocationActor = { callerRef: 'agent:development', principalRef: 'principal:development' }
 const origins: readonly ActionInvocationOrigin[] = [
@@ -42,6 +53,114 @@ const origins: readonly ActionInvocationOrigin[] = [
 ]
 
 describe('dynamic PublishedOperation Action Invocation adapter', () => {
+  it('reuses custody authorization after a crash between custody prepare and durable attempt preparation', async () => {
+    const prepared = paymentPreparedFixture()
+    const custody = new Map<string, Readonly<{
+      custodyRef: string
+      authorizationDigest: string
+      paymentSignature: string
+    }>>()
+    let signaturesCreated = 0
+    const custodyRuntime: RouteTransportRuntime = {
+      send: async () => { throw new Error('provider_send_must_not_run') },
+      resolveCredential: () => 'mock:credential',
+      createX402PaymentSignature: async () => { throw new Error('direct_signer_must_not_run') },
+      prepareX402PaymentAuthorization: async (request) => {
+        const identity = canonicalDigest({
+          paymentIdentifier: request.paymentIdentifier,
+          challengeDigest: request.challengeDigest,
+          attemptRef: request.attemptRef,
+          effectGeneration: request.effectGeneration,
+        })
+        const existing = custody.get(identity)
+        if (existing !== undefined) return existing
+        signaturesCreated += 1
+        const paymentSignature = 'raw:authorization:must-remain-in-custody'
+        const authorization = {
+          custodyRef: `custody:${identity}`,
+          authorizationDigest: canonicalDigest(paymentSignature),
+          paymentSignature,
+        }
+        custody.set(identity, authorization)
+        return authorization
+      },
+      readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) =>
+        [...custody.values()].find((candidate) =>
+          candidate.custodyRef === custodyRef
+          && candidate.authorizationDigest === authorizationDigest)?.paymentSignature,
+    }
+    const request = paymentAuthorizationRequest()
+    const crashCutAttempts = new Map<string, X402PaymentAttempt>()
+    crashCutAttempts.set = () => { throw new Error('crash_after_custody_prepare') }
+    await expect(
+      createPaymentAttemptRuntime(
+        custodyRuntime,
+        prepared,
+        crashCutAttempts,
+        undefined,
+        () => 1,
+      ).prepareX402PaymentAuthorization!(request),
+    ).rejects.toThrow('crash_after_custody_prepare')
+    expect(signaturesCreated).toBe(1)
+
+    const restoredAttempts = new Map<string, X402PaymentAttempt>()
+    const restoredRuntime = createPaymentAttemptRuntime(
+      custodyRuntime,
+      prepared,
+      restoredAttempts,
+      undefined,
+      () => 2,
+    )
+    const restored = await restoredRuntime.prepareX402PaymentAuthorization!(request)
+    expect(signaturesCreated).toBe(1)
+    expect(await restoredRuntime.readX402PaymentAuthorization!(restored!))
+      .toBe('raw:authorization:must-remain-in-custody')
+    expect(JSON.stringify([...restoredAttempts.values()])).not.toContain('raw:authorization')
+  })
+
+  it('restores prepared custody by reference and blocks uncertain custody before read or send', async () => {
+    const prepared = paymentPreparedFixture()
+    const request = paymentAuthorizationRequest()
+    const durable = paymentAttemptFixture(prepared, request)
+    let prepares = 0
+    let reads = 0
+    const runtime: RouteTransportRuntime = {
+      send: async () => { throw new Error('provider_send_must_not_run') },
+      resolveCredential: () => 'mock:credential',
+      createX402PaymentSignature: async () => { throw new Error('direct_signer_must_not_run') },
+      prepareX402PaymentAuthorization: async () => {
+        prepares += 1
+        throw new Error('custody_prepare_must_not_repeat')
+      },
+      readX402PaymentAuthorization: async () => {
+        reads += 1
+        return 'raw:authorization:from-custody'
+      },
+    }
+    const preparedAttempts = new Map([[x402PaymentAttemptKey(prepared), durable]])
+    const restored = createPaymentAttemptRuntime(runtime, prepared, preparedAttempts, undefined, () => 2)
+    expect(await restored.prepareX402PaymentAuthorization!(request)).toEqual({
+      custodyRef: durable.custodyRef,
+      authorizationDigest: durable.authorizationDigest,
+    })
+    expect(await restored.readX402PaymentAuthorization!({
+      custodyRef: durable.custodyRef,
+      authorizationDigest: durable.authorizationDigest,
+    })).toBe('raw:authorization:from-custody')
+    expect(prepares).toBe(0)
+    expect(reads).toBe(1)
+
+    preparedAttempts.set(x402PaymentAttemptKey(prepared), {
+      ...durable,
+      state: 'possibly_submitted',
+    })
+    const uncertain = createPaymentAttemptRuntime(runtime, prepared, preparedAttempts, undefined, () => 3)
+    await expect(uncertain.prepareX402PaymentAuthorization!(request))
+      .rejects.toThrow('x402_payment_attempt_reconciliation_required')
+    expect(prepares).toBe(0)
+    expect(reads).toBe(1)
+  })
+
   it('marks release conservatively before a malicious runner can return an opt-out shape', async () => {
     const now = () => '2026-07-20T00:00:00.000Z'
     let sequence = 0
@@ -210,6 +329,13 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     expect(source.list()[0]?.observedResolution).toEqual(
       refused.kind === 'accepted' ? refused.view.observedResolution : undefined,
     )
+    expect(adapter.exportSnapshot().paymentAuthorizationEvents).toEqual([
+      expect.objectContaining({
+        queryRelease: 'released',
+        authorization: 'not_created',
+      }),
+    ])
+    expect(adapter.exportSnapshot().paymentAttempts).toEqual([])
   })
 
   it.each(['config', 'payment_authority'] as const)(
@@ -380,6 +506,58 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     })
     expect(effects).toEqual({ payment: 1, provider: 1 })
     const snapshot = adapter.exportSnapshot()
+    expect(snapshot.format).toBe('dynamic-published-action-invocation:development:v3')
+    expect(snapshot.paymentAttempts).toEqual([
+      expect.objectContaining({
+        state: 'reconciliation_required',
+        paymentIdentifier: expect.stringMatching(/^sha256:/),
+        custodyRef: expect.stringMatching(/^development-custody:sha256:/),
+        authorizationDigest: expect.stringMatching(/^sha256:/),
+      }),
+    ])
+    expect(snapshot.paymentAuthorizationEvents).toEqual([
+      expect.objectContaining({
+        authorization: 'created',
+        authorizationDigest: snapshot.paymentAttempts[0]?.authorizationDigest,
+      }),
+    ])
+    expect(JSON.stringify(snapshot)).not.toContain('mock:signature')
+    expect(JSON.stringify(snapshot)).not.toContain('mock:credential')
+    if (uncertain.kind !== 'accepted') throw new Error(uncertain.code)
+    const paymentAttempt = snapshot.paymentAttempts[0]
+    if (paymentAttempt === undefined) throw new Error('payment_attempt_missing')
+    const semantics = derivePaidOperationSemantics({
+      view: uncertain.view,
+      paymentAttempt,
+      operation: {
+        operationKey: fixture.operation.operationId,
+        providerId: fixture.operation.identity.businessId,
+        providerName: 'Development Quote Provider',
+        operationRevision: String(fixture.operation.identity.publicationRevision),
+        materialInputs: { symbol: 'BTC', convert: 'USD' },
+      },
+      presentation: {
+        title: 'Get the latest BTC price in USD',
+        summary: 'Retrieve one current BTC/USD measurement.',
+        blocks: [{ kind: 'text', label: 'Pair', value: 'BTC/USD' }],
+      },
+      maximumAuthorizedCharge: { currency: 'USD', amountMinor: 1 },
+      queryRecipient: fixture.operation.identity.businessId,
+      resultDelivery: { state: 'not_delivered' },
+      environment: {
+        name: 'local-development',
+        evidenceClass: 'labelled_local_mock',
+        claimCeiling: 'mechanism_only',
+      },
+    })
+    expect(semantics).toMatchObject({
+      queryRelease: { state: 'unknown' },
+      paymentAuthorization: { state: 'created' },
+      paymentSubmission: { state: 'possibly_submitted' },
+      settlement: { state: 'unknown' },
+      continuations: [{ kind: 'reconcile' }],
+    })
+    expect(semantics.continuations.some(({ kind }) => kind === 'retry')).toBe(false)
     const preparedMaterial = buildDynamicPublishedInput({
       operation: fixture.operation,
       descriptor: fixture.descriptor,
@@ -407,6 +585,40 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         },
       },
     )
+    for (const mutate of [
+      (copy: any) => { copy.paymentAttempts[0].invocationRef = 'invocation:other' },
+      (copy: any) => { copy.paymentAttempts[0].attemptRef = 'attempt:other' },
+      (copy: any) => { copy.paymentAttempts[0].effectGeneration += 1 },
+      (copy: any) => { copy.paymentAttempts.push({ ...copy.paymentAttempts[0] }) },
+      (copy: any) => { copy.paymentAttempts = [] },
+      (copy: any) => { copy.paymentAuthorizationEvents = [] },
+      (copy: any) => {
+        copy.paymentAuthorizationEvents[0].authorization = 'not_created'
+        delete copy.paymentAuthorizationEvents[0].authorizationDigest
+      },
+    ]) {
+      const tampered = JSON.parse(JSON.stringify(snapshot))
+      mutate(tampered)
+      expect(() => loadDynamicPublishedAdapterSnapshot(tampered, {
+        operation: fixture.operation,
+        descriptor: fixture.descriptor,
+        actor,
+        origin,
+        issuedAuthority: {
+          reference: prepared.authority!.reference,
+          accepted: { kind: 'approve_each', authorityRef: prepared.authority!.reference },
+          materialInputDigest: materialDigest(
+            preparedMaterial,
+            ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+          ),
+        },
+        expectedEffectCount: 1,
+        expectedSemanticClaim: {
+          ownerInvocationRef: prepared.invocationRef,
+          status: 'uncertain',
+        },
+      })).toThrow('dynamic_published_snapshot_semantics_invalid')
+    }
     const coldSource = createDevelopmentDynamicPublishedSource(
       [fixture.operation],
       loaded.sourceRows,
@@ -418,6 +630,8 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       clock + 1_000,
       coldSource,
       loaded.durableState,
+      loaded.paymentAttempts,
+      loaded.paymentAuthorizationEvents,
     )
     expect(cold.inspect(prepared.invocationRef)?.control).toMatchObject({ state: 'reconciliation_required' })
     const cancelled = cold.cancel({
@@ -447,13 +661,32 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       resolution: 'released' as const,
       observedAt: new Date(clock + 1_000).toISOString(),
     }
+    const validEvidence = {
+      ...evidenceMaterial,
+      digest: canonicalDigest(evidenceMaterial),
+    }
+    const tampered = cold.reconcile({
+      invocationRef: view.invocationRef,
+      expectedInvocationVersion: view.invocationVersion,
+      attemptRef: attempt.attemptRef,
+      actor,
+      origin,
+      evidence: {
+        ...validEvidence,
+        evidenceRef: 'provider:reconciliation:tampered-after-signing',
+      },
+    })
+    expect(tampered).toMatchObject({ kind: 'refused', code: 'evidence_digest_mismatch' })
+    expect(cold.inspect(prepared.invocationRef)?.control)
+      .toMatchObject({ state: 'reconciliation_required' })
+    expect(effects).toEqual({ payment: 1, provider: 1 })
     const reconciled = cold.reconcile({
       invocationRef: view.invocationRef,
       expectedInvocationVersion: view.invocationVersion,
       attemptRef: attempt.attemptRef,
       actor,
       origin,
-      evidence: { ...evidenceMaterial, digest: canonicalDigest(evidenceMaterial) },
+      evidence: validEvidence,
     })
     expect(reconciled.kind === 'accepted' && reconciled.view.control).toEqual({ state: 'terminal' })
     expect(effects).toEqual({ payment: 1, provider: 1 })
@@ -513,8 +746,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       effectGeneration: acquired.view.control.effectGeneration,
     })
     expect(invalid.kind === 'accepted' && invalid.view.observedResolution).toMatchObject({
-      state: 'returned',
-      result: { kind: 'published_operation_invalid_evidence', failureCode: 'output_schema_invalid' },
+      state: 'threw',
     })
   })
 
@@ -997,6 +1229,8 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       clock + 1,
       coldSource,
       loaded.durableState,
+      loaded.paymentAttempts,
+      loaded.paymentAuthorizationEvents,
     )
     const second = cold.prepare({
       origin, actor, value: { symbol: 'BTC', convert: 'USD' }, freshnessMs: 60_000,
@@ -1081,6 +1315,8 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       clock + 1,
       coldSource,
       loaded.durableState,
+      loaded.paymentAttempts,
+      loaded.paymentAuthorizationEvents,
     )
     const completed = await cold.executeAcquired({
       invocationRef: prepared.invocationRef,
@@ -1333,6 +1569,8 @@ function createAdapter(
   now: number,
   source = createDevelopmentDynamicPublishedSource([operation]),
   durableState?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['durableState'],
+  paymentAttempts?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAttempts'],
+  paymentAuthorizationEvents?: Parameters<typeof createDynamicPublishedActionInvocationAdapter>[0]['paymentAuthorizationEvents'],
 ) {
   const priorCount = durableState?.controls.size ?? 0
   let invocation = priorCount
@@ -1347,11 +1585,119 @@ function createAdapter(
     nextAuthorityRef: () => `authority:${++authority}`,
     nextAttemptRef: () => `attempt:${++attempt}`,
     ...(durableState === undefined ? {} : { durableState }),
+    ...(paymentAttempts === undefined ? {} : { paymentAttempts }),
+    ...(paymentAuthorizationEvents === undefined ? {} : { paymentAuthorizationEvents }),
   })
 }
 
+function paymentPreparedFixture(): DynamicPublishedPreparedTransport {
+  return {
+    invocationRef: 'invocation:crash-cut',
+    operationKey: 'operation:paid',
+    attemptRef: 'attempt:one',
+    effectGeneration: 3,
+    plan: {
+      invocation: {
+        binding: {
+          adapterId: 'x402-fetch:v2',
+          endpointUrl: 'https://provider.example/paid',
+          credentialRef: 'env:EVM_PRIVATE_KEY',
+          configJson: '{}',
+          configDigest: canonicalDigest({}),
+        },
+        authority: {
+          attemptRef: 'attempt:one',
+          effectGeneration: 3,
+          operationKeyDigest: 'operation:paid',
+          mandateDigest: 'mandate:digest',
+          grantDigest: 'grant:digest',
+          capabilityContractDigest: 'operation:revision',
+          maximumSpend: { currency: 'USD', amountMinor: 1 },
+          expiresAt: Date.now() + 60_000,
+          callIdentity: { keyId: 'key:one', signature: 'call:signature' },
+        },
+        inputJson: '{}',
+      },
+      endpoint: new URL('https://provider.example/paid'),
+      credential: 'mock:credential',
+      target: new URL('https://provider.example/paid'),
+      configuration: {
+        method: 'POST',
+        requestTimeoutMs: 5_000,
+        scheme: 'exact',
+        network: 'eip155:8453',
+        currency: 'USD',
+        routeAmountExponent: 2,
+        assetAmountExponent: 6,
+        asset: '0xmock-usdc',
+        payTo: '0xmock-provider',
+      },
+      requestDigest: canonicalDigest({ request: 'paid' }),
+    },
+  }
+}
+
+function paymentAuthorizationRequest():
+  X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity {
+  const challenge = {
+    x402Version: 2 as const,
+    resource: { url: 'https://provider.example/paid' },
+    accepts: [{
+      scheme: 'exact',
+      network: 'eip155:8453' as const,
+      amount: '10000',
+      asset: '0xmock-usdc',
+      payTo: '0xmock-provider',
+      maxTimeoutSeconds: 30,
+      extra: {},
+    }],
+  }
+  return {
+    challenge,
+    credential: 'mock:credential',
+    paymentIdentifier: 'operation:paid',
+    selectedRequirement: challenge.accepts[0]!,
+    challengeDigest: canonicalDigest(challenge),
+    attemptRef: 'attempt:one',
+    effectGeneration: 3,
+  }
+}
+
+function paymentAttemptFixture(
+  prepared: DynamicPublishedPreparedTransport,
+  request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
+): X402PaymentAttempt {
+  return {
+    paymentIdentifier: request.paymentIdentifier,
+    invocationRef: prepared.invocationRef,
+    attemptRef: prepared.attemptRef,
+    effectGeneration: prepared.effectGeneration,
+    operationKey: prepared.operationKey,
+    challengeDigest: request.challengeDigest,
+    scheme: request.selectedRequirement.scheme,
+    network: request.selectedRequirement.network,
+    asset: request.selectedRequirement.asset,
+    payTo: request.selectedRequirement.payTo,
+    amount: request.selectedRequirement.amount,
+    providerEndpoint: request.challenge.resource.url,
+    operationRevision: prepared.plan.invocation.authority.capabilityContractDigest,
+    authorizationDigest: canonicalDigest('raw:authorization:from-custody'),
+    custodyRef: 'custody:stable',
+    state: 'prepared',
+    preparedAt: 1,
+    evidenceRefs: [],
+  }
+}
+
 function successRuntime(endpoint: string, effects: { payment: number; provider: number }): RouteTransportRuntime {
-  return runtime(endpoint, effects, JSON.stringify({ data: { BTC: { quote: { USD: { price: 1 } } } } }))
+  return runtime(endpoint, effects, JSON.stringify({
+    data: {
+      BTC: {
+        symbol: 'BTC',
+        quote: { USD: { price: 1, last_updated: '2026-07-20T00:00:00.000Z' } },
+      },
+    },
+  }))
 }
 
 function invalidOutputRuntime(endpoint: string): RouteTransportRuntime {
@@ -1379,6 +1725,11 @@ function runtime(
   effects: { payment: number; provider: number },
   output: string,
 ): RouteTransportRuntime {
+  const custody = new Map<string, Readonly<{
+    custodyRef: string
+    authorizationDigest: string
+    paymentSignature: string
+  }>>()
   const challenge = {
     x402Version: 2,
     resource: { url: `${endpoint}?symbol=BTC&convert=USD` },
@@ -1407,6 +1758,29 @@ function runtime(
       effects.payment += 1
       return 'mock:signature'
     },
+    prepareX402PaymentAuthorization: async (request) => {
+      const identity = canonicalDigest({
+        paymentIdentifier: request.paymentIdentifier,
+        challengeDigest: request.challengeDigest,
+        attemptRef: request.attemptRef,
+        effectGeneration: request.effectGeneration,
+      })
+      const existing = custody.get(identity)
+      if (existing !== undefined) return existing
+      effects.payment += 1
+      const paymentSignature = 'mock:signature'
+      const prepared = {
+        custodyRef: `development-custody:${identity}`,
+        authorizationDigest: canonicalDigest(paymentSignature),
+        paymentSignature,
+      }
+      custody.set(identity, prepared)
+      return prepared
+    },
+    readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) =>
+      [...custody.values()].find((candidate) =>
+        candidate.custodyRef === custodyRef
+        && candidate.authorizationDigest === authorizationDigest)?.paymentSignature,
   }
 }
 

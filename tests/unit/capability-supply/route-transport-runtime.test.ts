@@ -345,6 +345,11 @@ describe('registered route transport runtime', () => {
           protocolVersion: '2025-11-25', toolName: 'resolve_service', requestTimeoutMs: 5_000,
         },
       ),
+      authority: {
+        ...authority,
+        maximumSpend: { currency: 'USD', amountMinor: 1 },
+        expiresAt: Date.now() + 120_000,
+      },
     }), {
       send: fetch,
       resolveCredential: () => 'mcp-secret',
@@ -384,6 +389,8 @@ describe('registered route transport runtime', () => {
         })
       })
     const createPayment = vi.fn(async () => 'signed-payment-payload')
+    const submissionEvents: unknown[] = []
+    const observationEvents: unknown[] = []
 
     const observed = await invokeRegisteredRouteTransport(invocation({
       binding: registeredBinding(
@@ -398,6 +405,8 @@ describe('registered route transport runtime', () => {
       send: fetch,
       resolveCredential: () => '0xprivate-key',
       createX402PaymentSignature: createPayment,
+      markX402PaymentPossiblySubmitted: (event) => { submissionEvents.push(event) },
+      observeX402PaymentAttempt: (event) => { observationEvents.push(event) },
     })
 
     expect(createPayment).toHaveBeenCalledWith(expect.objectContaining({
@@ -410,8 +419,69 @@ describe('registered route transport runtime', () => {
       outputJson: JSON.stringify({ serviceReference: 'service:paid' }),
       paymentChallengeDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
       paymentProof: 'settlement-proof', providerReceipt: 'receipt:x402:1',
+      queryReleaseStatus: 'released',
+      paymentAuthorizationStatus: 'created',
+      paymentSubmissionStatus: 'observed',
+      settlementStatus: 'provider_asserted',
+      quoteDeliveryStatus: 'delivered',
     })
+    expect(submissionEvents).toHaveLength(1)
+    expect(observationEvents).toEqual([
+      expect.objectContaining({
+        state: 'observed',
+        custodyRef: expect.stringMatching(/^legacy:sha256:/),
+        authorizationDigest: expect.stringMatching(/^sha256:/),
+      }),
+    ])
+    expect(JSON.stringify([...submissionEvents, ...observationEvents])).not.toContain('signed-payment-payload')
     expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('marks a paid request possibly submitted before a lost response and requires reconciliation', async () => {
+    const requirement = {
+      x402Version: 2 as const,
+      resource: { url: 'https://provider.example/paid' },
+      accepts: [{
+        scheme: 'exact', network: 'eip155:84532' as const, amount: '10000',
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+        maxTimeoutSeconds: 60, extra: {},
+      }],
+    }
+    const challenge = Buffer.from(JSON.stringify(requirement)).toString('base64')
+    const states: string[] = []
+    const observed = await invokeRegisteredRouteTransport(invocation({
+      binding: registeredBinding(
+        'x402-fetch:v2', requirement.resource.url, 'env:EVM_PRIVATE_KEY', {
+          method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
+          currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
+          asset: requirement.accepts[0]!.asset, payTo: requirement.accepts[0]!.payTo,
+        },
+      ),
+      authority: {
+        ...authority,
+        maximumSpend: { currency: 'USD', amountMinor: 1 },
+        expiresAt: Date.now() + 120_000,
+      },
+    }), {
+      send: vi.fn<RouteTransportFetch>()
+        .mockResolvedValueOnce(new Response(null, {
+          status: 402, headers: { 'Payment-Required': challenge },
+        }))
+        .mockRejectedValueOnce(new Error('lost_after_send')),
+      resolveCredential: () => 'private-material',
+      createX402PaymentSignature: async () => 'must-not-be-persisted',
+      markX402PaymentPossiblySubmitted: () => { states.push('possibly_submitted') },
+      observeX402PaymentAttempt: (event) => { states.push(event.state) },
+    })
+    expect(observed).toMatchObject({
+      disposition: 'unknown',
+      failureCode: 'network_error',
+      paymentSubmissionStatus: 'possibly_submitted',
+      settlementStatus: 'unknown',
+      quoteDeliveryStatus: 'unknown',
+    })
+    expect(states).toEqual(['possibly_submitted', 'reconciliation_required'])
   })
 
   it('does not sign or retry an x402 challenge above the admitted ceiling', async () => {
@@ -452,5 +522,73 @@ describe('registered route transport runtime', () => {
     })
     expect(createPayment).not.toHaveBeenCalled()
     expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts exactly one cent and refuses the first representable unit above it before signing', async () => {
+    const challengeFor = (amount: string) => Buffer.from(JSON.stringify({
+      x402Version: 2,
+      resource: { url: 'https://provider.example/paid' },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:84532',
+        amount,
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    })).toString('base64')
+    const binding = registeredBinding(
+      'x402-fetch:v2', 'https://provider.example/paid', 'env:EVM_PRIVATE_KEY', {
+        method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
+        currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+      },
+    )
+    const exactFetch = vi.fn<RouteTransportFetch>()
+      .mockResolvedValueOnce(new Response(null, {
+        status: 402, headers: { 'Payment-Required': challengeFor('10000') },
+      }))
+      .mockResolvedValueOnce(Response.json({ price: 100_000 }))
+    const exactSigner = vi.fn(async () => 'one-cent-signature')
+    const exact = await invokeRegisteredRouteTransport(invocation({
+      binding,
+      authority: {
+        ...authority,
+        maximumSpend: { currency: 'USD', amountMinor: 1 },
+        expiresAt: Date.now() + 120_000,
+      },
+    }), {
+      send: exactFetch,
+      resolveCredential: () => 'credential',
+      createX402PaymentSignature: exactSigner,
+    })
+    expect(exact).toMatchObject({ disposition: 'succeeded' })
+    expect(exactSigner).toHaveBeenCalledTimes(1)
+    expect(exactFetch).toHaveBeenCalledTimes(2)
+
+    const aboveFetch = vi.fn<RouteTransportFetch>().mockResolvedValueOnce(new Response(null, {
+      status: 402, headers: { 'Payment-Required': challengeFor('10001') },
+    }))
+    const aboveSigner = vi.fn(async () => 'must-not-sign')
+    const above = await invokeRegisteredRouteTransport(invocation({
+      binding,
+      authority: {
+        ...authority,
+        maximumSpend: { currency: 'USD', amountMinor: 1 },
+        expiresAt: Date.now() + 120_000,
+      },
+    }), {
+      send: aboveFetch,
+      resolveCredential: () => 'credential',
+      createX402PaymentSignature: aboveSigner,
+    })
+    expect(above).toMatchObject({
+      disposition: 'refused',
+      failureCode: 'payment_exceeds_step_ceiling',
+    })
+    expect(aboveSigner).not.toHaveBeenCalled()
+    expect(aboveFetch).toHaveBeenCalledTimes(1)
   })
 })

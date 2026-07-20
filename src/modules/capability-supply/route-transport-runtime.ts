@@ -35,6 +35,7 @@ export type RouteTransportInvocation = Readonly<{
   }>
   authority: Readonly<{
     attemptRef: string
+    effectGeneration?: number
     operationKeyDigest: string
     mandateDigest: string
     grantDigest: string
@@ -68,6 +69,32 @@ export type X402PaymentSignatureRequest = Readonly<{
   selectedRequirement: X402Challenge['accepts'][number]
 }>
 
+export type X402PaymentAuthorizationIdentity = Readonly<{
+  paymentIdentifier: string
+  challengeDigest: string
+  attemptRef: string
+  effectGeneration: number
+}>
+
+export type X402PreparedAuthorization = Readonly<{
+  custodyRef: string
+  authorizationDigest: string
+}>
+
+export type X402PaymentAttemptEvent = Readonly<{
+  paymentIdentifier: string
+  attemptRef: string
+  challengeDigest: string
+  scheme: string
+  network: string
+  asset: string
+  payTo: string
+  amount: string
+  providerEndpoint: string
+  custodyRef: string
+  authorizationDigest: string
+}>
+
 export type RouteTransportRuntime = Readonly<{
   send: RouteTransportFetch
   resolveCredential: (reference: string) => string | undefined
@@ -79,12 +106,30 @@ export type RouteTransportRuntime = Readonly<{
     maximumSpend: Readonly<{ currency: string; amountMinor: number }>
   }>) => boolean
   createX402PaymentSignature: (request: X402PaymentSignatureRequest) => Promise<string | undefined>
+  prepareX402PaymentAuthorization?: (
+    request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
+  ) => Promise<X402PreparedAuthorization | undefined>
+  readX402PaymentAuthorization?: (
+    prepared: X402PreparedAuthorization,
+  ) => Promise<string | undefined>
+  markX402PaymentPossiblySubmitted?: (event: X402PaymentAttemptEvent) => Promise<void> | void
+  observeX402PaymentAttempt?: (
+    event: X402PaymentAttemptEvent & Readonly<{
+      state: 'observed' | 'reconciliation_required'
+      evidenceRefs: readonly string[]
+    }>,
+  ) => Promise<void> | void
 }>
 
 export type RouteTransportObservation = Readonly<{
   transport: 'http' | 'mcp' | 'x402' | 'unknown'
   disposition: 'succeeded' | 'refused' | 'partial' | 'unknown'
   releaseStarted: boolean
+  queryReleaseStatus?: 'not_released' | 'released' | 'unknown'
+  paymentAuthorizationStatus?: 'not_created' | 'created' | 'unknown'
+  paymentSubmissionStatus?: 'not_submitted' | 'possibly_submitted' | 'observed' | 'unknown'
+  settlementStatus?: 'not_evidenced' | 'provider_asserted' | 'unknown'
+  quoteDeliveryStatus?: 'not_delivered' | 'delivered' | 'unknown'
   requestDigest: string
   responseDigest?: string
   outputJson?: string
@@ -125,8 +170,18 @@ export function parseRouteTransportObservationJson(value: string): RouteTranspor
   if (optionalStrings.some((key) => parsed[key] !== undefined && !boundedString(parsed[key], MAX_RESPONSE_BYTES))) {
     return undefined
   }
+  const optionalStatuses = {
+    queryReleaseStatus: ['not_released', 'released', 'unknown'],
+    paymentAuthorizationStatus: ['not_created', 'created', 'unknown'],
+    paymentSubmissionStatus: ['not_submitted', 'possibly_submitted', 'observed', 'unknown'],
+    settlementStatus: ['not_evidenced', 'provider_asserted', 'unknown'],
+    quoteDeliveryStatus: ['not_delivered', 'delivered', 'unknown'],
+  } as const
+  if (Object.entries(optionalStatuses).some(([key, allowed]) =>
+    parsed[key] !== undefined && !(allowed as readonly unknown[]).includes(parsed[key]))) return undefined
   if (Object.keys(parsed).some((key) => ![
     'transport', 'disposition', 'releaseStarted', 'requestDigest', ...optionalStrings,
+    ...Object.keys(optionalStatuses),
   ].includes(key))) return undefined
   return parsed as RouteTransportObservation
 }
@@ -550,27 +605,94 @@ async function invokeX402(
   if (ceiling === undefined || BigInt(requirement.amount) > ceiling) {
     return { ...refused('x402', requestDigest, true, 'payment_exceeds_step_ceiling'), paymentChallengeDigest }
   }
-  const paymentSignature = await runtime.createX402PaymentSignature({
-    challenge, credential, paymentIdentifier: invocation.authority.operationKeyDigest,
-    selectedRequirement: requirement,
-  })
+  const authorizationIdentity = {
+    paymentIdentifier: invocation.authority.operationKeyDigest,
+    challengeDigest: paymentChallengeDigest,
+    attemptRef: invocation.authority.attemptRef,
+    effectGeneration: invocation.authority.effectGeneration ?? 0,
+  }
+  let legacyPaymentSignature: string | undefined
+  let preparedAuthorization: X402PreparedAuthorization | undefined
+  if (runtime.prepareX402PaymentAuthorization === undefined) {
+    legacyPaymentSignature = await runtime.createX402PaymentSignature({
+        challenge, credential, paymentIdentifier: invocation.authority.operationKeyDigest,
+        selectedRequirement: requirement,
+      })
+    preparedAuthorization = legacyPaymentSignature === undefined || legacyPaymentSignature.length === 0
+      ? undefined
+      : {
+          custodyRef: `legacy:${canonicalDigest(legacyPaymentSignature)}`,
+          authorizationDigest: canonicalDigest(legacyPaymentSignature),
+        }
+  } else {
+    preparedAuthorization = await runtime.prepareX402PaymentAuthorization({
+        challenge, credential,
+        selectedRequirement: requirement,
+        ...authorizationIdentity,
+      })
+  }
+  if (preparedAuthorization === undefined) {
+    return { ...refused('x402', requestDigest, true, 'payment_signature_unavailable'), paymentChallengeDigest }
+  }
+  const paymentSignature = legacyPaymentSignature
+    ?? await runtime.readX402PaymentAuthorization?.(preparedAuthorization)
   if (paymentSignature === undefined || paymentSignature.length === 0) {
     return { ...refused('x402', requestDigest, true, 'payment_signature_unavailable'), paymentChallengeDigest }
   }
+  const paymentEvent: X402PaymentAttemptEvent = {
+    paymentIdentifier: invocation.authority.operationKeyDigest,
+    attemptRef: invocation.authority.attemptRef,
+    challengeDigest: paymentChallengeDigest,
+    scheme: requirement.scheme,
+    network: requirement.network,
+    asset: requirement.asset,
+    payTo: requirement.payTo,
+    amount: requirement.amount,
+    providerEndpoint: target.href,
+    custodyRef: preparedAuthorization.custodyRef,
+    authorizationDigest: preparedAuthorization.authorizationDigest,
+  }
   try {
+    await runtime.markX402PaymentPossiblySubmitted?.(paymentEvent)
     const paid = await runtime.send(target, {
       method: configuration.method, redirect: 'manual', signal: AbortSignal.timeout(configuration.requestTimeoutMs),
       headers: { ...headers, 'Payment-Signature': paymentSignature },
       ...(configuration.method === 'POST' ? { body: invocation.inputJson } : {}),
     })
     const normalized = await normalizeJsonResponse('x402', paid, requestDigest, true)
+    const paymentProof = optionalHeader(paid, 'payment-response', 'paymentProof')
+    const providerReceipt = optionalHeader(paid, 'provider-receipt', 'providerReceipt')
+    await runtime.observeX402PaymentAttempt?.({
+      ...paymentEvent,
+      state: 'observed',
+      evidenceRefs: [
+        ...(paymentProof.paymentProof === undefined ? [] : [canonicalDigest(paymentProof.paymentProof)]),
+        ...(providerReceipt.providerReceipt === undefined ? [] : [canonicalDigest(providerReceipt.providerReceipt)]),
+      ],
+    })
     return {
       ...normalized, paymentChallengeDigest,
-      ...optionalHeader(paid, 'payment-response', 'paymentProof'),
-      ...optionalHeader(paid, 'provider-receipt', 'providerReceipt'),
+      queryReleaseStatus: 'released',
+      paymentAuthorizationStatus: 'created',
+      paymentSubmissionStatus: 'observed',
+      settlementStatus: paymentProof.paymentProof === undefined ? 'not_evidenced' : 'provider_asserted',
+      quoteDeliveryStatus: normalized.outputJson === undefined ? 'unknown' : 'delivered',
+      ...paymentProof,
+      ...providerReceipt,
     }
   } catch (error) {
-    return { ...unknown('x402', requestDigest, true, `network_${errorName(error)}`), paymentChallengeDigest }
+    await runtime.observeX402PaymentAttempt?.({
+      ...paymentEvent, state: 'reconciliation_required', evidenceRefs: [],
+    })
+    return {
+      ...unknown('x402', requestDigest, true, `network_${errorName(error)}`),
+      paymentChallengeDigest,
+      queryReleaseStatus: 'released',
+      paymentAuthorizationStatus: 'created',
+      paymentSubmissionStatus: 'possibly_submitted',
+      settlementStatus: 'unknown',
+      quoteDeliveryStatus: 'unknown',
+    }
   }
 }
 

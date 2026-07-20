@@ -17,15 +17,19 @@ import type { DynamicPublishedSourceRow } from './dynamic-published-source'
 
 export function assertDynamicPublishedSnapshotShape(value: unknown): asserts value is DynamicPublishedAdapterSnapshot {
   if (!isRecord(value)
-    || value.format !== 'dynamic-published-action-invocation:development:v2'
+    || value.format !== 'dynamic-published-action-invocation:development:v3'
     || !Array.isArray(value.sourceRows)
     || !Array.isArray(value.semanticClaims)
     || !Array.isArray(value.controls)
     || !Array.isArray(value.attempts)
     || !Array.isArray(value.history)
     || !Array.isArray(value.commands)
+    || !Array.isArray(value.paymentAttempts)
+    || !Array.isArray(value.paymentAuthorizationEvents)
     || !exactKeys(value, [
       'format', 'sourceRows', 'semanticClaims', 'controls', 'attempts', 'history', 'commands',
+      'paymentAttempts',
+      'paymentAuthorizationEvents',
       ...(value.inputWork === undefined ? [] : ['inputWork']),
       ...(value.inputHistory === undefined ? [] : ['inputHistory']),
       ...(value.operations === undefined ? [] : ['operations']),
@@ -52,9 +56,63 @@ export function assertDynamicPublishedSnapshotShape(value: unknown): asserts val
     || !Array.isArray(value.history[0].rows)
     || value.commands.some((command) => !isRecord(command)
       || typeof command.commandId !== 'string'
-      || !isRecord(command.value))) {
+      || !isRecord(command.value))
+    || value.paymentAttempts.some((attempt) => !paymentAttemptShapeValid(attempt))
+    || value.paymentAuthorizationEvents.some((event) => !paymentAuthorizationEventShapeValid(event))) {
     throw new Error('dynamic_published_snapshot_schema_invalid')
   }
+}
+
+function paymentAuthorizationEventShapeValid(value: unknown): boolean {
+  return isRecord(value)
+    && typeof value.invocationRef === 'string'
+    && typeof value.attemptRef === 'string'
+    && Number.isSafeInteger(value.effectGeneration)
+    && (value.effectGeneration as number) >= 1
+    && typeof value.operationKey === 'string'
+    && value.queryRelease === 'released'
+    && ['not_created', 'created', 'unknown'].includes(String(value.authorization))
+    && Number.isSafeInteger(value.recordedAt)
+    && (value.challengeDigest === undefined || typeof value.challengeDigest === 'string')
+    && (value.authorizationDigest === undefined || typeof value.authorizationDigest === 'string')
+    && (value.authorization === 'created'
+      ? typeof value.challengeDigest === 'string'
+        && typeof value.authorizationDigest === 'string'
+      : value.authorizationDigest === undefined)
+    && exactKeys(value, [
+      'invocationRef', 'attemptRef', 'effectGeneration', 'operationKey', 'queryRelease',
+      'authorization', 'recordedAt',
+      ...(value.challengeDigest === undefined ? [] : ['challengeDigest']),
+      ...(value.authorizationDigest === undefined ? [] : ['authorizationDigest']),
+    ])
+}
+
+function paymentAttemptShapeValid(value: unknown): boolean {
+  if (!isRecord(value)
+    || ![
+      'prepared', 'possibly_submitted', 'observed', 'reconciliation_required',
+      'not_settled', 'settled',
+    ].includes(String(value.state))
+    || !Number.isSafeInteger(value.effectGeneration)
+    || (value.effectGeneration as number) < 1
+    || !Number.isSafeInteger(value.preparedAt)
+    || !Array.isArray(value.evidenceRefs)
+    || value.evidenceRefs.some((ref) => typeof ref !== 'string')
+    || Object.values(value).some((entry) =>
+      typeof entry === 'string' && /(private.?key|payment.?signature|credential)/i.test(entry))
+    || !exactKeys(value, [
+      'paymentIdentifier', 'invocationRef', 'attemptRef', 'effectGeneration', 'operationKey',
+      'challengeDigest', 'scheme', 'network', 'asset', 'payTo', 'amount', 'providerEndpoint',
+      'operationRevision', 'authorizationDigest', 'custodyRef', 'state', 'preparedAt',
+      ...(value.submissionStartedAt === undefined ? [] : ['submissionStartedAt']),
+      ...(value.observedAt === undefined ? [] : ['observedAt']),
+      'evidenceRefs',
+    ])) return false
+  return [
+    'paymentIdentifier', 'invocationRef', 'attemptRef', 'operationKey', 'challengeDigest',
+    'scheme', 'network', 'asset', 'payTo', 'amount', 'providerEndpoint', 'operationRevision',
+    'authorizationDigest', 'custodyRef',
+  ].every((key) => typeof value[key] === 'string' && (value[key] as string).length > 0)
 }
 
 function semanticClaimShapeValid(value: unknown): boolean {
@@ -223,6 +281,14 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
     )
     || !attemptGroup.rows.every((attempt) =>
       attempt.idempotency.materialInputDigest === issuedAuthority.materialInputDigest)
+    || !paymentAttemptsValid(
+      snapshot.paymentAttempts,
+      snapshot.paymentAuthorizationEvents,
+      attemptGroup.rows,
+      control.invocationRef,
+      recomputedInput.operationKey,
+      operation,
+    )
     || !resultIdentityValid(
       source,
       control,
@@ -234,6 +300,72 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
       }`,
     )
   ) throw new Error('dynamic_published_snapshot_semantics_invalid')
+}
+
+function paymentAttemptsValid(
+  paymentAttempts: DynamicPublishedAdapterSnapshot['paymentAttempts'],
+  authorizationEvents: DynamicPublishedAdapterSnapshot['paymentAuthorizationEvents'],
+  attempts: DynamicPublishedAdapterSnapshot['attempts'][number]['rows'],
+  invocationRef: string,
+  operationKey: string,
+  operation: PublishedOperation,
+): boolean {
+  const durableAttempts = new Map(attempts.map((attempt) => [
+    `${attempt.attemptRef}\u0000${attempt.effectGeneration}`,
+    attempt,
+  ]))
+  const seen = new Set<string>()
+  const paymentRowsValid = paymentAttempts.every((paymentAttempt) => {
+    const key = `${paymentAttempt.attemptRef}\u0000${paymentAttempt.effectGeneration}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return paymentAttempt.invocationRef === invocationRef
+      && paymentAttempt.operationKey === operationKey
+      && paymentAttempt.paymentIdentifier === operationKey
+      && sameProviderEndpoint(paymentAttempt.providerEndpoint, operation.binding.endpointUrl)
+      && paymentAttempt.operationRevision === operation.identity.contractDigest
+      && durableAttempts.has(key)
+  })
+  if (!paymentRowsValid) return false
+  const paymentAttemptsByKey = new Map(paymentAttempts.map((attempt) => [
+    `${attempt.attemptRef}\u0000${attempt.effectGeneration}`,
+    attempt,
+  ]))
+  const expectedReleasedKeys = new Set(attempts
+    .filter((attempt) => attempt.release.state !== 'not_released')
+    .map((attempt) => `${attempt.attemptRef}\u0000${attempt.effectGeneration}`))
+  const eventKeys = new Set<string>()
+  const eventsValid = authorizationEvents.every((event) => {
+    const key = `${event.attemptRef}\u0000${event.effectGeneration}`
+    if (eventKeys.has(key)) return false
+    eventKeys.add(key)
+    const paymentAttempt = paymentAttemptsByKey.get(key)
+    return event.invocationRef === invocationRef
+      && event.operationKey === operationKey
+      && expectedReleasedKeys.has(key)
+      && (event.authorization === 'created'
+        ? paymentAttempt !== undefined
+          && event.challengeDigest === paymentAttempt.challengeDigest
+          && event.authorizationDigest === paymentAttempt.authorizationDigest
+        : paymentAttempt === undefined)
+  })
+  return eventsValid
+    && eventKeys.size === expectedReleasedKeys.size
+    && [...expectedReleasedKeys].every((key) => eventKeys.has(key))
+}
+
+function sameProviderEndpoint(observed: string, configured: string): boolean {
+  try {
+    const observedUrl = new URL(observed)
+    const configuredUrl = new URL(configured)
+    return observedUrl.origin === configuredUrl.origin
+      && observedUrl.pathname === configuredUrl.pathname
+      && observedUrl.username === ''
+      && observedUrl.password === ''
+      && observedUrl.hash === ''
+  } catch {
+    return false
+  }
 }
 
 function acceptedAuthorityGenerationValid(

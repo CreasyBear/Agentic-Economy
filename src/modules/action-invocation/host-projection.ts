@@ -5,6 +5,14 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { dynamicPublishedSourceDigest } from './dynamic-published-contract'
 import { inspectUserInputContract } from './input-work'
 import type { ActionInvocationOrigin, InvocationActor } from './contracts'
+export {
+  projectRichPaidOperation,
+  projectStructuredPaidOperation,
+} from './paid-operation-semantics'
+export type {
+  RichPaidOperationProjection,
+  StructuredPaidOperationProjection,
+} from './paid-operation-semantics'
 
 export type InvocationProjectionResolver = Readonly<{
   resolve(invocationRef: string): unknown

@@ -13,8 +13,14 @@ import type {
 } from './dynamic-published-contract'
 import type { PublishedOperation, RuntimePublishedOperationDescriptor } from '@/modules/capability-supply/public'
 import { executableFixedPrice } from './dynamic-published-contract'
+import {
+  x402PaymentAttemptKey,
+  type X402PaymentAttempt,
+  type X402PaymentAuthorizationEvent,
+} from './x402-payment-attempt'
 
 export type DynamicPublishedExecutionToken = Readonly<{
+  invocationRef: string
   attemptRef: string
   effectGeneration: number
   authorityRef: string
@@ -24,6 +30,7 @@ export type DynamicPublishedExecutionToken = Readonly<{
 }>
 
 export type DynamicPublishedPreparedTransport = Readonly<{
+  invocationRef: string
   operationKey: string
   attemptRef: string
   effectGeneration: number
@@ -54,6 +61,7 @@ export function prepareDynamicPublishedTransport(input: Readonly<{
   return {
     kind: 'prepared',
     prepared: {
+      invocationRef: input.token.invocationRef,
       operationKey: input.invocation.operationKey,
       attemptRef: input.token.attemptRef,
       effectGeneration: input.token.effectGeneration,
@@ -67,12 +75,190 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   descriptor: RuntimePublishedOperationDescriptor
   prepared: DynamicPublishedPreparedTransport
   runtime: RouteTransportRuntime
+  paymentAttempts?: Map<string, X402PaymentAttempt>
+  paymentAuthorizationEvents?: Map<string, X402PaymentAuthorizationEvent>
+  now?: () => number
 }>): Promise<DynamicPublishedInvocationResult> {
-  const observation = await invokePreparedRouteTransport(input.prepared.plan, input.runtime)
+  const runtime = input.paymentAttempts === undefined
+    ? input.runtime
+    : createPaymentAttemptRuntime(
+        input.runtime,
+        input.prepared,
+        input.paymentAttempts,
+        input.paymentAuthorizationEvents,
+        input.now ?? Date.now,
+      )
+  const eventKey = x402PaymentAttemptKey(input.prepared)
+  let observation: Awaited<ReturnType<typeof invokePreparedRouteTransport>>
+  try {
+    observation = await invokePreparedRouteTransport(input.prepared.plan, runtime)
+  } catch (error) {
+    if (input.paymentAuthorizationEvents !== undefined
+      && !input.paymentAuthorizationEvents.has(eventKey)) {
+      input.paymentAuthorizationEvents.set(eventKey, {
+        invocationRef: input.prepared.invocationRef,
+        attemptRef: input.prepared.attemptRef,
+        effectGeneration: input.prepared.effectGeneration,
+        operationKey: input.prepared.operationKey,
+        queryRelease: 'released',
+        authorization: 'unknown',
+        recordedAt: (input.now ?? Date.now)(),
+      })
+    }
+    throw error
+  }
+  if (input.paymentAuthorizationEvents !== undefined
+    && !input.paymentAuthorizationEvents.has(eventKey)
+    && observation.releaseStarted) {
+    input.paymentAuthorizationEvents.set(eventKey, {
+      invocationRef: input.prepared.invocationRef,
+      attemptRef: input.prepared.attemptRef,
+      effectGeneration: input.prepared.effectGeneration,
+      operationKey: input.prepared.operationKey,
+      queryRelease: 'released',
+      authorization: 'not_created',
+      recordedAt: (input.now ?? Date.now)(),
+      ...(observation.paymentChallengeDigest === undefined
+        ? {}
+        : { challengeDigest: observation.paymentChallengeDigest }),
+    })
+  }
   if (observation.disposition === 'unknown' && observation.releaseStarted) {
     throw new Error(`published_operation_outcome_unknown:${observation.failureCode ?? 'unknown'}`)
   }
-  return observationResult(input.operation, input.descriptor, observation)
+  const result = observationResult(input.operation, input.descriptor, observation)
+  if (observation.paymentAuthorizationStatus === 'created'
+    && result.kind !== 'published_operation_succeeded') {
+    if (input.paymentAttempts !== undefined) {
+      const key = x402PaymentAttemptKey({
+        invocationRef: input.prepared.invocationRef,
+        attemptRef: input.prepared.attemptRef,
+        effectGeneration: input.prepared.effectGeneration,
+      })
+      const current = input.paymentAttempts.get(key)
+      if (current !== undefined) {
+        input.paymentAttempts.set(key, {
+          ...current,
+          state: 'reconciliation_required',
+        })
+      }
+    }
+    throw new Error(
+      `published_operation_payment_reconciliation_required:${result.failureCode ?? result.kind}`,
+    )
+  }
+  return result
+}
+
+export function createPaymentAttemptRuntime(
+  runtime: RouteTransportRuntime,
+  prepared: DynamicPublishedPreparedTransport,
+  attempts: Map<string, X402PaymentAttempt>,
+  authorizationEvents: Map<string, X402PaymentAuthorizationEvent> | undefined,
+  now: () => number,
+): RouteTransportRuntime {
+  const key = x402PaymentAttemptKey({
+    invocationRef: prepared.invocationRef,
+    attemptRef: prepared.attemptRef,
+    effectGeneration: prepared.effectGeneration,
+  })
+  return {
+    ...runtime,
+    async prepareX402PaymentAuthorization(request) {
+      const current = attempts.get(key)
+      if (current !== undefined) {
+        if (current.paymentIdentifier !== request.paymentIdentifier
+          || current.challengeDigest !== request.challengeDigest
+          || current.attemptRef !== request.attemptRef
+          || current.effectGeneration !== request.effectGeneration) {
+          throw new Error('x402_payment_attempt_attribution_invalid')
+        }
+        if (current.state !== 'prepared') {
+          throw new Error('x402_payment_attempt_reconciliation_required')
+        }
+        return {
+          custodyRef: current.custodyRef,
+          authorizationDigest: current.authorizationDigest,
+        }
+      }
+      if (runtime.prepareX402PaymentAuthorization === undefined) {
+        throw new Error('x402_payment_custody_prepare_unavailable')
+      }
+      const authorization = await runtime.prepareX402PaymentAuthorization(request)
+      if (authorization === undefined) return undefined
+      const paymentAttempt: X402PaymentAttempt = {
+        paymentIdentifier: request.paymentIdentifier,
+        invocationRef: prepared.invocationRef,
+        attemptRef: prepared.attemptRef,
+        effectGeneration: prepared.effectGeneration,
+        operationKey: prepared.operationKey,
+        challengeDigest: request.challengeDigest,
+        scheme: request.selectedRequirement.scheme,
+        network: request.selectedRequirement.network,
+        asset: request.selectedRequirement.asset,
+        payTo: request.selectedRequirement.payTo,
+        amount: request.selectedRequirement.amount,
+        providerEndpoint: request.challenge.resource.url,
+        operationRevision: prepared.plan.invocation.authority.capabilityContractDigest,
+        authorizationDigest: authorization.authorizationDigest,
+        custodyRef: authorization.custodyRef,
+        state: 'prepared',
+        preparedAt: now(),
+        evidenceRefs: [],
+      }
+      attempts.set(key, paymentAttempt)
+      authorizationEvents?.set(key, {
+        invocationRef: prepared.invocationRef,
+        attemptRef: prepared.attemptRef,
+        effectGeneration: prepared.effectGeneration,
+        operationKey: prepared.operationKey,
+        queryRelease: 'released',
+        authorization: 'created',
+        recordedAt: paymentAttempt.preparedAt,
+        challengeDigest: paymentAttempt.challengeDigest,
+        authorizationDigest: authorization.authorizationDigest,
+      })
+      return authorization
+    },
+    async readX402PaymentAuthorization(authorization) {
+      const current = attempts.get(key)
+      if (current === undefined
+        || current.state !== 'prepared'
+        || current.custodyRef !== authorization.custodyRef
+        || current.authorizationDigest !== authorization.authorizationDigest) {
+        throw new Error('x402_payment_attempt_reconciliation_required')
+      }
+      if (runtime.readX402PaymentAuthorization === undefined) {
+        throw new Error('x402_payment_custody_read_unavailable')
+      }
+      return runtime.readX402PaymentAuthorization(authorization)
+    },
+    markX402PaymentPossiblySubmitted(event) {
+      const current = attempts.get(key)
+      if (current === undefined
+        || current.custodyRef !== event.custodyRef
+        || current.challengeDigest !== event.challengeDigest) {
+        throw new Error('x402_payment_attempt_attribution_invalid')
+      }
+      attempts.set(key, {
+        ...current,
+        state: 'possibly_submitted',
+        submissionStartedAt: now(),
+      })
+    },
+    observeX402PaymentAttempt(event) {
+      const current = attempts.get(key)
+      if (current === undefined || current.custodyRef !== event.custodyRef) {
+        throw new Error('x402_payment_attempt_attribution_invalid')
+      }
+      attempts.set(key, {
+        ...current,
+        state: event.state,
+        observedAt: now(),
+        evidenceRefs: event.evidenceRefs,
+      })
+    },
+  }
 }
 
 function dynamicTransportInvocation(input: Readonly<{
@@ -91,6 +277,7 @@ function dynamicTransportInvocation(input: Readonly<{
     },
     authority: {
       attemptRef: input.token.attemptRef,
+      effectGeneration: input.token.effectGeneration,
       operationKeyDigest: input.invocation.operationKey,
       mandateDigest: input.token.mandateDigest,
       grantDigest: input.token.grantDigest,

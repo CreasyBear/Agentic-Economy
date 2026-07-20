@@ -19,19 +19,16 @@ exists now.
 ```text
 Phase 1 — Action Invocation foundation                 complete
 Phase 2 — One action plane across human/agent hosts    accepted_narrowed
-Phase 3 — Protocol/kernel → product conversion         scoped
+Phase 3A — One reliable paid operation                 implementing
 ```
 
-ADR-009 and ADR-010 establish the control plane. ADR-019 establishes the four
-authority modes. Proposed ADR-020 decides how that machinery becomes one
-customer work model without exposing protocol theatre or creating approval
-theatre.
+ADR-009 and ADR-010 establish the control plane. ADR-019 establishes the
+authority-mode destination. ADR-020 narrows the first product projection to one
+standalone approve-each BTC/USD operation through one mock provider.
 
-Customer Request remains the aggregate for a broader outcome. A useful
-standalone action remains standalone. Both project through the same
-customer-semantic work model where authority, attempt, evidence and recovery
-semantics apply. The primary product object is the objective and current
-work—not the protocol, route graph, mandate ledger or transcript.
+Customer Request remains the aggregate for a broader outcome. Phase 3A proves
+the standalone path first. Its reusable object is a paid-operation semantic
+projection, not a protocol, mandate dashboard, workflow graph or transcript.
 
 ## Current evidence
 

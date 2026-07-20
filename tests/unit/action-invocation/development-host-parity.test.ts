@@ -62,8 +62,10 @@ describe('ADR-010 development host parity', () => {
     expect(packet.hosts.every((host) => (
       host.releasedRefusal.effects.payment === 1
       && host.releasedRefusal.effects.provider === 1
-      && host.releasedRefusal.failureCode === 'output_schema_invalid'
+      && host.releasedRefusal.failureCode === null
+      && host.releasedRefusal.state === 'reconciliation_required'
       && host.releasedRefusal.snapshot.attempts[0]!.rows[0]!.release.state === 'possibly_released'
+      && host.releasedRefusal.snapshot.paymentAttempts[0]!.state === 'reconciliation_required'
     ))).toBe(true)
     expect(packet.hosts[1].completedResultReuse).toMatchObject({
       firstKind: 'attached',
@@ -114,12 +116,12 @@ describe('ADR-010 development host parity', () => {
       packet.hosts[1].success.snapshot.sourceRows[0].operation.identity.endpoint.method = 'POST'
     }],
     ['released refusal result content', (packet: any) => {
-      packet.hosts[1].releasedRefusal.snapshot.sourceRows[0].observedResolution.result.failureCode =
-        'forged_refusal'
+      packet.hosts[1].releasedRefusal.snapshot.sourceRows[0].observedResolution.message =
+        'published_operation_payment_reconciliation_required:forged_refusal'
     }],
     ['released refusal provider evidence', (packet: any) => {
-      packet.hosts[0].releasedRefusal.snapshot.sourceRows[0]
-        .observedResolution.result.providerReceipt = 'mock:forged-provider-receipt'
+      packet.hosts[0].releasedRefusal.snapshot.paymentAttempts[0].evidenceRefs =
+        ['mock:forged-provider-receipt']
     }],
     ['timeout reclassified', (packet: any) => {
       packet.hosts[0].timeout.releaseClassification = 'not_released'
@@ -221,7 +223,7 @@ describe('ADR-010 development host parity', () => {
       .toThrow('host_parity_source_base_invalid')
   })
 
-  it('hydrates the historically accepted v2 snapshot without optional input state', async () => {
+  it('refuses archived v2 snapshots rather than silently reinterpreting their payment meaning', async () => {
     const packet = await buildDevelopmentHostParityEvidence(provenance)
     const liveFixture = buildDevelopmentPublishedOperationEvidence()
     const scenario = packet.hosts[1].success
@@ -229,14 +231,13 @@ describe('ADR-010 development host parity', () => {
     delete legacy.inputWork
     delete legacy.inputHistory
     delete legacy.operations
+    delete legacy.paymentAttempts
+    legacy.format = 'dynamic-published-action-invocation:development:v2'
     for (const row of legacy.sourceRows) {
       delete row.origin
       delete row.owner
     }
-    const frozenDigest = canonicalDigest(legacy)
-    expect(frozenDigest)
-      .toBe('sha256:279c3e8b9dea33a5aa4e83481ad815a5e97737298a3177bb662f401a293183d2')
-    const loaded = loadDynamicPublishedAdapterSnapshot(legacy, {
+    expect(() => loadDynamicPublishedAdapterSnapshot(legacy, {
       operation: liveFixture.operation,
       descriptor: liveFixture.descriptor,
       actor: packet.hosts[1].actor,
@@ -256,10 +257,7 @@ describe('ADR-010 development host parity', () => {
         status: 'completed',
         outcomeResultRef: legacy.sourceRows[0].resultIdentity.sourceResultRef,
       },
-    })
-    expect(loaded.inputWork).toEqual([])
-    expect(loaded.inputHistory).toEqual([])
-    expect(canonicalDigest(legacy)).toBe(frozenDigest)
+    })).toThrow('dynamic_published_snapshot_schema_invalid')
 
     const unsupportedV1 = clone(legacy)
     unsupportedV1.format = 'dynamic-published-action-invocation:development:v1'

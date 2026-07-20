@@ -7,7 +7,7 @@
 | ADR-009 | accepted | Action Invocation, discriminated lineage and authority/effect continuity |
 | ADR-010 | accepted_narrowed | One action plane; Gate 10 payoff rejected for the measured class |
 | ADR-019 | accepted | Inspect only, Approve each, Bounded mandate and Full autonomy destination |
-| ADR-020 | proposed | Customer product projection of delegated work |
+| ADR-020 | accepted for local implementation | One reliable paid operation as the first product projection |
 
 ## Other ADRs
 

@@ -1,43 +1,51 @@
 ---
 phase: 03-protocol-kernel-product-conversion
-status: scoped
+status: implementing
 decision_owner: Founder
 updated: 2026-07-20
 governing_adr: ADR-020
 ---
 
-# Phase 3 — Protocol/kernel → product conversion
+# Phase 3A — One reliable paid operation
 
 ## Outcome
 
-Convert the accepted Action Invocation, authority and host semantics into one
-customer-visible delegated-work model.
+Get the latest BTC price in USD from one named mock provider for no more than
+$0.01 through equivalent human and structured-agent experiences.
 
-## First proof
+## Implementation waves
 
-One labelled development operation demonstrates Inspect only, Approve each and
-Bounded mandate from objective through active work, exact-limit refusal,
-uncertain release, intervention and cold restoration. Full autonomy remains
-visibly unavailable until the same contract survives multi-action autonomy.
+1. Reconcile active Phase 3 authority to this narrow loop.
+2. Durably separate query release, payment authorization/submission, settlement
+   evidence and quote delivery.
+3. Normalize exact BTC/USD output in the operation owner.
+4. Project one `agentic-paid-operation:v1` semantic object through both hosts.
+5. Demonstrate success, pre-release refusal, uncertainty, reconciliation,
+   duplicate delivery and cold restoration with labelled local mock data.
 
-## Product contracts
+## Product surface
 
-- persistent Work Header;
-- source-derived Mandate Summary;
-- canonical Work Sequence;
-- action-specific detail and recovery;
-- distinct pause, revoke and provider-cancel controls;
-- Activity access for Request-owned and standalone work;
-- persistent evidence-class labelling.
+The human surface is one compact operation card with progressive technical
+detail. The agent surface is one typed structured contract with machine-actionable
+errors and continuations. Both consume the same source-owned semantics. Chat may
+host the human card, but the durable invocation owns state. Operation adapters
+provide typed presentation blocks to one query-agnostic renderer; BTC/USD is
+the first fixture, not a shared UI schema.
 
 ## Boundaries
 
-This phase does not add a public endpoint, Convex deployment, real provider,
-booking module, payment rail or production claim. It does not reopen the
-accepted Phase 1/2 kernel unless a source-provable projection blocker requires
-a narrow contract correction.
+No public endpoint, Convex persistence, real credential, real payment,
+independent settlement, hosted evidence, provider comparison, automatic
+fallback, workflow builder, booking module, standing mandate or Full autonomy
+surface is added.
 
-## Next
+## Phase 3B
 
-Run Phase 3 discussion to lock remaining interaction decisions, then create
-`03-UI-SPEC.md` and executable plans.
+After Phase 3A closes, add a second provider as a plug-in test. It must not
+change the host workflow. Uncertainty at provider A cannot trigger fallback to
+provider B.
+
+## Completion
+
+Phase 3A closes only against `.planning/REQUIREMENTS.md`. Evidence remains
+labelled local fixture behavior and product-comprehension proof.

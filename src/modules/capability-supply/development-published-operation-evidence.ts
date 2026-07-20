@@ -46,8 +46,8 @@ export function buildDevelopmentPublishedOperationEvidence() {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
       properties: {
-        symbol: { type: 'string', minLength: 1 },
-        convert: { type: 'string', minLength: 3, maxLength: 3 },
+        symbol: { type: 'string', enum: ['BTC'] },
+        convert: { type: 'string', enum: ['USD'] },
       },
       required: ['symbol', 'convert'],
       additionalProperties: false,
@@ -55,7 +55,39 @@ export function buildDevelopmentPublishedOperationEvidence() {
     outputSchema: {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
-      properties: { data: { type: 'object', additionalProperties: true } },
+      properties: {
+        data: {
+          type: 'object',
+          properties: {
+            BTC: {
+              type: 'object',
+              properties: {
+                symbol: { type: 'string', enum: ['BTC'] },
+                quote: {
+                  type: 'object',
+                  properties: {
+                    USD: {
+                      type: 'object',
+                      properties: {
+                        price: { type: 'number', exclusiveMinimum: 0 },
+                        last_updated: { type: 'string', format: 'date-time' },
+                      },
+                      required: ['price', 'last_updated'],
+                      additionalProperties: false,
+                    },
+                  },
+                  required: ['USD'],
+                  additionalProperties: false,
+                },
+              },
+              required: ['symbol', 'quote'],
+              additionalProperties: false,
+            },
+          },
+          required: ['BTC'],
+          additionalProperties: false,
+        },
+      },
       required: ['data'],
       additionalProperties: false,
     },
@@ -283,6 +315,8 @@ export function verifyDevelopmentPublishedOperationEvidence(
     || packet.descriptor.retryClass !== 'reconcile_before_retry'
     || packet.descriptor.authorityRequirement !== 'principal'
     || !packet.descriptor.validateInput({ symbol: 'BTC', convert: 'USD' })
+    || packet.descriptor.validateInput({ symbol: 'ETH', convert: 'USD' })
+    || packet.descriptor.validateInput({ symbol: 'BTC', convert: 'EUR' })
     || packet.descriptor.validateInput({ symbol: 'BTC', convert: 'USD', method: 'POST' })) {
     throw new Error('development_published_operation_evidence_invalid')
   }

@@ -40,50 +40,30 @@ and structured semantic projection.
 Gate 10 remains `NARROW_OR_REDESIGN`: the measured embedded path did not reduce
 human effort. The architecture survives; the payoff hypothesis does not.
 
-## Phase 3 — Protocol/kernel → product conversion
+## Phase 3A — One reliable paid operation
 
-**Status:** scoped; ADR-020 proposed
-**Goal:** make delegated work understandable and controllable through one
-source-backed customer work model without turning autonomy into repeated
-approval.
+**Status:** implementing; ADR-020 accepted for labelled local work
+**Goal:** safely obtain and explain one BTC/USD result from one named mock
+provider for no more than $0.01.
 
-### First vertical slice
+Phase 3A makes payment preparation/submission reconstructable, separates
+payment and quote truth, normalizes the operation result and projects one
+versioned semantic object through compact human and structured-agent hosts.
 
-One clearly labelled development operation demonstrates:
+Exit requires success, pre-release refusal, possible paid submission,
+attributable reconciliation, duplicate delivery and cold restoration to remain
+truthful with no unresolved P0/P1 inside the local mock boundary.
 
-1. an objective;
-2. Inspect only, Approve each and Bounded mandate as truthful mode choices;
-3. one ordinary-language mandate boundary;
-4. execution inside that boundary without another confirmation;
-5. current work, rationale and remaining authority;
-6. distinct pause-new-work, revoke-future-authority and provider-cancellation
-   controls;
-7. exact-limit refusal and uncertain-provider recovery;
-8. cold restoration without transcript or component memory.
+## Phase 3B — Second-provider plug-in test
 
-Full autonomy remains visible as the destination but unavailable for this first
-slice. It is admitted only after multi-action fallback and exception-only
-step-up pass the same contract.
+**Status:** deferred until Phase 3A closes
 
-### Exit
-
-- current mode and mandate remain visible on active and restored views;
-- spend, count, concurrency, time and held loss are source-derived;
-- Request-owned and standalone work share semantic states and continuations;
-- unresolved external work cannot be hidden by overall completion;
-- stale generations cannot render current or enable commands;
-- mock/sandbox provenance persists at work and action level;
-- narrow/wide, keyboard, screen-reader, zoom, touch and reduced-motion journeys
-  cover the adverse-state matrix;
-- no unresolved P0/P1 remains inside the labelled local product-proof boundary.
-
-### Cut
-
-No public endpoint, Convex deployment, production exposure, provider onboarding,
-real booking module, payment rail, marketplace expansion, generic dashboard or
-route-local design system is required.
+Add one second provider for the same operation without changing host workflow
+or shared semantics. Do not add automatic fallback while provider A is
+uncertain; changing providers creates a new authority and charge boundary.
 
 ## Deferred decisions
 
-Hosted sandbox exposure, independently operated supply, real-customer evidence
-and Full autonomy exposure are separate gates after Phase 3 local product proof.
+Hosted sandbox exposure, independently operated supply, real-customer evidence,
+broader authority modes and workflow composition are separate gates after the
+Phase 3A local product proof.

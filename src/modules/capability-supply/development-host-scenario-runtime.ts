@@ -2,6 +2,7 @@ import type {
   RouteTransportFetch,
   RouteTransportRuntime,
 } from './route-transport-runtime'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 export type DevelopmentEffectCounts = {
   payment: number
@@ -46,11 +47,28 @@ export function developmentSuccessRuntime(
     effects.provider += 1
     observer({ kind: 'provider_release', detail: { endpoint: String(url), providerCalls: effects.provider } })
     observer({ kind: 'provider_response', detail: { status: 200, evidence: 'quote_data' } })
-    return response(200, JSON.stringify({ data: { BTC: { price: 1 } } }), {
+    return response(200, JSON.stringify({
+      data: {
+        BTC: {
+          symbol: 'BTC',
+          quote: {
+            USD: {
+              price: 118_245.12,
+              last_updated: '2026-07-19T08:00:00.000Z',
+            },
+          },
+        },
+      },
+    }), {
       'payment-response': 'mock:payment-proof',
       'provider-receipt': 'mock:provider-receipt',
     })
   }
+  const prepared = new Map<string, Readonly<{
+    custodyRef: string
+    authorizationDigest: string
+  }>>()
+  const paymentSignature = 'mock:payment-signature'
   return {
     send,
     resolveCredential: () => 'mock:server-held-credential',
@@ -67,8 +85,37 @@ export function developmentSuccessRuntime(
       })
       effects.payment += 1
       observer({ kind: 'payment_signature_created', detail: { paymentAttempts: effects.payment } })
-      return 'mock:payment-signature'
+      return paymentSignature
     },
+    prepareX402PaymentAuthorization: async (request) => {
+      const identity = canonicalDigest({
+        paymentIdentifier: request.paymentIdentifier,
+        challengeDigest: request.challengeDigest,
+        attemptRef: request.attemptRef,
+        effectGeneration: request.effectGeneration,
+      })
+      const existing = prepared.get(identity)
+      if (existing !== undefined) return existing
+      observer({
+        kind: 'payment_signature_requested',
+        detail: {
+          network: request.selectedRequirement.network,
+          asset: request.selectedRequirement.asset,
+          payTo: request.selectedRequirement.payTo,
+          amount: request.selectedRequirement.amount,
+        },
+      })
+      effects.payment += 1
+      observer({ kind: 'payment_signature_created', detail: { paymentAttempts: effects.payment } })
+      const authorization = {
+        custodyRef: `development-custody:${identity}`,
+        authorizationDigest: canonicalDigest(paymentSignature),
+      }
+      prepared.set(identity, authorization)
+      return authorization
+    },
+    readX402PaymentAuthorization: async ({ authorizationDigest }) =>
+      authorizationDigest === canonicalDigest(paymentSignature) ? paymentSignature : undefined,
   }
 }
 

@@ -239,6 +239,8 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
         nextAuthorityRef: () => 'unused',
         nextAttemptRef: () => 'unused',
         durableState: loaded.durableState,
+        paymentAttempts: loaded.paymentAttempts,
+        paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
       })
       cases.push({
         origin,
@@ -594,6 +596,8 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       nextAuthorityRef: () => 'verifier:unused',
       nextAttemptRef: () => 'verifier:unused',
       durableState: loaded.durableState,
+      paymentAttempts: loaded.paymentAttempts,
+      paymentAuthorizationEvents: loaded.paymentAuthorizationEvents,
     })
     const view = adapter.inspect(entry.invocationRef)
     return view?.control.state === 'terminal'
@@ -683,6 +687,8 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     nextAuthorityRef: () => 'verifier:unused',
     nextAttemptRef: () => 'verifier:unused',
     durableState: loadedProcessKill.durableState,
+    paymentAttempts: loadedProcessKill.paymentAttempts,
+    paymentAuthorizationEvents: loadedProcessKill.paymentAuthorizationEvents,
   })
   const processKillView = processKillAdapter.inspect(packet.processKill.invocationRef)
   if (
@@ -764,11 +770,22 @@ function invocationSnapshot(
     attempts: snapshot.attempts.filter((group) => group.invocationRef === invocationRef),
     history,
     commands: snapshot.commands.filter(({ commandId }) => commandIds.has(commandId)),
+    paymentAttempts: snapshot.paymentAttempts.filter(
+      (attempt) => attempt.invocationRef === invocationRef,
+    ),
+    paymentAuthorizationEvents: snapshot.paymentAuthorizationEvents.filter(
+      (event) => event.invocationRef === invocationRef,
+    ),
   }
 }
 
 function successRuntime(endpoint: string, effects: { payment: number; provider: number }): RouteTransportRuntime {
   const challenge = developmentChallenge(endpoint)
+  const custody = new Map<string, Readonly<{
+    custodyRef: string
+    authorizationDigest: string
+  }>>()
+  const paymentSignature = 'mock:payment-signature'
   const send: RouteTransportFetch = async (_url, init) => {
     if (init?.headers?.['Payment-Signature'] === undefined) {
       return response(402, '', {
@@ -776,7 +793,19 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
       })
     }
     effects.provider += 1
-    return response(200, JSON.stringify({ data: { BTC: { price: 1 } } }), {
+    return response(200, JSON.stringify({
+      data: {
+        BTC: {
+          symbol: 'BTC',
+          quote: {
+            USD: {
+              price: 118_245.12,
+              last_updated: '2026-07-19T08:00:00.000Z',
+            },
+          },
+        },
+      },
+    }), {
       'payment-response': 'mock:payment-proof',
       'provider-receipt': 'mock:provider-receipt',
     })
@@ -787,8 +816,27 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
     x402PaymentSigningAvailable: () => true,
     createX402PaymentSignature: async () => {
       effects.payment += 1
-      return 'mock:payment-signature'
+      return paymentSignature
     },
+    prepareX402PaymentAuthorization: async (request) => {
+      const identity = canonicalDigest({
+        paymentIdentifier: request.paymentIdentifier,
+        challengeDigest: request.challengeDigest,
+        attemptRef: request.attemptRef,
+        effectGeneration: request.effectGeneration,
+      })
+      const existing = custody.get(identity)
+      if (existing !== undefined) return existing
+      effects.payment += 1
+      const authorization = {
+        custodyRef: `development-custody:${identity}`,
+        authorizationDigest: canonicalDigest(paymentSignature),
+      }
+      custody.set(identity, authorization)
+      return authorization
+    },
+    readX402PaymentAuthorization: async ({ authorizationDigest }) =>
+      authorizationDigest === canonicalDigest(paymentSignature) ? paymentSignature : undefined,
   }
 }
 
