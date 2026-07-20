@@ -10,12 +10,16 @@ import {
   HOSTED_PAID_OPERATION_SERVICE_TOKEN_TTL_MS,
   verifyHostedPaidOperationServiceToken,
 } from '@/modules/action-invocation/hosted-paid-operation-service-auth'
-import type { HostedPaidOperationAggregate } from '@/modules/action-invocation/hosted-paid-operation-port'
+import {
+  HOSTED_PAID_OPERATION_CHILD_CAP,
+  type HostedPaidOperationAggregate,
+} from '@/modules/action-invocation/hosted-paid-operation-port'
 import type { PaidOperationProjection } from '@/modules/action-invocation/paid-operation-application-service'
 import type { ActionResult } from '@/modules/common/action'
 
 const handler = readFileSync('convex/actionInvocationControl.ts', 'utf8')
 const hostedGateway = readFileSync('convex/hostedPaidOperationGateway.ts', 'utf8')
+const hostedPersistence = readFileSync('convex/hostedPaidOperation.ts', 'utf8')
 const durableContract = readFileSync(
   'src/modules/action-invocation/internal/durable-contracts.ts',
   'utf8',
@@ -131,6 +135,18 @@ const disablePhase3CAdmission = makeFunctionReference<
   | Readonly<{ kind: 'disabled'; policyDigest: string }>
   | Readonly<{ kind: 'refused'; code: string }>
 >('hostedPaidOperation:disablePhase3CAdmission')
+const phase3CHostedProofObservation = makeFunctionReference<
+  'query',
+  { invocationRefs: string[] },
+  | Readonly<{
+      kind: 'observed'
+      policy: Record<string, unknown>
+      counters: Record<string, unknown>
+      invocations: readonly Record<string, unknown>[]
+      observationDigest: string
+    }>
+  | Readonly<{ kind: 'refused'; code: string }>
+>('hostedPaidOperation:phase3CHostedProofObservation')
 
 const ownerIdentity = {
   subject: 'paid-operation-owner',
@@ -1131,6 +1147,192 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       } as never)).rejects.toThrow()
     }
   })
+
+  it('keeps the Phase3C proof observation internal, exact-ref-only, bounded, and sanitized', async () => {
+    const queryStart = hostedPersistence.indexOf('export const phase3CHostedProofObservation')
+    const querySource = hostedPersistence.slice(
+      queryStart,
+      hostedPersistence.indexOf('export const readMockEffectObservation'),
+    )
+    expect(queryStart).toBeGreaterThan(-1)
+    expect(querySource).toContain('export const phase3CHostedProofObservation = internalQuery')
+    expect(querySource).toContain(".withIndex('by_policyRef'")
+    expect(querySource).toContain('.take(2)')
+    expect(querySource).toContain('.take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)')
+    expect(querySource).not.toMatch(
+      /\.collect\(|\.filter\(|scheduler|\.custodyReference\b|\.evidenceReference\b/iu,
+    )
+    expect(hostedGateway).not.toContain('phase3CHostedProofObservation')
+
+    const backend = convexTest(schema, modules)
+    await expect(backend.query(phase3CHostedProofObservation, {
+      invocationRefs: [],
+    })).resolves.toEqual({ kind: 'refused', code: 'invocation_ref_count_invalid' })
+    await expect(backend.query(phase3CHostedProofObservation, {
+      invocationRefs: ['invocation:1', 'invocation:2', 'invocation:3', 'invocation:4'],
+    })).resolves.toEqual({ kind: 'refused', code: 'invocation_ref_count_invalid' })
+    await expect(backend.query(phase3CHostedProofObservation, {
+      invocationRefs: ['invocation:1', 'invocation:1'],
+    })).resolves.toEqual({ kind: 'refused', code: 'invocation_ref_count_invalid' })
+  })
+
+  it('observes exactly three closed one-effect invocations and refuses missing or inconsistent rows', async () => {
+    const backend = convexTest(schema, modules)
+    await admitOwner(backend, 3)
+    const owner = backend.withIdentity(ownerIdentity)
+    const first = await runCompletedEffect(owner, 'A', 'human-agent-a')
+    const second = await runCompletedEffect(owner, 'A', 'agent-a')
+    const third = await runCompletedEffect(owner, 'B', 'goblin-b')
+    const invocationRefs = [first.invocationRef, second.invocationRef, third.invocationRef]
+
+    const observed = await backend.query(phase3CHostedProofObservation, { invocationRefs })
+    expect(observed.kind).toBe('observed')
+    if (observed.kind !== 'observed') return
+    expect(observed.policy).toMatchObject({
+      enabled: true,
+      bounds: { total: 3, concurrency: 1, rate: 3 },
+    })
+    expect(observed.counters).toMatchObject({
+      admittedTotal: 3,
+      activeReservations: 0,
+      admittedInWindow: 3,
+    })
+    expect(observed.invocations).toHaveLength(3)
+    expect(observed.invocations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        providerId: 'provider:a',
+        counts: expect.objectContaining({ attempts: 1, effects: 1 }),
+      }),
+      expect.objectContaining({
+        providerId: 'provider:b',
+        currentTruth: expect.objectContaining({
+          payment: 'settled',
+          delivery: 'not_delivered',
+          observedResolution: 'pending',
+        }),
+        counts: expect.objectContaining({ attempts: 1, effects: 1 }),
+      }),
+    ]))
+    expect(observed.invocations.flatMap((invocation) => invocation.commands))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          commandIdDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
+        }),
+      ]))
+    expect(observed.observationDigest).toMatch(/^sha256:[0-9a-f]{64}$/u)
+    expect(JSON.stringify(observed)).not.toMatch(
+      /paid-operation-owner|identity\.test|"(?:custodyReference|evidenceReference)":|Bearer|api[_-]?key|session[_-]?token/iu,
+    )
+
+    await expect(backend.query(phase3CHostedProofObservation, {
+      invocationRefs: [...invocationRefs.slice(0, 2), 'invocation:missing'],
+    })).resolves.toEqual({ kind: 'refused', code: 'proof_row_missing' })
+
+    await backend.run(async (ctx) => {
+      const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
+        .withIndex('by_policyRef_and_principalRef', (q) =>
+          q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial')
+            .eq('principalRef', ownerIdentity.subject))
+        .unique()
+      if (counter === null) throw new Error('test_counter_missing')
+      await ctx.db.patch(counter._id, { admittedTotal: 2 })
+    })
+    await expect(backend.query(phase3CHostedProofObservation, {
+      invocationRefs,
+    })).resolves.toEqual({ kind: 'refused', code: 'proof_rows_inconsistent' })
+  })
+
+  it('enumerates hidden prior command, attempt, and effect rows instead of reading only current state', async () => {
+    const backend = convexTest(schema, modules)
+    await admitOwner(backend, 3)
+    const owner = backend.withIdentity(ownerIdentity)
+    const completed = await runCompletedEffect(owner, 'A', 'hidden-prior')
+    await backend.run(async (ctx) => {
+      const currentAttempt = await ctx.db.query('actionInvocationAttempts')
+        .withIndex('by_invocationRef_and_attemptNumber', (q) =>
+          q.eq('invocationRef', completed.invocationRef))
+        .take(1)
+      if (currentAttempt[0] === undefined) throw new Error('test_attempt_missing')
+      const {
+        _id: _attemptId,
+        _creationTime: _attemptCreationTime,
+        ...attemptRow
+      } = currentAttempt[0]
+      const currentEffect = await ctx.db.query('hostedPaidOperationMockEffects')
+        .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (q) =>
+          q.eq('invocationRef', completed.invocationRef))
+        .take(1)
+      if (currentEffect[0] === undefined) throw new Error('test_effect_missing')
+      const {
+        _id: _effectId,
+        _creationTime: _effectCreationTime,
+        ...effectRow
+      } = currentEffect[0]
+      await ctx.db.insert('actionInvocationAttempts', {
+        ...attemptRow,
+        attemptRef: 'attempt:hidden-prior',
+        attemptNumber: 0,
+        effectGeneration: 0,
+      })
+      await ctx.db.insert('hostedPaidOperationMockEffects', {
+        ...effectRow,
+        attemptRef: 'attempt:hidden-prior',
+        effectGeneration: 0,
+        paymentIdentifier: 'payment:hidden-prior',
+      })
+      await ctx.db.insert('hostedPaidOperationCommands', {
+        invocationRef: completed.invocationRef,
+        commandId: 'command:hidden-prior',
+        commandDigest: `sha256:${'f'.repeat(64)}`,
+        invocationVersion: 0,
+        effectGeneration: 0,
+        principalRef: ownerIdentity.subject,
+        callerRef: ownerIdentity.tokenIdentifier,
+        recordedAt: '2026-07-20T00:00:00.000Z',
+      })
+    })
+
+    const observed = await backend.query(phase3CHostedProofObservation, {
+      invocationRefs: [completed.invocationRef],
+    })
+    expect(observed.kind).toBe('observed')
+    if (observed.kind !== 'observed') return
+    expect(observed.invocations[0]).toMatchObject({
+      counts: { attempts: 2, effects: 2 },
+      attempts: expect.arrayContaining([
+        expect.objectContaining({ attemptNumber: 0, effectGeneration: 0 }),
+      ]),
+      effects: expect.arrayContaining([
+        expect.objectContaining({ effectGeneration: 0 }),
+      ]),
+      commands: expect.arrayContaining([
+        expect.objectContaining({ invocationVersion: 0, effectGeneration: 0 }),
+      ]),
+    })
+  })
+
+  it('refuses a cap-plus-one proof child instead of projecting a partial observation', async () => {
+    const backend = convexTest(schema, modules)
+    await admitOwner(backend, 3)
+    const owner = backend.withIdentity(ownerIdentity)
+    const completed = await runCompletedEffect(owner, 'A', 'child-cap')
+    await backend.run(async (ctx) => {
+      for (let index = 0; index <= HOSTED_PAID_OPERATION_CHILD_CAP; index += 1) {
+        await ctx.db.insert('hostedPaidOperationCommands', {
+          invocationRef: completed.invocationRef,
+          commandId: `proof-cap:${index}`,
+          commandDigest: `sha256:${String(index).padStart(64, '0')}`,
+          invocationVersion: 5,
+          principalRef: ownerIdentity.subject,
+          callerRef: ownerIdentity.tokenIdentifier,
+          recordedAt: '2026-07-20T00:00:00.000Z',
+        })
+      }
+    })
+    await expect(backend.query(phase3CHostedProofObservation, {
+      invocationRefs: [completed.invocationRef],
+    })).resolves.toEqual({ kind: 'refused', code: 'proof_child_cap_exceeded' })
+  })
 })
 
 function convexTransactionCommand(input: Readonly<{
@@ -1249,11 +1451,11 @@ function publicArgs(symbol: string): string {
   return match[1]
 }
 
-async function admitOwner(backend: HostedBackend) {
-  await admitPrincipal(backend, ownerIdentity.subject)
+async function admitOwner(backend: HostedBackend, rateLimit = 2) {
+  await admitPrincipal(backend, ownerIdentity.subject, rateLimit)
 }
 
-async function admitPrincipal(backend: HostedBackend, principalRef: string) {
+async function admitPrincipal(backend: HostedBackend, principalRef: string, rateLimit = 2) {
   await backend.run(async (ctx) => {
     await ctx.db.insert('hostedPaidOperationAdmissionPolicies', {
       policyRef: 'phase-3c-hosted-paid-operation-trial',
@@ -1261,7 +1463,7 @@ async function admitPrincipal(backend: HostedBackend, principalRef: string) {
       principalRef,
       totalLimit: 3,
       concurrencyLimit: 1,
-      rateLimit: 2,
+      rateLimit,
       policyDigest: `sha256:${'a'.repeat(64)}`,
       sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
       admissionEndsAt: '9999-12-30T00:00:00.000Z',
@@ -1295,6 +1497,34 @@ async function authorize(
   })
   if (result.kind !== 'accepted') throw new Error(`Authorization refused: ${result.code}.`)
   return result
+}
+
+async function runCompletedEffect(
+  owner: ReturnType<ReturnType<typeof convexTest>['withIdentity']>,
+  providerKey: 'A' | 'B',
+  commandPrefix: string,
+) {
+  const created = await createFor(owner, providerKey)
+  await authorize(owner, created.invocationRef, `command:authorize:${commandPrefix}`)
+  const executed = await owner.action(authenticatedCommand, {
+    invocationRef: created.invocationRef,
+    commandId: `command:execute:${commandPrefix}`,
+    expectedInvocationVersion: 2,
+    command: 'execute',
+  })
+  if (executed.kind !== 'accepted') throw new Error(`Execution refused: ${executed.code}.`)
+  if (providerKey === 'B') {
+    const reconciled = await owner.action(authenticatedCommand, {
+      invocationRef: created.invocationRef,
+      commandId: `command:reconcile:${commandPrefix}`,
+      expectedInvocationVersion: 5,
+      command: 'reconcile',
+    })
+    if (reconciled.kind !== 'accepted') {
+      throw new Error(`Reconciliation refused: ${reconciled.code}.`)
+    }
+  }
+  return created
 }
 
 async function effectFacts(

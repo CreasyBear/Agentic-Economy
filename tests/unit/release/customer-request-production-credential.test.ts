@@ -159,6 +159,73 @@ describe('production cold-agent credential', () => {
     })
   })
 
+  it('issues a paid-operation key with only its required scope and no Customer Request authority', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json(acceptanceUser()))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_paid', secret: 'ak_paid_secret' }))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_paid', revoked: true }))
+
+    await expect(withTemporaryClerkApiKey({
+      clerkSecretKey: 'sk_test_server',
+      expectedInstanceId: 'ins_expected',
+      subject: 'user_acceptance',
+      requiredScope: 'paid_operation:invoke',
+      scopes: ['paid_operation:invoke', 'paid_operation:invoke'],
+      fetch,
+      run: async () => undefined,
+    })).resolves.toBeUndefined()
+
+    expect(JSON.parse(String(fetch.mock.calls[2]?.[1]?.body))).toMatchObject({
+      scopes: ['paid_operation:invoke'],
+    })
+    expect(String(fetch.mock.calls[2]?.[1]?.body)).not.toContain('customer_requests:')
+    expect(fetch.mock.calls[3]?.[0]).toBe('https://api.clerk.com/v1/api_keys/apikey_paid/revoke')
+  })
+
+  it('rejects broad, unrelated, malformed, or oversized paid-operation scope escalation', async () => {
+    const invalidScopeSets = [
+      ['paid_operation:invoke', 'customer_requests:create'],
+      ['paid_operation:invoke', 'paid_operation:admin'],
+      ['paid_operation:*'],
+      ['paid_operation:invoke', ...Array.from({ length: 32 }, (_, index) => `other_${index}:read`)],
+    ] as const
+
+    for (const scopes of invalidScopeSets) {
+      const fetch = vi.fn<typeof globalThis.fetch>()
+        .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+        .mockResolvedValueOnce(Response.json(acceptanceUser()))
+
+      await expect(withTemporaryClerkApiKey({
+        clerkSecretKey: 'sk_test_server',
+        expectedInstanceId: 'ins_expected',
+        subject: 'user_acceptance',
+        requiredScope: 'paid_operation:invoke',
+        scopes,
+        fetch,
+        run: async () => undefined,
+      })).rejects.toThrow('temporary_agent_key_scopes_invalid')
+      expect(fetch).toHaveBeenCalledTimes(2)
+    }
+  })
+
+  it('rejects an unsupported required scope before creating a temporary key', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json(acceptanceUser()))
+
+    await expect(withTemporaryClerkApiKey({
+      clerkSecretKey: 'sk_test_server',
+      expectedInstanceId: 'ins_expected',
+      subject: 'user_acceptance',
+      requiredScope: 'administration:write',
+      scopes: ['administration:write'],
+      fetch,
+      run: async () => undefined,
+    })).rejects.toThrow('temporary_agent_key_scopes_invalid')
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
   it('preserves the journey failure when revocation also fails', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'production' }))

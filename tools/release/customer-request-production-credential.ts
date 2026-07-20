@@ -8,7 +8,14 @@ import {
   runCustomerRequestProductionSmoke,
 } from './customer-request-production-smoke'
 
-const REQUIRED_SCOPE = 'customer_requests:create'
+const DEFAULT_REQUIRED_SCOPE = 'customer_requests:create'
+const ALLOWED_TEMPORARY_KEY_SCOPES = {
+  'customer_requests:create': [
+    'customer_requests:create',
+    'customer_requests:standing_authority',
+  ],
+  'paid_operation:invoke': ['paid_operation:invoke'],
+} as const
 const ACCEPTANCE_PRIMARY_EMAIL = 'joel@agentic-economy.ai'
 const CLERK_API = 'https://api.clerk.com/v1'
 const instanceSchema = z.looseObject({ id: z.string().min(1), environment_type: z.string().min(1) })
@@ -78,6 +85,7 @@ export async function withTemporaryClerkApiKey(input: Readonly<{
   clerkSecretKey: string
   expectedInstanceId: string
   subject: string
+  requiredScope?: string
   scopes?: readonly string[]
   fetch: typeof globalThis.fetch
   run: (apiKey: string, identity: Readonly<{ credentialId: string }>) => Promise<void>
@@ -147,11 +155,12 @@ async function clerkAcceptanceHeaders(input: Readonly<{
 
 async function withTemporaryAgentKey(input: Readonly<{
   subject: string; fetch: typeof globalThis.fetch; headers: Record<string, string>
+  requiredScope?: string
   scopes?: readonly string[]
   keyNamePrefix?: string; revocationReason?: string
   run: (apiKey: string, identity: Readonly<{ credentialId: string }>) => Promise<void>
 }>): Promise<void> {
-  const scopes = temporaryKeyScopes(input.scopes)
+  const scopes = temporaryKeyScopes(input.scopes, input.requiredScope)
   const createdValue = await readClerkJson(input.fetch, `${CLERK_API}/api_keys`, {
     method: 'POST', headers: input.headers,
     body: JSON.stringify({
@@ -189,11 +198,21 @@ async function withTemporaryAgentKey(input: Readonly<{
   if (revocationFailure !== undefined) throw revocationFailure
 }
 
-function temporaryKeyScopes(scopes: readonly string[] | undefined): readonly string[] {
-  const selected = scopes ?? [REQUIRED_SCOPE]
+function temporaryKeyScopes(
+  scopes: readonly string[] | undefined,
+  requiredScope = DEFAULT_REQUIRED_SCOPE,
+): readonly string[] {
+  const selected = scopes ?? [requiredScope]
+  const allowed = Object.hasOwn(ALLOWED_TEMPORARY_KEY_SCOPES, requiredScope)
+    ? ALLOWED_TEMPORARY_KEY_SCOPES[
+      requiredScope as keyof typeof ALLOWED_TEMPORARY_KEY_SCOPES
+    ]
+    : undefined
   if (selected.length === 0 || selected.length > 32
     || selected.some((scope) => !/^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$/u.test(scope))
-    || !selected.includes(REQUIRED_SCOPE)) {
+    || allowed === undefined
+    || !selected.includes(requiredScope)
+    || selected.some((scope) => !(allowed as readonly string[]).includes(scope))) {
     throw new Error('temporary_agent_key_scopes_invalid')
   }
   return [...new Set(selected)].sort()
