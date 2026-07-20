@@ -150,6 +150,20 @@ const currentAttempt = v.object({
   outcome: durableAttemptOutcomeValue,
 })
 
+const trustedObservationGuard = v.union(
+  v.object({
+    kind: v.literal('mock_effect_absent'),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+  }),
+  v.object({
+    kind: v.literal('mock_effect_digest'),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+    observationDigest: v.string(),
+  }),
+)
+
 /**
  * One source-owned creation transaction. Provider/source interpretation,
  * neutral continuity, payment preparation and the creation command become
@@ -208,12 +222,19 @@ export const createInitial = internalMutation({
         q.eq('policyRef', reservation.policyRef)
           .eq('principalRef', reservation.principalRef))
       .unique()
+    const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
+      .withIndex('by_policyRef_and_principalRef', (q) =>
+        q.eq('policyRef', reservation.policyRef)
+          .eq('principalRef', reservation.principalRef))
+      .unique()
+    const recordedAt = canonicalIsoTimestamp(args.recordedAt)
+    const admissionEndsAt = canonicalIsoTimestamp(policy?.admissionEndsAt)
     if (policy === null
       || !policy.enabled
-      || policy.policyDigest === undefined
-      || reservation.policyDigest !== policy.policyDigest
-      || policy.admissionEndsAt === undefined
-      || Date.parse(args.recordedAt) >= Date.parse(policy.admissionEndsAt)) {
+      || recordedAt === undefined
+      || admissionEndsAt === undefined
+      || recordedAt >= admissionEndsAt
+      || !admissionCounterExact(policy, reservation, counter)) {
       return { kind: 'refused' as const, code: 'admission_reservation_invalid' as const }
     }
 
@@ -425,6 +446,7 @@ export const transact = internalMutation({
     commandDigest: v.string(),
     expectedInvocationVersion: v.number(),
     expectedEffectGeneration: v.optional(v.number()),
+    trustedObservationGuard: v.optional(trustedObservationGuard),
     nextInvocationVersion: v.number(),
     nextEffectGeneration: v.optional(v.number()),
     selectedSource: sourceRow,
@@ -490,6 +512,34 @@ export const transact = internalMutation({
     if (args.control.owner.principalRef !== args.ownerPrincipalRef) {
       return { kind: 'refused' as const, code: 'cross_principal_refused' as const }
     }
+    const storedControl = await ctx.db.query('actionInvocationControls')
+      .withIndex('by_invocationRef', (q) => q.eq('invocationRef', args.invocationRef))
+      .unique()
+    if (storedControl === null) {
+      return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
+    }
+    const observationGuard = args.trustedObservationGuard
+    if (observationGuard !== undefined) {
+      if (observationGuard.attemptRef !== storedControl.currentAttemptRef
+        || observationGuard.effectGeneration !== storedControl.currentEffectGeneration
+        || observationGuard.effectGeneration !== header.currentEffectGeneration
+        || observationGuard.effectGeneration !== args.expectedEffectGeneration) {
+        return { kind: 'refused' as const, code: 'trusted_observation_changed' as const }
+      }
+      const effect = await ctx.db.query('hostedPaidOperationMockEffects')
+        .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (q) =>
+          q.eq('invocationRef', args.invocationRef)
+            .eq('attemptRef', observationGuard.attemptRef)
+            .eq('effectGeneration', observationGuard.effectGeneration))
+        .unique()
+      const observationChanged = observationGuard.kind === 'mock_effect_absent'
+        ? effect !== null
+        : effect === null
+          || canonicalDigest(mockEffectObservation(effect)) !== observationGuard.observationDigest
+      if (observationChanged) {
+        return { kind: 'refused' as const, code: 'trusted_observation_changed' as const }
+      }
+    }
     const admissionRelease = args.releaseAdmission
       ? await prepareAdmissionRelease(ctx, {
           reservationRef: header.admissionReservationRef,
@@ -530,13 +580,7 @@ export const transact = internalMutation({
     if (source === null) await ctx.db.insert('hostedPaidOperationSources', sourceWrite)
     else await ctx.db.replace(source._id, sourceWrite)
 
-    const control = await ctx.db.query('actionInvocationControls')
-      .withIndex('by_invocationRef', (q) => q.eq('invocationRef', args.invocationRef))
-      .unique()
-    if (control === null) {
-      return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
-    }
-    await ctx.db.replace(control._id, {
+    await ctx.db.replace(storedControl._id, {
       invocationRef: args.invocationRef,
       invocationVersion: args.nextInvocationVersion,
       control: {
@@ -791,12 +835,11 @@ export const checkAdmissionForInvocation = internalQuery({
       .withIndex('by_policyRef_and_principalRef', (q) =>
         q.eq('policyRef', reservation.policyRef).eq('principalRef', args.principalRef))
       .unique()
+    const admissionEndsAt = canonicalIsoTimestamp(policy?.admissionEndsAt)
     return policy?.enabled === true
-      && policy.policyDigest !== undefined
-      && reservation.policyDigest === policy.policyDigest
-      && policy.admissionEndsAt !== undefined
-      && Date.now() < Date.parse(policy.admissionEndsAt)
-      && counter !== null && counter.active > 0
+      && admissionEndsAt !== undefined
+      && Date.now() < admissionEndsAt
+      && admissionCounterExact(policy, reservation, counter)
       ? { kind: 'active' as const, reservationRef: reservation.reservationRef }
       : { kind: 'refused' as const, code: 'trial_disabled' as const }
   },
@@ -886,22 +929,16 @@ export const recordMockEffect = internalMutation({
         .withIndex('by_policyRef_and_principalRef', (q) =>
           q.eq('policyRef', reservation.policyRef).eq('principalRef', args.principalRef))
         .unique()
-    const effectRecordedAt = Date.parse(args.recordedAt)
-    const admissionEndsAt = policy?.admissionEndsAt === undefined
-      ? Number.NaN
-      : Date.parse(policy.admissionEndsAt)
+    const effectRecordedAt = canonicalIsoTimestamp(args.recordedAt)
+    const admissionEndsAt = canonicalIsoTimestamp(policy?.admissionEndsAt)
     if (reservation === null
       || reservation.principalRef !== args.principalRef
       || reservation.state !== 'active'
-      || reservation.policyDigest === undefined
-      || counter === null
-      || counter.policyDigest !== reservation.policyDigest
-      || counter.active < 1
       || policy?.enabled !== true
-      || policy.policyDigest !== reservation.policyDigest
-      || !Number.isFinite(effectRecordedAt)
-      || !Number.isFinite(admissionEndsAt)
-      || effectRecordedAt >= admissionEndsAt) {
+      || effectRecordedAt === undefined
+      || admissionEndsAt === undefined
+      || Date.now() >= admissionEndsAt
+      || !admissionCounterExact(policy, reservation, counter)) {
       return { kind: 'refused' as const, code: 'trial_disabled_or_inactive' as const }
     }
     const row = {
@@ -941,13 +978,15 @@ export const configurePhase3CAdmission = internalMutation({
     recordedAt: v.string(),
   },
   handler: async (ctx, args) => {
-    const recordedAt = Date.parse(args.recordedAt)
-    const admissionEndsAt = Date.parse(args.admissionEndsAt)
-    const retainThrough = Date.parse(args.retainThrough)
+    const recordedAt = canonicalIsoTimestamp(args.recordedAt)
+    const admissionEndsAt = canonicalIsoTimestamp(args.admissionEndsAt)
+    const retainThrough = canonicalIsoTimestamp(args.retainThrough)
     if (!/^[0-9a-f]{40}$/u.test(args.sourceRevision)
       || args.evaluatorPrincipalRef.trim() === ''
       || args.killSwitchOwner.trim() === ''
-      || ![recordedAt, admissionEndsAt, retainThrough].every(Number.isFinite)
+      || recordedAt === undefined
+      || admissionEndsAt === undefined
+      || retainThrough === undefined
       || !(recordedAt < admissionEndsAt && admissionEndsAt <= retainThrough)
       || !Number.isSafeInteger(args.totalLimit) || args.totalLimit < 1 || args.totalLimit > 3
       || args.concurrencyLimit !== 1
@@ -1078,6 +1117,45 @@ export const readMockEffectObservation = internalQuery({
       : { kind: 'observed' as const, observation: mockEffectObservation(effect) }
   },
 })
+
+function canonicalIsoTimestamp(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const timestamp = Date.parse(value)
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== value) {
+    return undefined
+  }
+  return timestamp
+}
+
+function admissionCounterExact(
+  policy: Readonly<{
+    policyDigest?: string
+    totalLimit: number
+    concurrencyLimit: number
+    rateLimit: number
+  }>,
+  reservation: Readonly<{ policyDigest?: string }>,
+  counter: Readonly<{
+    policyDigest?: string
+    admittedTotal: number
+    active: number
+    admittedInWindow: number
+  }> | null,
+): boolean {
+  return policy.policyDigest !== undefined
+    && reservation.policyDigest === policy.policyDigest
+    && counter !== null
+    && counter.policyDigest === policy.policyDigest
+    && policy.concurrencyLimit === 1
+    && Number.isSafeInteger(counter.admittedTotal)
+    && counter.admittedTotal >= 1
+    && counter.admittedTotal <= policy.totalLimit
+    && Number.isSafeInteger(counter.active)
+    && counter.active === 1
+    && Number.isSafeInteger(counter.admittedInWindow)
+    && counter.admittedInWindow >= 1
+    && counter.admittedInWindow <= policy.rateLimit
+}
 
 function isAdmissionClosed(control: Readonly<{ state: string; reason?: string }>): boolean {
   return control.state === 'terminal'

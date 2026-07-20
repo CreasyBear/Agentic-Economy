@@ -42,6 +42,19 @@ export type HostedPaidOperationLoadResult<Result extends ActionResult> =
   | Readonly<{ kind: 'not_found' }>
   | Readonly<{ kind: 'aggregate_incomplete'; reason: HostedAggregateIncompleteReason }>
 
+export type HostedPaidOperationTrustedObservationGuard =
+  | Readonly<{
+      kind: 'mock_effect_absent'
+      attemptRef: string
+      effectGeneration: number
+    }>
+  | Readonly<{
+      kind: 'mock_effect_digest'
+      attemptRef: string
+      effectGeneration: number
+      observationDigest: string
+    }>
+
 export type HostedPaidOperationTransaction<Result extends ActionResult> = Readonly<{
   owner: InvocationActor
   invocationRef: string
@@ -49,6 +62,7 @@ export type HostedPaidOperationTransaction<Result extends ActionResult> = Readon
   commandDigest: string
   expectedInvocationVersion: number
   expectedEffectGeneration?: number
+  trustedObservationGuard?: HostedPaidOperationTrustedObservationGuard
   next: HostedPaidOperationAggregate<Result>
 }>
 
@@ -82,6 +96,7 @@ export type HostedPaidOperationTransactionResult =
         | 'cross_principal_refused'
         | 'stale_invocation_version'
         | 'effect_generation_stale'
+        | 'trusted_observation_changed'
         | 'aggregate_incomplete'
     }>
 
@@ -221,6 +236,9 @@ export function createInMemoryHostedPaidOperationPort<Result extends ActionResul
       if (input.expectedEffectGeneration !== undefined
         && current.header.currentEffectGeneration !== input.expectedEffectGeneration) {
         return { kind: 'refused', code: 'effect_generation_stale' }
+      }
+      if (input.trustedObservationGuard !== undefined) {
+        return { kind: 'refused', code: 'trusted_observation_changed' }
       }
       if (aggregateIncomplete(input.next) !== undefined) {
         return { kind: 'refused', code: 'aggregate_incomplete' }

@@ -21,6 +21,7 @@ import {
   type HostedPaidOperationAggregate,
   type HostedPaidOperationLoadResult,
   type HostedPaidOperationTransactionResult,
+  type HostedPaidOperationTrustedObservationGuard,
 } from '../src/modules/action-invocation/hosted-paid-operation-port'
 import {
   type HostedPaidOperationServiceIntent,
@@ -662,6 +663,19 @@ async function reconcileAuthenticatedIntent(
   if (!mockObservationMatches(begun.aggregate, observationResult.observation)) {
     return { kind: 'refused', code: 'aggregate_incomplete' }
   }
+  const trustedObservationGuard: HostedPaidOperationTrustedObservationGuard =
+    observationResult.observation.effect === 'not_released'
+      ? {
+          kind: 'mock_effect_absent',
+          attemptRef: currentAttempt.attemptRef,
+          effectGeneration: currentAttempt.effectGeneration,
+        }
+      : {
+          kind: 'mock_effect_digest',
+          attemptRef: currentAttempt.attemptRef,
+          effectGeneration: currentAttempt.effectGeneration,
+          observationDigest: canonicalDigest(observationResult.observation),
+        }
   const observedAt = new Date(Date.now()).toISOString()
   const boundPayment = boundPaymentAttempt(begun.aggregate, currentAttempt, observedAt)
   const trusted = trustedObservationEvidence(
@@ -740,6 +754,7 @@ async function reconcileAuthenticatedIntent(
           commandDigest: begun.commandDigest,
           expectedInvocationVersion: intent.expectedInvocationVersion,
           expectedEffectGeneration: currentAttempt.effectGeneration,
+          trustedObservationGuard,
           next,
         }, observedAt),
       ) as InternalRefusal | InternalDuplicate | Applied
@@ -1346,6 +1361,7 @@ function serializeTransaction(
     commandDigest: string
     expectedInvocationVersion: number
     expectedEffectGeneration?: number
+    trustedObservationGuard?: HostedPaidOperationTrustedObservationGuard
     next: HostedAggregate
   }>,
   recordedAt: string,
@@ -1363,6 +1379,9 @@ function serializeTransaction(
     ...(transaction.expectedEffectGeneration === undefined
       ? {}
       : { expectedEffectGeneration: transaction.expectedEffectGeneration }),
+    ...(transaction.trustedObservationGuard === undefined
+      ? {}
+      : { trustedObservationGuard: transaction.trustedObservationGuard }),
     nextInvocationVersion: next.invocation.invocationVersion,
     ...(attempt === undefined ? {} : { nextEffectGeneration: attempt.effectGeneration }),
     selectedSource: serializeSelectedSource(next),

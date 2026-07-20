@@ -10,7 +10,9 @@ import {
   HOSTED_PAID_OPERATION_SERVICE_TOKEN_TTL_MS,
   verifyHostedPaidOperationServiceToken,
 } from '@/modules/action-invocation/hosted-paid-operation-service-auth'
+import type { HostedPaidOperationAggregate } from '@/modules/action-invocation/hosted-paid-operation-port'
 import type { PaidOperationProjection } from '@/modules/action-invocation/paid-operation-application-service'
+import type { ActionResult } from '@/modules/common/action'
 
 const handler = readFileSync('convex/actionInvocationControl.ts', 'utf8')
 const hostedGateway = readFileSync('convex/hostedPaidOperationGateway.ts', 'utf8')
@@ -71,6 +73,33 @@ const beginAuthenticatedExecute = makeFunctionReference<
   | Readonly<{ kind: 'duplicate'; invocationVersion: number }>
   | Readonly<{ kind: 'refused'; code: string }>
 >('hostedPaidOperationGateway:beginAuthenticatedExecute')
+const beginAuthenticatedReconcile = makeFunctionReference<
+  'mutation',
+  {
+    principalRef: string
+    callerRef: string
+    invocationRef: string
+    commandId: string
+    expectedInvocationVersion: number
+  },
+  | Readonly<{
+      kind: 'ready'
+      aggregate: HostedPaidOperationAggregate<ActionResult>
+      commandDigest: string
+    }>
+  | Readonly<{ kind: 'duplicate'; invocationVersion: number }>
+  | Readonly<{ kind: 'refused'; code: string }>
+>('hostedPaidOperationGateway:beginAuthenticatedReconcile')
+const transact = makeFunctionReference<
+  'mutation',
+  Record<string, unknown>,
+  | Readonly<{
+      kind: 'applied' | 'duplicate'
+      invocationVersion: number
+      effectGeneration?: number
+    }>
+  | Readonly<{ kind: 'refused'; code: string }>
+>('hostedPaidOperation:transact')
 const recordMockEffect = makeFunctionReference<
   'mutation',
   {
@@ -694,6 +723,122 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       admissionReservationState: 'active',
       admissionCounterActive: 1,
     })
+    await expect(backend.mutation(recordMockEffect, {
+      principalRef: ownerIdentity.subject,
+      callerRef: ownerIdentity.tokenIdentifier,
+      invocationRef: created.invocationRef,
+      attemptRef: begun.attemptRef,
+      effectGeneration: begun.effectGeneration,
+      recordedAt: '2026-07-20T00:00:01.000Z',
+    })).resolves.toEqual({ kind: 'refused', code: 'effect_lineage_not_current' })
+    expect((await effectFacts(backend, created.invocationRef)).effectCount).toBe(0)
+  })
+
+  it('atomically refuses a stale trusted not-released observation when the effect wins the race', async () => {
+    const backend = convexTest(schema, modules)
+    await admitOwner(backend)
+    const owner = backend.withIdentity(ownerIdentity)
+    const created = await createFor(owner, 'A')
+    await authorize(owner, created.invocationRef, 'command:authorize:effect-race')
+    const begun = await backend.mutation(beginAuthenticatedExecute, {
+      principalRef: ownerIdentity.subject,
+      callerRef: ownerIdentity.tokenIdentifier,
+      invocationRef: created.invocationRef,
+      commandId: 'command:execute:effect-race',
+      expectedInvocationVersion: 2,
+    })
+    expect(begun.kind).toBe('ready')
+    if (begun.kind !== 'ready') return
+    const reconciliation = await backend.mutation(beginAuthenticatedReconcile, {
+      principalRef: ownerIdentity.subject,
+      callerRef: ownerIdentity.tokenIdentifier,
+      invocationRef: created.invocationRef,
+      commandId: 'command:reconcile:effect-race',
+      expectedInvocationVersion: 4,
+    })
+    expect(reconciliation.kind).toBe('ready')
+    if (reconciliation.kind !== 'ready') return
+    await expect(backend.query(readMockEffectObservation, {
+      principalRef: ownerIdentity.subject,
+      callerRef: ownerIdentity.tokenIdentifier,
+      invocationRef: created.invocationRef,
+      attemptRef: begun.attemptRef,
+      effectGeneration: begun.effectGeneration,
+    })).resolves.toMatchObject({
+      kind: 'observed',
+      observation: { effect: 'not_released', payment: 'not_submitted' },
+    })
+    await expect(backend.mutation(recordMockEffect, {
+      principalRef: ownerIdentity.subject,
+      callerRef: ownerIdentity.tokenIdentifier,
+      invocationRef: created.invocationRef,
+      attemptRef: begun.attemptRef,
+      effectGeneration: begun.effectGeneration,
+      recordedAt: '2026-07-20T00:00:01.000Z',
+    })).resolves.toMatchObject({
+      kind: 'recorded',
+      observation: { effect: 'released', payment: 'settled' },
+    })
+
+    await expect(backend.mutation(transact, convexTransactionCommand({
+      ownerPrincipalRef: ownerIdentity.subject,
+      ownerCallerRef: ownerIdentity.tokenIdentifier,
+      commandId: 'command:reconcile:effect-race',
+      commandDigest: reconciliation.commandDigest,
+      expectedInvocationVersion: 4,
+      aggregate: reconciliation.aggregate,
+      trustedObservationGuard: {
+        kind: 'mock_effect_absent',
+        attemptRef: begun.attemptRef,
+        effectGeneration: begun.effectGeneration,
+      },
+      recordedAt: '2026-07-20T00:00:02.000Z',
+    }))).resolves.toEqual({ kind: 'refused', code: 'trusted_observation_changed' })
+    await expect(backend.mutation(transact, convexTransactionCommand({
+      ownerPrincipalRef: ownerIdentity.subject,
+      ownerCallerRef: ownerIdentity.tokenIdentifier,
+      commandId: 'command:reconcile:effect-race',
+      commandDigest: reconciliation.commandDigest,
+      expectedInvocationVersion: 4,
+      aggregate: reconciliation.aggregate,
+      trustedObservationGuard: {
+        kind: 'mock_effect_digest',
+        attemptRef: begun.attemptRef,
+        effectGeneration: begun.effectGeneration,
+        observationDigest: `sha256:${'f'.repeat(64)}`,
+      },
+      recordedAt: '2026-07-20T00:00:02.000Z',
+    }))).resolves.toEqual({ kind: 'refused', code: 'trusted_observation_changed' })
+    expect(await effectFacts(backend, created.invocationRef)).toMatchObject({
+      invocationVersion: 4,
+      currentEffectGeneration: 1,
+      attemptCount: 1,
+      effectCount: 1,
+    })
+
+    const reconciled = await owner.action(authenticatedCommand, {
+      invocationRef: created.invocationRef,
+      commandId: 'command:reconcile:effect-race',
+      expectedInvocationVersion: 4,
+      command: 'reconcile',
+    })
+    expect(reconciled).toMatchObject({
+      kind: 'accepted',
+      value: {
+        semantics: {
+          identity: { expectedInvocationVersion: 5 },
+          queryRelease: { state: 'released' },
+          paymentSubmission: { state: 'observed' },
+          continuations: [{ kind: 'inspect' }],
+        },
+      },
+    })
+    expect(await effectFacts(backend, created.invocationRef)).toMatchObject({
+      invocationVersion: 5,
+      currentEffectGeneration: 1,
+      attemptCount: 1,
+      effectCount: 1,
+    })
   })
 
   it('rechecks a disabled trial before pre-release while preserving inspect and lifecycle rules', async () => {
@@ -737,6 +882,46 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       admissionReservationState: 'active',
       admissionCounterActive: 1,
     })
+  })
+
+  it('refuses counter digest or bound drift before execute changes durable invocation state', async () => {
+    const corruptions = [
+      { policyDigest: `sha256:${'b'.repeat(64)}` },
+      { admittedTotal: 0 },
+      { admittedTotal: 4 },
+      { active: 2 },
+      { admittedInWindow: 0 },
+      { admittedInWindow: 3 },
+      { admittedTotal: 1.5 },
+    ] as const
+    for (const [index, corruption] of corruptions.entries()) {
+      const backend = convexTest(schema, modules)
+      await admitOwner(backend)
+      const owner = backend.withIdentity(ownerIdentity)
+      const created = await createFor(owner, 'A')
+      await authorize(owner, created.invocationRef, `command:authorize:counter:${index}`)
+      await backend.run(async (ctx) => {
+        const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
+          .withIndex('by_policyRef_and_principalRef', (q) =>
+            q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial')
+              .eq('principalRef', ownerIdentity.subject))
+          .unique()
+        if (counter === null) throw new Error('test_counter_missing')
+        await ctx.db.patch(counter._id, corruption)
+      })
+
+      await expect(owner.action(authenticatedCommand, {
+        invocationRef: created.invocationRef,
+        commandId: `command:execute:counter:${index}`,
+        expectedInvocationVersion: 2,
+        command: 'execute',
+      })).resolves.toEqual({ kind: 'refused', code: 'trial_disabled' })
+      expect(await effectFacts(backend, created.invocationRef)).toMatchObject({
+        invocationVersion: 2,
+        attemptCount: 0,
+        effectCount: 0,
+      })
+    }
   })
 
   it('atomically refuses the effect when the kill switch changes after pre-release persistence', async () => {
@@ -847,7 +1032,9 @@ describe('authenticated hosted paid-operation intent gateway', () => {
         invocationRef: created.invocationRef,
         attemptRef: begun.attemptRef,
         effectGeneration: begun.effectGeneration,
-        recordedAt: '2026-07-20T00:00:00.000Z',
+        recordedAt: drift === 'expired'
+          ? '1900-01-01T00:00:00.000Z'
+          : '2026-07-20T00:00:00.000Z',
       })).resolves.toEqual({ kind: 'refused', code: 'trial_disabled_or_inactive' })
       expect(await effectFacts(backend, created.invocationRef)).toMatchObject({
         invocationVersion: 4,
@@ -945,6 +1132,113 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     }
   })
 })
+
+function convexTransactionCommand(input: Readonly<{
+  ownerPrincipalRef: string
+  ownerCallerRef: string
+  commandId: string
+  commandDigest: string
+  expectedInvocationVersion: number
+  aggregate: HostedPaidOperationAggregate<ActionResult>
+  trustedObservationGuard:
+    | Readonly<{
+        kind: 'mock_effect_absent'
+        attemptRef: string
+        effectGeneration: number
+      }>
+    | Readonly<{
+        kind: 'mock_effect_digest'
+        attemptRef: string
+        effectGeneration: number
+        observationDigest: string
+      }>
+  recordedAt: string
+}>): Record<string, unknown> {
+  const aggregate = input.aggregate
+  const prepared = aggregate.invocation.prepared
+  const authority = aggregate.invocation.authority
+  const attempt = aggregate.invocation.attempts.at(-1)
+  const payment = aggregate.paymentAttempt
+  if (prepared === undefined || authority === undefined || attempt === undefined
+    || payment === undefined) {
+    throw new Error('test_transaction_aggregate_incomplete')
+  }
+  const opaque = (reference: string) => ({
+    algorithm: 'sha256' as const,
+    digest: reference.slice('sha256:'.length),
+  })
+  return {
+    ownerPrincipalRef: input.ownerPrincipalRef,
+    ownerCallerRef: input.ownerCallerRef,
+    invocationRef: aggregate.invocation.invocationRef,
+    commandId: input.commandId,
+    commandDigest: input.commandDigest,
+    expectedInvocationVersion: input.expectedInvocationVersion,
+    expectedEffectGeneration: attempt.effectGeneration,
+    nextInvocationVersion: input.expectedInvocationVersion + 1,
+    nextEffectGeneration: attempt.effectGeneration,
+    selectedSource: {
+      sourceRef: aggregate.header.selectedSourceRef,
+      providerId: aggregate.interpretation.operation.providerId,
+      providerName: aggregate.interpretation.operation.providerName,
+      operationKey: aggregate.interpretation.operation.operationKey,
+      operationRevision: aggregate.interpretation.operation.operationRevision,
+      materialInputDigest: prepared.materialInputDigest,
+      materialInputs: aggregate.interpretation.operation.materialInputs,
+      prepared,
+      presentation: aggregate.interpretation.presentation,
+      maximumAuthorizedCharge: aggregate.interpretation.maximumAuthorizedCharge,
+      queryRecipient: aggregate.interpretation.queryRecipient,
+      resultDelivery: aggregate.interpretation.resultDelivery,
+      environment: aggregate.interpretation.environment,
+      observedResolution: aggregate.invocation.observedResolution,
+    },
+    control: {
+      origin: aggregate.invocation.origin,
+      owner: aggregate.invocation.owner,
+      action: aggregate.invocation.action,
+      desired: aggregate.invocation.desired,
+      prepared,
+      authority,
+      acceptedAuthority: aggregate.invocation.acceptedAuthority,
+      freshness: aggregate.invocation.freshness,
+      control: aggregate.invocation.control,
+    },
+    currentAttempt: {
+      attemptRef: attempt.attemptRef,
+      attemptNumber: attempt.attemptNumber,
+      effectGeneration: attempt.effectGeneration,
+      actor: attempt.actor,
+      idempotency: attempt.idempotency,
+      lease: attempt.lease,
+      release: attempt.release,
+      outcome: attempt.outcome,
+    },
+    payment: {
+      attemptRef: attempt.attemptRef,
+      effectGeneration: attempt.effectGeneration,
+      paymentIdentifier: payment.paymentIdentifier,
+      custodyReference: opaque(payment.custodyRef),
+      state: payment.state,
+      ...(payment.settledAmount === undefined
+        ? {}
+        : {
+            settledCurrency: payment.settledAmount.currency,
+            settledAmountMinor: payment.settledAmount.amountMinor,
+          }),
+    },
+    evidenceReferences: aggregate.evidenceReferences.map((reference) => ({
+      attemptRef: attempt.attemptRef,
+      effectGeneration: attempt.effectGeneration,
+      evidenceKind: 'hosted-sandbox-observation',
+      evidenceReference: opaque(reference),
+    })),
+    trustedObservationGuard: input.trustedObservationGuard,
+    submissionStarted: false,
+    releaseAdmission: false,
+    recordedAt: input.recordedAt,
+  }
+}
 
 function publicArgs(symbol: string): string {
   const match = hostedGateway.match(new RegExp(

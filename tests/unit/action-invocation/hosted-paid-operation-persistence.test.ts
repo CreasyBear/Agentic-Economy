@@ -120,6 +120,16 @@ describe('hosted paid-operation durable boundary', () => {
         state: 'active',
         updatedAt: '2026-07-20T00:00:00.000Z',
       })
+      await ctx.db.insert('hostedPaidOperationAdmissionCounters', {
+        policyRef: 'policy:trial',
+        principalRef: initial.invocation.owner.principalRef,
+        policyDigest,
+        currentWindowKey: 'window:creation',
+        admittedTotal: 1,
+        active: 1,
+        admittedInWindow: 1,
+        updatedAt: '2026-07-20T00:00:00.000Z',
+      })
     })
     const command = convexInitialCommand(initial, {
       creationCommandId: 'creation:paid:1',
@@ -129,6 +139,15 @@ describe('hosted paid-operation durable boundary', () => {
     })
 
     await expect(backend.mutation(createInitial, command)).resolves.toEqual({ kind: 'created' })
+    await backend.run(async (ctx) => {
+      const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
+        .withIndex('by_policyRef_and_principalRef', (q) =>
+          q.eq('policyRef', 'policy:trial')
+            .eq('principalRef', initial.invocation.owner.principalRef))
+        .unique()
+      if (counter === null) throw new Error('test_counter_missing')
+      await ctx.db.patch(counter._id, { active: 0 })
+    })
     await expect(backend.mutation(createInitial, command)).resolves.toEqual({ kind: 'duplicate' })
     await expect(backend.mutation(createInitial, {
       ...command,
@@ -164,6 +183,89 @@ describe('hosted paid-operation durable boundary', () => {
       paginationOpts: { numItems: 20, cursor: null },
     })
     expect(cold).toEqual({ kind: 'loaded', aggregate: initial })
+  })
+
+  it('creates no aggregate rows when a prior reservation counter is missing, drifted, or out of bounds', async () => {
+    for (const corruption of ['missing', 'digest', 'bounds'] as const) {
+      const backend = convexTest(schema, modules)
+      const initial = initialAggregate()
+      const policyDigest = `sha256:${'a'.repeat(64)}`
+      const command = convexInitialCommand(initial, {
+        creationCommandId: `creation:counter:${corruption}`,
+        creationCommandDigest: `sha256:${'d'.repeat(64)}`,
+        reservationRef: `trial-reservation:${corruption}`,
+        recordedAt: '2026-07-20T00:00:00.000Z',
+      })
+      await backend.run(async (ctx) => {
+        await ctx.db.insert('hostedPaidOperationAdmissionPolicies', {
+          policyRef: 'policy:trial',
+          enabled: true,
+          principalRef: initial.invocation.owner.principalRef,
+          totalLimit: 3,
+          concurrencyLimit: 1,
+          rateLimit: 2,
+          policyDigest,
+          sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
+          admissionEndsAt: '9999-12-30T00:00:00.000Z',
+          retainThrough: '9999-12-31T00:00:00.000Z',
+          killSwitchOwner: 'operator:phase3c',
+          recordedAt: '2026-07-20T00:00:00.000Z',
+        })
+        await ctx.db.insert('hostedPaidOperationAdmissionReservations', {
+          reservationRef: command.reservationRef,
+          policyRef: 'policy:trial',
+          principalRef: initial.invocation.owner.principalRef,
+          policyDigest,
+          state: 'active',
+          updatedAt: '2026-07-20T00:00:00.000Z',
+        })
+        if (corruption !== 'missing') {
+          await ctx.db.insert('hostedPaidOperationAdmissionCounters', {
+            policyRef: 'policy:trial',
+            principalRef: initial.invocation.owner.principalRef,
+            policyDigest: corruption === 'digest'
+              ? `sha256:${'b'.repeat(64)}`
+              : policyDigest,
+            currentWindowKey: 'window:creation',
+            admittedTotal: corruption === 'bounds' ? 4 : 1,
+            active: 1,
+            admittedInWindow: 1,
+            updatedAt: '2026-07-20T00:00:00.000Z',
+          })
+        }
+      })
+
+      await expect(backend.mutation(createInitial, command)).resolves.toEqual({
+        kind: 'refused',
+        code: 'admission_reservation_invalid',
+      })
+      const rows = await backend.run(async (ctx) => ({
+        header: await ctx.db.query('hostedPaidOperationHeaders')
+          .withIndex('by_invocationRef', (q) => q.eq('invocationRef', command.invocationRef))
+          .unique(),
+        source: await ctx.db.query('hostedPaidOperationSources')
+          .withIndex('by_invocationRef_and_sourceRef', (q) =>
+            q.eq('invocationRef', command.invocationRef))
+          .take(1),
+        control: await ctx.db.query('actionInvocationControls')
+          .withIndex('by_invocationRef', (q) => q.eq('invocationRef', command.invocationRef))
+          .unique(),
+        payment: await ctx.db.query('hostedPaidOperationPayments')
+          .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
+            q.eq('invocationRef', command.invocationRef))
+          .take(1),
+        command: await ctx.db.query('hostedPaidOperationCommands')
+          .withIndex('by_commandId', (q) => q.eq('commandId', command.creationCommandId))
+          .unique(),
+      }))
+      expect(rows).toEqual({
+        header: null,
+        source: [],
+        control: null,
+        payment: [],
+        command: null,
+      })
+    }
   })
 
   it('creates initial aggregates idempotently and refuses stale or conflicting lineage', async () => {
@@ -461,6 +563,33 @@ describe('hosted paid-operation durable boundary', () => {
     await expect(backend.query(phase3CAdmissionStatus, {
       evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
     })).resolves.toMatchObject({ state: 'disabled' })
+  })
+
+  it('refuses every parseable but noncanonical Phase3C policy timestamp', async () => {
+    const configuration = {
+      evaluatorPrincipalRef: 'principal:phase3c-evaluator',
+      sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
+      totalLimit: 3,
+      concurrencyLimit: 1,
+      rateLimit: 3,
+      admissionEndsAt: '2026-07-21T00:00:00.000Z',
+      retainThrough: '2026-07-22T00:00:00.000Z',
+      killSwitchOwner: 'operator:phase3c',
+      recordedAt: '2026-07-20T00:00:00.000Z',
+    }
+    for (const invalid of [
+      { ...configuration, recordedAt: '2026-07-20' },
+      { ...configuration, recordedAt: '2026-07-20T00:00:00Z' },
+      { ...configuration, admissionEndsAt: '2026-07-21T00:00:00.000' },
+      { ...configuration, retainThrough: '07/22/2026' },
+    ]) {
+      const backend = convexTest(schema, modules)
+      await expect(backend.mutation(configurePhase3CAdmission, invalid))
+        .resolves.toEqual({ kind: 'refused', code: 'policy_invalid' })
+      await expect(backend.query(phase3CAdmissionStatus, {
+        evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
+      })).resolves.toEqual({ kind: 'unconfigured' })
+    }
   })
 
   it('rejects raw custody and evidence material and accepts only opaque digest references', async () => {
