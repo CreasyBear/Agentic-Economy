@@ -79,12 +79,18 @@ type ProviderCase = Readonly<{
   assertPacketTamperingRefuses: () => void
 }>
 
-function expectTamperRefused<T>(
+function clonePacketData<T extends Readonly<{ descriptor: unknown }>>(packet: T): T {
+  const { descriptor, ...data } = packet
+  const clonedData: Omit<T, 'descriptor'> = structuredClone(data)
+  return Object.assign(clonedData, { descriptor }) as T
+}
+
+function expectTamperRefused<T extends Readonly<{ descriptor: unknown }>>(
   build: () => T,
   verify: (packet: T) => void,
   tamper: (packet: T) => void,
 ): void {
-  const packet = structuredClone(build())
+  const packet = clonePacketData(build())
   tamper(packet)
   expect(() => verify(packet)).toThrow()
 }
