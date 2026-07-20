@@ -16,6 +16,7 @@ import { executableFixedPrice } from './dynamic-published-contract'
 import {
   x402PaymentAttemptKey,
   type X402PaymentAttempt,
+  type X402PaymentAttemptPort,
   type X402PaymentAuthorizationEvent,
 } from './x402-payment-attempt'
 
@@ -76,10 +77,11 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   prepared: DynamicPublishedPreparedTransport
   runtime: RouteTransportRuntime
   paymentAttempts?: Map<string, X402PaymentAttempt>
+  paymentAttemptPort?: X402PaymentAttemptPort
   paymentAuthorizationEvents?: Map<string, X402PaymentAuthorizationEvent>
   now?: () => number
 }>): Promise<DynamicPublishedInvocationResult> {
-  const runtime = input.paymentAttempts === undefined
+  const runtime = input.paymentAttempts === undefined && input.paymentAttemptPort === undefined
     ? input.runtime
     : createPaymentAttemptRuntime(
         input.runtime,
@@ -87,6 +89,7 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
         input.paymentAttempts,
         input.paymentAuthorizationEvents,
         input.now ?? Date.now,
+        input.paymentAttemptPort,
       )
   const eventKey = x402PaymentAttemptKey(input.prepared)
   let observation: Awaited<ReturnType<typeof invokePreparedRouteTransport>>
@@ -129,18 +132,20 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   const result = observationResult(input.operation, input.descriptor, observation)
   if (observation.paymentAuthorizationStatus === 'created'
     && result.kind !== 'published_operation_succeeded') {
-    if (input.paymentAttempts !== undefined) {
+    if (input.paymentAttempts !== undefined || input.paymentAttemptPort !== undefined) {
       const key = x402PaymentAttemptKey({
         invocationRef: input.prepared.invocationRef,
         attemptRef: input.prepared.attemptRef,
         effectGeneration: input.prepared.effectGeneration,
       })
-      const current = input.paymentAttempts.get(key)
+      const current = input.paymentAttemptPort?.load(key) ?? input.paymentAttempts?.get(key)
       if (current !== undefined) {
-        input.paymentAttempts.set(key, {
+        const updated = {
           ...current,
           state: 'reconciliation_required',
-        })
+        } as const
+        await input.paymentAttemptPort?.persist(updated)
+        input.paymentAttempts?.set(key, updated)
       }
     }
     throw new Error(
@@ -153,9 +158,10 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
 export function createPaymentAttemptRuntime(
   runtime: RouteTransportRuntime,
   prepared: DynamicPublishedPreparedTransport,
-  attempts: Map<string, X402PaymentAttempt>,
+  attempts: Map<string, X402PaymentAttempt> | undefined,
   authorizationEvents: Map<string, X402PaymentAuthorizationEvent> | undefined,
   now: () => number,
+  attemptPort?: X402PaymentAttemptPort,
 ): RouteTransportRuntime {
   const key = x402PaymentAttemptKey({
     invocationRef: prepared.invocationRef,
@@ -165,7 +171,7 @@ export function createPaymentAttemptRuntime(
   return {
     ...runtime,
     async prepareX402PaymentAuthorization(request) {
-      const current = attempts.get(key)
+      const current = attemptPort?.load(key) ?? attempts?.get(key)
       if (current !== undefined) {
         if (current.paymentIdentifier !== request.paymentIdentifier
           || current.challengeDigest !== request.challengeDigest
@@ -206,7 +212,8 @@ export function createPaymentAttemptRuntime(
         preparedAt: now(),
         evidenceRefs: [],
       }
-      attempts.set(key, paymentAttempt)
+      await attemptPort?.persist(paymentAttempt)
+      attempts?.set(key, paymentAttempt)
       authorizationEvents?.set(key, {
         invocationRef: prepared.invocationRef,
         attemptRef: prepared.attemptRef,
@@ -221,7 +228,7 @@ export function createPaymentAttemptRuntime(
       return authorization
     },
     async readX402PaymentAuthorization(authorization) {
-      const current = attempts.get(key)
+      const current = attemptPort?.load(key) ?? attempts?.get(key)
       if (current === undefined
         || current.state !== 'prepared'
         || current.custodyRef !== authorization.custodyRef
@@ -233,30 +240,34 @@ export function createPaymentAttemptRuntime(
       }
       return runtime.readX402PaymentAuthorization(authorization)
     },
-    markX402PaymentPossiblySubmitted(event) {
-      const current = attempts.get(key)
+    async markX402PaymentPossiblySubmitted(event) {
+      const current = attemptPort?.load(key) ?? attempts?.get(key)
       if (current === undefined
         || current.custodyRef !== event.custodyRef
         || current.challengeDigest !== event.challengeDigest) {
         throw new Error('x402_payment_attempt_attribution_invalid')
       }
-      attempts.set(key, {
+      const updated = {
         ...current,
         state: 'possibly_submitted',
         submissionStartedAt: now(),
-      })
+      } as const
+      await attemptPort?.persist(updated)
+      attempts?.set(key, updated)
     },
-    observeX402PaymentAttempt(event) {
-      const current = attempts.get(key)
+    async observeX402PaymentAttempt(event) {
+      const current = attemptPort?.load(key) ?? attempts?.get(key)
       if (current === undefined || current.custodyRef !== event.custodyRef) {
         throw new Error('x402_payment_attempt_attribution_invalid')
       }
-      attempts.set(key, {
+      const updated = {
         ...current,
         state: event.state,
         observedAt: now(),
         evidenceRefs: event.evidenceRefs,
-      })
+      } as const
+      await attemptPort?.persist(updated)
+      attempts?.set(key, updated)
     },
   }
 }

@@ -62,9 +62,11 @@ import {
   type InvocationInputWork,
 } from './input-work'
 import { createDynamicPublishedInputApplication } from './input-application'
-import type {
-  X402PaymentAttempt,
-  X402PaymentAuthorizationEvent,
+import {
+  createInMemoryX402PaymentAttemptPort,
+  type X402PaymentAttempt,
+  type X402PaymentAttemptPort,
+  type X402PaymentAuthorizationEvent,
 } from './x402-payment-attempt'
 
 export type DynamicPublishedAdapterSnapshot = Readonly<{
@@ -186,6 +188,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   inputWork?: readonly InvocationInputWork[]
   inputHistory?: readonly InvocationInputHistory[]
   paymentAttempts?: readonly X402PaymentAttempt[]
+  paymentAttemptPort?: X402PaymentAttemptPort
   paymentAuthorizationEvents?: readonly X402PaymentAuthorizationEvent[]
 }>): DynamicPublishedActionInvocationAdapter {
   const descriptor = materializeRuntimePublishedOperation(input.operation)
@@ -199,6 +202,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       attempt,
     ]),
   )
+  const paymentAttemptPort = input.paymentAttemptPort
+    ?? createInMemoryX402PaymentAttemptPort(input.paymentAttempts)
   const paymentAuthorizationEvents = new Map(
     (input.paymentAuthorizationEvents ?? []).map((event) => [
       `${event.invocationRef}\u0000${event.attemptRef}\u0000${event.effectGeneration}`,
@@ -345,6 +350,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         prepared,
         runtime: input.runtime,
         paymentAttempts,
+        paymentAttemptPort,
         paymentAuthorizationEvents,
         now: input.now,
       })
@@ -691,7 +697,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         inputWork: [...inputWork.values()],
         inputHistory: [...inputHistory],
         operations: [input.operation],
-        paymentAttempts: [...paymentAttempts.values()],
+        paymentAttempts: paymentAttemptPort.list(),
         paymentAuthorizationEvents: [...paymentAuthorizationEvents.values()],
       }
       return JSON.parse(JSON.stringify(snapshot)) as DynamicPublishedAdapterSnapshot

@@ -42,6 +42,7 @@ import {
   type DynamicPublishedPreparedTransport,
 } from '@/modules/action-invocation/dynamic-published-execution'
 import {
+  createInMemoryX402PaymentAttemptPort,
   x402PaymentAttemptKey,
   type X402PaymentAttempt,
 } from '@/modules/action-invocation/x402-payment-attempt'
@@ -53,6 +54,67 @@ const origins: readonly ActionInvocationOrigin[] = [
 ]
 
 describe('dynamic PublishedOperation Action Invocation adapter', () => {
+  it('cold-restores durable prepared and possibly-submitted payment cuts without duplicate effects', async () => {
+    const prepared = paymentPreparedFixture()
+    const request = paymentAuthorizationRequest()
+    const durable = createInMemoryX402PaymentAttemptPort()
+    let authorizations = 0
+    let paidSends = 0
+    const custodyRuntime: RouteTransportRuntime = {
+      send: async () => { throw new Error('direct_provider_send_must_not_run') },
+      resolveCredential: () => 'mock:credential',
+      createX402PaymentSignature: async () => { throw new Error('direct_signer_must_not_run') },
+      prepareX402PaymentAuthorization: async () => {
+        authorizations += 1
+        return {
+          custodyRef: 'custody:durable-cut',
+          authorizationDigest: 'sha256:durable-cut',
+          paymentSignature: 'raw:authorization:in-custody',
+        }
+      },
+      readX402PaymentAuthorization: async () => 'raw:authorization:in-custody',
+    }
+
+    const first = createPaymentAttemptRuntime(
+      custodyRuntime, prepared, undefined, undefined, () => 1, durable,
+    )
+    const authorization = await first.prepareX402PaymentAuthorization!(request)
+    expect(authorizations).toBe(1)
+    expect(durable.list()).toEqual([expect.objectContaining({ state: 'prepared' })])
+
+    const restoredPrepared = createPaymentAttemptRuntime(
+      custodyRuntime, prepared, undefined, undefined, () => 2, durable,
+    )
+    expect(await restoredPrepared.prepareX402PaymentAuthorization!(request)).toEqual({
+      custodyRef: authorization!.custodyRef,
+      authorizationDigest: authorization!.authorizationDigest,
+    })
+    expect(authorizations).toBe(1)
+    await restoredPrepared.markX402PaymentPossiblySubmitted!({
+      paymentIdentifier: request.paymentIdentifier,
+      attemptRef: request.attemptRef,
+      challengeDigest: request.challengeDigest,
+      scheme: request.selectedRequirement.scheme,
+      network: request.selectedRequirement.network,
+      asset: request.selectedRequirement.asset,
+      payTo: request.selectedRequirement.payTo,
+      amount: request.selectedRequirement.amount,
+      providerEndpoint: request.challenge.resource.url,
+      custodyRef: authorization!.custodyRef,
+      authorizationDigest: authorization!.authorizationDigest,
+    })
+    expect(durable.list()).toEqual([expect.objectContaining({ state: 'possibly_submitted' })])
+    paidSends += 1
+
+    const restoredUncertain = createPaymentAttemptRuntime(
+      custodyRuntime, prepared, undefined, undefined, () => 3, durable,
+    )
+    await expect(restoredUncertain.prepareX402PaymentAuthorization!(request))
+      .rejects.toThrow('x402_payment_attempt_reconciliation_required')
+    expect(authorizations).toBe(1)
+    expect(paidSends).toBe(1)
+  })
+
   it('reuses custody authorization after a crash between custody prepare and durable attempt preparation', async () => {
     const prepared = paymentPreparedFixture()
     const custody = new Map<string, Readonly<{

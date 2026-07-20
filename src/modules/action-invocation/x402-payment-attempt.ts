@@ -41,6 +41,25 @@ export type X402PaymentAuthorizationEvent = Readonly<{
   authorizationDigest?: string
 }>
 
+export type X402PaymentAttemptPort = Readonly<{
+  load(key: string): X402PaymentAttempt | undefined
+  persist(attempt: X402PaymentAttempt): Promise<void> | void
+  list(): readonly X402PaymentAttempt[]
+}>
+
+export function createInMemoryX402PaymentAttemptPort(
+  initial: readonly X402PaymentAttempt[] = [],
+): X402PaymentAttemptPort {
+  const attempts = new Map(initial.map((attempt) => [x402PaymentAttemptKey(attempt), attempt]))
+  return {
+    load: (key) => attempts.get(key),
+    persist: (attempt) => {
+      attempts.set(x402PaymentAttemptKey(attempt), attempt)
+    },
+    list: () => [...attempts.values()],
+  }
+}
+
 export function x402PaymentAttemptKey(input: Readonly<{
   invocationRef: string
   attemptRef: string
