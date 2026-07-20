@@ -37,8 +37,8 @@ Expected implementation blast radius is no more than 14 owned source/test/tool
 files and approximately 1,500 net new lines. Crossing either threshold is a
 review trigger, not an invitation to compress code.
 
-These files are frozen. A child must stop if a failing conformance test appears
-to require editing one:
+These files are frozen after the parent-owned Wave 0. A later child must stop
+if a failing conformance test appears to require editing one:
 
 - `src/modules/action-invocation/paid-operation-semantics.ts`
 - `src/modules/action-invocation/paid-operation-application-service.ts`
@@ -51,6 +51,17 @@ to require editing one:
 The parent may authorize a narrow shared fix only after recording the exact
 Provider A assumption exposed, affected invariant and why provider-owned code
 cannot contain it.
+
+Before dispatch, the parent runs:
+
+```text
+test -x node_modules/.bin/vitest
+test -x node_modules/.bin/tsx
+test -x node_modules/.bin/playwright
+```
+
+Children do not install or acquire packages. A missing binary returns
+`BLOCKED_DEPENDENCIES_NOT_PROVISIONED`.
 
 ## Provider B fixture
 
@@ -77,13 +88,46 @@ Provider B is a labelled local mock with:
 }
 ```
 
-The decimal string must be parsed strictly into a finite positive safe number.
+The decimal string must be parsed strictly into a finite positive number.
 Whitespace, exponent notation, non-decimal strings, zero, negatives, infinity,
 wrong pair and malformed/future timestamps refuse normalization.
 
+## Wave 0 — Close the restore-binding gap
+
+Owner: parent only.
+
+Source review found that `paymentAttemptsValid` currently rebinds restored rows
+to invocation, operation key, payment identifier, endpoint and operation
+revision, but not to the selected operation's payee, amount, scheme, network,
+asset or the externally anchored challenge digest.
+
+Owned paths:
+
+- `src/modules/action-invocation/dynamic-published-snapshot-verifier.ts`;
+- `tests/unit/action-invocation/dynamic-published-operation.test.ts`.
+
+Add failing snapshot tamper cases for `payTo`, `amount`, `scheme`, `network`,
+`asset` and `challengeDigest`. Then make the verifier derive the expected x402
+terms from the selected operation's admitted transport, exact price and
+snapshot anchors. Every mutation must refuse before custody lookup, signing,
+send or state mutation.
+
+Focused command:
+
+```text
+npm run test -- tests/unit/action-invocation/dynamic-published-operation.test.ts
+```
+
+End condition: all six tamper cases refuse and the existing Phase 3A snapshot,
+restore, reconciliation and cold-process cases remain green. The parent commits
+this prerequisite, records the new exact base, and freezes both files again.
+
 ## Wave 1 — Write the differential conformance harness first
 
-Owner: tests and development-only conformance helpers.
+Owner:
+
+- `tests/unit/capability-supply/published-operation-provider-conformance.test.ts`;
+- `tests/unit/capability-supply/btc-usd-quote-result.test.ts`.
 
 Create a provider case contract containing only:
 
@@ -105,9 +149,16 @@ Run the same table-driven cases against Provider A and Provider B:
 8. provider-specific tampering;
 9. Provider A uncertainty leaves all Provider B counters at zero.
 
-The first Wave 1 run is expected to fail only because Provider B does not yet
-exist or because Provider A’s result source type is closed. Any failure in
-shared command truth is a Phase 3A regression and stops the wave.
+Wave 1 proceeds in two recorded steps:
+
+1. Run the existing Provider A baseline. Any failure stops as a Phase 3A
+   regression.
+2. Add the table-driven test against the exact Wave 2 filenames and exports.
+   Its only permitted initial failure is a missing Provider B export or
+   Provider A's closed `BtcUsdQuoteResult.source` type.
+
+No `.todo`, skipped case, weakened assertion or provider-conditional expected
+result may be committed.
 
 Acceptance:
 
@@ -118,7 +169,7 @@ Acceptance:
 Focused command:
 
 ```text
-npm exec -- vitest run tests/unit/capability-supply/published-operation-provider-conformance.test.ts tests/unit/capability-supply/btc-usd-quote-result.test.ts
+npm run test -- tests/unit/capability-supply/published-operation-provider-conformance.test.ts tests/unit/capability-supply/btc-usd-quote-result.test.ts
 ```
 
 ## Wave 2 — Add Provider B in operation ownership
@@ -126,9 +177,11 @@ npm exec -- vitest run tests/unit/capability-supply/published-operation-provider
 Owner:
 
 - `src/modules/capability-supply/btc-usd-quote-result.ts`;
-- new Provider B publication/evidence fixture;
-- new Provider B result-adapter tests;
-- capability-supply public exports strictly required by tests/tools.
+- `src/modules/capability-supply/development-alternate-btc-usd-quote-result.ts`;
+- `src/modules/capability-supply/development-alternate-published-operation-evidence.ts`;
+- `src/modules/capability-supply/public.ts`.
+
+Wave 1 tests are read-only to this instance.
 
 Implementation:
 
@@ -148,9 +201,18 @@ Acceptance:
 - Provider A public behavior and existing tests remain unchanged.
 - No provider switch, registry framework or host branch is introduced.
 
+Focused command:
+
+```text
+npm run test -- tests/unit/capability-supply/published-operation-provider-conformance.test.ts tests/unit/capability-supply/btc-usd-quote-result.test.ts
+```
+
 ## Wave 3 — Prove explicit selection and non-fallback end to end
 
-Owner: development-only Phase 3B scenario runner and focused integration tests.
+Owner:
+
+- `src/modules/capability-supply/development-provider-conformance-scenario.ts`;
+- `tests/unit/action-invocation/paid-operation-provider-selection.test.ts`.
 
 Construct each invocation with one selected `PublishedOperation`. Prove:
 
@@ -165,6 +227,24 @@ Construct each invocation with one selected `PublishedOperation`. Prove:
   payment identifier and effect generation lineage;
 - snapshots restore the selected operation and reject substitution.
 
+The test records `{ authorizations, signatures, sends }` separately for A and
+B. Every refused cross-provider command must leave both snapshot digests and
+all counters unchanged. An explicit switch must produce pairwise-different
+`invocationRef`, `authorityRef`, `paymentIdentifier` and
+`(attemptRef, effectGeneration)` lineage.
+
+Mandatory cases:
+
+- duplicate authority click from one prepared version;
+- concurrent A and B preparation with crossed continuations;
+- stale expected version after the other provider advances;
+- complete operation substitution and payee-only snapshot tampering;
+- forced payment-identifier collision across providers;
+- A reconciliation evidence replayed against B;
+- A exact `not_settled`, followed by explicit B selection;
+- A settled with an invalid result, followed by explicit B selection;
+- A and B raw payloads crossed into the other projector.
+
 The same application-service calls must drive both cases. Tests may parameterize
 provider material; production hosts may not switch on provider ID.
 
@@ -175,26 +255,68 @@ Acceptance:
   composition.
 - Existing Phase 3A browser suite remains green without new UI.
 
-## Wave 4 — Evidence and closeout
+Focused command:
+
+```text
+npm run test -- tests/unit/action-invocation/paid-operation-provider-selection.test.ts tests/unit/action-invocation/paid-operation-projection.test.ts tests/unit/action-invocation/paid-operation-application-service.test.ts
+```
+
+## Wave 4 — Implement evidence tooling before freeze
+
+Owner:
+
+- `tools/dev/phase-3b-provider-conformance-evidence.ts`;
+- `tools/dev/verify-phase-3b-provider-conformance-evidence.ts`;
+- `tests/unit/capability-supply/provider-conformance-evidence.test.ts`.
+
+The packet builder embeds both provider source fixtures, normalized outputs,
+semantic schema identities, per-provider effect counters, switch identities
+and every non-fallback case. The verifier independently rebuilds the two
+operations, normalizes both raw payloads, recomputes digests and counters, and
+rejects advertised claims that disagree with reconstruction.
+
+This wave generates only temporary working-tree packets. It must prove that
+tampered provider identity, raw evidence, schema, effect counter, switch
+identity or non-fallback result is rejected.
+
+Focused command:
+
+```text
+npm run test -- tests/unit/capability-supply/provider-conformance-evidence.test.ts
+node --import tsx tools/dev/phase-3b-provider-conformance-evidence.ts run /tmp/phase-3b-working.json HEAD
+node --import tsx tools/dev/verify-phase-3b-provider-conformance-evidence.ts /tmp/phase-3b-working.json HEAD
+```
+
+End condition: builder and verifier are integrated before the source freeze.
+No official packet exists yet.
+
+## Wave 5 — Official evidence and closeout
 
 Parent only after Waves 1–3 integrate.
 
 Run one clean detached-checkout proof at the final integrated revision:
 
 ```text
-npm exec -- vitest run tests/unit/capability-supply/published-operation-provider-conformance.test.ts
-npm exec -- vitest run tests/unit/capability-supply/btc-usd-quote-result.test.ts
-npm exec -- vitest run tests/unit/action-invocation/paid-operation-application-service.test.ts
-npm exec -- vitest run tests/unit/action-invocation/paid-operation-projection.test.ts
+npm run test -- tests/unit/capability-supply/published-operation-provider-conformance.test.ts
+npm run test -- tests/unit/capability-supply/btc-usd-quote-result.test.ts
+npm run test -- tests/unit/action-invocation/paid-operation-provider-selection.test.ts
+npm run test -- tests/unit/action-invocation/paid-operation-application-service.test.ts
+npm run test -- tests/unit/action-invocation/paid-operation-projection.test.ts
 npm run test:e2e:paid-operation
 npm run test:ui-contract
 git diff --check
 ```
 
-Generate one Phase 3B conformance packet that embeds both independently rebuilt
-provider fixtures, per-provider normalized outputs, shared schema versions,
-effect counters and the non-fallback scenario. Its verifier must recompute each
-claim; it may not trust advertised booleans.
+After source, tests, tools and active documentation are committed, freeze the
+revision. Generate exactly one official packet in a clean detached checkout:
+
+```text
+node --import tsx tools/dev/phase-3b-provider-conformance-evidence.ts run /tmp/phase-3b-provider-conformance.json <final-revision>
+node --import tsx tools/dev/verify-phase-3b-provider-conformance-evidence.ts /tmp/phase-3b-provider-conformance.json <final-revision>
+```
+
+Any later source, test, tool or active-document edit invalidates it and requires
+one replacement official run.
 
 An independent reviewer checks the final diff against P3B-R1–R9. R9 closes only
 if no unresolved P0/P1 exists within the labelled local/mock boundary.
@@ -227,6 +349,23 @@ Every handoff returns:
 Instances do not edit planning authority, commit completion claims, generate
 official packets, add public routes, touch Convex or “helpfully” generalize
 multi-provider behavior.
+
+The exact dispatch roster is
+`.planning/phases/03b-second-provider-plugin-test/03B-INSTANCE-CONTRACTS.md`.
+
+## Requirement execution map
+
+| Requirement | Owner | Primary executable proof | Stop condition |
+| --- | --- | --- | --- |
+| P3B-R1 | Wave 2 | provider conformance test | provider payload reaches a host |
+| P3B-R2 | Wave 3 | provider selection test | selection needs a host command |
+| P3B-R3 | Wave 3 | identical command/projection assertions | frozen shared file must change |
+| P3B-R4 | Wave 2 | crossed-schema normalization cases | shared result needs provider fields |
+| P3B-R5 | Wave 3 | per-provider zero-activity counters | any automatic B activity appears |
+| P3B-R6 | Wave 3 | pairwise consequence-identity inequality | A identity must be reused |
+| P3B-R7 | Waves 0 and 3 | tamper/restore/dedupe cases | snapshot format must change |
+| P3B-R8 | Waves 1 and 3 | same table and host sequence for A/B | provider branch enters harness |
+| P3B-R9 | Waves 4 and 5 | recomputed clean packet plus review | dirty/mismatched revision or P0/P1 |
 
 ## Must-haves
 

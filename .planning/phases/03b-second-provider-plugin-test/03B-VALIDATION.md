@@ -27,6 +27,21 @@ Phase 3B fails or pauses if:
 - a child crosses the frozen-file or change-budget boundary without parent
   authorization.
 
+## Mandatory adversarial cases
+
+- duplicate authority click from one prepared version;
+- concurrent A/B preparation with crossed continuations;
+- stale expected version after another provider advances;
+- operation substitution and payee-only payment-row tampering on restore;
+- forced cross-provider payment-identifier collision;
+- Provider A reconciliation evidence replayed against Provider B;
+- Provider A exact `not_settled`, then explicit Provider B selection;
+- Provider A settled with invalid result, then explicit Provider B selection;
+- Provider A and B raw schemas crossed into the other projector.
+
+For every refused cross-provider case, assert both provider snapshot digests and
+`authorizations`, `signatures` and `sends` counters are unchanged.
+
 ## Evidence ladder
 
 1. source inspection;
