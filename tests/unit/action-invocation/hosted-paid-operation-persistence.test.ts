@@ -65,10 +65,26 @@ describe('hosted paid-operation durable boundary', () => {
     const initial = initialAggregate()
     const backend = convexTest(schema, modules)
     await backend.run(async (ctx) => {
+      const policyDigest = `sha256:${'a'.repeat(64)}`
+      await ctx.db.insert('hostedPaidOperationAdmissionPolicies', {
+        policyRef: 'policy:trial',
+        enabled: true,
+        principalRef: initial.invocation.owner.principalRef,
+        totalLimit: 3,
+        concurrencyLimit: 1,
+        rateLimit: 2,
+        policyDigest,
+        sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
+        admissionEndsAt: '2026-07-21T00:00:00.000Z',
+        retainThrough: '2026-07-22T00:00:00.000Z',
+        killSwitchOwner: 'operator:phase3c',
+        recordedAt: '2026-07-20T00:00:00.000Z',
+      })
       await ctx.db.insert('hostedPaidOperationAdmissionReservations', {
         reservationRef: 'trial-reservation:1',
         policyRef: 'policy:trial',
         principalRef: initial.invocation.owner.principalRef,
+        policyDigest,
         state: 'active',
         updatedAt: '2026-07-20T00:00:00.000Z',
       })

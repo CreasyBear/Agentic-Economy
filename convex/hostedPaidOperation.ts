@@ -203,6 +203,19 @@ export const createInitial = internalMutation({
       || reservation.principalRef !== args.control.owner.principalRef) {
       return { kind: 'refused' as const, code: 'admission_reservation_invalid' as const }
     }
+    const policy = await ctx.db.query('hostedPaidOperationAdmissionPolicies')
+      .withIndex('by_policyRef_and_principalRef', (q) =>
+        q.eq('policyRef', reservation.policyRef)
+          .eq('principalRef', reservation.principalRef))
+      .unique()
+    if (policy === null
+      || !policy.enabled
+      || policy.policyDigest === undefined
+      || reservation.policyDigest !== policy.policyDigest
+      || policy.admissionEndsAt === undefined
+      || Date.parse(args.recordedAt) >= Date.parse(policy.admissionEndsAt)) {
+      return { kind: 'refused' as const, code: 'admission_reservation_invalid' as const }
+    }
 
     await ctx.db.insert('hostedPaidOperationHeaders', {
       ownerPrincipalRef: args.control.owner.principalRef,
