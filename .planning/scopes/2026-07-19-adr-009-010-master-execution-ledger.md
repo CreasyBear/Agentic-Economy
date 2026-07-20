@@ -6,13 +6,17 @@
 **Evidence ceiling:** source and labelled development behavior unless a row says otherwise  
 **Production deployment:** not authorized
 
-## Hardening review — 2026-07-20
+## Pre-fix hardening review — 2026-07-20
+
+**Status:** superseded by the successful hardening closeout at the end of this
+ledger. The present-tense findings below describe the review input at
+`c4d8f3fe`, not current source or evidence.
 
 The earlier implementation-complete disposition is withdrawn. ADR-009 is
 accepted as architecture and ADR-010 is accepted with Gate 10 narrowed, but
 exposure remains blocked.
 
-Trusted current evidence:
+Evidence trusted at review time:
 
 - source-owned Action Invocation transitions and discriminated Request-owned /
   standalone lineage;
@@ -24,7 +28,7 @@ Trusted current evidence:
 - Gate 10's negative result: embedded and direct measured human effort were
   equal, so no experience-payoff claim passed.
 
-Invalidated or narrowed claims:
+Claims invalidated or narrowed at review time:
 
 - prior packets labelled `gitRevision` do not prove execution of those exact
   committed bytes when generated from a dirty working tree;
@@ -37,7 +41,7 @@ Invalidated or narrowed claims:
 - invalid dates, non-finite values and negative spend/loss material must be
   rejected before this authority seam is reachable.
 
-Active transition:
+Transition ordered by the review:
 
 `authority validation -> observer truth -> revision-bound evidence -> fixture isolation -> documentation closeout`
 
