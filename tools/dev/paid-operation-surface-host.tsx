@@ -142,7 +142,10 @@ export function AePaidOperationDevelopmentSurface({
       {projection === null
         ? null
         : (
-            <div aria-busy={pending}>
+            <div
+              aria-busy={pending}
+              className="[&_button]:min-h-[44px] [&_summary]:min-h-[44px]"
+            >
               <AePaidOperationCard
                 semantics={projection.human.semantics}
                 {...(pending ? {} : { onContinue: dispatch })}
