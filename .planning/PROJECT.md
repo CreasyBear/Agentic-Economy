@@ -1,7 +1,7 @@
 # Agentic Economy — Product Conversion Charter
 
-**Status:** active implementation authority  
-**Decision owner:** Founder  
+**Status:** active implementation authority
+**Decision owner:** Founder
 **Rebaselined:** 2026-07-20
 
 ## Product

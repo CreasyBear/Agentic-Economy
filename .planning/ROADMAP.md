@@ -1,7 +1,7 @@
 # Agentic Economy — Current Product Roadmap
 
-**Status:** active  
-**Rebaselined:** 2026-07-20  
+**Status:** active
+**Rebaselined:** 2026-07-20
 **Authority:** `PRODUCT.md` → `DESIGN.md` → accepted ADRs → this roadmap
 
 ## Roadmap rule
@@ -24,16 +24,16 @@ Future exposure decision
 
 ## Phase 1 — Action Invocation foundation
 
-**Status:** complete  
-**ADR:** ADR-009  
+**Status:** complete
+**ADR:** ADR-009
 **Outcome:** one registered action can be invoked from Request-owned or
 standalone lineage with exact authority, attempt, uncertainty, cancellation,
 reconciliation and durable continuation semantics.
 
 ## Phase 2 — One action plane across human and agent hosts
 
-**Status:** accepted_narrowed  
-**ADR:** ADR-010  
+**Status:** accepted_narrowed
+**ADR:** ADR-010
 **Outcome:** Request-owned and standalone hosts use the same source transition
 and structured semantic projection.
 
@@ -42,7 +42,7 @@ human effort. The architecture survives; the payoff hypothesis does not.
 
 ## Phase 3 — Protocol/kernel → product conversion
 
-**Status:** scoped; ADR-020 proposed  
+**Status:** scoped; ADR-020 proposed
 **Goal:** make delegated work understandable and controllable through one
 source-backed customer work model without turning autonomy into repeated
 approval.

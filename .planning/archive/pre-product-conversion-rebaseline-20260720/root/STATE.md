@@ -18,7 +18,7 @@ progress:
 
 **Created:** 2026-06-27
 **Current execution state:** ADR-009/010 control-plane hardening active; exposure blocked
-**Last source/local phase closed:** Phase 6 source/local proof only  
+**Last source/local phase closed:** Phase 6 source/local proof only
 **Status:** architecture accepted; authority and exact-revision evidence hardening in progress
 ## Active decision
 

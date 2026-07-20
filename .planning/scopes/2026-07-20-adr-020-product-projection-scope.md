@@ -1,7 +1,7 @@
 # ADR-020 product projection scope
 
-**Status:** scoped; discussion required before planning  
-**Owner:** Founder  
+**Status:** scoped; discussion required before planning
+**Owner:** Founder
 **Phase:** 03-protocol-kernel-product-conversion
 
 ## Decision supported

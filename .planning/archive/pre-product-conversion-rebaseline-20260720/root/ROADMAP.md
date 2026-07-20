@@ -13,12 +13,12 @@ A phase does not exist for narrative, protocol completeness, marketplace surface
 | Decision | Door | Phase | Rule |
 |---|---|---:|---|
 | Fresh repo over backup | One-way | 0 | Backup is source mine only. |
-| Launch ICP = AU urgent/local services | Two-way after Phase 1 
-| Convex source of truth | One-way for M1 
-| AE-hosted fallback UCP | One-way for Phase 1 copy 
-| Lifecycle moat as descriptor contract | One-way 
-| Admin authority source-owned | One-way 
-| Search adapter | Two-way 
+| Launch ICP = AU urgent/local services | Two-way after Phase 1
+| Convex source of truth | One-way for M1
+| AE-hosted fallback UCP | One-way for Phase 1 copy
+| Lifecycle moat as descriptor contract | One-way
+| Admin authority source-owned | One-way
+| Search adapter | Two-way
 | Money rails | One-way later | 5 | Requires decision record before code. |
 | Handshake Protocol Kernel posture | One-way for public positioning | 4/6 | Future protected-action clearance should be HSK-shaped internally; do not expose HSK as a public AE surface or dependency until a phase gate needs it. |
 | Agentic business action receipts | One-way for the Phase 6 spike; per-slug two-way within the admitted set | 6 | A closed, typed, schema-validated set of software-scoped receipt-backed business operations. Each slug is individually admitted through ADR-005 D1's per-slug checklist. No generic `executeAction`, no arbitrary/caller-supplied slugs, no runtime/wallet/marketplace/provider authority. |
@@ -285,4 +285,3 @@ Plans:
 Plans:
 
 - [ ] 02-01-PLAN.md — Commit one buildable answer per axis (semantic-parity contract / host-adapter boundary / structured non-visual equivalent / generative-UI families / reconstruct-from-records / parity eval) + ADR-010 10-gate→test table + future build backlog. Design-only.
-
