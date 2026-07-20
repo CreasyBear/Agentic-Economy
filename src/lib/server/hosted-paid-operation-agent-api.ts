@@ -21,8 +21,9 @@ type AgentAuthResult =
 
 type AgentHandlerOptions = Readonly<{
   authenticate?: () => Promise<AgentAuthResult>
-  gateway: HostedPaidOperationTransportGateway
-  provenance: string
+  runtime?: AgentRuntimeFactory
+  gateway?: HostedPaidOperationTransportGateway
+  provenance?: string
   currentVersion?: (
     invocationRef: string,
     actor: HostedPaidOperationAgentPrincipal['actor'],
@@ -32,8 +33,20 @@ type AgentHandlerOptions = Readonly<{
 
 type AgentCreationOptions = Readonly<{
   authenticate?: () => Promise<AgentAuthResult>
-  creation: HostedPaidOperationCreationGateway
+  runtime?: AgentRuntimeFactory
+  creation?: HostedPaidOperationCreationGateway
 }>
+
+type AgentRuntime = Readonly<{
+  gateway: HostedPaidOperationTransportGateway
+  creation: HostedPaidOperationCreationGateway
+  provenance: string
+  currentVersion(invocationRef: string): Promise<number | undefined>
+}>
+
+type AgentRuntimeFactory = (
+  principal: HostedPaidOperationAgentPrincipal,
+) => Promise<AgentRuntime>
 
 export async function handleHostedPaidOperationAgentCreate(
   request: Request,
@@ -41,11 +54,14 @@ export async function handleHostedPaidOperationAgentCreate(
 ): Promise<Response> {
   const admitted = await admit(options)
   if (admitted.kind === 'refused') return authRefusal(admitted)
+  const runtime = await options.runtime?.(admitted.principal)
+  const creation = options.creation ?? runtime?.creation
+  if (creation === undefined) throw new Error('hosted_paid_operation_agent_runtime_missing')
   const setup = await parseHostedPaidOperationSetup(request)
   if (setup === undefined) {
     return noStore({ kind: 'refused', code: 'invalid_setup_input', issues: ['providerKey'] }, 422)
   }
-  const result = await options.creation.create({ actor: admitted.principal.actor, setup })
+  const result = await creation.create({ actor: admitted.principal.actor, setup })
   if (result.kind === 'refused') {
     const status = result.code === 'setup_shape_invalid' ? 422 : 403
     return noStore(result, status)
@@ -65,8 +81,11 @@ export async function handleHostedPaidOperationAgentInspect(
 ): Promise<Response> {
   const admitted = await admit(options)
   if (admitted.kind === 'refused') return authRefusal(admitted)
+  const runtime = await options.runtime?.(admitted.principal)
+  const gateway = options.gateway ?? runtime?.gateway
+  if (gateway === undefined) throw new Error('hosted_paid_operation_agent_runtime_missing')
   try {
-    const result = await options.gateway.inspect({
+    const result = await gateway.inspect({
       actor: admitted.principal.actor,
       invocationRef,
       expectedInvocationVersion,
@@ -76,7 +95,7 @@ export async function handleHostedPaidOperationAgentInspect(
       invocationRef,
       expectedInvocationVersion,
       admitted.principal,
-      options,
+      withRuntime(options, runtime),
     )
   } catch {
     return noStore({ kind: 'refused', code: 'hosted_read_unavailable' }, 503)
@@ -90,12 +109,15 @@ export async function handleHostedPaidOperationAgentCommand(
 ): Promise<Response> {
   const admitted = await admit(options)
   if (admitted.kind === 'refused') return authRefusal(admitted)
+  const runtime = await options.runtime?.(admitted.principal)
+  const gateway = options.gateway ?? runtime?.gateway
+  if (gateway === undefined) throw new Error('hosted_paid_operation_agent_runtime_missing')
   const parsed = await parseHostedPaidOperationCommand(request)
   if (parsed.kind === 'invalid') {
     return noStore({ kind: 'refused', code: 'invalid_command_input', issues: parsed.issues }, 422)
   }
   try {
-    const result = await options.gateway.command({
+    const result = await gateway.command({
       actor: admitted.principal.actor,
       invocationRef,
       expectedInvocationVersion: parsed.expectedInvocationVersion,
@@ -107,7 +129,7 @@ export async function handleHostedPaidOperationAgentCommand(
       invocationRef,
       parsed.expectedInvocationVersion,
       admitted.principal,
-      options,
+      withRuntime(options, runtime),
     )
   } catch {
     return noStore({
@@ -124,6 +146,21 @@ async function admit(options: Pick<AgentHandlerOptions, 'authenticate'>): Promis
   return await (options.authenticate ?? authenticateHostedPaidOperationAgent)()
 }
 
+function withRuntime(
+  options: AgentHandlerOptions,
+  runtime: AgentRuntime | undefined,
+): AgentHandlerOptions {
+  return {
+    ...options,
+    ...(options.provenance !== undefined
+      ? {}
+      : { provenance: runtime?.provenance ?? 'Labelled hosted sandbox source' }),
+    ...(options.currentVersion !== undefined || runtime === undefined
+      ? {}
+      : { currentVersion: (invocationRef) => runtime.currentVersion(invocationRef) }),
+  }
+}
+
 async function agentResult(
   result: Awaited<ReturnType<HostedPaidOperationTransportGateway['inspect']>>,
   invocationRef: string,
@@ -132,7 +169,11 @@ async function agentResult(
   options: AgentHandlerOptions,
 ) {
   if (result.kind === 'accepted') {
-    return noStore(projectHostedPaidOperation(result.value, options.provenance, 'agent'), 200)
+    return noStore(projectHostedPaidOperation(
+      result.value,
+      options.provenance ?? 'Labelled hosted sandbox source',
+      'agent',
+    ), 200)
   }
   if (result.code === 'invocation_not_found' || result.code === 'cross_principal_refused') {
     return noStore({ kind: 'refused', code: 'invocation_not_found' }, 404)

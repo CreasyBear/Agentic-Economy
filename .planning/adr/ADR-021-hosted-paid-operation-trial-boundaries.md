@@ -1,6 +1,7 @@
 ---
-status: accepted_for_phase_3c_plan_01
+status: accepted_for_phase_3c_plan_04_amended
 date: 2026-07-20
+amended: 2026-07-20
 decision_owner: Founder
 applies:
   - ADR-009
@@ -42,12 +43,23 @@ source-evidence verifier. The internal command port applies the validated
 resolution. Hosted work must inject evidence at that boundary from a trusted
 server/operator-side observer.
 
-Convex already supports authenticated public functions through
-`ctx.auth.getUserIdentity()`. The authenticated server client forwards Clerk's
-`convex` token. Existing agent API-key authentication demonstrates current-key
-revocation and scope checks. Phase 3C selects authenticated public Convex
-functions using `ctx.auth` as its one identity bridge. A route-supplied owner,
-principal, caller, session, or credential is never an identity source.
+Convex supports authenticated public functions through
+`ctx.auth.getUserIdentity()`, and the authenticated human server client forwards
+Clerk's `convex` JWT. Clerk's API-key machine identity does not provide that
+JWT: its `getToken()` returns the opaque API key, while `convex/auth.config.ts`
+accepts only Clerk JWTs for the `convex` audience. Forwarding the API key to
+Convex therefore cannot authenticate and is rejected.
+
+Phase 3C uses two narrow identity bridges. Human calls use `ctx.auth`. After the
+agent route has checked the current API key's owner, expiry, revocation, and
+paid-operation scope, it seals those admitted attributes into a
+paid-operation-specific, authenticated-encryption service token. The token is
+valid for at most 30 seconds and is bound to the exact create, inspect,
+current-version, or command intent, including provider, invocation, command ID,
+expected version, and authorization decision where applicable. Convex verifies
+and opens that opaque token with `AE_CONVEX_SERVER_FUNCTION_TOKEN`; no public
+argument exposes a raw owner, principal, caller, API key, evidence, or
+authority field.
 
 ## Frozen public and internal reconciliation split
 
@@ -107,9 +119,13 @@ identity fails before lookup and reveals no invocation facts.
 
 Agent identity uses a paid-operation-specific least-privilege Clerk API-key
 scope. The server verifies the current key ID, subject, owner, expiry,
-revocation, and scope before calling Convex. Convex independently derives the
-authenticated identity from the forwarded token. Customer Request scope does
-not imply paid-operation scope or authority.
+revocation, and scope before minting the short-lived exact-intent service token.
+Convex independently verifies that server attestation and derives the
+principal/caller only from its protected contents. It never accepts the Clerk
+API key as a Convex JWT and never accepts route actor fields. The attestation is
+an attribution bridge, not a replacement credential, ambient session, or
+consequence authority. Customer Request scope does not imply paid-operation
+scope or authority.
 
 Evaluator admission is separate from consequence authority. An allowlisted
 cohort, sandbox kill switch, and atomic per-principal count, concurrency, and
@@ -190,6 +206,12 @@ comprehension, or customer value.
   select the business/payment truth being decided.
 - Server route identity fields: rejected because authenticated identity must be
   derived at the source boundary.
+- Direct Clerk API-key forwarding: rejected because the machine identity
+  returns the opaque key, not a Clerk `convex`-audience JWT.
+- Replacing the agent key with a session or M2M credential: rejected as a new
+  credential and product contract outside this trial. The narrow exact-intent
+  server attestation reuses the existing admitted key and existing Convex
+  server-function secret.
 - Authentication as authority: rejected because identity and evaluator
   admission do not authorize a consequence.
 - Hosted route lifecycle: rejected because ADR-009/010 already own the shared

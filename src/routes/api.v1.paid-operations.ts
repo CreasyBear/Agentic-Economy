@@ -7,8 +7,11 @@ export const Route = createFileRoute('/api/v1/paid-operations')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const runtime = await getHostedPaidOperationRuntime()
-        return handleHostedPaidOperationAgentCreate(request, { creation: runtime.creation })
+        return handleHostedPaidOperationAgentCreate(request, {
+          runtime: async (principal) => await getHostedPaidOperationRuntime({
+            authMode: { kind: 'agent_service', principal },
+          }),
+        })
       },
     },
   },

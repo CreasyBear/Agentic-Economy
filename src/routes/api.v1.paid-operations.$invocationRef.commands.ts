@@ -7,11 +7,10 @@ export const Route = createFileRoute('/api/v1/paid-operations/$invocationRef/com
   server: {
     handlers: {
       POST: async ({ request, params }) => {
-        const runtime = await getHostedPaidOperationRuntime()
         return handleHostedPaidOperationAgentCommand(request, params.invocationRef, {
-          gateway: runtime.gateway,
-          provenance: runtime.provenance,
-          currentVersion: (ref) => runtime.currentVersion(ref),
+          runtime: async (principal) => await getHostedPaidOperationRuntime({
+            authMode: { kind: 'agent_service', principal },
+          }),
         })
       },
     },

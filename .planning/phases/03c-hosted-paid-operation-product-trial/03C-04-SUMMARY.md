@@ -37,6 +37,112 @@
 }
 ```
 
+## 2026-07-20 replacement cumulative candidate — authenticated intent gateway
+
+```json
+{
+  "plan": "03C-04",
+  "artifactState": "child-authored replacement cumulative candidate; not integrated, deployed, or a Plan04/Phase3C completion claim",
+  "runtime": "Codex local isolated worktree; existing ignored local dependency symlink only; no install, network, Convex control-plane, generated Convex API, remote, deployment, or external-state call",
+  "checkpointRevision": "42d840a9d0b7032c3d53b84efbd51dae966a21e0",
+  "checkpointTree": "51bd58dff6fb879a93853917eb8bd0a9c8056f3c",
+  "cumulativeBaseRevision": "f24cf08a351ffdc2b537b8eb758c043764be3ac4",
+  "cumulativeBaseTree": "c9a121db0f70d504a5b687dfb5b2fd8ad5cbdb25",
+  "integrationDestination": "codex/phase3c-execution; parent remains sole integrator",
+  "inheritedManifest": {
+    "path": "/tmp/ae-phase3c-parent-custody-fdb990ac.json",
+    "rawSha256": "3e53d94d419d1ba824d5c8b787c657a8fdb3fa5774864e6429d7c6b45d8aa924",
+    "canonicalSha256": "4d8952bceaba82c5a617be6b1747152e002131d0e5a7375ef5e2620b59060092",
+    "entries": 66,
+    "childIntersection": 0
+  },
+  "cumulativeChangedPaths": [
+    ".planning/adr/ADR-021-hosted-paid-operation-trial-boundaries.md",
+    ".planning/phases/03c-hosted-paid-operation-product-trial/03C-04-SUMMARY.md",
+    "convex/hostedPaidOperation.ts",
+    "convex/hostedPaidOperationGateway.ts",
+    "src/lib/server/hosted-paid-operation-agent-api.ts",
+    "src/lib/server/hosted-paid-operation-human-api.ts",
+    "src/lib/server/hosted-paid-operation-runtime.ts",
+    "src/modules/action-invocation/hosted-paid-operation-service-auth.ts",
+    "src/modules/action-invocation/internal/convex-schema.ts",
+    "src/routeTree.gen.ts",
+    "src/routes/actions.paid.$invocationRef.tsx",
+    "src/routes/actions.paid.new.tsx",
+    "src/routes/api.v1.paid-operations.$invocationRef.commands.ts",
+    "src/routes/api.v1.paid-operations.$invocationRef.ts",
+    "src/routes/api.v1.paid-operations.ts",
+    "tests/imports/hosted-paid-operation-boundaries.test.ts",
+    "tests/unit/action-invocation/convex-handler-contract.test.ts",
+    "tests/unit/server/hosted-paid-operation-agent-auth.test.ts",
+    "tests/unit/server/hosted-paid-operation-creation-api.test.ts",
+    "tests/unit/server/hosted-paid-operation-runtime.test.ts"
+  ],
+  "boundaryTestChange": "The import test's Plan01 absence assertions were genuinely obsolete after accepted Plan02-04 source landed. They were replaced with exact owned-surface/setup-route inventories. Its prohibition on low-level lifecycle/effect language in routes and src/lib/server remains unchanged and passes.",
+  "redBefore": [
+    {
+      "command": "npm test -- tests/unit/server/hosted-paid-operation-agent-auth.test.ts",
+      "result": "The actual API-key route fell into session-oriented createAuthenticatedConvexClient and raised session_auth_fallback; the opaque Clerk API key could not satisfy Convex JWT auth."
+    },
+    {
+      "command": "npm test -- tests/unit/server/hosted-paid-operation-creation-api.test.ts",
+      "result": "The native urlencoded setup form returned 422 instead of the expected 201 because parseSetup used request.json only."
+    },
+    {
+      "command": "checkpoint source and focused behavior trace",
+      "result": "The checkpoint had no command-bound service token, no operation-owned mock-effect observation table, no persisted admission reservation header, and no atomic terminal release. Its tests were registration/source assertions rather than an operational create-authorize-execute-reconcile proof."
+    }
+  ],
+  "observableMechanism": "Human routes use a lazy Clerk convex-audience JWT client; subject becomes principal and tokenIdentifier becomes caller inside Convex. Agent routes first recheck the current Clerk API key and paid-operation scope, then send only a paid-operation-specific encrypted serviceToken valid for at most 30 seconds and bound to the exact provider/inspect/version/command intent. Convex independently verifies the token with AE_CONVEX_SERVER_FUNCTION_TOKEN. Public create/inspect/command validators contain only closed intent plus the opaque token; raw actor, authority, provider state, payment/result state, and evidence are impossible arguments.",
+  "lifecycleAndEffect": "The authenticated gateway consumes the existing Action Invocation lifecycle behind Convex. It persists pre-release uncertainty before the labelled mock effect. The effect is the atomic insertion of exactly one source-owned observation row keyed by invocation, attempt, and effect generation. Provider B loses its response only after that row exists. Reconciliation reads only that exact row; absence resolves not-released/not-submitted. Execute checks current policy/reservation before pre-release persistence and recordMockEffect atomically rechecks enabled policy, active owner-bound reservation/counter, current attempt/effect generation, payment lineage, and exact accepted approve-each authority.",
+  "admissionClosure": "The source header persists admissionReservationRef. Provider A terminal execution, Provider B released reconciliation, and invalidated authority_not_accepted release concurrency in the same transaction as durable closure. Uncertainty and reconciled-not-released retryability retain the reservation. Duplicate commands/effects/releases neither add a row nor decrement the counter again.",
+  "cohesionAudit": "The former approximately 1950-line mixed Convex module was split once: convex/hostedPaidOperation.ts now owns indexed storage/admission/mock-observation persistence (1029 lines), while convex/hostedPaidOperationGateway.ts owns authenticated public intent plus the one lifecycle/mock fixture composition (1461 lines). The server runtime is transport/application intent only. A further split was not source-required and would fragment one request lifecycle without a clearer owner/deletion boundary.",
+  "verification": [
+    {
+      "command": "npm test -- Plan02/03 persistence, creation, application, projection, effect, reconciliation, provider-selection; Plan04 Convex/server; three focused import boundaries",
+      "result": "16 files, 66 tests passed. This includes unauthenticated convex-test service-token verification and wrong-intent/key/expiry refusal; create at version 1; exact authorize/refuse CAS; one Provider A effect and settlement; Provider B response loss/reconcile; stale version and command-digest conflict; crash before mock mutation resolving not-released/not-submitted with zero effect rows; kill-switch before and after pre-release; terminal reservation release exactly once; public intent-only reconciliation; non-enumeration; human/agent semantic digest/version/provenance parity; urlencoded form submit; and all three agent route auth modes."
+    },
+    {
+      "command": "npx oxlint --deny-warnings <changed TypeScript paths>",
+      "result": "Passed with zero warnings."
+    },
+    {
+      "command": "npm run typecheck -- --pretty false",
+      "result": "Exit 2 from pre-existing capability-supply and Customer Request errors; zero diagnostics name a changed Plan04/correction path."
+    },
+    {
+      "command": "npm test -- tests/imports/ts-standards.test.ts tests/imports/private-imports.test.ts tests/imports/route-boundary.test.ts",
+      "result": "Route boundary passed. Repository-wide standards/private-import gates remain red on inherited baseline. All local non-null/inexact-runtime findings exposed by the probe were repaired; the final standards output names no hosted-paid-operation correction path."
+    },
+    {
+      "command": "local @tanstack/router-generator run twice",
+      "result": "Before/first/second SHA-256 all 95b15655c07de7d722959a60db846d1bcc2725d8f525047d2ae96cf644ab78a4; no route-tree diff."
+    },
+    {
+      "command": "static .collect()/.filter() scan; git diff --check; exact status allowlist; parent manifest self-digest/intersection",
+      "result": "No collect/filter in the owned hosted paths; diff check passed; zero unexpected current paths; raw and canonical manifest identities matched with 66 entries and zero inherited-path intersection."
+    }
+  ],
+  "adverseAndRecovery": "Direct low-level server composition was rejected by the live host-boundary test. Raw public create/transact state was rejected because it made authority/provider/payment/evidence caller-constructible. Clerk API-key forwarding was rejected from installed Clerk and Convex source. A new session/M2M credential was rejected as product widening. The selected narrow server attestation preserves route admission and Convex-side attribution without turning identity into consequence authority. A zsh reserved-variable wrapper error was rerun mechanically; shared-machine load made the last full typecheck slow but it completed with the same unrelated baseline.",
+  "counters": {
+    "acceptedRoutes": 5,
+    "mockEffectRowsPerReleasedAttempt": 1,
+    "secondEffectRowsOnReplay": 0,
+    "secondAdmissionDecrementsOnReplay": 0,
+    "callerActorAuthorityEvidenceFieldsAccepted": 0,
+    "commandReplayFallbackProviderSwitchAfterAmbiguity": 0,
+    "focusedFilesPassed": 16,
+    "focusedTestsPassed": 66
+  },
+  "evidenceClass": "source inspection, generated-route readback, local authenticated route fixtures, and local Convex lifecycle/persistence fixtures",
+  "claimCeiling": "A replacement cumulative local candidate proving the declared intent/auth/CAS/mock-effect/reconciliation mechanics only.",
+  "explicitNonclaims": "No browser or hosted reachability, served revision, independent provider, real API credential exchange, real payment/submission/settlement, provider fulfilment, production safety, accessibility/comprehension, demand, or customer value.",
+  "unresolvedFindings": "Repository-wide typecheck, private-import, and TS-standards baselines remain red outside this cut. No changed-path P0/P1 remains in the focused evidence.",
+  "candidatePreservation": "One scoped child correction commit on top of checkpoint 42d840a9; exact revision/tree returned to the parent after commit.",
+  "exactNextSafeAction": "Parent audits the cumulative candidate against f24cf08a and the 20-path cumulative allowlist, reruns the focused bundle, and if accepted integrates it into codex/phase3c-execution. Do not deploy, start Plan05, or claim Plan04/Phase3C complete."
+}
+```
+
 ## 2026-07-20 authenticated runtime/routes completion attempt — narrowed
 
 ```json
@@ -62,6 +168,69 @@
   "nextSafeAction": "Continue within hosted-paid-operation-runtime.ts by mapping the authenticated createInitial/reserveAdmission/transact references into createHostedPaidOperation and request-scoped command ports, then rerun the focused persistence, creation, reconciliation and route tests before any parent integration."
 }
 ```
+
+## 2026-07-20 correction mapping decision
+
+Three source-compatible mappings were evaluated before correction:
+
+1. **Direct low-level server composition — rejected after the live boundary
+   falsifier.** Although the runtime could technically reconstruct the
+   invocation tracer, `tests/imports/hosted-paid-operation-boundaries.test.ts`
+   forbids low-level lifecycle/effect symbols in `src/lib/server`. Serializing
+   aggregate, authority, payment, result, or evidence state into public Convex
+   functions would also make trusted state caller-constructible.
+2. **Minimal high-level authenticated Convex intent gateway — selected.** The
+   Task1 DTO already carries the closed create/inspect/command intent. The
+   request-scoped server runtime sends only `providerKey`, `invocationRef`,
+   `commandId`, `expectedInvocationVersion`, `command`, and the authorize
+   decision. `convex/hostedPaidOperationGateway.ts` resolves authenticated
+   identity and closed provider facts, consumes the existing lifecycle
+   read-only, and invokes the typed storage/admission functions retained in
+   `convex/hostedPaidOperation.ts`. Public validators contain no owner,
+   principal, authority, selected source, payment, result, resolution, or
+   evidence fields. The runtime contains no aggregate serializer or low-level
+   lifecycle/effect language.
+3. **Further source-module widening — rejected.** The required lifecycle
+   symbols are exported read-only from
+   `src/modules/action-invocation/in-memory.ts`; the creation and persistence
+   contracts expose the necessary ports. The narrowly authorized
+   `hosted-paid-operation-service-auth.ts`, schema fields, and Convex gateway
+   split close the source-proven identity, admission, and mock-observation gaps.
+   No additional owner is required.
+
+The identity trace evaluated three paths separately. Forwarding the Clerk API
+key was rejected because the machine `getToken()` returns that opaque key while
+Convex accepts a Clerk JWT with audience `convex`. Replacing the credential with
+a session or M2M product was rejected as a new credential contract. The
+selected path reuses the existing server-attestation pattern, but narrows it to
+one paid-operation-specific encrypted token valid for at most 30 seconds and
+bound to the exact public intent. It is minted only after current API-key
+revocation/scope admission and independently verified inside Convex using
+`AE_CONVEX_SERVER_FUNCTION_TOKEN`. Human calls continue to derive
+subject-as-principal and tokenIdentifier-as-caller from `ctx.auth`.
+
+The effect/admission trace also changed the implementation. Provider release is
+the atomic insertion of one operation-owned mock-observation row keyed by
+invocation, attempt, and effect generation. A lost response occurs only after
+that row exists; reconciliation derives release and payment truth only from
+that row, while absence resolves to not-released/not-submitted. The source
+header retains the exact admission reservation, execution rechecks policy
+before pre-release persistence and atomically at mock-effect insertion, and
+terminal/no-consequence closure releases concurrency idempotently.
+
+The no-god-file audit selected one cohesive split: low-level indexed
+storage/admission remains in `convex/hostedPaidOperation.ts`; authenticated
+public intent, lifecycle composition, and the labelled mock fixture move
+together to `convex/hostedPaidOperationGateway.ts`. A further ceremonial split
+would separate one request lifecycle without creating a clearer source owner or
+deletion boundary, so it was not made.
+
+Rejected implementations: lifecycle logic in routes or server adapters;
+caller-supplied owner/principal/evidence; raw public create/transact state;
+runtime singleton or in-memory authority; a second copied lifecycle; mutation
+time external effects; and reconcile mapped to inspect. Ownership widening
+remains unjustified unless a focused Convex bundle/type RED identifies one exact
+external symbol that cannot be consumed read-only.
 
 ### Prior Task1 handoff
 

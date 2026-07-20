@@ -1,9 +1,24 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { handleHostedPaidOperationHumanInspect } from '@/lib/server/hosted-paid-operation-human-api'
+import {
+  handleHostedPaidOperationHumanCommand,
+  handleHostedPaidOperationHumanInspect,
+} from '@/lib/server/hosted-paid-operation-human-api'
 import { getHostedPaidOperationRuntime } from '@/lib/server/hosted-paid-operation-runtime'
 
 export const Route = createFileRoute('/actions/paid/$invocationRef')({
+  server: {
+    handlers: {
+      POST: async ({ request, params }) => {
+        const runtime = await getHostedPaidOperationRuntime()
+        return handleHostedPaidOperationHumanCommand(request, params.invocationRef, {
+          gateway: runtime.gateway,
+          provenance: runtime.provenance,
+          currentVersion: (ref) => runtime.currentVersion(ref),
+        })
+      },
+    },
+  },
   validateSearch: (search: Record<string, unknown>) => ({
     expectedInvocationVersion: Number(search.expectedInvocationVersion),
   }),

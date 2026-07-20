@@ -183,6 +183,7 @@ export const actionInvocationTables = {
     invocationRef: v.string(),
     invocationVersion: v.number(),
     selectedSourceRef: v.string(),
+    admissionReservationRef: v.string(),
     paymentAttemptRequired: v.boolean(),
     currentPaymentIdentifier: v.optional(v.string()),
     currentEffectGeneration: v.optional(v.number()),
@@ -344,6 +345,23 @@ export const actionInvocationTables = {
   })
     .index('by_invocationRef_and_commandId', ['invocationRef', 'commandId'])
     .index('by_commandId', ['commandId']),
+
+  hostedPaidOperationMockEffects: defineTable({
+    invocationRef: v.string(),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+    providerId: v.string(),
+    operationKey: v.string(),
+    operationRevision: v.string(),
+    paymentIdentifier: v.string(),
+    effect: v.literal('released'),
+    payment: v.literal('settled'),
+    delivery: v.union(v.literal('returned'), v.literal('response_lost')),
+    resultKind: v.string(),
+    recordedAt: v.string(),
+  }).index('by_invocationRef_and_attemptRef_and_effectGeneration', [
+    'invocationRef', 'attemptRef', 'effectGeneration',
+  ]),
 
   hostedPaidOperationAdmissionPolicies: defineTable({
     policyRef: v.string(),

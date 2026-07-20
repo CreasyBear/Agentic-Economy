@@ -7,6 +7,37 @@ import {
 import { handleHostedPaidOperationAgentCreate } from '@/lib/server/hosted-paid-operation-agent-api'
 
 describe('hosted paid-operation evaluator creation adapters', () => {
+  it('accepts the native human setup form as closed provider intent', async () => {
+    const calls: unknown[] = []
+    const creation: HostedPaidOperationCreationGateway = {
+      create: async (input) => {
+        calls.push(input)
+        return {
+          kind: 'created',
+          invocationRef: 'invocation:form',
+          expectedInvocationVersion: 1,
+        }
+      },
+    }
+    const response = await handleHostedPaidOperationHumanCreate(
+      new Request('https://ae.test/actions/paid/new', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ providerKey: 'B' }),
+      }),
+      {
+        authenticate: async () => ({ userId: 'owner:paid', sessionId: 'session:human' }),
+        creation,
+      },
+    )
+
+    expect(response.status).toBe(201)
+    expect(calls).toEqual([{
+      actor: { principalRef: 'owner:paid', callerRef: 'session:human' },
+      setup: { providerKey: 'B' },
+    }])
+  })
+
   it('accepts only providerKey and lets the source derive actor and consequence identities', async () => {
     const calls: unknown[] = []
     const creation: HostedPaidOperationCreationGateway = {

@@ -1,4 +1,4 @@
-import { makeFunctionReference, paginationOptsValidator } from 'convex/server'
+import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
@@ -9,16 +9,14 @@ import {
 import {
   acceptedAuthorityValue,
   actionInvocationOriginValue,
+  attemptReleaseValue,
+  durableAttemptOutcomeValue,
   invocationActorValue,
   invocationControlValue,
   invocationFreshnessValue,
 } from '../src/modules/action-invocation/internal/convex-schema'
 import { internalMutation, internalQuery } from './_generated/server'
-import { mutation, query } from './_generated/server'
-const internalLoadComplete = makeFunctionReference<'query'>('hostedPaidOperation:loadComplete')
-const internalCreateInitial = makeFunctionReference<'mutation'>('hostedPaidOperation:createInitial')
-const internalTransact = makeFunctionReference<'mutation'>('hostedPaidOperation:transact')
-const internalReserveAdmission = makeFunctionReference<'mutation'>('hostedPaidOperation:reserveAdmission')
+import type { MutationCtx } from './_generated/server'
 
 const opaqueReference = v.object({
   algorithm: v.literal('sha256'),
@@ -136,6 +134,21 @@ const initialControl = v.object({
   control: invocationControlValue,
 })
 
+const currentAttempt = v.object({
+  attemptRef: v.string(),
+  attemptNumber: v.number(),
+  effectGeneration: v.number(),
+  actor: invocationActorValue,
+  idempotency: v.object({
+    operationKey: v.string(),
+    materialInputDigest: v.string(),
+    effectIdentity: v.string(),
+  }),
+  lease: v.object({ owner: v.string(), expiresAt: v.string() }),
+  release: attemptReleaseValue,
+  outcome: durableAttemptOutcomeValue,
+})
+
 /**
  * One source-owned creation transaction. Provider/source interpretation,
  * neutral continuity, payment preparation and the creation command become
@@ -196,6 +209,7 @@ export const createInitial = internalMutation({
       invocationRef: args.invocationRef,
       invocationVersion: args.invocationVersion,
       selectedSourceRef: args.selectedSource.sourceRef,
+      admissionReservationRef: args.reservationRef,
       paymentAttemptRequired: true,
       currentPaymentIdentifier: args.payment.paymentIdentifier,
       updatedAt: args.recordedAt,
@@ -282,12 +296,13 @@ export const loadComplete = internalQuery({
     const currentAttempt = control?.currentAttemptRef === undefined
       ? undefined
       : attempts.find((candidate) => candidate.attemptRef === control.currentAttemptRef)
-    const payment = header.currentPaymentIdentifier === undefined
+    const paymentIdentifier = header.currentPaymentIdentifier
+    const payment = paymentIdentifier === undefined
       ? null
       : await ctx.db.query('hostedPaidOperationPayments')
         .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
           q.eq('invocationRef', args.invocationRef)
-            .eq('paymentIdentifier', header.currentPaymentIdentifier!))
+            .eq('paymentIdentifier', paymentIdentifier))
         .unique()
     const evidenceReferences = currentAttempt === undefined
       ? []
@@ -397,9 +412,12 @@ export const transact = internalMutation({
     nextInvocationVersion: v.number(),
     nextEffectGeneration: v.optional(v.number()),
     selectedSource: sourceRow,
+    control: initialControl,
+    currentAttempt: v.optional(currentAttempt),
     payment: v.optional(paymentRow),
     evidenceReferences: v.array(evidenceReferenceRow),
     submissionStarted: v.boolean(),
+    releaseAdmission: v.boolean(),
     recordedAt: v.string(),
   },
   handler: async (ctx, args) => {
@@ -420,6 +438,9 @@ export const transact = internalMutation({
     }
     if (args.submissionStarted && args.payment?.state !== 'possibly_submitted') {
       return { kind: 'refused' as const, code: 'submission_started_not_durable' as const }
+    }
+    if (args.releaseAdmission && !isAdmissionClosed(args.control.control)) {
+      return { kind: 'refused' as const, code: 'admission_release_not_terminal' as const }
     }
     const duplicate = await ctx.db.query('hostedPaidOperationCommands')
       .withIndex('by_invocationRef_and_commandId', (q) =>
@@ -450,6 +471,41 @@ export const transact = internalMutation({
       && header.currentEffectGeneration !== args.expectedEffectGeneration) {
       return { kind: 'refused' as const, code: 'effect_generation_stale' as const }
     }
+    if (args.control.owner.principalRef !== args.ownerPrincipalRef
+      || args.control.owner.callerRef !== args.ownerCallerRef) {
+      return { kind: 'refused' as const, code: 'cross_principal_refused' as const }
+    }
+    const admissionRelease = args.releaseAdmission
+      ? await prepareAdmissionRelease(ctx, {
+          reservationRef: header.admissionReservationRef,
+          principalRef: args.ownerPrincipalRef,
+        })
+      : undefined
+    if (admissionRelease?.kind === 'refused') return admissionRelease
+    const currentAttemptWrite = args.currentAttempt
+    const existingCurrentAttempt = currentAttemptWrite === undefined
+      ? null
+      : await ctx.db.query('actionInvocationAttempts')
+        .withIndex('by_invocationRef_and_attemptRef', (q) =>
+          q.eq('invocationRef', args.invocationRef)
+            .eq('attemptRef', currentAttemptWrite.attemptRef))
+        .unique()
+    if (existingCurrentAttempt !== null && args.currentAttempt !== undefined
+      && canonicalDigest({
+        attemptNumber: existingCurrentAttempt.attemptNumber,
+        actor: existingCurrentAttempt.actor,
+        effectGeneration: existingCurrentAttempt.effectGeneration,
+        idempotency: existingCurrentAttempt.idempotency,
+        lease: existingCurrentAttempt.lease,
+      }) !== canonicalDigest({
+        attemptNumber: args.currentAttempt.attemptNumber,
+        actor: args.currentAttempt.actor,
+        effectGeneration: args.currentAttempt.effectGeneration,
+        idempotency: args.currentAttempt.idempotency,
+        lease: args.currentAttempt.lease,
+      })) {
+      return { kind: 'refused' as const, code: 'command_identity_conflict' as const }
+    }
 
     const source = await ctx.db.query('hostedPaidOperationSources')
       .withIndex('by_invocationRef_and_sourceRef', (q) =>
@@ -459,14 +515,76 @@ export const transact = internalMutation({
     if (source === null) await ctx.db.insert('hostedPaidOperationSources', sourceWrite)
     else await ctx.db.replace(source._id, sourceWrite)
 
-    if (args.payment !== undefined) {
+    const control = await ctx.db.query('actionInvocationControls')
+      .withIndex('by_invocationRef', (q) => q.eq('invocationRef', args.invocationRef))
+      .unique()
+    if (control === null) {
+      return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
+    }
+    await ctx.db.replace(control._id, {
+      invocationRef: args.invocationRef,
+      invocationVersion: args.nextInvocationVersion,
+      control: {
+        invocationRef: args.invocationRef,
+        invocationVersion: args.nextInvocationVersion,
+        environment: 'MOCK/DEVELOPMENT ONLY',
+        persistence: 'durable_control',
+        origin: args.control.origin,
+        owner: args.control.owner,
+        action: args.control.action,
+        desired: args.control.desired,
+        authority: args.control.authority,
+        freshness: args.control.freshness,
+        control: args.control.control,
+      },
+      sourceRef: args.selectedSource.sourceRef,
+      preparedMaterialDigest: args.control.prepared.materialInputDigest,
+      preparedTargetDigest: canonicalDigest(args.control.prepared.target),
+      consequence: args.control.prepared.consequence,
+      dataLimitSummary: args.control.prepared.dataUse.limits,
+      authorityReference: args.control.authority.reference,
+      ...(args.control.acceptedAuthority === undefined
+        ? {}
+        : { acceptedAuthority: args.control.acceptedAuthority }),
+      ...(args.control.control.state === 'authorized'
+        ? { authorityDecisionAt: args.control.control.decidedAt }
+        : {}),
+      ...(args.currentAttempt === undefined
+        ? {}
+        : {
+            currentAttemptRef: args.currentAttempt.attemptRef,
+            currentEffectGeneration: args.currentAttempt.effectGeneration,
+            currentLeaseOwner: args.currentAttempt.lease.owner,
+            currentLeaseExpiresAt: args.currentAttempt.lease.expiresAt,
+          }),
+      updatedAt: args.recordedAt,
+    })
+
+    if (args.currentAttempt !== undefined) {
+      const attemptWrite = {
+        invocationRef: args.invocationRef,
+        ...args.currentAttempt,
+        recordedAt: args.recordedAt,
+      }
+      if (existingCurrentAttempt === null) {
+        await ctx.db.insert('actionInvocationAttempts', attemptWrite)
+      } else {
+        await ctx.db.replace(existingCurrentAttempt._id, attemptWrite)
+      }
+    }
+
+    const paymentWriteInput = args.payment
+    if (paymentWriteInput !== undefined) {
       const payment = await ctx.db.query('hostedPaidOperationPayments')
-        .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (q) =>
+        .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
           q.eq('invocationRef', args.invocationRef)
-            .eq('attemptRef', args.payment!.attemptRef)
-            .eq('effectGeneration', args.payment!.effectGeneration))
+            .eq('paymentIdentifier', paymentWriteInput.paymentIdentifier))
         .unique()
-      const paymentWrite = { invocationRef: args.invocationRef, ...args.payment, updatedAt: args.recordedAt }
+      const paymentWrite = {
+        invocationRef: args.invocationRef,
+        ...paymentWriteInput,
+        updatedAt: args.recordedAt,
+      }
       if (payment === null) await ctx.db.insert('hostedPaidOperationPayments', paymentWrite)
       else await ctx.db.replace(payment._id, paymentWrite)
     }
@@ -493,6 +611,16 @@ export const transact = internalMutation({
         ? {} : { effectGeneration: args.nextEffectGeneration }),
       recordedAt: args.recordedAt,
     })
+    if (admissionRelease?.kind === 'active') {
+      await ctx.db.patch(admissionRelease.counterId, {
+        active: admissionRelease.nextActive,
+        updatedAt: args.recordedAt,
+      })
+      await ctx.db.patch(admissionRelease.reservationId, {
+        state: 'released',
+        updatedAt: args.recordedAt,
+      })
+    }
     return {
       kind: 'applied' as const,
       invocationVersion: args.nextInvocationVersion,
@@ -594,6 +722,268 @@ export const releaseAdmission = internalMutation({
   },
 })
 
+export const checkAdmissionForInvocation = internalQuery({
+  args: {
+    principalRef: v.string(),
+    callerRef: v.string(),
+    invocationRef: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const header = await ctx.db.query('hostedPaidOperationHeaders')
+      .withIndex('by_ownerPrincipalRef_and_invocationRef', (q) =>
+        q.eq('ownerPrincipalRef', args.principalRef).eq('invocationRef', args.invocationRef))
+      .unique()
+    if (header === null || header.ownerCallerRef !== args.callerRef) {
+      return { kind: 'refused' as const, code: 'invocation_not_found' as const }
+    }
+    const reservation = await ctx.db.query('hostedPaidOperationAdmissionReservations')
+      .withIndex('by_reservationRef', (q) =>
+        q.eq('reservationRef', header.admissionReservationRef))
+      .unique()
+    if (reservation === null
+      || reservation.principalRef !== args.principalRef
+      || reservation.state !== 'active') {
+      return { kind: 'refused' as const, code: 'trial_admission_inactive' as const }
+    }
+    const policy = await ctx.db.query('hostedPaidOperationAdmissionPolicies')
+      .withIndex('by_policyRef_and_principalRef', (q) =>
+        q.eq('policyRef', reservation.policyRef).eq('principalRef', args.principalRef))
+      .unique()
+    const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
+      .withIndex('by_policyRef_and_principalRef', (q) =>
+        q.eq('policyRef', reservation.policyRef).eq('principalRef', args.principalRef))
+      .unique()
+    return policy?.enabled === true && counter !== null && counter.active > 0
+      ? { kind: 'active' as const, reservationRef: reservation.reservationRef }
+      : { kind: 'refused' as const, code: 'trial_disabled' as const }
+  },
+})
+
+/**
+ * The labelled mock effect is the insertion of this source-owned row. Policy,
+ * current authority, reservation, attempt and payment lineage are rechecked in
+ * the same transaction, and the compound index makes replay idempotent.
+ */
+export const recordMockEffect = internalMutation({
+  args: {
+    principalRef: v.string(),
+    callerRef: v.string(),
+    invocationRef: v.string(),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+    recordedAt: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const header = await ctx.db.query('hostedPaidOperationHeaders')
+      .withIndex('by_ownerPrincipalRef_and_invocationRef', (q) =>
+        q.eq('ownerPrincipalRef', args.principalRef).eq('invocationRef', args.invocationRef))
+      .unique()
+    if (header === null || header.ownerCallerRef !== args.callerRef) {
+      return { kind: 'refused' as const, code: 'invocation_not_found' as const }
+    }
+    const control = await ctx.db.query('actionInvocationControls')
+      .withIndex('by_invocationRef', (q) => q.eq('invocationRef', args.invocationRef))
+      .unique()
+    const attempt = await ctx.db.query('actionInvocationAttempts')
+      .withIndex('by_invocationRef_and_attemptRef', (q) =>
+        q.eq('invocationRef', args.invocationRef).eq('attemptRef', args.attemptRef))
+      .unique()
+    const source = await ctx.db.query('hostedPaidOperationSources')
+      .withIndex('by_invocationRef_and_sourceRef', (q) =>
+        q.eq('invocationRef', args.invocationRef).eq('sourceRef', header.selectedSourceRef))
+      .unique()
+    const paymentIdentifier = header.currentPaymentIdentifier
+    const payment = paymentIdentifier === undefined
+      ? null
+      : await ctx.db.query('hostedPaidOperationPayments')
+        .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
+          q.eq('invocationRef', args.invocationRef)
+            .eq('paymentIdentifier', paymentIdentifier))
+        .unique()
+    if (control === null
+      || attempt === null
+      || source === null
+      || payment === null
+      || header.currentEffectGeneration !== args.effectGeneration
+      || control.currentAttemptRef !== args.attemptRef
+      || control.currentEffectGeneration !== args.effectGeneration
+      || !currentAuthorityAccepted(control)
+      || control.control.control.state !== 'reconciliation_required'
+      || attempt.effectGeneration !== args.effectGeneration
+      || attempt.release.state !== 'possibly_released'
+      || payment.attemptRef !== args.attemptRef
+      || payment.effectGeneration !== args.effectGeneration) {
+      return { kind: 'refused' as const, code: 'effect_lineage_not_current' as const }
+    }
+    const existing = await ctx.db.query('hostedPaidOperationMockEffects')
+      .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (q) =>
+        q.eq('invocationRef', args.invocationRef)
+          .eq('attemptRef', args.attemptRef)
+          .eq('effectGeneration', args.effectGeneration))
+      .unique()
+    if (existing !== null) {
+      return {
+        kind: 'duplicate' as const,
+        observation: mockEffectObservation(existing),
+      }
+    }
+    const reservation = await ctx.db.query('hostedPaidOperationAdmissionReservations')
+      .withIndex('by_reservationRef', (q) =>
+        q.eq('reservationRef', header.admissionReservationRef))
+      .unique()
+    const policy = reservation === null
+      ? null
+      : await ctx.db.query('hostedPaidOperationAdmissionPolicies')
+        .withIndex('by_policyRef_and_principalRef', (q) =>
+          q.eq('policyRef', reservation.policyRef).eq('principalRef', args.principalRef))
+        .unique()
+    const counter = reservation === null
+      ? null
+      : await ctx.db.query('hostedPaidOperationAdmissionCounters')
+        .withIndex('by_policyRef_and_principalRef', (q) =>
+          q.eq('policyRef', reservation.policyRef).eq('principalRef', args.principalRef))
+        .unique()
+    if (reservation === null
+      || reservation.principalRef !== args.principalRef
+      || reservation.state !== 'active'
+      || counter === null
+      || counter.active < 1
+      || policy?.enabled !== true) {
+      return { kind: 'refused' as const, code: 'trial_disabled_or_inactive' as const }
+    }
+    const row = {
+      invocationRef: args.invocationRef,
+      attemptRef: args.attemptRef,
+      effectGeneration: args.effectGeneration,
+      providerId: source.providerId,
+      operationKey: source.operationKey,
+      operationRevision: source.operationRevision,
+      paymentIdentifier: payment.paymentIdentifier,
+      effect: 'released' as const,
+      payment: 'settled' as const,
+      delivery: source.providerId === 'provider:b'
+        ? 'response_lost' as const
+        : 'returned' as const,
+      resultKind: 'hosted_sandbox_succeeded',
+      recordedAt: args.recordedAt,
+    }
+    await ctx.db.insert('hostedPaidOperationMockEffects', row)
+    return {
+      kind: 'recorded' as const,
+      observation: mockEffectObservation(row),
+    }
+  },
+})
+
+export const readMockEffectObservation = internalQuery({
+  args: {
+    principalRef: v.string(),
+    callerRef: v.string(),
+    invocationRef: v.string(),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const header = await ctx.db.query('hostedPaidOperationHeaders')
+      .withIndex('by_ownerPrincipalRef_and_invocationRef', (q) =>
+        q.eq('ownerPrincipalRef', args.principalRef).eq('invocationRef', args.invocationRef))
+      .unique()
+    if (header === null || header.ownerCallerRef !== args.callerRef) {
+      return { kind: 'refused' as const, code: 'invocation_not_found' as const }
+    }
+    const attempt = await ctx.db.query('actionInvocationAttempts')
+      .withIndex('by_invocationRef_and_attemptRef', (q) =>
+        q.eq('invocationRef', args.invocationRef).eq('attemptRef', args.attemptRef))
+      .unique()
+    if (attempt === null || attempt.effectGeneration !== args.effectGeneration) {
+      return { kind: 'refused' as const, code: 'effect_lineage_not_found' as const }
+    }
+    const effect = await ctx.db.query('hostedPaidOperationMockEffects')
+      .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (q) =>
+        q.eq('invocationRef', args.invocationRef)
+          .eq('attemptRef', args.attemptRef)
+          .eq('effectGeneration', args.effectGeneration))
+      .unique()
+    return effect === null
+      ? {
+          kind: 'observed' as const,
+          observation: {
+            effect: 'not_released' as const,
+            payment: 'not_submitted' as const,
+            recordedAt: args.effectGeneration > 0 ? attempt.recordedAt : header.updatedAt,
+          },
+        }
+      : { kind: 'observed' as const, observation: mockEffectObservation(effect) }
+  },
+})
+
+function isAdmissionClosed(control: Readonly<{ state: string; reason?: string }>): boolean {
+  return control.state === 'terminal'
+    || control.state === 'cancelled'
+    || (control.state === 'invalidated' && control.reason === 'authority_not_accepted')
+}
+
+function currentAuthorityAccepted(control: Readonly<{
+  authorityReference?: string
+  acceptedAuthority?:
+    | Readonly<{ kind: 'approve_each'; authorityRef: string }>
+    | Readonly<{ kind: 'standing_mandate_use' }>
+}>): boolean {
+  return control.authorityReference !== undefined
+    && control.acceptedAuthority?.kind === 'approve_each'
+    && control.acceptedAuthority.authorityRef === control.authorityReference
+}
+
+function mockEffectObservation(row: Readonly<{
+  providerId: string
+  operationKey: string
+  operationRevision: string
+  paymentIdentifier: string
+  effect: 'released'
+  payment: 'settled'
+  delivery: 'returned' | 'response_lost'
+  resultKind: string
+  recordedAt: string
+}>) {
+  return {
+    providerId: row.providerId,
+    operationKey: row.operationKey,
+    operationRevision: row.operationRevision,
+    paymentIdentifier: row.paymentIdentifier,
+    effect: row.effect,
+    payment: row.payment,
+    delivery: row.delivery,
+    resultKind: row.resultKind,
+    recordedAt: row.recordedAt,
+  }
+}
+
+async function prepareAdmissionRelease(
+  ctx: MutationCtx,
+  input: Readonly<{ reservationRef: string; principalRef: string }>,
+) {
+  const reservation = await ctx.db.query('hostedPaidOperationAdmissionReservations')
+    .withIndex('by_reservationRef', (q) => q.eq('reservationRef', input.reservationRef))
+    .unique()
+  if (reservation === null || reservation.principalRef !== input.principalRef) {
+    return { kind: 'refused' as const, code: 'admission_reservation_invalid' as const }
+  }
+  if (reservation.state === 'released') return { kind: 'duplicate' as const }
+  const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
+    .withIndex('by_policyRef_and_principalRef', (q) =>
+      q.eq('policyRef', reservation.policyRef).eq('principalRef', reservation.principalRef))
+    .unique()
+  if (counter === null || counter.active < 1) {
+    return { kind: 'refused' as const, code: 'admission_counter_inconsistent' as const }
+  }
+  return {
+    kind: 'active' as const,
+    reservationId: reservation._id,
+    counterId: counter._id,
+    nextActive: counter.active - 1,
+  }
+}
+
 function opaqueDigestValid(digest: string): boolean {
   return /^[a-f0-9]{64}$/u.test(digest)
 }
@@ -637,95 +1027,3 @@ function normalizeAttemptOutcome(outcome: {
   }
   return rest
 }
-
-async function requireTokenIdentity(ctx: { auth: { getUserIdentity(): Promise<{ tokenIdentifier: string } | null> } }) {
-  const identity = await ctx.auth.getUserIdentity()
-  if (identity === null) return null
-  return {
-    principalRef: identity.tokenIdentifier,
-    callerRef: identity.tokenIdentifier,
-  }
-}
-
-export const authenticatedLoadComplete = query({
-  args: {
-    invocationRef: v.string(),
-    paginationOpts: paginationOptsValidator,
-  },
-  handler: async (ctx, args): Promise<unknown> => {
-    const identity = await requireTokenIdentity(ctx)
-    if (identity === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
-    return await ctx.runQuery(internalLoadComplete, {
-      ownerPrincipalRef: identity.principalRef,
-      ownerCallerRef: identity.callerRef,
-      invocationRef: args.invocationRef,
-      paginationOpts: args.paginationOpts,
-    })
-  },
-})
-
-export const authenticatedCreateInitial = mutation({
-  args: {
-    creationCommandId: v.string(),
-    creationCommandDigest: v.string(),
-    reservationRef: v.string(),
-    invocationRef: v.string(),
-    invocationVersion: v.number(),
-    selectedSource: sourceRow,
-    control: initialControl,
-    payment: paymentRow,
-    recordedAt: v.string(),
-  },
-  handler: async (ctx, args): Promise<unknown> => {
-    const identity = await requireTokenIdentity(ctx)
-    if (identity === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
-    if (args.control.owner.principalRef !== identity.principalRef
-      || args.control.owner.callerRef !== identity.callerRef) {
-      return { kind: 'refused' as const, code: 'caller_identity_refused' as const }
-    }
-    return await ctx.runMutation(internalCreateInitial, args)
-  },
-})
-
-export const authenticatedTransact = mutation({
-  args: {
-    invocationRef: v.string(),
-    commandId: v.string(),
-    commandDigest: v.string(),
-    expectedInvocationVersion: v.number(),
-    expectedEffectGeneration: v.optional(v.number()),
-    nextInvocationVersion: v.number(),
-    nextEffectGeneration: v.optional(v.number()),
-    selectedSource: sourceRow,
-    payment: v.optional(paymentRow),
-    evidenceReferences: v.array(evidenceReferenceRow),
-    submissionStarted: v.boolean(),
-    recordedAt: v.string(),
-  },
-  handler: async (ctx, args): Promise<unknown> => {
-    const identity = await requireTokenIdentity(ctx)
-    if (identity === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
-    return await ctx.runMutation(internalTransact, {
-      ...args,
-      ownerPrincipalRef: identity.principalRef,
-      ownerCallerRef: identity.callerRef,
-    })
-  },
-})
-
-export const authenticatedReserveAdmission = mutation({
-  args: {
-    policyRef: v.string(),
-    windowKey: v.string(),
-    commandId: v.string(),
-    recordedAt: v.string(),
-  },
-  handler: async (ctx, args): Promise<unknown> => {
-    const identity = await requireTokenIdentity(ctx)
-    if (identity === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
-    return await ctx.runMutation(internalReserveAdmission, {
-      ...args,
-      principalRef: identity.principalRef,
-    })
-  },
-})

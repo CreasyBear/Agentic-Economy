@@ -14,6 +14,8 @@ type TransportRefusalCode =
   | PaidOperationApplicationRefusalCode
   | 'aggregate_incomplete'
   | 'hosted_read_unavailable'
+  | 'command_identity_conflict'
+  | 'effect_generation_stale'
 
 export type HostedPaidOperationTransportResult =
   | Readonly<{ kind: 'accepted'; value: PaidOperationProjection }>
@@ -62,6 +64,8 @@ export type HostedPaidOperationCreationGateway = Readonly<{
           | 'total_exhausted'
           | 'concurrency_exhausted'
           | 'rate_exhausted'
+          | 'creation_conflict'
+          | 'aggregate_incomplete'
       }>
   >
 }>
@@ -413,6 +417,19 @@ export async function parseHostedPaidOperationSetup(request: Request) {
 }
 
 async function parseSetup(request: Request): Promise<Readonly<{ providerKey: 'A' | 'B' }> | undefined> {
+  const contentType = request.headers.get('content-type')?.toLowerCase() ?? ''
+  if (contentType.startsWith('application/x-www-form-urlencoded')
+    || contentType.startsWith('multipart/form-data')) {
+    try {
+      const entries = [...(await request.formData()).entries()]
+      if (entries.length !== 1 || entries[0]?.[0] !== 'providerKey') return undefined
+      const providerKey = entries[0][1]
+      return providerKey === 'A' || providerKey === 'B' ? { providerKey } : undefined
+    } catch {
+      return undefined
+    }
+  }
+
   let value: unknown
   try {
     value = await request.json()

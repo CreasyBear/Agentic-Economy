@@ -10,10 +10,27 @@ const nonPaidActionModules = production.filter((path) =>
   && !path.startsWith('src/modules/capability-supply/'))
 
 describe('Phase 3C hosted paid-operation ownership boundary', () => {
-  it('has no hosted paid-operation production lifecycle before Plan 02', () => {
+  it('keeps the Plan 02-04 hosted paid-operation surface inside its owned modules', () => {
     const hostedProduction = production.filter((path) =>
       /hosted-paid-operation|hostedPaidOperation/u.test(`${path}\n${readFileSync(path, 'utf8')}`))
-    expect(hostedProduction).toEqual([])
+    expect(hostedProduction).toEqual([
+      'convex/hostedPaidOperation.ts',
+      'convex/hostedPaidOperationGateway.ts',
+      'src/lib/server/hosted-paid-operation-agent-api.ts',
+      'src/lib/server/hosted-paid-operation-agent-auth.ts',
+      'src/lib/server/hosted-paid-operation-human-api.ts',
+      'src/lib/server/hosted-paid-operation-runtime.ts',
+      'src/modules/action-invocation/hosted-paid-operation-composition.ts',
+      'src/modules/action-invocation/hosted-paid-operation-creation.ts',
+      'src/modules/action-invocation/hosted-paid-operation-port.ts',
+      'src/modules/action-invocation/hosted-paid-operation-service-auth.ts',
+      'src/modules/action-invocation/internal/convex-schema.ts',
+      'src/routes/actions.paid.$invocationRef.tsx',
+      'src/routes/actions.paid.new.tsx',
+      'src/routes/api.v1.paid-operations.$invocationRef.commands.ts',
+      'src/routes/api.v1.paid-operations.$invocationRef.ts',
+      'src/routes/api.v1.paid-operations.ts',
+    ])
   })
 
   it('keeps routes and server adapters above the paid-operation application seam', () => {
@@ -30,9 +47,12 @@ describe('Phase 3C hosted paid-operation ownership boundary', () => {
     expect(violations).toEqual([])
   })
 
-  it('keeps Sandbox setup out of canonical routes and shared card logic in Plan 01', () => {
+  it('keeps Sandbox setup confined to its explicit setup route and generated registration', () => {
     const violations = production.filter((path) =>
       /\/actions\/paid\/new|Sandbox setup/u.test(readFileSync(path, 'utf8')))
-    expect(violations).toEqual([])
+    expect(violations).toEqual([
+      'src/routeTree.gen.ts',
+      'src/routes/actions.paid.new.tsx',
+    ])
   })
 })

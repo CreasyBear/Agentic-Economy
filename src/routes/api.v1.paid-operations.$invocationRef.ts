@@ -7,12 +7,11 @@ export const Route = createFileRoute('/api/v1/paid-operations/$invocationRef')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        const runtime = await getHostedPaidOperationRuntime()
         const version = Number(new URL(request.url).searchParams.get('expectedInvocationVersion'))
         return handleHostedPaidOperationAgentInspect(params.invocationRef, version, {
-          gateway: runtime.gateway,
-          provenance: runtime.provenance,
-          currentVersion: (ref) => runtime.currentVersion(ref),
+          runtime: async (principal) => await getHostedPaidOperationRuntime({
+            authMode: { kind: 'agent_service', principal },
+          }),
         })
       },
     },
