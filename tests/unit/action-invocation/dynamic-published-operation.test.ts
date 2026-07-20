@@ -199,6 +199,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         reads += 1
         return 'raw:authorization:from-custody'
       },
+      readX402PaymentAuthorizationByDigest: async () => {
+        reads += 1
+        return 'raw:authorization:from-custody'
+      },
     }
     const preparedAttempts = new Map([[x402PaymentAttemptKey(prepared), durable]])
     const restored = createPaymentAttemptRuntime(runtime, prepared, preparedAttempts, undefined, () => 2)
@@ -1962,6 +1966,9 @@ function runtime(
       [...custody.values()].find((candidate) =>
         candidate.custodyRef === custodyRef
         && candidate.authorizationDigest === authorizationDigest)?.paymentSignature,
+    readX402PaymentAuthorizationByDigest: async ({ authorizationDigest }) =>
+      [...custody.values()].find((candidate) =>
+        candidate.authorizationDigest === authorizationDigest)?.paymentSignature,
   }
 }
 

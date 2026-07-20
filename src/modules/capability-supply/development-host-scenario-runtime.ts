@@ -116,6 +116,8 @@ export function developmentSuccessRuntime(
     },
     readX402PaymentAuthorization: async ({ authorizationDigest }) =>
       authorizationDigest === canonicalDigest(paymentSignature) ? paymentSignature : undefined,
+    readX402PaymentAuthorizationByDigest: async ({ authorizationDigest }) =>
+      authorizationDigest === canonicalDigest(paymentSignature) ? paymentSignature : undefined,
   }
 }
 

@@ -364,6 +364,9 @@ function bindHost(
       if (controlEvidenceRefusal !== undefined) {
         return { kind: 'refused', code: controlEvidenceRefusal, view }
       }
+      if (reconciliationEvidence.resolution !== 'released') {
+        return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }
+      }
       const payment = await adapter.reconcilePayment({ evidence: paymentEvidence })
       if (payment.kind === 'refused') {
         return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }

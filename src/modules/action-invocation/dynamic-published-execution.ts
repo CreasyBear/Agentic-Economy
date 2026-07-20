@@ -249,10 +249,13 @@ export function createPaymentAttemptRuntime(
         || current.authorizationDigest !== authorization.authorizationDigest) {
         throw new Error('x402_payment_attempt_reconciliation_required')
       }
-      if (runtime.readX402PaymentAuthorization === undefined) {
+      const custodyReader = volatileCustodyRef === undefined
+        ? runtime.readX402PaymentAuthorizationByDigest
+        : runtime.readX402PaymentAuthorization
+      if (custodyReader === undefined) {
         throw new Error('x402_payment_custody_read_unavailable')
       }
-      return runtime.readX402PaymentAuthorization({
+      return custodyReader({
         ...authorization,
         custodyRef: volatileCustodyRef ?? authorization.custodyRef,
       })

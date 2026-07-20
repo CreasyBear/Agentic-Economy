@@ -112,6 +112,10 @@ export type RouteTransportRuntime = Readonly<{
   readX402PaymentAuthorization?: (
     prepared: X402PreparedAuthorization,
   ) => Promise<string | undefined>
+  /** Restores custody material by the persisted opaque digest after process loss. */
+  readX402PaymentAuthorizationByDigest?: (
+    prepared: X402PreparedAuthorization,
+  ) => Promise<string | undefined>
   markX402PaymentPossiblySubmitted?: (event: X402PaymentAttemptEvent) => Promise<void> | void
   observeX402PaymentAttempt?: (
     event: X402PaymentAttemptEvent & Readonly<{

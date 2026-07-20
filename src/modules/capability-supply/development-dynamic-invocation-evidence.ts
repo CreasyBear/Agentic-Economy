@@ -837,6 +837,8 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
     },
     readX402PaymentAuthorization: async ({ authorizationDigest }) =>
       authorizationDigest === canonicalDigest(paymentSignature) ? paymentSignature : undefined,
+    readX402PaymentAuthorizationByDigest: async ({ authorizationDigest }) =>
+      authorizationDigest === canonicalDigest(paymentSignature) ? paymentSignature : undefined,
   }
 }
 
