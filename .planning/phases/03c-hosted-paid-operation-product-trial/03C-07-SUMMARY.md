@@ -206,6 +206,13 @@ It creates the human session and singleton paid-only key inside the path,
 revokes both in `finally`, requires Clerk revoked-state readback, and only then
 runs the raw observation. Injected dependencies return
 `local_live_collector_fixture_only`; they cannot return the final class.
+After the journey, both revocation readbacks, raw Convex observation, packet
+integrity check and authoritative comparison, the collector immediately takes
+a second torn-safe clean Git observation. Neither the injected local-success
+class nor the final hosted class can be returned unless that observation still
+matches the original observation and the exact target revision/tree. A
+clean-to-dirty checkout transition or stable HEAD/tree drift during the live
+sequence therefore refuses as `live_source_mismatch`.
 `compareAuthoritativeLiveEvidence` returns only `live_evidence_matches`, never
 the hosted evidence class. There is no direct terminal-packet admission helper.
 
@@ -361,7 +368,7 @@ Focused REDs were written before each source slice:
 | --- | --- | --- |
 | Credential helper | Paid-only issuance still required Customer Request authority; broad/unrelated or non-singleton scope sets, active/mismatched revocation readback and journey-failure cleanup were not enforced. | Intended failures closed with paid-only evidence overloads while preserving legacy defaults; final credential suite 16/16. One callback-arity fixture mismatch and one edit-splice parse error were mechanical repairs, not accepted semantic REDs. |
 | Internal query and receipt | The rejected candidate lacked a deployment receipt, admitted an incomplete header/source/payment/reservation cohort, used cross-run-linkable digests, and could hide prior rows. | Receipt/schema tests first failed on the missing table. Cohort tests then produced three intended failures: missing returned cohort/deployment data, accepted fourth header, and equal digests across cohorts. Hidden header/source/payment/orphan-reservation, caller/payment drift, receipt drift, old-row and cap-plus-one falsifiers now close; final handler suite 24/24. A single expected-code mismatch was a fixture repair. |
-| Packet/live admission | The candidate hard-coded the wrong repo/ref, exposed a direct terminal-only admission helper, synthesized early transitions, accepted precreated credentials/admin-key input, and combined all responsibilities in one file. | The correct `main`/`CreasyBear/Agentic-Economy` fixture failed first. Strict receipt/run/job, v1/v2 checkpoint, torn-Git, configured-CLI, post-revocation, journey-failure cleanup, self-consistent-raw-contradiction and single-emitter falsifiers then guided the split. Offline and injected packets remain local-only; final release suite 23/23. |
+| Packet/live admission | The candidate hard-coded the wrong repo/ref, exposed a direct terminal-only admission helper, synthesized early transitions, accepted precreated credentials/admin-key input, combined all responsibilities in one file, and observed the proof checkout only before the long live sequence. | The correct `main`/`CreasyBear/Agentic-Economy` fixture failed first. Strict receipt/run/job, v1/v2 checkpoint, torn-Git, configured-CLI, post-revocation, journey-failure cleanup, self-consistent-raw-contradiction and single-emitter falsifiers then guided the split. Two final REDs proved that clean-to-dirty and stable HEAD/tree drift after raw observation still emitted local success; the second pre-return Git observation closes both. Offline and injected packets remain local-only; final release suite 25/25. |
 | Residue | The candidate's hand-maintained artifact list and classification table could omit the same path together. | Replaced with a Git-derived exact Phase 3B delta including untracked owned files. The derived 89-path set, omission falsifier, no-write removal graph and non-paid import scan pass 4/4. |
 | Package commands | Artifact integrity and live admission naming could still be conflated. | Exact source/local, `hosted-packet-integrity`, and required-live hosted smoke commands remain distinct and fail closed; no deployment/workflow command was added. |
 
@@ -373,9 +380,9 @@ provider or payment action was used to turn a RED green.
 
 | Command | Result |
 | --- | --- |
-| `npm run verify:paid-operation:hosted-source-local` | PASS — 4 files, 67 tests. |
+| `npm run verify:paid-operation:hosted-source-local` | PASS — 4 files, 69 tests. |
 | `./node_modules/.bin/vitest run tests/unit/action-invocation/hosted-paid-operation-persistence.test.ts tests/unit/action-invocation/hosted-paid-operation-creation.test.ts tests/unit/server/hosted-paid-operation-runtime.test.ts tests/unit/server/hosted-paid-operation-api.test.ts tests/imports/hosted-paid-operation-boundaries.test.ts` | PASS — 5 affected Plan 07A files, 33 tests. |
-| `./node_modules/.bin/oxlint` over the twelve changed TypeScript paths with `--deny-warnings` | PASS — no diagnostics. |
+| `./node_modules/.bin/oxlint` over the twelve cumulative changed TypeScript paths and a correction-specific rerun over the collector/test with `--deny-warnings` | PASS — no diagnostics. |
 | `./node_modules/.bin/tsc --noEmit --pretty false` | Broad baseline remains exit 2 with 108 diagnostics/331 output lines; zero diagnostics match an owned TypeScript path. |
 | Query-slice scan for `.collect()`, `.filter()`, scheduler, raw custody and raw evidence access | PASS — no matches. |
 | Final-label source scan | PASS — the literal is declared once in the proof contract and has exactly one return use in the default live collector; facade, journey, smoke, Convex owner and package contain no literal or bypass helper. |

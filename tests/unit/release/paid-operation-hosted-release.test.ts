@@ -452,6 +452,67 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(events).toContain('session_revocation_readback')
   })
 
+  it.each([
+    {
+      drift: 'clean-to-dirty checkout drift',
+      finalHead: SOURCE_REVISION,
+      finalTree: SOURCE_TREE,
+      finalStatus: ' M tools/release/paid-operation-hosted-live-collector.ts',
+    },
+    {
+      drift: 'HEAD and tree drift',
+      finalHead: 'f'.repeat(40),
+      finalTree: 'e'.repeat(40),
+      finalStatus: '',
+    },
+  ])('refuses $drift after raw observation without emitting a success class', async ({
+    finalHead,
+    finalTree,
+    finalStatus,
+  }) => {
+    const events: string[] = []
+    let gitCalls = 0
+    const result = await collectAndAdmitLivePaidOperationHostedEvidence(
+      liveTargetFixture(),
+      liveContextFixture(),
+      {
+        fetch: fakeLiveCollectionFetch(events),
+        exec: async (file, args) => {
+          if (file === 'git') {
+            gitCalls += 1
+            const finalObservation = gitCalls > 5
+            if (gitCalls === 6) events.push('admission_git_observation')
+            if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+              return finalObservation ? finalHead : SOURCE_REVISION
+            }
+            if (args[0] === 'rev-parse') {
+              return finalObservation ? finalTree : SOURCE_TREE
+            }
+            if (args[0] === 'status') {
+              return finalObservation ? finalStatus : ''
+            }
+          }
+          if (file === 'npx') {
+            events.push('convex_observation')
+            return JSON.stringify(contentFixture().sourceObservation)
+          }
+          throw new Error(`unexpected_exec:${file}:${args.join(':')}`)
+        },
+        runJourney: async () => journeyObservationFixture(),
+      },
+    )
+
+    expect(result).toEqual({ kind: 'refused', code: 'live_source_mismatch' })
+    expect(JSON.stringify(result)).not.toContain('local_live_path_verified')
+    expect(JSON.stringify(result)).not.toContain(
+      'authenticated_exact_revision_hosted_sandbox',
+    )
+    expect(gitCalls).toBe(10)
+    expect(events.indexOf('convex_observation')).toBeLessThan(
+      events.indexOf('admission_git_observation'),
+    )
+  })
+
   it('revokes both temporary credentials and skips raw observation when the journey fails', async () => {
     const events: string[] = []
     const result = await collectAndAdmitLivePaidOperationHostedEvidence(

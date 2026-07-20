@@ -244,6 +244,15 @@ export async function collectAndAdmitLivePaidOperationHostedEvidence(
     const compared = compareAuthoritativeLiveEvidence(packet, evidence)
     if (compared.kind === 'refused') return compared
 
+    const sourceAtAdmission = await observeStableCleanGit(
+      target.source,
+      contextInput.repositoryRoot,
+      dependencies.exec,
+    )
+    if (!sameJson(sourceAtAdmission, source)) {
+      return refused('live_source_mismatch')
+    }
+
     if (injectedDependencies !== undefined) {
       return {
         kind: 'local_live_path_verified',
