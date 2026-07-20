@@ -313,6 +313,8 @@ function preferredContinuation(
   continuations: readonly PaidOperationContinuation[],
 ): PaidOperationContinuation | null {
   return continuations.find(({ kind }) => kind === 'reconcile')
+    ?? continuations.find(({ kind }) => kind === 'authorize')
+    ?? continuations.find(({ kind }) => kind === 'execute')
     ?? continuations.find(({ kind }) => kind === 'retry')
     ?? continuations.find(({ kind }) => kind === 'inspect')
     ?? null
@@ -320,6 +322,10 @@ function preferredContinuation(
 
 function continuationLabel(continuation: PaidOperationContinuation): string {
   switch (continuation.kind) {
+    case 'authorize':
+      return 'Authorize payment'
+    case 'execute':
+      return 'Continue operation'
     case 'reconcile':
       return 'Check existing payment'
     case 'retry':
@@ -331,6 +337,10 @@ function continuationLabel(continuation: PaidOperationContinuation): string {
 
 function continuationIcon(continuation: PaidOperationContinuation) {
   switch (continuation.kind) {
+    case 'authorize':
+      return <CheckCircle2Icon aria-hidden="true" />
+    case 'execute':
+      return <RefreshCwIcon aria-hidden="true" />
     case 'reconcile':
       return <SearchIcon aria-hidden="true" />
     case 'retry':
@@ -346,11 +356,11 @@ function money(value: Readonly<{ currency: string; amountMinor: number }>): stri
     formatter = new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: value.currency,
-      minimumFractionDigits: 2,
     })
     moneyFormatters.set(value.currency, formatter)
   }
-  return formatter.format(value.amountMinor / 100)
+  const minorUnitExponent = formatter.resolvedOptions().maximumFractionDigits
+  return formatter.format(value.amountMinor / (10 ** minorUnitExponent))
 }
 
 function formatNumber(value: number): string {

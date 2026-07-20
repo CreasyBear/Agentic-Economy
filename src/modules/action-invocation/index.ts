@@ -128,6 +128,7 @@ export type {
 export type {
   PaidOperationContinuation,
   PaidOperationError,
+  OpaqueDigestReference,
   PaidOperationPaymentAuthorization,
   PaidOperationPaymentAttemptSnapshot,
   PaidOperationPaymentSubmission,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createPaidOperationSemantics,
+  derivePaidOperationSemantics,
   PAID_OPERATION_SEMANTIC_DIGEST_USE,
   projectRichPaidOperation,
   projectStructuredPaidOperation,
@@ -45,7 +46,11 @@ function baseSemantics(): Omit<PaidOperationSemantics, 'schema'> {
     paymentAuthorization: {
       state: 'created',
       paymentIdentifier: 'payment:1',
-      custodyReference: 'custody:opaque:1',
+      custodyReference: {
+        kind: 'opaque_digest_reference',
+        algorithm: 'sha256',
+        digest: `sha256:${'1'.repeat(64)}`,
+      },
       evidenceRefs: ['evidence:authorization'],
     },
     paymentSubmission: {
@@ -195,6 +200,77 @@ describe('agentic-paid-operation:v1 projections', () => {
         evidenceRefs: ['evidence:invalid'],
       },
     })).toThrow('paid_operation_presentation_invalid')
+  })
+
+  it('refuses settled state without attributable amount and nonempty evidence', () => {
+    expect(() => createPaidOperationSemantics({
+      ...baseSemantics(),
+      settlement: {
+        state: 'settled',
+        amount: { currency: 'USD', amountMinor: 1 },
+        evidenceRefs: [],
+      },
+    })).toThrow('paid_operation_settlement_invalid')
+  })
+
+  it('derives settlement from the attributable settled amount rather than maximum authority', () => {
+    const semantics = derivePaidOperationSemantics({
+      view: {
+        invocationRef: 'invocation:settled-amount',
+        invocationVersion: 4,
+        attempts: [],
+        control: { state: 'terminal' },
+        observedResolution: {
+          state: 'returned',
+          execution: 'runner_returned',
+          businessOutcome: 'quote_returned',
+          resultReferenceable: true,
+          result: { kind: 'success' },
+        },
+      } as any,
+      paymentAttempt: {
+        paymentIdentifier: 'payment:settled-amount',
+        custodyRef: 'runtime-only-custody-handle',
+        settledAmount: { currency: 'USD', amountMinor: 37 },
+        state: 'settled',
+        evidenceRefs: ['evidence:provider-settlement'],
+      },
+      operation: baseSemantics().operation,
+      presentation: baseSemantics().presentation,
+      maximumAuthorizedCharge: { currency: 'USD', amountMinor: 100 },
+      queryRecipient: 'provider:development-quote',
+      resultDelivery: { state: 'not_delivered' },
+      environment: baseSemantics().environment,
+    })
+
+    expect(semantics.settlement).toEqual({
+      state: 'settled',
+      amount: { currency: 'USD', amountMinor: 37 },
+      evidenceRefs: ['evidence:provider-settlement'],
+    })
+    expect(semantics.paymentAuthorization).toEqual(expect.objectContaining({
+      custodyReference: {
+        kind: 'opaque_digest_reference',
+        algorithm: 'sha256',
+        digest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      },
+    }))
+    expect(JSON.stringify(semantics)).not.toContain('runtime-only-custody-handle')
+  })
+
+  it('refuses custody material that is not a structurally opaque digest reference', () => {
+    const input = baseSemantics()
+    expect(() => createPaidOperationSemantics({
+      ...input,
+      paymentAuthorization: {
+        ...input.paymentAuthorization,
+        custodyReference: {
+          kind: 'opaque_digest_reference',
+          algorithm: 'sha256',
+          digest: 'secret-name:custody-key',
+        },
+      },
+    } as Omit<PaidOperationSemantics, 'schema'>)).toThrow('paid_operation_authorization_invalid')
   })
 
   it('keeps the six canonical replay states identical across human and agent projections', () => {

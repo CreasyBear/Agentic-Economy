@@ -18,7 +18,7 @@ describe('AePaidOperationCard', () => {
       paymentAuthorization: {
         state: 'created',
         paymentIdentifier: 'payment:prepared',
-        custodyReference: 'custody:prepared',
+        custodyReference: custodyReference('1'),
         evidenceRefs: ['evidence:prepared'],
       },
     })} />)
@@ -47,7 +47,7 @@ describe('AePaidOperationCard', () => {
         paymentAuthorization: {
           state: 'created',
           paymentIdentifier: 'payment:uncertain',
-          custodyReference: 'custody:uncertain',
+          custodyReference: custodyReference('2'),
           evidenceRefs: ['evidence:authorization'],
         },
         paymentSubmission: {
@@ -80,7 +80,7 @@ describe('AePaidOperationCard', () => {
       paymentAuthorization: {
         state: 'created',
         paymentIdentifier: 'payment:complete',
-        custodyReference: 'custody:complete',
+        custodyReference: custodyReference('3'),
         evidenceRefs: ['evidence:authorization'],
       },
       paymentSubmission: {
@@ -164,7 +164,7 @@ describe('AePaidOperationCard', () => {
       paymentAuthorization: {
         state: 'created',
         paymentIdentifier: 'payment:running',
-        custodyReference: 'custody:running',
+        custodyReference: custodyReference('4'),
         evidenceRefs: ['evidence:authorization'],
       },
       paymentSubmission: {
@@ -180,7 +180,7 @@ describe('AePaidOperationCard', () => {
       paymentAuthorization: {
         state: 'created',
         paymentIdentifier: 'payment:reconciled',
-        custodyReference: 'custody:reconciled',
+        custodyReference: custodyReference('5'),
         evidenceRefs: ['evidence:authorization'],
       },
       settlement: {
@@ -203,7 +203,7 @@ describe('AePaidOperationCard', () => {
       paymentAuthorization: {
         state: 'created',
         paymentIdentifier: 'payment:invalid-quote',
-        custodyReference: 'custody:invalid-quote',
+        custodyReference: custodyReference('6'),
         evidenceRefs: ['evidence:authorization'],
       },
       paymentSubmission: {
@@ -282,7 +282,58 @@ describe('AePaidOperationCard', () => {
     expect(document.body.textContent).not.toContain('BTC')
     expect(document.body.textContent).not.toContain('quote')
   })
+
+  it('uses ISO minor-unit exponents for JPY and KWD', () => {
+    const { rerender } = render(<AePaidOperationCard semantics={fixture({
+      maximumAuthorizedCharge: { currency: 'JPY', amountMinor: 250 },
+    })} />)
+    expect(screen.getByText('¥250')).toBeTruthy()
+
+    rerender(<AePaidOperationCard semantics={fixture({
+      maximumAuthorizedCharge: { currency: 'KWD', amountMinor: 250 },
+    })} />)
+    expect(screen.getByText(/KWD\s*0\.250/)).toBeTruthy()
+  })
+
+  it('emits prepared authorize and execute continuations through the generic callback', () => {
+    const onContinue = vi.fn()
+    const authorize = {
+      kind: 'authorize',
+      command: 'authorize_paid_operation',
+      requiredInput: ['authorityDecision'],
+      expectedInvocationVersion: 3,
+      authorityRequired: true,
+    } as const
+    const { rerender } = render(<AePaidOperationCard
+      semantics={fixture({ continuations: [authorize] })}
+      onContinue={onContinue}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize payment' }))
+    expect(onContinue).toHaveBeenCalledWith(authorize)
+
+    const execute = {
+      kind: 'execute',
+      command: 'execute_paid_operation',
+      requiredInput: [],
+      expectedInvocationVersion: 3,
+      authorityRequired: true,
+    } as const
+    rerender(<AePaidOperationCard
+      semantics={fixture({ continuations: [execute] })}
+      onContinue={onContinue}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: 'Continue operation' }))
+    expect(onContinue).toHaveBeenCalledWith(execute)
+  })
 })
+
+function custodyReference(seed: string) {
+  return {
+    kind: 'opaque_digest_reference',
+    algorithm: 'sha256',
+    digest: `sha256:${seed.repeat(64)}`,
+  } as const
+}
 
 function fixture(
   overrides: Partial<Omit<PaidOperationSemantics, 'schema'>> = {},

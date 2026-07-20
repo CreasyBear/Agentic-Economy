@@ -7,6 +7,12 @@ export const PAID_OPERATION_SEMANTICS_SCHEMA = 'agentic-paid-operation:v1' as co
 export const PAID_OPERATION_SEMANTIC_DIGEST_USE =
   'projection_equality_only_not_authority' as const
 
+export type OpaqueDigestReference = Readonly<{
+  kind: 'opaque_digest_reference'
+  algorithm: 'sha256'
+  digest: string
+}>
+
 export type PaidOperationQueryRelease =
   | Readonly<{ state: 'not_released' }>
   | Readonly<{ state: 'released'; recipient: string; evidenceRefs: readonly string[] }>
@@ -17,7 +23,7 @@ export type PaidOperationPaymentAuthorization =
   | Readonly<{
       state: 'created'
       paymentIdentifier: string
-      custodyReference: string
+      custodyReference: OpaqueDigestReference
       evidenceRefs: readonly string[]
     }>
 
@@ -39,6 +45,7 @@ export type PaidOperationSettlement =
 export type PaidOperationPaymentAttemptSnapshot = Readonly<{
   paymentIdentifier: string
   custodyRef: string
+  settledAmount?: Readonly<{ currency: string; amountMinor: number }>
   state:
     | 'prepared'
     | 'possibly_submitted'
@@ -98,8 +105,13 @@ export type PaidOperationError = Readonly<{
 }>
 
 export type PaidOperationContinuation = Readonly<{
-  kind: 'inspect' | 'reconcile' | 'retry'
-  command: 'inspect_paid_operation' | 'reconcile_paid_operation' | 'retry_paid_operation'
+  kind: 'authorize' | 'execute' | 'inspect' | 'reconcile' | 'retry'
+  command:
+    | 'authorize_paid_operation'
+    | 'execute_paid_operation'
+    | 'inspect_paid_operation'
+    | 'reconcile_paid_operation'
+    | 'retry_paid_operation'
   requiredInput: readonly string[]
   expectedInvocationVersion: number
   authorityRequired: boolean
@@ -192,11 +204,11 @@ export function derivePaidOperationSemantics<Result extends ActionResult>(input:
     : {
         state: 'created',
         paymentIdentifier: input.paymentAttempt.paymentIdentifier,
-        custodyReference: input.paymentAttempt.custodyRef,
+        custodyReference: opaqueDigestReference(input.paymentAttempt.custodyRef),
         evidenceRefs: input.paymentAttempt.evidenceRefs,
       }
   const paymentSubmission = projectPaymentSubmission(input.paymentAttempt)
-  const settlement = projectSettlement(input.paymentAttempt, input.maximumAuthorizedCharge)
+  const settlement = projectSettlement(input.paymentAttempt)
   const requiresReconciliation = input.view.control.state === 'reconciliation_required'
     || input.paymentAttempt?.state === 'reconciliation_required'
   const continuations: PaidOperationContinuation[] = requiresReconciliation
@@ -207,6 +219,22 @@ export function derivePaidOperationSemantics<Result extends ActionResult>(input:
         expectedInvocationVersion: input.view.invocationVersion,
         authorityRequired: false,
       }]
+    : input.view.control.state === 'awaiting_authority'
+      ? [{
+          kind: 'authorize',
+          command: 'authorize_paid_operation',
+          requiredInput: ['authorityDecision'],
+          expectedInvocationVersion: input.view.invocationVersion,
+          authorityRequired: true,
+        }]
+      : input.view.control.state === 'authorized'
+        ? [{
+            kind: 'execute',
+            command: 'execute_paid_operation',
+            requiredInput: [],
+            expectedInvocationVersion: input.view.invocationVersion,
+            authorityRequired: true,
+          }]
     : [{
         kind: 'inspect',
         command: 'inspect_paid_operation',
@@ -260,10 +288,16 @@ function projectPaymentSubmission(
 
 function projectSettlement(
   attempt: PaidOperationPaymentAttemptSnapshot | undefined,
-  authorized: PaidOperationSemantics['maximumAuthorizedCharge'],
 ): PaidOperationSettlement {
   if (attempt?.state === 'settled') {
-    return { state: 'settled', amount: authorized, evidenceRefs: attempt.evidenceRefs }
+    if (attempt.settledAmount === undefined || attempt.evidenceRefs.length === 0) {
+      throw new Error('paid_operation_settlement_invalid')
+    }
+    return {
+      state: 'settled',
+      amount: attempt.settledAmount,
+      evidenceRefs: attempt.evidenceRefs,
+    }
   }
   if (attempt?.state === 'not_settled') {
     return { state: 'not_settled', evidenceRefs: attempt.evidenceRefs }
@@ -356,13 +390,15 @@ function assertPaidOperationSemantics(value: PaidOperationSemantics): void {
   if (
     value.paymentAuthorization.state === 'created'
     && (value.paymentAuthorization.paymentIdentifier.trim().length === 0
-      || value.paymentAuthorization.custodyReference.trim().length === 0)
+      || !opaqueDigestReferenceValid(value.paymentAuthorization.custodyReference))
   ) throw new Error('paid_operation_authorization_invalid')
   if (
     value.settlement.state === 'settled'
     && (!Number.isSafeInteger(value.settlement.amount.amountMinor)
       || value.settlement.amount.amountMinor < 0
-      || value.settlement.amount.currency.trim().length === 0)
+      || value.settlement.amount.currency.trim().length === 0
+      || value.settlement.evidenceRefs.length === 0
+      || value.settlement.evidenceRefs.some((reference) => reference.trim().length === 0))
   ) throw new Error('paid_operation_settlement_invalid')
   if (value.continuations.some((continuation) =>
     continuation.expectedInvocationVersion !== value.identity.expectedInvocationVersion
@@ -393,6 +429,10 @@ function continuationCommand(
   kind: PaidOperationContinuation['kind'],
 ): PaidOperationContinuation['command'] {
   switch (kind) {
+    case 'authorize':
+      return 'authorize_paid_operation'
+    case 'execute':
+      return 'execute_paid_operation'
     case 'inspect':
       return 'inspect_paid_operation'
     case 'reconcile':
@@ -400,6 +440,20 @@ function continuationCommand(
     case 'retry':
       return 'retry_paid_operation'
   }
+}
+
+function opaqueDigestReference(value: string): OpaqueDigestReference {
+  return {
+    kind: 'opaque_digest_reference',
+    algorithm: 'sha256',
+    digest: canonicalDigest(value as unknown as StableHashValue),
+  }
+}
+
+function opaqueDigestReferenceValid(value: OpaqueDigestReference): boolean {
+  return value.kind === 'opaque_digest_reference'
+    && value.algorithm === 'sha256'
+    && /^sha256:[0-9a-f]{64}$/.test(value.digest)
 }
 
 function presentationBlocksUnique(blocks: readonly PaidOperationPresentationBlock[]): boolean {
