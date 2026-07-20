@@ -133,15 +133,6 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
     await input.paymentAttemptPort?.persist({ authorizationEvent: event })
     input.paymentAuthorizationEvents?.set(eventKey, event)
   }
-  if (observation.paymentAuthorizationStatus === 'created') {
-    await persistObservedSettlement(
-      observation.settlementStatus,
-      eventKey,
-      input.paymentAttemptPort,
-      input.paymentAttempts,
-      input.paymentAuthorizationEvents,
-    )
-  }
   if (observation.disposition === 'unknown' && observation.releaseStarted) {
     throw new Error(`published_operation_outcome_unknown:${observation.failureCode ?? 'unknown'}`)
   }
@@ -313,32 +304,6 @@ function custodyDigest(value: string): string {
 
 function custodyReferenceMatches(persisted: string, candidate: string): boolean {
   return persisted === candidate || persisted === custodyDigest(candidate)
-}
-
-async function persistObservedSettlement(
-  status: 'not_evidenced' | 'provider_asserted' | 'unknown' | undefined,
-  key: string,
-  port: X402PaymentAttemptPort | undefined,
-  attempts: Map<string, X402PaymentAttempt> | undefined,
-  events: Map<string, X402PaymentAuthorizationEvent> | undefined,
-): Promise<void> {
-  if (status !== 'provider_asserted' && status !== 'not_evidenced') return
-  const current = port?.load(key) ?? attempts?.get(key)
-  const authorizationEvent = port?.loadAuthorizationEvent(key) ?? events?.get(key)
-  if (current === undefined || authorizationEvent === undefined) return
-  const amountMinor = Number(current.amount)
-  if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) {
-    throw new Error('x402_payment_settled_amount_invalid')
-  }
-  const updated: X402PaymentAttempt = status === 'provider_asserted'
-    ? {
-        ...current,
-        state: 'settled',
-        settledAmount: { currency: current.asset, amountMinor },
-      }
-    : { ...current, state: 'not_settled' }
-  await port?.persist({ attempt: updated, authorizationEvent })
-  attempts?.set(key, updated)
 }
 
 function dynamicTransportInvocation(input: Readonly<{

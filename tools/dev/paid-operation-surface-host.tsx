@@ -15,6 +15,7 @@ import type {
   PaidOperationContinuation,
   StructuredPaidOperationProjection,
 } from '../../src/modules/action-invocation/paid-operation-semantics'
+import type { ReconciliationEvidence } from '../../src/modules/action-invocation/contracts'
 
 export const PAID_OPERATION_DEVELOPMENT_SURFACE = Object.freeze({
   environment: 'local-development',
@@ -60,9 +61,13 @@ export function createStructuredPaidOperationDevelopmentHost(
 export function AePaidOperationDevelopmentSurface({
   service,
   initialRef,
+  resolveReconciliationEvidence,
 }: Readonly<{
   service: PaidOperationApplicationService
   initialRef: PaidOperationSurfaceRef
+  resolveReconciliationEvidence?: (
+    ref: PaidOperationSurfaceRef,
+  ) => Promise<ReconciliationEvidence> | ReconciliationEvidence
 }>) {
   const initial = service.inspect(initialRef)
   const [result, setResult] = useState(initial)
@@ -72,15 +77,21 @@ export function AePaidOperationDevelopmentSurface({
   const projection = result.kind === 'accepted' ? result.value : null
 
   async function dispatch(continuation: PaidOperationContinuation) {
-    const command = continuationCommand(continuation)
+    const ref = {
+      invocationRef: projection?.semantics.identity.invocationRef ?? initialRef.invocationRef,
+      expectedInvocationVersion: continuation.expectedInvocationVersion,
+    }
+    const reconciliationEvidence = continuation.kind === 'reconcile'
+      ? await resolveReconciliationEvidence?.(ref)
+      : undefined
+    const command = continuationCommand(continuation, reconciliationEvidence)
     if (command === null) {
       setResult({ kind: 'refused', code: 'continuation_not_allowed' })
       return
     }
     setPending(true)
     const next = await service.command({
-      invocationRef: projection?.semantics.identity.invocationRef ?? initialRef.invocationRef,
-      expectedInvocationVersion: continuation.expectedInvocationVersion,
+      ...ref,
       command,
     })
     setResult(next)
@@ -137,6 +148,7 @@ export function AePaidOperationDevelopmentSurface({
 
 function continuationCommand(
   continuation: PaidOperationContinuation,
+  reconciliationEvidence?: ReconciliationEvidence,
 ): PaidOperationCommand | null {
   switch (continuation.kind) {
     case 'authorize':
@@ -146,7 +158,9 @@ function continuationCommand(
     case 'inspect':
       return { kind: 'inspect' }
     case 'reconcile':
-      return { kind: 'reconcile' }
+      return reconciliationEvidence === undefined
+        ? null
+        : { kind: 'reconcile', reconciliationEvidence }
     case 'retry':
       return null
   }
