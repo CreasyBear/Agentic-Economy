@@ -4,6 +4,7 @@ import {
   developmentBtcUsdQuoteSource,
   presentDevelopmentBtcUsdQuoteResult,
   projectDevelopmentBtcUsdQuoteResult,
+  type BtcUsdQuoteResult,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -29,18 +30,19 @@ function payload(overrides: Record<string, unknown> = {}) {
 describe('Phase 3A BTC/USD result projection', () => {
   it('normalizes the exact provider payload without exposing its shape', () => {
     const raw = payload()
+    const expectedResult = {
+      base: 'BTC',
+      quote: 'USD',
+      price: 118_245.12,
+      source: developmentBtcUsdQuoteSource,
+      observedAt: '2026-07-20T08:04:00.000Z',
+      receivedAt,
+      freshness: 'fresh',
+      rawEvidenceRef: canonicalDigest(raw),
+    } satisfies BtcUsdQuoteResult
     expect(projectDevelopmentBtcUsdQuoteResult({ payload: raw, receivedAt })).toEqual({
       kind: 'accepted',
-      result: {
-        base: 'BTC',
-        quote: 'USD',
-        price: 118_245.12,
-        source: developmentBtcUsdQuoteSource,
-        observedAt: '2026-07-20T08:04:00.000Z',
-        receivedAt,
-        freshness: 'fresh',
-        rawEvidenceRef: canonicalDigest(raw),
-      },
+      result: expectedResult,
     })
   })
 
