@@ -90,7 +90,8 @@ describe('paid operation development surfaces', () => {
     fireEvent.keyDown(action, { key: 'Enter' })
     fireEvent.click(action)
     await waitFor(() =>
-      expect(screen.getByRole('status').textContent).toMatch(/projection ready/i),
+      expect(screen.getAllByRole('status').some((status) =>
+        /projection ready/i.test(status.textContent ?? ''))).toBe(true),
     )
   })
 })
