@@ -204,7 +204,7 @@ export function createDevelopmentPaidOperationApplicationService(input: Readonly
         const result = await input.host.continue(invocationRef)
         return 'view' in result ? result.view : undefined
       },
-      reconcile: ({
+      reconcile: async ({
         invocationRef,
         expectedInvocationVersion,
         reconciliationEvidence,
