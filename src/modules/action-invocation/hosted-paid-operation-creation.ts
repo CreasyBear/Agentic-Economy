@@ -1,9 +1,13 @@
 import type { InvocationActor } from './contracts'
+import type { HostedPaidOperationAggregate } from './hosted-paid-operation-port'
+import type { ActionResult } from '@/modules/common/action'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 export type HostedSandboxProviderKey = 'A' | 'B'
 
 export type HostedSandboxProvider = Readonly<{
   providerId: string
+  providerName: string
   sourceRef: string
   recipient: string
   endpoint: string
@@ -38,6 +42,8 @@ type CreationResult =
         | 'total_exhausted'
         | 'concurrency_exhausted'
         | 'rate_exhausted'
+        | 'creation_conflict'
+        | 'aggregate_incomplete'
     }>
 
 type Setup = Readonly<{ providerKey: HostedSandboxProviderKey }>
@@ -46,7 +52,7 @@ type Setup = Readonly<{ providerKey: HostedSandboxProviderKey }>
  * Evaluator-only source boundary. The caller selects one closed fixture name;
  * every consequence-bearing fact and identity is resolved or generated here.
  */
-export function createHostedPaidOperation(input: Readonly<{
+export function createHostedPaidOperation<Result extends ActionResult>(input: Readonly<{
   reserveAdmission(args: Readonly<{
     principalRef: string
     windowKey: string
@@ -59,15 +65,21 @@ export function createHostedPaidOperation(input: Readonly<{
       }>
   >
   resolveProvider(key: HostedSandboxProviderKey): HostedSandboxProvider | undefined
-  persistProviderBinding(input: Readonly<{
-    actor: InvocationActor
-    reservationRef: string
-    providerKey: HostedSandboxProviderKey
-    provider: HostedSandboxProvider
-    materialInput: Readonly<{ symbol: 'BTC'; convert: 'USD' }>
-  }>): Promise<void>
   nextIdentity(kind: 'invocation' | 'authority' | 'payment' | 'effect'): string
-  persistCreated(record: HostedPaidOperationCreationRecord): Promise<void>
+  createInitial(input: Readonly<{
+    record: HostedPaidOperationCreationRecord
+    reservationRef: string
+    aggregate: HostedPaidOperationAggregate<Result>
+  }>): Promise<
+    | Readonly<{ kind: 'created' | 'duplicate' }>
+    | Readonly<{
+        kind: 'refused'
+        code: 'creation_command_conflict' | 'invocation_already_exists' | 'aggregate_incomplete'
+      }>
+  >
+  buildInitialAggregate?: (
+    record: HostedPaidOperationCreationRecord,
+  ) => HostedPaidOperationAggregate<Result>
   windowKey?: () => string
 }>): Readonly<{
   create(args: Readonly<{ actor: InvocationActor; setup: Setup }>): Promise<CreationResult>
@@ -91,13 +103,6 @@ export function createHostedPaidOperation(input: Readonly<{
       return { kind: 'refused', code: 'provider_fixture_unavailable' }
     }
     const materialInput = { symbol: 'BTC', convert: 'USD' } as const
-    await input.persistProviderBinding({
-      actor: args.actor,
-      reservationRef: admission.reservationRef,
-      providerKey: args.setup.providerKey,
-      provider,
-      materialInput,
-    })
     const record: HostedPaidOperationCreationRecord = {
       actor: args.actor,
       providerKey: args.setup.providerKey,
@@ -112,7 +117,21 @@ export function createHostedPaidOperation(input: Readonly<{
       effectIdentity: input.nextIdentity('effect'),
       terminalTruth: 'active',
     }
-    await input.persistCreated(record)
+    const aggregate = input.buildInitialAggregate?.(record)
+      ?? defaultInitialAggregate(record) as HostedPaidOperationAggregate<Result>
+    const created = await input.createInitial({
+      record,
+      reservationRef: admission.reservationRef,
+      aggregate,
+    })
+    if (created.kind === 'refused') {
+      return {
+        kind: 'refused',
+        code: created.code === 'aggregate_incomplete'
+          ? 'aggregate_incomplete'
+          : 'creation_conflict',
+      }
+    }
     return { kind: 'created', record }
   }
 
@@ -125,6 +144,90 @@ export function createHostedPaidOperation(input: Readonly<{
       return create({ actor, setup })
     },
   })
+}
+
+function defaultInitialAggregate(
+  record: HostedPaidOperationCreationRecord,
+): HostedPaidOperationAggregate<ActionResult> {
+  const custodyRef = canonicalDigest({
+    kind: 'hosted-paid-operation-custody-reference',
+    paymentIdentifier: record.paymentIdentifier,
+  })
+  return {
+    header: {
+      ownerPrincipalRef: record.actor.principalRef,
+      invocationRef: record.invocationRef,
+      selectedSourceRef: record.provider.sourceRef,
+      paymentAttemptRequired: true,
+      currentPaymentIdentifier: record.paymentIdentifier,
+      historyCursor: null,
+      historyPageSize: 20,
+    },
+    invocation: {
+      invocationRef: record.invocationRef,
+      invocationVersion: 1,
+      environment: 'MOCK/DEVELOPMENT ONLY',
+      persistence: 'durable_control',
+      origin: {
+        kind: 'standalone',
+        callerRef: record.actor.callerRef,
+        principalRef: record.actor.principalRef,
+      },
+      owner: record.actor,
+      action: { id: 'hosted-paid-operation', contractVersion: '1' },
+      desired: { state: 'invoke' },
+      prepared: {
+        materialInputDigest: canonicalDigest(record.materialInput),
+        target: {
+          providerId: record.provider.providerId,
+          sourceRef: record.provider.sourceRef,
+          operationRevision: record.provider.operationRevision,
+        },
+        consequence: 'release one labelled sandbox paid query',
+        dataUse: { fields: ['symbol', 'convert'], limits: { amountMinor: 1 } },
+        preparedAt: '1970-01-01T00:00:00.000Z',
+        freshUntil: '9999-12-31T23:59:59.999Z',
+      },
+      authority: {
+        reference: record.authorityRef,
+        expiresAt: '9999-12-31T23:59:59.999Z',
+      },
+      attempts: [],
+      observedResolution: { state: 'pending' },
+      freshness: { state: 'current', observedAt: '1970-01-01T00:00:00.000Z' },
+      control: { state: 'awaiting_authority' },
+    },
+    paymentAttempt: {
+      paymentIdentifier: record.paymentIdentifier,
+      custodyRef,
+      state: 'prepared',
+      evidenceRefs: [],
+    },
+    interpretation: {
+      operation: {
+        operationKey: record.provider.operationKey,
+        providerId: record.provider.providerId,
+        providerName: record.provider.providerName,
+        operationRevision: record.provider.operationRevision,
+        materialInputs: record.materialInput,
+      },
+      presentation: {
+        title: 'Get the latest BTC price in USD',
+        summary: 'Retrieve one labelled sandbox BTC/USD measurement.',
+        blocks: [{ kind: 'text', label: 'Pair', value: 'BTC/USD' }],
+      },
+      maximumAuthorizedCharge: record.provider.amount,
+      queryRecipient: record.provider.recipient,
+      resultDelivery: { state: 'not_delivered' },
+      environment: {
+        name: 'local-labelled-sandbox-fixture',
+        evidenceClass: 'local_labelled_sandbox_fixture',
+        claimCeiling: 'durable_fixture_mechanics_only',
+      },
+    },
+    evidenceReferences: [],
+    history: [],
+  }
 }
 
 function exactSetup(value: Setup): boolean {

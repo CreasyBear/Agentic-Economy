@@ -12,6 +12,7 @@ export const invocationFreshnessValue = v.union(
   v.object({ state: v.literal('current'), observedAt: v.string() }),
 )
 export const invocationControlValue = v.union(
+  v.object({ state: v.literal('gathering_information'), missingFields: v.array(v.string()) }),
   v.object({ state: v.literal('awaiting_authority') }),
   v.object({ state: v.literal('authorized'), decidedAt: v.string() }),
   v.object({
@@ -39,11 +40,12 @@ export const durableAttemptOutcomeValue = v.union(
   }),
   v.object({
     state: v.literal('failed'), retry: v.literal('safe_before_release'),
-    errorDigest: v.optional(v.string()),
+    errorDigest: v.optional(v.string()), message: v.optional(v.string()),
   }),
   v.object({
     state: v.literal('uncertain'), retry: v.literal('reconcile_before_retry'),
-    errorDigest: v.optional(v.string()), reconciliationRequiredAt: v.string(),
+    errorDigest: v.optional(v.string()), message: v.optional(v.string()),
+    reconciliationRequiredAt: v.string(),
   }),
   v.object({
     state: v.literal('timed_out'), timeoutMs: v.number(),
@@ -78,6 +80,17 @@ export const authorityBindingValue = v.object({
   digest: v.string(), targetDigest: v.string(), consequence: v.string(),
   limits: v.record(v.string(), v.number()), expiresAt: v.string(),
 })
+export const acceptedAuthorityValue = v.union(
+  v.object({ kind: v.literal('approve_each'), authorityRef: v.string() }),
+  v.object({
+    kind: v.literal('standing_mandate_use'),
+    mandateRef: v.string(),
+    mandateVersion: v.number(),
+    mandateGeneration: v.number(),
+    authorityUseRef: v.string(),
+    grantEvidenceRef: v.string(),
+  }),
+)
 export const durableControlProjectionValue = v.object({
   invocationRef: v.string(), invocationVersion: v.number(),
   environment: v.literal('MOCK/DEVELOPMENT ONLY'), persistence: v.literal('durable_control'),
@@ -112,6 +125,7 @@ export const actionInvocationTables = {
     authorityReference: v.optional(v.string()),
     authorityBinding: v.optional(authorityBindingValue),
     authorityDecisionAt: v.optional(v.string()),
+    acceptedAuthority: v.optional(acceptedAuthorityValue),
     currentAttemptRef: v.optional(v.string()),
     currentEffectGeneration: v.optional(v.number()),
     currentLeaseOwner: v.optional(v.string()),
@@ -170,6 +184,7 @@ export const actionInvocationTables = {
     invocationVersion: v.number(),
     selectedSourceRef: v.string(),
     paymentAttemptRequired: v.boolean(),
+    currentPaymentIdentifier: v.optional(v.string()),
     currentEffectGeneration: v.optional(v.number()),
     updatedAt: v.string(),
   })
@@ -184,6 +199,100 @@ export const actionInvocationTables = {
     operationKey: v.string(),
     operationRevision: v.string(),
     materialInputDigest: v.string(),
+    materialInputs: v.object({
+      symbol: v.literal('BTC'),
+      convert: v.literal('USD'),
+    }),
+    prepared: v.object({
+      materialInputDigest: v.string(),
+      target: v.object({
+        providerId: v.string(),
+        sourceRef: v.string(),
+        operationRevision: v.string(),
+      }),
+      consequence: v.string(),
+      dataUse: v.object({
+        fields: v.array(v.string()),
+        limits: v.record(v.string(), v.number()),
+      }),
+      preparedAt: v.string(),
+      freshUntil: v.string(),
+    }),
+    presentation: v.object({
+      title: v.string(),
+      summary: v.string(),
+      blocks: v.array(v.union(
+        v.object({ kind: v.literal('text'), label: v.string(), value: v.string() }),
+        v.object({
+          kind: v.literal('measurement'), label: v.string(), value: v.number(), unit: v.string(),
+        }),
+        v.object({
+          kind: v.literal('money'), label: v.string(), amountMinor: v.number(), currency: v.string(),
+        }),
+        v.object({ kind: v.literal('timestamp'), label: v.string(), value: v.string() }),
+        v.object({
+          kind: v.literal('source'), label: v.string(), providerId: v.string(),
+          providerName: v.string(), operationRevision: v.string(),
+        }),
+        v.object({ kind: v.literal('reference'), label: v.string(), value: v.string() }),
+        v.object({
+          kind: v.literal('status'), label: v.string(), value: v.string(),
+          tone: v.union(
+            v.literal('neutral'), v.literal('positive'), v.literal('caution'), v.literal('critical'),
+          ),
+        }),
+      )),
+    }),
+    maximumAuthorizedCharge: v.object({ currency: v.string(), amountMinor: v.number() }),
+    queryRecipient: v.string(),
+    resultDelivery: v.union(
+      v.object({ state: v.literal('not_delivered') }),
+      v.object({
+        state: v.literal('invalid'), code: v.string(), evidenceRefs: v.array(v.string()),
+      }),
+      v.object({
+        state: v.literal('valid'),
+        blocks: v.array(v.union(
+          v.object({ kind: v.literal('text'), label: v.string(), value: v.string() }),
+          v.object({
+            kind: v.literal('measurement'), label: v.string(), value: v.number(), unit: v.string(),
+          }),
+          v.object({
+            kind: v.literal('money'), label: v.string(), amountMinor: v.number(), currency: v.string(),
+          }),
+          v.object({ kind: v.literal('timestamp'), label: v.string(), value: v.string() }),
+          v.object({
+            kind: v.literal('source'), label: v.string(), providerId: v.string(),
+            providerName: v.string(), operationRevision: v.string(),
+          }),
+          v.object({ kind: v.literal('reference'), label: v.string(), value: v.string() }),
+          v.object({
+            kind: v.literal('status'), label: v.string(), value: v.string(),
+            tone: v.union(
+              v.literal('neutral'), v.literal('positive'), v.literal('caution'), v.literal('critical'),
+            ),
+          }),
+        )),
+        evidenceRefs: v.array(v.string()),
+      }),
+    ),
+    environment: v.object({
+      name: v.string(),
+      evidenceClass: v.string(),
+      claimCeiling: v.string(),
+    }),
+    observedResolution: v.union(
+      v.object({ state: v.literal('pending') }),
+      v.object({
+        state: v.literal('returned'),
+        execution: v.union(v.literal('runner_returned'), v.literal('pre_release_refused')),
+        businessOutcome: v.string(),
+        resultReferenceable: v.boolean(),
+        result: v.object({ kind: v.string(), ok: v.optional(v.boolean()) }),
+      }),
+      v.object({ state: v.literal('threw'), execution: v.literal('runner_threw'), message: v.string() }),
+      v.object({ state: v.literal('timed_out'), timeoutMs: v.number(), observedAt: v.string() }),
+    ),
     normalizedResultRef: v.optional(v.string()),
     normalizedResultDigest: v.optional(v.string()),
   }).index('by_invocationRef_and_sourceRef', ['invocationRef', 'sourceRef']),
@@ -206,6 +315,9 @@ export const actionInvocationTables = {
     settledAmountMinor: v.optional(v.number()),
     updatedAt: v.string(),
   })
+    .index('by_invocationRef_and_paymentIdentifier', [
+      'invocationRef', 'paymentIdentifier',
+    ])
     .index('by_invocationRef_and_attemptRef_and_effectGeneration', [
       'invocationRef', 'attemptRef', 'effectGeneration',
     ]),
@@ -229,7 +341,9 @@ export const actionInvocationTables = {
     invocationVersion: v.number(),
     effectGeneration: v.optional(v.number()),
     recordedAt: v.string(),
-  }).index('by_invocationRef_and_commandId', ['invocationRef', 'commandId']),
+  })
+    .index('by_invocationRef_and_commandId', ['invocationRef', 'commandId'])
+    .index('by_commandId', ['commandId']),
 
   hostedPaidOperationAdmissionPolicies: defineTable({
     policyRef: v.string(),

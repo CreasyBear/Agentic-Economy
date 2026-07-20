@@ -6,11 +6,68 @@ import {
   HOSTED_PAID_OPERATION_CHILD_CAP,
   HOSTED_PAID_OPERATION_HISTORY_PAGE_SIZE,
 } from '../src/modules/action-invocation/hosted-paid-operation-port'
+import {
+  acceptedAuthorityValue,
+  actionInvocationOriginValue,
+  invocationActorValue,
+  invocationControlValue,
+  invocationFreshnessValue,
+} from '../src/modules/action-invocation/internal/convex-schema'
 import { internalMutation, internalQuery } from './_generated/server'
 
 const opaqueReference = v.object({
   algorithm: v.literal('sha256'),
   digest: v.string(),
+})
+
+const presentationBlock = v.union(
+  v.object({ kind: v.literal('text'), label: v.string(), value: v.string() }),
+  v.object({ kind: v.literal('measurement'), label: v.string(), value: v.number(), unit: v.string() }),
+  v.object({ kind: v.literal('money'), label: v.string(), amountMinor: v.number(), currency: v.string() }),
+  v.object({ kind: v.literal('timestamp'), label: v.string(), value: v.string() }),
+  v.object({
+    kind: v.literal('source'), label: v.string(), providerId: v.string(),
+    providerName: v.string(), operationRevision: v.string(),
+  }),
+  v.object({ kind: v.literal('reference'), label: v.string(), value: v.string() }),
+  v.object({
+    kind: v.literal('status'), label: v.string(), value: v.string(),
+    tone: v.union(
+      v.literal('neutral'), v.literal('positive'), v.literal('caution'), v.literal('critical'),
+    ),
+  }),
+)
+
+const resultDelivery = v.union(
+  v.object({ state: v.literal('not_delivered') }),
+  v.object({ state: v.literal('invalid'), code: v.string(), evidenceRefs: v.array(v.string()) }),
+  v.object({ state: v.literal('valid'), blocks: v.array(presentationBlock), evidenceRefs: v.array(v.string()) }),
+)
+
+const observedResolution = v.union(
+  v.object({ state: v.literal('pending') }),
+  v.object({
+    state: v.literal('returned'),
+    execution: v.union(v.literal('runner_returned'), v.literal('pre_release_refused')),
+    businessOutcome: v.string(),
+    resultReferenceable: v.boolean(),
+    result: v.object({ kind: v.string(), ok: v.optional(v.boolean()) }),
+  }),
+  v.object({ state: v.literal('threw'), execution: v.literal('runner_threw'), message: v.string() }),
+  v.object({ state: v.literal('timed_out'), timeoutMs: v.number(), observedAt: v.string() }),
+)
+
+const prepared = v.object({
+  materialInputDigest: v.string(),
+  target: v.object({
+    providerId: v.string(),
+    sourceRef: v.string(),
+    operationRevision: v.string(),
+  }),
+  consequence: v.string(),
+  dataUse: v.object({ fields: v.array(v.string()), limits: v.record(v.string(), v.number()) }),
+  preparedAt: v.string(),
+  freshUntil: v.string(),
 })
 
 const sourceRow = v.object({
@@ -20,6 +77,20 @@ const sourceRow = v.object({
   operationKey: v.string(),
   operationRevision: v.string(),
   materialInputDigest: v.string(),
+  materialInputs: v.object({ symbol: v.literal('BTC'), convert: v.literal('USD') }),
+  prepared,
+  presentation: v.object({
+    title: v.string(),
+    summary: v.string(),
+    blocks: v.array(presentationBlock),
+  }),
+  maximumAuthorizedCharge: v.object({ currency: v.string(), amountMinor: v.number() }),
+  queryRecipient: v.string(),
+  resultDelivery,
+  environment: v.object({
+    name: v.string(), evidenceClass: v.string(), claimCeiling: v.string(),
+  }),
+  observedResolution,
   normalizedResultRef: v.optional(v.string()),
   normalizedResultDigest: v.optional(v.string()),
 })
@@ -46,6 +117,128 @@ const evidenceReferenceRow = v.object({
   effectGeneration: v.number(),
   evidenceKind: v.string(),
   evidenceReference: opaqueReference,
+})
+
+const initialControl = v.object({
+  origin: actionInvocationOriginValue,
+  owner: invocationActorValue,
+  action: v.object({ id: v.string(), contractVersion: v.string() }),
+  desired: v.object({ state: v.literal('invoke') }),
+  prepared,
+  authority: v.object({ reference: v.string(), expiresAt: v.string() }),
+  acceptedAuthority: v.optional(acceptedAuthorityValue),
+  freshness: invocationFreshnessValue,
+  control: invocationControlValue,
+})
+
+/**
+ * One source-owned creation transaction. Provider/source interpretation,
+ * neutral continuity, payment preparation and the creation command become
+ * durable together before any authority decision can be accepted.
+ */
+export const createInitial = internalMutation({
+  args: {
+    creationCommandId: v.string(),
+    creationCommandDigest: v.string(),
+    reservationRef: v.string(),
+    invocationRef: v.string(),
+    invocationVersion: v.number(),
+    selectedSource: sourceRow,
+    control: initialControl,
+    payment: paymentRow,
+    recordedAt: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!opaqueDigestValid(args.creationCommandDigest.replace(/^sha256:/u, ''))
+      || !opaqueDigestValid(args.payment.custodyReference.digest)
+      || !sourceMaterialSafe(args.selectedSource)) {
+      return { kind: 'refused' as const, code: 'raw_material_forbidden' as const }
+    }
+    if (!sourceMaterialWithinCaps(args.selectedSource)) {
+      return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
+    }
+    if (args.invocationVersion !== 1
+      || args.control.control.state !== 'awaiting_authority'
+      || args.control.acceptedAuthority !== undefined
+      || args.payment.state !== 'prepared') {
+      return { kind: 'refused' as const, code: 'initial_state_invalid' as const }
+    }
+    const priorCommand = await ctx.db.query('hostedPaidOperationCommands')
+      .withIndex('by_commandId', (q) => q.eq('commandId', args.creationCommandId))
+      .unique()
+    if (priorCommand !== null && priorCommand.commandDigest !== args.creationCommandDigest) {
+      return { kind: 'refused' as const, code: 'creation_command_conflict' as const }
+    }
+    if (priorCommand !== null) return { kind: 'duplicate' as const }
+    const existingHeader = await ctx.db.query('hostedPaidOperationHeaders')
+      .withIndex('by_invocationRef', (q) => q.eq('invocationRef', args.invocationRef))
+      .unique()
+    if (existingHeader !== null) {
+      return { kind: 'refused' as const, code: 'invocation_already_exists' as const }
+    }
+    const reservation = await ctx.db.query('hostedPaidOperationAdmissionReservations')
+      .withIndex('by_reservationRef', (q) => q.eq('reservationRef', args.reservationRef))
+      .unique()
+    if (reservation === null
+      || reservation.state !== 'active'
+      || reservation.principalRef !== args.control.owner.principalRef) {
+      return { kind: 'refused' as const, code: 'admission_reservation_invalid' as const }
+    }
+
+    await ctx.db.insert('hostedPaidOperationHeaders', {
+      ownerPrincipalRef: args.control.owner.principalRef,
+      ownerCallerRef: args.control.owner.callerRef,
+      invocationRef: args.invocationRef,
+      invocationVersion: args.invocationVersion,
+      selectedSourceRef: args.selectedSource.sourceRef,
+      paymentAttemptRequired: true,
+      currentPaymentIdentifier: args.payment.paymentIdentifier,
+      updatedAt: args.recordedAt,
+    })
+    await ctx.db.insert('hostedPaidOperationSources', {
+      invocationRef: args.invocationRef,
+      ...args.selectedSource,
+    })
+    await ctx.db.insert('actionInvocationControls', {
+      invocationRef: args.invocationRef,
+      invocationVersion: args.invocationVersion,
+      control: {
+        invocationRef: args.invocationRef,
+        invocationVersion: args.invocationVersion,
+        environment: 'MOCK/DEVELOPMENT ONLY',
+        persistence: 'durable_control',
+        origin: args.control.origin,
+        owner: args.control.owner,
+        action: args.control.action,
+        desired: args.control.desired,
+        authority: args.control.authority,
+        freshness: args.control.freshness,
+        control: args.control.control,
+      },
+      sourceRef: args.selectedSource.sourceRef,
+      preparedMaterialDigest: args.control.prepared.materialInputDigest,
+      preparedTargetDigest: canonicalDigest(args.control.prepared.target),
+      consequence: args.control.prepared.consequence,
+      dataLimitSummary: args.control.prepared.dataUse.limits,
+      authorityReference: args.control.authority.reference,
+      ...(args.control.acceptedAuthority === undefined
+        ? {} : { acceptedAuthority: args.control.acceptedAuthority }),
+      updatedAt: args.recordedAt,
+    })
+    await ctx.db.insert('hostedPaidOperationPayments', {
+      invocationRef: args.invocationRef,
+      ...args.payment,
+      updatedAt: args.recordedAt,
+    })
+    await ctx.db.insert('hostedPaidOperationCommands', {
+      invocationRef: args.invocationRef,
+      commandId: args.creationCommandId,
+      commandDigest: args.creationCommandDigest,
+      invocationVersion: args.invocationVersion,
+      recordedAt: args.recordedAt,
+    })
+    return { kind: 'created' as const }
+  },
 })
 
 /**
@@ -77,30 +270,31 @@ export const loadComplete = internalQuery({
     const control = await ctx.db.query('actionInvocationControls')
       .withIndex('by_invocationRef', (q) => q.eq('invocationRef', args.invocationRef))
       .unique()
-    const attempt = header.currentEffectGeneration === undefined || control?.currentAttemptRef === undefined
-      ? null
-      : await ctx.db.query('actionInvocationAttempts')
-        .withIndex('by_invocationRef_and_attemptRef', (q) =>
-          q.eq('invocationRef', args.invocationRef).eq('attemptRef', control.currentAttemptRef!))
-        .unique()
-    const payment = attempt === null
+    const attempts = await ctx.db.query('actionInvocationAttempts')
+      .withIndex('by_invocationRef_and_attemptNumber', (q) =>
+        q.eq('invocationRef', args.invocationRef))
+      .take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)
+    const currentAttempt = control?.currentAttemptRef === undefined
+      ? undefined
+      : attempts.find((candidate) => candidate.attemptRef === control.currentAttemptRef)
+    const payment = header.currentPaymentIdentifier === undefined
       ? null
       : await ctx.db.query('hostedPaidOperationPayments')
-        .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (q) =>
+        .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
           q.eq('invocationRef', args.invocationRef)
-            .eq('attemptRef', attempt.attemptRef)
-            .eq('effectGeneration', attempt.effectGeneration))
+            .eq('paymentIdentifier', header.currentPaymentIdentifier!))
         .unique()
-    const evidenceReferences = attempt === null
+    const evidenceReferences = currentAttempt === undefined
       ? []
       : await ctx.db.query('hostedPaidOperationEvidenceReferences')
         .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (q) =>
           q.eq('invocationRef', args.invocationRef)
-            .eq('attemptRef', attempt.attemptRef)
-            .eq('effectGeneration', attempt.effectGeneration))
+            .eq('attemptRef', currentAttempt.attemptRef)
+            .eq('effectGeneration', currentAttempt.effectGeneration))
         .take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)
     if (source === null || control === null
-      || (header.currentEffectGeneration !== undefined && attempt === null)
+      || attempts.length > HOSTED_PAID_OPERATION_CHILD_CAP
+      || (header.currentEffectGeneration !== undefined && currentAttempt === undefined)
       || (header.paymentAttemptRequired && payment === null)
       || evidenceReferences.length > HOSTED_PAID_OPERATION_CHILD_CAP) {
       return { kind: 'aggregate_incomplete' as const, reason: 'required_child_missing_or_cap_exceeded' as const }
@@ -108,7 +302,77 @@ export const loadComplete = internalQuery({
     const history = await ctx.db.query('hostedPaidOperationCommands')
       .withIndex('by_invocationRef_and_commandId', (q) => q.eq('invocationRef', args.invocationRef))
       .paginate(args.paginationOpts)
-    return { kind: 'loaded' as const, header, source, control, attempt, payment, evidenceReferences, history }
+    const reconstructedHistory: Array<{ commandId: string; invocationVersion: number }> = []
+    for (const command of history.page) {
+      if (command.invocationVersion !== 1) {
+        reconstructedHistory.push({
+          commandId: command.commandId,
+          invocationVersion: command.invocationVersion,
+        })
+      }
+    }
+    const aggregate = {
+      header: {
+        ownerPrincipalRef: header.ownerPrincipalRef,
+        invocationRef: header.invocationRef,
+        selectedSourceRef: header.selectedSourceRef,
+        paymentAttemptRequired: header.paymentAttemptRequired,
+        ...(header.currentPaymentIdentifier === undefined
+          ? {} : { currentPaymentIdentifier: header.currentPaymentIdentifier }),
+        ...(header.currentEffectGeneration === undefined
+          ? {} : { currentEffectGeneration: header.currentEffectGeneration }),
+        historyCursor: history.isDone ? null : history.continueCursor,
+        historyPageSize: HOSTED_PAID_OPERATION_HISTORY_PAGE_SIZE,
+      },
+      invocation: {
+        ...control.control,
+        prepared: source.prepared,
+        ...(control.control.authority === undefined ? {} : { authority: control.control.authority }),
+        ...(control.acceptedAuthority === undefined
+          ? {} : { acceptedAuthority: control.acceptedAuthority }),
+        attempts: attempts.map(({ _id, _creationTime, recordedAt, ...attempt }) => ({
+          ...attempt,
+          outcome: normalizeAttemptOutcome(attempt.outcome),
+        })),
+        observedResolution: source.observedResolution,
+      },
+      ...(payment === null ? {} : {
+        paymentAttempt: {
+          paymentIdentifier: payment.paymentIdentifier,
+          custodyRef: `sha256:${payment.custodyReference.digest}`,
+          ...(payment.settledCurrency === undefined || payment.settledAmountMinor === undefined
+            ? {} : {
+                settledAmount: {
+                  currency: payment.settledCurrency,
+                  amountMinor: payment.settledAmountMinor,
+                },
+              }),
+          state: payment.state,
+          evidenceRefs: evidenceReferences.map(
+            (reference) => `sha256:${reference.evidenceReference.digest}`,
+          ),
+        },
+      }),
+      interpretation: {
+        operation: {
+          operationKey: source.operationKey,
+          providerId: source.providerId,
+          providerName: source.providerName,
+          operationRevision: source.operationRevision,
+          materialInputs: source.materialInputs,
+        },
+        presentation: source.presentation,
+        maximumAuthorizedCharge: source.maximumAuthorizedCharge,
+        queryRecipient: source.queryRecipient,
+        resultDelivery: source.resultDelivery,
+        environment: source.environment,
+      },
+      evidenceReferences: evidenceReferences.map(
+        (reference) => `sha256:${reference.evidenceReference.digest}`,
+      ),
+      history: reconstructedHistory,
+    }
+    return { kind: 'loaded' as const, aggregate }
   },
 })
 
@@ -135,6 +399,10 @@ export const transact = internalMutation({
   },
   handler: async (ctx, args) => {
     if (args.evidenceReferences.length > HOSTED_PAID_OPERATION_CHILD_CAP) {
+      return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
+    }
+    if (!sourceMaterialSafe(args.selectedSource)
+      || !sourceMaterialWithinCaps(args.selectedSource)) {
       return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
     }
     for (const reference of args.evidenceReferences) {
@@ -207,6 +475,7 @@ export const transact = internalMutation({
     await ctx.db.patch(header._id, {
       invocationVersion: args.nextInvocationVersion,
       selectedSourceRef: args.selectedSource.sourceRef,
+      currentPaymentIdentifier: args.payment?.paymentIdentifier,
       currentEffectGeneration: args.nextEffectGeneration,
       updatedAt: args.recordedAt,
     })
@@ -322,4 +591,44 @@ export const releaseAdmission = internalMutation({
 
 function opaqueDigestValid(digest: string): boolean {
   return /^[a-f0-9]{64}$/u.test(digest)
+}
+
+function sourceMaterialSafe(source: {
+  presentation: { title: string; summary: string; blocks: readonly unknown[] }
+  resultDelivery: { state: string }
+}): boolean {
+  return !/(?:^Bearer\s|secret[-_:]|private[-_ ]?key|raw[-_ ]?(?:payload|evidence|response))/iu
+    .test(JSON.stringify(source))
+}
+
+function sourceMaterialWithinCaps(source: {
+  prepared: { dataUse: { fields: readonly string[] } }
+  presentation: { blocks: readonly unknown[] }
+  resultDelivery:
+    | { state: 'not_delivered' }
+    | { state: 'invalid'; evidenceRefs: readonly string[] }
+    | { state: 'valid'; blocks: readonly unknown[]; evidenceRefs: readonly string[] }
+}): boolean {
+  if (source.prepared.dataUse.fields.length > HOSTED_PAID_OPERATION_CHILD_CAP
+    || source.presentation.blocks.length > HOSTED_PAID_OPERATION_CHILD_CAP) {
+    return false
+  }
+  if (source.resultDelivery.state === 'not_delivered') return true
+  if (source.resultDelivery.evidenceRefs.length > HOSTED_PAID_OPERATION_CHILD_CAP) return false
+  return source.resultDelivery.state !== 'valid'
+    || source.resultDelivery.blocks.length <= HOSTED_PAID_OPERATION_CHILD_CAP
+}
+
+function normalizeAttemptOutcome(outcome: {
+  state: string
+  errorDigest?: string
+  message?: string
+  [key: string]: unknown
+}) {
+  const { errorDigest: _errorDigest, ...rest } = outcome
+  if ((outcome.state === 'failed' || outcome.state === 'uncertain')
+    && outcome.message === undefined) {
+    return { ...rest, message: 'source_error_digest_recorded' }
+  }
+  return rest
 }

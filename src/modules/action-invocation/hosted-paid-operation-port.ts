@@ -12,6 +12,7 @@ export type HostedPaidOperationHeader = Readonly<{
   invocationRef: string
   selectedSourceRef: string
   paymentAttemptRequired: boolean
+  currentPaymentIdentifier?: string
   currentEffectGeneration?: number
   historyCursor: string | null
   historyPageSize: typeof HOSTED_PAID_OPERATION_HISTORY_PAGE_SIZE
@@ -51,6 +52,23 @@ export type HostedPaidOperationTransaction<Result extends ActionResult> = Readon
   next: HostedPaidOperationAggregate<Result>
 }>
 
+export type HostedPaidOperationInitialCreation<Result extends ActionResult> = Readonly<{
+  creationCommandId: string
+  creationCommandDigest: string
+  reservationRef: string
+  aggregate: HostedPaidOperationAggregate<Result>
+}>
+
+export type HostedPaidOperationInitialCreationResult =
+  | Readonly<{ kind: 'created' | 'duplicate' }>
+  | Readonly<{
+      kind: 'refused'
+      code:
+        | 'creation_command_conflict'
+        | 'invocation_already_exists'
+        | 'aggregate_incomplete'
+    }>
+
 export type HostedPaidOperationTransactionResult =
   | Readonly<{
       kind: 'applied' | 'duplicate'
@@ -76,6 +94,9 @@ export type HostedPaidOperationAdmissionResult =
     }>
 
 export type HostedPaidOperationPort<Result extends ActionResult> = Readonly<{
+  createInitial(
+    input: HostedPaidOperationInitialCreation<Result>,
+  ): Promise<HostedPaidOperationInitialCreationResult>
   loadComplete(input: Readonly<{
     owner: InvocationActor
     invocationRef: string
@@ -120,6 +141,10 @@ export function createInMemoryHostedPaidOperationPort<Result extends ActionResul
     invocationVersion: number
     effectGeneration?: number
   }>>()
+  const creationCommands = new Map<string, Readonly<{
+    digest: string
+    invocationRef: string
+  }>>()
   const admittedTotals = new Map<string, number>()
   const admittedConcurrent = new Map<string, number>()
   const admittedRates = new Map<string, number>()
@@ -131,6 +156,30 @@ export function createInMemoryHostedPaidOperationPort<Result extends ActionResul
   }
 
   return Object.freeze({
+    createInitial: async (input) => {
+      assertAggregateSerializable(input.aggregate)
+      const incomplete = aggregateIncomplete(input.aggregate)
+      if (incomplete !== undefined) {
+        return { kind: 'refused', code: 'aggregate_incomplete' }
+      }
+      const prior = creationCommands.get(input.creationCommandId)
+      if (prior !== undefined && prior.digest !== input.creationCommandDigest) {
+        return { kind: 'refused', code: 'creation_command_conflict' }
+      }
+      if (prior !== undefined) return { kind: 'duplicate' }
+      if (records.has(input.aggregate.invocation.invocationRef)) {
+        return { kind: 'refused', code: 'invocation_already_exists' }
+      }
+      records.set(
+        input.aggregate.invocation.invocationRef,
+        clone(input.aggregate),
+      )
+      creationCommands.set(input.creationCommandId, {
+        digest: input.creationCommandDigest,
+        invocationRef: input.aggregate.invocation.invocationRef,
+      })
+      return { kind: 'created' }
+    },
     loadComplete: async ({ owner, invocationRef }) => {
       const aggregate = records.get(invocationRef)
       if (aggregate === undefined
@@ -240,6 +289,24 @@ function assertAggregateSerializable<Result extends ActionResult>(
   if (references.some((reference) => !isOpaqueHostedReference(reference))) {
     throw new Error('hosted_paid_operation_raw_material_forbidden')
   }
+  assertNoRawHostedMaterial(aggregate)
+}
+
+function assertNoRawHostedMaterial(value: unknown, path = ''): void {
+  if (typeof value === 'string') {
+    if (/(?:^Bearer\s|secret[-_:]|private[-_ ]?key|raw[-_ ]?(?:payload|evidence|response))/iu.test(value)) {
+      throw new Error('hosted_paid_operation_raw_material_forbidden')
+    }
+    return
+  }
+  if (value === null || typeof value !== 'object') return
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = path.length === 0 ? key : `${path}.${key}`
+    if (/(?:credential|signature|authorizationPayload|paymentPayload|providerResponse|rawEvidence)/iu.test(key)) {
+      throw new Error('hosted_paid_operation_raw_material_forbidden')
+    }
+    assertNoRawHostedMaterial(child, childPath)
+  }
 }
 
 function aggregateIncomplete<Result extends ActionResult>(
@@ -258,6 +325,10 @@ function aggregateIncomplete<Result extends ActionResult>(
     return 'current_attempt_missing'
   }
   if (aggregate.header.paymentAttemptRequired && aggregate.paymentAttempt === undefined) {
+    return 'payment_attempt_missing'
+  }
+  if (aggregate.paymentAttempt !== undefined
+    && aggregate.header.currentPaymentIdentifier !== aggregate.paymentAttempt.paymentIdentifier) {
     return 'payment_attempt_missing'
   }
   if (aggregate.invocation.attempts.length > HOSTED_PAID_OPERATION_CHILD_CAP) {

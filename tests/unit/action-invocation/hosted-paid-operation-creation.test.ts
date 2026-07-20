@@ -4,11 +4,16 @@ import {
   createHostedPaidOperation,
   type HostedPaidOperationCreationRecord,
 } from '@/modules/action-invocation/hosted-paid-operation-creation'
+import type { HostedPaidOperationAggregate } from '@/modules/action-invocation/hosted-paid-operation-port'
+import type { ActionResult } from '@/modules/common/action'
+
+type Result = ActionResult & { ok: boolean }
 
 describe('hosted paid-operation creation', () => {
   it('admits only an evaluator fixture selector and binds server-owned consequence facts', async () => {
     const saved: HostedPaidOperationCreationRecord[] = []
-    const service = fixtureService(saved)
+    const aggregates: HostedPaidOperationAggregate<Result>[] = []
+    const service = fixtureService(saved, aggregates)
 
     await expect(service.create({
       actor: { principalRef: 'principal:evaluator', callerRef: 'caller:session' },
@@ -27,6 +32,21 @@ describe('hosted paid-operation creation', () => {
       },
     })
     expect(saved).toHaveLength(1)
+    expect(aggregates).toHaveLength(1)
+    expect(aggregates[0]).toMatchObject({
+      header: { selectedSourceRef: 'source:a' },
+      invocation: {
+        invocationVersion: 1,
+        control: { state: 'awaiting_authority' },
+        attempts: [],
+      },
+      interpretation: {
+        operation: {
+          providerId: 'provider:a',
+          materialInputs: { symbol: 'BTC', convert: 'USD' },
+        },
+      },
+    })
     expect(saved[0]?.authorityRef).toBeTruthy()
     expect(saved[0]?.provider).toEqual(expect.objectContaining({ providerId: 'provider:a' }))
 
@@ -78,16 +98,20 @@ describe('hosted paid-operation creation', () => {
   })
 })
 
-function fixtureService(saved: HostedPaidOperationCreationRecord[]) {
+function fixtureService(
+  saved: HostedPaidOperationCreationRecord[],
+  aggregates: HostedPaidOperationAggregate<Result>[] = [],
+) {
   let sequence = 0
-  let boundProvider: string | undefined
-  return createHostedPaidOperation({
+  let createCalls = 0
+  return createHostedPaidOperation<Result>({
     reserveAdmission: async ({ principalRef }) => principalRef === 'principal:evaluator'
       ? { kind: 'admitted', reservationRef: 'reservation:1' }
       : { kind: 'refused', code: 'principal_not_allowlisted' },
     resolveProvider: (key) => ({
       A: {
         providerId: 'provider:a',
+        providerName: 'Provider A',
         sourceRef: 'source:a',
         recipient: 'recipient:a',
         endpoint: 'https://mock-a.invalid/btc-usd',
@@ -96,6 +120,7 @@ function fixtureService(saved: HostedPaidOperationCreationRecord[]) {
       },
       B: {
         providerId: 'provider:b',
+        providerName: 'Provider B',
         sourceRef: 'source:b',
         recipient: 'recipient:b',
         endpoint: 'https://mock-b.invalid/btc-usd',
@@ -103,11 +128,14 @@ function fixtureService(saved: HostedPaidOperationCreationRecord[]) {
         operationRevision: '2',
       },
     })[key],
-    persistProviderBinding: async ({ provider }) => { boundProvider = provider.providerId },
     nextIdentity: (kind) => `${kind}:${++sequence}`,
-    persistCreated: async (record) => {
-      expect(boundProvider).toBe(record.provider.providerId)
+    createInitial: async ({ record, aggregate }) => {
+      createCalls += 1
+      expect(createCalls).toBe(saved.length + 1)
+      expect(aggregate.header.selectedSourceRef).toBe(record.provider.sourceRef)
       saved.push(record)
+      aggregates.push(aggregate)
+      return { kind: 'created' }
     },
   })
 }

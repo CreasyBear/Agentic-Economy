@@ -34,23 +34,135 @@ const releaseAdmission = makeFunctionReference<
   { reservationRef: string; recordedAt: string },
   { kind: 'released' | 'duplicate' } | { kind: 'refused'; code: string }
 >('hostedPaidOperation:releaseAdmission')
+const createInitial = makeFunctionReference<
+  'mutation',
+  {
+    creationCommandId: string
+    creationCommandDigest: string
+    reservationRef: string
+    invocationRef: string
+    invocationVersion: number
+    selectedSource: Record<string, unknown>
+    control: Record<string, unknown>
+    payment: Record<string, unknown>
+    recordedAt: string
+  },
+  { kind: 'created' | 'duplicate' } | { kind: 'refused'; code: string }
+>('hostedPaidOperation:createInitial')
+const loadComplete = makeFunctionReference<
+  'query',
+  {
+    ownerPrincipalRef: string
+    ownerCallerRef: string
+    invocationRef: string
+    paginationOpts: { numItems: number; cursor: string | null }
+  },
+  { kind: string; aggregate?: HostedPaidOperationAggregate<Result>; reason?: string }
+>('hostedPaidOperation:loadComplete')
 
 describe('hosted paid-operation durable boundary', () => {
+  it('atomically creates and cold-loads the exact typed provider-bound aggregate', async () => {
+    const initial = initialAggregate()
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('hostedPaidOperationAdmissionReservations', {
+        reservationRef: 'trial-reservation:1',
+        policyRef: 'policy:trial',
+        principalRef: initial.invocation.owner.principalRef,
+        state: 'active',
+        updatedAt: '2026-07-20T00:00:00.000Z',
+      })
+    })
+    const command = convexInitialCommand(initial, {
+      creationCommandId: 'creation:paid:1',
+      creationCommandDigest: `sha256:${'d'.repeat(64)}`,
+      reservationRef: 'trial-reservation:1',
+      recordedAt: '2026-07-20T00:00:00.000Z',
+    })
+
+    await expect(backend.mutation(createInitial, command)).resolves.toEqual({ kind: 'created' })
+    await expect(backend.mutation(createInitial, command)).resolves.toEqual({ kind: 'duplicate' })
+    await expect(backend.mutation(createInitial, {
+      ...command,
+      creationCommandDigest: `sha256:${'e'.repeat(64)}`,
+    })).resolves.toEqual({ kind: 'refused', code: 'creation_command_conflict' })
+    await expect(backend.mutation(createInitial, {
+      ...command,
+      creationCommandId: 'creation:raw',
+      selectedSource: {
+        ...command.selectedSource,
+        providerName: 'Bearer secret-token',
+      },
+    })).resolves.toEqual({ kind: 'refused', code: 'raw_material_forbidden' })
+    await expect(backend.mutation(createInitial, {
+      ...command,
+      creationCommandId: 'creation:cap-plus-one',
+      selectedSource: {
+        ...command.selectedSource,
+        presentation: {
+          ...(command.selectedSource.presentation as { title: string; summary: string }),
+          blocks: Array.from(
+            { length: HOSTED_PAID_OPERATION_CHILD_CAP + 1 },
+            (_, index) => ({ kind: 'text' as const, label: `Block ${index}`, value: 'bounded' }),
+          ),
+        },
+      },
+    })).resolves.toEqual({ kind: 'refused', code: 'aggregate_incomplete' })
+
+    const cold = await backend.query(loadComplete, {
+      ownerPrincipalRef: initial.invocation.owner.principalRef,
+      ownerCallerRef: initial.invocation.owner.callerRef,
+      invocationRef: initial.invocation.invocationRef,
+      paginationOpts: { numItems: 20, cursor: null },
+    })
+    expect(cold).toEqual({ kind: 'loaded', aggregate: initial })
+  })
+
+  it('creates initial aggregates idempotently and refuses stale or conflicting lineage', async () => {
+    const initial = initialAggregate()
+    const port = createInMemoryHostedPaidOperationPort<Result>()
+    const command = {
+      creationCommandId: 'creation:paid:1',
+      creationCommandDigest: `sha256:${'d'.repeat(64)}`,
+      reservationRef: 'trial-reservation:1',
+      aggregate: initial,
+    } as const
+
+    await expect(port.createInitial(command)).resolves.toEqual({ kind: 'created' })
+    await expect(port.createInitial(command)).resolves.toEqual({ kind: 'duplicate' })
+    await expect(port.createInitial({
+      ...command,
+      creationCommandDigest: `sha256:${'e'.repeat(64)}`,
+    })).resolves.toEqual({ kind: 'refused', code: 'creation_command_conflict' })
+    await expect(port.createInitial({
+      ...command,
+      creationCommandId: 'creation:paid:2',
+      aggregate: {
+        ...initial,
+        header: { ...initial.header, selectedSourceRef: 'source:other' },
+      },
+    })).resolves.toEqual({ kind: 'refused', code: 'invocation_already_exists' })
+  })
+
   it('keeps every growing Convex read indexed and bounded in the required load order', () => {
     const source = readFileSync('convex/hostedPaidOperation.ts', 'utf8')
-    const header = source.indexOf("ctx.db.query('hostedPaidOperationHeaders')")
-    const selectedSource = source.indexOf("ctx.db.query('hostedPaidOperationSources')")
-    const control = source.indexOf("ctx.db.query('actionInvocationControls')")
-    const attempt = source.indexOf("ctx.db.query('actionInvocationAttempts')")
-    const payment = source.indexOf("ctx.db.query('hostedPaidOperationPayments')")
-    const evidence = source.indexOf("ctx.db.query('hostedPaidOperationEvidenceReferences')")
-    const history = source.indexOf("ctx.db.query('hostedPaidOperationCommands')")
+    const loader = source.slice(
+      source.indexOf('export const loadComplete'),
+      source.indexOf('export const transact'),
+    )
+    const header = loader.indexOf("ctx.db.query('hostedPaidOperationHeaders')")
+    const selectedSource = loader.indexOf("ctx.db.query('hostedPaidOperationSources')")
+    const control = loader.indexOf("ctx.db.query('actionInvocationControls')")
+    const attempt = loader.indexOf("ctx.db.query('actionInvocationAttempts')")
+    const payment = loader.indexOf("ctx.db.query('hostedPaidOperationPayments')")
+    const evidence = loader.indexOf("ctx.db.query('hostedPaidOperationEvidenceReferences')")
+    const history = loader.indexOf("ctx.db.query('hostedPaidOperationCommands')")
     expect([header, selectedSource, control, attempt, payment, evidence, history])
       .toEqual([...new Set([header, selectedSource, control, attempt, payment, evidence, history])]
         .sort((left, right) => left - right))
-    expect(source).toContain('.take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)')
-    expect(source).toContain('.paginate(args.paginationOpts)')
-    expect(source).not.toMatch(/\.collect\(|\.filter\(/u)
+    expect(loader).toContain('.take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)')
+    expect(loader).toContain('.paginate(args.paginationOpts)')
+    expect(loader).not.toMatch(/\.collect\(|\.filter\(/u)
   })
 
   it('fails closed rather than projecting a missing or cap-plus-one child aggregate', async () => {
@@ -179,13 +291,30 @@ describe('hosted paid-operation durable boundary', () => {
     })).resolves.toMatchObject({ kind: 'refused', code: 'total_exhausted' })
   })
 
-  it('rejects raw custody and evidence material and accepts only opaque digest references', () => {
+  it('rejects raw custody and evidence material and accepts only opaque digest references', async () => {
     expect(isOpaqueHostedReference(`sha256:${'a'.repeat(64)}`)).toBe(true)
     expect(isOpaqueHostedReference('Bearer secret-token')).toBe(false)
     expect(() => createInMemoryHostedPaidOperationPort<Result>([{
       ...aggregate(),
       evidenceReferences: ['provider response body'],
     }])).toThrow('hosted_paid_operation_raw_material_forbidden')
+    const port = createInMemoryHostedPaidOperationPort<Result>()
+    await expect(port.createInitial({
+      creationCommandId: 'creation:raw',
+      creationCommandDigest: `sha256:${'d'.repeat(64)}`,
+      reservationRef: 'trial-reservation:raw',
+      aggregate: {
+        ...initialAggregate(),
+        interpretation: {
+          ...initialAggregate().interpretation,
+          resultDelivery: {
+            state: 'invalid',
+            code: 'Bearer secret-token',
+            evidenceRefs: [],
+          },
+        },
+      },
+    })).rejects.toThrow('hosted_paid_operation_raw_material_forbidden')
   })
 
   it('reconstructs equal warm and cold semantics and reloads committed state after command', async () => {
@@ -302,6 +431,7 @@ function aggregate(
       invocationRef: 'invocation:paid',
       selectedSourceRef: 'source:paid',
       paymentAttemptRequired: true,
+      currentPaymentIdentifier: 'payment:1',
       currentEffectGeneration: 1,
       historyCursor: null,
       historyPageSize: 20,
@@ -317,7 +447,11 @@ function aggregate(
       desired: { state: 'invoke' },
       prepared: {
         materialInputDigest: 'sha256:material',
-        target: { provider: 'provider:paid' },
+        target: {
+          providerId: 'provider:paid',
+          sourceRef: 'source:paid',
+          operationRevision: 'revision:1',
+        },
         consequence: 'release paid query',
         dataUse: { fields: ['symbol'], limits: {} },
         preparedAt: '2026-07-20T00:00:00.000Z',
@@ -361,7 +495,7 @@ function aggregate(
         providerId: 'provider:paid',
         providerName: 'Paid fixture provider',
         operationRevision: 'revision:1',
-        materialInputs: { symbol: 'BTC' },
+        materialInputs: { symbol: 'BTC', convert: 'USD' },
       },
       presentation: {
         title: 'Run paid operation',
@@ -379,5 +513,84 @@ function aggregate(
     },
     evidenceReferences: [`sha256:${'c'.repeat(64)}`],
     history: [{ commandId: 'command:prepare', invocationVersion: 3 }],
+  }
+}
+
+function initialAggregate(): HostedPaidOperationAggregate<Result> {
+  const current = aggregate()
+  const { currentEffectGeneration: _effectGeneration, ...header } = current.header
+  const { acceptedAuthority: _acceptedAuthority, ...invocation } = current.invocation
+  return {
+    ...current,
+    header: { ...header, currentPaymentIdentifier: 'payment:initial' },
+    invocation: {
+      ...invocation,
+      invocationVersion: 1,
+      attempts: [],
+      observedResolution: { state: 'pending' },
+      control: { state: 'awaiting_authority' },
+    },
+    paymentAttempt: {
+      paymentIdentifier: 'payment:initial',
+      custodyRef: `sha256:${'b'.repeat(64)}`,
+      state: 'prepared',
+      evidenceRefs: [],
+    },
+    evidenceReferences: [],
+    history: [],
+  }
+}
+
+function convexInitialCommand(
+  aggregate: HostedPaidOperationAggregate<Result>,
+  command: Readonly<{
+    creationCommandId: string
+    creationCommandDigest: string
+    reservationRef: string
+    recordedAt: string
+  }>,
+) {
+  const payment = aggregate.paymentAttempt!
+  return {
+    ...command,
+    invocationRef: aggregate.invocation.invocationRef,
+    invocationVersion: aggregate.invocation.invocationVersion,
+    selectedSource: {
+      sourceRef: aggregate.header.selectedSourceRef,
+      providerId: aggregate.interpretation.operation.providerId,
+      providerName: aggregate.interpretation.operation.providerName,
+      operationKey: aggregate.interpretation.operation.operationKey,
+      operationRevision: aggregate.interpretation.operation.operationRevision,
+      materialInputDigest: aggregate.invocation.prepared!.materialInputDigest,
+      materialInputs: aggregate.interpretation.operation.materialInputs,
+      prepared: aggregate.invocation.prepared,
+      presentation: aggregate.interpretation.presentation,
+      maximumAuthorizedCharge: aggregate.interpretation.maximumAuthorizedCharge,
+      queryRecipient: aggregate.interpretation.queryRecipient,
+      resultDelivery: aggregate.interpretation.resultDelivery,
+      environment: aggregate.interpretation.environment,
+      observedResolution: aggregate.invocation.observedResolution,
+    },
+    control: {
+      origin: aggregate.invocation.origin,
+      owner: aggregate.invocation.owner,
+      action: aggregate.invocation.action,
+      desired: aggregate.invocation.desired,
+      prepared: aggregate.invocation.prepared,
+      authority: aggregate.invocation.authority,
+      acceptedAuthority: aggregate.invocation.acceptedAuthority,
+      freshness: aggregate.invocation.freshness,
+      control: aggregate.invocation.control,
+    },
+    payment: {
+      attemptRef: 'creation',
+      effectGeneration: 0,
+      paymentIdentifier: payment.paymentIdentifier,
+      custodyReference: {
+        algorithm: 'sha256' as const,
+        digest: payment.custodyRef.slice('sha256:'.length),
+      },
+      state: payment.state,
+    },
   }
 }
