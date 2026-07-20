@@ -1,3 +1,113 @@
+## 2026-07-20 protected human route-operability correction mapping
+
+Three source-compatible mappings were evaluated against the accepted UI
+contract and the live TanStack Start patterns:
+
+1. **Shared server-bound human admission/read seam — selected.**
+   `src/lib/server/hosted-paid-operation-human-api.ts` can follow
+   `src/lib/server/require-operator-session.ts`: a `createServerFn`-backed
+   `beforeLoad` derives the current Clerk session and redirects an
+   unauthenticated request to `/sign-in` with the exact `location.href` as its
+   return target. The setup POST remains a native form submission and thinly
+   translates the existing source-created inspect relation into a `303
+   Location`. The detail loader calls a route-local `createServerFn` whose
+   server handler alone imports the authenticated runtime and human inspect
+   adapter. This protects initial GET and client navigation without adding
+   lifecycle, authority, provider, custody, or evidence state.
+2. **Client fetch/navigation — rejected.** A client-owned fetch, pending state,
+   error state, and imperative navigation path would duplicate transport
+   behavior already owned by the route/server boundary. It would also make it
+   easier for auth/environment/runtime dependencies or protected response
+   details to enter client state.
+3. **JSON-only or narrowed route — rejected.** Returning the creation JSON to a
+   native browser form leaves the evaluator on an API payload and violates
+   Plan04 Task2's protected create-to-Action-Detail golden path. Removing or
+   narrowing the route would orphan the already accepted Plan05 browser
+   contract rather than close this route-operability defect.
+
+The selected blast radius is the two human routes, the minimum shared human
+guard/navigation response helper, their focused tests, and this handoff only.
+Route names do not change, so generated route-tree bytes must remain unchanged.
+
+## 2026-07-20 protected human route-operability correction handoff
+
+```json
+{
+  "plan": "03C-04",
+  "artifactState": "one additive child-authored correction candidate on top of the audited checkpoint; not integrated, deployed, or a Plan04/Phase3C completion claim",
+  "correctionBaseRevision": "77ac162bb4b03cde9c9f26428ab23414e32150a3",
+  "correctionBaseTree": "c60154ed5bdafe15342d290add94baee3f893139",
+  "correctionBaseParent": "42d840a9d0b7032c3d53b84efbd51dae966a21e0",
+  "cumulativeBaseRevision": "f24cf08a351ffdc2b537b8eb758c043764be3ac4",
+  "cumulativeBaseTree": "c9a121db0f70d504a5b687dfb5b2fd8ad5cbdb25",
+  "integrationDestination": "codex/phase3c-execution; parent remains sole integrator",
+  "inheritedManifest": {
+    "path": "/tmp/ae-phase3c-parent-custody-fdb990ac.json",
+    "rawSha256": "3e53d94d419d1ba824d5c8b787c657a8fdb3fa5774864e6429d7c6b45d8aa924",
+    "canonicalSha256": "4d8952bceaba82c5a617be6b1747152e002131d0e5a7375ef5e2620b59060092",
+    "entries": 66,
+    "childIntersection": 0
+  },
+  "correctionChangedPaths": [
+    ".planning/phases/03c-hosted-paid-operation-product-trial/03C-04-SUMMARY.md",
+    "src/lib/server/hosted-paid-operation-human-api.ts",
+    "src/routes/actions.paid.$invocationRef.tsx",
+    "src/routes/actions.paid.new.tsx",
+    "tests/imports/hosted-paid-operation-boundaries.test.ts",
+    "tests/unit/server/hosted-paid-operation-api.test.ts",
+    "tests/unit/server/hosted-paid-operation-creation-api.test.ts"
+  ],
+  "cumulativeChangedPathCount": 21,
+  "redBefore": {
+    "command": "npm test -- tests/unit/server/hosted-paid-operation-api.test.ts tests/unit/server/hosted-paid-operation-creation-api.test.ts",
+    "result": "Five behavioral failures reproduced the route defect: setup and detail had no protected navigation guard; the detail loader had no server-function boundary; setup rendered the wrong select/default/copy semantics; and a native urlencoded creation returned 201 JSON instead of a 303 relation navigation. Seven pre-existing tests passed."
+  },
+  "observableMechanism": "Both human routes run the same createServerFn-backed Clerk session admission before loading and preserve the exact protected href through /sign-in. Setup renders the frozen labelled mock-provider contract with a fieldset, radios, no default, and a disabled Create sandbox operation control until selection. Its native POST calls creation once and translates only the source-created inspect relation into 303 Location. Detail navigation calls a createServerFn seam; only its server handler obtains the authenticated runtime and invokes inspect. Missing and cross-owner reads render one ordinary non-enumerating state.",
+  "acceptedBacklinkContract": "Action Detail includes exactly one protected link with text Back to Sandbox setup and href /actions/paid/new. The corrected import boundary permits that exact context plus setup and generated registration while continuing to forbid setup/provider selection in /, shared paid-operation UI, and all other production paths.",
+  "verification": [
+    {
+      "command": "npm test -- tests/unit/server/hosted-paid-operation-api.test.ts tests/unit/server/hosted-paid-operation-creation-api.test.ts",
+      "result": "2 files, 12 tests passed."
+    },
+    {
+      "command": "npm test -- the two focused server tests plus tests/imports/route-boundary.test.ts and tests/imports/hosted-paid-operation-boundaries.test.ts",
+      "result": "4 files, 17 tests passed."
+    },
+    {
+      "command": "npm test -- relevant Plan02/03 persistence, creation, application, projection, effect, reconciliation and Plan04 runtime/auth/route tests",
+      "result": "16 files, 72 tests passed."
+    },
+    {
+      "command": "npx --no-install oxlint --deny-warnings <six changed TypeScript/test paths>",
+      "result": "Passed with zero warnings."
+    },
+    {
+      "command": "npx --no-install react-doctor . --scope changed --base 77ac162b --verbose --no-supply-chain --no-telemetry --blocking warning",
+      "result": "Passed with no issues after canonical TanStack route-property ordering, a private server-function seam, and router-native backlink navigation."
+    },
+    {
+      "command": "npm run typecheck -- --pretty false",
+      "result": "Exit 2 from the inherited capability-supply/Customer Request baseline; zero diagnostics name a correction path."
+    },
+    {
+      "command": "npm test -- tests/imports/private-imports.test.ts tests/imports/route-boundary.test.ts tests/imports/ts-standards.test.ts",
+      "result": "Route boundary passed. The private-import and TS-standards baselines remain red outside this correction; zero findings name a correction path."
+    },
+    {
+      "command": "route-tree byte readback; git diff --check; exact status allowlist; parent manifest raw/self-digest/intersection",
+      "result": "src/routeTree.gen.ts remains unchanged at SHA-256 95b15655c07de7d722959a60db846d1bcc2725d8f525047d2ae96cf644ab78a4. Diff check passed; exactly seven authorized paths changed; parent raw and canonical identities match with 66 entries and zero child intersection."
+    }
+  ],
+  "adverseAndRecovery": "A first test edit contained a malformed regular expression and was repaired before the semantic RED was recorded. The initial stale confinement assertion rejected the accepted detail backlink; the frozen UI contract proved the link was required, so the explicitly authorized import test was narrowed to the exact backlink context instead of weakening the UI. Three changed-path type diagnostics were mechanical server-function/fixture inference issues and were repaired without widening source behavior. The first scoped-commit hook then identified TanStack route-property ordering as an inference defect; validateSearch and loaderDeps were moved ahead of beforeLoad, the server function was kept private, and the backlink became router-native. The new correction commit was rewritten before handoff without changing or amending checkpoint 77ac162b.",
+  "evidenceClass": "source inspection, local authenticated route/server fixtures, local labelled mock lifecycle regressions, and unchanged generated-route readback",
+  "claimCeiling": "A local additive correction candidate proving protected route admission, form-to-detail translation, loader server-boundary behavior, non-enumerating detail refusal, and frozen setup/backlink contracts.",
+  "explicitNonclaims": "No browser execution, hosted reachability, served revision, independent provider, real credential/payment/settlement/fulfilment, production safety, accessibility/comprehension, demand, or customer-value proof.",
+  "unresolvedFindings": "Repository-wide typecheck, private-import, and TS-standards baselines remain red outside this correction. The React Doctor route-property, Fast Refresh, and internal-link findings were repaired locally without widening the route contract. No changed-path P0/P1 remains in the focused local evidence.",
+  "candidatePreservation": "One scoped child commit will be created on top of 77ac162b; its exact revision and tree are returned to the parent after commit.",
+  "exactNextSafeAction": "Parent audits this additive correction and the 21-path cumulative candidate against f24cf08a, reruns the focused route/import bundle, and if accepted integrates it into codex/phase3c-execution. Do not deploy, start Plan05, or claim Plan04/Phase3C complete."
+}
+```
+
 ## 2026-07-20 runtime-composition resumption — stopped at source-owned reconstruction boundary
 
 ```json

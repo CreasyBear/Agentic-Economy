@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { createElement, type ReactNode } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { isRedirect, type AnyRedirect } from '@tanstack/react-router'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   handleHostedPaidOperationHumanCommand,
@@ -10,8 +13,184 @@ import {
   handleHostedPaidOperationAgentInspect,
 } from '@/lib/server/hosted-paid-operation-agent-api'
 import type { PaidOperationProjection } from '@/modules/action-invocation/paid-operation-application-service'
+import {
+  HostedPaidOperationDetailView,
+  Route as DetailRoute,
+} from '@/routes/actions.paid.$invocationRef'
+
+const clerk = vi.hoisted(() => ({
+  auth: vi.fn(),
+  client: vi.fn(),
+}))
+const runtime = vi.hoisted(() => ({
+  get: vi.fn(),
+}))
+const serverFunctions = vi.hoisted(() => ({
+  calls: [] as Array<Readonly<{ method: string; data: unknown }>>,
+}))
+
+vi.mock('@clerk/tanstack-react-start/server', () => ({
+  auth: clerk.auth,
+  clerkClient: clerk.client,
+}))
+
+vi.mock('@/lib/server/hosted-paid-operation-runtime', () => ({
+  getHostedPaidOperationRuntime: runtime.get,
+}))
+
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-router')>()
+  const { createElement: createMockElement } = await import('react')
+  return {
+    ...actual,
+    Link: ({
+      children,
+      to,
+      ...props
+    }: Readonly<{
+      children: ReactNode
+      className?: string
+      to: string
+    }>) => createMockElement('a', { ...props, href: to }, children),
+  }
+})
+
+vi.mock('@tanstack/react-start', () => ({
+  createServerFn: (options?: Readonly<{ method?: string }>) => {
+    const build = (validator: (data: unknown) => unknown = (data) => data) => ({
+      validator: (next: (data: unknown) => unknown) => build(next),
+      handler: (
+        handler: (input: Readonly<{ data: unknown }>) => unknown | Promise<unknown>,
+      ) => Object.assign(
+        async (input: Readonly<{ data?: unknown }> = {}) => {
+          const data = validator(input.data)
+          serverFunctions.calls.push({ method: options?.method ?? 'GET', data })
+          return await handler({ data })
+        },
+        { method: options?.method ?? 'GET', serverBoundary: true },
+      ),
+    })
+    return build()
+  },
+}))
+
+afterEach(() => {
+  clerk.auth.mockReset()
+  clerk.client.mockReset()
+  runtime.get.mockReset()
+  serverFunctions.calls.length = 0
+})
 
 describe('hosted paid-operation authenticated adapters', () => {
+  it('protects detail before loading and preserves the exact intended return', async () => {
+    clerk.auth.mockResolvedValue({
+      isAuthenticated: false,
+      userId: null,
+      sessionId: null,
+    })
+    const beforeLoad = DetailRoute.options.beforeLoad
+    if (beforeLoad === undefined) throw new Error('paid_operation_detail_guard_missing')
+
+    let thrown: unknown
+    try {
+      await beforeLoad({
+        location: {
+          href: '/actions/paid/secret-ref?expectedInvocationVersion=3',
+        },
+      } as never)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(isRedirect(thrown)).toBe(true)
+    const redirect = thrown as AnyRedirect
+    expect(redirect.options).toMatchObject({
+      to: '/sign-in/$',
+      params: { _splat: '' },
+      search: {
+        redirect: '/actions/paid/secret-ref?expectedInvocationVersion=3',
+      },
+    })
+    expect(JSON.stringify(redirect.options)).not.toMatch(
+      /BTC|USD|provider|maximum charge|amount/u,
+    )
+    expect(runtime.get).not.toHaveBeenCalled()
+  })
+
+  it('loads detail through createServerFn and gives missing/cross-owner one ordinary state', async () => {
+    clerk.auth.mockResolvedValue({
+      isAuthenticated: true,
+      userId: 'owner:paid',
+      sessionId: 'session:human',
+    })
+    const refusals = ['invocation_not_found', 'cross_principal_refused'] as const
+    let refusalIndex = 0
+    const inspect = vi.fn(async () => ({
+      kind: 'refused' as const,
+      code: refusals[refusalIndex++] ?? 'invocation_not_found',
+    }))
+    runtime.get.mockResolvedValue({
+      gateway: { inspect, command: vi.fn() },
+      provenance: 'Labelled mock provider',
+      currentVersion: vi.fn(),
+    })
+    const loader = DetailRoute.options.loader as (input: Readonly<{
+      params: Readonly<{ invocationRef: string }>
+      deps: Readonly<{ expectedInvocationVersion: number }>
+    }>) => Promise<unknown>
+    const loaderSource = String(loader)
+    expect(loaderSource).toContain('readHostedPaidOperationDetailServer')
+    expect(loaderSource).not.toMatch(
+      /getHostedPaidOperationRuntime|auth\s*\(|process\.env/u,
+    )
+
+    const input = {
+      params: { invocationRef: 'secret-ref' },
+      deps: { expectedInvocationVersion: 3 },
+    }
+    const missing = await loader(input)
+    const crossOwner = await loader(input)
+
+    expect(missing).toEqual(crossOwner)
+    expect(missing).toEqual({
+      status: 404,
+      body: { kind: 'refused', code: 'invocation_not_found' },
+    })
+    expect(serverFunctions.calls).toEqual([
+      {
+        method: 'GET',
+        data: {
+          invocationRef: 'secret-ref',
+          expectedInvocationVersion: 3,
+        },
+      },
+      {
+        method: 'GET',
+        data: {
+          invocationRef: 'secret-ref',
+          expectedInvocationVersion: 3,
+        },
+      },
+    ])
+    expect(inspect).toHaveBeenCalledTimes(2)
+
+    const missingMarkup = renderToStaticMarkup(createElement(
+      HostedPaidOperationDetailView,
+      { result: missing as never },
+    ))
+    const crossOwnerMarkup = renderToStaticMarkup(createElement(
+      HostedPaidOperationDetailView,
+      { result: crossOwner as never },
+    ))
+    expect(missingMarkup).toBe(crossOwnerMarkup)
+    expect(missingMarkup).toContain('This operation is not available to this account')
+    expect(missingMarkup).toContain('href="/actions/paid/new"')
+    expect(missingMarkup).toContain('Back to Sandbox setup')
+    expect(missingMarkup).not.toMatch(
+      /invocation_not_found|cross_principal_refused|secret-ref/u,
+    )
+  })
+
   it('projects identical semantics and frozen host inputs without treating identity as authority', async () => {
     const projection = paidProjection()
     const gateway: HostedPaidOperationTransportGateway = {

@@ -47,12 +47,21 @@ describe('Phase 3C hosted paid-operation ownership boundary', () => {
     expect(violations).toEqual([])
   })
 
-  it('keeps Sandbox setup confined to its explicit setup route and generated registration', () => {
+  it('keeps Sandbox setup confined to setup registration and the exact detail backlink', () => {
     const violations = production.filter((path) =>
       /\/actions\/paid\/new|Sandbox setup/u.test(readFileSync(path, 'utf8')))
     expect(violations).toEqual([
       'src/routeTree.gen.ts',
+      'src/routes/actions.paid.$invocationRef.tsx',
       'src/routes/actions.paid.new.tsx',
     ])
+
+    const detail = readFileSync('src/routes/actions.paid.$invocationRef.tsx', 'utf8')
+    const exactBacklink =
+      /<Link className="[^"]*" to="\/actions\/paid\/new">\s*Back to Sandbox setup\s*<\/Link>/u
+    expect(detail).toMatch(exactBacklink)
+    expect(detail.replace(exactBacklink, '')).not.toMatch(
+      /\/actions\/paid\/new|Sandbox setup/u,
+    )
   })
 })

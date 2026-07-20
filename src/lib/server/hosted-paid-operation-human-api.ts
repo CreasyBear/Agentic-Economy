@@ -1,4 +1,6 @@
 import { auth } from '@clerk/tanstack-react-start/server'
+import { redirect } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
 
 import type { InvocationActor } from '@/modules/action-invocation/contracts'
 import type {
@@ -43,6 +45,33 @@ export type HostedPaidOperationTransportGateway = Readonly<{
 }>
 
 type HumanSession = Readonly<{ userId: string; sessionId: string }>
+
+const admitHostedPaidOperationHumanServer = createServerFn()
+  .validator((data: Readonly<{ redirectTo: string }>) => {
+    if (typeof data.redirectTo !== 'string' || !data.redirectTo.startsWith('/')) {
+      throw new Error('hosted_paid_operation_redirect_invalid')
+    }
+    return data
+  })
+  .handler(async ({ data }) => {
+    const session = await readHumanSession()
+    if (session === null) {
+      throw redirect({
+        to: '/sign-in/$',
+        params: { _splat: '' },
+        search: { redirect: data.redirectTo },
+      })
+    }
+    return { userId: session.userId }
+  })
+
+export function requireHostedPaidOperationHumanBeforeLoad({
+  location,
+}: Readonly<{ location: Readonly<{ href: string }> }>) {
+  return admitHostedPaidOperationHumanServer({
+    data: { redirectTo: location.href },
+  })
+}
 
 export type HostedPaidOperationCreationGateway = Readonly<{
   create(input: Readonly<{
@@ -155,6 +184,32 @@ export async function handleHostedPaidOperationHumanCreate(
       inspect: `/actions/paid/${encodeURIComponent(result.invocationRef)}?expectedInvocationVersion=${result.expectedInvocationVersion}`,
     },
   }, 201)
+}
+
+export async function handleHostedPaidOperationHumanCreateNavigation(
+  request: Request,
+  options: HumanCreationOptions,
+): Promise<Response> {
+  const response = await handleHostedPaidOperationHumanCreate(request, options)
+  if (response.status !== 201) return response
+
+  const body = await response.json() as Readonly<{
+    relation?: Readonly<{ inspect?: unknown }>
+  }>
+  const location = body.relation?.inspect
+  if (typeof location !== 'string'
+    || !location.startsWith('/actions/paid/')
+    || location.startsWith('//')) {
+    throw new Error('hosted_paid_operation_creation_relation_invalid')
+  }
+
+  return new Response(null, {
+    status: 303,
+    headers: {
+      'Cache-Control': 'no-store',
+      Location: location,
+    },
+  })
 }
 
 export async function handleHostedPaidOperationHumanInspect(
@@ -278,15 +333,21 @@ export function projectHostedPaidOperation(
 async function authenticateHuman(
   authenticate: HumanHandlerOptions['authenticate'],
 ): Promise<InvocationActor | null> {
-  const session = await (authenticate ?? (async () => {
+  const session = await readHumanSession(authenticate)
+  return session === null
+    ? null
+    : { principalRef: session.userId, callerRef: session.sessionId }
+}
+
+async function readHumanSession(
+  authenticate?: () => Promise<HumanSession | null>,
+): Promise<HumanSession | null> {
+  return await (authenticate ?? (async () => {
     const identity = await auth()
     return identity.isAuthenticated && identity.userId !== null && identity.sessionId !== null
       ? { userId: identity.userId, sessionId: identity.sessionId }
       : null
   }))()
-  return session === null
-    ? null
-    : { principalRef: session.userId, callerRef: session.sessionId }
 }
 
 async function projectResult(
