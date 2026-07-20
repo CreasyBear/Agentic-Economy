@@ -6,7 +6,7 @@ import {
   createDynamicPublishedActionInvocationAdapter,
   type PaidOperationInterpreter,
 } from '@/modules/action-invocation'
-import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-dynamic-invocation-evidence'
+import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
 import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
 import type { DynamicPublishedInvocationResult } from '@/modules/action-invocation'
 
