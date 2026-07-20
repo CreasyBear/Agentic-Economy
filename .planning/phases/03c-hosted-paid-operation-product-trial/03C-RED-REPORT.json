@@ -1,0 +1,15 @@
+{
+  "schema": "phase-3c-red-report:v1",
+  "generatedAt": "2026-07-20T00:00:00.000Z",
+  "command": "npm run test -- tests/unit/action-invocation/hosted-paid-operation-red-harness.test.ts",
+  "vitestExitCode": 127,
+  "disposition": "rejected",
+  "classification": {
+    "kind": "rejected",
+    "code": "infrastructure_failure",
+    "detail": "sh: vitest: command not found"
+  },
+  "expectedCount": 19,
+  "evidenceClass": "source_inspection_only_classifier_not_executed",
+  "claimCeiling": "source_proven_contract_decision_and_reproducible_missing_runtime_only"
+}
