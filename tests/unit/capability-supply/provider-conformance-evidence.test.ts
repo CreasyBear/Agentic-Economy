@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, rename, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { afterAll, describe, expect, it } from 'vitest'
@@ -63,7 +63,18 @@ describe('Phase 3B provider conformance evidence', () => {
   it('refuses exact-revision generation from a dirty checkout', async () => {
     const path = await tempPath('packet.json')
     const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
-    await expect(writePhase3bProviderConformanceEvidence(path, revision))
-      .rejects.toThrow('evidence_checkout_dirty')
+    const marker = join(
+      process.cwd(),
+      `.phase3b-evidence-dirty-marker-${process.pid}-${Date.now()}`,
+    )
+    await writeFile(marker, 'test-owned dirty checkout marker\n', { flag: 'wx' })
+    try {
+      await expect(writePhase3bProviderConformanceEvidence(path, revision))
+        .rejects.toThrow('evidence_checkout_dirty')
+    } finally {
+      const trash = await mkdtemp(join(homedir(), '.Trash', 'phase3b-evidence-dirty-test-'))
+      await rename(marker, join(trash, basename(marker)))
+    }
+    await expect(access(marker)).rejects.toThrow()
   })
 })
