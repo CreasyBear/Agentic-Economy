@@ -203,7 +203,10 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     ]),
   )
   const paymentAttemptPort = input.paymentAttemptPort
-    ?? createInMemoryX402PaymentAttemptPort(input.paymentAttempts)
+    ?? createInMemoryX402PaymentAttemptPort(
+      input.paymentAttempts,
+      input.paymentAuthorizationEvents,
+    )
   const paymentAuthorizationEvents = new Map(
     (input.paymentAuthorizationEvents ?? []).map((event) => [
       `${event.invocationRef}\u0000${event.attemptRef}\u0000${event.effectGeneration}`,
@@ -698,7 +701,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         inputHistory: [...inputHistory],
         operations: [input.operation],
         paymentAttempts: paymentAttemptPort.list(),
-        paymentAuthorizationEvents: [...paymentAuthorizationEvents.values()],
+        paymentAuthorizationEvents: paymentAttemptPort.listAuthorizationEvents(),
       }
       return JSON.parse(JSON.stringify(snapshot)) as DynamicPublishedAdapterSnapshot
     },

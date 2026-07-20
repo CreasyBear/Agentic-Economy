@@ -86,7 +86,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       custodyRuntime, prepared, undefined, undefined, () => 2, durable,
     )
     expect(await restoredPrepared.prepareX402PaymentAuthorization!(request)).toEqual({
-      custodyRef: authorization!.custodyRef,
+      custodyRef: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
       authorizationDigest: authorization!.authorizationDigest,
     })
     expect(authorizations).toBe(1)
@@ -573,7 +573,7 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       expect.objectContaining({
         state: 'reconciliation_required',
         paymentIdentifier: expect.stringMatching(/^sha256:/),
-        custodyRef: expect.stringMatching(/^development-custody:sha256:/),
+        custodyRef: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
         authorizationDigest: expect.stringMatching(/^sha256:/),
       }),
     ])

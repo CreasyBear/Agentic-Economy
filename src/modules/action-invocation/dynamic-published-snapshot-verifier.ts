@@ -104,6 +104,7 @@ function paymentAttemptShapeValid(value: unknown): boolean {
       'paymentIdentifier', 'invocationRef', 'attemptRef', 'effectGeneration', 'operationKey',
       'challengeDigest', 'scheme', 'network', 'asset', 'payTo', 'amount', 'providerEndpoint',
       'operationRevision', 'authorizationDigest', 'custodyRef', 'state', 'preparedAt',
+      ...(value.settledAmount === undefined ? [] : ['settledAmount']),
       ...(value.submissionStartedAt === undefined ? [] : ['submissionStartedAt']),
       ...(value.observedAt === undefined ? [] : ['observedAt']),
       'evidenceRefs',
@@ -111,8 +112,17 @@ function paymentAttemptShapeValid(value: unknown): boolean {
   return [
     'paymentIdentifier', 'invocationRef', 'attemptRef', 'operationKey', 'challengeDigest',
     'scheme', 'network', 'asset', 'payTo', 'amount', 'providerEndpoint', 'operationRevision',
-    'authorizationDigest', 'custodyRef',
+    'authorizationDigest',
   ].every((key) => typeof value[key] === 'string' && (value[key] as string).length > 0)
+    && typeof value.custodyRef === 'string'
+    && /^sha256:[0-9a-f]{64}$/.test(value.custodyRef)
+    && (value.settledAmount === undefined
+      || isRecord(value.settledAmount)
+        && typeof value.settledAmount.currency === 'string'
+        && value.settledAmount.currency.length > 0
+        && Number.isSafeInteger(value.settledAmount.amountMinor)
+        && (value.settledAmount.amountMinor as number) >= 0
+        && exactKeys(value.settledAmount, ['currency', 'amountMinor']))
 }
 
 function semanticClaimShapeValid(value: unknown): boolean {

@@ -18,6 +18,7 @@ import {
   type StructuredPaidOperationProjection,
 } from './paid-operation-semantics'
 import type { X402PaymentAttempt } from './x402-payment-attempt'
+import type { ReconciliationEvidence } from './reconciliation-evidence'
 
 export type PaidOperationReadPort<Result extends ActionResult> = Readonly<{
   loadInvocation(invocationRef: string): ActionInvocationView<Result> | undefined
@@ -60,7 +61,7 @@ export type PaidOperationApplicationResult<Value> =
 export type PaidOperationCommand =
   | Readonly<{ kind: 'authorize'; accept: boolean }>
   | Readonly<{ kind: 'execute' }>
-  | Readonly<{ kind: 'reconcile' }>
+  | Readonly<{ kind: 'reconcile'; reconciliationEvidence: ReconciliationEvidence }>
   | Readonly<{ kind: 'inspect' }>
 
 export type PaidOperationCommandPort<Result extends ActionResult> = Readonly<{
@@ -76,6 +77,7 @@ export type PaidOperationCommandPort<Result extends ActionResult> = Readonly<{
   reconcile(input: Readonly<{
     invocationRef: string
     expectedInvocationVersion: number
+    reconciliationEvidence: ReconciliationEvidence
   }>): Promise<ActionInvocationView<Result> | undefined> | ActionInvocationView<Result> | undefined
 }>
 
@@ -120,7 +122,7 @@ export function createPaidOperationApplicationService<Result extends ActionResul
         })
     const semantics = derivePaidOperationSemantics({
       view,
-      paymentAttempt,
+      ...(paymentAttempt === undefined ? {} : { paymentAttempt }),
       ...input.interpreter.interpret(view),
     })
     return {
@@ -151,7 +153,11 @@ export function createPaidOperationApplicationService<Result extends ActionResul
           })
         : command.kind === 'execute'
           ? await input.commands.execute({ invocationRef, expectedInvocationVersion })
-          : await input.commands.reconcile({ invocationRef, expectedInvocationVersion })
+          : await input.commands.reconcile({
+              invocationRef,
+              expectedInvocationVersion,
+              reconciliationEvidence: command.reconciliationEvidence,
+            })
       if (updated === undefined) return { kind: 'refused', code: 'continuation_not_allowed' }
       return reconstruct(invocationRef, updated.invocationVersion)
     },
@@ -191,11 +197,11 @@ export function createDevelopmentPaidOperationApplicationService(input: Readonly
         const result = await input.host.continue(invocationRef)
         return 'view' in result ? result.view : undefined
       },
-      reconcile: ({ invocationRef, expectedInvocationVersion }) => {
+      reconcile: ({ invocationRef, expectedInvocationVersion, reconciliationEvidence }) => {
         if (input.host.inspect(invocationRef)?.invocationVersion !== expectedInvocationVersion) {
           return undefined
         }
-        const result = input.host.recover(invocationRef)
+        const result = input.host.recover(invocationRef, reconciliationEvidence)
         return 'view' in result ? result.view : undefined
       },
     },
@@ -213,6 +219,7 @@ function paymentAttemptSnapshot(attempt: X402PaymentAttempt): PaidOperationPayme
   return {
     paymentIdentifier: attempt.paymentIdentifier,
     custodyRef: attempt.custodyRef,
+    ...(attempt.settledAmount === undefined ? {} : { settledAmount: attempt.settledAmount }),
     state: attempt.state,
     evidenceRefs: attempt.evidenceRefs,
   }

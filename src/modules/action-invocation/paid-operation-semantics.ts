@@ -443,10 +443,13 @@ function continuationCommand(
 }
 
 function opaqueDigestReference(value: string): OpaqueDigestReference {
+  if (!/^sha256:[0-9a-f]{64}$/.test(value)) {
+    throw new Error('paid_operation_custody_reference_invalid')
+  }
   return {
     kind: 'opaque_digest_reference',
     algorithm: 'sha256',
-    digest: canonicalDigest(value as unknown as StableHashValue),
+    digest: value,
   }
 }
 

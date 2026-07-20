@@ -22,6 +22,7 @@ export type X402PaymentAttempt = Readonly<{
   operationRevision: string
   authorizationDigest: string
   custodyRef: string
+  settledAmount?: Readonly<{ currency: string; amountMinor: number }>
   state: X402PaymentAttemptState
   preparedAt: number
   submissionStartedAt?: number
@@ -43,21 +44,41 @@ export type X402PaymentAuthorizationEvent = Readonly<{
 
 export type X402PaymentAttemptPort = Readonly<{
   load(key: string): X402PaymentAttempt | undefined
-  persist(attempt: X402PaymentAttempt): Promise<void> | void
+  loadAuthorizationEvent(key: string): X402PaymentAuthorizationEvent | undefined
+  persist(record: Readonly<{
+    attempt?: X402PaymentAttempt
+    authorizationEvent: X402PaymentAuthorizationEvent
+  }>): Promise<void> | void
   list(): readonly X402PaymentAttempt[]
+  listAuthorizationEvents(): readonly X402PaymentAuthorizationEvent[]
 }>
 
 export function createInMemoryX402PaymentAttemptPort(
   initial: readonly X402PaymentAttempt[] = [],
+  initialAuthorizationEvents: readonly X402PaymentAuthorizationEvent[] = [],
 ): X402PaymentAttemptPort {
   const attempts = new Map(initial.map((attempt) => [x402PaymentAttemptKey(attempt), attempt]))
+  const authorizationEvents = new Map(initialAuthorizationEvents.map(
+    (event) => [x402PaymentAttemptKey(event), event],
+  ))
   return {
     load: (key) => attempts.get(key),
-    persist: (attempt) => {
-      attempts.set(x402PaymentAttemptKey(attempt), attempt)
+    loadAuthorizationEvent: (key) => authorizationEvents.get(key),
+    persist: ({ attempt, authorizationEvent }) => {
+      const key = x402PaymentAttemptKey(authorizationEvent)
+      if (attempt !== undefined && x402PaymentAttemptKey(attempt) !== key) {
+        throw new Error('x402_payment_record_attribution_invalid')
+      }
+      if (attempt !== undefined) attempts.set(key, attempt)
+      authorizationEvents.set(key, authorizationEvent)
     },
     list: () => [...attempts.values()],
+    listAuthorizationEvents: () => [...authorizationEvents.values()],
   }
+}
+
+export function x402CustodyDigestReferenceValid(value: string): boolean {
+  return /^sha256:[0-9a-f]{64}$/.test(value)
 }
 
 export function x402PaymentAttemptKey(input: Readonly<{

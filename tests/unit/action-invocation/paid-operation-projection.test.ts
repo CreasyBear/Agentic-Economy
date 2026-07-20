@@ -230,7 +230,7 @@ describe('agentic-paid-operation:v1 projections', () => {
       } as any,
       paymentAttempt: {
         paymentIdentifier: 'payment:settled-amount',
-        custodyRef: 'runtime-only-custody-handle',
+        custodyRef: `sha256:${'a'.repeat(64)}`,
         settledAmount: { currency: 'USD', amountMinor: 37 },
         state: 'settled',
         evidenceRefs: ['evidence:provider-settlement'],

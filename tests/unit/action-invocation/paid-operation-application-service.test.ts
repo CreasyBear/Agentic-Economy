@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest'
 import {
   createDevelopmentInvocationApplication,
   createDevelopmentPaidOperationApplicationService,
+  createPaidOperationApplicationService,
   createDynamicPublishedActionInvocationAdapter,
   type PaidOperationInterpreter,
 } from '@/modules/action-invocation'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
 import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
 import type { DynamicPublishedInvocationResult } from '@/modules/action-invocation'
@@ -68,6 +70,77 @@ describe('paid operation application service', () => {
       invocationRef: prepared.invocationRef,
       expectedInvocationVersion: prepared.invocationVersion,
     })).toEqual({ kind: 'refused', code: 'cross_principal_refused' })
+  })
+
+  it('accepts and forwards the exact advertised bounded reconciliation evidence', async () => {
+    const { interpreter } = fixture()
+    const evidenceMaterial = {
+      kind: 'action_invocation_reconciliation' as const,
+      version: 1 as const,
+      evidenceRef: 'evidence:provider-readback',
+      source: 'provider:development',
+      invocationRef: 'invocation:reconcile',
+      attemptRef: 'attempt:reconcile',
+      effectGeneration: 1,
+      resolution: 'released' as const,
+      observedAt: '2026-07-20T00:00:00.000Z',
+    }
+    const reconciliationEvidence = {
+      ...evidenceMaterial,
+      digest: canonicalDigest(evidenceMaterial),
+    }
+    const view = {
+      invocationRef: evidenceMaterial.invocationRef,
+      invocationVersion: 3,
+      owner: { callerRef: 'agent:paid-service', principalRef: 'principal:paid-service' },
+      attempts: [{
+        attemptRef: evidenceMaterial.attemptRef,
+        effectGeneration: 1,
+        release: { state: 'possibly_released' },
+        outcome: { state: 'uncertain' },
+      }],
+      control: {
+        state: 'reconciliation_required',
+        attemptRef: evidenceMaterial.attemptRef,
+        effectGeneration: 1,
+      },
+      observedResolution: { state: 'threw', message: 'provider_outcome_unknown' },
+    } as any
+    let received: unknown
+    const service = createPaidOperationApplicationService({
+      actor: view.owner,
+      interpreter,
+      reads: {
+        loadInvocation: () => view,
+        loadPaymentAttempt: () => ({
+          paymentIdentifier: 'payment:reconcile',
+          custodyRef: `sha256:${'b'.repeat(64)}`,
+          state: 'reconciliation_required',
+          evidenceRefs: [],
+        }),
+      },
+      commands: {
+        authorize: () => undefined,
+        execute: () => undefined,
+        reconcile: (input) => {
+          received = input.reconciliationEvidence
+          return { ...view, invocationVersion: 4 }
+        },
+      },
+    })
+    const current = service.inspect({
+      invocationRef: view.invocationRef,
+      expectedInvocationVersion: 3,
+    })
+    expect(current.kind === 'accepted'
+      && current.value.semantics.continuations[0]?.requiredInput)
+      .toEqual(['reconciliationEvidence'])
+    await service.command({
+      invocationRef: view.invocationRef,
+      expectedInvocationVersion: 3,
+      command: { kind: 'reconcile', reconciliationEvidence },
+    })
+    expect(received).toEqual(reconciliationEvidence)
   })
 })
 

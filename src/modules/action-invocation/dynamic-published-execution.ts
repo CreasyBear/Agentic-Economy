@@ -14,6 +14,7 @@ import type {
 import type { PublishedOperation, RuntimePublishedOperationDescriptor } from '@/modules/capability-supply/public'
 import { executableFixedPrice } from './dynamic-published-contract'
 import {
+  x402CustodyDigestReferenceValid,
   x402PaymentAttemptKey,
   type X402PaymentAttempt,
   type X402PaymentAttemptPort,
@@ -96,9 +97,10 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   try {
     observation = await invokePreparedRouteTransport(input.prepared.plan, runtime)
   } catch (error) {
-    if (input.paymentAuthorizationEvents !== undefined
-      && !input.paymentAuthorizationEvents.has(eventKey)) {
-      input.paymentAuthorizationEvents.set(eventKey, {
+    if ((input.paymentAuthorizationEvents !== undefined || input.paymentAttemptPort !== undefined)
+      && input.paymentAttemptPort?.loadAuthorizationEvent(eventKey) === undefined
+      && !input.paymentAuthorizationEvents?.has(eventKey)) {
+      const event = {
         invocationRef: input.prepared.invocationRef,
         attemptRef: input.prepared.attemptRef,
         effectGeneration: input.prepared.effectGeneration,
@@ -106,14 +108,17 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
         queryRelease: 'released',
         authorization: 'unknown',
         recordedAt: (input.now ?? Date.now)(),
-      })
+      } as const
+      await input.paymentAttemptPort?.persist({ authorizationEvent: event })
+      input.paymentAuthorizationEvents?.set(eventKey, event)
     }
     throw error
   }
-  if (input.paymentAuthorizationEvents !== undefined
-    && !input.paymentAuthorizationEvents.has(eventKey)
+  if ((input.paymentAuthorizationEvents !== undefined || input.paymentAttemptPort !== undefined)
+    && input.paymentAttemptPort?.loadAuthorizationEvent(eventKey) === undefined
+    && !input.paymentAuthorizationEvents?.has(eventKey)
     && observation.releaseStarted) {
-    input.paymentAuthorizationEvents.set(eventKey, {
+    const event = {
       invocationRef: input.prepared.invocationRef,
       attemptRef: input.prepared.attemptRef,
       effectGeneration: input.prepared.effectGeneration,
@@ -124,7 +129,18 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
       ...(observation.paymentChallengeDigest === undefined
         ? {}
         : { challengeDigest: observation.paymentChallengeDigest }),
-    })
+    } as const
+    await input.paymentAttemptPort?.persist({ authorizationEvent: event })
+    input.paymentAuthorizationEvents?.set(eventKey, event)
+  }
+  if (observation.paymentAuthorizationStatus === 'created') {
+    await persistObservedSettlement(
+      observation.settlementStatus,
+      eventKey,
+      input.paymentAttemptPort,
+      input.paymentAttempts,
+      input.paymentAuthorizationEvents,
+    )
   }
   if (observation.disposition === 'unknown' && observation.releaseStarted) {
     throw new Error(`published_operation_outcome_unknown:${observation.failureCode ?? 'unknown'}`)
@@ -144,7 +160,11 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
           ...current,
           state: 'reconciliation_required',
         } as const
-        await input.paymentAttemptPort?.persist(updated)
+        const authorizationEvent = input.paymentAttemptPort?.loadAuthorizationEvent(key)
+          ?? input.paymentAuthorizationEvents?.get(key)
+        if (authorizationEvent !== undefined) {
+          await input.paymentAttemptPort?.persist({ attempt: updated, authorizationEvent })
+        }
         input.paymentAttempts?.set(key, updated)
       }
     }
@@ -168,6 +188,7 @@ export function createPaymentAttemptRuntime(
     attemptRef: prepared.attemptRef,
     effectGeneration: prepared.effectGeneration,
   })
+  let volatileCustodyRef: string | undefined
   return {
     ...runtime,
     async prepareX402PaymentAuthorization(request) {
@@ -192,6 +213,7 @@ export function createPaymentAttemptRuntime(
       }
       const authorization = await runtime.prepareX402PaymentAuthorization(request)
       if (authorization === undefined) return undefined
+      volatileCustodyRef = authorization.custodyRef
       const paymentAttempt: X402PaymentAttempt = {
         paymentIdentifier: request.paymentIdentifier,
         invocationRef: prepared.invocationRef,
@@ -207,14 +229,12 @@ export function createPaymentAttemptRuntime(
         providerEndpoint: request.challenge.resource.url,
         operationRevision: prepared.plan.invocation.authority.capabilityContractDigest,
         authorizationDigest: authorization.authorizationDigest,
-        custodyRef: authorization.custodyRef,
+        custodyRef: custodyDigest(authorization.custodyRef),
         state: 'prepared',
         preparedAt: now(),
         evidenceRefs: [],
       }
-      await attemptPort?.persist(paymentAttempt)
-      attempts?.set(key, paymentAttempt)
-      authorizationEvents?.set(key, {
+      const authorizationEvent = {
         invocationRef: prepared.invocationRef,
         attemptRef: prepared.attemptRef,
         effectGeneration: prepared.effectGeneration,
@@ -224,26 +244,32 @@ export function createPaymentAttemptRuntime(
         recordedAt: paymentAttempt.preparedAt,
         challengeDigest: paymentAttempt.challengeDigest,
         authorizationDigest: authorization.authorizationDigest,
-      })
+      } as const
+      await attemptPort?.persist({ attempt: paymentAttempt, authorizationEvent })
+      attempts?.set(key, paymentAttempt)
+      authorizationEvents?.set(key, authorizationEvent)
       return authorization
     },
     async readX402PaymentAuthorization(authorization) {
       const current = attemptPort?.load(key) ?? attempts?.get(key)
       if (current === undefined
         || current.state !== 'prepared'
-        || current.custodyRef !== authorization.custodyRef
+        || !custodyReferenceMatches(current.custodyRef, authorization.custodyRef)
         || current.authorizationDigest !== authorization.authorizationDigest) {
         throw new Error('x402_payment_attempt_reconciliation_required')
       }
       if (runtime.readX402PaymentAuthorization === undefined) {
         throw new Error('x402_payment_custody_read_unavailable')
       }
-      return runtime.readX402PaymentAuthorization(authorization)
+      return runtime.readX402PaymentAuthorization({
+        ...authorization,
+        custodyRef: volatileCustodyRef ?? authorization.custodyRef,
+      })
     },
     async markX402PaymentPossiblySubmitted(event) {
       const current = attemptPort?.load(key) ?? attempts?.get(key)
       if (current === undefined
-        || current.custodyRef !== event.custodyRef
+        || !custodyReferenceMatches(current.custodyRef, event.custodyRef)
         || current.challengeDigest !== event.challengeDigest) {
         throw new Error('x402_payment_attempt_attribution_invalid')
       }
@@ -252,12 +278,16 @@ export function createPaymentAttemptRuntime(
         state: 'possibly_submitted',
         submissionStartedAt: now(),
       } as const
-      await attemptPort?.persist(updated)
+      const authorizationEvent = attemptPort?.loadAuthorizationEvent(key)
+        ?? authorizationEvents?.get(key)
+      if (authorizationEvent === undefined) throw new Error('x402_payment_authorization_event_missing')
+      await attemptPort?.persist({ attempt: updated, authorizationEvent })
       attempts?.set(key, updated)
     },
     async observeX402PaymentAttempt(event) {
       const current = attemptPort?.load(key) ?? attempts?.get(key)
-      if (current === undefined || current.custodyRef !== event.custodyRef) {
+      if (current === undefined
+        || !custodyReferenceMatches(current.custodyRef, event.custodyRef)) {
         throw new Error('x402_payment_attempt_attribution_invalid')
       }
       const updated = {
@@ -266,10 +296,49 @@ export function createPaymentAttemptRuntime(
         observedAt: now(),
         evidenceRefs: event.evidenceRefs,
       } as const
-      await attemptPort?.persist(updated)
+      const authorizationEvent = attemptPort?.loadAuthorizationEvent(key)
+        ?? authorizationEvents?.get(key)
+      if (authorizationEvent === undefined) throw new Error('x402_payment_authorization_event_missing')
+      await attemptPort?.persist({ attempt: updated, authorizationEvent })
       attempts?.set(key, updated)
     },
   }
+}
+
+function custodyDigest(value: string): string {
+  return x402CustodyDigestReferenceValid(value)
+    ? value
+    : canonicalDigest(value as unknown as StableHashValue)
+}
+
+function custodyReferenceMatches(persisted: string, candidate: string): boolean {
+  return persisted === candidate || persisted === custodyDigest(candidate)
+}
+
+async function persistObservedSettlement(
+  status: 'not_evidenced' | 'provider_asserted' | 'unknown' | undefined,
+  key: string,
+  port: X402PaymentAttemptPort | undefined,
+  attempts: Map<string, X402PaymentAttempt> | undefined,
+  events: Map<string, X402PaymentAuthorizationEvent> | undefined,
+): Promise<void> {
+  if (status !== 'provider_asserted' && status !== 'not_evidenced') return
+  const current = port?.load(key) ?? attempts?.get(key)
+  const authorizationEvent = port?.loadAuthorizationEvent(key) ?? events?.get(key)
+  if (current === undefined || authorizationEvent === undefined) return
+  const amountMinor = Number(current.amount)
+  if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) {
+    throw new Error('x402_payment_settled_amount_invalid')
+  }
+  const updated: X402PaymentAttempt = status === 'provider_asserted'
+    ? {
+        ...current,
+        state: 'settled',
+        settledAmount: { currency: current.asset, amountMinor },
+      }
+    : { ...current, state: 'not_settled' }
+  await port?.persist({ attempt: updated, authorizationEvent })
+  attempts?.set(key, updated)
 }
 
 function dynamicTransportInvocation(input: Readonly<{

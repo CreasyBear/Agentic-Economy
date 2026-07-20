@@ -52,7 +52,10 @@ export type DevelopmentInvocationHost = Readonly<{
   ): InvocationDecision<DynamicPublishedInvocationResult>
   decide(invocationRef: string, accept: boolean): InvocationDecision<DynamicPublishedInvocationResult>
   continue(invocationRef: string): Promise<DevelopmentHostContinuation>
-  recover(invocationRef: string): DevelopmentHostContinuation
+  recover(
+    invocationRef: string,
+    reconciliationEvidence?: ReconciliationEvidence,
+  ): DevelopmentHostContinuation
   requestCancellation(invocationRef: string): InvocationDecision<DynamicPublishedInvocationResult>
   inspect(invocationRef: string): ActionInvocationView<DynamicPublishedInvocationResult> | undefined
   projectRich(invocationRef: string, expectedInvocationVersion: number): RichInvocationTaskProjection
@@ -283,7 +286,7 @@ function bindHost(
       }, invocationRef)
       return result
     },
-    recover: (invocationRef) => {
+    recover: (invocationRef, suppliedEvidence) => {
       emit('before', 'recover', {}, invocationRef)
       const found = current(invocationRef)
       if (found.kind === 'refused') {
@@ -297,7 +300,7 @@ function bindHost(
         return refused
       }
       const attemptRef = view.control.attemptRef
-      const evidence = sourceCommands.reconciliationEvidence(view)
+      const evidence = suppliedEvidence ?? sourceCommands.reconciliationEvidence(view)
       const attempt = view.attempts.find(
         (entry) => entry.attemptRef === attemptRef,
       )
