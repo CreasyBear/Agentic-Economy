@@ -41,9 +41,11 @@ surface is added.
 
 ## Phase 3B
 
-After Phase 3A closes, add a second provider as a plug-in test. It must not
-change the host workflow. Uncertainty at provider A cannot trigger fallback to
-provider B.
+Phase 3B confirmed the plug-in seam with a second labelled mock provider. It
+did not change the host workflow, semantic schema or query-agnostic renderer.
+Uncertainty, refusal or invalid output at Provider A creates no Provider B
+activity. Explicitly choosing Provider B starts a new invocation, authority,
+payment identifier and attempt/effect lineage.
 
 ## Completion
 
@@ -67,3 +69,10 @@ tests, the mounted browser passed seven evals, both official local packets
 verified, and independent review found no unresolved P0/P1. This is local/mock
 product proof only; it does not establish real payment, provider fulfilment,
 hosted behavior, production safety or customer value.
+
+Phase 3B implementation closed through `db7a8552`; the final documentation
+revision is the clean evidence revision. Focused provider, selection,
+reconciliation, projection and verifier suites are green. Independent review
+found and caused repair of one evidence-test P1: clean-checkout refusal had
+depended on ambient dirty state. No provider ranking, fallback, public route,
+real payment, hosted behavior or customer-value claim follows.

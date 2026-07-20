@@ -57,30 +57,30 @@ standing mandate, Full autonomy or production exposure.
 
 # Requirements — Phase 3B second-provider plug-in test
 
-- [ ] **P3B-R1 Provider-owned variation:** Provider B owns its publication,
+- [x] **P3B-R1 Provider-owned variation:** Provider B owns its publication,
   endpoint, revision, payment recipient, raw result schema and normalization;
   shared hosts never parse either provider payload.
-- [ ] **P3B-R2 Explicit selection:** exactly one provider is selected before
+- [x] **P3B-R2 Explicit selection:** exactly one provider is selected before
   authority is granted; provider identity and material digest are bound into
   the invocation, payment attempt and result source.
-- [ ] **P3B-R3 Shared contract unchanged:** Provider A and Provider B use the
+- [x] **P3B-R3 Shared contract unchanged:** Provider A and Provider B use the
   existing `agentic-paid-operation:v1` semantics, application service, host
   commands and query-agnostic card without provider branches.
-- [ ] **P3B-R4 Equivalent normalized result:** both providers produce the same
+- [x] **P3B-R4 Equivalent normalized result:** both providers produce the same
   `BtcUsdQuoteResult` contract and generic presentation block vocabulary while
   retaining their attributable source identity and raw evidence digest.
-- [ ] **P3B-R5 No fallback:** timeout, refusal, malformed result or uncertain
+- [x] **P3B-R5 No fallback:** timeout, refusal, malformed result or uncertain
   payment at Provider A causes zero Provider B authorizations and sends.
-- [ ] **P3B-R6 Switching is a new consequence:** choosing Provider B after a
+- [x] **P3B-R6 Switching is a new consequence:** choosing Provider B after a
   safely terminated Provider A invocation creates a new invocation, authority,
   payment identifier and charge boundary; it never resumes Provider A state.
-- [ ] **P3B-R7 Restore and dedupe:** both selected providers survive snapshot
+- [x] **P3B-R7 Restore and dedupe:** both selected providers survive snapshot
   restoration without changing target identity or creating duplicate
   signatures, sends or effect generations.
-- [ ] **P3B-R8 Differential proof:** the conformance suite runs the same
+- [x] **P3B-R8 Differential proof:** the conformance suite runs the same
   success, refusal, uncertainty, reconciliation, invalid-result and restore
   cases against both providers and proves unchanged host behavior.
-- [ ] **P3B-R9 Evidence honesty:** final evidence is generated once from the
+- [x] **P3B-R9 Evidence honesty:** final evidence is generated once from the
   clean integrated revision and remains labelled local/mock; browser checks are
   regression evidence only.
 

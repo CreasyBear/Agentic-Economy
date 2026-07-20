@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted; Phase 3A closed at labelled local/mock evidence boundary
+Accepted; Phase 3A and Phase 3B closed at labelled local/mock evidence boundary
 
 ## Date
 
@@ -92,6 +92,12 @@ Phase 3B may add a second provider only as a plug-in and normalization test.
 Provider material remains operation-owned. Automatic fallback is prohibited
 while the first provider is uncertain, and changing providers creates a new
 invocation, authority and charge boundary.
+
+Phase 3B confirmed that boundary. A second provider used the existing
+paid-operation application service, semantic schema and renderer. Provider
+variation remained in publication, transport, payment material and
+operation-owned result normalization. No failure or uncertainty triggered
+fallback; explicit switching created new consequence identities.
 
 ## Acceptance
 

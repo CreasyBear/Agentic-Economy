@@ -56,7 +56,7 @@ truthful with no unresolved P0/P1 inside the local mock boundary.
 
 ## Phase 3B — Second-provider plug-in test
 
-**Status:** planning
+**Status:** complete at labelled local/mock evidence boundary
 **Depends on:** Phase 3A
 **Goal:** prove that one second labelled mock BTC/USD provider can be selected
 before authorization and executed through the existing paid-operation host,
@@ -71,6 +71,12 @@ uncertain; changing providers creates a new authority and charge boundary.
 The phase is a falsification test. If provider B requires a new lifecycle
 state, host command, semantic schema, renderer branch or payment retry rule,
 implementation stops and the abstraction finding returns to the parent.
+
+The test confirmed the seam. Provider B owns its publication, transport,
+payment recipient and raw-result adapter. Explicit selection uses the unchanged
+paid-operation host and `agentic-paid-operation:v1`; uncertainty never falls
+back, and switching providers creates a new invocation, authority, payment and
+effect lineage. Evidence remains local/mock only.
 
 ## Deferred decisions
 

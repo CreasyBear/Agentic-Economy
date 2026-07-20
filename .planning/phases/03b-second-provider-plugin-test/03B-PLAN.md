@@ -3,6 +3,7 @@ phase: 03B-second-provider-plugin-test
 plan: 01
 type: implementation
 wave: 1
+status: complete
 depends_on:
   - Phase 3A at eec9131c
 files_modified:
@@ -24,6 +25,27 @@ requirements:
 ---
 
 # Phase 3B — Second-provider plug-in test
+
+## Execution result
+
+The provider seam was confirmed through source revision `db7a8552`.
+
+- Provider B remained operation-owned; shared hosts, semantics and renderer
+  did not change.
+- Explicit selection created distinct invocation, authority, payment and
+  attempt/effect lineage.
+- Uncertain, refused and invalid Provider A outcomes produced zero automatic
+  Provider B activity.
+- Cross-provider reconciliation, restore substitution, payee tampering and
+  payment-identifier collision were refused by live source-owned seams.
+- The evidence verifier recomputes provider material, normalization, counters,
+  identities and dispositions. Its clean-checkout test was repaired after an
+  independent review found that ambient dirt could manufacture PASS.
+
+The documented change-budget threshold was crossed, which triggered review.
+The added surface is planning, provider fixtures, a development conformance
+scenario, focused tests and evidence tooling; no public route, shared product
+UI, Convex path or production provider behavior was added.
 
 ## Objective
 

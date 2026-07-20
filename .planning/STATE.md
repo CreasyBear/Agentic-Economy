@@ -4,15 +4,15 @@ milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 current_phase: 3B
 current_phase_name: second-provider-plugin-test
-status: planning
-stopped_at: "Phase 3B conformance plan drafted for independent review"
+status: complete
+stopped_at: "Phase 3B closed at the labelled local/mock conformance boundary"
 last_updated: "2026-07-20"
 progress:
   total_phases: 4
-  completed_phases: 3
-  total_plans: 0
-  completed_plans: 0
-  percent: 75
+  completed_phases: 4
+  total_plans: 1
+  completed_plans: 1
+  percent: 100
 ---
 
 # Current state
@@ -21,13 +21,15 @@ Phases 1 and 2 are complete at the local control-plane evidence boundary.
 ADR-009 is accepted. ADR-010 is accepted with Gate 10 narrowed. ADR-019 owns
 the four-mode product destination.
 
-Phase 3A is complete at the labelled local/mock boundary. Phase 3B now tests
-whether that paid-operation product seam is genuinely provider-pluggable.
+Phase 3A is complete at the labelled local/mock boundary. Phase 3B confirmed
+that a second operation-owned provider can use the same paid-operation host,
+semantics and query-agnostic renderer without fallback or a second product
+stack.
 
 ## Next transition
 
-Verify the Phase 3B plan against live source, then execute its conformance
-harness before implementing Provider B.
+Choose the next product outcome. Phase 3B does not authorize provider ranking,
+automatic fallback, hosted exposure or a broader workflow product.
 
 ## Remaining evidence gaps
 
@@ -39,14 +41,13 @@ harness before implementing Provider B.
 
 ## Evidence ceiling
 
-Phase 3A focused local evidence through `eec9131c` proves the source-owned paid
-operation contract, separate-process crash recovery, exact payment
-reconciliation, query-agnostic human/agent projections and automated mounted
-browser mechanics only. Clean tree
-`1490ceea9590281d1941aa6d0955fc782f5084a9` produced and verified the
-provider-operation packet (`sha256:5dce9aa3b0bd9976da55ecb0e769e299722d12ab0abf5f3c7a178b9653d325bc`)
-and host-parity packet (`sha256:4451aab0680bfd6dfa8af9f6ed0ca01bc99139809b80bfd1a24486bdf84b30c9`).
-Independent review found no unresolved P0/P1 inside this claim boundary.
+Phase 3B source through `db7a8552` proves two operation-owned mock providers,
+strict provider-specific normalization, explicit pre-authority selection,
+separate consequence identities, no automatic fallback, cross-provider
+reconciliation/restore refusal and recomputed evidence tooling. Closure binds
+one clean exact-revision packet to the final documentation revision and an
+independent review with no unresolved P0/P1. This remains labelled local/mock
+mechanism evidence only.
 
 Historical state, roadmap, requirements and scopes are preserved under
 `.planning/archive/pre-product-conversion-rebaseline-20260720/`.
