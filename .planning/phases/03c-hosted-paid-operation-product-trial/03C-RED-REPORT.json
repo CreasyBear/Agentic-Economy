@@ -1,16 +1,92 @@
 {
   "schema": "phase-3c-red-report:v1",
-  "generatedAt": null,
-  "generationNote": "Manual checkpoint report; classifier did not execute because Vitest was unavailable.",
-  "command": "npm run test -- tests/unit/action-invocation/hosted-paid-operation-red-harness.test.ts",
-  "vitestExitCode": 127,
-  "disposition": "rejected",
+  "generatedAt": "2026-07-20T12:07:00.896Z",
+  "command": "npx --offline tsx tools/dev/verify-phase-3c-red-contract.ts --report .planning/phases/03c-hosted-paid-operation-product-trial/03C-RED-REPORT.json",
+  "classifiedCommand": "npx vitest run <two allowlisted Phase 3C RED files> --reporter=json",
+  "vitestExitCode": 1,
+  "disposition": "expected_red",
   "classification": {
-    "kind": "rejected",
-    "code": "infrastructure_failure",
-    "detail": "sh: vitest: command not found"
+    "kind": "expected_red",
+    "tests": [
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED reconstructs the hosted aggregate from bounded source and control records",
+        "reason": "hosted_aggregate_reconstruction_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED returns aggregate_incomplete instead of projecting a cap plus one read",
+        "reason": "bounded_aggregate_cap_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED reloads the committed aggregate after every mutating command",
+        "reason": "post_command_durable_refresh_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED keeps business and provider truth out of neutral control",
+        "reason": "business_control_ownership_gate_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED persists only opaque custody references and rejects raw secret or evidence material",
+        "reason": "opaque_custody_serialization_gate_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED persists submission-started before a possible provider release",
+        "reason": "submission_started_ordering_contract_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED exposes an intent-only public reconcile command",
+        "reason": "public_reconcile_intent_dto_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED separates public reconcile intent from internal trusted resolution types",
+        "reason": "public_internal_reconcile_split_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED admits reconciliation only through a trusted evidence observer",
+        "reason": "trusted_reconciliation_observer_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED creates pairwise-distinct consequence lineage when switching provider",
+        "reason": "provider_switch_new_lineage_contract_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED allows reconcile only while payment truth is uncertain",
+        "reason": "uncertainty_continuation_gate_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED keeps authority recording and execution as distinct golden transitions",
+        "reason": "golden_authority_execute_boundary_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation contract RED supplies evidence labels at runtime without letting local fixtures claim hosted proof",
+        "reason": "runtime_evidence_label_admission_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation authentication RED derives the hosted actor from ctx.auth instead of caller owner fields",
+        "reason": "ctx_auth_actor_bridge_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation authentication RED keeps authentication and evaluator admission separate from consequence authority",
+        "reason": "identity_authority_separation_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation authentication RED reserves evaluator count concurrency and rate limits atomically",
+        "reason": "atomic_trial_admission_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation authentication RED fails closed for revoked paid-operation agent credentials",
+        "reason": "paid_operation_agent_revocation_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation authentication RED uses a non-enumerating missing and cross-principal hosted read boundary",
+        "reason": "hosted_non_enumeration_boundary_absent"
+      },
+      {
+        "fullName": "Phase 3C hosted paid-operation authentication RED rejects direct bypass before any hosted operation facts are loaded",
+        "reason": "hosted_direct_bypass_guard_absent"
+      }
+    ]
   },
   "expectedCount": 19,
-  "evidenceClass": "source_inspection_only_classifier_not_executed",
-  "claimCeiling": "source_proven_contract_decision_and_reproducible_missing_runtime_only"
+  "evidenceClass": "source_inspection_and_classified_executable_failing_fixtures",
+  "claimCeiling": "contract_gaps_only_no_implementation_or_hosted_provider_payment_claim"
 }

@@ -23,7 +23,16 @@ function report(overrides: Partial<{
 
 describe('Phase 3C RED classifier', () => {
   it('accepts only the full allowlist with the exact absent-contract reasons', () => {
-    const result = classifyPhase3CRedReport(report())
+    const result = classifyPhase3CRedReport(report({
+      assertions: entries.map(([fullName, reason]) => ({
+        fullName,
+        status: 'failed',
+        failureMessages: [
+          `AssertionError: [P3C_RED:${reason}] required contract is absent\n`
+          + '    at runWithTimeout (node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)',
+        ],
+      })),
+    }))
     expect(result.kind).toBe('expected_red')
     if (result.kind === 'expected_red') expect(result.tests).toHaveLength(entries.length)
   })

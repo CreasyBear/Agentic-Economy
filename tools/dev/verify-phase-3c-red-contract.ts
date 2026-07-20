@@ -88,25 +88,27 @@ export function classifyPhase3CRedReport(value: unknown): RedClassification {
       return rejected('malformed_output', `${assertion.fullName}: failureMessages missing`)
     }
     const messages = assertion.failureMessages.join('\n')
+    const primaryDiagnostic = messages.split('\n', 1)[0] ?? ''
+    const marker = `[P3C_RED:${reason}]`
+    if (primaryDiagnostic.startsWith(`AssertionError: ${marker}`)) {
+      if (observed.has(assertion.fullName)) {
+        return rejected('duplicate_test', assertion.fullName)
+      }
+      observed.set(assertion.fullName, reason)
+      continue
+    }
     if (/(Failed to load url|Cannot find module|ERR_MODULE_NOT_FOUND|config|timed out|timeout|Worker exited|Unhandled Error)/iu
-      .test(messages)) {
-      const code = /timed out|timeout/iu.test(messages)
+      .test(primaryDiagnostic)) {
+      const code = /timed out|timeout/iu.test(primaryDiagnostic)
         ? 'timeout_failure'
-        : /Cannot find module|ERR_MODULE_NOT_FOUND|Failed to load url/iu.test(messages)
+        : /Cannot find module|ERR_MODULE_NOT_FOUND|Failed to load url/iu.test(primaryDiagnostic)
           ? 'import_failure'
-          : /config/iu.test(messages)
+          : /config/iu.test(primaryDiagnostic)
             ? 'config_failure'
             : 'infrastructure_failure'
       return rejected(code, assertion.fullName)
     }
-    const marker = `[P3C_RED:${reason}]`
-    if (!messages.includes(marker)) {
-      return rejected('reason_mismatch', `${assertion.fullName}: expected ${marker}`)
-    }
-    if (observed.has(assertion.fullName)) {
-      return rejected('duplicate_test', assertion.fullName)
-    }
-    observed.set(assertion.fullName, reason)
+    return rejected('reason_mismatch', `${assertion.fullName}: expected ${marker} as the primary diagnostic`)
   }
   const missing = [...expected.keys()].filter((fullName) => !observed.has(fullName))
   if (missing.length > 0) return rejected('missing_test', missing.join(', '))
@@ -160,7 +162,9 @@ export function runPhase3CRedVerifier(args = process.argv.slice(2)): number {
   const report = {
     schema: 'phase-3c-red-report:v1',
     generatedAt: new Date().toISOString(),
-    command: 'npx vitest run <two allowlisted Phase 3C RED files> --reporter=json',
+    command: `npx --offline tsx tools/dev/verify-phase-3c-red-contract.ts --report ${outputPath}`,
+    classifiedCommand:
+      'npx vitest run <two allowlisted Phase 3C RED files> --reporter=json',
     vitestExitCode: command.status,
     disposition: classification.kind,
     classification,
