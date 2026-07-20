@@ -1,3 +1,44 @@
+## 2026-07-20 runtime-composition resumption — stopped at source-owned reconstruction boundary
+
+```json
+{
+  "plan": "03C-04",
+  "runtime": "Codex local isolated worktree; existing local dependency tree used by absolute path; no install or network",
+  "baseRevision": "2623bc204be38f7d22f9549e659e23cff02927dc",
+  "baseTree": "202dfd9e19eb33e9c49529c0641da664a2fe3731",
+  "parentSha": "2623bc204be38f7d22f9549e659e23cff02927dc",
+  "custodyManifestHash": "ef316f053d5d5655b160c9d78097aad9fdcce6c35d5a20ace4dc191ff8f5efa9",
+  "changedPaths": [
+    "src/routeTree.gen.ts",
+    ".planning/phases/03c-hosted-paid-operation-product-trial/03C-04-SUMMARY.md"
+  ],
+  "forbiddenPathsChecked": "All paths outside Plan04 ownership remained unchanged. The parent manifest's 66 inherited changes remained absent as worktree changes.",
+  "commands": [
+    {
+      "command": "route generator through the locked local @tanstack/router-generator dependency, twice",
+      "exitCode": 0,
+      "result": "Both clean rebuilds produced SHA-256 55d50bca6040eeedc63be4ca0ff2dbb901a6e8f1a669b2b543f233359aaef2ed. The only baseline normalization is removal of a stale ten-line React Start Register trailer."
+    },
+    {
+      "command": "focused source trace of hosted composition, creation, persistence, Convex gateway and server adapters",
+      "exitCode": 0,
+      "result": "Found the earliest required ownership boundary before RED implementation."
+    }
+  ],
+  "observableOutcome": "The route tree now has a deterministic clean-generator baseline. No paid-operation route was mounted and no runtime gateway was created.",
+  "redDisposition": "NOT_RUN_SOURCE_BOUNDARY_STOP. A decisive runtime RED would require specifying a gateway contract that the current persisted source rows cannot fulfil without fabricating reconstruction truth.",
+  "evidenceClass": "local source inspection and deterministic generated-artifact readback",
+  "claimCeiling": "Generated-tree normalization and a source-linked implementation blocker only. No runtime composition, route reachability, hosted behavior, provider/payment behavior, production safety, comprehension, demand or customer-value proof.",
+  "remainingFailure": "convex/hostedPaidOperation.ts exposes internal bounded row loading, CAS transaction and admission reservation only. Its persisted source row contains provider identifiers and materialInputDigest but not the typed material inputs, presentation, or complete interpretation required by HostedPaidOperationAggregate. It also has no source-owned initial creation write that can implement persistProviderBinding and persistCreated. The existing createHostedPaidOperationComposition requires a HostedPaidOperationPort whose loadComplete returns that complete typed aggregate, and createHostedPaidOperation requires those two creation persistence transitions.",
+  "stopReason": "SOURCE_OWNED_RECONSTRUCTION_AND_CREATION_BOUNDARY_OUTSIDE_PLAN04",
+  "nextDecision": "Parent must extend Plan02/03 ownership with a source-owned Convex serialization/reconstruction adapter and initial creation transaction, or explicitly widen this cut to those exact modules and tests. Then resume Plan04 from the resulting integrated revision.",
+  "commitCandidate": "Set by the scoped child commit containing only the two changed paths.",
+  "resumptionCommand": "git show --stat --oneline HEAD && git diff HEAD^ -- src/routeTree.gen.ts .planning/phases/03c-hosted-paid-operation-product-trial/03C-04-SUMMARY.md"
+}
+```
+
+### Prior Task1 handoff
+
 {
   "plan": "03C-04",
   "runtime": "Codex local isolated worktree; existing local dependencies reused by an ignored node_modules symlink; no install or network",
