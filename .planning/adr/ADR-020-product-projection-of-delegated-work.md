@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted; labelled local implementation complete, final custody/review open
+Accepted; Phase 3A closed at labelled local/mock evidence boundary
 
 ## Date
 
@@ -29,9 +29,10 @@ The source boundary was implemented through revision `6933fac0`. Payment
 preparation and possible submission survive separate-process loss; provider
 assertion remains distinct from settlement; exact payment reconciliation is
 bound and crash-replayable; and query-agnostic human and structured development
-surfaces share one semantic object. Mounted-browser evaluation now covers the
-R10 mechanics at a labelled local boundary. Phase closure remains pending final
-clean-checkout custody and independent re-review under R11.
+surfaces share one semantic object. Mounted-browser evaluation covers the R10
+mechanics at a labelled local boundary. At revision `eec9131c`, clean packet
+custody and independent review closed R11 with no unresolved P0/P1 inside that
+boundary.
 
 ## Decision
 

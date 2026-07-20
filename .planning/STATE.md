@@ -4,15 +4,15 @@ milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 current_phase: 3
 current_phase_name: protocol-kernel-product-conversion
-status: verifying
-stopped_at: "Phase 3A R1-R10 complete; final clean custody and re-review remain"
+status: complete
+stopped_at: "Phase 3A closed at labelled local/mock evidence boundary"
 last_updated: "2026-07-20"
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 0
   completed_plans: 0
-  percent: 67
+  percent: 100
 ---
 
 # Current state
@@ -21,16 +21,15 @@ Phases 1 and 2 are complete at the local control-plane evidence boundary.
 ADR-009 is accepted. ADR-010 is accepted with Gate 10 narrowed. ADR-019 owns
 the four-mode product destination.
 
-Phase 3A is current: prove one reliable paid BTC/USD operation through equal
-human and agent projections. ADR-020 is accepted for labelled local
-implementation.
+Phase 3A is complete at the labelled local/mock boundary: one reliable paid
+BTC/USD operation projects equal human and agent semantics under ADR-020.
 
 ## Next transition
 
-Run final-revision clean custody and independent re-review, then close R11
-without adding a public route or widening the evidence claim.
+Decide whether to begin Phase 3B's second-provider plug-in test. It remains
+deferred; no automatic fallback or exposure work is authorized.
 
-## Current blockers
+## Remaining evidence gaps
 
 - no real screen-reader session or human comprehension study has been run;
 - the development file port is labelled evidence infrastructure, not
@@ -40,11 +39,14 @@ without adding a public route or widening the evidence claim.
 
 ## Evidence ceiling
 
-Phase 3A focused local evidence through `6933fac0` proves the source-owned paid
+Phase 3A focused local evidence through `eec9131c` proves the source-owned paid
 operation contract, separate-process crash recovery, exact payment
 reconciliation, query-agnostic human/agent projections and automated mounted
-browser mechanics only. Final packets must bind the documentation-complete
-revision before R11 closes.
+browser mechanics only. Clean tree
+`1490ceea9590281d1941aa6d0955fc782f5084a9` produced and verified the
+provider-operation packet (`sha256:5dce9aa3b0bd9976da55ecb0e769e299722d12ab0abf5f3c7a178b9653d325bc`)
+and host-parity packet (`sha256:4451aab0680bfd6dfa8af9f6ed0ca01bc99139809b80bfd1a24486bdf84b30c9`).
+Independent review found no unresolved P0/P1 inside this claim boundary.
 
 Historical state, roadmap, requirements and scopes are preserved under
 `.planning/archive/pre-product-conversion-rebaseline-20260720/`.

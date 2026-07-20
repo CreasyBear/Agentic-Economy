@@ -17,7 +17,7 @@ Phase 1 — Action Invocation foundation (complete)
                          ↓
 Phase 2 — One action plane (accepted_narrowed)
                          ↓
-Phase 3 — Protocol/kernel → product conversion (current)
+Phase 3 — Protocol/kernel → product conversion (complete)
                          ↓
 Future exposure decision
 ```
@@ -42,7 +42,7 @@ human effort. The architecture survives; the payoff hypothesis does not.
 
 ## Phase 3A — One reliable paid operation
 
-**Status:** closure candidate; R1-R10 complete, final custody/review open
+**Status:** complete at labelled local/mock evidence boundary
 **Goal:** safely obtain and explain one BTC/USD result from one named mock
 provider for no more than $0.01.
 
@@ -56,7 +56,7 @@ truthful with no unresolved P0/P1 inside the local mock boundary.
 
 ## Phase 3B — Second-provider plug-in test
 
-**Status:** deferred until Phase 3A closes
+**Status:** deferred; next product decision
 
 Add one second provider for the same operation without changing host workflow
 or shared semantics. Do not add automatic fallback while provider A is

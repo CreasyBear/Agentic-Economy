@@ -1,6 +1,6 @@
 ---
 phase: 03-protocol-kernel-product-conversion
-status: verifying
+status: complete
 decision_owner: Founder
 updated: 2026-07-20
 governing_adr: ADR-020
@@ -61,5 +61,9 @@ are green. The browser evaluation covers one atomic live region,
 accessibility-tree semantics, keyboard/focus, 44px targets, 320px reflow,
 declared 400% zoom emulation and reduced motion.
 
-Phase 3A is not closed. R11 still requires regenerated clean-checkout packets
-at the documentation-complete revision and an independent re-review.
+Phase 3A closed at revision `eec9131c` and clean tree
+`1490ceea9590281d1941aa6d0955fc782f5084a9`. The focused suite passed 153
+tests, the mounted browser passed seven evals, both official local packets
+verified, and independent review found no unresolved P0/P1. This is local/mock
+product proof only; it does not establish real payment, provider fulfilment,
+hosted behavior, production safety or customer value.

@@ -33,7 +33,7 @@ created: 2026-07-20
 - [x] **P3A-R10 Experience quality:** Astryx neutral, keyboard, visible focus,
   44px targets, non-colour states, bounded announcements, responsive reflow,
   zoom and reduced motion pass focused checks.
-- [ ] **P3A-R11 Product-proof closeout:** focused source, fixture, parity,
+- [x] **P3A-R11 Product-proof closeout:** focused source, fixture, parity,
   browser, accessibility and independent review has no unresolved P0/P1.
 
 R1–R10 are source- and labelled-local-fixture complete through revision
@@ -41,8 +41,10 @@ R1–R10 are source- and labelled-local-fixture complete through revision
 zoom emulation, computed focus, reduced-motion behavior, one atomic live
 region, accessibility-tree semantics and query-agnostic projection parity.
 This is automated local evidence, not a real screen-reader session or human
-comprehension study. R11 remains open for clean final-revision custody and
-independent re-review.
+comprehension study. R11 closed at revision `eec9131c`: 153 focused tests,
+seven browser evals and both official local packet verifiers passed from clean
+tree `1490ceea9590281d1941aa6d0955fc782f5084a9`; independent review found no
+unresolved P0/P1 inside the labelled local/mock boundary.
 
 ## Non-requirements
 
