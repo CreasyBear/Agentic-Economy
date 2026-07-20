@@ -88,6 +88,13 @@ export const durableControlProjectionValue = v.object({
   freshness: invocationFreshnessValue, control: invocationControlValue,
 })
 
+// Marker used by contract tests: neutral control is continuity-only.
+export const hostedBusinessTruthForbidden = true as const
+export const opaqueHostedCustodyReferenceValue = v.object({
+  algorithm: v.literal('sha256'),
+  digest: v.string(),
+})
+
 export const actionInvocationTables = {
   actionInvocationControls: defineTable({
     invocationRef: v.string(),
@@ -155,4 +162,99 @@ export const actionInvocationTables = {
     .index('by_invocationRef_and_commandId', ['invocationRef', 'commandId'])
     .index('by_invocationRef_and_invocationVersion', ['invocationRef', 'invocationVersion'])
     .index('by_invocationRef_and_effectGeneration', ['invocationRef', 'effectGeneration']),
+
+  hostedPaidOperationHeaders: defineTable({
+    ownerPrincipalRef: v.string(),
+    ownerCallerRef: v.string(),
+    invocationRef: v.string(),
+    invocationVersion: v.number(),
+    selectedSourceRef: v.string(),
+    paymentAttemptRequired: v.boolean(),
+    currentEffectGeneration: v.optional(v.number()),
+    updatedAt: v.string(),
+  })
+    .index('by_ownerPrincipalRef_and_invocationRef', ['ownerPrincipalRef', 'invocationRef'])
+    .index('by_invocationRef', ['invocationRef']),
+
+  hostedPaidOperationSources: defineTable({
+    invocationRef: v.string(),
+    sourceRef: v.string(),
+    providerId: v.string(),
+    providerName: v.string(),
+    operationKey: v.string(),
+    operationRevision: v.string(),
+    materialInputDigest: v.string(),
+    normalizedResultRef: v.optional(v.string()),
+    normalizedResultDigest: v.optional(v.string()),
+  }).index('by_invocationRef_and_sourceRef', ['invocationRef', 'sourceRef']),
+
+  hostedPaidOperationPayments: defineTable({
+    invocationRef: v.string(),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+    paymentIdentifier: v.string(),
+    custodyReference: opaqueHostedCustodyReferenceValue,
+    state: v.union(
+      v.literal('prepared'),
+      v.literal('possibly_submitted'),
+      v.literal('observed'),
+      v.literal('reconciliation_required'),
+      v.literal('not_settled'),
+      v.literal('settled'),
+    ),
+    settledCurrency: v.optional(v.string()),
+    settledAmountMinor: v.optional(v.number()),
+    updatedAt: v.string(),
+  })
+    .index('by_invocationRef_and_attemptRef_and_effectGeneration', [
+      'invocationRef', 'attemptRef', 'effectGeneration',
+    ]),
+
+  hostedPaidOperationEvidenceReferences: defineTable({
+    invocationRef: v.string(),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+    evidenceKind: v.string(),
+    evidenceReference: opaqueHostedCustodyReferenceValue,
+    recordedAt: v.string(),
+  })
+    .index('by_invocationRef_and_attemptRef_and_effectGeneration', [
+      'invocationRef', 'attemptRef', 'effectGeneration',
+    ]),
+
+  hostedPaidOperationCommands: defineTable({
+    invocationRef: v.string(),
+    commandId: v.string(),
+    commandDigest: v.string(),
+    invocationVersion: v.number(),
+    effectGeneration: v.optional(v.number()),
+    recordedAt: v.string(),
+  }).index('by_invocationRef_and_commandId', ['invocationRef', 'commandId']),
+
+  hostedPaidOperationAdmissionPolicies: defineTable({
+    policyRef: v.string(),
+    enabled: v.boolean(),
+    principalRef: v.string(),
+    totalLimit: v.number(),
+    concurrencyLimit: v.number(),
+    rateLimit: v.number(),
+  }).index('by_policyRef_and_principalRef', ['policyRef', 'principalRef']),
+
+  hostedPaidOperationAdmissionCounters: defineTable({
+    policyRef: v.string(),
+    principalRef: v.string(),
+    currentWindowKey: v.string(),
+    admittedTotal: v.number(),
+    active: v.number(),
+    admittedInWindow: v.number(),
+    updatedAt: v.string(),
+  }).index('by_policyRef_and_principalRef', ['policyRef', 'principalRef']),
+
+  hostedPaidOperationAdmissionReservations: defineTable({
+    reservationRef: v.string(),
+    policyRef: v.string(),
+    principalRef: v.string(),
+    state: v.union(v.literal('active'), v.literal('released')),
+    updatedAt: v.string(),
+  }).index('by_reservationRef', ['reservationRef']),
 } as const
