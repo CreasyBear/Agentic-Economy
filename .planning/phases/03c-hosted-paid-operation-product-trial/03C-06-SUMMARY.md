@@ -1,4 +1,4 @@
-# Phase 03C Plan06 Task1 — frozen comprehension instrument and scorer
+# Phase 03C Plan06 — frozen comprehension instrument and recorded automated adjunct
 
 ## Decision
 
@@ -6,8 +6,12 @@ The ten-question instrument is frozen before answers at:
 
 `sha256:526b009ddbf476758a06abf5768fe8459a1a5c29411c98ebfd5d131084452719`
 
-The empty result is valid `not_run` / `unproven`. No human or automated-model
-participant has answered a question, and no PASS is claimed.
+Task2 recorded the three independently returned fresh-agent responses without
+repair or answer normalization. The frozen scorer accepted the
+`automated_model_comprehension` cohort at 30/30 with all gates passed. This is
+an automated-model adjunct PASS only. The human cohort remains exactly
+`not_run` / `unproven`, `p3cR8HumanComprehensionSatisfied` remains `false`,
+and no human PASS is claimed.
 
 ## Source contradiction resolved
 
@@ -28,7 +32,7 @@ boundary, keeps payment/payment-outcome/result truth in one question, and
 tests visible stop through safe-continuation questions. Mandatory
 all-participant gates are exactly Q3, Q5, Q7, Q8, Q9 and Q10.
 
-## Bounded handoff
+## Task1 bounded handoff (historical freeze record)
 
 ```json
 {
@@ -200,5 +204,131 @@ and the response JSON skeleton from
 the instrument’s answer-key fields, scorer, repository, files, tools, source
 trace, prior answers or rubric.
 
-Task1 stops here. No participant answer is authored, inferred or scored in this
-candidate.
+This boundary governed the Task1 evaluator dispatch. Task2 did not expose the
+answer key or repository to participants and did not author, infer, normalize,
+or repair any returned answer.
+
+## Task2 — automated-model adjunct recording
+
+### Base, custody, and frozen inputs
+
+- Detached clean base:
+  `5b1e976879e842a1055c25b28645e6078358227f`
+- Base tree:
+  `eb786c23acc6f9395a552160d52dde530a7868e8`
+- Parent content-bound custody:
+  `/tmp/ae-phase3c-parent-custody-5b1e9768.json`
+- Custody raw SHA-256:
+  `59b8bc3edffdee630ce0d5783188c870050ddde1818e9a4ed739748bb9a58826`
+- Custody embedded canonical SHA-256:
+  `604cd7633d64692924f26321c38cfff064b7ec0667509cd3abf6eb17289644dc`
+- Custody entries: `66`; official manifest verification passed against the
+  parent checkout; changed-path intersection is zero.
+- Frozen instrument file SHA-256:
+  `d541b95ba4bd43f3da70a2c6418a3e32c04081d17c4f17fc049d4b005529a593`
+- Frozen runbook file SHA-256:
+  `ef52e4cb0d57a3e1ad1e9a7bf4dca1d4a695a8054f5ba1ab1a6e37cd01c65a26`
+- Frozen scorer file SHA-256:
+  `94934c6e94708378d519b2c7d6b21f926d9dfa8d1da1303f6a7952886aff60a0`
+- Task2 changed paths are only
+  `.planning/phases/03c-hosted-paid-operation-product-trial/03C-COMPREHENSION-RESULTS.json`
+  and
+  `.planning/phases/03c-hosted-paid-operation-product-trial/03C-06-SUMMARY.md`.
+  Instrument, scorer, runbook, source, UI, tests, package, workflows, Convex,
+  routes, Plan07, AGENTS, PRODUCT, DESIGN, and custody paths are untouched.
+
+### Raw anonymous response custody
+
+The result envelope stores each supplied response object verbatim in meaning
+and field values under `automatedModelCohort.sessions`; no selected option,
+eligibility field, friction field, scenario order, or note was changed.
+The digests below are SHA-256 over deterministic canonical JSON of each stored
+raw session object: UTF-8, recursively lexicographic object keys, preserved
+array order, JSON scalar encoding, and no whitespace.
+
+| Participant ID | Evidence class | Assignment | Canonical response SHA-256 |
+|---|---|---:|---|
+| `agent-00000001` | `automated_model_comprehension` | A | `6b4ae41d5dc9584bb3544007d68ff65511b0354af2bd4f37ab30acd671d9e50c` |
+| `agent-00000002` | `automated_model_comprehension` | B | `faa9c5a30dfa7c055bae07fe694c3c11791072060b242a0cd765881bd84f9c34` |
+| `agent-00000003` | `automated_model_comprehension` | C | `44c59bdc5a19bad3b67c0c60b9d70dce0d3de7edd4e8dcdd2a1990eab34e353a` |
+
+The ordered three-session array digest is
+`43d15a05b9460a5ce321161103f3416c25d464fc0b727001da907f1ffd921180`.
+The resulting envelope file raw SHA-256 is
+`c6527e9fe52bf18a0bfa87f891215eb9668845e73411d3391d79a196a9b21554`.
+`generatedAt` is the local recording timestamp
+`2026-07-20T18:07:19Z`; it is not represented as participant timing.
+
+### Frozen scorer result
+
+Command:
+
+```text
+PATH=/Users/joelchan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH "/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/Agentic-Economy/node_modules/.bin/tsx" tools/dev/score-paid-operation-comprehension.ts --instrument .planning/phases/03c-hosted-paid-operation-product-trial/03C-COMPREHENSION-EVAL.md --results .planning/phases/03c-hosted-paid-operation-product-trial/03C-COMPREHENSION-RESULTS.json
+```
+
+Exit code: `0`. Exact decision payload:
+
+```json
+{
+  "kind": "accepted",
+  "instrumentDigest": "sha256:526b009ddbf476758a06abf5768fe8459a1a5c29411c98ebfd5d131084452719",
+  "human": {
+    "decision": "NOT_RUN",
+    "eligibleSessions": 0,
+    "totalAnswers": 0,
+    "correctAnswers": 0,
+    "accuracy": null,
+    "mandatoryGatePassed": false,
+    "goldenJourneyGatePassed": false,
+    "hardFailTriggered": false,
+    "claimStatus": "unproven"
+  },
+  "automated": {
+    "decision": "PASS",
+    "eligibleSessions": 3,
+    "totalAnswers": 30,
+    "correctAnswers": 30,
+    "accuracy": 1,
+    "mandatoryGatePassed": true,
+    "goldenJourneyGatePassed": true,
+    "hardFailTriggered": false,
+    "claimStatus": "proven_for_automated_model_comprehension_only"
+  },
+  "overall": {
+    "status": "automated_adjunct_only",
+    "p3cR8HumanComprehensionSatisfied": false,
+    "humanEvidenceClaim": "unproven",
+    "automatedAdjunctClaim": "proven_for_automated_model_comprehension_only",
+    "claimCeiling": "Automated-model comprehension for exactly three eligible fresh-agent sessions only. It is adjunct model evidence and cannot satisfy or overwrite declared human comprehension or P3C-R8."
+  }
+}
+```
+
+No network, external service, credential, provider, payment, settlement, or
+deployment call was made.
+
+### Evidence and remaining failure
+
+Evidence class: frozen-instrument model evaluation for exactly three eligible,
+independent fresh-agent sessions, using the participant-safe packet derived
+from labelled local browser mechanics and authenticated route fixtures.
+
+Claim ceiling: automated-model comprehension for exactly these three eligible
+fresh-agent sessions only. It cannot satisfy or overwrite declared human
+comprehension or P3C-R8. It does not prove hosted reachability,
+accessibility-in-use, population usability, provider fulfilment, real payment
+or settlement, production safety, customer value, demand, or non-paid
+compatibility.
+
+Remaining failure: real-human comprehension has not run. The human decision is
+`NOT_RUN`, its claim is `unproven`, and
+`p3cR8HumanComprehensionSatisfied=false`.
+
+Founder override, unchanged:
+
+> Real-human comprehension may remain unproven without blocking the already-authorized Plan07 source/deploy work, but that does not satisfy P3C-R8’s human-comprehension evidence or upgrade the claim.
+
+Task2 stops after recording and frozen scoring. Parent alone audits and
+integrates this two-file candidate and owns any later human cohort or completion
+claim.
