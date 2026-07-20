@@ -177,7 +177,7 @@ jobs:
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
       AE_RELEASE_GITHUB_RUN_ID: ${{ github.run_id }}
       AE_RELEASE_GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
-      AE_PAID_OPERATION_CLERK_SUBJECT: ${{ secrets.AE_PAID_OPERATION_CLERK_SUBJECT }}
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_SUBJECT }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
@@ -222,14 +222,14 @@ jobs:
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
-          if [ -z "${AE_PAID_OPERATION_CLERK_SUBJECT}" ]; then
+          if [ -z "${AE_CUSTOMER_REQUEST_CLERK_SUBJECT}" ]; then
             echo 'Phase 3C evaluator subject is not configured.' >&2
             exit 1
           fi
           recorded_at="$(node --input-type=module -e 'const now = new Date(); now.setMilliseconds(0); process.stdout.write(now.toISOString())')"
           admission_ends_at="$(node --input-type=module -e 'const now = new Date(process.argv[1]); process.stdout.write(new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString())' "${recorded_at}")"
           admission_args="$(jq -cn \
-            --arg evaluatorPrincipalRef "${AE_PAID_OPERATION_CLERK_SUBJECT}" \
+            --arg evaluatorPrincipalRef "${AE_CUSTOMER_REQUEST_CLERK_SUBJECT}" \
             --arg sourceRevision "${AE_RELEASE_SOURCE_REVISION}" \
             --argjson totalLimit 3 \
             --argjson concurrencyLimit 1 \

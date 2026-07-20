@@ -42,6 +42,9 @@ The TDD loop captured intended failures before implementation:
 | Closure inventory | Filtered `paid-operation-trial-residue.test.ts` | `[P3C_RED:closure_07e_artifact_absent]` for this summary; Git derived 96 paths before it existed. |
 | Closure classification | Filtered `paid-operation-trial-residue.test.ts` after all files existed | `[P3C_RED:closure_artifact_unclassified]` named exactly five missing rows and zero extras before classification. |
 | Build isolation | Filtered `paid-operation-hosted-release.test.ts` after the first scratch build | `[P3C_RED:phase3c_build_isolation_absent]` proved a direct CI build would dirty the checkout. |
+| Evaluator secret binding | Filtered `paid-operation-hosted-release.test.ts` during parent audit correction | `[P3C_RED:phase3c_customer_request_evaluator_secret_absent]` exposed the nonexistent paid-operation secret binding before configuration. |
+| Pre-attempt payment owner gate | Filtered `paid-operation-hosted-release.test.ts` during parent audit correction | `[P3C_RED:phase3c_release_owner_test_absent] tests/unit/action-invocation/paid-operation-application-service.test.ts`. |
+| Temporary-credential owner gate | The same filtered test after the first gate repair | `[P3C_RED:phase3c_release_owner_test_absent] tests/unit/release/customer-request-production-credential.test.ts`. |
 
 The pre-change Customer Request completeness file also had three unrelated
 stale source-shape assertions plus its old workflow-order assertion. They are
@@ -67,7 +70,7 @@ contract. It now reaches source proof only.
 
 Rejected: reuse the legacy temporary-Clerk lifecycle in the Phase 3C job. The
 parent owns later hosted readback; this cut needs only the pre-existing
-authenticated evaluator subject as the admission principal.
+authenticated Customer Request evaluator subject as the admission principal.
 
 ## Workflow decision table
 
@@ -94,16 +97,21 @@ checkout, uses a frozen install, runs `verify:phase3c:release-source`, runs
 `build` separately, and refuses generated-file drift. Its production successor
 observes Vercel, runs exactly one Convex deploy, configures totals `3/1/3` for
 about four hours through `2026-08-21T00:00:00.000Z` retention with kill-switch
-owner `Phase 3C release owner`, and ends at the exact named receipt step.
+owner `Phase 3C release owner`, and ends at the exact named receipt step. Parent
+names-only GitHub readback established that the configured evaluator secret is
+`AE_CUSTOMER_REQUEST_CLERK_SUBJECT`; the production job now binds that existing
+name end-to-end and contains no paid-operation-specific secret reference.
 
 `package.json` adds the focused Phase 3C release-source command. It crosses the
 current source/persistence/projection/server/auth/route/card/UI/release/
 observer/residue boundaries plus the Customer Request workflow compatibility
-fixture. Build remains a separate workflow step.
+fixture, the Plan 07C pre-attempt payment owner, and the scoped temporary-
+credential owner. Build remains a separate workflow step.
 
 ## Verification results
 
-The required focused sequence passed after the build-isolation correction:
+The required focused sequence passed after the build-isolation and parent-audit
+corrections:
 
 | Command | Result |
 | --- | --- |
@@ -111,7 +119,7 @@ The required focused sequence passed after the build-isolation correction:
 | `vitest run tests/unit/release/paid-operation-hosted-release.test.ts` | 1 file, 28 tests passed. |
 | `vitest run tests/imports/customer-request-source-completeness.test.ts` | 1 file, 9 tests passed. |
 | `vitest run tests/imports/paid-operation-trial-residue.test.ts` | 1 file, 4 tests passed, including exact 97-path classification and removal/import falsifiers. |
-| `npm run verify:phase3c:release-source` | 15 files, 144 tests passed. |
+| `npm run verify:phase3c:release-source` | 17 files, 167 tests passed. |
 | Changed-path `oxlint --deny-warnings` | Passed with no diagnostics. |
 | `git diff --check` | Passed. |
 | YAML parse plus source-count extraction | Four jobs parsed; marker present; Phase 3C production has one observer, one Convex deploy, zero Vercel mutation/create paths, one admission configuration and one receipt write; receipt is the final step. |

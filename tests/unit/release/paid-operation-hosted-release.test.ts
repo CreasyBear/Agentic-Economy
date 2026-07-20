@@ -774,6 +774,20 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(phase3CProduction).toContain(
       "if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[phase3c-hosted-trial]')",
     )
+    expect(
+      phase3CProduction,
+      '[P3C_RED:phase3c_customer_request_evaluator_secret_absent]',
+    ).toContain(
+      'AE_CUSTOMER_REQUEST_CLERK_SUBJECT: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_SUBJECT }}',
+    )
+    expect(
+      phase3CProduction,
+      '[P3C_RED:phase3c_nonexistent_evaluator_secret_present]',
+    ).not.toContain('secrets.AE_PAID_OPERATION_CLERK_SUBJECT')
+    expect(phase3CProduction).not.toContain('AE_PAID_OPERATION_CLERK_SUBJECT')
+    expect(phase3CProduction).toContain(
+      '--arg evaluatorPrincipalRef "${AE_CUSTOMER_REQUEST_CLERK_SUBJECT}"',
+    )
 
     expect(legacyHosted).toContain('needs: source-proof')
     expect(legacyHosted).toContain(
@@ -837,6 +851,17 @@ describe('paid-operation hosted proof integrity and live admission', () => {
   it('keeps source, packet-integrity, and live-smoke commands distinct and fail closed', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
       scripts: Record<string, string>
+    }
+    const phase3CReleaseSource =
+      packageJson.scripts['verify:phase3c:release-source']
+    for (const ownerTest of [
+      'tests/unit/action-invocation/paid-operation-application-service.test.ts',
+      'tests/unit/release/customer-request-production-credential.test.ts',
+    ]) {
+      expect(
+        phase3CReleaseSource,
+        `[P3C_RED:phase3c_release_owner_test_absent] ${ownerTest}`,
+      ).toContain(ownerTest)
     }
     expect(packageJson.scripts).toMatchObject({
       'verify:paid-operation:hosted-source-local':
