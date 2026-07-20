@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for labelled local implementation
+Accepted; labelled local source implementation complete, browser verification open
 
 ## Date
 
@@ -24,6 +24,13 @@ Source review found that x402 challenge, authorization and paid dispatch were
 too compressed: a crash or unusable response could lose whether payment was
 possibly submitted. Product projection is therefore blocked until those facts
 are durable and independently represented.
+
+The source boundary was implemented through revision `a7307c33`. Payment
+preparation and possible submission survive separate-process loss; provider
+assertion remains distinct from settlement; exact payment reconciliation is
+bound and crash-replayable; and query-agnostic human and structured development
+surfaces share one semantic object. Phase closure remains pending the browser
+accessibility and final clean-checkout evidence named in R10/R11.
 
 ## Decision
 

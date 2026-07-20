@@ -42,7 +42,7 @@ human effort. The architecture survives; the payoff hypothesis does not.
 
 ## Phase 3A — One reliable paid operation
 
-**Status:** implementing; ADR-020 accepted for labelled local work
+**Status:** verifying; source loop complete, browser evidence open
 **Goal:** safely obtain and explain one BTC/USD result from one named mock
 provider for no more than $0.01.
 

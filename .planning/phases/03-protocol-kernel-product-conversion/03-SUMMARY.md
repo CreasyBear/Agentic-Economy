@@ -1,6 +1,6 @@
 ---
 phase: 03-protocol-kernel-product-conversion
-status: implementing
+status: verifying
 decision_owner: Founder
 updated: 2026-07-20
 governing_adr: ADR-020
@@ -49,3 +49,14 @@ provider B.
 
 Phase 3A closes only against `.planning/REQUIREMENTS.md`. Evidence remains
 labelled local fixture behavior and product-comprehension proof.
+
+## Current implementation truth
+
+At revision `a7307c33`, the source loop implements exact BTC/USD normalization,
+durable prepared/possibly-submitted payment checkpoints, opaque custody lookup,
+separate provider assertion and settlement truth, crash-replayable
+payment-specific reconciliation, one query-agnostic card, and matching
+structured-agent semantics. Focused source and fixture checks are green.
+
+Phase 3A is not closed. R10/R11 still require mounted browser accessibility
+evidence and a regenerated clean-checkout packet at the final revision.

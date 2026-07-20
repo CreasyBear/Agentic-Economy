@@ -4,8 +4,8 @@ milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 current_phase: 3
 current_phase_name: protocol-kernel-product-conversion
-status: implementing
-stopped_at: "Phase 3A implementation authorized; Wave 1 payment custody is the first source transition"
+status: verifying
+stopped_at: "Phase 3A source loop complete; browser accessibility evidence remains"
 last_updated: "2026-07-20"
 progress:
   total_phases: 3
@@ -27,22 +27,26 @@ implementation.
 
 ## Next transition
 
-Make x402 payment preparation and possible submission durably reconstructable,
-then normalize the exact quote and project shared paid-operation semantics.
+Mount the development-only paid-operation harness in a browser test boundary
+and close R10/R11 without adding a public route or widening the evidence claim.
 
 ## Current blockers
 
-- payment authorization and paid dispatch are not yet durably separated;
-- settlement evidence and quote delivery are not independently projected;
-- the development quote contract is not yet exact BTC/USD product evidence;
-- no compact human paid-operation surface exists;
-- current parity proves generic invocation semantics, not paid-result semantics.
+- no browser-level proof yet exists for 320px/400% reflow, computed focus,
+  reduced-motion media behavior, bounded announcements or axe/screen-reader
+  behavior;
+- the development file port is labelled evidence infrastructure, not
+  production persistence;
+- no hosted, real-payment, independent-settlement, provider or customer proof
+  follows from the completed source loop.
 
 ## Evidence ceiling
 
-Phase 1/2 clean-checkout evidence binds revision
-`13158022c7462a7fdae346b548f0ea272a87cefe`. It proves labelled local
-development behavior only.
+Phase 3A focused local evidence at `a7307c33` proves the source-owned paid
+operation contract, separate-process crash recovery, exact payment
+reconciliation, query-agnostic human/agent projections and local fixture
+comprehension only. The last clean-checkout packet proof predates the final
+reconciliation commits and must be regenerated before R11 closes.
 
 Historical state, roadmap, requirements and scopes are preserved under
 `.planning/archive/pre-product-conversion-rebaseline-20260720/`.
