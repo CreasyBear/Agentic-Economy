@@ -30,17 +30,19 @@ created: 2026-07-20
 - [x] **P3A-R9 Human comprehension:** the compact operation surface makes task,
   provider, maximum charge, shared data, payment/release truth and safe next
   action understandable without protocol vocabulary.
-- [ ] **P3A-R10 Experience quality:** Astryx neutral, keyboard, visible focus,
+- [x] **P3A-R10 Experience quality:** Astryx neutral, keyboard, visible focus,
   44px targets, non-colour states, bounded announcements, responsive reflow,
   zoom and reduced motion pass focused checks.
 - [ ] **P3A-R11 Product-proof closeout:** focused source, fixture, parity,
   browser, accessibility and independent review has no unresolved P0/P1.
 
-R1–R9 are source- and labelled-local-fixture complete at revision `a7307c33`.
-R10–R11 remain open for a mounted browser evaluation of 320px/400% reflow,
-computed focus, reduced-motion media behavior, bounded announcements and
-axe/screen-reader behavior. This is an evidence gap, not permission to widen
-the product or deployment claim.
+R1–R10 are source- and labelled-local-fixture complete through revision
+`6933fac0`. The mounted Chromium evaluation covers 320px reflow, declared 400%
+zoom emulation, computed focus, reduced-motion behavior, one atomic live
+region, accessibility-tree semantics and query-agnostic projection parity.
+This is automated local evidence, not a real screen-reader session or human
+comprehension study. R11 remains open for clean final-revision custody and
+independent re-review.
 
 ## Non-requirements
 

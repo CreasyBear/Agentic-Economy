@@ -52,11 +52,14 @@ labelled local fixture behavior and product-comprehension proof.
 
 ## Current implementation truth
 
-At revision `a7307c33`, the source loop implements exact BTC/USD normalization,
+Through revision `6933fac0`, the source loop implements exact BTC/USD normalization,
 durable prepared/possibly-submitted payment checkpoints, opaque custody lookup,
 separate provider assertion and settlement truth, crash-replayable
 payment-specific reconciliation, one query-agnostic card, and matching
-structured-agent semantics. Focused source and fixture checks are green.
+structured-agent semantics. Focused source, fixture and mounted-browser checks
+are green. The browser evaluation covers one atomic live region,
+accessibility-tree semantics, keyboard/focus, 44px targets, 320px reflow,
+declared 400% zoom emulation and reduced motion.
 
-Phase 3A is not closed. R10/R11 still require mounted browser accessibility
-evidence and a regenerated clean-checkout packet at the final revision.
+Phase 3A is not closed. R11 still requires regenerated clean-checkout packets
+at the documentation-complete revision and an independent re-review.

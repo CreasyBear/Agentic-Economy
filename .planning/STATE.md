@@ -5,7 +5,7 @@ milestone_name: Protocol/kernel to product conversion
 current_phase: 3
 current_phase_name: protocol-kernel-product-conversion
 status: verifying
-stopped_at: "Phase 3A source loop complete; browser accessibility evidence remains"
+stopped_at: "Phase 3A R1-R10 complete; final clean custody and re-review remain"
 last_updated: "2026-07-20"
 progress:
   total_phases: 3
@@ -27,14 +27,12 @@ implementation.
 
 ## Next transition
 
-Mount the development-only paid-operation harness in a browser test boundary
-and close R10/R11 without adding a public route or widening the evidence claim.
+Run final-revision clean custody and independent re-review, then close R11
+without adding a public route or widening the evidence claim.
 
 ## Current blockers
 
-- no browser-level proof yet exists for 320px/400% reflow, computed focus,
-  reduced-motion media behavior, bounded announcements or axe/screen-reader
-  behavior;
+- no real screen-reader session or human comprehension study has been run;
 - the development file port is labelled evidence infrastructure, not
   production persistence;
 - no hosted, real-payment, independent-settlement, provider or customer proof
@@ -42,11 +40,11 @@ and close R10/R11 without adding a public route or widening the evidence claim.
 
 ## Evidence ceiling
 
-Phase 3A focused local evidence at `a7307c33` proves the source-owned paid
+Phase 3A focused local evidence through `6933fac0` proves the source-owned paid
 operation contract, separate-process crash recovery, exact payment
-reconciliation, query-agnostic human/agent projections and local fixture
-comprehension only. The last clean-checkout packet proof predates the final
-reconciliation commits and must be regenerated before R11 closes.
+reconciliation, query-agnostic human/agent projections and automated mounted
+browser mechanics only. Final packets must bind the documentation-complete
+revision before R11 closes.
 
 Historical state, roadmap, requirements and scopes are preserved under
 `.planning/archive/pre-product-conversion-rebaseline-20260720/`.
