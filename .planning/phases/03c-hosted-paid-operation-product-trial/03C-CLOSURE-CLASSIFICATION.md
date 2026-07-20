@@ -15,14 +15,15 @@ classified as shared.
 
 ## Artifact inventory
 
-The inventory is the exact 92-path Git-derived Phase 3C delta from
-`2debf4b9f65ce228491f7d3d17ed1654a23bb496` through this Plan 07D cut,
+The inventory is the exact 97-path Git-derived Phase 3C delta from
+`2debf4b9f65ce228491f7d3d17ed1654a23bb496` through this Plan 07E cut,
 including tracked changes and untracked owned files during TDD. The import
 test derives this set directly from Git; there is no second hand-maintained
 inventory capable of hiding an omission.
 
 | Artifact | Classification | Closure treatment |
 | --- | --- | --- |
+| `.github/workflows/kernel-release-gate.yml` | `trial-only` | Revert the Phase 3C marker jobs and predicate split after the trial; preserve the ordinary Customer Request release path. |
 | `.planning/REQUIREMENTS.md` | `trial-only` | Revert only the Phase 3C planning delta when the milestone is archived. |
 | `.planning/ROADMAP.md` | `trial-only` | Revert only the Phase 3C planning delta when the milestone is archived. |
 | `.planning/STATE.md` | `trial-only` | Revert only the Phase 3C planning delta when the milestone is archived. |
@@ -45,6 +46,7 @@ inventory capable of hiding an omission.
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-07A-SUMMARY.md` | `trial-only` | Retain as phase provenance; it has no runtime authority. |
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-07C-SUMMARY.md` | `trial-only` | Retain as phase provenance; it has no runtime authority. |
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-07D-SUMMARY.md` | `trial-only` | Retain as phase provenance; it has no runtime authority. |
+| `.planning/phases/03c-hosted-paid-operation-product-trial/03C-07E-SUMMARY.md` | `trial-only` | Retain as source/local release-safety provenance; it is not hosted evidence. |
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-AGENT-RUNBOOK.md` | `trial-only` | Retire as an executable runbook after the declared review; retain as provenance. |
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-CLOSURE-CLASSIFICATION.md` | `trial-only` | Retain this retirement manifest as phase provenance. |
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-COMPREHENSION-EVAL.md` | `trial-only` | Retain the instrument as provenance; do not reuse as proof of human comprehension. |
@@ -85,6 +87,7 @@ inventory capable of hiding an omission.
 | `tests/e2e/paid-operation-development-surface.spec.ts` | `paid-operation-owned` | Revert only the Phase 3C assertions if the class is retired. |
 | `tests/e2e/paid-operation-hosted-sandbox.spec.ts` | `trial-only` | Remove the hosted trial browser fixture. |
 | `tests/imports/hosted-paid-operation-boundaries.test.ts` | `trial-only` | Remove with the hosted trial production paths. |
+| `tests/imports/customer-request-source-completeness.test.ts` | `trial-only` | Revert only the Plan 07E marker/legacy workflow assertions; preserve the Customer Request source-completeness boundary. |
 | `tests/imports/paid-operation-trial-residue.test.ts` | `trial-only` | Retain until the removal cut passes, then archive with this manifest. |
 | `tests/ui-contract/hosted-paid-operation-contract.test.tsx` | `trial-only` | Remove the Phase 3C hosted card contract fixture. |
 | `tests/unit/action-invocation/convex-handler-contract.test.ts` | `trial-only` | Revert only Phase 3C persistence/proof-query fixtures after schema retirement. |
@@ -99,6 +102,7 @@ inventory capable of hiding an omission.
 | `tests/unit/action-invocation/paid-operation-development-surface.test.tsx` | `paid-operation-owned` | Revert only the Phase 3C development assertions if the class is retired. |
 | `tests/unit/action-invocation/paid-operation-projection.test.ts` | `paid-operation-owned` | Revert only the Phase 3C projection assertions if the class is retired. |
 | `tests/unit/release/customer-request-production-credential.test.ts` | `trial-only` | Revert only the paid-scope Plan 07B fixture; preserve Customer Request defaults. |
+| `tests/unit/release/observe-vercel-git-source-deployment.test.ts` | `trial-only` | Remove with the Phase 3C GET-only deployment observer after parent-owned readback and retirement. |
 | `tests/unit/release/paid-operation-hosted-release.test.ts` | `trial-only` | Remove the packet/live-admission falsifier suite after final review. |
 | `tests/unit/server/hosted-paid-operation-agent-auth.test.ts` | `trial-only` | Remove with the protected trial agent authentication adapter. |
 | `tests/unit/server/hosted-paid-operation-api.test.ts` | `trial-only` | Remove with the protected trial routes. |
@@ -111,6 +115,7 @@ inventory capable of hiding an omission.
 | `tools/dev/score-paid-operation-comprehension.ts` | `trial-only` | Remove the automated adjunct scorer after review. |
 | `tools/dev/verify-phase-3c-red-contract.ts` | `trial-only` | Remove the Phase 3C-only RED classifier after archival. |
 | `tools/release/customer-request-production-credential.ts` | `trial-only` | Revert only the paid-scope option; preserve default Customer Request behavior. |
+| `tools/release/observe-vercel-git-source-deployment.ts` | `trial-only` | Remove the Phase 3C GET-only deployment observer after the one release and retained audit window. |
 | `tools/release/paid-operation-hosted-journey.ts` | `trial-only` | Remove the module-owned three-operation checkpoint journey after the declared review. |
 | `tools/release/paid-operation-hosted-live-collector.ts` | `trial-only` | Remove the temporary-credential, control-plane, and raw-observation admission collector after review. |
 | `tools/release/paid-operation-hosted-proof-contract.ts` | `trial-only` | Remove the packet schema and offline integrity verifier after the retained packet review window. |

@@ -17,6 +17,7 @@ concurrency:
 jobs:
   source-proof:
     name: Clean source, contract, browser, and build proof
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[phase3c-hosted-trial]')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -38,7 +39,7 @@ jobs:
 
   hosted-proof:
     name: Exact-revision production deploy and authenticated Request readback
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[phase3c-hosted-trial]')
     needs: source-proof
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -124,3 +125,139 @@ jobs:
           AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON: '[{"name":"Sandbox Route Resolver","purposes":["resolve_sandbox_service_reference"]},{"name":"Sandbox Route Quoter","purposes":["prepare_sandbox_service_quote"]}]'
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run test:release:hosted
+
+  phase3c-source-proof:
+    name: Phase 3C clean source and build proof
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[phase3c-hosted-trial]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Refuse a Phase 3C checkout other than the triggering revision
+        run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1
+
+      - name: Frozen Phase 3C dependency install
+        run: npm ci
+
+      - name: Run focused Phase 3C release source gate
+        run: npm run verify:phase3c:release-source
+
+      - name: Build exact Phase 3C candidate
+        run: |
+          build_scratch="$(mktemp -d "${RUNNER_TEMP}/phase3c-build.XXXXXX")"
+          git archive "${AE_RELEASE_SOURCE_REVISION}" | tar -x -C "${build_scratch}"
+          ln -s "${GITHUB_WORKSPACE}/node_modules" "${build_scratch}/node_modules"
+          (
+            cd "${build_scratch}"
+            npm run build
+          )
+
+      - name: Refuse Phase 3C source or generated-file drift
+        run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"
+
+  phase3c-production:
+    name: Phase 3C exact-revision Convex deployment
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[phase3c-hosted-trial]')
+    needs: phase3c-source-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
+      AE_RELEASE_GITHUB_RUN_ID: ${{ github.run_id }}
+      AE_RELEASE_GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+      AE_PAID_OPERATION_CLERK_SUBJECT: ${{ secrets.AE_PAID_OPERATION_CLERK_SUBJECT }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1
+
+      - name: Frozen Phase 3C production dependency install
+        run: npm ci
+
+      - name: Bind exact Phase 3C source metadata
+        run: |
+          test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}"
+          test -z "$(git status --porcelain)"
+          source_tree="$(git rev-parse 'HEAD^{tree}')"
+          source_epoch="$(git show -s --format=%ct HEAD)"
+          source_clock_timestamp="$(node --input-type=module -e 'process.stdout.write(new Date(Number(process.argv[1]) * 1000).toISOString())' "${source_epoch}")"
+          printf 'AE_RELEASE_SOURCE_TREE=%s\n' "${source_tree}" >> "${GITHUB_ENV}"
+          printf 'AE_RELEASE_SOURCE_CLOCK_TIMESTAMP=%s\n' "${source_clock_timestamp}" >> "${GITHUB_ENV}"
+
+      - name: Observe the exact Vercel Git deployment
+        id: observe-vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          observation="$(npm exec -- tsx tools/release/observe-vercel-git-source-deployment.ts)"
+          deployment_id="$(printf '%s' "${observation}" | jq -er '.deploymentId | select(type == "string" and length > 0)')"
+          printf 'deployment_id=%s\n' "${deployment_id}" >> "${GITHUB_OUTPUT}"
+
+      - name: Deploy the exact Phase 3C Convex source
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"
+
+      - name: Configure exact Phase 3C admission
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          if [ -z "${AE_PAID_OPERATION_CLERK_SUBJECT}" ]; then
+            echo 'Phase 3C evaluator subject is not configured.' >&2
+            exit 1
+          fi
+          recorded_at="$(node --input-type=module -e 'const now = new Date(); now.setMilliseconds(0); process.stdout.write(now.toISOString())')"
+          admission_ends_at="$(node --input-type=module -e 'const now = new Date(process.argv[1]); process.stdout.write(new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString())' "${recorded_at}")"
+          admission_args="$(jq -cn \
+            --arg evaluatorPrincipalRef "${AE_PAID_OPERATION_CLERK_SUBJECT}" \
+            --arg sourceRevision "${AE_RELEASE_SOURCE_REVISION}" \
+            --argjson totalLimit 3 \
+            --argjson concurrencyLimit 1 \
+            --argjson rateLimit 3 \
+            --arg admissionEndsAt "${admission_ends_at}" \
+            --arg retainThrough '2026-08-21T00:00:00.000Z' \
+            --arg killSwitchOwner 'Phase 3C release owner' \
+            --arg recordedAt "${recorded_at}" \
+            '{evaluatorPrincipalRef:$evaluatorPrincipalRef,sourceRevision:$sourceRevision,totalLimit:$totalLimit,concurrencyLimit:$concurrencyLimit,rateLimit:$rateLimit,admissionEndsAt:$admissionEndsAt,retainThrough:$retainThrough,killSwitchOwner:$killSwitchOwner,recordedAt:$recordedAt}')"
+          policy_result="$(npx convex run hostedPaidOperation:configurePhase3CAdmission "${admission_args}" --prod)"
+          if ! printf '%s' "${policy_result}" | jq -e '.kind == "configured" and ((.policyDigest // "") | type == "string" and length > 0)' >/dev/null; then
+            echo 'Phase 3C admission configuration was refused.' >&2
+            exit 1
+          fi
+
+      - name: Record Phase 3C Convex deployment receipt
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          receipt_args="$(jq -cn \
+            --arg sourceRevision "${AE_RELEASE_SOURCE_REVISION}" \
+            --arg sourceTree "${AE_RELEASE_SOURCE_TREE}" \
+            --arg githubRunId "${AE_RELEASE_GITHUB_RUN_ID}" \
+            --argjson githubRunAttempt "${AE_RELEASE_GITHUB_RUN_ATTEMPT}" \
+            --arg sourceClockTimestamp "${AE_RELEASE_SOURCE_CLOCK_TIMESTAMP}" \
+            '{sourceRevision:$sourceRevision,sourceTree:$sourceTree,githubRunId:$githubRunId,githubRunAttempt:$githubRunAttempt,sourceClockTimestamp:$sourceClockTimestamp}')"
+          receipt_result="$(npx convex run hostedPaidOperation:recordPhase3CDeploymentReceipt "${receipt_args}" --prod)"
+          if ! printf '%s' "${receipt_result}" | jq -e '.kind == "recorded" and ((.deploymentName // "") | type == "string" and length > 0)' >/dev/null; then
+            echo 'Phase 3C deployment receipt was not recorded.' >&2
+            exit 1
+          fi

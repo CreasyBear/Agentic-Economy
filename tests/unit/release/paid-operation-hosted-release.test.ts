@@ -739,6 +739,101 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(source).not.toContain('authenticated_exact_revision_hosted_sandbox')
   })
 
+  it('routes a Phase 3C marker push through one observed Vercel deployment and one Convex deploy', () => {
+    const workflow = readFileSync('.github/workflows/kernel-release-gate.yml', 'utf8')
+    const marker = '[phase3c-hosted-trial]'
+
+    expect(workflow, '[P3C_RED:phase3c_marker_absent]').toContain(marker)
+    for (const job of [
+      '\n  source-proof:',
+      '\n  hosted-proof:',
+      '\n  phase3c-source-proof:',
+      '\n  phase3c-production:',
+    ]) {
+      expect(workflow, `[P3C_RED:phase3c_job_absent] ${job.trim()}`).toContain(job)
+    }
+
+    const sourceStart = workflow.indexOf('\n  source-proof:')
+    const legacyStart = workflow.indexOf('\n  hosted-proof:')
+    const phase3CSourceStart = workflow.indexOf('\n  phase3c-source-proof:')
+    const phase3CProductionStart = workflow.indexOf('\n  phase3c-production:')
+    const sourceProof = workflow.slice(sourceStart, legacyStart)
+    const legacyHosted = workflow.slice(legacyStart, phase3CSourceStart)
+    const phase3CSource = workflow.slice(phase3CSourceStart, phase3CProductionStart)
+    const phase3CProduction = workflow.slice(phase3CProductionStart)
+
+    expect(sourceProof).toContain(
+      "if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[phase3c-hosted-trial]')",
+    )
+    expect(legacyHosted).toContain(
+      "if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[phase3c-hosted-trial]')",
+    )
+    expect(phase3CSource).toContain(
+      "if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[phase3c-hosted-trial]')",
+    )
+    expect(phase3CProduction).toContain(
+      "if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[phase3c-hosted-trial]')",
+    )
+
+    expect(legacyHosted).toContain('needs: source-proof')
+    expect(legacyHosted).toContain(
+      'npm exec -- tsx tools/release/deploy-customer-request-git-source.ts',
+    )
+    expect(phase3CSource).toContain('npm run verify:phase3c:release-source')
+    expect(phase3CSource).toContain('npm run build')
+    expect(phase3CSource, '[P3C_RED:phase3c_build_isolation_absent]')
+      .toContain('git archive "${AE_RELEASE_SOURCE_REVISION}"')
+    expect(phase3CSource).toContain(
+      'mktemp -d "${RUNNER_TEMP}/phase3c-build.XXXXXX"',
+    )
+    expect(phase3CSource).toContain(
+      'ln -s "${GITHUB_WORKSPACE}/node_modules" "${build_scratch}/node_modules"',
+    )
+    expect(phase3CSource.indexOf('npm run build')).toBeLessThan(
+      phase3CSource.indexOf('Refuse Phase 3C source or generated-file drift'),
+    )
+    expect(phase3CProduction).toContain('needs: phase3c-source-proof')
+    expect(phase3CProduction).toContain(
+      'name: Phase 3C exact-revision Convex deployment',
+    )
+    expect(phase3CProduction).toContain(
+      'npm exec -- tsx tools/release/observe-vercel-git-source-deployment.ts',
+    )
+    expect(phase3CProduction.match(/npx convex deploy/gu)).toHaveLength(1)
+    expect(phase3CProduction.match(
+      /npx convex run hostedPaidOperation:configurePhase3CAdmission/gu,
+    )).toHaveLength(1)
+    expect(phase3CProduction.match(
+      /name: Record Phase 3C Convex deployment receipt/gu,
+    )).toHaveLength(1)
+    expect(phase3CProduction).toContain('--argjson totalLimit 3')
+    expect(phase3CProduction).toContain('--argjson concurrencyLimit 1')
+    expect(phase3CProduction).toContain('--argjson rateLimit 3')
+    expect(phase3CProduction).toContain('4 * 60 * 60 * 1000')
+    expect(phase3CProduction).toContain('2026-08-21T00:00:00.000Z')
+    expect(phase3CProduction).toContain('Phase 3C release owner')
+    expect(phase3CProduction).toContain(".kind == \"configured\"")
+    expect(phase3CProduction).toContain(".policyDigest // \"\"")
+    expect(phase3CProduction).toContain(".kind == \"recorded\"")
+    expect(phase3CProduction).toContain(".deploymentName // \"\"")
+    expect(phase3CProduction).not.toMatch(
+      /deploy-customer-request-git-source|forceNew|vercel deploy|method:\s*['"]POST|curl/iu,
+    )
+    expect(phase3CProduction).not.toMatch(
+      /CLERK_SECRET_KEY|temporary|test:release:hosted|hosted.*journey|smoke:/iu,
+    )
+
+    const observe = phase3CProduction.indexOf('Observe the exact Vercel Git deployment')
+    const convexDeploy = phase3CProduction.indexOf('Deploy the exact Phase 3C Convex source')
+    const configure = phase3CProduction.indexOf('Configure exact Phase 3C admission')
+    const receipt = phase3CProduction.indexOf('Record Phase 3C Convex deployment receipt')
+    expect(observe).toBeLessThan(convexDeploy)
+    expect(convexDeploy).toBeLessThan(configure)
+    expect(configure).toBeLessThan(receipt)
+    expect(phase3CProduction.slice(receipt).match(/\n\s+- name:/gu) ?? [])
+      .toHaveLength(0)
+  })
+
   it('keeps source, packet-integrity, and live-smoke commands distinct and fail closed', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
       scripts: Record<string, string>

@@ -4,7 +4,7 @@ import { dirname, normalize, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const PHASE_BASE = '2debf4b9f65ce228491f7d3d17ed1654a23bb496'
-const EXPECTED_PHASE_ARTIFACT_COUNT = 92
+const EXPECTED_PHASE_ARTIFACT_COUNT = 97
 const CLASSIFICATION_PATH =
   '.planning/phases/03c-hosted-paid-operation-product-trial/03C-CLOSURE-CLASSIFICATION.md'
 const CLASSIFICATIONS = [
@@ -162,13 +162,24 @@ function nonPaidImportViolations(): readonly string[] {
 describe('Phase 3C paid-operation trial residue boundary', () => {
   it('derives and classifies the exact Phase 3C delta without circular lists', () => {
     const rows = parseClassifications(classificationSource())
-    expect(PHASE_ARTIFACTS).toHaveLength(EXPECTED_PHASE_ARTIFACT_COUNT)
-    expect(PHASE_ARTIFACTS).toContain(
-      'tools/release/paid-operation-hosted-proof-contract.ts',
-    )
+    for (const path of [
+      '.planning/phases/03c-hosted-paid-operation-product-trial/03C-07E-SUMMARY.md',
+      '.github/workflows/kernel-release-gate.yml',
+      'tools/release/observe-vercel-git-source-deployment.ts',
+      'tests/unit/release/observe-vercel-git-source-deployment.test.ts',
+      'tests/imports/customer-request-source-completeness.test.ts',
+      'tests/unit/release/paid-operation-hosted-release.test.ts',
+      'tests/imports/paid-operation-trial-residue.test.ts',
+      'package.json',
+    ]) {
+      expect(PHASE_ARTIFACTS, `[P3C_RED:closure_07e_artifact_absent] ${path}`)
+        .toContain(path)
+    }
+    expect(PHASE_ARTIFACTS).toContain('tools/release/paid-operation-hosted-proof-contract.ts')
     expect(PHASE_ARTIFACTS).toContain(
       '.planning/phases/03c-hosted-paid-operation-product-trial/03C-07D-SUMMARY.md',
     )
+    expect(PHASE_ARTIFACTS).toHaveLength(EXPECTED_PHASE_ARTIFACT_COUNT)
     expect(classificationDelta(PHASE_ARTIFACTS, rows),
       '[P3C_RED:closure_artifact_unclassified]').toEqual({ missing: [], extra: [] })
     expect([...rows.values()].every((value) => CLASSIFICATIONS.includes(value))).toBe(true)
@@ -176,6 +187,16 @@ describe('Phase 3C paid-operation trial residue boundary', () => {
     expect(rows.get(
       '.planning/phases/03c-hosted-paid-operation-product-trial/03C-UI-SPEC.md',
     )).toBe('trial-only')
+    for (const path of [
+      '.planning/phases/03c-hosted-paid-operation-product-trial/03C-07E-SUMMARY.md',
+      '.github/workflows/kernel-release-gate.yml',
+      'tools/release/observe-vercel-git-source-deployment.ts',
+      'tests/unit/release/observe-vercel-git-source-deployment.test.ts',
+      'tests/imports/customer-request-source-completeness.test.ts',
+    ]) {
+      expect(rows.get(path), `[P3C_RED:closure_07e_not_trial_only] ${path}`)
+        .toBe('trial-only')
+    }
 
     const omitted = new Map(rows)
     const omittedPath = PHASE_ARTIFACTS[0]!
