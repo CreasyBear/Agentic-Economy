@@ -15,8 +15,8 @@ classified as shared.
 
 ## Artifact inventory
 
-The inventory is the exact 98-path Git-derived Phase 3C delta from
-`2debf4b9f65ce228491f7d3d17ed1654a23bb496` through this Plan 07E cut,
+The inventory is the exact 100-path Git-derived Phase 3C delta from
+`2debf4b9f65ce228491f7d3d17ed1654a23bb496` through Repair Cut 2,
 including tracked changes and untracked owned files during TDD. The import
 test derives this set directly from Git; there is no second hand-maintained
 inventory capable of hiding an omission.
@@ -70,12 +70,14 @@ inventory capable of hiding an omission.
 | `src/lib/server/hosted-paid-operation-runtime.ts` | `trial-only` | Remove the trial runtime composition. |
 | `src/modules/action-invocation/hosted-paid-operation-composition.ts` | `trial-only` | Remove the labelled-trial composition after record retirement. |
 | `src/modules/action-invocation/hosted-paid-operation-creation.ts` | `trial-only` | Remove the source-owned BTC trial creation fixture. |
+| `src/modules/action-invocation/hosted-paid-operation-payment-proposal.ts` | `trial-only` | Remove the hosted-trial proposal owner with its persistence adapter; do not reconstruct retained rows from later provider configuration. |
 | `src/modules/action-invocation/hosted-paid-operation-port.ts` | `trial-only` | Remove the trial persistence port with its implementation. |
 | `src/modules/action-invocation/hosted-paid-operation-service-auth.ts` | `trial-only` | Remove the trial-only trusted service bridge. |
 | `src/modules/action-invocation/hosted-sandbox-effect-adapter.ts` | `trial-only` | Remove labelled Provider A/B mock effects. |
 | `src/modules/action-invocation/hosted-sandbox-reconciliation.ts` | `trial-only` | Remove labelled Provider B trusted reconciliation fixture. |
 | `src/modules/action-invocation/internal/convex-schema.ts` | `trial-only` | Revert only the Phase 3C tables and indexes through a reviewed schema migration. |
 | `src/modules/action-invocation/paid-operation-application-service.ts` | `paid-operation-owned` | Revert only the Phase 3C pre-attempt payment-read delta if the paid-operation class is retired. |
+| `src/modules/action-invocation/paid-operation-agent-command-contract.ts` | `paid-operation-owned` | Keep paid-operation-local; promote only after a second paid operation proves the same closed command affordance without branching. |
 | `src/modules/action-invocation/paid-operation-card-contract.ts` | `candidate-shared-after-second-use` | Keep paid-operation-local; remove if no second non-BTC use is accepted. |
 | `src/modules/action-invocation/paid-operation-semantics.ts` | `paid-operation-owned` | Revert only the Phase 3C semantic delta if the trial contract is retired. |
 | `src/routeTree.gen.ts` | `trial-only` | Regenerate after removing the trial setup/detail/API routes. |
