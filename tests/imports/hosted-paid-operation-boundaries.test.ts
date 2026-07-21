@@ -24,6 +24,7 @@ describe('Phase 3C hosted paid-operation ownership boundary', () => {
       'src/lib/server/hosted-paid-operation-runtime.ts',
       'src/modules/action-invocation/hosted-paid-operation-composition.ts',
       'src/modules/action-invocation/hosted-paid-operation-creation.ts',
+      'src/modules/action-invocation/hosted-paid-operation-payment-proposal.ts',
       'src/modules/action-invocation/hosted-paid-operation-port.ts',
       'src/modules/action-invocation/hosted-paid-operation-service-auth.ts',
       'src/modules/action-invocation/internal/convex-schema.ts',
