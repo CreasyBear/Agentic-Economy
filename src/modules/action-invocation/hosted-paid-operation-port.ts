@@ -2,6 +2,12 @@ import type { ActionResult } from '@/modules/common/action'
 
 import type { ActionInvocationView, InvocationActor } from './contracts'
 import type { PaidOperationInterpretation } from './paid-operation-application-service'
+import {
+  hostedPaidOperationAmountFromMinorUnits,
+  hostedPaidOperationPaymentProposalMatches,
+  hostedPaidOperationPaymentProposalValid,
+  type HostedPaidOperationPaymentProposal,
+} from './hosted-paid-operation-payment-proposal'
 import type { PaidOperationPaymentAttemptSnapshot } from './paid-operation-semantics'
 
 export const HOSTED_PAID_OPERATION_CHILD_CAP = 32
@@ -22,6 +28,7 @@ export type HostedPaidOperationAggregate<Result extends ActionResult> = Readonly
   header: HostedPaidOperationHeader
   invocation: ActionInvocationView<Result>
   paymentAttempt?: PaidOperationPaymentAttemptSnapshot
+  paymentProposal?: HostedPaidOperationPaymentProposal
   interpretation: PaidOperationInterpretation<Result>
   evidenceReferences: readonly string[]
   history: readonly Readonly<{ commandId: string; invocationVersion: number }>[]
@@ -33,6 +40,9 @@ export type HostedAggregateIncompleteReason =
   | 'authority_missing'
   | 'current_attempt_missing'
   | 'payment_attempt_missing'
+  | 'payment_proposal_missing'
+  | 'payment_proposal_invalid'
+  | 'payment_proposal_mismatch'
   | 'attempt_cap_exceeded'
   | 'evidence_reference_cap_exceeded'
   | 'history_page_cap_exceeded'
@@ -351,6 +361,35 @@ function aggregateIncomplete<Result extends ActionResult>(
     && aggregate.header.currentPaymentIdentifier !== aggregate.paymentAttempt.paymentIdentifier) {
     return 'payment_attempt_missing'
   }
+  const proposal = aggregate.paymentProposal
+  if (proposal === undefined) {
+    if (!legacyTerminalInspectOnly(aggregate.invocation.control)) {
+      return 'payment_proposal_missing'
+    }
+  } else {
+    if (!hostedPaidOperationPaymentProposalValid(proposal)) {
+      return 'payment_proposal_invalid'
+    }
+    const amount = hostedPaidOperationAmountFromMinorUnits(
+      aggregate.interpretation.maximumAuthorizedCharge.amountMinor,
+    )
+    const preparedAt = aggregate.invocation.prepared?.preparedAt
+    if (amount === undefined
+      || preparedAt === undefined
+      || aggregate.paymentAttempt === undefined
+      || !hostedPaidOperationPaymentProposalMatches(proposal, {
+        paymentIdentifier: aggregate.paymentAttempt.paymentIdentifier,
+        providerId: aggregate.interpretation.operation.providerId,
+        operationKey: aggregate.interpretation.operation.operationKey,
+        operationRevision: aggregate.interpretation.operation.operationRevision,
+        payTo: aggregate.interpretation.queryRecipient,
+        amount,
+        custodyRef: aggregate.paymentAttempt.custodyRef,
+        preparedAt,
+      })) {
+      return 'payment_proposal_mismatch'
+    }
+  }
   if (aggregate.invocation.attempts.length > HOSTED_PAID_OPERATION_CHILD_CAP) {
     return 'attempt_cap_exceeded'
   }
@@ -361,6 +400,14 @@ function aggregateIncomplete<Result extends ActionResult>(
     return 'history_page_cap_exceeded'
   }
   return undefined
+}
+
+function legacyTerminalInspectOnly(
+  control: ActionInvocationView<ActionResult>['control'],
+): boolean {
+  return control.state === 'terminal'
+    || control.state === 'cancelled'
+    || control.state === 'invalidated'
 }
 
 function clone<T>(value: T): T {

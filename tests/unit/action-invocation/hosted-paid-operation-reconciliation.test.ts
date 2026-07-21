@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -8,6 +9,18 @@ import type { ReconciliationEvidenceMaterial } from '@/modules/action-invocation
 import type { X402PaymentReconciliationEvidenceMaterial } from '@/modules/action-invocation/x402-payment-reconciliation-evidence'
 
 describe('hosted paid-operation reconciliation', () => {
+  it('constructs the bound payment attempt only from the persisted proposal', () => {
+    const gateway = readFileSync('convex/hostedPaidOperationGateway.ts', 'utf8')
+    const boundAttempt = gateway.slice(
+      gateway.indexOf('function boundPaymentAttempt'),
+      gateway.indexOf('function trustedObservationEvidence'),
+    )
+    expect(boundAttempt).toContain('aggregate.paymentProposal')
+    expect(boundAttempt).not.toMatch(/providerForAggregate|HOSTED_SANDBOX_PROVIDERS/u)
+    expect(gateway.slice(gateway.indexOf('function mockObservationMatches')))
+      .toMatch(/proposalDigest[\s\S]*paymentProposal/u)
+  })
+
   it('rejects client result facts and unknown keys without observing or mutating', async () => {
     let observations = 0
     let mutations = 0

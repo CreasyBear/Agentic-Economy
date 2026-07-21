@@ -4,6 +4,12 @@ import { v } from 'convex/values'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import type { StableHashValue } from '../src/modules/common/stable-hash'
 import {
+  hostedPaidOperationAmountFromMinorUnits,
+  hostedPaidOperationPaymentProposalMatches,
+  hostedPaidOperationPaymentProposalValid,
+  type HostedPaidOperationPaymentProposal,
+} from '../src/modules/action-invocation/hosted-paid-operation-payment-proposal'
+import {
   HOSTED_PAID_OPERATION_CHILD_CAP,
   HOSTED_PAID_OPERATION_HISTORY_PAGE_SIZE,
 } from '../src/modules/action-invocation/hosted-paid-operation-port'
@@ -15,20 +21,22 @@ import {
   invocationActorValue,
   invocationControlValue,
   invocationFreshnessValue,
+  hostedPaidOperationPaymentProposalValue,
 } from '../src/modules/action-invocation/internal/convex-schema'
 import { internalMutation, internalQuery } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 
-const PHASE3C_POLICY_REF = 'phase-3c-hosted-paid-operation-trial:g5'
+const PHASE3C_POLICY_REF = 'phase-3c-hosted-paid-operation-trial:g6'
 const PHASE3C_PRIOR_POLICY_REFS = [
   'phase-3c-hosted-paid-operation-trial',
   'phase-3c-hosted-paid-operation-trial:g2',
   'phase-3c-hosted-paid-operation-trial:g3',
   'phase-3c-hosted-paid-operation-trial:g4',
+  'phase-3c-hosted-paid-operation-trial:g5',
 ] as const
 const PHASE3C_PROOF_HEADER_CAP = 11
 const PHASE3C_DEPLOYMENT_RECEIPT_REF =
-  'phase3c-paid-operation-exact-revision-deployment:g5' as const
+  'phase3c-paid-operation-exact-revision-deployment:g6' as const
 const PHASE3C_GITHUB_REPOSITORY = 'CreasyBear/Agentic-Economy' as const
 const PHASE3C_GITHUB_REF = 'main' as const
 const PHASE3C_GITHUB_WORKFLOW = '.github/workflows/kernel-release-gate.yml' as const
@@ -119,6 +127,7 @@ const paymentRow = v.object({
   effectGeneration: v.number(),
   paymentIdentifier: v.string(),
   custodyReference: opaqueReference,
+  proposal: v.optional(hostedPaidOperationPaymentProposalValue),
   state: v.union(
     v.literal('prepared'),
     v.literal('possibly_submitted'),
@@ -203,6 +212,14 @@ export const createInitial = internalMutation({
       return { kind: 'refused' as const, code: 'raw_material_forbidden' as const }
     }
     if (!sourceMaterialWithinCaps(args.selectedSource)) {
+      return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
+    }
+    if (args.payment.proposal === undefined
+      || !paymentProposalMatchesRows(
+        args.payment.proposal,
+        args.selectedSource,
+        args.payment,
+      )) {
       return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
     }
     if (args.invocationVersion !== 1
@@ -371,6 +388,13 @@ export const loadComplete = internalQuery({
       || evidenceReferences.length > HOSTED_PAID_OPERATION_CHILD_CAP) {
       return { kind: 'aggregate_incomplete' as const, reason: 'required_child_missing_or_cap_exceeded' as const }
     }
+    if (payment === null || payment.proposal === undefined) {
+      if (!legacyTerminalInspectOnly(control.control.control)) {
+        return { kind: 'aggregate_incomplete' as const, reason: 'payment_proposal_missing' as const }
+      }
+    } else if (!paymentProposalMatchesRows(payment.proposal, source, payment)) {
+      return { kind: 'aggregate_incomplete' as const, reason: 'payment_proposal_invalid' as const }
+    }
     const history = await ctx.db.query('hostedPaidOperationCommands')
       .withIndex('by_invocationRef_and_commandId', (q) => q.eq('invocationRef', args.invocationRef))
       .paginate(args.paginationOpts)
@@ -425,6 +449,7 @@ export const loadComplete = internalQuery({
           ),
         },
       }),
+      ...(payment?.proposal === undefined ? {} : { paymentProposal: payment.proposal }),
       interpretation: {
         operation: {
           operationKey: source.operationKey,
@@ -489,6 +514,15 @@ export const transact = internalMutation({
     if (args.payment !== undefined && !opaqueDigestValid(args.payment.custodyReference.digest)) {
       return { kind: 'refused' as const, code: 'raw_material_forbidden' as const }
     }
+    if (args.payment === undefined
+      || args.payment.proposal === undefined
+      || !paymentProposalMatchesRows(
+        args.payment.proposal,
+        args.selectedSource,
+        args.payment,
+      )) {
+      return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
+    }
     if (args.submissionStarted && args.payment?.state !== 'possibly_submitted') {
       return { kind: 'refused' as const, code: 'submission_started_not_durable' as const }
     }
@@ -531,6 +565,23 @@ export const transact = internalMutation({
       .withIndex('by_invocationRef', (q) => q.eq('invocationRef', args.invocationRef))
       .unique()
     if (storedControl === null) {
+      return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
+    }
+    if (header.currentPaymentIdentifier === undefined
+      || header.currentPaymentIdentifier !== args.payment.paymentIdentifier) {
+      return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
+    }
+    const storedPaymentIdentifier = header.currentPaymentIdentifier
+    const storedPayment = await ctx.db.query('hostedPaidOperationPayments')
+      .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
+        q.eq('invocationRef', args.invocationRef)
+          .eq('paymentIdentifier', storedPaymentIdentifier))
+      .unique()
+    if (storedPayment === null
+      || storedPayment.proposal === undefined
+      || !paymentProposalMatchesRows(storedPayment.proposal, args.selectedSource, storedPayment)
+      || canonicalDigest(storedPayment.proposal as never)
+        !== canonicalDigest(args.payment.proposal as never)) {
       return { kind: 'refused' as const, code: 'aggregate_incomplete' as const }
     }
     const observationGuard = args.trustedObservationGuard
@@ -647,21 +698,12 @@ export const transact = internalMutation({
       }
     }
 
-    const paymentWriteInput = args.payment
-    if (paymentWriteInput !== undefined) {
-      const payment = await ctx.db.query('hostedPaidOperationPayments')
-        .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
-          q.eq('invocationRef', args.invocationRef)
-            .eq('paymentIdentifier', paymentWriteInput.paymentIdentifier))
-        .unique()
-      const paymentWrite = {
-        invocationRef: args.invocationRef,
-        ...paymentWriteInput,
-        updatedAt: args.recordedAt,
-      }
-      if (payment === null) await ctx.db.insert('hostedPaidOperationPayments', paymentWrite)
-      else await ctx.db.replace(payment._id, paymentWrite)
-    }
+    await ctx.db.replace(storedPayment._id, {
+      invocationRef: args.invocationRef,
+      ...args.payment,
+      proposal: storedPayment.proposal,
+      updatedAt: args.recordedAt,
+    })
     for (const evidence of args.evidenceReferences) {
       await ctx.db.insert('hostedPaidOperationEvidenceReferences', {
         invocationRef: args.invocationRef,
@@ -913,7 +955,9 @@ export const recordMockEffect = internalMutation({
       || attempt.effectGeneration !== args.effectGeneration
       || attempt.release.state !== 'possibly_released'
       || payment.attemptRef !== args.attemptRef
-      || payment.effectGeneration !== args.effectGeneration) {
+      || payment.effectGeneration !== args.effectGeneration
+      || payment.proposal === undefined
+      || !paymentProposalMatchesRows(payment.proposal, source, payment)) {
       return { kind: 'refused' as const, code: 'effect_lineage_not_current' as const }
     }
     const existing = await ctx.db.query('hostedPaidOperationMockEffects')
@@ -923,6 +967,9 @@ export const recordMockEffect = internalMutation({
           .eq('effectGeneration', args.effectGeneration))
       .unique()
     if (existing !== null) {
+      if (existing.proposalDigest !== payment.proposal.proposalDigest) {
+        return { kind: 'refused' as const, code: 'effect_proposal_mismatch' as const }
+      }
       return {
         kind: 'duplicate' as const,
         observation: mockEffectObservation(existing),
@@ -964,6 +1011,7 @@ export const recordMockEffect = internalMutation({
       operationKey: source.operationKey,
       operationRevision: source.operationRevision,
       paymentIdentifier: payment.paymentIdentifier,
+      proposalDigest: payment.proposal.proposalDigest,
       effect: 'released' as const,
       payment: 'settled' as const,
       delivery: source.providerId === 'provider:b'
@@ -1371,6 +1419,8 @@ export const phase3CHostedProofObservation = internalQuery({
         && control.sourceRef === source.sourceRef
         && header.selectedSourceRef === source.sourceRef
         && header.currentPaymentIdentifier === payment.paymentIdentifier
+        && payment.proposal !== undefined
+        && paymentProposalMatchesRows(payment.proposal, source, payment)
         && source.prepared.target.providerId === source.providerId
         && source.prepared.target.sourceRef === source.sourceRef
         && source.prepared.target.operationRevision === source.operationRevision
@@ -1386,7 +1436,8 @@ export const phase3CHostedProofObservation = internalQuery({
           && effect.providerId === source.providerId
           && effect.operationKey === source.operationKey
           && effect.operationRevision === source.operationRevision
-          && effect.paymentIdentifier === payment.paymentIdentifier)
+          && effect.paymentIdentifier === payment.paymentIdentifier
+          && effect.proposalDigest === payment.proposal?.proposalDigest)
         && evidenceRows.every((evidence) =>
           attemptKeys.has([evidence.attemptRef, evidence.effectGeneration].join('\u0000')))
         && (control.currentAttemptRef === undefined
@@ -1439,7 +1490,7 @@ export const phase3CHostedProofObservation = internalQuery({
           left.attemptNumber - right.attemptNumber
           || left.attemptIdentityDigest.localeCompare(right.attemptIdentityDigest))
       const effectsObserved = effects
-        .map((effect) => ({
+        .flatMap((effect) => effect.proposalDigest === undefined ? [] : [{
           observationDigest: canonicalDigest({
             cohortDigest,
             observation: {
@@ -1450,6 +1501,7 @@ export const phase3CHostedProofObservation = internalQuery({
               operationKey: effect.operationKey,
               operationRevision: effect.operationRevision,
               paymentIdentifier: effect.paymentIdentifier,
+              proposalDigest: effect.proposalDigest,
               effect: effect.effect,
               payment: effect.payment,
               delivery: effect.delivery,
@@ -1466,10 +1518,11 @@ export const phase3CHostedProofObservation = internalQuery({
           providerId: effect.providerId,
           operationKey: effect.operationKey,
           operationRevision: effect.operationRevision,
+          proposalDigest: effect.proposalDigest,
           effect: effect.effect,
           payment: effect.payment,
           delivery: effect.delivery,
-        }))
+        }])
         .sort((left, right) =>
           left.effectGeneration - right.effectGeneration
           || left.observationDigest.localeCompare(right.observationDigest))
@@ -1698,6 +1751,45 @@ function canonicalIsoTimestamp(value: string | undefined): number | undefined {
   return timestamp
 }
 
+function paymentProposalMatchesRows(
+  proposal: HostedPaidOperationPaymentProposal,
+  source: Readonly<{
+    providerId: string
+    operationKey: string
+    operationRevision: string
+    queryRecipient: string
+    maximumAuthorizedCharge: Readonly<{ currency: string; amountMinor: number }>
+    prepared: Readonly<{ preparedAt: string }>
+  }>,
+  payment: Readonly<{
+    paymentIdentifier: string
+    custodyReference: Readonly<{ algorithm: 'sha256'; digest: string }>
+  }>,
+): boolean {
+  const amount = hostedPaidOperationAmountFromMinorUnits(
+    source.maximumAuthorizedCharge.amountMinor,
+  )
+  return source.maximumAuthorizedCharge.currency === 'USD'
+    && amount !== undefined
+    && hostedPaidOperationPaymentProposalValid(proposal)
+    && hostedPaidOperationPaymentProposalMatches(proposal, {
+      paymentIdentifier: payment.paymentIdentifier,
+      providerId: source.providerId,
+      operationKey: source.operationKey,
+      operationRevision: source.operationRevision,
+      payTo: source.queryRecipient,
+      amount,
+      custodyRef: `${payment.custodyReference.algorithm}:${payment.custodyReference.digest}`,
+      preparedAt: source.prepared.preparedAt,
+    })
+}
+
+function legacyTerminalInspectOnly(control: Readonly<{ state: string }>): boolean {
+  return control.state === 'terminal'
+    || control.state === 'cancelled'
+    || control.state === 'invalidated'
+}
+
 function admissionCounterExact(
   policy: Readonly<{
     policyDigest?: string
@@ -1750,6 +1842,7 @@ function mockEffectObservation(row: Readonly<{
   operationKey: string
   operationRevision: string
   paymentIdentifier: string
+  proposalDigest?: string
   effect: 'released'
   payment: 'settled'
   delivery: 'returned' | 'response_lost'
@@ -1761,6 +1854,7 @@ function mockEffectObservation(row: Readonly<{
     operationKey: row.operationKey,
     operationRevision: row.operationRevision,
     paymentIdentifier: row.paymentIdentifier,
+    ...(row.proposalDigest === undefined ? {} : { proposalDigest: row.proposalDigest }),
     effect: row.effect,
     payment: row.payment,
     delivery: row.delivery,

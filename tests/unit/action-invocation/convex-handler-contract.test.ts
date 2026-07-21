@@ -266,13 +266,17 @@ describe('authenticated hosted paid-operation intent gateway', () => {
         .withIndex('by_invocationRef_and_sourceRef', (q) =>
           q.eq('invocationRef', created.invocationRef))
         .unique()
+      const payment = await ctx.db.query('hostedPaidOperationPayments')
+        .withIndex('by_invocationRef_and_paymentIdentifier', (q) =>
+          q.eq('invocationRef', created.invocationRef))
+        .unique()
       const reservation = header === null
         ? null
         : await ctx.db.query('hostedPaidOperationAdmissionReservations')
           .withIndex('by_reservationRef', (q) =>
             q.eq('reservationRef', header.admissionReservationRef))
           .unique()
-      return { header, control, source, reservation }
+      return { header, control, source, payment, reservation }
     })
     expect(stored.header).toMatchObject({
       ownerPrincipalRef: ownerIdentity.subject,
@@ -284,6 +288,16 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       callerRef: ownerIdentity.tokenIdentifier,
     })
     expect(stored.source?.environment).toEqual(inspected.value.semantics.environment)
+    expect(stored.payment).toMatchObject({
+      proposal: {
+        paymentIdentifier: stored.payment?.paymentIdentifier,
+        providerId: 'provider:a',
+        operationKey: 'btc-usd-a',
+        operationRevision: '1',
+        providerEndpoint: 'https://sandbox-a.invalid/btc-usd',
+        proposalDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
+      },
+    })
     expect(stored.reservation?.policyDigest).toBe(`sha256:${'a'.repeat(64)}`)
   })
 
@@ -620,6 +634,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     })
     expect(durable.effects[0]).toMatchObject({
       effectGeneration: 1,
+      proposalDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
       effect: 'released',
       payment: 'settled',
       delivery: 'returned',
@@ -954,7 +969,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       await backend.run(async (ctx) => {
         const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
           .withIndex('by_policyRef_and_principalRef', (q) =>
-            q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g5')
+            q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g6')
               .eq('principalRef', ownerIdentity.subject))
           .unique()
         if (counter === null) throw new Error('test_counter_missing')
@@ -1498,7 +1513,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     await backend.run(async (ctx) => {
       const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
         .withIndex('by_policyRef_and_principalRef', (q) =>
-          q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g5')
+          q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g6')
             .eq('principalRef', ownerIdentity.subject))
         .unique()
       if (counter === null) throw new Error('test_counter_missing')
@@ -1586,7 +1601,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
           await backend.run(async (ctx) => {
             const rows = await ctx.db.query('hostedPaidOperationAdmissionReservations')
               .withIndex('by_policyRef_and_principalRef_and_reservationRef', (q) =>
-                q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g5')
+                q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g6')
                   .eq('principalRef', ownerIdentity.subject))
               .take(1)
             if (rows[0] === undefined) throw new Error('test_reservation_missing')
@@ -1667,7 +1682,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       await cohort.backend.run(async (ctx) => {
         const rows = await ctx.db.query('hostedPaidOperationDeploymentReceipts')
           .withIndex('by_receiptRef', (q) =>
-            q.eq('receiptRef', 'phase3c-paid-operation-exact-revision-deployment:g5'))
+            q.eq('receiptRef', 'phase3c-paid-operation-exact-revision-deployment:g6'))
           .take(2)
         if (rows[0] === undefined) throw new Error('test_deployment_receipt_missing')
         if (drift === 'missing') await ctx.db.delete(rows[0]._id)
@@ -1807,8 +1822,9 @@ function convexTransactionCommand(input: Readonly<{
   const authority = aggregate.invocation.authority
   const attempt = aggregate.invocation.attempts.at(-1)
   const payment = aggregate.paymentAttempt
+  const proposal = aggregate.paymentProposal
   if (prepared === undefined || authority === undefined || attempt === undefined
-    || payment === undefined) {
+    || payment === undefined || proposal === undefined) {
     throw new Error('test_transaction_aggregate_incomplete')
   }
   const opaque = (reference: string) => ({
@@ -1867,6 +1883,7 @@ function convexTransactionCommand(input: Readonly<{
       effectGeneration: attempt.effectGeneration,
       paymentIdentifier: payment.paymentIdentifier,
       custodyReference: opaque(payment.custodyRef),
+      proposal,
       state: payment.state,
       ...(payment.settledAmount === undefined
         ? {}
@@ -1904,7 +1921,7 @@ async function admitOwner(backend: HostedBackend, rateLimit = 2) {
 async function admitPrincipal(backend: HostedBackend, principalRef: string, rateLimit = 2) {
   await backend.run(async (ctx) => {
     await ctx.db.insert('hostedPaidOperationAdmissionPolicies', {
-      policyRef: 'phase-3c-hosted-paid-operation-trial:g5',
+      policyRef: 'phase-3c-hosted-paid-operation-trial:g6',
       enabled: true,
       principalRef,
       totalLimit: 3,

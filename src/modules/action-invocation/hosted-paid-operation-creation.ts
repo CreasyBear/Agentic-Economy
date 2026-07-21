@@ -1,5 +1,9 @@
 import type { InvocationActor } from './contracts'
 import type { HostedPaidOperationAggregate } from './hosted-paid-operation-port'
+import {
+  createHostedPaidOperationPaymentProposal,
+  type HostedPaidOperationPaymentProposal,
+} from './hosted-paid-operation-payment-proposal'
 import type { ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -25,6 +29,7 @@ export type HostedPaidOperationCreationRecord = Readonly<{
   invocationRef: string
   authorityRef: string
   paymentIdentifier: string
+  paymentProposal: HostedPaidOperationPaymentProposal
   effectIdentity: string
   terminalTruth: 'active' | 'safely_terminal' | 'uncertain'
   environment?: Readonly<{ name: string; evidenceClass: string; claimCeiling: string }>
@@ -86,6 +91,7 @@ export function createHostedPaidOperation<Result extends ActionResult>(input: Re
     record: HostedPaidOperationCreationRecord,
   ) => HostedPaidOperationAggregate<Result>
   windowKey?: () => string
+  now?: () => string
 }>): Readonly<{
   create(args: Readonly<{ actor: InvocationActor; setup: Setup }>): Promise<CreationResult>
   switchProvider(args: Readonly<{
@@ -108,6 +114,37 @@ export function createHostedPaidOperation<Result extends ActionResult>(input: Re
       return { kind: 'refused', code: 'provider_fixture_unavailable' }
     }
     const materialInput = { symbol: 'BTC', convert: 'USD' } as const
+    const invocationRef = input.nextIdentity('invocation')
+    const authorityRef = input.nextIdentity('authority')
+    const paymentIdentifier = input.nextIdentity('payment')
+    const effectIdentity = input.nextIdentity('effect')
+    const preparedAt = input.now?.() ?? '1970-01-01T00:00:00.000Z'
+    const custodyRef = canonicalDigest({
+      kind: 'hosted-paid-operation-custody-reference',
+      paymentIdentifier,
+    })
+    const paymentProposal = createHostedPaidOperationPaymentProposal({
+      paymentIdentifier,
+      providerId: provider.providerId,
+      operationKey: provider.operationKey,
+      operationRevision: provider.operationRevision,
+      providerEndpoint: provider.endpoint,
+      scheme: 'exact',
+      network: 'eip155:84532',
+      asset: 'USDC',
+      payTo: provider.recipient,
+      amount: '0.01',
+      challengeDigest: canonicalDigest({
+        kind: 'hosted-sandbox-challenge',
+        paymentIdentifier,
+      }),
+      authorizationDigest: canonicalDigest({
+        kind: 'hosted-sandbox-authorization',
+        paymentIdentifier,
+      }),
+      custodyRef,
+      preparedAt,
+    })
     const record: HostedPaidOperationCreationRecord = {
       actor: args.actor,
       providerKey: args.setup.providerKey,
@@ -116,10 +153,11 @@ export function createHostedPaidOperation<Result extends ActionResult>(input: Re
         amount: { currency: 'USD', amountMinor: 1 },
       },
       materialInput,
-      invocationRef: input.nextIdentity('invocation'),
-      authorityRef: input.nextIdentity('authority'),
-      paymentIdentifier: input.nextIdentity('payment'),
-      effectIdentity: input.nextIdentity('effect'),
+      invocationRef,
+      authorityRef,
+      paymentIdentifier,
+      paymentProposal,
+      effectIdentity,
       terminalTruth: 'active',
       ...(admission.environment === undefined ? {} : { environment: admission.environment }),
     }
@@ -155,10 +193,6 @@ export function createHostedPaidOperation<Result extends ActionResult>(input: Re
 function defaultInitialAggregate(
   record: HostedPaidOperationCreationRecord,
 ): HostedPaidOperationAggregate<ActionResult> {
-  const custodyRef = canonicalDigest({
-    kind: 'hosted-paid-operation-custody-reference',
-    paymentIdentifier: record.paymentIdentifier,
-  })
   return {
     header: {
       ownerPrincipalRef: record.actor.principalRef,
@@ -191,7 +225,7 @@ function defaultInitialAggregate(
         },
         consequence: 'release one labelled sandbox paid query',
         dataUse: { fields: ['symbol', 'convert'], limits: { amountMinor: 1 } },
-        preparedAt: '1970-01-01T00:00:00.000Z',
+        preparedAt: record.paymentProposal.preparedAt,
         freshUntil: '9999-12-31T23:59:59.999Z',
       },
       authority: {
@@ -205,10 +239,11 @@ function defaultInitialAggregate(
     },
     paymentAttempt: {
       paymentIdentifier: record.paymentIdentifier,
-      custodyRef,
+      custodyRef: record.paymentProposal.custodyRef,
       state: 'prepared',
       evidenceRefs: [],
     },
+    paymentProposal: record.paymentProposal,
     interpretation: {
       operation: {
         operationKey: record.provider.operationKey,

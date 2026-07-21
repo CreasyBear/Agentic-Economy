@@ -11,6 +11,7 @@ import {
   type HostedPaidOperationAggregate,
 } from '@/modules/action-invocation/hosted-paid-operation-port'
 import { createHostedPaidOperationComposition } from '@/modules/action-invocation/hosted-paid-operation-composition'
+import { createHostedPaidOperationPaymentProposal } from '@/modules/action-invocation/hosted-paid-operation-payment-proposal'
 import type { ActionResult } from '@/modules/common/action'
 
 type Result = ActionResult & { ok: boolean }
@@ -340,6 +341,41 @@ describe('hosted paid-operation durable boundary', () => {
     })).resolves.toEqual({ kind: 'aggregate_incomplete', reason: 'evidence_reference_cap_exceeded' })
   })
 
+  it('keeps only terminal legacy rows inspectable when durable proposal truth is absent', async () => {
+    const { paymentProposal: _nonterminalProposal, ...nonterminal } = aggregate({
+      control: { state: 'reconciliation_required', attemptRef: 'attempt:1' },
+    })
+    const nonterminalPort = createInMemoryHostedPaidOperationPort<Result>([nonterminal])
+    await expect(nonterminalPort.loadComplete({
+      owner: nonterminal.invocation.owner,
+      invocationRef: nonterminal.invocation.invocationRef,
+    })).resolves.toEqual({ kind: 'aggregate_incomplete', reason: 'payment_proposal_missing' })
+
+    const { paymentProposal: _terminalProposal, ...terminal } = aggregate({
+      control: { state: 'terminal' },
+    })
+    const terminalPort = createInMemoryHostedPaidOperationPort<Result>([terminal])
+    await expect(terminalPort.loadComplete({
+      owner: terminal.invocation.owner,
+      invocationRef: terminal.invocation.invocationRef,
+    })).resolves.toMatchObject({ kind: 'loaded' })
+  })
+
+  it('fails closed when persisted proposal material is incomplete or mismatches its digest', async () => {
+    const current = aggregate()
+    for (const paymentProposal of [
+      { ...current.paymentProposal!, providerEndpoint: 'https://tampered.invalid/btc-usd' },
+      { ...current.paymentProposal!, providerEndpoint: undefined },
+    ]) {
+      const corrupt = { ...current, paymentProposal } as HostedPaidOperationAggregate<Result>
+      const port = createInMemoryHostedPaidOperationPort<Result>([corrupt])
+      await expect(port.loadComplete({
+        owner: corrupt.invocation.owner,
+        invocationRef: corrupt.invocation.invocationRef,
+      })).resolves.toEqual({ kind: 'aggregate_incomplete', reason: 'payment_proposal_invalid' })
+    }
+  })
+
   it('deduplicates a command and fences stale versions and effect generations', async () => {
     const initial = aggregate()
     const port = createInMemoryHostedPaidOperationPort<Result>([initial])
@@ -493,7 +529,7 @@ describe('hosted paid-operation durable boundary', () => {
       evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
     })).resolves.toEqual({ kind: 'unconfigured' })
 
-    const currentPolicyRef = 'phase-3c-hosted-paid-operation-trial:g5'
+    const currentPolicyRef = 'phase-3c-hosted-paid-operation-trial:g6'
     const priorGenerations = [
       {
         policyRef: 'phase-3c-hosted-paid-operation-trial',
@@ -530,6 +566,15 @@ describe('hosted paid-operation durable boundary', () => {
         active: 0,
         reservationState: 'released',
         sourceRevision: '8b17e045ce27184597153e2cc7b8b81874125b09',
+      },
+      {
+        policyRef: 'phase-3c-hosted-paid-operation-trial:g5',
+        policyDigest: `sha256:${'b'.repeat(64)}`,
+        reservationRef: 'reservation:phase3c-persisted-proposal-failure',
+        enabled: false,
+        active: 0,
+        reservationState: 'released',
+        sourceRevision: '336db633491f569bee9704fabca09b63c392d349',
       },
     ] as const
     await backend.run(async (ctx) => {
@@ -887,6 +932,7 @@ function aggregate(
       state: 'reconciliation_required',
       evidenceRefs: [`sha256:${'c'.repeat(64)}`],
     },
+    paymentProposal: fixturePaymentProposal('payment:1'),
     interpretation: {
       operation: {
         operationKey: 'paid-operation',
@@ -934,6 +980,7 @@ function initialAggregate(): HostedPaidOperationAggregate<Result> {
       state: 'prepared',
       evidenceRefs: [],
     },
+    paymentProposal: fixturePaymentProposal('payment:initial'),
     evidenceReferences: [],
     history: [],
   }
@@ -988,7 +1035,27 @@ function convexInitialCommand(
         algorithm: 'sha256' as const,
         digest: payment.custodyRef.slice('sha256:'.length),
       },
+      proposal: aggregate.paymentProposal,
       state: payment.state,
     },
   }
+}
+
+function fixturePaymentProposal(paymentIdentifier: string) {
+  return createHostedPaidOperationPaymentProposal({
+    paymentIdentifier,
+    providerId: 'provider:paid',
+    operationKey: 'paid-operation',
+    operationRevision: 'revision:1',
+    providerEndpoint: 'https://persisted.invalid/btc-usd',
+    scheme: 'exact',
+    network: 'eip155:84532',
+    asset: 'USDC',
+    payTo: 'provider:paid',
+    amount: '1.00',
+    challengeDigest: `sha256:${'d'.repeat(64)}`,
+    authorizationDigest: `sha256:${'e'.repeat(64)}`,
+    custodyRef: `sha256:${'b'.repeat(64)}`,
+    preparedAt: '2026-07-20T00:00:00.000Z',
+  })
 }

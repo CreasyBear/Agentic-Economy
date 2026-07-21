@@ -6,6 +6,7 @@ import {
 } from '@/modules/action-invocation/hosted-paid-operation-creation'
 import type { HostedPaidOperationAggregate } from '@/modules/action-invocation/hosted-paid-operation-port'
 import type { ActionResult } from '@/modules/common/action'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 type Result = ActionResult & { ok: boolean }
 
@@ -49,6 +50,24 @@ describe('hosted paid-operation creation', () => {
     })
     expect(saved[0]?.authorityRef).toBeTruthy()
     expect(saved[0]?.provider).toEqual(expect.objectContaining({ providerId: 'provider:a' }))
+    const proposal = (saved[0] as HostedPaidOperationCreationRecord & Readonly<{
+      paymentProposal?: Readonly<Record<string, unknown> & { proposalDigest: string }>
+    }> | undefined)?.paymentProposal
+    expect(proposal).toMatchObject({
+      paymentIdentifier: saved[0]?.paymentIdentifier,
+      providerId: 'provider:a',
+      operationKey: 'btc-usd-a',
+      operationRevision: '1',
+      providerEndpoint: 'https://mock-a.invalid/btc-usd',
+      scheme: 'exact',
+      network: 'eip155:84532',
+      asset: 'USDC',
+      payTo: 'recipient:a',
+      amount: '0.01',
+    })
+    if (proposal === undefined) throw new Error('source_owned_payment_proposal_missing')
+    const { proposalDigest, ...material } = proposal
+    expect(proposalDigest).toBe(canonicalDigest(material as never))
 
     await expect(service.create({
       actor: { principalRef: 'principal:not-admitted', callerRef: 'caller:session' },
@@ -57,6 +76,13 @@ describe('hosted paid-operation creation', () => {
     await expect(service.create({
       actor: { principalRef: 'principal:evaluator', callerRef: 'caller:session' },
       setup: { providerKey: 'A', amount: 0 } as never,
+    })).resolves.toEqual({ kind: 'refused', code: 'setup_shape_invalid' })
+    await expect(service.create({
+      actor: { principalRef: 'principal:evaluator', callerRef: 'caller:session' },
+      setup: {
+        providerKey: 'A',
+        paymentProposal: { providerEndpoint: 'https://caller.invalid' },
+      } as never,
     })).resolves.toEqual({ kind: 'refused', code: 'setup_shape_invalid' })
   })
 

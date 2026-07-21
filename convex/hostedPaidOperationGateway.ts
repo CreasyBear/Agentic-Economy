@@ -24,6 +24,11 @@ import {
   type HostedPaidOperationTrustedObservationGuard,
 } from '../src/modules/action-invocation/hosted-paid-operation-port'
 import {
+  hostedPaidOperationAmountFromMinorUnits,
+  hostedPaidOperationPaymentProposalMatches,
+  hostedPaidOperationPaymentProposalValid,
+} from '../src/modules/action-invocation/hosted-paid-operation-payment-proposal'
+import {
   type HostedPaidOperationServiceIntent,
   verifyHostedPaidOperationServiceToken,
 } from '../src/modules/action-invocation/hosted-paid-operation-service-auth'
@@ -134,6 +139,7 @@ type MockObservation =
       operationKey: string
       operationRevision: string
       paymentIdentifier: string
+      proposalDigest?: string
       effect: 'released'
       payment: 'settled'
       delivery: 'returned' | 'response_lost'
@@ -141,7 +147,7 @@ type MockObservation =
       recordedAt: string
     }>
 
-const PAID_OPERATION_POLICY_REF = 'phase-3c-hosted-paid-operation-trial:g5'
+const PAID_OPERATION_POLICY_REF = 'phase-3c-hosted-paid-operation-trial:g6'
 const TRUSTED_OBSERVER_SOURCE = 'hosted-paid-operation:mock-effect-ledger'
 const commandKind = v.union(
   v.literal('authorize'),
@@ -201,6 +207,7 @@ export const authenticatedCreate = mutation({
       resolveProvider: (providerKey) => HOSTED_SANDBOX_PROVIDERS[providerKey],
       nextIdentity: (kind) => `${kind}:${canonicalDigest({ requestIdentity, kind })}`,
       windowKey: () => recordedAt.slice(0, 13),
+      now: () => recordedAt,
       createInitial: async ({ record, reservationRef, aggregate }) => {
         const result = await ctx.runMutation(
           internalCreateInitial,
@@ -1164,8 +1171,25 @@ function boundPaymentAttempt(
 ): X402PaymentAttempt {
   const payment = aggregate.paymentAttempt
   const preparedState = aggregate.invocation.prepared
-  const provider = providerForAggregate(aggregate)
-  if (payment === undefined || preparedState === undefined) {
+  const proposal = aggregate.paymentProposal
+  const amount = hostedPaidOperationAmountFromMinorUnits(
+    aggregate.interpretation.maximumAuthorizedCharge.amountMinor,
+  )
+  if (payment === undefined
+    || preparedState === undefined
+    || proposal === undefined
+    || amount === undefined
+    || !hostedPaidOperationPaymentProposalValid(proposal)
+    || !hostedPaidOperationPaymentProposalMatches(proposal, {
+      paymentIdentifier: payment.paymentIdentifier,
+      providerId: aggregate.interpretation.operation.providerId,
+      operationKey: aggregate.interpretation.operation.operationKey,
+      operationRevision: aggregate.interpretation.operation.operationRevision,
+      payTo: aggregate.interpretation.queryRecipient,
+      amount,
+      custodyRef: payment.custodyRef,
+      preparedAt: preparedState.preparedAt,
+    })) {
     throw new Error('hosted_paid_operation_payment_binding_incomplete')
   }
   const submissionStartedAt = attempt.outcome.state === 'uncertain'
@@ -1177,25 +1201,19 @@ function boundPaymentAttempt(
     invocationRef: aggregate.invocation.invocationRef,
     attemptRef: attempt.attemptRef,
     effectGeneration: attempt.effectGeneration,
-    operationKey: aggregate.interpretation.operation.operationKey,
-    challengeDigest: canonicalDigest({
-      kind: 'hosted-sandbox-challenge',
-      paymentIdentifier: payment.paymentIdentifier,
-    }),
-    scheme: 'exact',
-    network: 'eip155:84532',
-    asset: 'USDC',
-    payTo: aggregate.interpretation.queryRecipient,
-    amount: '0.01',
-    providerEndpoint: provider.endpoint,
-    operationRevision: aggregate.interpretation.operation.operationRevision,
-    authorizationDigest: canonicalDigest({
-      kind: 'hosted-sandbox-authorization',
-      paymentIdentifier: payment.paymentIdentifier,
-    }),
-    custodyRef: payment.custodyRef,
+    operationKey: proposal.operationKey,
+    challengeDigest: proposal.challengeDigest,
+    scheme: proposal.scheme,
+    network: proposal.network,
+    asset: proposal.asset,
+    payTo: proposal.payTo,
+    amount: proposal.amount,
+    providerEndpoint: proposal.providerEndpoint,
+    operationRevision: proposal.operationRevision,
+    authorizationDigest: proposal.authorizationDigest,
+    custodyRef: proposal.custodyRef,
     state: 'reconciliation_required',
-    preparedAt: Date.parse(preparedState.preparedAt),
+    preparedAt: Date.parse(proposal.preparedAt),
     submissionStartedAt,
     evidenceRefs: payment.evidenceRefs,
   }
@@ -1276,6 +1294,8 @@ function mockObservationMatches(
   aggregate: HostedAggregate,
   observation: MockObservation,
 ): boolean {
+  const proposal = aggregate.paymentProposal
+  if (proposal === undefined) return false
   if (observation.effect === 'not_released') {
     return observation.payment === 'not_submitted'
   }
@@ -1283,6 +1303,7 @@ function mockObservationMatches(
     && observation.operationKey === aggregate.interpretation.operation.operationKey
     && observation.operationRevision === aggregate.interpretation.operation.operationRevision
     && observation.paymentIdentifier === aggregate.paymentAttempt?.paymentIdentifier
+    && observation.proposalDigest === proposal.proposalDigest
 }
 
 function mockObservationReference(
@@ -1318,14 +1339,6 @@ const HOSTED_SANDBOX_PROVIDERS: Readonly<Record<'A' | 'B', HostedSandboxProvider
     operationKey: 'btc-usd-b',
     operationRevision: '1',
   },
-}
-
-function providerForAggregate(aggregate: HostedAggregate): HostedSandboxProvider {
-  const provider = Object.values(HOSTED_SANDBOX_PROVIDERS).find(
-    ({ providerId }) => providerId === aggregate.interpretation.operation.providerId,
-  )
-  if (provider === undefined) throw new Error('hosted_paid_operation_provider_missing')
-  return provider
 }
 
 function serializeInitialCreation(
@@ -1483,12 +1496,16 @@ function serializePayment(
   effectGeneration: number,
 ): Record<string, unknown> {
   const payment = aggregate.paymentAttempt
-  if (payment === undefined) throw new Error('hosted_paid_operation_payment_missing')
+  const proposal = aggregate.paymentProposal
+  if (payment === undefined || proposal === undefined) {
+    throw new Error('hosted_paid_operation_payment_missing')
+  }
   return {
     attemptRef,
     effectGeneration,
     paymentIdentifier: payment.paymentIdentifier,
     custodyReference: serializeOpaqueReference(payment.custodyRef),
+    proposal,
     state: payment.state,
     ...(payment.settledAmount === undefined
       ? {}

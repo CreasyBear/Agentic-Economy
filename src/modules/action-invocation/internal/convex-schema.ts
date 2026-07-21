@@ -107,6 +107,23 @@ export const opaqueHostedCustodyReferenceValue = v.object({
   algorithm: v.literal('sha256'),
   digest: v.string(),
 })
+export const hostedPaidOperationPaymentProposalValue = v.object({
+  paymentIdentifier: v.string(),
+  providerId: v.string(),
+  operationKey: v.string(),
+  operationRevision: v.string(),
+  providerEndpoint: v.string(),
+  scheme: v.string(),
+  network: v.string(),
+  asset: v.string(),
+  payTo: v.string(),
+  amount: v.string(),
+  challengeDigest: v.string(),
+  authorizationDigest: v.string(),
+  custodyRef: v.string(),
+  preparedAt: v.string(),
+  proposalDigest: v.string(),
+})
 
 export const actionInvocationTables = {
   actionInvocationControls: defineTable({
@@ -304,6 +321,7 @@ export const actionInvocationTables = {
     effectGeneration: v.number(),
     paymentIdentifier: v.string(),
     custodyReference: opaqueHostedCustodyReferenceValue,
+    proposal: v.optional(hostedPaidOperationPaymentProposalValue),
     state: v.union(
       v.literal('prepared'),
       v.literal('possibly_submitted'),
@@ -356,6 +374,7 @@ export const actionInvocationTables = {
     operationKey: v.string(),
     operationRevision: v.string(),
     paymentIdentifier: v.string(),
+    proposalDigest: v.optional(v.string()),
     effect: v.literal('released'),
     payment: v.literal('settled'),
     delivery: v.union(v.literal('returned'), v.literal('response_lost')),
@@ -413,6 +432,7 @@ export const actionInvocationTables = {
       v.literal('phase3c-paid-operation-exact-revision-deployment:g3'),
       v.literal('phase3c-paid-operation-exact-revision-deployment:g4'),
       v.literal('phase3c-paid-operation-exact-revision-deployment:g5'),
+      v.literal('phase3c-paid-operation-exact-revision-deployment:g6'),
     ),
     sourceRevision: v.string(),
     sourceTree: v.string(),
