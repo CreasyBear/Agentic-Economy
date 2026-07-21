@@ -45,12 +45,14 @@ test('golden path preserves durable truth while pending and restores without new
     readOnlyInspections: 0,
   })
 
+  await page.clock.install()
   await page.getByRole('button', { name: 'Authorize up to A$2.50' }).click({ noWaitAfter: true })
   await expect(page.locator('[data-paid-operation-state]')).toHaveAttribute('aria-busy', 'true')
   await expect(page.getByText('Ready for permission', { exact: true })).toBeVisible()
   await expect(page.getByText('Payment prepared', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Authorize up to A$2.50' })).toBeDisabled()
 
+  await page.clock.runFor(75)
   await expect(page.getByText('Payment prepared', { exact: true })).toBeVisible()
   await expect(page.getByText(
     'Permission recorded. Nothing has been submitted yet.',
@@ -72,6 +74,7 @@ test('golden path preserves durable truth while pending and restores without new
   await expect(page.getByText('Result received', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Continue operation' })).toBeDisabled()
 
+  await page.clock.runFor(75)
   await expect(page.getByText('Result received', { exact: true })).toBeVisible()
   await expect(page.getByText('Validated local mock result', { exact: true })).toBeVisible()
   const completed = await snapshot(page)
