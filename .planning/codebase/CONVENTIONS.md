@@ -1,7 +1,7 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-07-19
-**last_mapped_commit:** `77ec35ac`
+**Analysis Date:** 2026-07-21
+**last_mapped_commit:** `63a451f43edea453d0a1a8d8502504433acf76fb`
 
 ## Naming Patterns
 
@@ -27,6 +27,8 @@
 **Types:**
 - Use PascalCase type aliases. The codebase prefers `type` over `interface` for DTOs, ports, commands, results, and function contracts.
 - Model expected outcomes as discriminated unions, normally on `kind`; do not use thrown exceptions for ordinary refused, missing, conflict, or proof-gap states.
+- Make result variants explicit and readonly. `PaidOperationApplicationResult<Value>` in `src/modules/action-invocation/paid-operation-application-service.ts` separates `{ kind: 'accepted'; value }` from `{ kind: 'refused'; code }`; extend that vocabulary instead of returning booleans or loosely typed errors.
+- Keep authority and identity distinct in names and types. `src/lib/server/hosted-paid-operation-agent-api.ts` admits an authenticated principal, while the application service separately enforces invocation ownership, expected version, advertised continuation, and accepted authority.
 - Mark public collections `readonly` and use `as const` for literal vocabularies.
 - Keep Convex runtime types (`MutationCtx`, `QueryCtx`, `Doc`) out of pure modules under `src/modules/`.
 
@@ -64,13 +66,16 @@ Blank lines separate major import groups. Existing files sometimes interleave a 
 - Routes and Convex hosts consume module public seams. Pure domain code must not import `convex/_generated`, `convex/server`, or access `ctx.db`.
 - `tests/imports/private-imports.test.ts`, `tests/imports/route-boundary.test.ts`, and the domain-specific boundary tests under `tests/imports/` are executable architecture policy.
 - Register operations explicitly in `src/modules/actions/index.ts`; do not rely on module-evaluation side effects.
+- Keep HTTP routes as transport adapters. `src/routes/api.v1.paid-operations.$invocationRef.commands.ts` authenticates through `src/lib/server/hosted-paid-operation-agent-api.ts` and obtains the source runtime from `src/lib/server/hosted-paid-operation-runtime.ts`; it does not implement payment, authority, or reconciliation rules.
+- Keep business facts in the owning source module. Shared Action Invocation control may project continuity, but result interpretation remains in `src/modules/action-invocation/paid-operation-semantics.ts` and action-specific source records rather than route state.
 
 ## Error Handling
 
 **Patterns:**
 - Return typed discriminated unions for expected domain outcomes. Callers must branch on `kind` and preserve specific refusal/error codes.
-- Throw only for broken invariants, impossible setup, or programmer errors, as demonstrated by precondition checks in `tests/integration/registry-api.test.ts`.
-- Validate external inputs at boundaries with Zod schemas in actions and Convex validators in Convex hosts.
+- Return uncertainty as data. `src/lib/server/hosted-paid-operation-agent-api.ts` returns `update_not_confirmed` with an inspect relation after an ambiguous command failure; `src/modules/action-invocation/hosted-sandbox-reconciliation.ts` accepts only intent and obtains trusted observations behind the server boundary.
+- Throw only for broken invariants, impossible setup, or programmer errors. `src/modules/action-invocation/paid-operation-application-service.ts` throws `paid_operation_pre_attempt_payment_invariant` only when a declared source port contradicts its contract.
+- Validate external inputs at boundaries with strict Zod schemas or exact shape guards, and validate Convex arguments/returns with `v.*`. Use `safeParse` for ordinary invalid input, as in `src/lib/server/customer-request-route-action-api.ts`; use `z.strictObject` for proof/evidence packet contracts in `tools/release/paid-operation-hosted-proof-contract.ts`.
 - Use exhaustive union handling with a `never` assignment when switching over a closed vocabulary.
 - Use `try`/`finally` when a test or runtime adapter temporarily changes process state, globals, servers, or injected backends.
 - Do not expose raw provider, database, or sensitive payload errors. Return redacted codes/messages and persist structured evidence through the observability module.
@@ -83,6 +88,7 @@ Blank lines separate major import groups. Existing files sometimes interleave a 
 - Record business-significant actions as structured audit/funnel/receipt records, not free-form console strings.
 - Redact private inquiry content, credentials, and provider payloads before persistence or logging.
 - Use `console` only at CLI/script boundaries or where a runtime integration explicitly owns operational logging.
+- When logging interpretation failures in Convex, emit a stable redacted code rather than customer/provider input; examples are `convex/customerRequestApplication.ts` and `convex/customerRequestRefinePorts.ts`.
 
 ## Comments
 
@@ -102,6 +108,8 @@ Blank lines separate major import groups. Existing files sometimes interleave a 
 **Parameters:** Prefer a typed input object plus a typed ports object over long positional argument lists. Inject clocks, network calls, persistence, and schedulers through ports or explicit options.
 
 **Return Values:** Return serializable, readonly result shapes with specific `kind` and `code` values. Do not return deferred patch plans for a host to interpret; ports perform semantic IO inside the owning transaction.
+
+**Runtime validation:** Parse unknown request and provider input once at the boundary. Do not cast unknown payloads into domain types. Keep Zod schemas near the owned contract and Convex validators at the host boundary; the corresponding behavior test must include extra-key, malformed, and materially stale cases.
 
 ## Module Design
 
@@ -129,8 +137,11 @@ Blank lines separate major import groups. Existing files sometimes interleave a 
 - Use Astryx components first for UI and Tailwind only as layout glue; `DESIGN.md` and `.agents/skills/ae-design-system/SKILL.md` govern presentation work.
 - Keep public and assistant-visible copy within the evidenced safe contract. Run `npm run test:copy` for changes to action summaries, boundaries, public routes, or assistant output.
 - When changing Convex code, read `convex/_generated/ai/guidelines.md` first.
+- Bound growing Convex reads with indexed `.unique()`, `.first()`, `.take(limit)`, or `.paginate(...)`. `convex/actionInvocationControl.ts` paginates attempts/history, and `convex/customerRequestEvidenceLoadPorts.ts` makes caller-supplied bounds explicit. Do not copy the legacy `.collect()` patterns still present in files such as `convex/catalog.ts`, `convex/discovery.ts`, and `convex/answerThreads.ts` into new work.
+- Preserve exact effect generations, command identities, and optimistic versions across consequential transitions. `convex/actionInvocationControl.ts` refuses stale versions, effect-generation drift, and command-identity conflicts before writes.
+- After a possibly released effect, expose reconciliation as the only safe continuation. Do not retry, switch provider, or infer settlement from a receipt; cover this with source-owned tests such as `tests/unit/action-invocation/hosted-paid-operation-reconciliation.test.ts`.
 - Add or update an architectural thinness test when moving a host decision into a machine/ports seam; pair that static lock with behavior tests.
 
 ---
 
-*Convention analysis: 2026-07-19*
+*Convention analysis: 2026-07-21*

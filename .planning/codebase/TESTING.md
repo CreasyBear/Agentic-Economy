@@ -1,7 +1,7 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-07-19
-**last_mapped_commit:** `77ec35ac`
+**Analysis Date:** 2026-07-21
+**last_mapped_commit:** `63a451f43edea453d0a1a8d8502504433acf76fb`
 
 ## Test Framework
 
@@ -34,6 +34,9 @@ npm run test:a11y                 # Playwright accessibility journeys
 npm run test:eval                 # Eval coverage, report, Promptfoo, and Vitest evals
 npm run test:all                  # Local type/codegen/test/build gate
 npm run test:release              # Source gate followed by hosted readback and smokes
+npm run verify:phase3c:release-source                    # Focused Phase 3C source-local gate, serialized
+npm run verify:paid-operation:hosted-packet-integrity    # Offline packet-integrity verification
+npm run smoke:paid-operation:hosted-sandbox              # Credentialed exact-revision hosted Playwright smoke
 ```
 
 There is no dedicated Vitest watch script because `vitest.config.ts` pins `watch: false`. Run a focused file with `npx vitest run <path>`.
@@ -98,6 +101,8 @@ describe('example operation', () => {
 - Use `it.each` for a shared case catalog, as in `tests/eval/answer-pipeline.test.ts`.
 - Use `expect.objectContaining`, `toMatchObject`, and targeted exact assertions to keep tests strict about the contract without binding unrelated fields.
 - For source-policy tests, read live files and assert forbidden imports/tokens, required wiring, or line limits. Keep behavior coverage alongside these static locks.
+- For consequential operations, assert state before and after the command: authority consumption, exact attempt/effect generation, source-owned result, idempotent replay, stale-version refusal, outcome uncertainty, and reconcile-before-retry. `tests/unit/action-invocation/paid-operation-application-service.test.ts` and `tests/integration/customer-request-v2-application-path.test.ts` show this pattern.
+- For hostile input substitution, send the forbidden client-owned field and assert no observation, mutation, or external effect. `tests/unit/action-invocation/hosted-paid-operation-reconciliation.test.ts` rejects client-supplied result facts and verifies zero counters before trusted observation.
 
 **Setup and Teardown:**
 - Use `beforeEach`/`afterEach` for repeatable environment or fake-runtime setup.
@@ -133,6 +138,7 @@ Use `vi.fn` for ports/fetch implementations, `vi.spyOn` for narrow replaceable c
 - Convex persistence when the integration claim requires `convex-test`.
 - Source scanners; feed them live targets and deliberate fixtures instead.
 - Hosted behavior with local imports or direct database calls. Hosted proof must use the intended public surface.
+- Source ownership when that ownership is the claim. A projection digest can establish equality between human and agent views, but it cannot substitute for the business record or trusted observation that owns the fact.
 
 ## Fixtures and Factories
 
@@ -172,25 +178,26 @@ To add source-code coverage, first configure a Vitest coverage provider and expl
 ## Test Types
 
 **Unit Tests:**
-- 294 files under `tests/unit/`.
+- 342 files under `tests/unit/`.
 - Exercise pure domain operations, schemas, projections, components, fake Convex hosts, security primitives, and source thinness.
 - Use direct ports/fakes for speed and deterministic boundary cases.
 
 **Integration Tests:**
-- 41 files under `tests/integration/`, plus `convex/customerRequestRouteMandate.test.ts`.
+- 42 files under `tests/integration/`, plus `convex/customerRequestRouteMandate.test.ts`.
 - Use `convex-test` with `import.meta.glob` for real schema/function execution where persistence matters.
 - Exercise cross-module API routes, registration/publication, Request lifecycle, provider adapters, security, and source parity.
 - The package command disables file parallelism because these flows share heavier runtime/global resources.
 
 **E2E Tests:**
-- 11 Playwright files under `tests/e2e/`, including two accessibility specs.
+- 13 Playwright files under `tests/e2e/`, including two accessibility specs.
 - `playwright.config.ts` runs compact and wide Chromium projects, starts a strict local Vite server when `PLAYWRIGHT_BASE_URL` is absent, retries only in CI, and captures trace on first retry.
 - Prefer accessible role/label locators and customer-visible language; stub only the API state needed to isolate the journey.
 
 **Deploy Smoke Tests:**
-- Six `tests/deploy-smoke/*.spec.ts` files verify selected hosted human/provider flows.
+- Seven `tests/deploy-smoke/*.spec.ts` files verify selected hosted human/provider flows.
 - `playwright.deploy-smoke.config.ts` is serial, has no retries, and retains traces on failure.
 - Deployment smoke establishes intended-surface readback only for the exact environment/revision tested.
+- `tests/deploy-smoke/paid-operation-hosted-sandbox-smoke.spec.ts` is skipped unless `AE_PAID_OPERATION_REQUIRE_LIVE=1` and validates exact revision/tree, deployment, GitHub run, Convex deployment, and temporary credentials before collecting evidence. Its presence does not prove a hosted run occurred.
 
 **Static Contract Tests:**
 - Import/private-boundary tests under `tests/imports/`.
@@ -203,6 +210,33 @@ To add source-code coverage, first configure a Vitest coverage provider and expl
 **Evaluation Tests:**
 - `tests/eval/answer-pipeline.test.ts` validates case uniqueness, semantic coverage, score thresholds, user outcomes, and Promptfoo catalog parity.
 - `test:eval` generates a report, runs Promptfoo without cache, and then runs Vitest eval tests.
+- `tests/eval/product-foundry-partial-entry.test.ts` uses rejected Zod inputs plus disposition assertions to demonstrate what current entry surfaces do and do not address. Treat a passing eval as evidence for the declared case catalog, not proof of real customer value.
+
+## Evidence Planes and Claim Limits
+
+**Source and fixture plane:**
+- Vitest unit, integration, import, copy, SEO, UI-contract, and eval suites prove only the behavior and structure exercised by their source-owned fixtures.
+- A labelled local browser run such as `tests/e2e/paid-operation-development-surface.spec.ts` proves the named local projection, keyboard/focus behavior, responsive mechanics, and semantic parity. It does not prove deployment, independent provider behavior, settlement, fulfilment, or customer value.
+
+**Hosted plane:**
+- Exact-revision hosted evidence is separately gated through `tools/release/paid-operation-hosted-live-collector.ts`, `tools/release/paid-operation-hosted-proof-contract.ts`, and `tests/deploy-smoke/paid-operation-hosted-sandbox-smoke.spec.ts`.
+- `observeStableCleanGit` in `tools/release/paid-operation-hosted-live-collector.ts` reads HEAD, tree, and clean status twice, and the collector re-observes custody immediately before admission. Preserve this before/after custody pattern for long-running evidence collection.
+- Hosted packet integrity verifies internal consistency and provenance. It does not by itself prove independently operated provider fulfilment, a real charge or settlement, production safety, accessibility in use, or customer value.
+
+**Focused versus broad gates:**
+- Start with the test that falsifies the changed transition. Expand to `npm run typecheck`, import/copy/UI contracts, and the relevant browser flow only when the change crosses those boundaries.
+- Run `npm run test:all` for cross-cutting source work and `npm run test:release:source` for a release candidate. Record the first unrelated broad-suite failure without absorbing it into the focused parcel.
+- Never report a package script as passing merely because it exists. Report the exact command, revision, file/test counts, first failure, and evidence ceiling.
+
+## Current Exact-Revision Readback
+
+At commit `63a451f43edea453d0a1a8d8502504433acf76fb` (tree `16fee2f5321d7917f7f0bccd5d59e3d6a018be64`), the mapping run executed:
+
+```bash
+npm run verify:phase3c:release-source
+```
+
+Result: **failed** with 16/17 test files passing and 187/188 tests passing. The first failure is `tests/unit/server/hosted-paid-operation-agent-auth.test.ts:156`: the route now returns a `humanHandoff` object, but the exact expected response fixture omits it. This is a source-local contract-fixture mismatch; it is not hosted, provider, payment, settlement, production, or customer evidence. No broad-suite or hosted smoke was run by this mapping task.
 
 ## Common Patterns
 
@@ -255,4 +289,4 @@ Test what a customer or external caller can observe. Do not use internal IDs or 
 
 ---
 
-*Testing analysis: 2026-07-19*
+*Testing analysis: 2026-07-21*
