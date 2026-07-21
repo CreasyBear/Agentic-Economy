@@ -19,13 +19,14 @@ import {
 import { internalMutation, internalQuery } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 
-const PHASE3C_POLICY_REF = 'phase-3c-hosted-paid-operation-trial:g2'
+const PHASE3C_POLICY_REF = 'phase-3c-hosted-paid-operation-trial:g3'
 const PHASE3C_PRIOR_POLICY_REFS = [
   'phase-3c-hosted-paid-operation-trial',
+  'phase-3c-hosted-paid-operation-trial:g2',
 ] as const
 const PHASE3C_PROOF_HEADER_CAP = 6
 const PHASE3C_DEPLOYMENT_RECEIPT_REF =
-  'phase3c-paid-operation-exact-revision-deployment:g2' as const
+  'phase3c-paid-operation-exact-revision-deployment:g3' as const
 const PHASE3C_GITHUB_REPOSITORY = 'CreasyBear/Agentic-Economy' as const
 const PHASE3C_GITHUB_REF = 'main' as const
 const PHASE3C_GITHUB_WORKFLOW = '.github/workflows/kernel-release-gate.yml' as const

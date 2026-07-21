@@ -421,6 +421,14 @@ describe('hosted paid-operation authenticated adapters', () => {
       'true',
     )
     expect(container.querySelector('pre')).toBeNull()
+    const embeddedProjection = container.querySelector(
+      'script[data-paid-operation-human-projection]',
+    )
+    expect(
+      embeddedProjection,
+      '[P3C_RED:protected_human_projection_not_embedded]',
+    ).not.toBeNull()
+    expect(JSON.parse(embeddedProjection?.textContent ?? '{}')).toEqual(initial.projection)
     expect(screen.getByText('Ready for permission', { exact: true })).toBeTruthy()
 
     const authorize = screen.getByRole('button', { name: 'Authorize up to $0.01' })

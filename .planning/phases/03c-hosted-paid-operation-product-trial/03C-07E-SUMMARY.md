@@ -349,3 +349,57 @@ honest no-effect failure preservation. It did not complete a hosted paid
 operation. The generation-2 repair is not hosted evidence yet. Neither result
 proves real provider fulfilment, payment, settlement, production safety,
 real-human comprehension, demand or customer value.
+
+## Generation-2 deployment and surface-ownership finding
+
+Exact revision `0c00f56d252522739fa4a5926638eb82e9c1ef9d` passed GitHub run
+`29795699488`. Vercel production deployment
+`dpl_EFLSPguGao2ArJpiBNwFE9Vrr6FR` reached READY and the canonical hostname
+resolved to that exact source. The run then performed one Convex production
+deploy, atomically retired generation 1, configured generation 2 and recorded
+the generation-2 deployment receipt against `prod:formal-jaguar-441`.
+
+The next bounded hosted lifecycle stopped after the human operation reached
+version 2 with accepted authority and a durable prepared payment. No external
+mock effect was released. Raw readback showed generation 2 at one admission,
+one active reservation and one retained version-2 invocation. The temporary
+session and key were revoked with readback.
+
+The failure was in the proof collector: it attempted to inspect the
+human-session-owned invocation with the distinct agent-key caller. Live source
+correctly requires both principal and caller identity for reconstruction, so
+that cross-surface read was refused. Local route fixtures had proved semantic
+parity only when both projections used the same actor; they did not authorize
+one credential to assume another credential's caller identity.
+
+Three source-compatible recoveries were evaluated. Widening ownership to the
+principal alone was rejected because it would weaken caller attribution and
+the accepted non-enumeration boundary. Reusing or impersonating the human
+session from the agent adapter, or copying one observed projection into the
+other surface's evidence slot, was rejected as false attribution. Adding a
+trial-only parity API was rejected because it would broaden the product
+transport solely to satisfy evidence machinery.
+
+The selected correction makes the hosted evidence honestly surface-specific.
+The protected human detail embeds its already-authorized closed rich
+projection as non-executable escaped JSON beside the rendered card; the live
+collector records warm/cold human projection and DOM truth from that route.
+The agent golden and uncertainty paths record warm/cold structured projection
+through the scoped agent route only. Both remain the same closed
+`agentic-paid-operation:v1` semantic contract, and raw operator observation
+independently binds each invocation to its actual caller, transitions, payment
+row and one mock effect. No caller gains access to another caller's record.
+
+Generation 3 keeps both failed invocations and their payment state as retained
+evidence. Its admission transaction disables generations 1 and 2, releases
+only their bounded active reservations, and creates a fresh three-operation
+cohort. The operator proof accepts those older headers only when their exact
+policies are disabled and their reservations are released. Source proof covers
+both retained generations plus the current cohort under the cap-plus-one
+fence.
+
+The generation-3 correction passed 17 release-source files / 168 tests,
+changed-path lint, diff checks and changed-path TypeScript filtering. These
+remain source and local-fixture results until a later exact generation-3
+deployment completes the human, structured-agent and uncertainty paths,
+revocation, admission shutdown and packet verification.

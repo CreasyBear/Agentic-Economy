@@ -257,6 +257,12 @@ function AcceptedPaidOperationDetail({
       >
         {announcement}
       </p>
+      <script
+        type="application/json"
+        data-paid-operation-human-projection="agentic-paid-operation:v1"
+      >
+        {serializeEmbeddedProjection(readback.projection)}
+      </script>
       <AePaidOperationCard
         semantics={readback.projection.semantics}
         card={card}
@@ -265,6 +271,13 @@ function AcceptedPaidOperationDetail({
       />
     </main>
   )
+}
+
+function serializeEmbeddedProjection(value: unknown): string {
+  return JSON.stringify(value)
+    .replaceAll('<', '\\u003c')
+    .replaceAll('\u2028', '\\u2028')
+    .replaceAll('\u2029', '\\u2029')
 }
 
 function ReadUnavailable({

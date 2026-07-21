@@ -410,6 +410,7 @@ export const actionInvocationTables = {
     receiptRef: v.union(
       v.literal('phase3c-paid-operation-exact-revision-deployment'),
       v.literal('phase3c-paid-operation-exact-revision-deployment:g2'),
+      v.literal('phase3c-paid-operation-exact-revision-deployment:g3'),
     ),
     sourceRevision: v.string(),
     sourceTree: v.string(),

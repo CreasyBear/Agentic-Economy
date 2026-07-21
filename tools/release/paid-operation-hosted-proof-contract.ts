@@ -10,7 +10,7 @@ export const PAID_OPERATION_PACKET_INTEGRITY_CLASS =
   'local_packet_integrity_only' as const
 
 export const EXPECTED_SCENARIO_ORDER = [
-  'shared_human_agent_provider_a_golden',
+  'human_provider_a_golden',
   'agent_provider_a_golden',
   'provider_b_response_lost_uncertainty_goblin',
 ] as const
@@ -130,12 +130,13 @@ const journeyCheckpointSchema = z.strictObject({
     settlementLabel: z.literal('No settlement evidence'),
     resultLabel: z.literal('Not received'),
     nextCommand: z.enum(['authorize', 'execute']),
-  }),
-  agent: projectionSchema,
+    projection: projectionSchema,
+  }).nullable(),
+  agent: projectionSchema.nullable(),
 })
 export const scenarioSchema = z.strictObject({
   scenario: z.enum(EXPECTED_SCENARIO_ORDER),
-  actorClass: z.enum(['shared_human_agent', 'agent', 'agent_goblin']),
+  actorClass: z.enum(['human', 'agent', 'agent_goblin']),
   invocationRef: z.string().min(1),
   providerId: z.enum(['provider:a', 'provider:b']),
   operationKey: z.enum(['btc-usd-a', 'btc-usd-b']),
@@ -143,10 +144,10 @@ export const scenarioSchema = z.strictObject({
   checkpoints: z.tuple([journeyCheckpointSchema, journeyCheckpointSchema]),
   transitions: z.array(transitionSchema).min(4).max(5),
   projections: z.strictObject({
-    humanWarm: projectionSchema,
-    humanCold: projectionSchema,
-    agentWarm: projectionSchema,
-    agentCold: projectionSchema,
+    humanWarm: projectionSchema.nullable(),
+    humanCold: projectionSchema.nullable(),
+    agentWarm: projectionSchema.nullable(),
+    agentCold: projectionSchema.nullable(),
   }),
 })
 const commandObservationSchema = z.strictObject({
@@ -231,7 +232,7 @@ export const sourceObservationSchema = z.strictObject({
       class: z.enum(['s16', 's256', 'd1024']),
     }),
     receipt: z.strictObject({
-      receiptRef: z.literal('phase3c-paid-operation-exact-revision-deployment:g2'),
+      receiptRef: z.literal('phase3c-paid-operation-exact-revision-deployment:g3'),
       sourceRevision: revisionSchema,
       sourceTree: z.string().regex(/^[0-9a-f]{40}$/u),
       githubRunId: z.string().regex(/^[1-9][0-9]*$/u),
@@ -247,7 +248,7 @@ export const sourceObservationSchema = z.strictObject({
     }),
   }),
   policy: z.strictObject({
-    policyRef: z.literal('phase-3c-hosted-paid-operation-trial:g2'),
+    policyRef: z.literal('phase-3c-hosted-paid-operation-trial:g3'),
     enabled: z.boolean(),
     policyDigest: digestSchema,
     sourceRevision: revisionSchema,
@@ -619,8 +620,12 @@ export function verifyPacketIntegrity(input: unknown): PaidOperationPacketIntegr
     if (!journeyCheckpointsValid(scenario)) {
       return refused('journey_checkpoint_mismatch')
     }
+    const terminalProjection = terminalScenarioProjection(scenario)
+    if (terminalProjection === undefined) {
+      return refused('projection_semantics_mismatch')
+    }
     if (index === 2 && !sameJson(
-      readPath(scenario.projections.agentCold.semantics, ['continuations']),
+      readPath(terminalProjection.semantics, ['continuations']),
       [{ kind: 'inspect' }],
     )) {
       return refused('unsafe_uncertainty_continuation')
@@ -708,7 +713,7 @@ export function verifyPacketIntegrity(input: unknown): PaidOperationPacketIntegr
         return refused('transition_invariant_mismatch')
       }
     }
-    const semantics = scenario.projections.agentCold.semantics
+    const semantics = terminalProjection.semantics
     if (!semanticsMatchObservation(
       semantics,
       scenario,
@@ -771,7 +776,28 @@ export function compareAuthoritativeLiveEvidence(
 function verifyScenarioProjections(
   scenario: PaidOperationHostedProofPacket['scenarios'][number],
 ): 'projection_semantics_mismatch' | undefined {
-  const projections = Object.values(scenario.projections)
+  const humanProjections = [
+    scenario.projections.humanWarm,
+    scenario.projections.humanCold,
+  ]
+  const agentProjections = [
+    scenario.projections.agentWarm,
+    scenario.projections.agentCold,
+  ]
+  const expected = scenario.actorClass === 'human'
+    ? humanProjections
+    : agentProjections
+  const forbidden = scenario.actorClass === 'human'
+    ? agentProjections
+    : humanProjections
+  if (expected.some((projection) => projection === null)
+    || forbidden.some((projection) => projection !== null)) {
+    return 'projection_semantics_mismatch'
+  }
+  const projections = expected.filter(
+    (projection): projection is NonNullable<typeof projection> => projection !== null,
+  )
+  if (projections.length !== 2) return 'projection_semantics_mismatch'
   for (const projection of projections) {
     if (projection.semanticDigest !== canonicalProofDigest(projection.semantics)
       || projection.observedVersion !== scenario.transitions.at(-1)?.invocationVersion
@@ -788,36 +814,65 @@ function verifyScenarioProjections(
   return undefined
 }
 
+function terminalScenarioProjection(
+  scenario: PaidOperationHostedProofPacket['scenarios'][number],
+): z.infer<typeof projectionSchema> | undefined {
+  return scenario.actorClass === 'human'
+    ? scenario.projections.humanCold ?? undefined
+    : scenario.projections.agentCold ?? undefined
+}
+
 function journeyCheckpointsValid(
   scenario: PaidOperationHostedProofPacket['scenarios'][number],
 ): boolean {
   const [ready, prepared] = scenario.checkpoints
+  const readyProjection = checkpointProjection(scenario, ready)
+  const preparedProjection = checkpointProjection(scenario, prepared)
+  if (readyProjection === undefined || preparedProjection === undefined) return false
+  const humanLabelsValid = scenario.actorClass !== 'human'
+    || (ready.human !== null
+      && ready.human.semanticDigest === ready.human.projection.semanticDigest
+      && ready.human.observedVersion === 1
+      && ready.human.decisionLabel === 'Ready for permission'
+      && ready.human.nextCommand === 'authorize'
+      && prepared.human !== null
+      && prepared.human.semanticDigest === prepared.human.projection.semanticDigest
+      && prepared.human.observedVersion === 2
+      && prepared.human.decisionLabel === 'Payment prepared'
+      && prepared.human.nextCommand === 'execute')
   return ready.stage === 'ready_for_permission'
     && ready.observedVersion === 1
-    && ready.human.observedVersion === 1
-    && ready.human.decisionLabel === 'Ready for permission'
-    && ready.human.nextCommand === 'authorize'
-    && ready.human.semanticDigest === ready.agent.semanticDigest
-    && ready.agent.observedVersion === 1
-    && ready.agent.semanticDigest === canonicalProofDigest(ready.agent.semantics)
-    && readPath(ready.agent.semantics, ['paymentAuthorization', 'state']) === 'not_created'
-    && readPath(ready.agent.semantics, ['paymentSubmission', 'state']) === 'not_submitted'
-    && readPath(ready.agent.semantics, ['settlement', 'state']) === 'no_evidence'
-    && readPath(ready.agent.semantics, ['resultDelivery', 'state']) === 'not_delivered'
-    && continuationKinds(ready.agent.semantics).join(',') === 'authorize'
+    && readyProjection.observedVersion === 1
+    && readyProjection.semanticDigest === canonicalProofDigest(readyProjection.semantics)
+    && readPath(readyProjection.semantics, ['paymentAuthorization', 'state']) === 'not_created'
+    && readPath(readyProjection.semantics, ['paymentSubmission', 'state']) === 'not_submitted'
+    && readPath(readyProjection.semantics, ['settlement', 'state']) === 'no_evidence'
+    && readPath(readyProjection.semantics, ['resultDelivery', 'state']) === 'not_delivered'
+    && continuationKinds(readyProjection.semantics).join(',') === 'authorize'
     && prepared.stage === 'payment_prepared'
     && prepared.observedVersion === 2
-    && prepared.human.observedVersion === 2
-    && prepared.human.decisionLabel === 'Payment prepared'
-    && prepared.human.nextCommand === 'execute'
-    && prepared.human.semanticDigest === prepared.agent.semanticDigest
-    && prepared.agent.observedVersion === 2
-    && prepared.agent.semanticDigest === canonicalProofDigest(prepared.agent.semantics)
-    && readPath(prepared.agent.semantics, ['paymentAuthorization', 'state']) === 'created'
-    && readPath(prepared.agent.semantics, ['paymentSubmission', 'state']) === 'not_submitted'
-    && readPath(prepared.agent.semantics, ['settlement', 'state']) === 'no_evidence'
-    && readPath(prepared.agent.semantics, ['resultDelivery', 'state']) === 'not_delivered'
-    && continuationKinds(prepared.agent.semantics).join(',') === 'execute'
+    && preparedProjection.observedVersion === 2
+    && preparedProjection.semanticDigest === canonicalProofDigest(preparedProjection.semantics)
+    && readPath(preparedProjection.semantics, ['paymentAuthorization', 'state']) === 'created'
+    && readPath(preparedProjection.semantics, ['paymentSubmission', 'state']) === 'not_submitted'
+    && readPath(preparedProjection.semantics, ['settlement', 'state']) === 'no_evidence'
+    && readPath(preparedProjection.semantics, ['resultDelivery', 'state']) === 'not_delivered'
+    && continuationKinds(preparedProjection.semantics).join(',') === 'execute'
+    && humanLabelsValid
+}
+
+function checkpointProjection(
+  scenario: PaidOperationHostedProofPacket['scenarios'][number],
+  checkpoint: PaidOperationHostedProofPacket['scenarios'][number]['checkpoints'][number],
+): z.infer<typeof projectionSchema> | undefined {
+  if (scenario.actorClass === 'human') {
+    return checkpoint.agent === null
+      ? checkpoint.human?.projection
+      : undefined
+  }
+  return checkpoint.human === null
+    ? checkpoint.agent ?? undefined
+    : undefined
 }
 
 function continuationKinds(semantics: JsonValue): readonly string[] {
@@ -905,7 +960,7 @@ function commandSort(
 
 function expectedScenario(index: number) {
   if (index === 0) return {
-    actorClass: 'shared_human_agent',
+    actorClass: 'human',
     providerId: 'provider:a',
     operationKey: 'btc-usd-a',
     transitions: [

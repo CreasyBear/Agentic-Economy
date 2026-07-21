@@ -79,7 +79,7 @@ describe('paid-operation hosted proof integrity and live admission', () => {
 
   it('refuses checksum-only forgery, packet tampering, and a self-asserted hosted label', () => {
     const tampered = mutateContent((content) => {
-      const operation = content.scenarios[0]!.projections.humanWarm.semantics.operation
+      const operation = content.scenarios[0]!.projections.humanWarm!.semantics.operation
       ;(operation as { providerId: string }).providerId = 'provider:forged'
     })
     expect(verifyPacketIntegrity(tampered)).toEqual({
@@ -130,12 +130,12 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     })
   })
 
-  it('refuses divergent projections even when all four projection digests are recomputed', () => {
+  it('refuses divergent warm and cold surface projections after digest recomputation', () => {
     const packet = mutateContent((content) => {
       const scenario = content.scenarios[1]!
-      scenario.projections.agentCold.semantics.resultDelivery = { state: 'not_delivered' }
-      scenario.projections.agentCold.semanticDigest = canonicalProofDigest(
-        scenario.projections.agentCold.semantics,
+      scenario.projections.agentCold!.semantics.resultDelivery = { state: 'not_delivered' }
+      scenario.projections.agentCold!.semanticDigest = canonicalProofDigest(
+        scenario.projections.agentCold!.semantics,
       )
     })
     expect(verifyPacketIntegrity(packet)).toEqual({
@@ -148,6 +148,7 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     const packet = mutateContent((content) => {
       const scenario = content.scenarios[0]!
       for (const projection of Object.values(scenario.projections)) {
+        if (projection === null) continue
         projection.semantics.paymentSubmission = { state: 'not_submitted' }
         projection.semantics.settlement = { state: 'no_evidence' }
         projection.semanticDigest = canonicalProofDigest(projection.semantics)
@@ -170,6 +171,7 @@ describe('paid-operation hosted proof integrity and live admission', () => {
 
     const unsafeProjection = mutateContent((content) => {
       for (const projection of Object.values(content.scenarios[2]!.projections)) {
+        if (projection === null) continue
         projection.semantics.continuations = [{ kind: 'retry' }]
         projection.semanticDigest = canonicalProofDigest(projection.semantics)
       }
@@ -286,7 +288,7 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     )).toEqual({ kind: 'refused', code: 'packet_schema_invalid' })
 
     const divergent = mutateContent((content) => {
-      content.scenarios[1]!.checkpoints[0]!.human.decisionLabel = 'Payment prepared'
+      content.scenarios[0]!.checkpoints[0]!.human!.decisionLabel = 'Payment prepared'
     })
     expect(verifyPacketIntegrity(divergent)).toEqual({
       kind: 'refused',
@@ -295,10 +297,9 @@ describe('paid-operation hosted proof integrity and live admission', () => {
 
     const paymentNotCreated = mutateContent((content) => {
       const prepared = content.scenarios[2]!.checkpoints[1]!.agent
+      if (prepared === null) throw new Error('test_agent_checkpoint_missing')
       prepared.semantics.paymentAuthorization = { state: 'not_created' }
       prepared.semanticDigest = canonicalProofDigest(prepared.semantics)
-      content.scenarios[2]!.checkpoints[1]!.human.semanticDigest =
-        prepared.semanticDigest
     })
     expect(verifyPacketIntegrity(paymentNotCreated)).toEqual({
       kind: 'refused',
@@ -675,6 +676,7 @@ describe('paid-operation hosted proof integrity and live admission', () => {
   it('refuses secret-shaped material hidden under an otherwise schema-valid semantic key', () => {
     const packet = mutateContent((content) => {
       for (const projection of Object.values(content.scenarios[0]!.projections)) {
+        if (projection === null) continue
         ;(projection.semantics as unknown as Record<string, unknown>).diagnostics = {
           vercelApiToken: 'opaque-control-plane-token',
         }
@@ -705,7 +707,7 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     )
     const goblin = journey.slice(
       journey.indexOf('async function runGoblinScenario'),
-      journey.indexOf('async function captureCheckpoint'),
+      journey.indexOf('async function captureHumanCheckpoint'),
     )
 
     expect(source).toContain("test.skip(liveConfig === undefined")
@@ -723,15 +725,21 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(golden.lastIndexOf('captureCheckpoint')).toBeLessThan(
       golden.indexOf('await input.execute()'),
     )
-    expect(goblin.indexOf('captureCheckpoint')).toBeLessThan(
+    expect(goblin.indexOf('captureAgentCheckpoint')).toBeLessThan(
       goblin.indexOf("command: 'authorize'"),
     )
-    expect(goblin.lastIndexOf('captureCheckpoint')).toBeLessThan(
+    expect(goblin.lastIndexOf('captureAgentCheckpoint')).toBeLessThan(
       goblin.indexOf("command: 'execute'"),
     )
     expect(journey).toContain("paymentAuthorization: 'created'")
     expect(journey).toContain("paymentSubmission: 'not_submitted'")
     expect(journey).toContain("settlement: 'no_evidence'")
+    expect(
+      journey,
+      '[P3C_RED:surface_owner_crossing_not_removed]',
+    ).toContain('async function captureHumanCheckpoint')
+    expect(journey).toContain('async function captureAgentCheckpoint')
+    expect(journey).toContain("actorClass: 'human'")
     expect(
       journey,
       '[P3C_RED:permission_control_pair_not_observed]',
@@ -929,7 +937,7 @@ function contentFixture() {
     'clerk_api_key:key:agent',
   )
   const scenarios = [
-    scenarioFixture('shared_human_agent_provider_a_golden', INVOCATION_REFS[0], 'provider:a', 5),
+    scenarioFixture('human_provider_a_golden', INVOCATION_REFS[0], 'provider:a', 5),
     scenarioFixture('agent_provider_a_golden', INVOCATION_REFS[1], 'provider:a', 5),
     scenarioFixture('provider_b_response_lost_uncertainty_goblin', INVOCATION_REFS[2], 'provider:b', 6),
   ]
@@ -1066,6 +1074,12 @@ function scenarioFixture(
   providerId: 'provider:a' | 'provider:b',
   finalVersion: 5 | 6,
 ) {
+  const actorClass = scenario === 'human_provider_a_golden'
+    ? 'human'
+    : scenario === 'agent_provider_a_golden'
+      ? 'agent'
+      : 'agent_goblin'
+  const surface = actorClass === 'human' ? 'human' : 'agent'
   const semantics = semanticsFixture(invocationRef, providerId, finalVersion)
   const projection = () => ({
     schema: 'agentic-paid-operation:v1',
@@ -1112,26 +1126,29 @@ function scenarioFixture(
       ]
   return {
     scenario,
-    actorClass: scenario === 'shared_human_agent_provider_a_golden'
-      ? 'shared_human_agent'
-      : scenario === 'agent_provider_a_golden'
-        ? 'agent'
-        : 'agent_goblin',
+    actorClass,
     invocationRef,
     providerId,
     operationKey: providerId === 'provider:a' ? 'btc-usd-a' : 'btc-usd-b',
     operationRevision: '1',
     checkpoints: [
-      checkpointFixture(invocationRef, providerId, 1),
-      checkpointFixture(invocationRef, providerId, 2),
+      checkpointFixture(invocationRef, providerId, 1, surface),
+      checkpointFixture(invocationRef, providerId, 2, surface),
     ],
     transitions,
-    projections: {
-      humanWarm: projection(),
-      humanCold: projection(),
-      agentWarm: projection(),
-      agentCold: projection(),
-    },
+    projections: surface === 'human'
+      ? {
+          humanWarm: projection(),
+          humanCold: projection(),
+          agentWarm: null,
+          agentCold: null,
+        }
+      : {
+          humanWarm: null,
+          humanCold: null,
+          agentWarm: projection(),
+          agentCold: projection(),
+        },
   }
 }
 
@@ -1139,6 +1156,7 @@ function checkpointFixture(
   invocationRef: string,
   providerId: 'provider:a' | 'provider:b',
   observedVersion: 1 | 2,
+  surface: 'human' | 'agent',
 ) {
   const prepared = observedVersion === 2
   const semantics = {
@@ -1156,26 +1174,30 @@ function checkpointFixture(
     continuations: [{ kind: prepared ? 'execute' : 'authorize' }],
   }
   const semanticDigest = canonicalProofDigest(semantics)
+  const projection = {
+    schema: 'agentic-paid-operation:v1' as const,
+    semantics,
+    semanticDigest,
+    observedVersion,
+    evidenceClass: 'hosted_labelled_mock_candidate' as const,
+  }
   return {
     stage: prepared ? 'payment_prepared' : 'ready_for_permission',
     observedVersion,
-    human: {
-      semanticDigest,
-      observedVersion,
-      evidenceClass: 'hosted_labelled_mock_candidate',
-      decisionLabel: prepared ? 'Payment prepared' : 'Ready for permission',
-      paymentSubmissionLabel: 'Not submitted',
-      settlementLabel: 'No settlement evidence',
-      resultLabel: 'Not received',
-      nextCommand: prepared ? 'execute' : 'authorize',
-    },
-    agent: {
-      schema: 'agentic-paid-operation:v1',
-      semantics,
-      semanticDigest,
-      observedVersion,
-      evidenceClass: 'hosted_labelled_mock_candidate',
-    },
+    human: surface === 'human'
+      ? {
+          semanticDigest,
+          observedVersion,
+          evidenceClass: 'hosted_labelled_mock_candidate' as const,
+          decisionLabel: prepared ? 'Payment prepared' as const : 'Ready for permission' as const,
+          paymentSubmissionLabel: 'Not submitted' as const,
+          settlementLabel: 'No settlement evidence' as const,
+          resultLabel: 'Not received' as const,
+          nextCommand: prepared ? 'execute' as const : 'authorize' as const,
+          projection,
+        }
+      : null,
+    agent: surface === 'agent' ? projection : null,
   }
 }
 
@@ -1340,7 +1362,7 @@ function rawObservationFixture(
     }
   })
   const receiptWithoutDigest = {
-    receiptRef: 'phase3c-paid-operation-exact-revision-deployment:g2',
+    receiptRef: 'phase3c-paid-operation-exact-revision-deployment:g3',
     sourceRevision: SOURCE_REVISION,
     sourceTree: SOURCE_TREE,
     githubRunId: '123456',
@@ -1372,7 +1394,7 @@ function rawObservationFixture(
       },
     },
     policy: {
-      policyRef: 'phase-3c-hosted-paid-operation-trial:g2',
+      policyRef: 'phase-3c-hosted-paid-operation-trial:g3',
       enabled: true,
       policyDigest: DIGEST('a'),
       sourceRevision: SOURCE_REVISION,
@@ -1428,7 +1450,7 @@ function authoritativeEvidenceFrom(packet: ReturnType<typeof completePacket>) {
 
 function journeyObservationFixture(): PaidOperationHostedJourneyObservation {
   const human = scenarioFixture(
-    'shared_human_agent_provider_a_golden',
+    'human_provider_a_golden',
     INVOCATION_REFS[0],
     'provider:a',
     5,
@@ -1449,8 +1471,8 @@ function journeyObservationFixture(): PaidOperationHostedJourneyObservation {
     scenarios: [
       {
         ...human,
-        scenario: 'shared_human_agent_provider_a_golden',
-        actorClass: 'shared_human_agent',
+        scenario: 'human_provider_a_golden',
+        actorClass: 'human',
         observedStages: [
           { stage: 'created', invocationVersion: 1, continuations: ['authorize'] },
           { stage: 'authorized', invocationVersion: 2, continuations: ['execute'] },

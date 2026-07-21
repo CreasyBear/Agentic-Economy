@@ -141,7 +141,7 @@ type MockObservation =
       recordedAt: string
     }>
 
-const PAID_OPERATION_POLICY_REF = 'phase-3c-hosted-paid-operation-trial:g2'
+const PAID_OPERATION_POLICY_REF = 'phase-3c-hosted-paid-operation-trial:g3'
 const TRUSTED_OBSERVER_SOURCE = 'hosted-paid-operation:mock-effect-ledger'
 const commandKind = v.union(
   v.literal('authorize'),
