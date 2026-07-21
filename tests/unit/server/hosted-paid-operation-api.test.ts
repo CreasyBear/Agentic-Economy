@@ -196,6 +196,47 @@ describe('hosted paid-operation authenticated adapters', () => {
     )
   })
 
+  it('wires stale human inspection to the authenticated runtime current version', async () => {
+    clerk.auth.mockResolvedValue({
+      isAuthenticated: true,
+      userId: 'owner:paid',
+      sessionId: 'session:human',
+    })
+    const currentVersion = vi.fn(async () => 6)
+    runtime.get.mockResolvedValue({
+      gateway: {
+        inspect: vi.fn(async () => ({
+          kind: 'refused' as const,
+          code: 'stale_invocation_version' as const,
+        })),
+        command: vi.fn(),
+      },
+      provenance: 'Labelled mock provider',
+      currentVersion,
+    })
+    const loader = DetailRoute.options.loader as (input: Readonly<{
+      params: Readonly<{ invocationRef: string }>
+      deps: Readonly<{ expectedInvocationVersion: number }>
+    }>) => Promise<Readonly<{ status: number; body: unknown }>>
+
+    await expect(loader({
+      params: { invocationRef: 'invocation:paid' },
+      deps: { expectedInvocationVersion: 3 },
+    })).resolves.toEqual({
+      status: 409,
+      body: {
+        kind: 'refused',
+        code: 'stale_invocation_version',
+        suppliedVersion: 3,
+        currentExpectedInvocationVersion: 6,
+        relation: {
+          inspect: '/actions/paid/invocation%3Apaid?expectedInvocationVersion=6',
+        },
+      },
+    })
+    expect(currentVersion).toHaveBeenCalledWith('invocation:paid')
+  })
+
   it('projects identical semantics and frozen host inputs without treating identity as authority', async () => {
     const projection = paidProjection()
     const gateway: HostedPaidOperationTransportGateway = {
@@ -259,6 +300,117 @@ describe('hosted paid-operation authenticated adapters', () => {
     })
     expect(JSON.stringify(humanBody)).not.toMatch(/authorityRef|reconciliationEvidence|paymentReconciliationEvidence/u)
     expect(JSON.stringify(agentBody)).not.toMatch(/authorityRef|reconciliationEvidence|paymentReconciliationEvidence/u)
+    expect(humanBody).not.toHaveProperty('commands')
+    expect(agentBody).not.toHaveProperty('card')
+    expect(agentBody.commands).toEqual([{
+      command: 'authorize',
+      commandIdRequired: true,
+      expectedInvocationVersion: 3,
+      requiredInput: ['accept'],
+      relation: {
+        method: 'POST',
+        href: '/api/v1/paid-operations/invocation%3Apaid/commands',
+      },
+    }])
+  })
+
+  it('issues only the current source-owned command relation for every durable truth', async () => {
+    const inspect = async (projection: PaidOperationProjection) => {
+      const response = await handleHostedPaidOperationAgentInspect(
+        projection.semantics.identity.invocationRef,
+        projection.semantics.identity.expectedInvocationVersion,
+        {
+          authenticate: authenticatedAgent,
+          gateway: {
+            inspect: async () => ({ kind: 'accepted', value: projection }),
+            command: async () => ({ kind: 'accepted', value: projection }),
+          },
+          provenance: 'Labelled mock provider',
+        },
+      )
+      return await response.json() as Readonly<{ commands: readonly unknown[] }>
+    }
+    const terminal = projectionFromSemantics({
+      ...paidProjection().semantics,
+      continuations: [{
+        kind: 'inspect',
+        command: 'inspect_paid_operation',
+        requiredInput: [],
+        expectedInvocationVersion: 3,
+        authorityRequired: false,
+      }],
+    })
+
+    await expect(inspect(paidProjection())).resolves.toMatchObject({
+      commands: [{
+        command: 'authorize',
+        commandIdRequired: true,
+        expectedInvocationVersion: 3,
+        requiredInput: ['accept'],
+        relation: { method: 'POST' },
+      }],
+    })
+    await expect(inspect(preparedProjection())).resolves.toMatchObject({
+      commands: [{
+        command: 'execute',
+        commandIdRequired: true,
+        expectedInvocationVersion: 4,
+        requiredInput: [],
+        relation: { method: 'POST' },
+      }],
+    })
+    await expect(inspect(uncertainProjection())).resolves.toMatchObject({
+      commands: [{
+        command: 'reconcile',
+        commandIdRequired: true,
+        expectedInvocationVersion: 3,
+        requiredInput: [],
+        relation: { method: 'POST' },
+      }],
+    })
+    await expect(inspect(terminal)).resolves.toEqual(expect.objectContaining({
+      commands: [{
+        command: 'inspect',
+        commandIdRequired: false,
+        expectedInvocationVersion: 3,
+        requiredInput: [],
+        relation: {
+          method: 'GET',
+          href: '/api/v1/paid-operations/invocation%3Apaid?expectedInvocationVersion=3',
+        },
+      }],
+    }))
+
+    for (const projection of [paidProjection(), preparedProjection(), uncertainProjection(), terminal]) {
+      const body = await inspect(projection)
+      expect(body.commands).toHaveLength(1)
+      expect(JSON.stringify(body.commands)).not.toMatch(
+        /retry|providerKey|authorityRef|reconciliationEvidence|paymentReconciliationEvidence|result/u,
+      )
+    }
+
+    const retry = projectionFromSemantics({
+      ...paidProjection().semantics,
+      continuations: [{
+        kind: 'retry',
+        command: 'retry_paid_operation',
+        requiredInput: [],
+        expectedInvocationVersion: 3,
+        authorityRequired: true,
+      }],
+    })
+    const mismatchedVersion = projectionFromSemantics({
+      ...paidProjection().semantics,
+      continuations: [{
+        kind: 'authorize',
+        command: 'authorize_paid_operation',
+        requiredInput: ['authorityDecision'],
+        expectedInvocationVersion: 2,
+        authorityRequired: true,
+      }],
+    })
+    await expect(inspect(retry)).resolves.toMatchObject({ commands: [] })
+    await expect(inspect(mismatchedVersion)).resolves.toMatchObject({ commands: [] })
   })
 
   it('does not disclose facts before auth or across owners and fences stale/disallowed commands', async () => {
@@ -321,6 +473,32 @@ describe('hosted paid-operation authenticated adapters', () => {
       relation: { inspect: '/actions/paid/secret-ref?expectedInvocationVersion=4' },
     })
     expect(mutations).toBe(1)
+  })
+
+  it('uses the authenticated human actor to recover the current inspect relation', async () => {
+    const actor = { principalRef: 'owner:paid', callerRef: 'session:paid' }
+    const currentVersion = vi.fn(async () => 7)
+    const response = await handleHostedPaidOperationHumanInspect('invocation:paid', 3, {
+      authenticate: async () => ({ userId: actor.principalRef, sessionId: actor.callerRef }),
+      gateway: {
+        inspect: async () => ({ kind: 'refused', code: 'stale_invocation_version' }),
+        command: async () => ({ kind: 'refused', code: 'continuation_not_allowed' }),
+      },
+      provenance: 'Labelled mock provider',
+      currentVersion,
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      kind: 'refused',
+      code: 'stale_invocation_version',
+      suppliedVersion: 3,
+      currentExpectedInvocationVersion: 7,
+      relation: {
+        inspect: '/actions/paid/invocation%3Apaid?expectedInvocationVersion=7',
+      },
+    })
+    expect(currentVersion).toHaveBeenCalledWith('invocation:paid', actor)
   })
 
   it('accepts public reconciliation intent only and converts ambiguous transport into read-only inspect recovery', async () => {
@@ -397,6 +575,41 @@ describe('hosted paid-operation authenticated adapters', () => {
     expect(seen).toHaveLength(1)
   })
 
+  it('maps an unclassified relationless command result to inspect-only update-not-confirmed', async () => {
+    const gateway: HostedPaidOperationTransportGateway = {
+      inspect: async () => ({ kind: 'accepted', value: paidProjection() }),
+      command: async () => ({ kind: 'refused', code: 'aggregate_incomplete' }),
+    }
+    const response = await handleHostedPaidOperationAgentCommand(
+      new Request('https://ae.test/api/v1/paid-operations/invocation:paid/commands', {
+        method: 'POST',
+        body: JSON.stringify({
+          command: 'execute',
+          commandId: 'command:relationless',
+          expectedInvocationVersion: 4,
+        }),
+      }),
+      'invocation:paid',
+      {
+        authenticate: authenticatedAgent,
+        gateway,
+        provenance: 'Labelled mock provider',
+        requestId: () => 'request:relationless',
+      },
+    )
+
+    expect(response.status).toBe(503)
+    const body = await response.json()
+    expect(body).toEqual({
+      kind: 'update_not_confirmed',
+      requestId: 'request:relationless',
+      relation: {
+        inspect: '/api/v1/paid-operations/invocation%3Apaid?expectedInvocationVersion=4',
+      },
+    })
+    expect(JSON.stringify(body)).not.toMatch(/execute|authorize|reconcile|retry/u)
+  })
+
   it('renders one source-issued detail and preserves durable truth while an exact command is pending', async () => {
     const initial = await acceptedHumanReadback(paidProjection())
     const next = await acceptedHumanReadback(preparedProjection())
@@ -428,7 +641,13 @@ describe('hosted paid-operation authenticated adapters', () => {
       embeddedProjection,
       '[P3C_RED:protected_human_projection_not_embedded]',
     ).not.toBeNull()
-    expect(JSON.parse(embeddedProjection?.textContent ?? '{}')).toEqual(initial.projection)
+    expect(JSON.parse(embeddedProjection?.textContent ?? '{}')).toEqual({
+      semanticDigest: initial.projection.semanticDigest,
+      expectedInvocationVersion: initial.expectedInvocationVersion,
+    })
+    expect(embeddedProjection?.textContent).not.toMatch(
+      /provider|payment|settlement|result|materialInputs|evidence|semantics|sections/u,
+    )
     expect(screen.getByText('Ready for permission', { exact: true })).toBeTruthy()
 
     const authorize = screen.getByRole('button', { name: 'Authorize up to $0.01' })
@@ -586,6 +805,17 @@ describe('hosted paid-operation authenticated adapters', () => {
     expect(counters).toEqual(countersBeforeReload)
   })
 })
+
+async function authenticatedAgent() {
+  return {
+    kind: 'authenticated' as const,
+    principal: {
+      actor: { principalRef: 'owner:paid', callerRef: 'agent:key' },
+      credentialId: 'key:paid',
+      scopes: ['paid_operation:invoke'],
+    },
+  }
+}
 
 async function acceptedHumanReadback(projection: PaidOperationProjection) {
   const response = await handleHostedPaidOperationHumanInspect(

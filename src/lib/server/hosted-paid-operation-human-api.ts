@@ -7,6 +7,7 @@ import type {
   PaidOperationApplicationRefusalCode,
   PaidOperationProjection,
 } from '@/modules/action-invocation/paid-operation-application-service'
+import { projectPaidOperationAgentCommands } from '@/modules/action-invocation/paid-operation-agent-command-contract'
 import {
   projectHostedPaidOperationCardInput,
   type HostedPaidOperationCardInput,
@@ -182,7 +183,14 @@ export async function handleHostedPaidOperationHumanInspect(
   if (actor === null) return humanAuthenticationRequired(invocationRef)
   try {
     const result = await options.gateway.inspect({ actor, invocationRef, expectedInvocationVersion })
-    return await projectResult(result, invocationRef, expectedInvocationVersion, options, 'human')
+    return await projectResult(
+      result,
+      invocationRef,
+      expectedInvocationVersion,
+      options,
+      'human',
+      actor,
+    )
   } catch {
     return noStore({ kind: 'refused', code: 'hosted_read_unavailable' }, 503)
   }
@@ -235,9 +243,8 @@ export function projectHostedPaidOperation(
   audience: 'human' | 'agent',
 ) {
   const semantics = projection.semantics
-  const card = projectHostedPaidOperationCardInput(projection, provenance)
   const selected = audience === 'human' ? projection.human : projection.agent
-  return {
+  const base = {
     kind: 'accepted',
     schema: semantics.schema,
     projection: selected,
@@ -248,8 +255,16 @@ export function projectHostedPaidOperation(
       evidenceClass: semantics.environment.evidenceClass,
       claimCeiling: semantics.environment.claimCeiling,
     },
-    card,
   } as const
+  return audience === 'agent'
+    ? {
+        ...base,
+        commands: projectPaidOperationAgentCommands(semantics),
+      } as const
+    : {
+        ...base,
+        card: projectHostedPaidOperationCardInput(projection, provenance),
+      } as const
 }
 
 async function authenticateHuman(

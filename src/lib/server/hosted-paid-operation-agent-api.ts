@@ -96,6 +96,7 @@ export async function handleHostedPaidOperationAgentInspect(
       expectedInvocationVersion,
       admitted.principal,
       withRuntime(options, runtime),
+      'inspect',
     )
   } catch {
     return noStore({ kind: 'refused', code: 'hosted_read_unavailable' }, 503)
@@ -130,15 +131,14 @@ export async function handleHostedPaidOperationAgentCommand(
       parsed.expectedInvocationVersion,
       admitted.principal,
       withRuntime(options, runtime),
+      'command',
     )
   } catch {
-    return noStore({
-      kind: 'update_not_confirmed',
-      requestId: options.requestId?.() ?? crypto.randomUUID(),
-      relation: {
-        inspect: `/api/v1/paid-operations/${encodeURIComponent(invocationRef)}?expectedInvocationVersion=${parsed.expectedInvocationVersion}`,
-      },
-    }, 503)
+    return agentUpdateNotConfirmed(
+      invocationRef,
+      parsed.expectedInvocationVersion,
+      options,
+    )
   }
 }
 
@@ -167,6 +167,7 @@ async function agentResult(
   suppliedVersion: number,
   principal: HostedPaidOperationAgentPrincipal,
   options: AgentHandlerOptions,
+  source: 'inspect' | 'command',
 ) {
   if (result.kind === 'accepted') {
     return noStore(projectHostedPaidOperation(
@@ -200,7 +201,23 @@ async function agentResult(
       },
     }, 409)
   }
-  return noStore({ kind: 'refused', code: result.code }, 503)
+  return source === 'command'
+    ? agentUpdateNotConfirmed(invocationRef, suppliedVersion, options)
+    : noStore({ kind: 'refused', code: result.code }, 503)
+}
+
+function agentUpdateNotConfirmed(
+  invocationRef: string,
+  expectedInvocationVersion: number,
+  options: Pick<AgentHandlerOptions, 'requestId'>,
+): Response {
+  return noStore({
+    kind: 'update_not_confirmed',
+    requestId: options.requestId?.() ?? crypto.randomUUID(),
+    relation: {
+      inspect: `/api/v1/paid-operations/${encodeURIComponent(invocationRef)}?expectedInvocationVersion=${expectedInvocationVersion}`,
+    },
+  }, 503)
 }
 
 function authRefusal(result: Extract<AgentAuthResult, { kind: 'refused' }>) {

@@ -26,6 +26,9 @@ describe('Phase 3C hosted paid-operation UI contract', () => {
 
     expect(detailRoute).not.toMatch(/<pre\b|JSON\.stringify\s*\(\s*result\.body/u)
     expect(detailRoute).toContain('<AePaidOperationCard')
+    expect(detailRoute).toContain('semanticDigest: readback.projection.semanticDigest')
+    expect(detailRoute).toContain('expectedInvocationVersion: readback.expectedInvocationVersion')
+    expect(detailRoute).not.toContain('serializeEmbeddedProjection(readback.projection)')
   })
 
   it('locks the paid-operation reading order and pre-authority language', () => {

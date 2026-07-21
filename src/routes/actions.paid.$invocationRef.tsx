@@ -46,7 +46,11 @@ const readHostedPaidOperationDetailServer = createServerFn({ method: 'GET' })
     const response = await handleHostedPaidOperationHumanInspect(
       data.invocationRef,
       data.expectedInvocationVersion,
-      { gateway: runtime.gateway, provenance: runtime.provenance },
+      {
+        gateway: runtime.gateway,
+        provenance: runtime.provenance,
+        currentVersion: (ref) => runtime.currentVersion(ref),
+      },
     )
     return { status: response.status, body: await response.json() }
   })
@@ -261,7 +265,10 @@ function AcceptedPaidOperationDetail({
         type="application/json"
         data-paid-operation-human-projection="agentic-paid-operation:v1"
       >
-        {serializeEmbeddedProjection(readback.projection)}
+        {serializeEmbeddedProjection({
+          semanticDigest: readback.projection.semanticDigest,
+          expectedInvocationVersion: readback.expectedInvocationVersion,
+        })}
       </script>
       <AePaidOperationCard
         semantics={readback.projection.semantics}
