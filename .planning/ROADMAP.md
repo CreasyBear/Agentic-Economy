@@ -1,7 +1,7 @@
 # Agentic Economy — Current Product Roadmap
 
 **Status:** active
-**Rebaselined:** 2026-07-20
+**Rebaselined:** 2026-07-21
 **Authority:** `PRODUCT.md` → `DESIGN.md` → accepted ADRs → this roadmap
 
 ## Roadmap rule
@@ -19,7 +19,9 @@ Phase 2 — One action plane (accepted_narrowed)
                          ↓
 Phase 3 — Protocol/kernel → product conversion (complete)
                          ↓
-Future exposure decision
+Phase 4 — Business Account and routeable-supply maturity (planning accepted)
+                         ↓
+Phase 5 — Demand-side quote-to-close and customer operating proof (future)
 ```
 
 ## Phase 1 — Action Invocation foundation
@@ -78,8 +80,55 @@ paid-operation host and `agentic-paid-operation:v1`; uncertainty never falls
 back, and switching providers creates a new invocation, authority, payment and
 effect lineage. Evidence remains local/mock only.
 
+## Phase 4 — Business Account and routeable-supply maturity
+
+**Status:** planning accepted; source implementation pending
+**ADRs:** ADR-024, ADR-025
+**Goal:** make the complete Business Account operating loop real in source:
+onboard a business and team, establish Commercial and Usage truth, publish one
+routeable operation, operate and recover it through human and scoped-agent
+surfaces, pause new intake, withdraw/offboard safely and preserve history.
+
+Phase 4 closes at source, focused-fixture and labelled-local evidence. It does
+not require independently operated providers or real customers, and it does
+not claim demand, customer value, revenue, hosted availability or production
+safety.
+
+**Requirements:**
+
+- `P4-ACCOUNT`: account identity, membership, additive responsibility and
+  protected Ownership are durable and server-authorized.
+- `P4-SUPPLY`: offering, binding, readiness, publication and one reachable
+  registered operation form one source-owned routeable-supply chain.
+- `P4-COMMERCIAL`: AE account billing, operation payment, Usage, telemetry and
+  future payouts remain separate; Commercial and Usage follow ADR-025.
+- `P4-OPERATE`: Work, Inbox and safe continuations survive reload, uncertainty
+  and reconciliation without transport-derived truth.
+- `P4-LIFECYCLE`: pause, withdrawal, offboarding and closure are resumable,
+  bounded and history-preserving.
+- `P4-SURFACES`: direct human and scoped-agent routes share one semantic account
+  projection and re-evaluate membership and command authority server-side.
+- `P4-BOUNDS`: growing reads are indexed, paginated or cap-plus-one bounded;
+  projections remain removable and rebuildable.
+- `P4-EVIDENCE`: exact-candidate source, focused fixtures and labelled-local
+  acceptance evidence state their claim ceiling.
+
+**Authority:** `.planning/phases/04-market-activation/`
+
+## Phase 5 — Demand-side quote-to-close and customer operating proof
+
+**Status:** future; not Phase 4 dispatch authority
+**Goal:** prove demand-side sourcing, comparison, selection, close/start and
+real customer operating outcomes against independently routeable supply.
+
+The historical Phase 4B three-quote and Phase 4C quote-to-close proposals move
+here as inputs. They do not become active acceptance until separately planned
+and accepted. Sales tactics, incentives, liquidity and retention mechanisms
+also remain product research until tied to a concrete customer loop.
+
 ## Deferred decisions
 
-Hosted sandbox exposure, independently operated supply, real-customer evidence,
-broader authority modes and workflow composition are separate gates after the
-Phase 3A local product proof.
+Independently operated supply, real-customer evidence, additional authority
+modes and broader mandate policies,
+workflow composition, commercial-provider integration and market mechanisms
+remain separate gates. Phase 4 source maturity must not silently claim them.

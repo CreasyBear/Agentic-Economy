@@ -110,6 +110,11 @@ Commercial context may be `no_charge | manual | provider_managed` with source
 references. It does not manufacture invoices, settlement, paid status or
 feature access.
 
+ADR-025 owns the separate Commercial and Usage source boundaries. Business
+Account stores their references and composes their projections; it never owns
+operation payment, Usage events, quota reservations, invoices, telemetry or
+future payouts.
+
 ## Consequences
 
 - A public business may exist without an active Business Account.

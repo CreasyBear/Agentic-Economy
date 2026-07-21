@@ -1,6 +1,6 @@
 # Phase 4 Business Account product contract
 
-**Status:** Accepted target contract under D-011
+**Status:** Accepted target contract under D-011 and D-012
 **Accepted:** 2026-07-21
 **Implementation:** Pending
 
@@ -33,7 +33,7 @@ commercial context or closure.
 | Availability | new domain source/read model | narrow shared disposition only |
 | Integrations | existing, bounded extension | business scope, many-to-many offering links and diagnostics |
 | Team/access | new source/read model | memberships, invitations, responsibilities and Ownership |
-| Business settings | new owners/read models | notifications, commercial references, export and closure |
+| Business settings | new owners/read models | Commercial/Usage, personal-security link, export and lifecycle |
 | Help/support | new source/read model | customer-visible support cases/messages |
 | Founder account | new owners/read models | relationship, tasks, private notes and bounded summaries |
 | `/owner/**` | retire/redirect | membership-resolved `/businesses/:businessId/**` routes |
@@ -57,12 +57,13 @@ Canonical routes:
 - `/businesses/:businessId/work[/:workRef]`
 - `/businesses/:businessId/inbox[/:threadRef]`
 - `/businesses/:businessId/offerings[/:serviceRef]`
+- `/businesses/:businessId/offerings/:serviceRef/test` (operator-only labelled sandbox check)
 - `/businesses/:businessId/offerings/:serviceRef/availability`
 - `/businesses/:businessId/settings`
 - `/businesses/:businessId/settings/integrations[/:integrationRef]`
 - `/businesses/:businessId/settings/team`
-- `/businesses/:businessId/settings/notifications`
-- `/businesses/:businessId/settings/security`
+- `/businesses/:businessId/settings/notifications` (candidate extension)
+- `/settings` (canonical personal identity, sessions and security)
 - `/businesses/:businessId/settings/plan-data`
 - `/businesses/:businessId/settings/closure`
 - `/businesses/:businessId/history`
@@ -71,6 +72,19 @@ Canonical routes:
 The URL and fresh server membership determine current business. Switching
 accounts moves to Home unless the equivalent destination is permitted and
 meaningful. Browser preference is convenience only.
+
+Scoped agents use versioned `/api/v1/businesses/:businessId/**` projections and
+closed command routes. One AE-owned account resolver maps human sessions and
+agent credentials to membership; neither Clerk organization metadata, email,
+URL possession nor API-key scope alone creates membership. Human and agent
+views derive from one account semantic projection and agree on account,
+effective responsibilities, relationship, Commercial/Usage currentness,
+routeable supply, Work and safe continuation.
+
+The offering `test` route is a provider-onboarding control in the protected
+business workspace. It exercises the admitted labelled sandbox operation and
+creates real source records inside that environment; it is not a customer
+marketplace route, a generic action console or evidence of provider operation.
 
 ## Customer loops
 
@@ -100,6 +114,12 @@ Every consequential view uses the source-issued safe continuation. Stale state
 requires refresh/recheck. Possible external effect permits inspect/reconcile
 only. Transport acceptance never becomes durable success.
 
+The seed operation is reached through the business offering/binding/readiness/
+publication chain and registered action seam. Phase 3 evaluator-host records
+are not routeable Business Account supply. Its first Usage meter records the
+source-created operation attempt, not provider success, operation payment or
+settlement.
+
 ### Team and access
 
 Membership is business-bound. Responsibilities are additive and initially
@@ -113,17 +133,27 @@ while preserving history.
 
 ### Business settings
 
-Business settings contains Integrations, Team, notifications, security links,
-truthful commercial references, data/export and closure.
+Business settings contains Integrations, Team, Commercial & Usage, personal-
+security links, data/export and lifecycle. Notifications administration is a
+candidate extension, not a load-bearing Phase 4 source owner.
 
 Personal identity, sessions and personal security remain under `/settings`.
-Commercial state may be no-charge, manual or provider-managed. No absent
-provider source is converted into invoices, paid status, earnings or
-settlement.
+Commercial state follows ADR-025: arrangement `no_charge | manual |
+provider_managed`, independent status, entitlement revision/effective period,
+billing contact/period and opaque currentness references. Usage owns closed
+meters, immutable account-attributed events, atomic reserve/settle and bounded
+rebuildable summaries. No absent provider source is converted into invoices,
+paid status, earnings, payout, revenue or settlement.
 
-Closure is a durable resumable withdrawal of future work and access. Failed
-withdrawals remain visible and retryable from source-issued progress. Closure
-preserves attributable history.
+Customer-to-business operation payment remains on Work detail. Operational
+metrics remain telemetry. Billing responsibility may administer AE Commercial
+and Usage but cannot operate Work or authorize an external consequence.
+
+Pause stops new intake without cancelling accepted Work. Closure is a durable,
+resumable withdrawal of publication, new-work admission, bindings/credentials,
+invitations/access and Commercial widening while preserving accepted Work,
+open reconciliation, support access and attributable history. Failed steps
+remain visible and resume only from source-issued progress.
 
 ### Help and support
 
@@ -188,7 +218,9 @@ then support follow-up.
 - Integration/readiness: capability-supply source.
 - Availability policy: domain owner.
 - Membership/responsibilities/Ownership: Business Account membership source.
-- Relationship/tasks/support/commercial/closure: their Business Account owners.
+- Relationship/tasks/support/lifecycle: their Business Account owners.
+- AE Commercial arrangement/entitlement/currentness: Commercial owner.
+- Platform Usage events/reservations/summaries: Usage owner.
 - Home, Work list, History and founder portfolio: removable projections.
 
 Home uses one revisioned summary plus cap-and-one attention, Work and Inbox
@@ -203,14 +235,15 @@ credential mode without secret value, evidence and retry posture. It is not
 ordinary navigation.
 
 Founder/customer-success routes own portfolio, relationship, onboarding tasks,
-private notes, support administration, commercial references and lifecycle.
+private notes, support administration, Commercial/Usage references and
+lifecycle.
 Release operations remain separate. Founder commands name the admin actor and
 never borrow member authority.
 
 ## Compatibility
 
 - `/owner/status` → Business Home
-- `/owner/inquiries[/:threadId]` → Inbox/conversation
+- `/owner/inquiries[/:threadRef]` → Inbox/conversation
 - `/owner/settings` → personal or business settings as appropriate
 - `/owner/request-problems/:reportRef` → source-linked Work recovery
 
@@ -224,13 +257,15 @@ Using labelled fixtures, an evaluator can:
 
 1. establish and switch Business Accounts while refusing a guessed account;
 2. complete/resume onboarding and repair blockers;
-3. manage profile, services and three unlike availability shapes;
+3. manage one paid-information seed offering while appointment and dispatch
+   substitutions prove the shared availability boundary;
 4. configure one-to-many, many-to-one and account-wide Integrations;
 5. invite members, combine responsibilities and prove last-owner protection;
 6. distinguish Home attention, Work, Inbox, Help and History;
 7. respond to conversations and link only source-created Work;
 8. inspect uncertainty and follow only safe continuation;
-9. manage notifications and truthful commercial references;
+9. inspect and administer truthful Commercial/Usage without gaining Work
+   authority or confusing operation payment;
 10. export data and resume partial closure without losing history;
 11. operate founder support without impersonation;
 12. resume every view by direct URL at bounded query cost.

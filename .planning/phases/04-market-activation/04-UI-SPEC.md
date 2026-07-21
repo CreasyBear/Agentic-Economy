@@ -1,7 +1,7 @@
 ---
 phase: 04
 status: accepted_target_contract
-decision: D-011
+decisions: D-011,D-012
 accepted: 2026-07-21
 design_system: Astryx neutral
 authority: DESIGN.md
@@ -126,6 +126,9 @@ Possible external effect never exposes retry.
   availability and affected Integrations.
 - Offering management edits/saves/previews/publishes; availability changes
   require matching responsibility.
+- An admitted seed offering may expose `Run test request` in a persistent
+  `Labelled sandbox` context. It uses the protected Business Account test route,
+  creates attributable source records and never claims a real provider ran.
 - Exact revision is required. Conflict compares current and draft. Publish
   remains Checking until accepted readback.
 
@@ -164,12 +167,19 @@ Possible external effect never exposes retry.
 
 ### Business settings
 
-- Contains Integrations, Team, notifications, security links, commercial
-  references, data/export and closure.
+- Contains Integrations, Team, Commercial & Usage, personal-security link,
+  data/export and lifecycle.
 - Personal identity/security remains at `/settings`.
 - Section commands require their matching responsibility.
-- “No paid plan applies” is a complete state. Commercial label never grants
-  access. Closure shows durable progress and preserves history.
+- “No paid plan applies” is a complete state. The Commercial section shows
+  arrangement and status separately, entitlement revision/effective period,
+  billing contact/period, opaque invoice/payment currentness references and
+  their `asOf`/completeness. Usage shows the named meter, current period,
+  settled/held/remaining units, limit, `asOf` and completeness.
+- Customer-to-business operation payment stays on Work detail. No payout,
+  earnings, balance, raw provider/payment or secret material renders.
+- Commercial labels and remaining Usage never grant Work authority. Closure
+  shows durable progress and preserves history.
 
 ### Help and support
 
@@ -182,7 +192,7 @@ Possible external effect never exposes retry.
 ### Founder account detail
 
 - Shows relationship, accountable founder, people, onboarding tasks,
-  reason-coded attention, customer support, commercial references and linked
+  reason-coded attention, customer support, Commercial/Usage references and linked
   source truth.
 - Founder/admin commands name the actual actor.
 - Partial source failure never invents At risk. Lifecycle reduction requires
@@ -235,7 +245,7 @@ Presets initially expose additive responsibilities:
 | Owner | all responsibilities plus protected Ownership |
 | Administrator | business administration, Offerings, Work, Inbox, support, reporting |
 | Operations | Work, Inbox and operational availability |
-| Billing | commercial references and reporting |
+| Billing | AE Commercial/Usage administration and reporting; never Work authority |
 | Developer | Integrations, diagnostics and reporting |
 | Viewer | reporting/read only |
 
@@ -253,6 +263,59 @@ Price/currency/payment, calendar/slots/duration, and fleet/zone/capacity/
 fulfilment remain in domain panels. Shared Work shows identity, action class,
 counterparty, consequence summary, source status, attention, provenance, safe
 continuation and domain-detail link—never one universal lifecycle.
+
+## Shared human and agent semantics
+
+One versioned Business Account semantic projection supplies both the human
+shell and scoped-agent API. It includes account and source revision, effective
+membership/responsibilities/Ownership, relationship, offering/readiness
+references, Commercial arrangement/status/entitlement/currentness, Usage
+period/balance/`asOf`/completeness, attention references and source-issued safe
+continuations. The agent projection adds machine commands; the human projection
+adds routes and copy. Neither infers missing truth.
+
+A human session and scoped agent credential at the same source revision must
+agree semantically. A semantic digest proves equality only; it is not identity,
+membership or authority. Guessed account, stale membership, forged principal,
+wrong business and cross-account API key receive the same non-enumerating
+server refusal before projection or command.
+
+## Literal core copy and command labels
+
+These strings are contract examples for the first executable loop; operation-
+specific nouns may replace “operation” only from source presentation.
+
+| State | Heading | Explanation | Primary action |
+|---|---|---|---|
+| Home clear | `You're ready for new work` | `Your published offerings can receive requests through AE.` | `View offerings` |
+| Home attention | `One thing needs your attention` | Source-owned reason and currentness follow. | exact source continuation |
+| Work empty | `No work needs attention` | `New and completed work will appear here.` | `View offerings` |
+| Inbox empty | `No replies are waiting` | `Customer conversations will appear here.` | `View conversation history` |
+| Commercial no charge | `No paid plan applies` | `This account currently has no AE account charge.` | `View arrangement details` |
+| Usage current | `Usage is current` | Named meter, period, settled/held/remaining and `asOf` follow. | `View usage details` |
+| Usage incomplete | `Usage needs checking` | `AE cannot confirm the current balance yet. No additional quota will be used until this is resolved.` | `Check usage` |
+| Offering sandbox | `Test this offering` | `This labelled sandbox creates a real AE work record without contacting a real provider.` | `Run test request` |
+| Work uncertain | `We need to confirm what happened` | `AE will not try this operation again until the previous attempt is reconciled.` | `Check outcome` |
+| Relationship paused | `New work is paused` | `Existing work and history are preserved.` | `Review pause` |
+| Offboarding partial | `Offboarding needs attention` | Name the failed withdrawal step and preserved state. | `Resume offboarding` |
+| Fatal section error | `We couldn't load this section` | `Other account areas are still available. Try this source read again.` | `Try again` |
+
+Consequential labels use verb plus object: `Publish offering`, `Pause new work`,
+`Disable integration`, `Remove member`, `Transfer ownership`, `Close business
+account`. Ownership transfer, last-member removal attempt, Integration disable,
+offering retirement and account closure require a confirmation naming what
+stops, what remains and the exact safe continuation. Possible external effect
+never offers `Try again`.
+
+## Visual constraints and registry safety
+
+Use a 60/30/10 balance: neutral canvas, white/quiet surfaces and Eucalyptus only
+for the primary action, current selection or active progress. Use at most four
+type sizes and two weights; body copy uses at least 1.5 line height. Use the
+4/8/16/24/32/48/64 spacing scale unless a component contract records an
+exception. Phase 4 uses Astryx neutral and existing AE components only; no
+third-party registry block is admitted without dated design and security
+vetting.
 
 ## Provenance
 
