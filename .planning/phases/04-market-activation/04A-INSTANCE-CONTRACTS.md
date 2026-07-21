@@ -11,8 +11,8 @@ limited to the named parcel. Only 4A-A may claim Phase 4A complete.
 Exact dependency order:
 
 ```text
-01 → 02 → 02B → 02C → 03 → 04 → 05 → 06 → 07A → 07B → 08
-   → 09 → 10A → 10B → 11 → 12A → 12B → parent 4A-R → 4A-A
+01 → 02 → 02B → 02C → 03 → 03B → 04 → 05 → 06 → 07A → 07B → 08
+   → 09 → 10A → 10B → 11 → 12A → 12B → 12C → parent 4A-R → 4A-A
 ```
 
 ## 4A-01 — Domain, schema and bounded-query contract
@@ -22,6 +22,8 @@ Exact dependency order:
 - `src/modules/business-account/public.ts`
 - `src/modules/business-account/internal/schema.ts`
 - `src/modules/business-account/internal/validators.ts`
+- `src/modules/release-control/public.ts`
+- `src/modules/release-control/internal/schema.ts`
 - `src/modules/capability-supply/onboarding-contract.ts`
 - `src/modules/capability-supply/internal/credential-custody.ts`
 - `src/modules/capability-supply/internal/environment-credential-custody.ts`
@@ -44,6 +46,19 @@ token identifier, health, attention reason codes, bounded source counts and
 to return 50 plus continuation. Dashboard performs at most six queries: one
 summary plus five section queries, each reading at most 11 rows to return 10
 plus continuation.
+
+Also define code-owned release-control keys and the distinct persistence
+contracts: `applicationReleaseControls` controls whether AE has released an
+area in an environment; `applicationReleaseTargets` stores one named pilot
+Business Account per row; `businessFeatureAccess` records whether one Business
+Account may use a released area. Index them exactly as
+`by_environment_and_featureKey`,
+`by_businessId_and_environment_and_featureKey`, and
+`by_businessId_and_featureKey` respectively. Neither table owns membership permissions,
+commercial truth or capability state. Release modes are exactly `off |
+internal | named_accounts | all_accounts`; unknown state is off. Bound the
+code-owned registry and each shell evaluation to 32 entries per source in three
+indexed reads.
 
 ```text
 npm exec -- vitest run tests/unit/business-account/contracts.test.ts tests/unit/business-account/schema.test.ts tests/imports/business-account-boundaries.test.ts
@@ -91,6 +106,8 @@ Handoff: `.planning/handoffs/phase-04/4A-02.json`.
 - `src/modules/inquiries/inquiry.functions.ts`
 - `src/modules/inquiries/public.ts`
 - `convex/inquiries.ts`
+- `src/routes/_operator/businesses.$businessId.inquiries.tsx`
+- `src/routes/_operator/businesses.$businessId.inquiries.$threadId.tsx`
 - `src/routes/_operator/owner.inquiries.tsx`
 - `src/routes/_operator/owner.inquiries.$threadId.tsx`
 - `tests/unit/convex/inquiries-runtime.test.ts`
@@ -104,6 +121,8 @@ Replace single-owner lookup on inbox/thread/reply/close paths with
 business-bound membership authority. Owner/admin/operations may read and
 respond; viewer is read-only; billing has no operations authority. Prove
 multi-business isolation, non-enumerating denial and direct-URL restoration.
+The canonical routes are business-scoped. Existing `/owner/inquiries` links are
+compatibility redirects only and never recover authority from browser state.
 
 ```text
 npm exec -- vitest run tests/unit/convex/inquiries-runtime.test.ts tests/unit/inquiries/customer-access-security.test.ts tests/integration/business-account-inquiries.test.ts
@@ -156,6 +175,10 @@ Handoff: `.planning/handoffs/phase-04/4A-02C.json`.
 
 **RED:** `closure_waits_for_every_bounded_future_work_withdrawal`.
 
+Also prove `business_member_cannot_self_classify_account_as_internal`. The
+relationship owns an admin-only `internal | external` classification solely for
+release exposure; it is never inferred from email, domain or member role.
+
 Use the existing capability-publication withdrawal command in indexed batches
 of 50. Persist an offboarding run with cursor, attempted/succeeded/failed refs,
 revision and `pending | withdrawing | attention_required | ready_to_close |
@@ -170,6 +193,39 @@ git diff --check
 
 Stop on full-table enumeration, destructive deletion or owner impersonation.
 Handoff: `.planning/handoffs/phase-04/4A-03.json`.
+
+## 4A-03B — Release controls and Business Account feature access
+
+**Owns only:**
+
+- `src/modules/release-control/application.ts`
+- `src/modules/release-control/internal/evaluate.ts`
+- `src/modules/release-control/internal/registry.ts`
+- `src/modules/business-account/feature-access.ts`
+- `convex/releaseControl.ts`
+- `tests/unit/release-control/evaluate.test.ts`
+- `tests/integration/release-control-business-access.test.ts`
+
+**RED:** `hidden_navigation_never_grants_or_denies_server_access` and
+`unknown_or_unavailable_release_control_fails_off`.
+
+Implement one source-owned evaluation returning enabled/disabled, reason and
+revision for an environment, Business Account and code-owned feature key.
+Support only off, internal accounts, named pilot accounts and all accounts.
+The code registry marks access as included or explicit; missing explicit access
+denies the area. Feature access is evaluated separately after release. Every change names an
+admin actor, reason and required review/removal date and appends an audit event.
+No percentage rollout, user targeting, arbitrary expression language or
+third-party flag SDK enters Phase 4A.
+
+```text
+npm exec -- vitest run tests/unit/release-control/evaluate.test.ts tests/integration/release-control-business-access.test.ts
+git diff --check
+```
+
+Stop if client state becomes authoritative or one flag substitutes for member
+role, commercial arrangement or capability publication. Handoff:
+`.planning/handoffs/phase-04/4A-03B.json`.
 
 ## 4A-04 — Business profile and multiple services
 
@@ -340,7 +396,7 @@ git diff --check
 
 Handoff: `.planning/handoffs/phase-04/4A-08.json`.
 
-## 4A-09 — Owner shell, navigation and dashboard
+## 4A-09 — Business shell, account switcher, navigation and dashboard
 
 **Owns only:**
 
@@ -349,16 +405,25 @@ Handoff: `.planning/handoffs/phase-04/4A-08.json`.
 - `src/components/ae/layout/AeOperatorSectionNav.tsx`
 - `src/components/ae/layout/AeOperatorCommandMenu.tsx`
 - `src/components/ae/business-account/BusinessAccountDashboard.tsx`
+- `src/components/ae/business-account/BusinessAccountSwitcher.tsx`
 - `src/routes/_operator.tsx`
+- `src/routes/_operator/businesses.index.tsx`
+- `src/routes/_operator/businesses.$businessId.index.tsx`
 - `src/routes/_operator/owner.index.tsx`
+- `src/lib/operator/legacy-owner-redirect.ts`
 - `src/lib/operator/navigation.ts`
 - `tests/unit/business-account/dashboard-ui.test.tsx`
 - `tests/unit/operator-navigation.test.ts`
 
-**RED:** `owner_navigation_remains_usable_across_eleven_account_destinations`.
+**RED:** `business_navigation_remains_usable_across_account_destinations` and
+`guessed_business_id_never_enters_shell_or_switcher`.
 
 Implement source-driven attention/work dashboard and responsive persistent
-account navigation. Remove/hide every unsupported destination.
+account navigation. The URL supplies the current Business Account and the
+server rechecks membership. Show the switcher only for permitted accounts.
+Remove/hide every unsupported or unreleased destination, while direct routes
+use the same server release/access decision. Existing `/owner/*` entry points
+are compatibility redirects, not a second shell.
 
 ```text
 npm exec -- vitest run tests/unit/business-account/dashboard-ui.test.tsx tests/unit/operator-navigation.test.ts
@@ -367,16 +432,16 @@ git diff --check
 
 Handoff: `.planning/handoffs/phase-04/4A-09.json`.
 
-## 4A-10A — Owner profile, team and service surfaces
+## 4A-10A — Business profile, team and service surfaces
 
 **Owns only:**
 
 - `src/components/ae/business-account/BusinessProfileEditor.tsx`
 - `src/components/ae/business-account/BusinessTeamManager.tsx`
 - `src/components/ae/business-account/BusinessServiceManager.tsx`
-- `src/routes/_operator/owner.business.tsx`
-- `src/routes/_operator/owner.team.tsx`
-- `src/routes/_operator/owner.services.tsx`
+- `src/routes/_operator/businesses.$businessId.profile.tsx`
+- `src/routes/_operator/businesses.$businessId.team.tsx`
+- `src/routes/_operator/businesses.$businessId.services.tsx`
 - `tests/unit/business-account/profile-team-services-ui.test.tsx`
 - `tests/e2e/business-account-profile-team-services.spec.ts`
 
@@ -394,7 +459,7 @@ git diff --check
 
 Handoff: `.planning/handoffs/phase-04/4A-10A.json`.
 
-## 4A-10B — Owner work, activity, support and commercial surfaces
+## 4A-10B — Business work, activity, support, plan and settings surfaces
 
 **Owns only:**
 
@@ -402,20 +467,22 @@ Handoff: `.planning/handoffs/phase-04/4A-10A.json`.
 - `src/components/ae/business-account/BusinessActivityList.tsx`
 - `src/components/ae/business-account/BusinessCommercialSummary.tsx`
 - `src/components/ae/business-account/BusinessSupportWorkspace.tsx`
-- `src/routes/_operator/owner.work.tsx`
-- `src/routes/_operator/owner.activity.tsx`
-- `src/routes/_operator/owner.commercial.tsx`
-- `src/routes/_operator/owner.support.tsx`
-- `src/routes/_operator/owner.support.$caseRef.tsx`
-- `src/routes/_operator/owner.settings.tsx`
+- `src/routes/_operator/businesses.$businessId.work.tsx`
+- `src/routes/_operator/businesses.$businessId.activity.tsx`
+- `src/routes/_operator/businesses.$businessId.plan.tsx`
+- `src/routes/_operator/businesses.$businessId.support.tsx`
+- `src/routes/_operator/businesses.$businessId.support.$caseRef.tsx`
+- `src/routes/_operator/businesses.$businessId.settings.tsx`
+- `src/routes/_operator/settings.tsx`
 - `tests/unit/business-account/work-support-commercial-ui.test.tsx`
 - `tests/e2e/business-account-work-support.spec.ts`
 
 **RED:** `private_notes_payment_claims_and_browser_state_never_enter_owner_readback`.
 
 Implement source-referenced work/activity, customer-visible support, truthful
-commercial state and scoped preferences. Private notes never render. No-charge
-is complete, not an empty state. Every direct route reloads durably.
+commercial state, business settings and separate personal settings. Private
+notes never render. No-charge is complete, not an empty state. Every direct
+route reloads durably.
 
 ```text
 npm exec -- vitest run tests/unit/business-account/work-support-commercial-ui.test.tsx
@@ -425,7 +492,7 @@ git diff --check
 
 Handoff: `.planning/handoffs/phase-04/4A-10B.json`.
 
-## 4A-11 — Owner operations and connections surfaces
+## 4A-11 — Business operations and connections surfaces
 
 **Owns only:**
 
@@ -434,10 +501,10 @@ Handoff: `.planning/handoffs/phase-04/4A-10B.json`.
 - `src/components/ae/supply-onboarding/AeCapabilitySetupForm.tsx`
 - `src/components/ae/supply-onboarding/AeCapabilityReadiness.tsx`
 - `src/components/ae/supply-onboarding/AeCapabilityBlockers.tsx`
-- `src/routes/_operator/owner.capabilities.tsx`
-- `src/routes/_operator/owner.capabilities.new.tsx`
-- `src/routes/_operator/owner.capabilities.$publicationRef.tsx`
-- `src/routes/_operator/owner.connections.tsx`
+- `src/routes/_operator/businesses.$businessId.capabilities.tsx`
+- `src/routes/_operator/businesses.$businessId.capabilities.new.tsx`
+- `src/routes/_operator/businesses.$businessId.capabilities.$publicationRef.tsx`
+- `src/routes/_operator/businesses.$businessId.connections.tsx`
 - `tests/unit/supply-onboarding/capability-list.test.tsx`
 - `tests/unit/supply-onboarding/capability-setup.test.tsx`
 - `tests/e2e/supply-onboarding.spec.ts`
@@ -502,7 +569,9 @@ Handoff: `.planning/handoffs/phase-04/4A-12A.json`.
 
 Implement operation inspection, customer-visible support, private-note
 separation, commercial context and source-linked activity. Every mutation names
-the actual admin actor and source command.
+the actual admin actor and source command. The commercial view may maintain
+source-backed Business Account feature access, but it cannot release unfinished
+software or infer access from a plan label.
 
 ```text
 npm exec -- vitest run tests/unit/business-account/admin-operations-support-ui.test.tsx tests/integration/business-account-support-commercial.test.ts
@@ -512,9 +581,37 @@ git diff --check
 
 Handoff: `.planning/handoffs/phase-04/4A-12B.json`.
 
+## 4A-12C — Founder release controls
+
+**Owns only:**
+
+- `src/components/ae/release-control/ReleaseControlList.tsx`
+- `src/components/ae/release-control/ReleaseControlDetail.tsx`
+- `src/routes/_operator/admin.releases.tsx`
+- `src/routes/_operator/admin.releases.$featureKey.tsx`
+- `tests/unit/release-control/admin-ui.test.tsx`
+- `tests/e2e/release-control-admin.spec.ts`
+
+**RED:** `release_preview_and_server_readback_name_the_same_affected_accounts`.
+
+Implement a founder-only list and detail surface for code-owned application
+areas. Show current environment, mode, safe default, affected internal/pilot
+accounts, accountable owner, reason, last change and review/removal date.
+Preview affected Business Accounts before applying. Provide an immediate off
+action and source readback. Do not expose technical flag names to business
+users or add experiments, percentages or arbitrary targeting.
+
+```text
+npm exec -- vitest run tests/unit/release-control/admin-ui.test.tsx
+npm exec -- playwright test tests/e2e/release-control-admin.spec.ts
+git diff --check
+```
+
+Handoff: `.planning/handoffs/phase-04/4A-12C.json`.
+
 ## Parent cut 4A-R — Route generation
 
-After 4A-12B, the parent alone runs the existing route generator, owns only
+After 4A-12C, the parent alone runs the existing route generator, owns only
 `src/routeTree.gen.ts`, verifies every route in the 4A IA, then runs focused
 route tests and typecheck. Handoff: `.planning/handoffs/phase-04/4A-R.json`.
 
@@ -531,11 +628,11 @@ route tests and typecheck. Handoff: `.planning/handoffs/phase-04/4A-R.json`.
 
 **RED:** `capability_wizard_alone_cannot_close_phase_4a`.
 
-Run all ten completion scenarios in 04A-BUSINESS-ACCOUNT-MANAGEMENT, plus exact
+Run all twelve completion scenarios in 04A-BUSINESS-ACCOUNT-MANAGEMENT, plus exact
 query budgets, direct-URL cold restoration, membership hostile substitutions,
-partial offboarding recovery and accessibility. Generate/verify a labelled
-clean-revision sandbox packet. This is the only parcel permitted to claim 4A
-complete.
+partial offboarding recovery, release-control failure/off behavior, legacy
+owner-link redirects and accessibility. Generate/verify a labelled clean-
+revision sandbox packet. This is the only parcel permitted to claim 4A complete.
 
 ```text
 npm exec -- playwright test tests/e2e/business-account-acceptance.spec.ts

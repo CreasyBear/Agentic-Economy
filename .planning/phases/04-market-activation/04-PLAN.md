@@ -193,20 +193,39 @@ unrelated operations do not expand the read budget for one page.
 
 Create protected routes:
 
-- `/owner` — account health, work, blockers and next actions;
-- `/owner/business` — profile, contacts, locations and visibility;
-- `/owner/team` — invitations, roles and access lifecycle;
-- `/owner/services` — multiple discoverable services;
-- `/owner/capabilities` — list current operations and blockers;
-- `/owner/capabilities/new` — configure one operation;
-- `/owner/capabilities/$publicationRef` — inspect, test, publish, pause or repair;
-- `/owner/connections` — endpoint/adapter readiness;
-- `/owner/work` and `/owner/activity` — bounded referenced work and history;
-- `/owner/commercial` — truthful no-charge/manual/provider-managed context;
-- `/owner/support` — durable customer-visible support cases;
+- `/businesses` — choose or create a permitted Business Account;
+- `/businesses/$businessId` — account health, work, blockers and next actions;
+- `/businesses/$businessId/profile` — profile, contacts, locations and visibility;
+- `/businesses/$businessId/team` — invitations, roles and access lifecycle;
+- `/businesses/$businessId/services` — multiple discoverable services;
+- `/businesses/$businessId/capabilities` — current operations and blockers;
+- `/businesses/$businessId/capabilities/new` — configure one operation;
+- `/businesses/$businessId/capabilities/$publicationRef` — inspect, test,
+  publish, pause or repair;
+- `/businesses/$businessId/connections` — endpoint/adapter readiness;
+- `/businesses/$businessId/work` and `/businesses/$businessId/activity` —
+  bounded referenced work and history;
+- `/businesses/$businessId/plan` — truthful no-charge/manual/provider-managed
+  context;
+- `/businesses/$businessId/support` — durable customer-visible support cases;
+- `/businesses/$businessId/settings` — business defaults and lifecycle controls;
+- `/settings` — personal security, sessions and preferences;
 - `/admin/businesses` and `/admin/businesses/$businessId/**` — portfolio,
   onboarding, operations, support, commercial context and activity without
-  owner impersonation or raw credential custody.
+  owner impersonation or raw credential custody;
+- `/admin/releases` — founder-only exposure of completed application areas to
+  internal, named pilot or all Business Accounts.
+
+Existing `/owner/*` destinations become compatibility redirects. The stable
+business identifier in the canonical URL is always checked against current
+server membership; a browser-selected account never supplies authority.
+
+Add a small source-owned release control with only `off | internal |
+named_accounts | all_accounts`. It is environment-specific, audited and off on
+unknown/unavailable state. Apply the same result to navigation, direct routes
+and commands. Keep release, account feature access, member permissions,
+commercial arrangement and operation publication as separate facts. Do not add
+percentage experiments, user targeting or a third-party flag service in 4A.
 
 The route sequence is:
 
@@ -222,7 +241,8 @@ eligibility, current readiness and intended-surface reachability.
 
 End condition: a fresh evaluator can administer and use the account without
 engineering help, identify what is public and routeable, handle team access,
-enquiries, support and lifecycle changes, and understand every next action.
+enquiries, support and lifecycle changes, safely switch accounts, expose or
+disable a completed area, and understand every next action.
 
 ### 4A-4 — 4A integration evidence
 
@@ -246,7 +266,7 @@ route-tree diff, verifies every Business Account and founder route ID/import,
 and runs focused route tests plus typecheck. Children do not edit generated
 routes.
 
-After route generation, parcel 4A-A runs all ten Business Account completion
+After route generation, parcel 4A-A runs all twelve Business Account completion
 scenarios, hostile membership/offboarding substitutions, constant query
 budgets, direct-URL restoration, accessibility and clean-revision packet
 verification. It is the only parcel permitted to close 4A. Phase 4B starts from

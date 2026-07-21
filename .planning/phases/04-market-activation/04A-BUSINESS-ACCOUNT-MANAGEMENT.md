@@ -40,7 +40,9 @@ quality, provider fulfilment, revenue or customer satisfaction.
 - new `businessMemberInvitations` owns pending invitation state. Tokens are
   single-use, hashed, expiring and never stored in plaintext.
 - new `businessRelationships` owns AE's lifecycle with the business:
-  `prospect | onboarding | active | paused | at_risk | offboarding | closed`.
+  `prospect | onboarding | active | paused | at_risk | offboarding | closed`,
+  plus the founder-controlled `internal | external` account classification used
+  only for release exposure.
 - business profile and service facts remain in `business` and `catalog`.
 - capability contracts, offerings, bindings, publications and readiness remain
   in `capability-contract-registry` and `capability-supply`.
@@ -55,22 +57,30 @@ quality, provider fulfilment, revenue or customer satisfaction.
 
 | Route | Customer job |
 |---|---|
-| `/owner` | See account health, current work, blockers and next actions |
-| `/owner/business` | Manage identity, public profile, locations, contacts and visibility |
-| `/owner/team` | Invite, change role, suspend or remove members |
-| `/owner/services` | Manage the services customers can discover |
-| `/owner/capabilities` | Manage registered operations and routeability |
-| `/owner/connections` | Manage endpoint/adapter connections and readiness |
-| `/owner/inquiries` | Receive and respond to human enquiries |
-| `/owner/work` | See consequential and agent-originated work involving the business |
-| `/owner/activity` | Review an attributable cross-account timeline |
-| `/owner/commercial` | See the truthful plan/charge arrangement and billing contact |
-| `/owner/support` | Open and continue support cases |
-| `/owner/settings` | Personal security, notifications and account preferences |
+| `/businesses` | Choose or create a Business Account the person may access |
+| `/businesses/$businessId` | See account health, current work, blockers and next actions |
+| `/businesses/$businessId/profile` | Manage identity, public profile, locations, contacts and visibility |
+| `/businesses/$businessId/team` | Invite, change role, suspend or remove members |
+| `/businesses/$businessId/services` | Manage the services customers can discover |
+| `/businesses/$businessId/capabilities` | Manage registered operations and routeability |
+| `/businesses/$businessId/connections` | Manage endpoint/adapter connections and readiness |
+| `/businesses/$businessId/inquiries` | Receive and respond to human enquiries |
+| `/businesses/$businessId/work` | See consequential and agent-originated work involving the business |
+| `/businesses/$businessId/activity` | Review an attributable cross-account timeline |
+| `/businesses/$businessId/plan` | See the truthful plan/charge arrangement and billing contact |
+| `/businesses/$businessId/support` | Open and continue support cases |
+| `/businesses/$businessId/settings` | Manage business defaults, notifications and closure controls |
+| `/settings` | Manage the signed-in person's security, sessions and preferences |
 
-The owner landing page is an operating dashboard, not a vanity metrics page.
+The business landing page is an operating dashboard, not a vanity metrics page.
 It answers: what is live, what needs attention, what customers or agents are
 waiting on, what AE will do next, and what the business can safely change.
+
+`businessId` is a stable opaque account identifier, not the mutable public
+slug. Every business-scoped read and command rechecks membership on the server.
+The `/businesses` switcher shows only accounts the person may access. Existing
+`/owner/*` URLs remain temporary compatibility redirects that preserve the
+business, destination and query string; they are not the canonical IA.
 
 If no paid arrangement exists, Commercial says **No paid plan applies**. It
 does not fabricate invoices or leave a dead Billing link. Phase 4A records
@@ -88,6 +98,7 @@ it does not implement charging, settlement or a Stripe product.
 | `/admin/businesses/$businessId/support` | Manage support cases and accountable follow-up |
 | `/admin/businesses/$businessId/commercial` | Record the truthful commercial arrangement and references |
 | `/admin/businesses/$businessId/activity` | Review source-linked account history and audit evidence |
+| `/admin/releases` | Expose or disable completed application areas by environment and account |
 
 Founder assist issues explicit source-owned commands. It never impersonates a
 business member, edits secrets, manufactures readiness or hides an unresolved
@@ -104,8 +115,46 @@ are a distinct record.
 - enforce role-specific read/write permissions server-side;
 - prevent removal, suspension or demotion of the last active owner;
 - show active, invited, suspended and revoked membership truth;
+- switch between permitted Business Accounts without changing identity;
 - revoke future access without rewriting attributable history;
 - provide a source-owned ownership-transfer ceremony.
+
+### Release and feature access
+
+AE needs a small release control so a finished area can be enabled for internal
+accounts, then named pilot Business Accounts, then everyone, or disabled without
+a redeploy. It is server-enforced and fail-closed; hiding a navigation item is
+never the access check.
+
+Keep four ordinary concepts separate:
+
+- a **release control** answers whether AE has released an application area in
+  this environment for this Business Account;
+- **feature access** answers whether the Business Account is allowed to use a
+  released area under its current arrangement;
+- a **membership role** answers what this person may do for the business;
+- an **operation state** answers whether one capability is currently draft,
+  published, paused or unavailable.
+
+Each code-owned area declares whether access is included for every active
+Business Account or requires an explicit access record. Missing explicit access
+means unavailable; it never falls back to a plan label or UI assumption.
+
+Phase 4A supports only `off | internal | named_accounts | all_accounts`. It does
+not add percentage experiments, user-level targeting or arbitrary rules. Every
+release control has a code-owned key and safe default, accountable owner,
+reason, environment, updated time and required review/removal date. Changes are
+audited. Unknown, missing or unavailable control state resolves to off. Once an
+area is available to everyone and stable, the control is removed or its ongoing
+emergency purpose is explicitly renewed. The
+founder surface previews which Business Accounts are affected before applying
+a change and always provides an immediate disable action.
+
+Business users do not see technical flag names. A disabled unreleased area is
+absent from navigation and its direct URL returns a plain unavailable response.
+Previously recorded business data remains intact when an area is disabled.
+An ordinary member cannot mark a Business Account internal; that classification
+is founder-controlled, audited and absent from the public business profile.
 
 ### Profile and service management
 
@@ -153,6 +202,12 @@ are a distinct record.
 - never manufacture invoices, receipts, settlement or provider events;
 - hide or replace every navigation destination that has no source-backed route.
 
+Commercial plan labels do not grant feature access by themselves. Where a
+commercial arrangement implies access, an attributable feature-access record
+names the source arrangement. Removing a release control does not alter the
+commercial record, and changing the commercial record does not silently release
+unfinished software.
+
 ## Data and query contract
 
 New source tables are bounded and indexed for intended access:
@@ -170,6 +225,20 @@ New source tables are bounded and indexed for intended access:
 - `businessAccountSummaryItems`: removable portfolio/dashboard projection with
   `businessId`, relationship revision/status, assigned admin token identifier,
   `health`, attention reason codes, bounded source counts and `updatedAt`.
+- `businessFeatureAccess`: one current row per business and feature key, with
+  source arrangement, status, effective period and revision;
+- `applicationReleaseControls`: one current row per code-owned feature key and
+  environment, with mode, owner, reason, review date and revision;
+- `applicationReleaseTargets`: one row per named pilot feature, environment and
+  Business Account. Named accounts are rows, never an unbounded ID array.
+
+Exact release/access indexes are
+`applicationReleaseControls.by_environment_and_featureKey`,
+`applicationReleaseTargets.by_businessId_and_environment_and_featureKey`, and
+`businessFeatureAccess.by_businessId_and_featureKey`. One shell evaluation
+loads at most 32 code-owned controls, 32 matching account targets and 32 account
+access rows in three bounded indexed reads; adding unrelated Business Accounts
+does not increase that budget.
 
 Exact summary indexes:
 
@@ -218,7 +287,10 @@ The dashboard must represent at least:
 7. read the truthful commercial arrangement without fake billing;
 8. pause, export and close the relationship without losing attributable truth;
 9. find the account from the founder portfolio at constant page read budget;
-10. resume every state from a direct URL after reload.
+10. switch between two permitted businesses while rejecting a guessed third;
+11. expose one completed area to internal then named pilot accounts, disable it
+    without redeploying, and prove navigation plus direct URLs agree;
+12. resume every state from a direct URL after reload.
 
 This establishes a credible Business Account product ready for founder-led
 onboarding. It does not establish real adoption, revenue or provider quality.

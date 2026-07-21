@@ -8,6 +8,7 @@
 | Business Account relationship/team | absent; current `owners` is a single-person compatibility record | Add ADR-024 membership, invitation, relationship and lifecycle owners without replacing `businesses` |
 | Business support/customer success | absent as an account domain | Add source-owned cases, tasks and private notes; never reuse Request problems or inquiry truth |
 | Business commercial context | navigation/audit vocabulary exists; no complete billing source or route | Add truthful no-charge/manual/provider-managed context only; hide or replace unsupported billing destinations |
+| Application release control | absent; CSP has a purpose-specific environment rollout switch only | Add bounded code-keyed environment/account release control; do not reuse it for roles, plans or capability state |
 | Public listing/services | `src/modules/catalog/**`, `convex/catalog.ts` | Keep discovery-only; do not make executable registry |
 | Capability contract | `src/modules/capability-contract-registry/**` | Reuse exact active contract/digest |
 | Offering/binding/publication/readiness | `src/modules/capability-supply/**`, `convex/capabilitySupply*.ts` | Add onboarding application/projection, custody port and bounded reads |
@@ -30,6 +31,8 @@
   bounded case messages.
 - one `businessCommercialAccounts` current relationship row per business; no
   invoice, payment or settlement fabrication.
+- `applicationReleaseControls`, row-based `applicationReleaseTargets` and
+  `businessFeatureAccess` with the exact bounded indexes in the 4A contract.
 - removable `businessAccountActivityItems` referencing source events.
 - `capabilityOnboardingDrafts` with exact revision/owner/business/source/digests,
   `credentialMode: none | managed_ref`, opaque managed reference, issues and

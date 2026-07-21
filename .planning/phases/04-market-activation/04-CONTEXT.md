@@ -95,9 +95,14 @@ payment, fulfilment and outcome truth remain separate.
 - Operation-owned results remain authoritative. Customer Request and Activity
   store references and continuity projections, not competing business truth.
 - `/` remains Ask. `/registry` remains business/supply discovery. Protected
-  `/owner/**` is the complete Business Account workspace; capability activation
-  is one area within it. `/admin/businesses/**` is the founder/customer-success
-  console. `/activity` resumes demand-side customer work.
+  `/businesses/$businessId/**` is the complete Business Account workspace;
+  capability activation is one area within it. `/businesses` is the permitted
+  account switcher. `/owner/**` is compatibility redirect history only.
+  `/admin/businesses/**` is the founder/customer-success console. `/activity`
+  resumes demand-side customer work.
+- Release controls, Business Account feature access, member permissions and
+  capability state answer different questions and are never collapsed into one
+  generic flag or entitlement.
 - Human and structured-agent surfaces consume the same source-created semantic
   objects. Components do not parse provider payloads.
 - The existing paid-operation card stays paid-operation-specific. A non-paid

@@ -30,6 +30,13 @@ participating business.
   not authorize, settle or rewrite source truth.
 - founder/customer-success actions use explicit admin authority and never
   impersonate a business member.
+- canonical business workspace routes are `/businesses/$businessId/**` because
+  owner is a membership role, not the account or application. `/owner/**`
+  remains a temporary redirect boundary only.
+- application release controls, Business Account feature access, member roles,
+  commercial arrangements and capability state remain separate source facts.
+  A release control may expose or disable code; it may not grant membership,
+  rewrite a plan or publish an operation.
 
 Business relationship lifecycle is:
 
@@ -69,5 +76,9 @@ payment processor, invoice ledger or settlement claim.
 - no profile, membership or relationship state manufactures routeability;
 - no dashboard projection owns business, action or commercial truth;
 - owner and founder surfaces resume from durable source state;
+- canonical business routes recheck current membership and legacy owner links
+  redirect without becoming an authority path;
+- one completed area can move from internal to named pilot to all accounts and
+  be disabled without redeploying, while unknown control state fails off;
 - intended list/detail queries remain bounded at 10,000 unrelated accounts;
 - offboarding withdraws future work while preserving history.

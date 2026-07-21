@@ -29,19 +29,24 @@ support the outcome; they do not become the product home.
 | Request detail | `/activity/$requestRef` | Requirements, sourcing, options, selected work and recovery |
 | Action detail | action-class route | Inspect one exact action and safe continuation |
 | Supply entry | `/claim` | Establish business identity and explain operation activation |
-| Business home | `/owner` | Account health, current work, blockers and next actions |
-| Business profile | `/owner/business` | Identity, locations, contacts, visibility and preview |
-| Team | `/owner/team` | Invitations, roles and access lifecycle |
-| Services | `/owner/services` | Multiple discoverable customer services |
-| Owner operations | `/owner/capabilities` | Configure and maintain supported operations |
-| Owner operation | `/owner/capabilities/$publicationRef` | Connection, readiness, publication, pause and repair |
-| Connections | `/owner/connections` | Endpoint, adapter and readiness state |
-| Business work | `/owner/work` | Current/completed attributable work |
-| Business activity | `/owner/activity` | Source-linked account history |
-| Commercial | `/owner/commercial` | Truthful plan/charge arrangement, including no-charge |
-| Support | `/owner/support` | Open and continue support cases |
+| Business switcher | `/businesses` | Choose or create a permitted Business Account |
+| Business home | `/businesses/$businessId` | Account health, current work, blockers and next actions |
+| Business profile | `/businesses/$businessId/profile` | Identity, locations, contacts, visibility and preview |
+| Team | `/businesses/$businessId/team` | Invitations, roles and access lifecycle |
+| Services | `/businesses/$businessId/services` | Multiple discoverable customer services |
+| Operations | `/businesses/$businessId/capabilities` | Configure and maintain supported operations |
+| Operation | `/businesses/$businessId/capabilities/$publicationRef` | Connection, readiness, publication, pause and repair |
+| Connections | `/businesses/$businessId/connections` | Endpoint, adapter and readiness state |
+| Inquiries | `/businesses/$businessId/inquiries` | Receive and respond to customer enquiries |
+| Business work | `/businesses/$businessId/work` | Current/completed attributable work |
+| Business activity | `/businesses/$businessId/activity` | Source-linked account history |
+| Plan | `/businesses/$businessId/plan` | Truthful plan/charge arrangement, including no-charge |
+| Support | `/businesses/$businessId/support` | Open and continue support cases |
+| Business settings | `/businesses/$businessId/settings` | Defaults, notifications and closure controls |
+| Personal settings | `/settings` | Signed-in person's security, sessions and preferences |
 | Founder portfolio | `/admin/businesses` | Search/filter Business Accounts and onboarding pipeline |
 | Founder account | `/admin/businesses/$businessId` | Relationship, people, supply, work, support and lifecycle |
+| Release controls | `/admin/releases` | Safely expose or disable completed application areas |
 | For agents | existing agent entry | Explain and expose the matching structured contracts |
 
 `/registry` never owns a Customer Request comparison. `/activity` never owns
@@ -94,6 +99,16 @@ service state and operation routeability remain separate dimensions.
 
 Required mature views and interaction states are defined in
 `04A-BUSINESS-ACCOUNT-MANAGEMENT.md`.
+
+The shell includes a Business Account switcher whenever the person has more
+than one membership. The current business comes from the URL and a fresh
+server-side membership check, never an unscoped browser preference. Changing
+businesses moves to that account's home unless an equivalent destination is
+known to be available.
+
+Navigation is derived from released application areas and the member's feature
+access. The same server decision protects direct routes and commands. Business
+users see ordinary availability language, not flag keys or rollout modes.
 
 ### Operation activation states
 

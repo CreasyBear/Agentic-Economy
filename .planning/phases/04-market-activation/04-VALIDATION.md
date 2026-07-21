@@ -48,18 +48,21 @@ Required evals include exact ceiling/one-over page limits, duplicate draft
 commands, stale revisions, private/redirected probe targets, readiness expiry,
 withdrawal, projection rebuild and 1k/10k unrelated-record query budgets.
 
-Also run the ten Business Account completion scenarios in
+Also run the twelve Business Account completion scenarios in
 `04A-BUSINESS-ACCOUNT-MANAGEMENT.md`, including membership, multiple services,
-support, commercial context, offboarding and direct-URL restoration.
+support, commercial context, account switching, release controls, offboarding
+and direct-URL restoration.
 
 Only parcel 4A-A may aggregate these results into Phase 4A acceptance. It runs
 after source integration, UI integration and parent-owned route generation.
 4B cannot start from an earlier parcel even if every focused child command is
 green.
 
-The parent regenerates the route tree after owner routes land and verifies the
-four exact route IDs/imports before focused route tests and typecheck. Generated
-route output is never hand-edited by a child.
+The parent regenerates the route tree after business routes land and verifies
+every canonical Business Account, personal-settings, founder and release-
+control route plus the declared `/owner/*` compatibility redirects before
+focused route tests and typecheck. Generated route output is never hand-edited
+by a child.
 
 ## Phase 4B falsifiers
 
