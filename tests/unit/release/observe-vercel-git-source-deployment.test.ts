@@ -37,12 +37,37 @@ type FetchCall = Readonly<{
 }>
 
 describe('Vercel Git source deployment observer', () => {
+  it('resolves the canonical production alias independently of the deployment alias snapshot', async () => {
+    const observe = await loadObserver()
+    const calls: FetchCall[] = []
+    const creationTimeAliases = [
+      'agentic-economy-creasybears-projects.vercel.app',
+      'agentic-economy-git-main-creasybears-projects.vercel.app',
+    ]
+
+    const result = await observe(CONFIG, {
+      fetch: queuedFetch([
+        { deployments: [listDeployment()] },
+        detailDeployment({ alias: creationTimeAliases }),
+        detailDeployment({ alias: creationTimeAliases }),
+      ], calls),
+      wait: async () => undefined,
+    })
+
+    expect(result.deploymentId).toBe('dpl_exact')
+    expect(calls.map((call) => call.method)).toEqual(['GET', 'GET', 'GET'])
+    expect(calls[2]!.url.pathname)
+      .toBe('/v13/deployments/agentic-economy-phi.vercel.app')
+    expect(calls[2]!.url.searchParams.get('teamId')).toBe('team_exact')
+  })
+
   it('returns only the one exact READY production deployment through GET requests', async () => {
     const observe = await loadObserver()
     const calls: FetchCall[] = []
     const result = await observe(CONFIG, {
       fetch: queuedFetch([
         { deployments: [listDeployment()] },
+        detailDeployment(),
         detailDeployment(),
       ], calls),
       wait: async () => undefined,
@@ -60,7 +85,7 @@ describe('Vercel Git source deployment observer', () => {
       'deploymentUrl',
       'sourceRevision',
     ])
-    expect(calls.map((call) => call.method)).toEqual(['GET', 'GET'])
+    expect(calls.map((call) => call.method)).toEqual(['GET', 'GET', 'GET'])
     expect(calls.every((call) => call.authorization === 'Bearer vercel-secret-token'))
       .toBe(true)
     expect(calls[0]!.url.pathname).toBe('/v6/deployments')
@@ -71,6 +96,9 @@ describe('Vercel Git source deployment observer', () => {
       .toBe(SOURCE_REVISION)
     expect(calls[1]!.url.pathname).toBe('/v13/deployments/dpl_exact')
     expect(calls[1]!.url.searchParams.get('teamId')).toBe('team_exact')
+    expect(calls[2]!.url.pathname)
+      .toBe('/v13/deployments/agentic-economy-phi.vercel.app')
+    expect(calls[2]!.url.searchParams.get('teamId')).toBe('team_exact')
     expect(JSON.stringify(result)).not.toContain(CONFIG.apiToken)
   })
 
@@ -125,13 +153,27 @@ describe('Vercel Git source deployment observer', () => {
     ['project id', { projectId: 'prj_other' }],
     ['project name', { name: 'other-project' }],
     ['target', { target: 'preview' }],
-    ['production alias', { alias: ['other.vercel.app'] }],
   ] as const)('refuses %s mismatch', async (_label, override) => {
     const observe = await loadObserver()
     await expect(observe(CONFIG, {
       fetch: queuedFetch([
         { deployments: [listDeployment()] },
         detailDeployment(override),
+      ], []),
+      wait: async () => undefined,
+    })).rejects.toThrow('vercel_deployment_identity_mismatch')
+  })
+
+  it('refuses the canonical production alias resolving to another deployment', async () => {
+    const observe = await loadObserver()
+    await expect(observe(CONFIG, {
+      fetch: queuedFetch([
+        { deployments: [listDeployment()] },
+        detailDeployment(),
+        detailDeployment({
+          id: 'dpl_other',
+          url: 'agentic-economy-other.vercel.app',
+        }),
       ], []),
       wait: async () => undefined,
     })).rejects.toThrow('vercel_deployment_identity_mismatch')

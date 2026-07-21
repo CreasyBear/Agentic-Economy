@@ -86,13 +86,51 @@ configuration, temporary credential creation or use, hosted lifecycle, or
 hosted readback occurred. The one-Vercel attempt count is consumed. Any retry
 requires fresh parent external authorization.
 
+## Second authorized marker attempt and observer correction
+
+The founder authorized one corrected marker push. `origin/main` advanced to
+`f45a09e57937104dfdba05d94e0eaf8d99b1d115`, and Vercel Git integration
+created exact READY production deployment
+`dpl_H1UscNWxGfGK6uV5m3nYSy4eyPWg`. GitHub run `29790147219` passed the clean
+source and build job. Its first production attempt stopped at the read-only
+Vercel observer while the production alias remained pinned to the prior
+rollback target. No later production step ran.
+
+The founder then authorized promotion of that existing deployment and a rerun
+of only the failed job. Readback established that
+`agentic-economy-phi.vercel.app` resolved to `dpl_H1UscNWxGfGK6uV5m3nYSy4eyPWg`
+and that the deployment was READY, production-targeted and bound to exact SHA
+`f45a09e57937104dfdba05d94e0eaf8d99b1d115`, ref `main`, repository
+`CreasyBear/Agentic-Economy` and the configured project. Run attempt 2 still
+failed at the observer. Its Convex deploy, admission configuration and receipt
+steps were skipped.
+
+The exact defect was a false assumption about Vercel metadata after rollback
+and promotion. The live alias registry and alias lookup both mapped the
+canonical hostname to the correct deployment, but the deployment-detail
+`alias[]` retained its creation-time aliases. Explicitly setting the already
+correct alias did not alter that snapshot. The parent therefore rolled
+production back to prior READY deployment
+`dpl_4Y9pqP1UwVNNwSAXaEgzZpDh9Vm1`; exact alias readback confirmed the rollback.
+Across both attempts there remains zero Phase 3C Convex deploy, admission
+configuration, receipt, temporary credential use or hosted lifecycle.
+
+The source correction keeps the observer GET-only. It validates the unique
+SHA-bound candidate and its deployment detail as before, then resolves
+`GET /v13/deployments/agentic-economy-phi.vercel.app` and requires that live
+canonical route to return the same deployment ID, URL, creation time, state,
+project, target and repository metadata. It no longer treats a creation-time
+`alias[]` snapshot as routing authority.
+
 ## Selected and rejected recovery paths
 
 Selected: rely on the already-enabled Vercel Git integration, poll
 `GET /v6/deployments` with exact project, team, production target and source
 SHA, then validate the single candidate through
-`GET /v13/deployments/{id}`. This preserves one deployment creator and gives
-the workflow a fail-closed duplicate/identity/terminal-state gate.
+`GET /v13/deployments/{id}` and independently resolve the canonical hostname
+through `GET /v13/deployments/{alias}`. This preserves one deployment creator
+and gives the workflow a fail-closed duplicate/identity/terminal-state and
+live-route gate.
 
 Rejected: retain the explicit Vercel `POST`/`forceNew` helper for the marker
 path. Source audit established that this would be a second creator and could
@@ -105,6 +143,14 @@ contract. It now reaches source proof only.
 Rejected: reuse the legacy temporary-Clerk lifecycle in the Phase 3C job. The
 parent owns later hosted readback; this cut needs only the pre-existing
 authenticated Customer Request evaluator subject as the admission principal.
+
+Rejected: continue manually with Convex after the failed observer. The proof
+contract requires a successful exact GitHub production job and its final named
+receipt step; bypassing that job would manufacture the deployment chain.
+
+Rejected: treat alias reassignment as a substitute for the source correction.
+The canonical route already resolved correctly and an explicit alias set did
+not update Vercel's creation-time deployment alias snapshot.
 
 ## Workflow decision table
 
@@ -121,9 +167,9 @@ authenticated Customer Request evaluator subject as the admission principal.
 observer with injected fetch and wait functions. It emits only deployment ID,
 deployment URL, exact source revision and creation time. It rejects zero or
 duplicate candidates, terminal failure, unexpected state, wrong SHA/ref/repo,
-wrong project/target/alias, malformed responses and invalid configuration.
-Every request is explicitly GET. Errors are code-only and never include the
-bearer token or response body.
+wrong project/target, a canonical alias that resolves to another deployment,
+malformed responses and invalid configuration. Every request is explicitly
+GET. Errors are code-only and never include the bearer token or response body.
 
 `.github/workflows/kernel-release-gate.yml` now makes the ordinary and marker
 paths mutually exclusive. The marker source job checks the exact clean
@@ -152,11 +198,11 @@ corrections:
 
 | Command | Result |
 | --- | --- |
-| `vitest run tests/unit/release/observe-vercel-git-source-deployment.test.ts` | 1 file, 14 tests passed. |
+| `vitest run tests/unit/release/observe-vercel-git-source-deployment.test.ts` | 1 file, 15 tests passed, including a promoted deployment whose creation-time alias snapshot omits the live canonical route. |
 | `vitest run tests/unit/release/paid-operation-hosted-release.test.ts` | 1 file, 28 tests passed. |
 | `vitest run tests/imports/customer-request-source-completeness.test.ts` | 1 file, 9 tests passed. |
 | `vitest run tests/imports/paid-operation-trial-residue.test.ts` | 1 file, 4 tests passed, including exact 97-path classification and removal/import falsifiers. |
-| `npm run verify:phase3c:release-source` | 17 files, 167 tests passed. |
+| `npm run verify:phase3c:release-source` | 17 files, 168 tests passed. |
 | Changed-path `oxlint --deny-warnings` | Passed with no diagnostics. |
 | `git diff --check` | Passed. |
 | YAML parse plus source-count extraction | Four jobs parsed; marker present; only Phase 3C source checkout has `fetch-depth: 0`; Phase 3C production has one observer, one Convex deploy, zero Vercel mutation/create paths, one admission configuration and one receipt write; receipt is the final step. |
@@ -167,6 +213,11 @@ and Customer Request port/type mismatches. Zero diagnostic names a changed
 TypeScript path. The log is
 `/tmp/ae-phase3c-07e-typecheck-b738.log`; this cut does not broaden into those
 baseline failures.
+
+The observer correction reran that diagnostic at the corrected source. It
+again exited `2` with 108 inherited diagnostics and zero diagnostics naming
+either corrected observer path. Its log is
+`/tmp/ae-phase3c-07f-typecheck.log`.
 
 `npm run build` passed against a Git-archive scratch copy overlaid with the
 exact nine-path candidate and the lock-identical installed dependency tree.
@@ -206,6 +257,8 @@ identity, hosted reachability, provider fulfilment, payment, settlement,
 comprehension or accessibility in use, production safety, demand, or customer
 value.
 
-The next safe action is parent audit of the exact committed correction. Any
-marker retry and parent-owned hosted readback require fresh external
-authorization. This child performs neither action.
+The next safe action is parent audit of the exact committed correction, then
+fresh founder authority for one source-fix push and the third Vercel Git
+deployment it will create. The already-authorized Convex deploy and temporary
+human/agent credentials remain unused. This child performs no push, deployment,
+Convex, credential or lifecycle action.

@@ -88,6 +88,22 @@ export async function observeVercelGitSourceDeployment(
         fail('vercel_deployment_terminal')
       }
       if (detail.readyState === 'READY') {
+        const canonicalAliasUrl = new URL(
+          `/v13/deployments/${encodeURIComponent(EXPECTED_PRODUCTION_ALIAS)}`,
+          VERCEL_API_ORIGIN,
+        )
+        canonicalAliasUrl.searchParams.set('teamId', config.teamId)
+        const canonicalAliasPayload = await getJson(
+          dependencies.fetch,
+          canonicalAliasUrl,
+          config.apiToken,
+          'vercel_alias_request_failed',
+        )
+        validateCanonicalAliasDeployment(
+          canonicalAliasPayload,
+          detail,
+          config,
+        )
         return Object.freeze({
           deploymentId: detail.id,
           deploymentUrl: `https://${detail.url}`,
@@ -200,13 +216,33 @@ function validateDetailedDeployment(
     || deployment.projectId !== config.projectId
     || deployment.target !== EXPECTED_TARGET
     || !validDeploymentHost(url)
-    || !exactRepositoryMetadata(deployment.meta, config.sourceRevision)
-    || !Array.isArray(deployment.alias)
-    || !deployment.alias.every((alias) => typeof alias === 'string')
-    || !deployment.alias.includes(EXPECTED_PRODUCTION_ALIAS)) {
+    || !exactRepositoryMetadata(deployment.meta, config.sourceRevision)) {
     fail('vercel_deployment_identity_mismatch')
   }
   return { id, url, createdAt, readyState }
+}
+
+function validateCanonicalAliasDeployment(
+  deployment: unknown,
+  expected: Readonly<{
+    id: string
+    url: string
+    createdAt: number
+    readyState: string
+  }>,
+  config: ObserveVercelGitSourceDeploymentConfig,
+): void {
+  if (!isRecord(deployment)) fail('vercel_alias_response_invalid')
+  if (deployment.id !== expected.id
+    || deployment.url !== expected.url
+    || deployment.createdAt !== expected.createdAt
+    || deployment.readyState !== expected.readyState
+    || deployment.name !== EXPECTED_PROJECT_NAME
+    || deployment.projectId !== config.projectId
+    || deployment.target !== EXPECTED_TARGET
+    || !exactRepositoryMetadata(deployment.meta, config.sourceRevision)) {
+    fail('vercel_deployment_identity_mismatch')
+  }
 }
 
 function exactRepositoryMetadata(
