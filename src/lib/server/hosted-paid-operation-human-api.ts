@@ -28,12 +28,12 @@ type TransportRefusalCode =
 
 export type HostedPaidOperationTransportResult =
   | Readonly<{ kind: 'accepted'; value: PaidOperationProjection }>
+  | Readonly<{ kind: 'update_not_confirmed' }>
   | Readonly<{ kind: 'refused'; code: TransportRefusalCode }>
 
 export type HostedPaidOperationPublicCommand =
   | Readonly<{ kind: 'authorize'; accept: boolean }>
   | Readonly<{ kind: 'execute' }>
-  | Readonly<{ kind: 'inspect' }>
   | Readonly<{ kind: 'reconcile' }>
 
 export type HostedPaidOperationTransportGateway = Readonly<{
@@ -190,6 +190,7 @@ export async function handleHostedPaidOperationHumanInspect(
       options,
       'human',
       actor,
+      'inspect',
     )
   } catch {
     return noStore({ kind: 'refused', code: 'hosted_read_unavailable' }, 503)
@@ -220,16 +221,14 @@ export async function handleHostedPaidOperationHumanCommand(
       options,
       'human',
       actor,
+      'command',
     )
   } catch {
-    const requestId = options.requestId?.() ?? crypto.randomUUID()
-    return noStore({
-      kind: 'update_not_confirmed',
-      requestId,
-      relation: {
-        inspect: `/actions/paid/${encodeURIComponent(invocationRef)}?expectedInvocationVersion=${parsed.expectedInvocationVersion}`,
-      },
-    }, 503)
+    return humanUpdateNotConfirmed(
+      invocationRef,
+      parsed.expectedInvocationVersion,
+      options,
+    )
   }
 }
 
@@ -294,9 +293,13 @@ async function projectResult(
   options: HumanHandlerOptions,
   audience: 'human' | 'agent',
   actor?: InvocationActor,
+  source: 'inspect' | 'command' = 'inspect',
 ): Promise<Response> {
   if (result.kind === 'accepted') {
     return noStore(projectHostedPaidOperation(result.value, options.provenance, audience), 200)
+  }
+  if (result.kind === 'update_not_confirmed') {
+    return humanUpdateNotConfirmed(invocationRef, suppliedVersion, options)
   }
   if (result.code === 'invocation_not_found' || result.code === 'cross_principal_refused') {
     return noStore({ kind: 'refused', code: 'invocation_not_found' }, 404)
@@ -330,7 +333,23 @@ async function projectResult(
       },
     }, 409)
   }
-  return noStore({ kind: 'refused', code: result.code }, 503)
+  return source === 'command'
+    ? humanUpdateNotConfirmed(invocationRef, suppliedVersion, options)
+    : noStore({ kind: 'refused', code: result.code }, 503)
+}
+
+function humanUpdateNotConfirmed(
+  invocationRef: string,
+  expectedInvocationVersion: number,
+  options: Pick<HumanHandlerOptions, 'requestId'>,
+): Response {
+  return noStore({
+    kind: 'update_not_confirmed',
+    requestId: options.requestId?.() ?? crypto.randomUUID(),
+    relation: {
+      inspect: `/actions/paid/${encodeURIComponent(invocationRef)}?expectedInvocationVersion=${expectedInvocationVersion}`,
+    },
+  }, 202)
 }
 
 type ParsedCommand =
@@ -364,7 +383,7 @@ async function parseCommand(request: Request): Promise<ParsedCommand> {
     || (candidate.expectedInvocationVersion as number) < 0) {
     issues.push('expectedInvocationVersion')
   }
-  if (command !== 'authorize' && command !== 'execute' && command !== 'inspect' && command !== 'reconcile') {
+  if (command !== 'authorize' && command !== 'execute' && command !== 'reconcile') {
     issues.push('command')
   }
   if (command === 'authorize' && typeof candidate.accept !== 'boolean') issues.push('accept')
@@ -375,7 +394,7 @@ async function parseCommand(request: Request): Promise<ParsedCommand> {
     expectedInvocationVersion: candidate.expectedInvocationVersion as number,
     command: command === 'authorize'
       ? { kind: 'authorize', accept: candidate.accept as boolean }
-      : { kind: command as 'execute' | 'inspect' | 'reconcile' },
+      : { kind: command as 'execute' | 'reconcile' },
   }
 }
 

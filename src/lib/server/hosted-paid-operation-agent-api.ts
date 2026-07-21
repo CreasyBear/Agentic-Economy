@@ -176,6 +176,9 @@ async function agentResult(
       'agent',
     ), 200)
   }
+  if (result.kind === 'update_not_confirmed') {
+    return agentUpdateNotConfirmed(invocationRef, suppliedVersion, options)
+  }
   if (result.code === 'invocation_not_found' || result.code === 'cross_principal_refused') {
     return noStore({ kind: 'refused', code: 'invocation_not_found' }, 404)
   }
@@ -217,7 +220,7 @@ function agentUpdateNotConfirmed(
     relation: {
       inspect: `/api/v1/paid-operations/${encodeURIComponent(invocationRef)}?expectedInvocationVersion=${expectedInvocationVersion}`,
     },
-  }, 503)
+  }, 202)
 }
 
 function authRefusal(result: Extract<AgentAuthResult, { kind: 'refused' }>) {

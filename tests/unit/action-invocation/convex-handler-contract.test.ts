@@ -1165,6 +1165,21 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     expect(await effectFacts(backend, created.invocationRef)).toEqual(released)
   })
 
+  it('classifies a final persistence refusal after release as update-not-confirmed', () => {
+    const executeStart = hostedGateway.indexOf('async function executeAuthenticatedIntent')
+    const executeSource = hostedGateway.slice(
+      executeStart,
+      hostedGateway.indexOf('async function reconcileAuthenticatedIntent'),
+    )
+
+    expect(executeStart).toBeGreaterThan(-1)
+    expect(executeSource).toContain('releaseSignal.wasReleased()')
+    expect(executeSource).toContain("kind: 'update_not_confirmed'")
+    expect(executeSource).not.toMatch(
+      /if \(persisted\.kind === 'refused'\) return persisted/u,
+    )
+  })
+
   it('keeps every public validator intent-only and refuses caller state fields', async () => {
     expect(hostedGateway).not.toMatch(
       /export const authenticated(?:CreateInitial|Transact|ReserveAdmission|LoadComplete|Identity)/u,

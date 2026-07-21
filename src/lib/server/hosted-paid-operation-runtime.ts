@@ -138,18 +138,6 @@ function convexIntentTransport(
       }) as HostedPaidOperationTransportResult
     },
     command: async (input) => {
-      if (input.command.kind === 'inspect') {
-        const intent = {
-          kind: 'inspect' as const,
-          invocationRef: input.invocationRef,
-          expectedInvocationVersion: input.expectedInvocationVersion,
-        }
-        return await client.query(inspectIntent, {
-          invocationRef: input.invocationRef,
-          expectedInvocationVersion: input.expectedInvocationVersion,
-          ...await authArgs(intent),
-        }) as HostedPaidOperationTransportResult
-      }
       const publicIntent = publicCommandIntent(input)
       const intent = {
         kind: 'command' as const,

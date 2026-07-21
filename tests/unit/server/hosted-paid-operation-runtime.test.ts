@@ -94,6 +94,18 @@ describe('hosted paid-operation intent runtime', () => {
     expect(tree).not.toContain('/actions/paid/index')
     expect(tree).not.toContain('/api/v1/paid-operations/$invocationRef/retry')
   })
+
+  it('keeps inspect on the query transport instead of accepting POST inspect', () => {
+    const runtimeSource = readFileSync(
+      'src/lib/server/hosted-paid-operation-runtime.ts',
+      'utf8',
+    )
+
+    expect(runtimeSource).not.toContain("input.command.kind === 'inspect'")
+    expect(runtimeSource).toContain(
+      "const inspectIntent = sourceQuery('hostedPaidOperationGateway:authenticatedInspect')",
+    )
+  })
 })
 
 function projection(version: number): HostedPaidOperationTransportResult {

@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import { readFileSync } from 'node:fs'
 import { createElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -10,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   handleHostedPaidOperationHumanCommand,
   handleHostedPaidOperationHumanInspect,
+  parseHostedPaidOperationCommand,
   type HostedPaidOperationTransportGateway,
 } from '@/lib/server/hosted-paid-operation-human-api'
 import {
@@ -534,7 +536,7 @@ describe('hosted paid-operation authenticated adapters', () => {
         requestId: () => 'request:ambiguous',
       },
     )
-    expect(response.status).toBe(503)
+    expect(response.status).toBe(202)
     expect(await response.json()).toEqual({
       kind: 'update_not_confirmed',
       requestId: 'request:ambiguous',
@@ -598,7 +600,7 @@ describe('hosted paid-operation authenticated adapters', () => {
       },
     )
 
-    expect(response.status).toBe(503)
+    expect(response.status).toBe(202)
     const body = await response.json()
     expect(body).toEqual({
       kind: 'update_not_confirmed',
@@ -608,6 +610,65 @@ describe('hosted paid-operation authenticated adapters', () => {
       },
     })
     expect(JSON.stringify(body)).not.toMatch(/execute|authorize|reconcile|retry/u)
+  })
+
+  it('rejects inspect on the consequence-command POST transport', async () => {
+    const parsed = await parseHostedPaidOperationCommand(new Request(
+      'https://ae.test/api/v1/paid-operations/invocation:paid/commands',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          command: 'inspect',
+          commandId: 'command:inspect',
+          expectedInvocationVersion: 5,
+        }),
+      },
+    ))
+
+    expect(parsed).toEqual({ kind: 'invalid', issues: ['command'] })
+  })
+
+  it('navigates terminal human inspect through GET without command submission', async () => {
+    const terminal = projectionFromSemantics({
+      ...paidProjection().semantics,
+      continuations: [{
+        kind: 'inspect',
+        command: 'inspect_paid_operation',
+        requiredInput: [],
+        expectedInvocationVersion: 3,
+        authorityRequired: false,
+      }],
+    })
+    const initial = await acceptedHumanReadback(terminal)
+    const sendCommand = vi.fn()
+    const followInspectRelation = vi.fn()
+
+    render(createElement(HostedPaidOperationDetailView, {
+      result: { status: 200, body: initial },
+      sendCommand,
+      followInspectRelation,
+    }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review details' }))
+
+    expect(followInspectRelation).toHaveBeenCalledWith(
+      '/actions/paid/invocation%3Apaid?expectedInvocationVersion=3',
+    )
+    expect(sendCommand).not.toHaveBeenCalled()
+  })
+
+  it('fails human command transport closed across an origin redirect', () => {
+    const routeSource = readFileSync(
+      'src/routes/actions.paid.$invocationRef.tsx',
+      'utf8',
+    )
+    const sender = routeSource.slice(
+      routeSource.indexOf('async function sendHostedPaidOperationCommand'),
+      routeSource.indexOf('function responseInspectRelation'),
+    )
+
+    expect(sender).toContain("redirect: 'error'")
+    expect(sender).toContain('new URL(response.url).origin')
+    expect(sender).toContain('window.location.origin')
   })
 
   it('renders one source-issued detail and preserves durable truth while an exact command is pending', async () => {

@@ -151,6 +151,10 @@ function AcceptedPaidOperationDetail({
       pendingCommandRef.current !== null
       || !descriptorMatchesReadback(descriptor, readback)
     ) return
+    if (descriptor.command === 'inspect') {
+      followReadOnlyInspect(currentInspectRelation(readback))
+      return
+    }
     const commandId = crypto.randomUUID()
     const body = commandBody(descriptor, commandId)
     if (body === null) return
@@ -357,6 +361,7 @@ function commandBody(
       ? { ...base, accept: descriptor.accept }
       : null
   }
+  if (descriptor.command === 'inspect') return null
   return descriptor.accept === undefined && descriptor.requiredInput.length === 0
     ? base
     : null
@@ -373,7 +378,11 @@ async function sendHostedPaidOperationCommand(
     },
     body: JSON.stringify(body),
     cache: 'no-store',
+    redirect: 'error',
   })
+  if (new URL(response.url).origin !== window.location.origin) {
+    throw new Error('hosted_paid_operation_command_origin_mismatch')
+  }
   return { status: response.status, body: await response.json() }
 }
 

@@ -104,6 +104,7 @@ type AuthenticatedIntent = Readonly<{
 }>
 
 type InternalRefusal = Readonly<{ kind: 'refused'; code: string }>
+type InternalUpdateNotConfirmed = Readonly<{ kind: 'update_not_confirmed' }>
 type InternalDuplicate = Readonly<{
   kind: 'duplicate'
   invocationVersion: number
@@ -535,7 +536,9 @@ export const authenticatedCommand = action({
       : args.command === 'execute'
         ? await executeAuthenticatedIntent(ctx, internalIntent)
         : await reconcileAuthenticatedIntent(ctx, internalIntent)
-    if (transition.kind === 'refused') return transition
+    if (transition.kind === 'refused' || transition.kind === 'update_not_confirmed') {
+      return transition
+    }
     const loaded = await ctx.runQuery(
       internalLoadComplete,
       loadArgs(caller.actor, args.invocationRef),
@@ -548,7 +551,7 @@ export const authenticatedCommand = action({
 async function executeAuthenticatedIntent(
   ctx: ActionCtx,
   intent: AuthenticatedIntent,
-): Promise<InternalRefusal | InternalDuplicate | Applied> {
+): Promise<InternalRefusal | InternalDuplicate | Applied | InternalUpdateNotConfirmed> {
   const begun = await ctx.runMutation(internalBeginExecute, intent) as
     InternalRefusal | InternalDuplicate | ExecuteReady
   if (begun.kind !== 'ready') return begun
@@ -644,7 +647,11 @@ async function executeAuthenticatedIntent(
       next,
     }, completedAt),
   ) as InternalRefusal | InternalDuplicate | Applied
-  if (persisted.kind === 'refused') return persisted
+  if (persisted.kind === 'refused') {
+    return releaseSignal.wasReleased()
+      ? { kind: 'update_not_confirmed' }
+      : persisted
+  }
   return effectRefusal ?? persisted
 }
 
