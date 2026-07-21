@@ -4,15 +4,15 @@ milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 current_phase: 3C
 current_phase_name: hosted-paid-operation-product-trial
-status: awaiting_founder_acceptance
-stopped_at: "Phase 3C Sandbox setup/paid Action Detail golden-goblin contract reconciled; no execution authorized"
-last_updated: "2026-07-20"
+status: complete
+stopped_at: "Phase 3C closed at authenticated exact-revision hosted labelled-mock sandbox evidence; admission disabled"
+last_updated: "2026-07-21"
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 7
-  completed_plans: 0
-  percent: 0
+  completed_plans: 7
+  percent: 100
 ---
 
 # Current state
@@ -26,31 +26,39 @@ that a second operation-owned provider can use the same paid-operation host,
 semantics and query-agnostic renderer without fallback or a second product
 stack.
 
+Phase 3C is complete at the authenticated exact-revision hosted labelled-mock
+sandbox boundary. Revision `07581a5a1c91cfaeba8c717fbac5765b9b1fd5b5`
+served the protected human and structured-agent surfaces. The bounded run
+produced one human Provider-A golden operation, one agent Provider-A golden
+operation, and one Provider-B response-lost operation that rejoined only by
+trusted reconciliation. Each invocation owns exactly one attempt, one effect
+generation and one mock effect. The final policy is disabled with three total
+admissions and zero active reservations.
+
 ## Next transition
 
-Founder decision: accept or revise the reconciled seven-wave Phase 3C plan,
-evaluator-only Sandbox setup, reusable paid Action Detail, and golden/goblin UI
-contract.
-Execution remains stopped. Deployment and hosted/Convex access have a second,
-later blocking discovery and authorization checkpoint even if accepted.
+Choose the next customer/product evidence phase. Phase 3C does not by itself
+authorize another sandbox run, a real provider, payment, provider onboarding,
+comparison, workflow composition, or market activation. Retained trial records
+reach their owner review on `2026-08-21`.
 
 ## Remaining evidence gaps
 
 - no real screen-reader session or human comprehension study has been run;
-- the development file port is labelled evidence infrastructure, not
-  production persistence;
-- no hosted, real-payment, independent-settlement, provider or customer proof
-  follows from the completed source loop.
+- the completed run used labelled mock providers and a mock $0.01 payment
+  lifecycle; it proves no real payment, settlement or provider fulfilment;
+- no customer demand, customer value, production-safety or general non-paid
+  action compatibility claim follows from the trial.
 
 ## Evidence ceiling
 
-Phase 3B source through `db7a8552` proves two operation-owned mock providers,
-strict provider-specific normalization, explicit pre-authority selection,
-separate consequence identities, no automatic fallback, cross-provider
-reconciliation/restore refusal and recomputed evidence tooling. Closure binds
-one clean exact-revision packet to the final documentation revision and an
-independent review with no unresolved P0/P1. This remains labelled local/mock
-mechanism evidence only.
+The strongest admitted class is
+`authenticated_exact_revision_hosted_sandbox` for the labelled mock BTC/USD
+trial at revision `07581a5a`. The sanitized packet digest is
+`sha256:18b5f80eeccdc6a102af3993f7145e2b1e5fb604eba64d4723a5db13fb7ded82`.
+It proves hosted reachability, durable reconstruction, human/agent semantic
+parity and safe uncertainty continuity for the paid-operation class. Human
+comprehension remains `NOT_RUN`; automated comprehension remains an adjunct.
 
 Historical state, roadmap, requirements and scopes are preserved under
 `.planning/archive/pre-product-conversion-rebaseline-20260720/`.

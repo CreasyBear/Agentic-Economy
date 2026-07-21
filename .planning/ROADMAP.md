@@ -80,7 +80,7 @@ effect lineage. Evidence remains local/mock only.
 
 ## Phase 3C — Hosted paid-operation product trial
 
-**Status:** awaiting founder acceptance
+**Status:** complete — authenticated exact-revision hosted labelled-mock sandbox
 **Depends on:** Phase 3A and Phase 3B
 **Goal:** let an authenticated developer or product evaluator run, understand
 and safely recover one hosted-sandbox BTC/USD paid operation through equivalent
@@ -122,10 +122,16 @@ agent surfaces diverge, shared semantics or rendering acquire BTC/provider
 branches, uncertainty becomes retryable, or a hosted readback cannot
 reconstruct the safe continuation from durable source-owned records.
 
-Completion may prove authenticated exact-revision hosted-sandbox reachability,
-durable reconstruction, human/agent semantic parity and product comprehension.
-It does not prove real payment or settlement, independently operated provider
-fulfilment, production safety, customer demand or customer value.
+Completion proved authenticated exact-revision hosted-sandbox reachability,
+durable reconstruction and human/agent semantic parity for the paid-operation
+class at revision `07581a5a`. The human Provider-A and agent Provider-A golden
+paths completed at version 5. The Provider-B response-lost goblin rejoined only
+through trusted reconciliation at version 6. All three reservations were
+released, exactly three mock effects remain, temporary credentials were revoked
+with readback, and admission is disabled. Human comprehension remains
+`NOT_RUN`; automated comprehension is adjunct evidence only. This does not
+prove real payment or settlement, independently operated provider fulfilment,
+production safety, customer demand or customer value.
 
 ## Deferred decisions
 

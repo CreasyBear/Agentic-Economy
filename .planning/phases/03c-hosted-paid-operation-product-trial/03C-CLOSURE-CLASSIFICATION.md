@@ -150,12 +150,12 @@ rewritten by that test.
 | Retention review date | `2026-08-21` |
 | Kill-switch owner | `Phase 3C release owner` |
 | Temporary credentials | Create only for the single authorized run, least privilege, then revoke in `finally`; retain no API key, session token, authorization header, or credential preimage in packets or logs. |
-| Sandbox account | Disable new admission immediately after the one authorized run; retain only the operator-owned account reference through review, then retire it. |
+| Sandbox account | New admission was disabled on `2026-07-21` after the one authorized run; retain only the operator-owned account reference through review, then retire it. |
 | Sandbox records | Retain the three declared invocation aggregates and sanitized evidence references through the review date; after review the kill-switch owner retires them through an approved migration/retention action. |
 | Expected residual records | Git/ADR/phase provenance; the sanitized packet if independently admitted; deployment/audit identifiers; revocation audit; and historical digests required to explain the trial. No active reservation, live trial credential, raw provider response, payment payload, custody preimage, or trusted evidence value may remain. |
-| Objective retirement trigger | After the single authorized three-operation run has either been reviewed or abandoned, there is no approved rerun, and `2026-08-21` is reached: the Phase 3C release owner disables policy/admission, verifies zero active reservations, retires credentials/account/records, and opens the source-removal cut. Any safety, identity, counter, reservation, or duplicate-effect contradiction disables admission immediately rather than waiting for the date. |
+| Objective retirement trigger | Admission is already disabled with zero active reservations. When `2026-08-21` is reached and no new run has been separately approved, the Phase 3C release owner reviews the retained three-operation packet, retires the sandbox account/records through an approved migration or retention action, and opens the source-removal cut. Any safety, identity, counter, reservation, or duplicate-effect contradiction accelerates retirement rather than waiting for the date. |
 
-## Evidence admission and open dependency
+## Evidence admission and closeout
 
 An offline or checksum-valid packet can establish only
 `local_packet_integrity_only`. `verifyPacketIntegrity` cannot mint a hosted
@@ -165,10 +165,13 @@ and readback, independently recomputed agent semantics, and the raw
 operator-invoked bounded Convex observation may return
 `authenticated_exact_revision_hosted_sandbox`.
 
-That live path is not ready to run from this source revision. The current
-application-service reconstruction omits a durable prepared payment when the
-version-2 aggregate has no attempt, so it projects payment authorization as not
-created. The smoke remains strict on `Payment prepared`, `not_submitted`, and
-execute-only. A separate parent-owned application-service plus hosted
-composition/gateway TDD correction is required before deployment or live
-admission; this closure record does not fabricate that state.
+The prepared-payment reconstruction dependency was closed before release. The
+single authorized live path then cross-linked exact revision `07581a5a`,
+Vercel deployment `dpl_5HLSWhERc9krTWgqwGySbiNangvB`, GitHub run
+`29798672036`, the authenticated human and scoped-agent surfaces, and the raw
+bounded Convex cohort. It earned
+`authenticated_exact_revision_hosted_sandbox` only for the labelled mock
+trial. Its packet digest is
+`sha256:18b5f80eeccdc6a102af3993f7145e2b1e5fb604eba64d4723a5db13fb7ded82`.
+Admission is disabled; three aggregates and their sanitized evidence references
+remain under the review posture above.

@@ -627,8 +627,8 @@ export function verifyPacketIntegrity(input: unknown): PaidOperationPacketIntegr
       return refused('projection_semantics_mismatch')
     }
     if (index === 2 && !sameJson(
-      readPath(terminalProjection.semantics, ['continuations']),
-      [{ kind: 'inspect' }],
+      continuationKinds(terminalProjection.semantics),
+      ['inspect'],
     )) {
       return refused('unsafe_uncertainty_continuation')
     }

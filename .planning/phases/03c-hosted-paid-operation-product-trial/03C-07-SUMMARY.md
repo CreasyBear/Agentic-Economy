@@ -428,3 +428,57 @@ Only a successful concrete live admission after those steps may upgrade the
 evidence class. The child commit and tree cannot self-identify inside their own
 bytes; they are reported with the exact name-status and clean-status custody
 handoff after this record is committed.
+
+## Final exact-revision hosted closeout
+
+Phase 3C subsequently completed the authorized hosted run at exact application
+revision `07581a5a1c91cfaeba8c717fbac5765b9b1fd5b5`, tree
+`7c474487f02230500573fc933e525ccb70d9fc76`, Vercel deployment
+`dpl_5HLSWhERc9krTWgqwGySbiNangvB`, GitHub run `29798672036` attempt 1, and
+Convex deployment `formal-jaguar-441`. The canonical production alias resolved
+to that READY deployment before lifecycle mutation.
+
+The single bounded cohort produced these durable outcomes:
+
+| Surface/path | Terminal truth | Effect count |
+| --- | --- | --- |
+| Authenticated human, Provider A golden | version 5; terminal; settled labelled-mock payment; valid result | 1 |
+| Scoped structured agent, Provider A golden | version 5; terminal; settled labelled-mock payment; valid result | 1 |
+| Scoped agent, Provider B response-lost goblin | version 5 exposed only `reconcile`; trusted server evidence advanced it to version 6; terminal; no delivered result | 1 |
+
+The operator readback found exactly three admissions, zero active reservations,
+three attempts, three effect generations and three effects. Every reservation
+is released. The goblin's only effect retained `response_lost` delivery; no
+retry, provider switch, fallback or duplicate release occurred. The temporary
+human session and one-hour `paid_operation:invoke` key were revoked in
+`finally` and independently read back as revoked for the exact evaluator.
+
+The first final packet admission exposed one proof-tool defect after all three
+journeys and both revocation readbacks had completed:
+`verifyPacketIntegrity` compared the terminal projection's full typed inspect
+descriptor with `{ kind: "inspect" }`. The actual paid-operation semantic
+object correctly includes command, version, input and authority fields. A
+focused RED proved the false refusal; the verifier now compares the exact
+continuation-kind sequence and continues to refuse retry, provider switch or
+extra continuations. No hosted lifecycle was replayed. The packet was rebuilt
+from the same retained aggregate, command, attempt, effect, projection and
+credential-revocation facts and independently verified as local packet
+integrity.
+
+The sanitized packet checksum is
+`sha256:18b5f80eeccdc6a102af3993f7145e2b1e5fb604eba64d4723a5db13fb7ded82`;
+its retained file SHA-256 is
+`6252f131fc0a57180248a17682ab80b139395a7996c9f48ef8480921d89c94c2`.
+The mode-0600 local evidence copy is retained at
+`/Users/joelchan/.codex/evidence/agentic-economy/phase3c/07581a5a-hosted-proof.packet.json`.
+The g5 policy digest
+`sha256:fe786e59a7e03285b895de0180b100ff07557fd0704d991e4b7e12f356519030`
+is disabled. Final status is three admitted, zero active, with retained review
+date `2026-08-21` and kill-switch owner `Phase 3C release owner`.
+
+The strongest evidence class is
+`authenticated_exact_revision_hosted_sandbox` for this labelled mock BTC/USD
+trial. Human comprehension remains `NOT_RUN`; the automated instrument remains
+an adjunct. Nothing here proves a real provider, payment, settlement,
+fulfilment, production safety, demand, customer value, onboarding, general
+non-paid compatibility or authorization for another run.

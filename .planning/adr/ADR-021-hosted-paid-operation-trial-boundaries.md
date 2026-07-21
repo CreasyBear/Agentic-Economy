@@ -1,5 +1,5 @@
 ---
-status: accepted_for_phase_3c_plan_07a_amended
+status: accepted_and_implemented_for_phase_3c
 date: 2026-07-20
 amended: 2026-07-21
 decision_owner: Founder
@@ -8,7 +8,7 @@ applies:
   - ADR-010
   - ADR-019
   - ADR-020
-evidence_ceiling: source_inspection_and_classified_red_fixtures
+evidence_ceiling: authenticated_exact_revision_hosted_sandbox
 ---
 
 # Hosted paid-operation trial boundaries
@@ -254,6 +254,30 @@ compiled evaluator identity would lack safe history and immediate disable;
 caller/free-form runtime labels are forgeable; and hardcoding hosted labels in
 local fixtures would manufacture a hosted claim. This amendment has only
 source and labelled local-fixture evidence.
+
+## Phase 3C hosted closeout
+
+The separately authorized run served exact source revision
+`07581a5a1c91cfaeba8c717fbac5765b9b1fd5b5` through Vercel deployment
+`dpl_5HLSWhERc9krTWgqwGySbiNangvB`, GitHub run `29798672036`, and Convex
+deployment `formal-jaguar-441`. One authenticated human Provider-A operation
+and one scoped-agent Provider-A operation completed at version 5. One
+Provider-B response-lost operation exposed reconciliation as its sole safe
+continuation and resolved from server-owned evidence at version 6.
+
+The bounded operator observation records exactly three admissions, three
+released reservations, three attempts, three effect generations and three mock
+effects. No operation replayed or switched provider. The temporary human
+session and one-hour `paid_operation:invoke` key were both revoked and read
+back as revoked. The g5 admission policy was then disabled with zero active
+reservations. The sanitized packet digest is
+`sha256:18b5f80eeccdc6a102af3993f7145e2b1e5fb604eba64d4723a5db13fb7ded82`.
+
+This evidence raises only the hosted labelled-mock claim. It does not change
+the authority, reconciliation, ownership, provider-selection or claim-ceiling
+decisions above, and it does not prove real payment, settlement, independently
+operated provider fulfilment, production safety, human comprehension, demand,
+customer value or compatibility with non-paid action classes.
 
 ## Plan 01 acceptance
 

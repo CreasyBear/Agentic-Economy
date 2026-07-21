@@ -194,6 +194,28 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     })
   })
 
+  it('accepts the full typed inspect continuation emitted by the paid-operation projection', () => {
+    const packet = mutateContent((content) => {
+      const typedInspect = {
+        kind: 'inspect',
+        command: 'inspect_paid_operation',
+        requiredInput: [],
+        expectedInvocationVersion: 6,
+        authorityRequired: false,
+      }
+      for (const projection of Object.values(content.scenarios[2]!.projections)) {
+        if (projection === null) continue
+        projection.semantics.continuations = [typedInspect]
+        projection.semanticDigest = canonicalProofDigest(projection.semantics)
+      }
+    })
+    expect(verifyPacketIntegrity(packet)).toEqual({
+      kind: 'packet_integrity_verified',
+      evidenceClass: 'local_packet_integrity_only',
+      packetDigest: packet.checksum.digest,
+    })
+  })
+
   it('refuses duplicate, hidden, or extra generations/effects/invocations and active reservations', () => {
     const hiddenEffect = mutateContent((content) => {
       const invocation = content.sourceObservation.invocations[0]!

@@ -447,3 +447,22 @@ the bounded policy and receipt generation, retains all eight prior records, and
 sets the proof cap to exactly eight retained plus three current records. No
 caller assertion, raw session ID, token, credential or identity preimage enters
 the packet.
+
+## Generation-5 hosted closeout
+
+Generation 5 deployed revision `07581a5a1c91cfaeba8c717fbac5765b9b1fd5b5`
+through Vercel `dpl_5HLSWhERc9krTWgqwGySbiNangvB`, GitHub run
+`29798672036`, and Convex `formal-jaguar-441`. The protected human golden path,
+scoped-agent golden path and response-lost goblin all completed once. Durable
+readback records terminal versions 5, 5 and 6 respectively, exactly one effect
+per invocation, released reservations and no replay or provider switch.
+
+Both temporary credentials were revoked and independently read back as
+revoked. After packet reconstruction from the retained source-owned cohort,
+the policy was disabled at three total admissions and zero active reservations.
+The sanitized packet digest is
+`sha256:18b5f80eeccdc6a102af3993f7145e2b1e5fb604eba64d4723a5db13fb7ded82`.
+The final claim is only authenticated exact-revision hosted labelled-mock
+sandbox evidence; human comprehension remains `NOT_RUN` and real provider,
+payment, settlement, fulfilment, safety, demand and customer value remain
+unproven.
