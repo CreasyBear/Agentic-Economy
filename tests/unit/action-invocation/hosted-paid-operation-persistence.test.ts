@@ -408,6 +408,43 @@ describe('hosted paid-operation durable boundary', () => {
     expect(port.effectGenerationCount(initial.invocation.invocationRef)).toBe(1)
   })
 
+  it('refuses a valid replacement proposal and preserves the original through cold load', async () => {
+    const current = aggregate()
+    const originalProposal = current.paymentProposal!
+    const { proposalDigest: originalDigest, ...proposalMaterial } = originalProposal
+    const replacementProposal = createHostedPaidOperationPaymentProposal({
+      ...proposalMaterial,
+      providerEndpoint: 'https://replacement.invalid/btc-usd',
+    })
+    expect(replacementProposal.proposalDigest).not.toBe(originalDigest)
+
+    const port = createInMemoryHostedPaidOperationPort<Result>([current])
+    await expect(port.transact({
+      owner: current.invocation.owner,
+      invocationRef: current.invocation.invocationRef,
+      commandId: 'command:replace-proposal',
+      commandDigest: 'sha256:replace-proposal',
+      expectedInvocationVersion: current.invocation.invocationVersion,
+      next: {
+        ...current,
+        invocation: {
+          ...current.invocation,
+          invocationVersion: current.invocation.invocationVersion + 1,
+        },
+        paymentProposal: replacementProposal,
+      },
+    })).resolves.toEqual({ kind: 'refused', code: 'aggregate_incomplete' })
+
+    const coldPort = createInMemoryHostedPaidOperationPort<Result>(port.exportDurableFixture())
+    const cold = await coldPort.loadComplete({
+      owner: current.invocation.owner,
+      invocationRef: current.invocation.invocationRef,
+    })
+    expect(cold.kind).toBe('loaded')
+    if (cold.kind !== 'loaded') return
+    expect(cold.aggregate.paymentProposal?.proposalDigest).toBe(originalDigest)
+  })
+
   it('reserves evaluator admission atomically without granting consequence authority', async () => {
     const port = createInMemoryHostedPaidOperationPort<Result>([], {
       enabled: true,

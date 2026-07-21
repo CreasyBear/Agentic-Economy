@@ -250,13 +250,22 @@ export function createInMemoryHostedPaidOperationPort<Result extends ActionResul
       if (input.trustedObservationGuard !== undefined) {
         return { kind: 'refused', code: 'trusted_observation_changed' }
       }
-      if (aggregateIncomplete(input.next) !== undefined) {
+      const currentProposal = current.paymentProposal
+      const nextProposal = input.next.paymentProposal
+      if (currentProposal === undefined
+        || nextProposal === undefined
+        || aggregateIncomplete(current) !== undefined
+        || aggregateIncomplete(input.next) !== undefined
+        || currentProposal.proposalDigest !== nextProposal.proposalDigest) {
         return { kind: 'refused', code: 'aggregate_incomplete' }
       }
       if (input.next.invocation.invocationVersion <= current.invocation.invocationVersion) {
         return { kind: 'refused', code: 'stale_invocation_version' }
       }
-      records.set(input.invocationRef, clone(input.next))
+      records.set(input.invocationRef, clone({
+        ...input.next,
+        paymentProposal: currentProposal,
+      }))
       const effectGeneration = input.next.header.currentEffectGeneration
       commands.set(commandKey, {
         digest: input.commandDigest,
