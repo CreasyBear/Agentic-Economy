@@ -317,3 +317,9 @@ and adds four narrower requirements:
 Until a fresh collector completes those checks, the claim ceiling is source,
 focused local/mock fixtures, historical hosted observations, and
 `local_packet_integrity_only`. Human comprehension remains `NOT_RUN`.
+
+The repair source and local audit cuts completed on 2026-07-21. They do not
+supersede this evidence ceiling: immutable proposal custody, human/agent safe
+continuity, v2 deployment binding and admission shutdown have only source,
+fixture and labelled local-browser evidence until a separately authorized fresh
+collector runs from the exact audited revision.

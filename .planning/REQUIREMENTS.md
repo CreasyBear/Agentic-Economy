@@ -174,6 +174,9 @@ component or model-generated executable UI.
 P3C-R1 through P3C-R11 remain unchecked. The retained v1 packet was rebuilt
 after the live collector refused and therefore establishes only
 `local_packet_integrity_only`. The repair contract is
-`03C-REPAIR-PLAN.md`. P3C-R10 cannot close until eligible human comprehension
-sessions satisfy the frozen instrument; the automated result remains
-`automated_adjunct_only`.
+`03C-REPAIR-PLAN.md`. Cuts 0-4 are locally integrated and their focused source,
+UI, browser, residue and v2 verifier gates are green, but no requirement is
+upgraded by that local evidence. A fresh exact-revision hosted v2 run remains
+required for technical hosted admission. P3C-R10 cannot close until eligible
+human comprehension sessions satisfy the frozen instrument; the automated
+result remains `automated_adjunct_only`.

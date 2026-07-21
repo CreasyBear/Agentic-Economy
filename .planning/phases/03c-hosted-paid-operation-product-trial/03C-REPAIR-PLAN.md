@@ -63,3 +63,22 @@ compatibility.
 The loop ends with working source and source-bound evidence, a source-linked
 narrowing decision, or the earliest genuine external blocker. Mechanical
 fixture, import, typing and metadata problems are repaired inside the owned cut.
+
+## Local integration checkpoint — 2026-07-21
+
+Cuts 0-4 are locally complete. The source implementation snapshot immediately
+before this planning checkpoint is
+`74107bd347630e83c4fe4b4572e1d17335a932d0` (tree
+`b00507a11690b8447fbd2f47c4692d8beaa4a51d`). The lifecycle, surface and release
+goblins found no P0s; their P1s were returned once to the owning seams and closed
+with focused regression contracts. The final local gates passed 188 Phase 3C
+source checks, five UI-contract checks, twelve combined paid-operation browser
+checks, 81 hosted-source checks, changed-path lint and diff checks. The retained
+v1 packet still verifies only as `local_packet_integrity_only`.
+
+The broad import command retains two unrelated baseline failures in capability
+contract and private-import boundaries. Repository typecheck retains 108
+unrelated diagnostics; none name a repair-changed TypeScript path. Neither
+baseline is adopted by this repair loop. No push, deployment, Convex control
+plane, Clerk credential or hosted lifecycle action occurred. Cut 5 is paused at
+the required fresh exact-revision external-authorization checkpoint.

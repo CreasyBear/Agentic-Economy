@@ -80,7 +80,7 @@ effect lineage. Evidence remains local/mock only.
 
 ## Phase 3C — Hosted paid-operation product trial
 
-**Status:** verification_required — post-closeout repair in progress
+**Status:** verification_required — local repair complete; fresh hosted v2 run pending
 **Depends on:** Phase 3A and Phase 3B
 **Goal:** let an authenticated developer or product evaluator run, understand
 and safely recover one hosted-sandbox BTC/USD paid operation through equivalent
@@ -126,11 +126,13 @@ The hosted run retained useful source facts: two golden mock effects, one
 response-lost effect, revoked temporary credentials, and a disabled g5 policy.
 Its live collector refused before final admission, however, and the packet was
 rebuilt later. The retained packet therefore proves local integrity only. A
-fresh repair must persist immutable payment proposal facts, make agent commands
-source-issued, close stale/relationless recovery, remove the hidden rich human
-projection, bind an immutable deployment URL, and retain post-disable state in
-a v2 packet before the hosted class can be reconsidered. Human comprehension
-remains `NOT_RUN`; automated comprehension is adjunct evidence only.
+local repair now persists immutable payment proposal facts, makes agent commands
+source-issued, closes stale/relationless recovery, removes the hidden rich human
+projection, binds an immutable deployment URL, and requires retained
+post-disable state in a v2 packet. Those transitions are source-, fixture- and
+labelled-browser-verified only. A fresh exact-revision hosted run must exercise
+them before the hosted class can be reconsidered. Human comprehension remains
+`NOT_RUN`; automated comprehension is adjunct evidence only.
 
 ## Deferred decisions
 
