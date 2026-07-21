@@ -135,6 +135,8 @@ jobs:
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Refuse a Phase 3C checkout other than the triggering revision
         run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"

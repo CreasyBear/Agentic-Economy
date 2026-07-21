@@ -30,6 +30,15 @@ lifecycle and does not create or use temporary Clerk credentials.
 The child began clean at the exact base. Parent custody verified before source
 work and again after the first source transition. No parent entry changed.
 
+The targeted full-history correction resumed clean at
+`d27591d04a8e2f694055400522aeefda235abc2a` / tree
+`28fc67c0ff2c6ff749050cdba6b3845f55222639`. Its parent custody manifest is
+`/tmp/ae-phase3c-parent-custody-d27591d0.json`, with canonical digest
+`58322771ff39d31a0b278b4a0cf3bf6ac4c8cedbcf153c7df0518d278438dfcf`
+and entries-only digest
+`1591c52ecb943bab01aea9781ad55fd5a9dc6275eb202363d62b950ab9000fc1`
+across the same 66 inherited entries.
+
 ## Named RED evidence
 
 The TDD loop captured intended failures before implementation:
@@ -45,12 +54,37 @@ The TDD loop captured intended failures before implementation:
 | Evaluator secret binding | Filtered `paid-operation-hosted-release.test.ts` during parent audit correction | `[P3C_RED:phase3c_customer_request_evaluator_secret_absent]` exposed the nonexistent paid-operation secret binding before configuration. |
 | Pre-attempt payment owner gate | Filtered `paid-operation-hosted-release.test.ts` during parent audit correction | `[P3C_RED:phase3c_release_owner_test_absent] tests/unit/action-invocation/paid-operation-application-service.test.ts`. |
 | Temporary-credential owner gate | The same filtered test after the first gate repair | `[P3C_RED:phase3c_release_owner_test_absent] tests/unit/release/customer-request-production-credential.test.ts`. |
+| Full-history source checkout | Filtered `paid-operation-hosted-release.test.ts` after the first authorized marker run | `[P3C_RED:phase3c_full_history_checkout_absent]` proved the Phase 3C source job did not bind `fetch-depth: 0`. |
 
 The pre-change Customer Request completeness file also had three unrelated
 stale source-shape assertions plus its old workflow-order assertion. They are
 baseline fixture drift, not evidence about this release transition. The
 allowed test file is minimally re-grounded during final verification so the
 focused gate can exercise its live source owners.
+
+## First authorized marker attempt ledger
+
+The parent-provided external ledger records that main advanced from
+`a91a37a3d8da09546994e70af92d6e532a4471e6` to
+`d27591d04a8e2f694055400522aeefda235abc2a`. GitHub run `29788718518`
+failed only in Phase 3C source proof, before build or production, because
+`paid-operation-trial-residue.test.ts` invoked
+`git diff --name-only 2debf4b9f65ce228491f7d3d17ed1654a23bb496` in the default shallow
+`actions/checkout@v6` clone and Git reported `fatal: bad object`. Sixteen files
+loaded and 163 tests passed; the residue suite ran zero tests because its import
+failed.
+
+Vercel Git integration created exact deployment
+`dpl_3D4hsxUbTRVvrwSKQW4f48nhby88` and moved the production alias before the
+source job failed. The parent executed the recorded rollback; subsequent
+inspection established that `agentic-economy-phi.vercel.app` again resolved to
+prior READY deployment `dpl_4Y9pqP1UwVNNwSAXaEgzZpDh9Vm1` at `a91a37a3`.
+The first Vercel deployment occurred and was rolled back.
+
+The Phase 3C Convex job was skipped: zero Convex deploy, admission
+configuration, temporary credential creation or use, hosted lifecycle, or
+hosted readback occurred. The one-Vercel attempt count is consumed. Any retry
+requires fresh parent external authorization.
 
 ## Selected and rejected recovery paths
 
@@ -93,9 +127,12 @@ bearer token or response body.
 
 `.github/workflows/kernel-release-gate.yml` now makes the ordinary and marker
 paths mutually exclusive. The marker source job checks the exact clean
-checkout, uses a frozen install, runs `verify:phase3c:release-source`, runs
-`build` separately, and refuses generated-file drift. Its production successor
-observes Vercel, runs exactly one Convex deploy, configures totals `3/1/3` for
+checkout with full Git history (`fetch-depth: 0`) so the Git-derived residue
+gate can resolve its declared Phase base. It uses a frozen install, runs
+`verify:phase3c:release-source`, runs `build` separately, and refuses
+generated-file drift. The other checkout steps remain unchanged. Its
+production successor observes Vercel, runs exactly one Convex deploy,
+configures totals `3/1/3` for
 about four hours through `2026-08-21T00:00:00.000Z` retention with kill-switch
 owner `Phase 3C release owner`, and ends at the exact named receipt step. Parent
 names-only GitHub readback established that the configured evaluator secret is
@@ -122,7 +159,7 @@ corrections:
 | `npm run verify:phase3c:release-source` | 17 files, 167 tests passed. |
 | Changed-path `oxlint --deny-warnings` | Passed with no diagnostics. |
 | `git diff --check` | Passed. |
-| YAML parse plus source-count extraction | Four jobs parsed; marker present; Phase 3C production has one observer, one Convex deploy, zero Vercel mutation/create paths, one admission configuration and one receipt write; receipt is the final step. |
+| YAML parse plus source-count extraction | Four jobs parsed; marker present; only Phase 3C source checkout has `fetch-depth: 0`; Phase 3C production has one observer, one Convex deploy, zero Vercel mutation/create paths, one admission configuration and one receipt write; receipt is the final step. |
 
 `npm run typecheck` was run only for diagnostic extraction. It exited `2` with
 108 inherited repository diagnostics, led by existing Convex capability-supply
@@ -140,6 +177,11 @@ were moved to macOS Trash. The workflow now uses the same archive-isolated
 mechanism, so its post-build clean guard observes the exact checkout rather
 than generated scratch churn.
 
+The targeted full-history correction did not rerun `npm run build`: it changes
+checkout metadata, one static workflow assertion, and this ledger only. No
+executable application source or build command changed, so the existing exact-
+candidate build evidence remains the applicable build result.
+
 Final stage/commit and post-commit custody checks remain outside this record's
 self-contained source identity. No hosted or control-plane command was run.
 
@@ -155,13 +197,15 @@ those functions or create another lifecycle.
 
 ## Evidence and claim ceiling
 
-Evidence is source inspection, static workflow contract, focused unit/import/UI
-fixtures, mocked Vercel responses, and the local build only. It cannot
-prove a Git push, workflow run, Vercel or Convex deployment, served revision,
-credential identity, hosted reachability, provider fulfilment, payment,
-settlement, comprehension or accessibility in use, production safety, demand,
-or customer value.
+The attempt, deployment, rollback, and skipped-job statements above are the
+parent-provided exact external ledger and readback. This correction's own
+evidence is source inspection, static workflow contract, focused local fixtures,
+mocked Vercel responses, and the retained local build result. It does not prove
+a successful retry, Convex deployment, served corrected revision, credential
+identity, hosted reachability, provider fulfilment, payment, settlement,
+comprehension or accessibility in use, production safety, demand, or customer
+value.
 
-The next safe action is parent audit of the exact committed candidate, followed
-by a separately authorized marker push and parent-owned hosted readback. This
-child performs neither external action.
+The next safe action is parent audit of the exact committed correction. Any
+marker retry and parent-owned hosted readback require fresh external
+authorization. This child performs neither action.

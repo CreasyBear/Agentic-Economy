@@ -771,6 +771,12 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(phase3CSource).toContain(
       "if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[phase3c-hosted-trial]')",
     )
+    expect(
+      phase3CSource,
+      '[P3C_RED:phase3c_full_history_checkout_absent]',
+    ).toMatch(
+      /- uses: actions\/checkout@v6\n\s+with:\n\s+fetch-depth: 0/u,
+    )
     expect(phase3CProduction).toContain(
       "if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[phase3c-hosted-trial]')",
     )
