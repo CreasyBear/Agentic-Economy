@@ -403,3 +403,24 @@ changed-path lint, diff checks and changed-path TypeScript filtering. These
 remain source and local-fixture results until a later exact generation-3
 deployment completes the human, structured-agent and uncertainty paths,
 revocation, admission shutdown and packet verification.
+
+## Generation-3 hosted result and generation-4 correction
+
+Exact generation 3 admitted all three intended operations. The human and
+structured-agent golden paths each produced one settled labelled-mock effect.
+The provider-B operation produced one effect with `response_lost` delivery and
+correctly stopped at invocation version 5 with reconciliation as its only safe
+continuation. The run was refused before reconciliation because the live
+journey collector incorrectly expected payment submission `observed` and
+settlement `settled` while transport remained uncertain. Durable source truth
+was `possibly_submitted` and `unknown`, matching the paid-operation semantic
+owner and existing Convex contract tests. Temporary credentials were revoked,
+generation 3 was disabled, and no effect was replayed.
+
+Generation 4 changes that collector expectation and advances the bounded
+policy and deployment-receipt generation. It retains generations 1 through 3,
+expands the proof header cap to the exact five retained records plus three
+current records, and atomically disables and releases any remaining prior
+generation-3 admission during configuration. The hosted evidence class remains
+unearned until a complete generation-4 exact-revision packet passes independent
+verification.

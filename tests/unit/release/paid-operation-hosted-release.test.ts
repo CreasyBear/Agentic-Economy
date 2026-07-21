@@ -735,6 +735,14 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(journey).toContain("paymentSubmission: 'not_submitted'")
     expect(journey).toContain("settlement: 'no_evidence'")
     expect(
+      goblin,
+      '[P3C_RED:uncertain_transport_must_not_claim_observed_payment]',
+    ).toContain("paymentSubmission: 'possibly_submitted'")
+    expect(
+      goblin,
+      '[P3C_RED:uncertain_transport_must_not_claim_settlement]',
+    ).toContain("settlement: 'unknown'")
+    expect(
       journey,
       '[P3C_RED:surface_owner_crossing_not_removed]',
     ).toContain('async function captureHumanCheckpoint')
@@ -1362,7 +1370,7 @@ function rawObservationFixture(
     }
   })
   const receiptWithoutDigest = {
-    receiptRef: 'phase3c-paid-operation-exact-revision-deployment:g3',
+    receiptRef: 'phase3c-paid-operation-exact-revision-deployment:g4',
     sourceRevision: SOURCE_REVISION,
     sourceTree: SOURCE_TREE,
     githubRunId: '123456',
@@ -1394,7 +1402,7 @@ function rawObservationFixture(
       },
     },
     policy: {
-      policyRef: 'phase-3c-hosted-paid-operation-trial:g3',
+      policyRef: 'phase-3c-hosted-paid-operation-trial:g4',
       enabled: true,
       policyDigest: DIGEST('a'),
       sourceRevision: SOURCE_REVISION,

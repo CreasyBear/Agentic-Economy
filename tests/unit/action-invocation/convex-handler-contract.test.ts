@@ -954,7 +954,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       await backend.run(async (ctx) => {
         const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
           .withIndex('by_policyRef_and_principalRef', (q) =>
-            q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g3')
+            q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g4')
               .eq('principalRef', ownerIdentity.subject))
           .unique()
         if (counter === null) throw new Error('test_counter_missing')
@@ -1347,6 +1347,50 @@ describe('authenticated hosted paid-operation intent gateway', () => {
         admissionReservationRef: priorAuthorizedReservationRef,
         updatedAt: '2026-07-21T02:29:43.941Z',
       })
+      const priorUncertaintyPolicyRef = 'phase-3c-hosted-paid-operation-trial:g3'
+      const priorUncertaintyDigest = `sha256:${'d'.repeat(64)}`
+      await ctx.db.insert('hostedPaidOperationAdmissionPolicies', {
+        policyRef: priorUncertaintyPolicyRef,
+        enabled: false,
+        principalRef: ownerIdentity.subject,
+        totalLimit: 3,
+        concurrencyLimit: 1,
+        rateLimit: 3,
+        policyDigest: priorUncertaintyDigest,
+        sourceRevision: '10635cceeaace76327ae0292758456a84d12d659',
+        admissionEndsAt: '2026-07-21T06:52:20.000Z',
+        retainThrough: '2026-08-21T00:00:00.000Z',
+        killSwitchOwner: 'operator:phase3c',
+        recordedAt: '2026-07-21T02:52:20.000Z',
+      })
+      await ctx.db.insert('hostedPaidOperationAdmissionCounters', {
+        policyRef: priorUncertaintyPolicyRef,
+        principalRef: ownerIdentity.subject,
+        policyDigest: priorUncertaintyDigest,
+        currentWindowKey: '2026-07-21T02',
+        admittedTotal: 3,
+        active: 0,
+        admittedInWindow: 3,
+        updatedAt: '2026-07-21T03:00:00.000Z',
+      })
+      for (const [index, version] of [5, 5, 5].entries()) {
+        const reservationRef = `reservation:retained-g3:${index + 1}`
+        await ctx.db.insert('hostedPaidOperationAdmissionReservations', {
+          reservationRef,
+          policyRef: priorUncertaintyPolicyRef,
+          principalRef: ownerIdentity.subject,
+          policyDigest: priorUncertaintyDigest,
+          state: 'released',
+          updatedAt: '2026-07-21T03:00:00.000Z',
+        })
+        await ctx.db.insert('hostedPaidOperationHeaders', {
+          ...retainedHeader,
+          invocationRef: `invocation:retained-g3:${index + 1}`,
+          invocationVersion: version,
+          admissionReservationRef: reservationRef,
+          updatedAt: `2026-07-21T02:54:0${index + 6}.000Z`,
+        })
+      }
     })
 
     const observed = await backend.query(phase3CHostedProofObservation, { invocationRefs })
@@ -1410,7 +1454,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     await backend.run(async (ctx) => {
       const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
         .withIndex('by_policyRef_and_principalRef', (q) =>
-          q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g3')
+          q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g4')
             .eq('principalRef', ownerIdentity.subject))
         .unique()
       if (counter === null) throw new Error('test_counter_missing')
@@ -1498,7 +1542,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
           await backend.run(async (ctx) => {
             const rows = await ctx.db.query('hostedPaidOperationAdmissionReservations')
               .withIndex('by_policyRef_and_principalRef_and_reservationRef', (q) =>
-                q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g3')
+                q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g4')
                   .eq('principalRef', ownerIdentity.subject))
               .take(1)
             if (rows[0] === undefined) throw new Error('test_reservation_missing')
@@ -1579,7 +1623,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       await cohort.backend.run(async (ctx) => {
         const rows = await ctx.db.query('hostedPaidOperationDeploymentReceipts')
           .withIndex('by_receiptRef', (q) =>
-            q.eq('receiptRef', 'phase3c-paid-operation-exact-revision-deployment:g3'))
+            q.eq('receiptRef', 'phase3c-paid-operation-exact-revision-deployment:g4'))
           .take(2)
         if (rows[0] === undefined) throw new Error('test_deployment_receipt_missing')
         if (drift === 'missing') await ctx.db.delete(rows[0]._id)
@@ -1816,7 +1860,7 @@ async function admitOwner(backend: HostedBackend, rateLimit = 2) {
 async function admitPrincipal(backend: HostedBackend, principalRef: string, rateLimit = 2) {
   await backend.run(async (ctx) => {
     await ctx.db.insert('hostedPaidOperationAdmissionPolicies', {
-      policyRef: 'phase-3c-hosted-paid-operation-trial:g3',
+      policyRef: 'phase-3c-hosted-paid-operation-trial:g4',
       enabled: true,
       principalRef,
       totalLimit: 3,

@@ -232,7 +232,7 @@ export const sourceObservationSchema = z.strictObject({
       class: z.enum(['s16', 's256', 'd1024']),
     }),
     receipt: z.strictObject({
-      receiptRef: z.literal('phase3c-paid-operation-exact-revision-deployment:g3'),
+      receiptRef: z.literal('phase3c-paid-operation-exact-revision-deployment:g4'),
       sourceRevision: revisionSchema,
       sourceTree: z.string().regex(/^[0-9a-f]{40}$/u),
       githubRunId: z.string().regex(/^[1-9][0-9]*$/u),
@@ -248,7 +248,7 @@ export const sourceObservationSchema = z.strictObject({
     }),
   }),
   policy: z.strictObject({
-    policyRef: z.literal('phase-3c-hosted-paid-operation-trial:g3'),
+    policyRef: z.literal('phase-3c-hosted-paid-operation-trial:g4'),
     enabled: z.boolean(),
     policyDigest: digestSchema,
     sourceRevision: revisionSchema,

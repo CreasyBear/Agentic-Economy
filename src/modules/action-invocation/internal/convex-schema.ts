@@ -411,6 +411,7 @@ export const actionInvocationTables = {
       v.literal('phase3c-paid-operation-exact-revision-deployment'),
       v.literal('phase3c-paid-operation-exact-revision-deployment:g2'),
       v.literal('phase3c-paid-operation-exact-revision-deployment:g3'),
+      v.literal('phase3c-paid-operation-exact-revision-deployment:g4'),
     ),
     sourceRevision: v.string(),
     sourceTree: v.string(),

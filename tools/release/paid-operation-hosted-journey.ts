@@ -212,8 +212,8 @@ async function runGoblinScenario(
   assertProjectionState(responseLostProjection, {
     version: 5,
     paymentAuthorization: 'created',
-    paymentSubmission: 'observed',
-    settlement: 'settled',
+    paymentSubmission: 'possibly_submitted',
+    settlement: 'unknown',
     resultDelivery: 'not_delivered',
     continuations: ['reconcile'],
   })
