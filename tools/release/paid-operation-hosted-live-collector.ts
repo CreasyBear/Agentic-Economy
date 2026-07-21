@@ -124,6 +124,9 @@ export async function collectAndAdmitLivePaidOperationHostedEvidence(
   let credentialResult: Awaited<ReturnType<typeof collectJourneyWithCredentials>> | undefined
 
   try {
+    beforeLifecycle = await collectPhase3CAdmissionState(contextInput, dependencies.exec)
+    lifecycleEntered = beforeLifecycle.state === 'enabled'
+    assertPreLifecycleAdmission(beforeLifecycle, target.source.expectedRevision)
     source = await observeStableCleanGit(
       target.source,
       contextInput.repositoryRoot,
@@ -131,9 +134,6 @@ export async function collectAndAdmitLivePaidOperationHostedEvidence(
     )
     beforeBinding = await collectVercelBinding(target, contextInput, dependencies.fetch)
     githubDeployment = await collectGitHubDeployment(target, dependencies.fetch)
-    beforeLifecycle = await collectPhase3CAdmissionState(contextInput, dependencies.exec)
-    lifecycleEntered = beforeLifecycle.state === 'enabled'
-    assertPreLifecycleAdmission(beforeLifecycle, target.source.expectedRevision)
 
     credentialResult = await collectJourneyWithCredentials(
       target,

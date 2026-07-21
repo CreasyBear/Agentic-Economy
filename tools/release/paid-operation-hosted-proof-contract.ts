@@ -10,6 +10,8 @@ export const PAID_OPERATION_HOSTED_EVIDENCE_CLASS =
   'authenticated_exact_revision_hosted_sandbox' as const
 export const PAID_OPERATION_PACKET_INTEGRITY_CLASS =
   'local_packet_integrity_only' as const
+export const PHASE3C_PRODUCTION_ALIAS =
+  'agentic-economy-phi.vercel.app' as const
 
 export const EXPECTED_SCENARIO_ORDER = [
   'human_provider_a_golden',
@@ -466,11 +468,12 @@ export const phase3CAdmissionStateSchema = z.strictObject({
 })
 
 export const deploymentSchemaV2 = deploymentSchema.extend({
+  productionUrl: z.literal(PHASE3C_PRODUCTION_ALIAS),
   projectId: z.string().min(1),
   projectName: z.literal('agentic-economy'),
 })
 const aliasBindingSchemaV2 = z.strictObject({
-  hostname: z.string().min(1),
+  hostname: z.literal(PHASE3C_PRODUCTION_ALIAS),
   resolvedDeploymentId: z.string().regex(/^dpl_[A-Za-z0-9]+$/u),
   resolvedImmutableHostname: z.string().min(1),
 })
@@ -609,7 +612,7 @@ export const liveCollectionTargetSchema = z.strictObject({
   deployment: z.strictObject({
     id: z.string().regex(/^dpl_[A-Za-z0-9]+$/u),
     immutableUrl: z.string().min(1),
-    productionUrl: z.string().min(1),
+    productionUrl: z.literal(PHASE3C_PRODUCTION_ALIAS),
     projectId: z.string().min(1),
     projectName: z.literal('agentic-economy'),
   }),
@@ -1301,8 +1304,9 @@ function vercelBindingValid(
     && exact.repository === 'CreasyBear/Agentic-Economy'
     && exact.readyState === 'READY'
     && exact.target === 'production'
+    && exact.productionUrl === PHASE3C_PRODUCTION_ALIAS
     && exact.url !== exact.productionUrl
-    && binding.alias.hostname === exact.productionUrl
+    && binding.alias.hostname === PHASE3C_PRODUCTION_ALIAS
     && binding.alias.resolvedDeploymentId === exact.id
     && binding.alias.resolvedImmutableHostname === exact.url
 }

@@ -514,6 +514,94 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     }
   })
 
+  it.each(['source', 'vercel', 'github'] as const)(
+    'shuts down g6 when %s preflight fails before credentials or lifecycle work',
+    async (failedPreflight) => {
+      const events: string[] = []
+      const baseExec = fakeLiveCollectionExec(events)
+      const baseFetch = fakeLiveCollectionFetch(events)
+      const result = await collectAndAdmitLivePaidOperationHostedEvidence(
+        liveTargetFixture(),
+        liveContextFixture(),
+        {
+          exec: async (file, args) => {
+            if (failedPreflight === 'source' && file === 'git') {
+              if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+                return 'f'.repeat(40)
+              }
+              if (args[0] === 'rev-parse') return SOURCE_TREE
+              if (args[0] === 'status') return ''
+            }
+            return await baseExec(file, args)
+          },
+          fetch: (async (input, init) => {
+            const url = new URL(
+              typeof input === 'string'
+                ? input
+                : input instanceof URL
+                  ? input.href
+                  : input.url,
+            )
+            if (failedPreflight === 'vercel'
+              && url.hostname === 'api.vercel.com') {
+              return Response.json({ error: 'wrong deployment' }, { status: 404 })
+            }
+            if (failedPreflight === 'github'
+              && url.hostname === 'api.github.com') {
+              return Response.json({ error: 'wrong run' }, { status: 404 })
+            }
+            return await baseFetch(input, init)
+          }) as typeof fetch,
+          runJourney: async () => {
+            events.push('unexpected_journey')
+            throw new Error('journey_must_not_run')
+          },
+        },
+      )
+
+      expect(
+        events,
+        `[P3C_RED:early_${failedPreflight}_failure_skipped_g6_shutdown]`,
+      ).toContain('admission_disabled')
+      expect(events).toContain('admission_disabled_readback')
+      expect(events).not.toContain('unexpected_journey')
+      expect(events).not.toContain('convex_observation')
+      expect(events).not.toContain('key_revoked')
+      expect(events).not.toContain('session_revoked')
+      expect(events.some((event) =>
+        event.includes('/v1/sessions') || event.includes('/v1/api_keys')),
+      ).toBe(false)
+      expect(result.kind).toBe('refused')
+    },
+  )
+
+  it('refuses a caller-selected noncanonical production alias before any read', async () => {
+    const events: string[] = []
+    const canonicalTarget = liveTargetFixture()
+    const target = {
+      ...canonicalTarget,
+      deployment: {
+        ...canonicalTarget.deployment,
+        productionUrl: 'founder-selected.example.test',
+      },
+    }
+    const result = await collectAndAdmitLivePaidOperationHostedEvidence(
+      target,
+      liveContextFixture(),
+      {
+        fetch: fakeLiveCollectionFetch(events),
+        exec: fakeLiveCollectionExec(events),
+        runJourney: async () => journeyObservationFixture(),
+      },
+    )
+
+    expect(
+      result,
+      '[P3C_RED:caller_selected_production_alias_accepted]',
+    ).toEqual({ kind: 'refused', code: 'live_admission_context_required' })
+    expect(events).toEqual([])
+  })
+
   it('refuses v2 deployment, proposal, descriptor, credential, human payload, and shutdown forgery', async () => {
     const packet = await collectLocalV2Packet()
     const mutateV2 = (mutate: (copy: typeof packet) => void) => {
@@ -544,6 +632,22 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     })
     expect(verifyPacketIntegrity(wrongSha)).toEqual({
       kind: 'refused', code: 'deployment_binding_mismatch',
+    })
+
+    const noncanonicalProductionAlias = mutateV2((copy) => {
+      for (const binding of [
+        copy.deployment.beforeLifecycle,
+        copy.deployment.afterLifecycle,
+      ]) {
+        ;(binding.exact as { productionUrl: string }).productionUrl =
+          'caller-selected.example.test'
+        ;(binding.alias as { hostname: string }).hostname =
+          'caller-selected.example.test'
+        refreshBinding(binding)
+      }
+    })
+    expect(verifyPacketIntegrity(noncanonicalProductionAlias)).toEqual({
+      kind: 'refused', code: 'packet_schema_invalid',
     })
 
     const proposalMismatch = mutateV2((copy) => {
@@ -963,6 +1067,14 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(journey).toContain("'reconcile'")
     expect(journey).toContain('input.servedBinding.immutableUrl')
     expect(journey).toContain('journey_mutable_host_forbidden')
+    expect(
+      journey,
+      '[P3C_RED:later_human_navigation_not_immutable_bound]',
+    ).toContain('assertHumanNavigationBoundToImmutableDeployment')
+    expect(
+      journey.match(/assertHumanPageBoundToImmutableDeployment/gu)?.length ?? 0,
+      '[P3C_RED:human_command_transition_host_not_rechecked]',
+    ).toBeGreaterThanOrEqual(4)
     expect(journey).toContain("'expectedInvocationVersion,semanticDigest'")
     expect(journey).not.toContain('human_rich_paid_operation')
     expect(journey).not.toMatch(/retry|switch_provider|reconciliationEvidence/iu)
@@ -1064,6 +1176,9 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(phase3CProduction.match(
       /name: Record Phase 3C Convex deployment receipt/gu,
     )).toHaveLength(1)
+    expect(phase3CProduction.match(
+      /hostedPaidOperation:recordPhase3CDeploymentReceipt/gu,
+    )).toHaveLength(1)
     expect(phase3CProduction).toContain('--argjson totalLimit 3')
     expect(phase3CProduction).toContain('--argjson concurrencyLimit 1')
     expect(phase3CProduction).toContain('--argjson rateLimit 3')
@@ -1074,6 +1189,21 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(phase3CProduction).toContain(".policyDigest // \"\"")
     expect(phase3CProduction).toContain(".kind == \"recorded\"")
     expect(phase3CProduction).toContain(".deploymentName // \"\"")
+    expect(
+      phase3CProduction,
+      '[P3C_RED:receipt_failure_does_not_compensate_admission]',
+    ).toContain('compensate_phase3c_admission')
+    const receiptSlice = phase3CProduction.slice(
+      phase3CProduction.indexOf('Record Phase 3C Convex deployment receipt'),
+    )
+    expect(receiptSlice.match(
+      /hostedPaidOperation:phase3CAdmissionStatus/gu,
+    )).toHaveLength(2)
+    expect(receiptSlice.match(
+      /hostedPaidOperation:disablePhase3CAdmission/gu,
+    )).toHaveLength(1)
+    expect(receiptSlice).toContain('AE_PHASE3C_POLICY_DIGEST')
+    expect(receiptSlice).toContain('receipt_exit')
     expect(phase3CProduction).not.toMatch(
       /deploy-customer-request-git-source|forceNew|vercel deploy|method:\s*['"]POST|curl/iu,
     )
@@ -2024,7 +2154,7 @@ function liveTargetFixture() {
     deployment: {
       id: 'dpl_exact',
       immutableUrl: 'ae-exact.vercel.app',
-      productionUrl: 'agentic-economy.ai',
+      productionUrl: 'agentic-economy-phi.vercel.app',
       projectId: 'prj_exact',
       projectName: 'agentic-economy',
     },

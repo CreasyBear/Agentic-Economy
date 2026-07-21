@@ -1,13 +1,14 @@
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { PHASE3C_PRODUCTION_ALIAS } from './paid-operation-hosted-proof-contract'
+
 const VERCEL_API_ORIGIN = 'https://api.vercel.com'
 const EXPECTED_PROJECT_NAME = 'agentic-economy'
 const EXPECTED_REPOSITORY_ORG = 'CreasyBear'
 const EXPECTED_REPOSITORY_NAME = 'Agentic-Economy'
 const EXPECTED_GIT_REF = 'main'
 const EXPECTED_TARGET = 'production'
-const EXPECTED_PRODUCTION_ALIAS = 'agentic-economy-phi.vercel.app'
 const DEFAULT_POLL_INTERVAL_MS = 10_000
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1_000
 
@@ -89,7 +90,7 @@ export async function observeVercelGitSourceDeployment(
       }
       if (detail.readyState === 'READY') {
         const canonicalAliasUrl = new URL(
-          `/v13/deployments/${encodeURIComponent(EXPECTED_PRODUCTION_ALIAS)}`,
+          `/v13/deployments/${encodeURIComponent(PHASE3C_PRODUCTION_ALIAS)}`,
           VERCEL_API_ORIGIN,
         )
         canonicalAliasUrl.searchParams.set('teamId', config.teamId)

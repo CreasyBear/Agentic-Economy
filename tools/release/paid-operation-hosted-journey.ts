@@ -112,12 +112,18 @@ export async function runPaidOperationHostedJourney(
       captureTerminal: async () =>
         await captureHumanTerminalProof(input, page, human.invocationRef, 5, 'valid'),
       authorize: async () => {
+        assertHumanPageBoundToImmutableDeployment(input, page)
         await page.getByRole('button', { name: 'Authorize up to $0.01' }).click()
+        assertHumanPageBoundToImmutableDeployment(input, page)
         await waitForHumanCardVersion(page, 2)
+        assertHumanPageBoundToImmutableDeployment(input, page)
       },
       execute: async () => {
+        assertHumanPageBoundToImmutableDeployment(input, page)
         await page.getByRole('button', { name: 'Continue operation' }).click()
+        assertHumanPageBoundToImmutableDeployment(input, page)
         await waitForHumanCardVersion(page, 5)
+        assertHumanPageBoundToImmutableDeployment(input, page)
       },
       commandIds: {
         authorize: 'phase3c-human-a-authorize',
@@ -580,11 +586,13 @@ async function createHumanOperation(
   const response = await page.goto(new URL('/actions/paid/new', input.baseUrl).href, {
     waitUntil: 'networkidle',
   })
-  assertServedDeploymentBindingBeforeFirstLifecyclePost(input, response)
+  assertServedDeploymentBindingBeforeFirstLifecyclePost(input, page, response)
   await page.getByRole('radio', {
     name: providerKey === 'A' ? 'Sandbox provider A' : 'Sandbox provider B',
   }).check()
+  assertHumanPageBoundToImmutableDeployment(input, page)
   await page.getByRole('button', { name: 'Create sandbox operation' }).click()
+  assertHumanPageBoundToImmutableDeployment(input, page)
   const url = new URL(page.url())
   const prefix = '/actions/paid/'
   if (!url.pathname.startsWith(prefix)) throw new Error('journey_human_creation_route_mismatch')
@@ -595,19 +603,21 @@ async function createHumanOperation(
 
 function assertServedDeploymentBindingBeforeFirstLifecyclePost(
   input: PaidOperationHostedJourneyInput,
+  page: Page,
   response: Awaited<ReturnType<Page['goto']>>,
 ): void {
   const baseUrl = new URL(input.baseUrl)
-  const responseUrl = response === null ? undefined : new URL(response.url())
-  if (response === null
-    || !response.ok()
-    || !/^dpl_[A-Za-z0-9]+$/u.test(input.servedBinding.deploymentId)
+  assertHumanNavigationBoundToImmutableDeployment(
+    input,
+    page,
+    response,
+    '/actions/paid/new',
+  )
+  if (!/^dpl_[A-Za-z0-9]+$/u.test(input.servedBinding.deploymentId)
     || !/^[0-9a-f]{40}$/u.test(input.servedBinding.sourceRevision)
     || baseUrl.hostname !== input.servedBinding.immutableUrl
-    || responseUrl?.hostname !== input.servedBinding.immutableUrl
     || input.servedBinding.immutableUrl === input.servedBinding.productionUrl
-    || responseUrl.pathname !== '/actions/paid/new'
-    || !response.headers()['x-vercel-id']?.trim()) {
+    || !response?.headers()['x-vercel-id']?.trim()) {
     throw new Error('served_revision_deployment_binding_mismatch')
   }
 }
@@ -914,7 +924,36 @@ async function navigateToDetail(
   )
   url.searchParams.set('expectedInvocationVersion', String(version))
   const response = await page.goto(url.href, { waitUntil: 'networkidle' })
-  if (response === null || !response.ok()) throw new Error('journey_human_readback_unavailable')
+  assertHumanNavigationBoundToImmutableDeployment(
+    input,
+    page,
+    response,
+    `/actions/paid/${encodeURIComponent(invocationRef)}`,
+  )
+}
+
+function assertHumanNavigationBoundToImmutableDeployment(
+  input: PaidOperationHostedJourneyInput,
+  page: Page,
+  response: Awaited<ReturnType<Page['goto']>>,
+  expectedPathname: string,
+): void {
+  if (response === null || !response.ok()) {
+    throw new Error('journey_human_readback_unavailable')
+  }
+  assertExactLifecycleUrl(input, response.url())
+  assertHumanPageBoundToImmutableDeployment(input, page)
+  if (new URL(response.url()).pathname !== expectedPathname
+    || new URL(page.url()).pathname !== expectedPathname) {
+    throw new Error('journey_mutable_host_forbidden')
+  }
+}
+
+function assertHumanPageBoundToImmutableDeployment(
+  input: PaidOperationHostedJourneyInput,
+  page: Page,
+): void {
+  assertExactLifecycleUrl(input, page.url())
 }
 
 function semanticCard(page: Page) {

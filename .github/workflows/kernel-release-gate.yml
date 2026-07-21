@@ -242,15 +242,49 @@ jobs:
             --arg recordedAt "${recorded_at}" \
             '{evaluatorPrincipalRef:$evaluatorPrincipalRef,sourceRevision:$sourceRevision,totalLimit:$totalLimit,concurrencyLimit:$concurrencyLimit,rateLimit:$rateLimit,admissionEndsAt:$admissionEndsAt,retainThrough:$retainThrough,killSwitchOwner:$killSwitchOwner,recordedAt:$recordedAt}')"
           policy_result="$(npx convex run hostedPaidOperation:configurePhase3CAdmission "${admission_args}" --prod)"
-          if ! printf '%s' "${policy_result}" | jq -e '.kind == "configured" and ((.policyDigest // "") | type == "string" and length > 0)' >/dev/null; then
+          if ! printf '%s' "${policy_result}" | jq -e '.kind == "configured" and ((.policyDigest // "") | type == "string" and test("^sha256:[0-9a-f]{64}$"))' >/dev/null; then
             echo 'Phase 3C admission configuration was refused.' >&2
             exit 1
           fi
+          policy_digest="$(printf '%s' "${policy_result}" | jq -er '.policyDigest')"
+          printf 'AE_PHASE3C_POLICY_DIGEST=%s\n' "${policy_digest}" >> "${GITHUB_ENV}"
 
       - name: Record Phase 3C Convex deployment receipt
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
+          compensate_phase3c_admission() {
+            status_args="$(jq -cn \
+              --arg evaluatorPrincipalRef "${AE_CUSTOMER_REQUEST_CLERK_SUBJECT}" \
+              '{evaluatorPrincipalRef:$evaluatorPrincipalRef}')"
+            before_shutdown="$(npx convex run hostedPaidOperation:phase3CAdmissionStatus "${status_args}" --prod)" || return 1
+            printf '%s' "${before_shutdown}" | jq -e \
+              --arg policyDigest "${AE_PHASE3C_POLICY_DIGEST}" \
+              --arg sourceRevision "${AE_RELEASE_SOURCE_REVISION}" \
+              '.kind == "configured"
+                and .state == "enabled"
+                and .policyDigest == $policyDigest
+                and .sourceRevision == $sourceRevision
+                and .bounds == {total:3,concurrency:1,rate:3}' >/dev/null || return 1
+            disable_args="$(jq -cn \
+              --arg evaluatorPrincipalRef "${AE_CUSTOMER_REQUEST_CLERK_SUBJECT}" \
+              --arg policyDigest "${AE_PHASE3C_POLICY_DIGEST}" \
+              --arg killSwitchOwner 'Phase 3C release owner' \
+              '{evaluatorPrincipalRef:$evaluatorPrincipalRef,policyDigest:$policyDigest,killSwitchOwner:$killSwitchOwner}')"
+            disabled_result="$(npx convex run hostedPaidOperation:disablePhase3CAdmission "${disable_args}" --prod)" || return 1
+            printf '%s' "${disabled_result}" | jq -e \
+              --arg policyDigest "${AE_PHASE3C_POLICY_DIGEST}" \
+              '.kind == "disabled" and .policyDigest == $policyDigest' >/dev/null || return 1
+            after_shutdown="$(npx convex run hostedPaidOperation:phase3CAdmissionStatus "${status_args}" --prod)" || return 1
+            printf '%s' "${after_shutdown}" | jq -e \
+              --arg policyDigest "${AE_PHASE3C_POLICY_DIGEST}" \
+              --arg sourceRevision "${AE_RELEASE_SOURCE_REVISION}" \
+              '.kind == "configured"
+                and .state == "disabled"
+                and .policyDigest == $policyDigest
+                and .sourceRevision == $sourceRevision
+                and .bounds == {total:3,concurrency:1,rate:3}' >/dev/null
+          }
           receipt_args="$(jq -cn \
             --arg sourceRevision "${AE_RELEASE_SOURCE_REVISION}" \
             --arg sourceTree "${AE_RELEASE_SOURCE_TREE}" \
@@ -258,8 +292,14 @@ jobs:
             --argjson githubRunAttempt "${AE_RELEASE_GITHUB_RUN_ATTEMPT}" \
             --arg sourceClockTimestamp "${AE_RELEASE_SOURCE_CLOCK_TIMESTAMP}" \
             '{sourceRevision:$sourceRevision,sourceTree:$sourceTree,githubRunId:$githubRunId,githubRunAttempt:$githubRunAttempt,sourceClockTimestamp:$sourceClockTimestamp}')"
-          receipt_result="$(npx convex run hostedPaidOperation:recordPhase3CDeploymentReceipt "${receipt_args}" --prod)"
-          if ! printf '%s' "${receipt_result}" | jq -e '.kind == "recorded" and ((.deploymentName // "") | type == "string" and length > 0)' >/dev/null; then
-            echo 'Phase 3C deployment receipt was not recorded.' >&2
-            exit 1
+          receipt_exit=0
+          receipt_result="$(npx convex run hostedPaidOperation:recordPhase3CDeploymentReceipt "${receipt_args}" --prod)" || receipt_exit=$?
+          if [ "${receipt_exit}" -eq 0 ] && printf '%s' "${receipt_result}" | jq -e '.kind == "recorded" and ((.deploymentName // "") | type == "string" and length > 0)' >/dev/null; then
+            exit 0
           fi
+          if [ "${receipt_exit}" -eq 0 ]; then receipt_exit=1; fi
+          echo 'Phase 3C deployment receipt was not recorded; disabling admission.' >&2
+          if ! compensate_phase3c_admission; then
+            echo 'Phase 3C admission compensation could not be independently verified.' >&2
+          fi
+          exit "${receipt_exit}"
