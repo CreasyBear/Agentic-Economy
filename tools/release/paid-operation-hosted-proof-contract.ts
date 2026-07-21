@@ -232,7 +232,7 @@ export const sourceObservationSchema = z.strictObject({
       class: z.enum(['s16', 's256', 'd1024']),
     }),
     receipt: z.strictObject({
-      receiptRef: z.literal('phase3c-paid-operation-exact-revision-deployment:g4'),
+      receiptRef: z.literal('phase3c-paid-operation-exact-revision-deployment:g5'),
       sourceRevision: revisionSchema,
       sourceTree: z.string().regex(/^[0-9a-f]{40}$/u),
       githubRunId: z.string().regex(/^[1-9][0-9]*$/u),
@@ -248,7 +248,7 @@ export const sourceObservationSchema = z.strictObject({
     }),
   }),
   policy: z.strictObject({
-    policyRef: z.literal('phase-3c-hosted-paid-operation-trial:g4'),
+    policyRef: z.literal('phase-3c-hosted-paid-operation-trial:g5'),
     enabled: z.boolean(),
     policyDigest: digestSchema,
     sourceRevision: revisionSchema,
@@ -302,6 +302,7 @@ export const packetContentSchema = z.strictObject({
     subjectPrincipalDigest: digestSchema,
     humanSession: z.strictObject({
       callerDigest: digestSchema,
+      sessionDigest: digestSchema,
       status: z.literal('revoked'),
     }),
     agentKey: z.strictObject({
@@ -537,6 +538,7 @@ export function verifyPacketIntegrity(input: unknown): PaidOperationPacketIntegr
   }
   if (packet.credentials.subjectPrincipalDigest !== packet.actors.human.principalDigest
     || packet.credentials.humanSession.callerDigest !== packet.actors.human.callerDigest
+    || packet.credentials.humanSession.sessionDigest === packet.actors.human.callerDigest
     || packet.credentials.agentKey.callerDigest !== packet.actors.agent.callerDigest
     || packet.credentials.agentKey.requiredScopes[0] !== 'paid_operation:invoke'
     || packet.credentials.humanSession.status !== 'revoked'

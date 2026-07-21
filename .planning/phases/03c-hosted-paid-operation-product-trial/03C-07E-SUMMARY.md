@@ -424,3 +424,26 @@ current records, and atomically disables and releases any remaining prior
 generation-3 admission during configuration. The hosted evidence class remains
 unearned until a complete generation-4 exact-revision packet passes independent
 verification.
+
+## Generation-4 hosted result and generation-5 actor binding
+
+Exact generation 4 completed all three hosted behaviours before packet
+admission: one protected human Provider-A golden path, one scoped-agent
+Provider-A golden path, and one Provider-B `response_lost` path that exposed
+only reconciliation and then resolved from trusted server evidence. Raw Convex
+readback showed three admissions, zero active reservations, three attempts and
+exactly three mock effects; the uncertainty invocation finished at version 6
+without replay. Both temporary credentials were revoked with readback and the
+generation-4 policy was disabled.
+
+The packet then refused `actor_identity_mismatch`. Live source proved that
+Convex identifies a Clerk human caller with the signed token identifier
+`issuer|subject`, while the collector had conflated that caller identity with
+the independently revocable Clerk session ID. The agent key already used a
+credential-specific caller. Generation 5 derives the human caller from the
+validated JWT issuer and subject, keeps the session ID only as a separate
+opaque revocation digest, and requires those two digests to differ. It advances
+the bounded policy and receipt generation, retains all eight prior records, and
+sets the proof cap to exactly eight retained plus three current records. No
+caller assertion, raw session ID, token, credential or identity preimage enters
+the packet.

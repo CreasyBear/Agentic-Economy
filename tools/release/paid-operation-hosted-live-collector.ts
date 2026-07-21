@@ -132,8 +132,9 @@ export async function collectAndAdmitLivePaidOperationHostedEvidence(
       returnEvidence: true,
       run: async (sessionToken) => {
         const sessionPayload = decodeJwtPayload(sessionToken)
-        if (sessionPayload.sub !== contextInput.clerk.subject
-          || typeof sessionPayload.sid !== 'string') {
+        const humanIdentity = clerkHumanIdentity(sessionPayload)
+        if (humanIdentity === undefined
+          || humanIdentity.principalRef !== contextInput.clerk.subject) {
           throw new Error('live_actor_identity_mismatch')
         }
         const keyResult = await withTemporaryClerkApiKey({
@@ -174,7 +175,8 @@ export async function collectAndAdmitLivePaidOperationHostedEvidence(
         }
         return {
           journey: keyResult.value.journey,
-          humanCallerRef: sessionPayload.sid,
+          humanCallerRef: humanIdentity.callerRef,
+          humanSessionId: humanIdentity.sessionId,
           agentCredentialId: keyResult.value.credentialId,
           keyRevocation: keyResult.revocation,
         }
@@ -182,7 +184,7 @@ export async function collectAndAdmitLivePaidOperationHostedEvidence(
     })
     if (credentialResult.revocation.subject !== contextInput.clerk.subject
       || credentialResult.revocation.sessionId
-        !== credentialResult.value.humanCallerRef) {
+        !== credentialResult.value.humanSessionId) {
       throw new Error('credential_revocation_mismatch')
     }
 
@@ -223,7 +225,7 @@ export async function collectAndAdmitLivePaidOperationHostedEvidence(
       observation,
       actorRefs,
       credentialEvidence: {
-        humanSessionId: credentialResult.revocation.sessionId,
+        humanSessionId: credentialResult.value.humanSessionId,
         agentCredentialId: credentialResult.value.keyRevocation.credentialId,
       },
     })
@@ -512,7 +514,8 @@ function buildPacket(input: Readonly<{
     input.actorRefs.agentCallerRef,
   )
   if (input.actorRefs.humanPrincipalRef !== input.actorRefs.agentPrincipalRef
-    || input.credentialEvidence.humanSessionId !== input.actorRefs.humanCallerRef
+    || input.credentialEvidence.humanSessionId.trim() === ''
+    || input.credentialEvidence.humanSessionId === input.actorRefs.humanCallerRef
     || `clerk_api_key:${input.credentialEvidence.agentCredentialId}`
       !== input.actorRefs.agentCallerRef) {
     throw new Error('credential_revocation_mismatch')
@@ -573,6 +576,11 @@ function buildPacket(input: Readonly<{
       subjectPrincipalDigest: principalDigest,
       humanSession: {
         callerDigest: humanCallerDigest,
+        sessionDigest: proofReferenceDigest(
+          cohortDigest,
+          'human-session',
+          input.credentialEvidence.humanSessionId,
+        ),
         status: 'revoked' as const,
       },
       agentKey: {
@@ -736,6 +744,42 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
   )
   if (!isRecord(value)) throw new Error('live_actor_identity_mismatch')
   return value
+}
+
+function clerkHumanIdentity(payload: Record<string, unknown>): Readonly<{
+  principalRef: string
+  callerRef: string
+  sessionId: string
+}> | undefined {
+  const issuer = payload.iss
+  const principalRef = payload.sub
+  const sessionId = payload.sid
+  if (typeof issuer !== 'string'
+    || typeof principalRef !== 'string'
+    || typeof sessionId !== 'string'
+    || principalRef.trim() === ''
+    || sessionId.trim() === ''
+    || issuer.includes('|')
+    || principalRef.includes('|')) {
+    return undefined
+  }
+  try {
+    const url = new URL(issuer)
+    if (url.protocol !== 'https:'
+      || url.username !== ''
+      || url.password !== ''
+      || url.search !== ''
+      || url.hash !== '') {
+      return undefined
+    }
+  } catch {
+    return undefined
+  }
+  return {
+    principalRef,
+    callerRef: `${issuer}|${principalRef}`,
+    sessionId,
+  }
 }
 
 function githubHeaders(): Record<string, string> {

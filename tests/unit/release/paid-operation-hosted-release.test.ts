@@ -430,6 +430,11 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     )).toHaveLength(1)
     expect(collector).toContain('runJourney: runPaidOperationHostedJourney')
     expect(collector).toContain('credentialResult.revocation.sessionId')
+    expect(
+      collector,
+      '[P3C_RED:clerk_actor_and_session_identity_conflated]',
+    ).toContain('callerRef: `${issuer}|${principalRef}`')
+    expect(collector).toContain("'human-session'")
   })
 
   it('keeps an injected full live path local and queries raw state only after revocation', async () => {
@@ -936,7 +941,12 @@ function contentFixture() {
   const humanCallerDigest = proofReferenceDigest(
     COHORT_DIGEST,
     'caller',
-    'session:human',
+    'https://clerk.example.test|user_phase3c',
+  )
+  const humanSessionDigest = proofReferenceDigest(
+    COHORT_DIGEST,
+    'human-session',
+    'sess_human',
   )
   const agentPrincipalDigest = humanPrincipalDigest
   const agentCallerDigest = proofReferenceDigest(
@@ -1018,6 +1028,7 @@ function contentFixture() {
       subjectPrincipalDigest: humanPrincipalDigest,
       humanSession: {
         callerDigest: humanCallerDigest,
+        sessionDigest: humanSessionDigest,
         status: 'revoked',
       },
       agentKey: {
@@ -1268,7 +1279,7 @@ function rawObservationFixture(
   const humanCallerDigest = proofReferenceDigest(
     COHORT_DIGEST,
     'caller',
-    'session:human',
+    'https://clerk.example.test|user_phase3c',
   )
   const agentCallerDigest = proofReferenceDigest(
     COHORT_DIGEST,
@@ -1370,7 +1381,7 @@ function rawObservationFixture(
     }
   })
   const receiptWithoutDigest = {
-    receiptRef: 'phase3c-paid-operation-exact-revision-deployment:g4',
+    receiptRef: 'phase3c-paid-operation-exact-revision-deployment:g5',
     sourceRevision: SOURCE_REVISION,
     sourceTree: SOURCE_TREE,
     githubRunId: '123456',
@@ -1402,7 +1413,7 @@ function rawObservationFixture(
       },
     },
     policy: {
-      policyRef: 'phase-3c-hosted-paid-operation-trial:g4',
+      policyRef: 'phase-3c-hosted-paid-operation-trial:g5',
       enabled: true,
       policyDigest: DIGEST('a'),
       sourceRevision: SOURCE_REVISION,
@@ -1529,6 +1540,7 @@ function fakeLiveCollectionFetch(events: string[]): typeof fetch {
   const jwt = [
     Buffer.from(JSON.stringify({ alg: 'none' })).toString('base64url'),
     Buffer.from(JSON.stringify({
+      iss: 'https://clerk.example.test',
       sub: 'user_phase3c',
       sid: 'session:human',
     })).toString('base64url'),

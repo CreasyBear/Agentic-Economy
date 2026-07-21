@@ -493,7 +493,7 @@ describe('hosted paid-operation durable boundary', () => {
       evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
     })).resolves.toEqual({ kind: 'unconfigured' })
 
-    const currentPolicyRef = 'phase-3c-hosted-paid-operation-trial:g4'
+    const currentPolicyRef = 'phase-3c-hosted-paid-operation-trial:g5'
     const priorGenerations = [
       {
         policyRef: 'phase-3c-hosted-paid-operation-trial',
@@ -521,6 +521,15 @@ describe('hosted paid-operation durable boundary', () => {
         active: 1,
         reservationState: 'active',
         sourceRevision: '10635cceeaace76327ae0292758456a84d12d659',
+      },
+      {
+        policyRef: 'phase-3c-hosted-paid-operation-trial:g4',
+        policyDigest: `sha256:${'c'.repeat(64)}`,
+        reservationRef: 'reservation:phase3c-actor-proof-failure',
+        enabled: false,
+        active: 0,
+        reservationState: 'released',
+        sourceRevision: '8b17e045ce27184597153e2cc7b8b81874125b09',
       },
     ] as const
     await backend.run(async (ctx) => {
