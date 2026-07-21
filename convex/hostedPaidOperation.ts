@@ -19,9 +19,13 @@ import {
 import { internalMutation, internalQuery } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 
-const PHASE3C_POLICY_REF = 'phase-3c-hosted-paid-operation-trial'
+const PHASE3C_POLICY_REF = 'phase-3c-hosted-paid-operation-trial:g2'
+const PHASE3C_PRIOR_POLICY_REFS = [
+  'phase-3c-hosted-paid-operation-trial',
+] as const
+const PHASE3C_PROOF_HEADER_CAP = 6
 const PHASE3C_DEPLOYMENT_RECEIPT_REF =
-  'phase3c-paid-operation-exact-revision-deployment' as const
+  'phase3c-paid-operation-exact-revision-deployment:g2' as const
 const PHASE3C_GITHUB_REPOSITORY = 'CreasyBear/Agentic-Economy' as const
 const PHASE3C_GITHUB_REF = 'main' as const
 const PHASE3C_GITHUB_WORKFLOW = '.github/workflows/kernel-release-gate.yml' as const
@@ -1018,6 +1022,12 @@ export const configurePhase3CAdmission = internalMutation({
     if (existing !== null || counter !== null) {
       return { kind: 'refused' as const, code: 'policy_conflict' as const }
     }
+    const priorRetirement = await retirePriorPhase3CAdmission(ctx, {
+      evaluatorPrincipalRef: args.evaluatorPrincipalRef,
+      killSwitchOwner: args.killSwitchOwner,
+      recordedAt: args.recordedAt,
+    })
+    if (priorRetirement.kind === 'refused') return priorRetirement
     await ctx.db.insert('hostedPaidOperationAdmissionPolicies', {
       policyRef: PHASE3C_POLICY_REF,
       enabled: true,
@@ -1215,13 +1225,57 @@ export const phase3CHostedProofObservation = internalQuery({
       return { kind: 'refused' as const, code: 'proof_row_missing' as const }
     }
 
-    const headers = await ctx.db.query('hostedPaidOperationHeaders')
+    const observedHeaders = await ctx.db.query('hostedPaidOperationHeaders')
       .withIndex('by_ownerPrincipalRef_and_invocationRef', (q) =>
         q.eq('ownerPrincipalRef', policy.principalRef))
-      .take(4)
+      .take(PHASE3C_PROOF_HEADER_CAP + 1)
+    if (observedHeaders.length > PHASE3C_PROOF_HEADER_CAP) {
+      return { kind: 'refused' as const, code: 'proof_header_cohort_mismatch' as const }
+    }
+    const observedReservations = await Promise.all(observedHeaders.map(
+      (header) => ctx.db.query('hostedPaidOperationAdmissionReservations')
+        .withIndex('by_reservationRef', (q) =>
+          q.eq('reservationRef', header.admissionReservationRef))
+        .unique(),
+    ))
+    if (observedReservations.some((reservation) => reservation === null)) {
+      return { kind: 'refused' as const, code: 'proof_header_cohort_mismatch' as const }
+    }
+    const priorPolicyRows = await Promise.all(PHASE3C_PRIOR_POLICY_REFS.map(
+      (policyRef) => ctx.db.query('hostedPaidOperationAdmissionPolicies')
+        .withIndex('by_policyRef', (q) => q.eq('policyRef', policyRef))
+        .take(2),
+    ))
+    if (priorPolicyRows.some((rows) => rows.length > 1)) {
+      return { kind: 'refused' as const, code: 'proof_header_cohort_mismatch' as const }
+    }
+    const priorPolicies = priorPolicyRows.flatMap((rows) =>
+      rows[0] === undefined ? [] : [rows[0]])
+    const headers: typeof observedHeaders = []
+    for (const [index, header] of observedHeaders.entries()) {
+      if (observedReservations[index]?.policyRef === policy.policyRef) {
+        headers.push(header)
+      }
+    }
+    const priorHeadersSafe = observedHeaders.every((header, index) => {
+      const reservation = observedReservations[index]
+      if (reservation === null || reservation === undefined) return false
+      if (reservation.policyRef === policy.policyRef) return true
+      const priorPolicy = priorPolicies.find((candidate) =>
+        candidate.policyRef === reservation.policyRef)
+      return priorPolicy !== undefined
+        && priorPolicy.enabled === false
+        && priorPolicy.principalRef === policy.principalRef
+        && priorPolicy.policyDigest === reservation.policyDigest
+        && reservation.principalRef === policy.principalRef
+        && reservation.state === 'released'
+        && header.admissionReservationRef === reservation.reservationRef
+    })
     const requestedRefSet = [...invocationRefs].sort().join('\u0000')
     const headerRefSet = headers.map((header) => header.invocationRef).sort().join('\u0000')
-    if (headers.length !== invocationRefs.length || headerRefSet !== requestedRefSet) {
+    if (!priorHeadersSafe
+      || headers.length !== invocationRefs.length
+      || headerRefSet !== requestedRefSet) {
       return { kind: 'refused' as const, code: 'proof_header_cohort_mismatch' as const }
     }
 
@@ -1568,6 +1622,69 @@ export const readMockEffectObservation = internalQuery({
       : { kind: 'observed' as const, observation: mockEffectObservation(effect) }
   },
 })
+
+async function retirePriorPhase3CAdmission(
+  ctx: MutationCtx,
+  input: Readonly<{
+    evaluatorPrincipalRef: string
+    killSwitchOwner: string
+    recordedAt: string
+  }>,
+): Promise<
+  | Readonly<{ kind: 'retired' }>
+  | Readonly<{ kind: 'refused'; code: 'policy_conflict' }>
+> {
+  for (const policyRef of PHASE3C_PRIOR_POLICY_REFS) {
+    const policies = await ctx.db.query('hostedPaidOperationAdmissionPolicies')
+      .withIndex('by_policyRef', (q) => q.eq('policyRef', policyRef))
+      .take(2)
+    if (policies.length > 1) {
+      return { kind: 'refused', code: 'policy_conflict' }
+    }
+    const policy = policies[0]
+    if (policy === undefined) continue
+    const reservations = await ctx.db.query('hostedPaidOperationAdmissionReservations')
+      .withIndex('by_policyRef_and_principalRef_and_reservationRef', (q) =>
+        q.eq('policyRef', policyRef).eq('principalRef', input.evaluatorPrincipalRef))
+      .take(4)
+    const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
+      .withIndex('by_policyRef_and_principalRef', (q) =>
+        q.eq('policyRef', policyRef).eq('principalRef', input.evaluatorPrincipalRef))
+      .unique()
+    const activeReservations = reservations.reduce<typeof reservations>(
+      (active, reservation) => {
+        if (reservation.state === 'active') active.push(reservation)
+        return active
+      },
+      [],
+    )
+    if (policy.principalRef !== input.evaluatorPrincipalRef
+      || policy.killSwitchOwner !== input.killSwitchOwner
+      || reservations.length > 3
+      || reservations.some((reservation) =>
+        reservation.policyDigest !== policy.policyDigest)
+      || (counter === null && reservations.length > 0)
+      || (counter !== null
+        && (counter.policyDigest !== policy.policyDigest
+          || counter.active !== activeReservations.length))) {
+      return { kind: 'refused', code: 'policy_conflict' }
+    }
+    if (policy.enabled) await ctx.db.patch(policy._id, { enabled: false })
+    for (const reservation of activeReservations) {
+      await ctx.db.patch(reservation._id, {
+        state: 'released',
+        updatedAt: input.recordedAt,
+      })
+    }
+    if (counter !== null && counter.active !== 0) {
+      await ctx.db.patch(counter._id, {
+        active: 0,
+        updatedAt: input.recordedAt,
+      })
+    }
+  }
+  return { kind: 'retired' }
+}
 
 function canonicalIsoTimestamp(value: string | undefined): number | undefined {
   if (value === undefined) return undefined

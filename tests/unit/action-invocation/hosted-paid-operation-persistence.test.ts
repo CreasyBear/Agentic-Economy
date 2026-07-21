@@ -493,13 +493,70 @@ describe('hosted paid-operation durable boundary', () => {
       evaluatorPrincipalRef: configuration.evaluatorPrincipalRef,
     })).resolves.toEqual({ kind: 'unconfigured' })
 
+    const priorPolicyRef = 'phase-3c-hosted-paid-operation-trial'
+    const currentPolicyRef = 'phase-3c-hosted-paid-operation-trial:g2'
+    const priorPolicyDigest = `sha256:${'e'.repeat(64)}`
+    const priorReservationRef = 'reservation:phase3c-pre-authority-failure'
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('hostedPaidOperationAdmissionPolicies', {
+        policyRef: priorPolicyRef,
+        enabled: true,
+        principalRef: configuration.evaluatorPrincipalRef,
+        totalLimit: 3,
+        concurrencyLimit: 1,
+        rateLimit: 3,
+        policyDigest: priorPolicyDigest,
+        sourceRevision: 'f1d57784a621f3769d8006300705188fb65f0568',
+        admissionEndsAt: configuration.admissionEndsAt,
+        retainThrough: configuration.retainThrough,
+        killSwitchOwner: configuration.killSwitchOwner,
+        recordedAt: '2026-07-20T00:00:00.000Z',
+      })
+      await ctx.db.insert('hostedPaidOperationAdmissionCounters', {
+        policyRef: priorPolicyRef,
+        principalRef: configuration.evaluatorPrincipalRef,
+        policyDigest: priorPolicyDigest,
+        currentWindowKey: 'window:prior',
+        admittedTotal: 1,
+        active: 1,
+        admittedInWindow: 1,
+        updatedAt: '2026-07-20T00:00:00.000Z',
+      })
+      await ctx.db.insert('hostedPaidOperationAdmissionReservations', {
+        reservationRef: priorReservationRef,
+        policyRef: priorPolicyRef,
+        principalRef: configuration.evaluatorPrincipalRef,
+        policyDigest: priorPolicyDigest,
+        state: 'active',
+        updatedAt: '2026-07-20T00:00:00.000Z',
+      })
+    })
+
     const configured = await backend.mutation(configurePhase3CAdmission, configuration)
     expect(configured.kind).toBe('configured')
     if (configured.kind !== 'configured') return
+    await backend.run(async (ctx) => {
+      const priorPolicy = await ctx.db.query('hostedPaidOperationAdmissionPolicies')
+        .withIndex('by_policyRef_and_principalRef', (q) =>
+          q.eq('policyRef', priorPolicyRef)
+            .eq('principalRef', configuration.evaluatorPrincipalRef))
+        .unique()
+      const priorCounter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
+        .withIndex('by_policyRef_and_principalRef', (q) =>
+          q.eq('policyRef', priorPolicyRef)
+            .eq('principalRef', configuration.evaluatorPrincipalRef))
+        .unique()
+      const priorReservation = await ctx.db.query('hostedPaidOperationAdmissionReservations')
+        .withIndex('by_reservationRef', (q) => q.eq('reservationRef', priorReservationRef))
+        .unique()
+      expect(priorPolicy?.enabled).toBe(false)
+      expect(priorCounter?.active).toBe(0)
+      expect(priorReservation?.state).toBe('released')
+    })
     await expect(backend.mutation(configurePhase3CAdmission, configuration))
       .resolves.toEqual(configured)
     const reservation = await backend.mutation(reserveAdmission, {
-      policyRef: 'phase-3c-hosted-paid-operation-trial',
+      policyRef: currentPolicyRef,
       principalRef: configuration.evaluatorPrincipalRef,
       windowKey: 'window:configuration',
       commandId: 'admission:configuration',

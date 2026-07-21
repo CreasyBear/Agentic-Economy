@@ -296,6 +296,56 @@ revision, credential identity, hosted lifecycle, provider fulfilment, payment,
 settlement, comprehension or accessibility in use, production safety, demand,
 or customer value.
 
-The next safe action after local audit is fresh founder authority for exactly
-one additional marker push and its Vercel Git deployment. The previously
-authorized Convex deploy and temporary human/agent credentials remain unused.
+## Fourth marker release and first hosted lifecycle finding
+
+The founder subsequently authorized and the parent released exact revision
+`f1d57784a621f3769d8006300705188fb65f0568`. Vercel Git integration created
+READY production deployment `dpl_9dbJNLRgbZVeLCiqhzS3oVT2pFLF`; independent
+canonical-hostname resolution returned that same deployment and revision.
+GitHub run `29794190263` passed source proof, archive-isolated build, exact
+Vercel observation, one Convex production deploy, admission configuration and
+the final deployment-receipt write against `prod:formal-jaguar-441`.
+
+The first hosted lifecycle then stopped before authority at a real UI
+checkpoint mismatch. Both authenticated projections were otherwise valid and
+semantic-digest equal at invocation version 1. The card correctly exposed two
+permission controls, `Authorize` and `Refuse`, while the journey collector's
+old assertion expected one control. No mock effect was released. The durable
+generation-1 residue is one version-1 invocation, one active admission
+reservation and zero effects. The temporary smoke credential pair and the
+separate read-only diagnostic credential pair were revoked, with independent
+revocation readback; no active trial credential was retained.
+
+## Generation-2 source-owned recovery
+
+The selected recovery keeps the failed pre-authority invocation as durable
+evidence and creates a new admission generation. It does not rewrite the row,
+reuse revoked caller identity, or pretend the first lifecycle completed.
+Generation 2 atomically disables the exact prior policy, releases only its
+bounded active reservations, reduces its concurrency counter to zero and then
+creates the new policy. The proof query accepts prior-generation headers only
+when their policy is disabled, principal and policy digest still match, and
+their reservations are released. It continues to refuse an extra current-
+generation header or any inconsistent prior residue.
+
+The journey contract now requires the actual permission surface: two controls
+at version 1, both bound to the expected permission command, and one execute
+control after authority at version 2. The current source-owned policy and
+deployment-receipt references are versioned to `g2`; the original rows remain
+queryable as retained trial residue.
+
+The generation-2 correction passed `verify:phase3c:release-source` with 17
+files and 168 tests, changed-path lint, `git diff --check`, and changed-path
+TypeScript filtering. Repository-wide typecheck remains red only on the
+pre-existing baseline. These are source and local-fixture results until the
+generation-2 revision is deployed and the three hosted paths, shutdown and
+packet verification complete.
+
+## Current claim ceiling
+
+Revision `f1d57784` proved exact Vercel and Convex deployment, authenticated
+human/agent projection reachability, durable pre-authority reconstruction and
+honest no-effect failure preservation. It did not complete a hosted paid
+operation. The generation-2 repair is not hosted evidence yet. Neither result
+proves real provider fulfilment, payment, settlement, production safety,
+real-human comprehension, demand or customer value.

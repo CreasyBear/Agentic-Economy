@@ -300,9 +300,12 @@ async function captureCheckpoint(
     || required.some((label) => !body.includes(label))) {
     throw new Error(`journey_checkpoint_v${version}_mismatch`)
   }
-  const command = page.locator('[data-command]')
-  if (await command.count() !== 1
-    || await command.getAttribute('data-command') !== nextCommand) {
+  const commands = page.locator('[data-command]')
+  const expectedCommandCount = version === 1 ? 2 : 1
+  const observedCommands = await commands.evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute('data-command')))
+  if (observedCommands.length !== expectedCommandCount
+    || observedCommands.some((command) => command !== nextCommand)) {
     throw new Error(`journey_checkpoint_v${version}_command_mismatch`)
   }
   return {

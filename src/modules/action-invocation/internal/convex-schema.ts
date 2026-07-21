@@ -407,7 +407,10 @@ export const actionInvocationTables = {
     ]),
 
   hostedPaidOperationDeploymentReceipts: defineTable({
-    receiptRef: v.literal('phase3c-paid-operation-exact-revision-deployment'),
+    receiptRef: v.union(
+      v.literal('phase3c-paid-operation-exact-revision-deployment'),
+      v.literal('phase3c-paid-operation-exact-revision-deployment:g2'),
+    ),
     sourceRevision: v.string(),
     sourceTree: v.string(),
     githubRunId: v.string(),

@@ -732,6 +732,10 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(journey).toContain("paymentAuthorization: 'created'")
     expect(journey).toContain("paymentSubmission: 'not_submitted'")
     expect(journey).toContain("settlement: 'no_evidence'")
+    expect(
+      journey,
+      '[P3C_RED:permission_control_pair_not_observed]',
+    ).toContain('const expectedCommandCount = version === 1 ? 2 : 1')
     expect(journey).toContain('await restoreInNewAuthenticatedContext')
     expect(journey).toContain("command: 'reconcile'")
     expect(journey).not.toMatch(/retry|switch_provider|reconciliationEvidence/iu)
@@ -1336,7 +1340,7 @@ function rawObservationFixture(
     }
   })
   const receiptWithoutDigest = {
-    receiptRef: 'phase3c-paid-operation-exact-revision-deployment',
+    receiptRef: 'phase3c-paid-operation-exact-revision-deployment:g2',
     sourceRevision: SOURCE_REVISION,
     sourceTree: SOURCE_TREE,
     githubRunId: '123456',
@@ -1368,7 +1372,7 @@ function rawObservationFixture(
       },
     },
     policy: {
-      policyRef: 'phase-3c-hosted-paid-operation-trial',
+      policyRef: 'phase-3c-hosted-paid-operation-trial:g2',
       enabled: true,
       policyDigest: DIGEST('a'),
       sourceRevision: SOURCE_REVISION,

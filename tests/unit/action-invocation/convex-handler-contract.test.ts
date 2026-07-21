@@ -954,7 +954,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       await backend.run(async (ctx) => {
         const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
           .withIndex('by_policyRef_and_principalRef', (q) =>
-            q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial')
+            q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g2')
               .eq('principalRef', ownerIdentity.subject))
           .unique()
         if (counter === null) throw new Error('test_counter_missing')
@@ -1195,6 +1195,8 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     expect(querySource).toContain('.take(2)')
     expect(querySource).toContain(".withIndex('by_ownerPrincipalRef_and_invocationRef'")
     expect(querySource).toContain(".withIndex('by_policyRef_and_principalRef_and_reservationRef'")
+    expect(querySource).toContain('.take(PHASE3C_PROOF_HEADER_CAP + 1)')
+    expect(querySource).toContain('const priorHeadersSafe = observedHeaders.every')
     expect(querySource).toContain('.take(4)')
     expect(querySource).toContain('.take(HOSTED_PAID_OPERATION_CHILD_CAP + 1)')
     expect(querySource).not.toMatch(
@@ -1250,6 +1252,60 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     const second = await runCompletedEffect(owner, 'A', 'agent-a')
     const third = await runCompletedEffect(owner, 'B', 'goblin-b')
     const invocationRefs = [first.invocationRef, second.invocationRef, third.invocationRef]
+
+    await backend.run(async (ctx) => {
+      const currentHeader = await ctx.db.query('hostedPaidOperationHeaders')
+        .withIndex('by_invocationRef', (q) => q.eq('invocationRef', first.invocationRef))
+        .unique()
+      if (currentHeader === null) throw new Error('test_header_missing')
+      const {
+        _id: _currentHeaderId,
+        _creationTime: _currentHeaderCreationTime,
+        ...retainedHeader
+      } = currentHeader
+      const priorPolicyDigest = `sha256:${'e'.repeat(64)}`
+      const priorPolicyRef = 'phase-3c-hosted-paid-operation-trial'
+      const priorReservationRef = 'reservation:retained-pre-authority'
+      await ctx.db.insert('hostedPaidOperationAdmissionPolicies', {
+        policyRef: priorPolicyRef,
+        enabled: false,
+        principalRef: ownerIdentity.subject,
+        totalLimit: 3,
+        concurrencyLimit: 1,
+        rateLimit: 3,
+        policyDigest: priorPolicyDigest,
+        sourceRevision: 'f1d57784a621f3769d8006300705188fb65f0568',
+        admissionEndsAt: '2026-07-21T05:52:44.000Z',
+        retainThrough: '2026-08-21T00:00:00.000Z',
+        killSwitchOwner: 'operator:phase3c',
+        recordedAt: '2026-07-21T01:52:44.000Z',
+      })
+      await ctx.db.insert('hostedPaidOperationAdmissionCounters', {
+        policyRef: priorPolicyRef,
+        principalRef: ownerIdentity.subject,
+        policyDigest: priorPolicyDigest,
+        currentWindowKey: '2026-07-21T01',
+        admittedTotal: 1,
+        active: 0,
+        admittedInWindow: 1,
+        updatedAt: '2026-07-21T02:00:00.000Z',
+      })
+      await ctx.db.insert('hostedPaidOperationAdmissionReservations', {
+        reservationRef: priorReservationRef,
+        policyRef: priorPolicyRef,
+        principalRef: ownerIdentity.subject,
+        policyDigest: priorPolicyDigest,
+        state: 'released',
+        updatedAt: '2026-07-21T02:00:00.000Z',
+      })
+      await ctx.db.insert('hostedPaidOperationHeaders', {
+        ...retainedHeader,
+        invocationRef: 'invocation:retained-pre-authority',
+        invocationVersion: 1,
+        admissionReservationRef: priorReservationRef,
+        updatedAt: '2026-07-21T01:57:50.212Z',
+      })
+    })
 
     const observed = await backend.query(phase3CHostedProofObservation, { invocationRefs })
     expect(observed.kind).toBe('observed')
@@ -1312,7 +1368,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
     await backend.run(async (ctx) => {
       const counter = await ctx.db.query('hostedPaidOperationAdmissionCounters')
         .withIndex('by_policyRef_and_principalRef', (q) =>
-          q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial')
+          q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g2')
             .eq('principalRef', ownerIdentity.subject))
         .unique()
       if (counter === null) throw new Error('test_counter_missing')
@@ -1400,7 +1456,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
           await backend.run(async (ctx) => {
             const rows = await ctx.db.query('hostedPaidOperationAdmissionReservations')
               .withIndex('by_policyRef_and_principalRef_and_reservationRef', (q) =>
-                q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial')
+                q.eq('policyRef', 'phase-3c-hosted-paid-operation-trial:g2')
                   .eq('principalRef', ownerIdentity.subject))
               .take(1)
             if (rows[0] === undefined) throw new Error('test_reservation_missing')
@@ -1481,7 +1537,7 @@ describe('authenticated hosted paid-operation intent gateway', () => {
       await cohort.backend.run(async (ctx) => {
         const rows = await ctx.db.query('hostedPaidOperationDeploymentReceipts')
           .withIndex('by_receiptRef', (q) =>
-            q.eq('receiptRef', 'phase3c-paid-operation-exact-revision-deployment'))
+            q.eq('receiptRef', 'phase3c-paid-operation-exact-revision-deployment:g2'))
           .take(2)
         if (rows[0] === undefined) throw new Error('test_deployment_receipt_missing')
         if (drift === 'missing') await ctx.db.delete(rows[0]._id)
@@ -1718,7 +1774,7 @@ async function admitOwner(backend: HostedBackend, rateLimit = 2) {
 async function admitPrincipal(backend: HostedBackend, principalRef: string, rateLimit = 2) {
   await backend.run(async (ctx) => {
     await ctx.db.insert('hostedPaidOperationAdmissionPolicies', {
-      policyRef: 'phase-3c-hosted-paid-operation-trial',
+      policyRef: 'phase-3c-hosted-paid-operation-trial:g2',
       enabled: true,
       principalRef,
       totalLimit: 3,
