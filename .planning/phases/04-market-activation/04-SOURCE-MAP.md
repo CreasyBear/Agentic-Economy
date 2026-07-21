@@ -1,112 +1,61 @@
 # Phase 4 source and data map
 
-## Reuse map
+This map separates current source truth from D-011 target design. Classification means: **exists/reuse**, **bounded extension**, **new source owner/read model**, **projection only**, or **retire/redirect**.
 
-| Product fact | Current source owner | Phase 4 action |
-|---|---|---|
-| Business identity/claim | `src/modules/business/**`, `convex/business.ts` | Reuse; migrate owner authorization to token identifier |
-| Business Account relationship/team | absent; current `owners` is a single-person compatibility record | Add ADR-024 membership, invitation, relationship and lifecycle owners without replacing `businesses` |
-| Business support/customer success | absent as an account domain | Add source-owned cases, tasks and private notes; never reuse Request problems or inquiry truth |
-| Business commercial context | navigation/audit vocabulary exists; no complete billing source or route | Add truthful no-charge/manual/provider-managed context only; hide or replace unsupported billing destinations |
-| Application release control | absent; CSP has a purpose-specific environment rollout switch only | Add bounded code-keyed environment/account release control; do not reuse it for roles, plans or capability state |
-| Public listing/services | `src/modules/catalog/**`, `convex/catalog.ts` | Keep discovery-only; do not make executable registry |
-| Capability contract | `src/modules/capability-contract-registry/**` | Reuse exact active contract/digest |
-| Offering/binding/publication/readiness | `src/modules/capability-supply/**`, `convex/capabilitySupply*.ts` | Add onboarding application/projection, custody port and bounded reads |
-| Credential-mode transport | binding/publication/readiness/route runtime under `src/modules/capability-supply/**` | Thread `none | managed_ref` through admission, probe and execution; never resolve or emit auth for `none` |
-| Request/requirements | `src/modules/customer-request/**` | Reuse canonical Request and facts/criteria |
-| Candidate/quote records | existing routing-kernel preparation tables | Implement durable Convex store; do not add quote tables |
-| Comparison | `customer-option-set.ts`, `option-inspection.ts` | Feed strict operation-owned quote results; retain honest cardinality/influence |
-| Authority/attempt/recovery | Customer Request v2 execution plus Action Invocation | Reuse; do not add activity/execution aggregate |
-| Paid action exemplar | Phase 3C paid-operation source | Link/wrap only for paid operations; never universalize |
-| Human inquiry/outbox | `src/modules/inquiries/**` | Keep communication-specific; not quote/business truth |
-| Empty-search analytics | `src/modules/demand/**` | Keep analytics-only; not Request/RFQ aggregate |
+## Current-to-target source-gap map
 
-## Data additions
+| Customer fact or view | Current inspected source | Classification | Target owner / WP |
+|---|---|---|---|
+| Business identity and public profile | `src/modules/business/**`, `convex/business.ts` | exists/reuse, with bounded authorization migration where required | business owner; WP3 composes its customer view |
+| Public listing and service discovery facts | `src/modules/catalog/**`, `convex/catalog.ts` | exists/reuse and bounded extension | catalog/business owners; WP3 |
+| Capability contract | `src/modules/capability-contract-registry/**` | exists/reuse | capability-contract owner; WP3/WP4 consume references |
+| Offering, binding, publication, eligibility and readiness | `src/modules/capability-supply/**`, `convex/capabilitySupply*.ts` | exists/reuse and bounded extension | capability-supply owner; WP3/WP4 |
+| Inquiry messages and conversation state | `src/modules/inquiries/**` | exists/reuse and bounded extension for account scope/linking | inquiry owner; WP8 |
+| Work action, attempt, uncertainty and result truth | registered action / Action Invocation and operation-owned result modules | exists/reuse and bounded extension for account-scoped reads | action and operation result owners; WP7 |
+| Paid digital information facts | paid-operation source owner | exists/reuse | operation owner; never generalized into shared payment truth |
+| Membership, invitations, additive responsibility grants and protected Ownership | current `owners` compatibility record is insufficient | new source owner/read model | Business Account; WP1 |
+| Business relationship, customer-visible support, commercial references/export and closure | no complete owner | new source owner/read model | Business Account; WP2 |
+| Domain-owned availability | domain facts vary; no narrow shared account projection | new source owner plus projection | each domain owns facts; WP3 owns only the shared discriminated projection |
+| Integration-to-offering relationship and account connection check | capability-supply facts exist but the account relation/read model is incomplete | bounded extension | capability-supply/integration owner; WP4 |
+| Home status, attention and next action | no complete bounded account read model | projection only | removable Business Account projection; WP5 |
+| Work list and evidence history | source facts exist; account projection incomplete | projection only | removable indexed projection referencing action/result owners; WP5/WP7 |
+| Offerings list and service detail | source facts exist; account projection incomplete | proposed projection only | removable projection over business/catalog/supply owners; WP3/WP10 |
+| Integrations list/detail | source facts exist; account projection incomplete | proposed projection only | removable projection over integration/supply owners; WP4/WP10 |
+| Portfolio/switcher and founder account summary | no complete bounded read model | new read model / projection only | Business Account relationship projections; WP5/WP11 |
+| Team, settings and Help views | source owners above are incomplete | new read models composed from WP1/WP2 | WP9 |
+| `/owner/**` destinations | compatibility routes | retire/redirect | WP6 redirects to `/businesses/:businessId/**` or account switcher |
+| Three-quote and quote-to-close programme | earlier planning proposal only | retire from active Phase 4 authority | preserve as historical/future research, not D-011 source work |
 
-### Phase 4A
+## WP1–WP12 ownership
 
-- `businessRelationships`, `businessMemberships` and
-  `businessMemberInvitations` with ADR-024 lifecycle and authority indexes.
-- `businessSuccessTasks`, `businessSuccessNotes`, `businessSupportCases` and
-  bounded case messages.
-- one `businessCommercialAccounts` current relationship row per business; no
-  invoice, payment or settlement fabrication.
-- `applicationReleaseControls`, row-based `applicationReleaseTargets` and
-  `businessFeatureAccess` with the exact bounded indexes in the 4A contract.
-- removable `businessAccountActivityItems` referencing source events.
-- `capabilityOnboardingDrafts` with exact revision/owner/business/source/digests,
-  `credentialMode: none | managed_ref`, opaque managed reference, issues and
-  publication reference.
-- optional `owners.ownerTokenIdentifier` plus
-  `owners.by_ownerTokenIdentifier` during migration.
-- removable `registryOperationProjectionItems` with exact publication and
-  readiness references plus bounded search index.
+| WP | Source-owned outcome |
+|---|---|
+| WP1 | Business Account identity relationship seam, membership, invitation, responsibility grants and protected Ownership |
+| WP2 | Relationship lifecycle, customer-visible support, commercial references/export and closure; preserves WP1 public exports |
+| WP3 | Profile/services composition and a discriminated, domain-owned availability projection across three domain shapes |
+| WP4 | Many-to-many integrations relation, credential-safe connection status and bounded diagnostics |
+| WP5 | Removable bounded Home, Work and portfolio projections with one attention computation |
+| WP6 | Canonical shell, current-business context and `/owner/**` redirects |
+| WP7 | Work list/detail over source-owned action, attempt, uncertainty and result truth |
+| WP8 | Inbox/conversation over inquiry truth with explicit, reconstructable Work links |
+| WP9 | Team/access, security, notifications, commercial references/export, Help and closure UI |
+| WP10 | Offerings and canonical Business settings/Integrations UI with contextual many-to-many links |
+| WP11 | Founder/customer-success account detail without impersonation or source rewriting |
+| WP12 | Integrated comprehension, accessibility-contract, responsive and horizontal acceptance evidence |
 
-### Phase 4B
+## Projection and query rules
 
-Add operation-owned `digitalProcurementQuoteResults` and
-`digitalProcurementStartWorkResults`. Existing routing-kernel offer rows refer
-to these results and retain only the normalized comparison projection. Add the
-Convex implementation of `StructuredQuotePreparationStore` over existing
-routing-kernel rows and the candidate/attempt/offer indexes named in
-`04-PLAN.md`.
+- Business and operation facts remain with their current source owners; projections store references, summaries, observed time and currentness only.
+- Deleting and rebuilding a projection cannot delete or change canonical business, inquiry, action, result, catalog, publication, readiness or integration facts.
+- Home owns the single `needs attention` computation. Work owns operational counts; Inbox owns unread conversation counts. A linked conversation/work pair contributes once to Home.
+- Every growing list is account-scoped, indexed, paginated or cap-plus-one bounded. WP5 proves unrelated 1,000/10,000-record growth does not change one-page query counts.
+- Stale or incomplete source evidence produces partial/stale/uncertain UI state and a safe refresh, inspect, or reconcile continuation; it never becomes success.
+- Availability shares only discriminants and customer-safe summaries. Appointment slots, dispatch coverage/capacity, and digital delivery windows remain domain-owned.
+- Integrations and Offerings are many-to-many. Neither owns or embeds the other's canonical records.
+- Public inputs never select the owner/principal. URL knowledge, projection membership or source reference possession is not authority.
 
-### Phase 4C
+## Current liabilities to preserve as liabilities
 
-Add `customerRequestV2QuoteSelections` as the versioned Request transition; do
-not add a second Request or order aggregate. No new activity/order tables. If
-standalone work appears in Activity, add only
-an owner/principal/updatedAt continuity index to the Action Invocation control
-projection. Business results stay with their operation owner.
+Current owner routes are Status/Inquiries/Settings-shaped and incomplete; membership is singular/compatibility-shaped; some catalog, inquiry and supply reads require bounded account-scoped extensions; and credential/readiness custody remains technical source truth rather than customer navigation. These are implementation gaps, not authority to weaken the accepted target.
 
-## Query and performance contract
-
-- All growing lists paginate or use explicit cap-plus-one reads.
-- Business portfolio, membership, task, support and activity lists use the
-  indexes and constant page budgets in `04A-BUSINESS-ACCOUNT-MANAGEMENT.md`.
-- Public search returns at most 50 and does not hydrate the full supply graph.
-  It follows at most three cursor pages/150 candidates and returns an explicit
-  incomplete-coverage state when that ceiling prevents an exhaustive page.
-- Expired routeability projection rows are invalidated in indexed batches of
-  100; exact routing still revalidates canonical readiness.
-- One sourcing action is capped at 32 candidates/attempts/offers; reference
-  policy contacts three.
-- Activity pages are bounded and ordered; child attempts/problems have explicit
-  caps.
-- Scale evals seed 1,000 and 10,000 unrelated records and assert unchanged read
-  counts/query calls for one exact page. Wall-clock time is diagnostic only.
-- Intended Phase 4 paths must remove N+1/full-table reads before exposure.
-  Unrelated operator exports may be recorded without becoming the loop.
-
-## Known source liabilities
-
-1. Capability publication still uses Clerk subject/user identity in places;
-   token identifier must become canonical before owner exposure.
-2. Readiness credential resolution currently accepts `env:NAME`; model this as
-   the first founder-assisted `managed_ref` adapter and support `none` for open
-   endpoints across admission, readiness and execution. Do not claim
-   self-service secret intake.
-3. Capability graph candidate hydration is bounded but row-by-row, and current
-   Customer Request discovery caps after broad hydration.
-4. The active structured-quote runtime defaults to an in-memory store despite
-   durable schema/readback records, and it can call quote adapters outside a
-   Registered Action invocation. Both must be replaced in the intended path.
-5. Registry/catalog and inquiry owner paths contain N+1 or full-table
-   `.collect()` reads. Fix only those used by Phase 4 intended surfaces.
-6. Existing `supplied-quote` source is explicitly development evidence and may
-   not be renamed/promoted as the product RFQ operation.
-7. Current owner IA is Status/Inquiries/Settings-shaped, has no team or
-   relationship aggregate, and advertises incomplete advanced destinations.
-   Phase 4A must implement or remove every intended destination.
-
-## Security and privacy contract
-
-- Derive owner/principal from authenticated server context; public inputs never
-  choose their owner.
-- Guard endpoints against private/link-local DNS, rebinding and redirects.
-- Store normalized result facts and bounded evidence references, not raw
-  provider bodies or secrets.
-- Candidate contact requires exact disclosure allocation per recipient/purpose.
-- Cross-principal reads return the same non-enumerating absence behavior.
-- Projection membership, URL knowledge, Request possession and quote possession
-  are never authority.
+This source map makes no claim that the target owners, queries, routes or views are implemented.

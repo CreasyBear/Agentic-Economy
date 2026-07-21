@@ -1,547 +1,297 @@
 ---
 phase: 04-market-activation
 type: product-and-engineering-plan
-status: proposed_ready_for_founder_review
-depends_on:
-  - final Phase 3C integration revision
-subphases:
-  - 04A-business-account-management
-  - 04B-three-viable-quotes
-  - 04C-close-one-and-see-it-through
+status: documentation_authority_accepted_implementation_pending
+decision: D-011
+accepted: 2026-07-21
 ---
 
-# Phase 4A–4C implementation plan
+# Phase 4 mature business experience plan
 
-## What we are building
+## Outcome
 
-Phase 4 makes AE usable for founder-led market activation. The founder can
-onboard and manage Business Accounts, enter a customer need, show current comparable offers, and
-start one exact provider operation without asking an engineer to edit data or
-explain the control plane.
+Phase 4 delivers mature Business Account/customer-management operation under
+the accepted six-item customer shell. This plan is organized by source
+dependency, not an arbitrary 4A/4B/4C cap.
 
-This is a vertical product conversion over existing source owners. It is not a
-new marketplace kernel.
-
-```text
-SUPPLY                              DEMAND                         CLOSE
-Business                            Customer Request               Registered Action
-  ↓                                  ↓                              ↓
-Capability contract                 Material requirements          Exact selected offer
-  ↓                                  ↓                              ↓
-Offering + binding                  Qualified suppliers            Authority + attempt
-  ↓                                  ↓                              ↓
-Eligibility + readiness             Attributable quotes            Business result
-  ↓                                  ↓                              ↓
-Published operation                 Honest comparison              Activity/recovery
-```
+Documentation reconciliation is complete only when ADR-024, the Business
+Account contract, context, source map, UI-SPEC, validation strategy, this plan
+and both levels of child contracts agree. That completion does not imply source
+implementation or product evidence.
 
 ## Operating rules
 
-1. Parent owns phase authority, exact base, custody, cross-phase interfaces,
-   integration, deployment authorization and claims.
-2. One plan-owned writer works at a time. Read-only audits may run in parallel.
-3. Every writer starts from the parent-integrated revision of its predecessor.
-4. Every parcel has one named semantic RED. Broad suites are not the loop.
-5. A child may change only exact writable paths. An unexpected path is a stop,
-   not an invitation to clean or restore it.
-6. Source-issued projections precede UI work. UI never invents routeability,
-   comparison, authority, evidence or commands.
-7. Each child gets one bounded correction for a source-linked defect in its
-   owned slice. Contract changes, new tables outside the plan, or cross-owner
-   repairs return to the parent.
-8. Real provider/customer onboarding is not an implementation dependency.
-   Fixtures are persistently labelled. Claims never exceed the evidence class.
+- One parent owns decisions, custody, integration and claims.
+- Dependency-ordered writers start from the integrated predecessor.
+- Parallel work is read-only audit or independent candidate review only.
+- Each package has one source-owned outcome and semantic falsifier.
+- UI projections never become command or business truth.
+- Focused evals steer the changed boundary.
+- No deployment, provider/payment action or hosted claim follows.
 
-## Phase 4A — Business Account management
+## Natural dependency graph
 
-### 4A outcome
-
-An authenticated business team can manage its complete account, and an
-authorized founder can manage the relationship without database edits or
-impersonation. The surface covers people and roles, business profile and
-multiple services, operations and connections, enquiries and work, activity,
-support, commercial context, lifecycle controls and offboarding. Public
-discovery shows operations only while canonical routeability facts are current.
-
-`04A-BUSINESS-ACCOUNT-MANAGEMENT.md` is the complete Phase 4A product and data
-contract. `04A-INSTANCE-CONTRACTS.md` is its sole child-dispatch authority. The
-common and 4B/4C contracts remain in `04-INSTANCE-CONTRACTS.md`. A working
-capability wizard without the surrounding Business Account and
-founder/customer-success surfaces is not Phase 4A.
-
-### 4A-0 — Freeze contracts and hostile substitutions
-
-Parent owns ADR-022 acceptance candidate and freezes these terms:
-
-- ADR-024 Business Account, membership and relationship ownership;
-- draft versus canonical supply;
-- token-identifier owner authority;
-- opaque credential-custody port;
-- source-issued onboarding/readiness projection;
-- removable executable-operation search projection;
-- exact routeability gate conjunction.
-
-The first child writes RED tests before implementation. Required substitutions:
-
-- claimed/public business becomes unadmitted;
-- contract becomes inactive or digest changes;
-- offering becomes inactive or integrity changes;
-- binding becomes unadmitted, non-conformant or points elsewhere;
-- credential becomes unavailable;
-- readiness becomes unhealthy, stale or revision-mismatched;
-- public projection remains stale after canonical withdrawal.
-
-Every mutation must remove routeability. No form success or projection row may
-override the source graph.
-
-### 4A-1 — Business identity, relationship, membership and onboarding drafts
-
-Add the Business Account relationship and team model defined in ADR-024, plus
-resumable profile/service and capability-onboarding drafts. Capability supply
-stores canonical JSON/digests and an opaque `credentialRef`, never secret
-material. Membership authority is separate from account relationship and
-routeability.
-
-Draft status is one of:
-
-```text
-draft | validating | ready_to_publish | published | needs_attention | abandoned
+```mermaid
+flowchart TD
+  D[\"D-011 reconciled authority\"]
+  A[\"WP1 Business context, membership and responsibilities\"]
+  R[\"WP2 Relationship, support, commercial and closure owners\"]
+  O[\"WP3 Offerings and domain availability contracts\"]
+  I[\"WP4 Integrations and readiness contract\"]
+  Q[\"WP5 Query projections and attention identity\"]
+  S[\"WP6 Customer shell and compatibility routes\"]
+  W[\"WP7 Work detail and business Work queue\"]
+  M[\"WP8 Inbox, conversation and Work linking\"]
+  F[\"WP9 Settings, Team, Help and closure surfaces\"]
+  T[\"WP10 Offerings, Availability and Integrations surfaces\"]
+  B[\"WP11 Founder/customer-success backstage\"]
+  E[\"WP12 Cross-surface acceptance and horizontal proof\"]
+  D --> A
+  A --> R
+  R --> O
+  O --> I
+  I --> Q
+  A --> S
+  Q --> S
+  Q --> W
+  A --> M
+  W --> M
+  A --> F
+  R --> F
+  O --> T
+  I --> T
+  R --> B
+  Q --> B
+  S --> E
+  W --> E
+  M --> E
+  F --> E
+  T --> E
+  B --> E
 ```
 
-Required fields:
-
-```text
-draftRef, businessId, ownerTokenIdentifier, revision, status,
-sourceKind, contractDocumentJson, contractDigest,
-offeringDraftJson, offeringDigest, bindingDraftJson, bindingDigest,
-credentialRef, currentStep, validationIssues,
-publicationRef?, publishedRevision?, createdAt, updatedAt
-```
-
-Required indexes:
-
-- `by_draftRef`;
-- `by_businessId_and_status_and_updatedAt`;
-- `by_ownerTokenIdentifier_and_updatedAt`.
-
-Migrate owner authorization to token identifier with bounded dual-read and a
-resumable backfill. Do not rename or reinterpret historical owner IDs.
-
-Bindings declare `credentialMode: none | managed_ref`. Open endpoints are valid
-with `none`; the UI must not manufacture a credential blocker for them.
-Authenticated endpoints use an injected custody interface and the existing
-server-resolved environment-reference adapter as the first configured
-founder-assisted implementation. Owners never type raw secrets into the web
-form: a founder/operator provisions the secret through the deployment's
-protected configuration channel and records only its managed reference. A
-labelled mock adapter drives fixtures. Self-service secret intake or a different
-external secret manager requires a later custody decision, but Phase 4 can
-truthfully onboard open endpoints and founder-provisioned authenticated ones.
-
-The credential mode is executable policy, not descriptive metadata. Carry it
-through binding admission, publication, readiness and route execution. `none`
-must not invoke a credential resolver or emit an Authorization header.
-`managed_ref` fails closed at every boundary until the exact source-owned
-reference resolves; no caller may downgrade it during execution. The mode is
-persisted and reconstructed with the canonical binding and participates in the
-probe target/digest, so changing it invalidates earlier readiness evidence.
-
-End condition: the draft survives reload, rejects raw credentials, enforces
-expected revision, and cannot independently create routeable supply.
-
-The same end condition covers membership invitation/acceptance/revocation,
-last-owner protection, multi-business membership and complete account lifecycle
-transitions. No membership or relationship state creates public or executable
-supply.
-
-### 4A-2 — Publish, readiness and operation projection
-
-The application service validates the draft, calls the existing canonical
-contract/offering/binding/publication commands, then schedules or invokes a
-guarded readiness observation. Partial failure leaves an inspectable inactive
-publication; it never manufactures a ready row.
-
-Add a removable registry projection containing only current discovery facts:
-
-```text
-logicalKey, businessId, publicationRef, publicationRevision,
-capabilityId, version, contractDigest, offeringId, bindingId,
-label, summary, searchText, sourceKind, environment,
-routeabilityStatus, readinessObservedAt, readinessValidUntil,
-sourceDigest, generatedDigest, updatedAt
-```
-
-Required indexes:
-
-- `by_logicalKey`;
-- `by_publicationRef_and_publicationRevision`;
-- `by_businessId_and_routeabilityStatus_and_updatedAt`;
-- search `search_searchText_by_routeabilityStatus`.
-
-Maintain `by_routeabilityStatus_and_readinessValidUntil` and invalidate expired
-projection rows in bounded batches of 100. Public search may follow at most
-three cap-plus-one cursor pages (hard scan ceiling 150) and returns at most 50.
-If valid results beyond that ceiling are unknown, the page returns
-`coverage: incomplete` plus a continuation cursor; it never implies exhaustive
-membership. Exact execution resolves canonical source records again.
-
-End condition: a projection can be deleted/rebuilt without losing supply; an
-expired or withdrawn operation disappears from routeable discovery; 10,000
-unrelated operations do not expand the read budget for one page.
-
-### 4A-3 — Business workspace and founder/customer-success surface
-
-Create protected routes:
-
-- `/businesses` — choose or create a permitted Business Account;
-- `/businesses/$businessId` — account health, work, blockers and next actions;
-- `/businesses/$businessId/profile` — profile, contacts, locations and visibility;
-- `/businesses/$businessId/team` — invitations, roles and access lifecycle;
-- `/businesses/$businessId/services` — multiple discoverable services;
-- `/businesses/$businessId/capabilities` — current operations and blockers;
-- `/businesses/$businessId/capabilities/new` — configure one operation;
-- `/businesses/$businessId/capabilities/$publicationRef` — inspect, test,
-  publish, pause or repair;
-- `/businesses/$businessId/connections` — endpoint/adapter readiness;
-- `/businesses/$businessId/work` and `/businesses/$businessId/activity` —
-  bounded referenced work and history;
-- `/businesses/$businessId/plan` — truthful no-charge/manual/provider-managed
-  context;
-- `/businesses/$businessId/support` — durable customer-visible support cases;
-- `/businesses/$businessId/settings` — business defaults and lifecycle controls;
-- `/settings` — personal security, sessions and preferences;
-- `/admin/businesses` and `/admin/businesses/$businessId/**` — portfolio,
-  onboarding, operations, support, commercial context and activity without
-  owner impersonation or raw credential custody;
-- `/admin/releases` — founder-only exposure of completed application areas to
-  internal, named pilot or all Business Accounts.
-
-Existing `/owner/*` destinations become compatibility redirects. The stable
-business identifier in the canonical URL is always checked against current
-server membership; a browser-selected account never supplies authority.
-
-Add a small source-owned release control with only `off | internal |
-named_accounts | all_accounts`. It is environment-specific, audited and off on
-unknown/unavailable state. Apply the same result to navigation, direct routes
-and commands. Keep release, account feature access, member permissions,
-commercial arrangement and operation publication as separate facts. Do not add
-percentage experiments, user targeting or a third-party flag service in 4A.
-
-The route sequence is:
-
-```text
-business relationship → people and roles → profile and services
-→ supported operations → connections/readiness → ongoing work and support
-→ pause/offboard/close
-```
-
-The UI renders only source-issued state and allowed commands. It must visibly
-distinguish profile publication, operation registration, mechanical
-eligibility, current readiness and intended-surface reachability.
-
-End condition: a fresh evaluator can administer and use the account without
-engineering help, identify what is public and routeable, handle team access,
-enquiries, support and lifecycle changes, safely switch accounts, expose or
-disable a completed area, and understand every next action.
-
-### 4A-4 — 4A integration evidence
-
-Run the owner/founder workflow with labelled fixture cases covering the full
-state matrix in `04A-BUSINESS-ACCOUNT-MANAGEMENT.md`, including:
+## Work packages
 
-1. valid contract, missing credential;
-2. ready then readiness-expired;
-3. published then paused/withdrawn;
-4. invitation acceptance, role refusal and last-owner protection;
-5. multiple services and operations with mixed readiness;
-6. open/resolved support and truthful no-charge commercial state;
-7. at-risk, offboarding and closed accounts retaining history.
+### WP1 — Business context, membership and additive responsibility
 
-Generate a source/local packet that recomputes gate dispositions and projection
-digests. Hosted readback is optional until the Phase 4C release cut. Do not call
-fixtures real providers.
+**Depends on:** reconciled D-011 documentation.
 
-The parent then runs the repository's route generator, owns only the generated
-route-tree diff, verifies every Business Account and founder route ID/import,
-and runs focused route tests plus typecheck. Children do not edit generated
-routes.
-
-After route generation, parcel 4A-A runs all twelve Business Account completion
-scenarios, hostile membership/offboarding substitutions, constant query
-budgets, direct-URL restoration, accessibility and clean-revision packet
-verification. It is the only parcel permitted to close 4A. Phase 4B starts from
-the parent-integrated 4A-A revision, never from a capability or route-generation
-parcel alone.
+**Source-owned outcome:** memberships, invitations, additive grants, effective
+access and protected Ownership independent of business identity.
 
-## Phase 4B — Three viable quotes
+**Target behavior:** multiple businesses per person; persistent URL business
+context; presets; accepted transfer; immediate revocation; last-owner
+protection; server refusal on direct routes/commands.
 
-### 4B outcome
+**Falsifier:** assigning every ordinary responsibility does not create
+Ownership; no role/preset substitution can remove the last Owner.
 
-A customer can describe one digital project, review the material requirements
-and disclosure, ask up to three qualified providers, and compare the current
-attributable offers that actually return.
+**Evidence ceiling:** source and focused fixtures.
 
-### 4B-0 — Freeze one reference RFQ contract
+**Stop:** if identity/browser state becomes membership authority or emergency
+founder recovery must be invented.
 
-Define and register one operation-owned contract pack outside the neutral
-kernel:
+### WP2 — Relationship, support, commercial references and closure
 
-- `digital_project.request_quote:v1` input and material fields;
-- strict normalized quote result;
-- comparable outputs and non-comparable domain evidence;
-- validity, price/currency, terms, exclusions and response identity;
-- source-specific raw adapters for three labelled mock providers.
+**Depends on:** parent-integrated WP1.
 
-`digital_project.request_quote:v1` is registered through
-`src/modules/actions/index.ts`. Every supplier contact creates one Request-owned
-Action Invocation/attempt/release identity before its operation adapter sends.
-No sourcing application may call a provider quote adapter directly.
+**Source-owned outcome:** relationship, onboarding tasks, private notes,
+customer-visible support, truthful commercial references, export and closure.
 
-Persist each admitted normalized result in the reference operation owner:
+**Target behavior:** complete lifecycle; private/customer records separated;
+no-charge complete; partial offboarding resumes; history survives.
 
-```text
-quoteResultRef, invocationRef, requestRef, requirementRevision,
-supplierBindingId, operationRevision, resultDigest, normalizedResultJson,
-rawEvidenceRef, observedAt, validUntil
-```
+**Falsifier:** commercial labels cannot grant feature access or manufacture
+payment truth; closure cannot complete with unresolved withdrawal.
 
-The routing-kernel provider-offer row holds `quoteResultRef` and the comparable
-projection needed by the Request. It is not the sole business source.
+**Evidence ceiling:** source and focused fixtures; no revenue claim.
 
-The shared Request/UI sees only the normalized contract. The fixture count and
-website-project language stay in the reference operation and scenario.
+**Stop:** on deletion, impersonation, fabricated billing or unbounded work.
 
-End condition: crossed provider payloads, wrong requirement revision, wrong
-currency, invalid price, expired offer and wrong supplier binding refuse.
+### WP3 — Offerings and domain-owned availability
 
-### 4B-1 — Persist the existing structured-quote store
+**Depends on:** parent-integrated WP2.
 
-Implement the Convex adapter for the existing
-`StructuredQuotePreparationStore`. Do not add a second quote schema.
+**Source-owned outcome:** revisioned services and explicit paid-information,
+appointment and dispatch availability contracts.
 
-Use the current candidate-set, candidate, attempt, provider-offer, execution
-field and material-term tables plus operation-owned quote-result references.
-Add only indexes proved necessary:
+**Target behavior:** create/order/preview/publish/pause/retire; shared
+availability is only disposition/currentness/customer impact.
 
-- candidates `by_candidateSetDigest_and_position`;
-- attempts `by_candidateSetDigest_and_disposition`;
-- offers `by_candidateSetDigest_and_expiresAt`;
-- Request heads `by_principalId_and_updatedAt`.
+**Falsifier:** slots, dispatch capacity and paid-operation price cannot enter
+the shared availability schema.
 
-Bound one action to at most 32 candidates/attempts/offers. The reference policy
-contacts at most three.
+**Evidence ceiling:** source, schema and labelled fixtures.
 
-Required transition truth:
+**Stop:** on universal calendar/provider lifecycle or publication-as-availability.
 
-```text
-not_contacted → allocated → dispatched → quoted | unavailable | uncertain
-```
+### WP4 — Business-scoped Integrations and readiness
 
-`allocated` is pre-release. A timeout or invalid response after dispatch is
-uncertain/reconcile-only; it is not an ordinary refusal and cannot silently
-contact the same or a replacement provider.
+**Depends on:** parent-integrated WP3.
 
-End condition: cold restoration produces zero additional provider contacts;
-duplicate commands produce one attempt; 10,000 unrelated offers do not expand
-the exact candidate-set read budget.
+**Source-owned outcome:** Integration summary/detail with many-to-many offering
+relations and protected technical disclosure.
 
-### 4B-2 — Bounded qualified-supplier discovery and coverage
+**Target behavior:** one-to-many, many-to-one and account-wide Integrations;
+source/currentness; no secret readback.
 
-Replace graph-wide/N+1 candidate hydration for this intended surface with an
-index-first exact capability/network projection query, then hydrate only the
-selected eligible publications from canonical supply.
+**Falsifier:** changing one offering cannot duplicate/mutate its shared
+Integration; stale readiness cannot say Available.
 
-Customer Request owns sourcing coverage:
+**Evidence ceiling:** source, fixtures and labelled adapter checks.
 
-```text
-evaluated, contacted, responded, unavailable, refused, pending, uncertain,
-viable, expired, invalid
-```
+**Stop:** if raw credential custody or external provider mutation is required.
 
-An eligible provider is not a quote. “Three viable quotes” requires three
-current attributable normalized results. Partial results remain useful and
-visible; the product does not wait forever or fabricate cardinality.
+### WP5 — Bounded summaries, Work references and attention identity
 
-End condition: candidate discovery is bounded, requirements/disclosure are
-bound to the exact Request revision, and each provider has independent release
-and uncertainty truth.
+**Depends on:** parent-integrated WP4 and the programme interface-freeze gate.
 
-### 4B-3 — Durable Activity request route and sourcing UI
+**Source-owned outcome:** removable Home, Work-list, History and founder
+projections with bounded indexes and stable source identity.
 
-After Request creation, navigate to `/activity/$requestRef`. Browser storage
-may retain a convenience pointer but cannot be the only recovery mechanism.
+**Target behavior:** one summary plus cap-and-one attention, Work and Inbox;
+exact detail rehydrates source owners.
 
-Add:
+**Falsifier:** 10,000 unrelated records do not change page budget; deleting
+projections changes no result or authority.
 
-- `/activity` — bounded current/completed Request list;
-- `/activity/$requestRef` — working understanding, disclosure, sourcing
-  progress and quote comparison;
-- query/domain panels under Customer Request, not `/registry`.
+**Evidence ceiling:** source and query-budget fixtures.
 
-Split the existing `AeCustomerRequestWorkspace`; do not add another lifecycle
-to that file. The shared shell owns request orientation and commands. A
-`QuoteComparisonView` owns quote-specific price, terms, expiry, coverage and
-evidence. Do not widen the common action contract into a procurement DSL.
+**Stop:** on N+1 hydration, full-table counts or projection-owned success.
 
-End condition: at 320px/400% zoom and by keyboard, a customer can distinguish
-two-of-three results, one uncertain supplier, an expired quote, unknown fields,
-commercial influence and the fact that nothing is selected or started.
+### WP6 — Customer shell, Home and compatibility routes
 
-### 4B-4 — Human/agent parity and evidence
+**Depends on:** WP1 and WP5.
 
-The existing `/api/v1/requests` path exposes the same Request revision,
-requirements, disclosure, coverage, normalized options, ordering basis and
-safe actions as the human surface.
+**Source-owned outcome:** membership-resolved shell and redirect boundary.
 
-Golden cases:
+**Target behavior:** six-item navigation, persistent business, role-aware
+Integration shortcut to canonical settings, ranked Home and owner compatibility
+redirects.
 
-- three comparable current quotes;
-- two quotes plus one unavailable;
-- two quotes plus one uncertain;
-- one invalid/expired response;
-- changed Request invalidates prior comparability;
-- commercial influence unknown prevents recommendation.
+**Falsifier:** guessed business never enters shell; zero/one/many membership
+redirects never use browser state as authority.
 
-Evidence ceiling: labelled local/hosted mock sourcing and comprehension only.
+**Evidence ceiling:** source, component and labelled browser fixtures.
 
-The parent then reruns route generation, owns only the generated route-tree
-diff, verifies `/activity` and `/activity/$requestRef`, and runs focused route
-tests plus typecheck before 4C starts.
+**Stop:** on unsupported destination, duplicate shell or browser authority.
 
-## Phase 4C — Close one and see it through
+### WP7 — Exact Work detail and business Work queue
 
-### 4C outcome
+**Depends on:** WP5 and existing action/domain owners.
 
-A customer selects one current offer, understands exactly what accepting it
-does, grants exact authority, starts the provider operation once and resumes
-through success, refusal, cancellation or uncertainty.
+**Source-owned outcome:** detail rehydrates exact invocation/result; list
+remains references.
 
-### 4C-0 — Freeze close-operation ownership
+**Target behavior:** consequence, authority, attempt, uncertainty, evidence and
+safe continuation survive reload across unlike operations.
 
-Define the reference operation-owned `accept_offer` or `start_work` contract.
-It binds:
+**Falsifier:** possible release exposes inspect/reconcile only; projection or
+transport cannot declare success.
 
-```text
-requestRef + requestRevision + routeGeneration
-+ providerOfferId + offerDigest + issuerBindingId + expiry
-+ provider operation/revision + exact terms/price ceiling
-+ principal + disclosure + authority limits
-```
+**Evidence ceiling:** source, fixtures and labelled adapters.
 
-The business result minimally distinguishes accepted/acknowledged work from
-later fulfilment. Acknowledgement never closes the customer's whole outcome.
+**Stop:** if a universal lifecycle replaces domain truth or external effect is
+required.
 
-Register `digital_project.start_work:v1` through
-`src/modules/actions/index.ts`. Persist the operation-owned result under an
-exact `startWorkResultRef`; Customer Request and Activity keep only that
-reference and a bounded display projection.
+### WP8 — Inbox, Conversation and source-created Work linking
 
-### 4C-1 — Exact selection and authority
+**Depends on:** WP1 and WP7.
 
-Selection is a Customer Request v2 transition persisted as
-`customerRequestV2QuoteSelections` with:
+**Source-owned outcome:** business-scoped conversations with explicit links to
+durable Work identities.
 
-```text
-selectionRef, requestId, requestRevision, routeGenerationRef,
-providerOfferId, offerDigest, quoteResultRef, issuerBindingId,
-selectedByPrincipalId, selectedAt, expiresAt, status
-```
+**Target behavior:** bounded Inbox, delivery/read/reply truth, draft-preserving
+conflict and uncertain-send recovery.
 
-Indexes are `by_selectionRef`,
-`by_requestId_and_requestRevision_and_selectedAt`, and
-`by_providerOfferId`. The command requires expected Request revision and one
-idempotency key; the latest Request readback exposes selection reference and
-validity only after exact affinity validation.
+**Falsifier:** message text cannot create Work; possible delivery cannot expose
+blind resend; Work completion does not mark Inbox read.
 
-Selection persists against the exact current offer and Request revision.
-Material change or expiry invalidates it. Approval binds the prepared action;
-possession of a Request, offer or selection is never authority.
+**Evidence ceiling:** source and inquiry fixtures.
 
-Required REDs:
+**Stop:** if classifier becomes command truth or conversation state is copied.
 
-- stale Request/offer revision;
-- replacement provider using old approval;
-- changed terms, price, operation revision or recipient;
-- duplicate selection/approval click;
-- cross-principal read or command.
+### WP9 — Team, settings, Help and lifecycle surfaces
 
-End condition: selection, authorization and start are distinct durable states
-and human/agent projections agree.
+**Depends on:** WP1 and WP2.
 
-### 4C-2 — Execute once and preserve business truth
+**Source-owned outcome:** Team, notifications, commercial/data, support and
+closure customer surfaces.
 
-Reuse existing Request execution and Action Invocation machinery. Do not add a
-new activity, order or universal execution table.
+**Target behavior:** section responsibilities, no-charge, private-note
+exclusion, resumable export/closure and personal/business separation.
 
-The operation owner persists its result/reference. Shared records persist
-authority, reservation, attempt, provider release, current effect generation,
-resolution and safe continuation.
+**Falsifier:** Billing cannot act on Work; last Owner cannot be removed; support
+cannot rewrite Work; partial closure cannot claim closed.
 
-Crash cuts:
+**Evidence ceiling:** source, component and labelled browser fixtures.
 
-- before release;
-- after possible release and before send returns;
-- after provider response and before result commit;
-- after result commit and before projection refresh.
+**Stop:** on fake financial truth, deletion or impersonation.
 
-Cold restoration must not duplicate effects. Possible release exposes inspect
-and reconcile only. Late completion cannot overwrite a newer generation.
+### WP10 — Offerings, Availability and Integrations surfaces
 
-### 4C-3 — Activity, action detail and recovery
+**Depends on:** WP3, WP4 and WP6.
 
-Activity reads exact, bounded source records:
+**Source-owned outcome:** accepted views with many-to-many links and domain
+panels.
 
-1. current Request head/revision;
-2. current route-plan generation;
-3. exact selected offer;
-4. approval/attempt/resolution;
-5. current route-run head and capped step attempts;
-6. capped problem/recovery history.
+**Target behavior:** canonical Integrations under settings; technical shortcut
+same route; visibility and availability separate.
 
-The UI shows selected offer, exact consequence, authority, released/possibly
-released truth, business result, payment/fulfilment evidence when relevant and
-only the source-issued safe next action. Request and Action Detail link to one
-another without copying source truth.
+**Falsifier:** four Integration topologies remain coherent and three domains
+introduce no shared vertical field.
 
-Cancellation distinguishes requested, externally confirmed, unknown and
-irreversible effects. Changing provider during uncertainty is absent.
+**Evidence ceiling:** source, component and labelled browser fixtures.
 
-### 4C-4 — Hosted founder demonstration and closeout
+**Stop:** on duplicated Integration ownership, universal availability or
+secret readback.
 
-From one clean exact revision, deploy the already configured Vercel and Convex
-targets only after the parent records separate release authorization. Run:
+### WP11 — Founder/customer-success backstage
 
-- one supply onboarding golden path;
-- one human three-quote-to-close path;
-- one structured-agent equivalent;
-- one predeclared uncertainty/reconciliation goblin;
-- one cold reload/resume path;
-- one 320px/keyboard/accessibility pass.
+**Depends on:** WP2 and WP5.
 
-Verify served revision before lifecycle mutation. Evidence packet verification
-recomputes source revision/tree, fixture provenance, Request/offer/authority
-identities, effect counts, projection parity and safe continuation.
+**Source-owned outcome:** bounded portfolio/account detail and explicit admin
+commands.
 
-The program stops if deployment identity differs, a real provider/payment
-would be contacted, or exact-revision readback fails. It does not repeatedly
-probe or reinterpret a failed external authorization.
+**Target behavior:** actual actor recorded; private/customer communication
+separate; source facts linked rather than rewritten.
 
-## Completion standard
+**Falsifier:** founder cannot borrow member authority, manufacture readiness or
+convert plan label into access.
 
-Phase 4 closes only when:
+**Evidence ceiling:** source and protected fixtures.
 
-- the founder can onboard a labelled business operation without source edits;
-- routeability is the conjunction of current canonical gates;
-- public operation search is indexed, bounded and removable;
-- quote attempts and normalized offers survive cold restoration;
-- three is a sourcing policy, while partial/uncertain coverage remains honest;
-- comparison rejects materially unlike or expired evidence;
-- selection, authorization and execution are separate;
-- possible release remains reconcile-only with zero duplicate effect;
-- Activity reconstructs current work from source records;
-- human and agent surfaces agree on material truth and commands;
-- the hosted-sandbox loop is understandable and accessible;
-- an independent review finds no unresolved P0/P1 in the declared surface.
+**Stop:** on impersonation, secret editing or unbounded cross-account read.
 
-No provider-quality, market-liquidity, fulfilment, settlement, production-safety
-or customer-value claim follows.
+### WP12 — Cross-surface acceptance and horizontal proof
+
+**Depends on:** WP6–WP11.
+
+**Source-owned outcome:** exact-revision acceptance packet across all target
+loops and three offering shapes.
+
+**Target behavior:** onboarding, daily operation, recovery, team growth,
+Integrations, support and closure; 320px, 400% zoom, keyboard and reduced
+motion retain information.
+
+**Falsifier:** capability wizard alone cannot close Business Account; domain
+substitution cannot change shared navigation/contracts.
+
+**Evidence ceiling:** source, focused fixtures and labelled sandbox.
+
+**Stop:** on customer/production claim, real provider/payment, unauthorized
+deployment or unresolved P0/P1.
+
+## Completion boundaries
+
+Documentation authority completes when the active Phase 4 authority documents
+agree and reviews pass. Implementation completes only after WP1–WP12 source
+outcomes and evals pass at an exact revision. Neither proves adoption,
+accessibility in use, provider fulfilment or production safety.
+
+## Future market-mechanism research
+
+Demand engineering—sales tactics, supplier/customer incentives, liquidity,
+retention and market mechanisms—is a future product-design frontier. It does
+not block Business Account implementation. Phase 4 adds no rewards,
+commissions, rankings, loyalty, marketplace metrics or growth dashboards.

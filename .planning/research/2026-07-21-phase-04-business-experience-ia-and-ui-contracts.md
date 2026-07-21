@@ -1,7 +1,7 @@
 # Phase 4 business experience: information architecture and UI contracts
 
 **Owner:** Founder / Phase 4 business-experience design master
-**Status:** Active
+**Status:** Accepted design-research baseline
 **Maturity:** Target research
 **Question:** What customer-familiar information architecture, views, UI contracts, access model and operational surfaces should govern AE business management?
 **Decision affected:** D-011
@@ -27,7 +27,7 @@ Help
 
 Integrations is canonically located under **Business settings**, not Offerings. Offerings and Integrations have contextual many-to-many links. Members responsible for technical maintenance may receive a role-aware Integrations shortcut, but the shortcut does not create another route owner or shell.
 
-**UNKNOWN — decision authority:** D-011 remains **PROPOSED** pending founder acceptance of the remaining choices and documentation reconciliation across ADR-024, the Phase 4 product contract, UI-SPEC, plan and child contracts. This research is not implementation authority.
+**OBSERVED — decision authority:** D-011 was **ACCEPTED by the founder on 2026-07-21** as the first-pass Phase 4 business-experience product contract. Acceptance authorizes documentation reconciliation across ADR-024, the Phase 4 Business Account contract, UI-SPEC, plan and child contracts. It does not authorize implementation, deployment, usability claims or a maturity upgrade.
 
 **OBSERVED — custody:** Analysis used the isolated worktree at revision `d7a98bab649f589438388ddd916f25f99f11c717` with 66 inherited dirty paths bound by a verified content manifest. No hosted system or external control plane was used.
 
@@ -528,11 +528,17 @@ flowchart TD
 
 This dependency graph must not be compressed into an arbitrary 4A/4B/4C sequence before documentation reconciliation.
 
-## Remaining founder decisions
+## Remaining hypotheses and unknowns
 
-1. **HYPOTHESIS:** Give technical maintainers an optional role-aware Integrations shortcut while retaining Business settings as canonical placement. Recommended: accept.
-2. **HYPOTHESIS:** Model additive responsibilities immediately but initially expose multiple presets; expose full custom combinations only when onboarding evidence requires them. Recommended: accept.
-3. **UNKNOWN:** Define whether founder operations may perform emergency ownership recovery. Ordinary ownership transfer requires recipient acceptance; emergency recovery needs a separate, audited authority decision.
+1. **HYPOTHESIS:** The optional role-aware Integrations shortcut will reduce technical-maintainer navigation cost without confusing ordinary operators. Business settings remains the canonical placement.
+2. **HYPOTHESIS:** Familiar presets will be sufficient initially even though the source model supports additive responsibilities. Customer onboarding must decide when a custom-combination editor is warranted.
+3. **UNKNOWN:** Whether founder operations may perform emergency ownership recovery. Ordinary ownership transfer requires recipient acceptance; emergency recovery needs a separate, audited authority decision.
+
+## Far-field product-design frontier
+
+**OBSERVED — founder direction:** AE's central future challenge is how it engineers demand: sales tactics, supplier/customer incentives, liquidity, retention and market mechanisms.
+
+**INFERRED — Phase 4 boundary:** This is a non-blocking future research programme. Phase 4 must build mature business operation and truthful source surfaces that later mechanisms can use. It must not invent rewards, commissions, rankings, loyalty mechanics, marketplace metrics or growth dashboards. None of those mechanisms is implied by D-011 acceptance.
 
 ## Documentation reconciliation frontier
 
