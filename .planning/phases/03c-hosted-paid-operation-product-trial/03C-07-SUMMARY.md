@@ -482,3 +482,15 @@ trial. Human comprehension remains `NOT_RUN`; the automated instrument remains
 an adjunct. Nothing here proves a real provider, payment, settlement,
 fulfilment, production safety, demand, customer value, onboarding, general
 non-paid compatibility or authorization for another run.
+
+## Post-closeout audit correction — 2026-07-21
+
+The preceding final-class statement is superseded. The live collector refused
+`unsafe_uncertainty_continuation`; the later packet rebuild exercised only the
+offline integrity verifier. The retained packet is valid historical evidence
+at `local_packet_integrity_only`, not a successful live admission.
+
+The repair must close immutable payment-proposal custody, server-issued agent
+commands, stale and relationless recovery, digest-only human proof, immutable
+deployment binding, final-class emitter timing, retained admission shutdown,
+and stale runbook commands. No original run or packet is rewritten.

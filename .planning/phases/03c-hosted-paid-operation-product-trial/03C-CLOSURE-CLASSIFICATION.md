@@ -15,7 +15,7 @@ classified as shared.
 
 ## Artifact inventory
 
-The inventory is the exact 97-path Git-derived Phase 3C delta from
+The inventory is the exact 98-path Git-derived Phase 3C delta from
 `2debf4b9f65ce228491f7d3d17ed1654a23bb496` through this Plan 07E cut,
 including tracked changes and untracked owned files during TDD. The import
 test derives this set directly from Git; there is no second hand-maintained
@@ -54,6 +54,7 @@ inventory capable of hiding an omission.
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-CONTEXT.md` | `trial-only` | Retain as phase provenance; it has no runtime authority. |
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-PLAN-REVIEW.md` | `trial-only` | Retain as phase provenance; it has no runtime authority. |
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-RED-REPORT.json` | `trial-only` | Retain the classified RED history as local-fixture provenance. |
+| `.planning/phases/03c-hosted-paid-operation-product-trial/03C-REPAIR-PLAN.md` | `trial-only` | Retain the bounded post-closeout repair authority and retire it with Phase 3C provenance. |
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-RESEARCH.md` | `trial-only` | Retain as phase provenance; it has no runtime authority. |
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-UI-SPEC.md` | `trial-only` | Phase provenance only at closure; it is not promoted into `DESIGN.md`. |
 | `.planning/phases/03c-hosted-paid-operation-product-trial/03C-VALIDATION.md` | `trial-only` | Retain as phase provenance; its source checks are not hosted proof. |
@@ -165,13 +166,11 @@ and readback, independently recomputed agent semantics, and the raw
 operator-invoked bounded Convex observation may return
 `authenticated_exact_revision_hosted_sandbox`.
 
-The prepared-payment reconstruction dependency was closed before release. The
-single authorized live path then cross-linked exact revision `07581a5a`,
-Vercel deployment `dpl_5HLSWhERc9krTWgqwGySbiNangvB`, GitHub run
-`29798672036`, the authenticated human and scoped-agent surfaces, and the raw
-bounded Convex cohort. It earned
-`authenticated_exact_revision_hosted_sandbox` only for the labelled mock
-trial. Its packet digest is
+The prepared-payment reconstruction dependency was closed before release and
+the hosted run retained attributable source facts. The live collector then
+refused `unsafe_uncertainty_continuation`; the packet was rebuilt later and
+verified only by the offline path. It therefore remains
+`local_packet_integrity_only`. Its packet digest is
 `sha256:18b5f80eeccdc6a102af3993f7145e2b1e5fb604eba64d4723a5db13fb7ded82`.
 Admission is disabled; three aggregates and their sanitized evidence references
 remain under the review posture above.

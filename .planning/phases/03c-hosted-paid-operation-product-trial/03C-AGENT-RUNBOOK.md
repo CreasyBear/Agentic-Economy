@@ -55,10 +55,15 @@ those action classes import paid-operation DTOs, semantics or payment panels.
 
 ## Custody and integration
 
-At the start and end of every plan, record `HEAD`, tree, `git status --short`,
-and a SHA-256 custody manifest made from the sorted path/status pairs of all
-pre-existing changes. A count is informational only. Stop if the manifest
-changes outside owned paths.
+At the start and end of every repair cut, record `HEAD`, tree and
+`git status --short`, then verify the canonical content-bound
+`codex-dirty-custody:v1` manifest with
+`orchestrate-master-child-worktrees/scripts/custody_manifest.py`. A status/path
+hash is not custody because it does not bind modified or untracked bytes. The
+current parent manifest is `/tmp/ae-phase3c-parent-custody-closeout.json`, its
+canonical digest is
+`31e5c167ddd53f83c8be7d0906d110242cf71c0940f1166239ba150a0f84757f`,
+and it owns exactly 66 inherited paths. Stop if any entry changes.
 
 Each executor returns an owned-path commit candidate and parent SHA; the parent
 integrator alone selectively stages and commits verified owned paths in plan
@@ -83,7 +88,12 @@ focused command. Never replay a consequential or externally ambiguous command.
 Stop at the earliest source contradiction, ownership collision, missing tool,
 unexpected external effect, or claim-ceiling breach.
 
-The invariant claim ceiling is: Phase 3C may prove authenticated hosted-sandbox
-reachability, durable reconstruction, and declared evaluator comprehension plus
-human/agent semantic parity. It cannot prove onboarding, real provider
-fulfilment, demand or customer value, real settlement, or production safety.
+The invariant repair claim ceiling is source plus focused local/mock fixtures
+until a fresh v2 live collector independently admits an exact revision.
+`verify:phase3c:release-source`, `test:ui-contract`,
+`test:e2e:paid-operation`, `test:imports`, changed-path lint/type filtering and
+`git diff --check` are the local gates. `smoke:paid-operation:hosted-sandbox`
+is external and forbidden before its exact-revision authorization. Phase 3C
+cannot prove onboarding, real provider fulfilment, demand or customer value,
+real settlement, production safety, accessibility-in-use, or human
+comprehension.

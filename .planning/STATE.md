@@ -4,15 +4,15 @@ milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 current_phase: 3C
 current_phase_name: hosted-paid-operation-product-trial
-status: complete
-stopped_at: "Phase 3C closed at authenticated exact-revision hosted labelled-mock sandbox evidence; admission disabled"
+status: verification_required
+stopped_at: "Phase 3C post-closeout audit reopened nine source/evidence gaps; repair Cut 0 active"
 last_updated: "2026-07-21"
 progress:
   total_phases: 5
-  completed_phases: 5
+  completed_phases: 4
   total_plans: 7
   completed_plans: 7
-  percent: 100
+  percent: 80
 ---
 
 # Current state
@@ -26,25 +26,33 @@ that a second operation-owned provider can use the same paid-operation host,
 semantics and query-agnostic renderer without fallback or a second product
 stack.
 
-Phase 3C is complete at the authenticated exact-revision hosted labelled-mock
-sandbox boundary. Revision `07581a5a1c91cfaeba8c717fbac5765b9b1fd5b5`
-served the protected human and structured-agent surfaces. The bounded run
-produced one human Provider-A golden operation, one agent Provider-A golden
-operation, and one Provider-B response-lost operation that rejoined only by
-trusted reconciliation. Each invocation owns exactly one attempt, one effect
-generation and one mock effect. The final policy is disabled with three total
-admissions and zero active reservations.
+Phase 3C implementation and one bounded hosted labelled-mock run exist, but
+the post-closeout audit reopened verification. Revision
+`07581a5a1c91cfaeba8c717fbac5765b9b1fd5b5` served protected human and
+structured-agent surfaces and retained three source-owned mock effects. The
+live collector then refused `unsafe_uncertainty_continuation`; the packet was
+rebuilt later from retained facts and verified only as local packet integrity.
+That sequence does not admit the final hosted evidence class.
 
-## Next transition
+## Repair frontier
 
-Choose the next customer/product evidence phase. Phase 3C does not by itself
-authorize another sandbox run, a real provider, payment, provider onboarding,
-comparison, workflow composition, or market activation. Retained trial records
-reach their owner review on `2026-08-21`.
+Execute the dependency-ordered Phase 3C repair cuts recorded in
+`03C-REPAIR-PLAN.md`: immutable payment proposal custody; server-issued agent
+commands and safe transport recovery; digest-only human proof; v2 exact-source
+evidence with post-run admission shutdown; then independent local audit. A
+fresh hosted run remains a separate exact-revision authorization gate.
 
 ## Remaining evidence gaps
 
 - no real screen-reader session or human comprehension study has been run;
+- payment proposal material is reconstructed from current code instead of an
+  immutable durable proposal;
+- agent GET lacks server-issued command descriptors, while stale and
+  relationless transport recovery can strand a caller;
+- the human route embeds the complete projection instead of digest/version
+  proof material only;
+- exact deployment binding, live-evidence admission and retained post-disable
+  state require a fresh v2 collector run;
 - the completed run used labelled mock providers and a mock $0.01 payment
   lifecycle; it proves no real payment, settlement or provider fulfilment;
 - no customer demand, customer value, production-safety or general non-paid
@@ -52,13 +60,12 @@ reach their owner review on `2026-08-21`.
 
 ## Evidence ceiling
 
-The strongest admitted class is
-`authenticated_exact_revision_hosted_sandbox` for the labelled mock BTC/USD
-trial at revision `07581a5a`. The sanitized packet digest is
+The strongest admitted class is `local_packet_integrity_only` for the retained
+labelled mock BTC/USD packet. The sanitized packet digest is
 `sha256:18b5f80eeccdc6a102af3993f7145e2b1e5fb604eba64d4723a5db13fb7ded82`.
-It proves hosted reachability, durable reconstruction, human/agent semantic
-parity and safe uncertainty continuity for the paid-operation class. Human
-comprehension remains `NOT_RUN`; automated comprehension remains an adjunct.
+Hosted observations remain historical provenance, but the post-hoc packet
+cannot prove exact-revision hosted admission. Human comprehension remains
+`NOT_RUN`; automated comprehension remains an adjunct.
 
 Historical state, roadmap, requirements and scopes are preserved under
 `.planning/archive/pre-product-conversion-rebaseline-20260720/`.

@@ -17,7 +17,7 @@ Phase 1 — Action Invocation foundation (complete)
                          ↓
 Phase 2 — One action plane (accepted_narrowed)
                          ↓
-Phase 3 — Protocol/kernel → product conversion (complete)
+Phase 3 — Protocol/kernel → product conversion (verification repair)
                          ↓
 Future exposure decision
 ```
@@ -80,7 +80,7 @@ effect lineage. Evidence remains local/mock only.
 
 ## Phase 3C — Hosted paid-operation product trial
 
-**Status:** complete — authenticated exact-revision hosted labelled-mock sandbox
+**Status:** verification_required — post-closeout repair in progress
 **Depends on:** Phase 3A and Phase 3B
 **Goal:** let an authenticated developer or product evaluator run, understand
 and safely recover one hosted-sandbox BTC/USD paid operation through equivalent
@@ -122,16 +122,15 @@ agent surfaces diverge, shared semantics or rendering acquire BTC/provider
 branches, uncertainty becomes retryable, or a hosted readback cannot
 reconstruct the safe continuation from durable source-owned records.
 
-Completion proved authenticated exact-revision hosted-sandbox reachability,
-durable reconstruction and human/agent semantic parity for the paid-operation
-class at revision `07581a5a`. The human Provider-A and agent Provider-A golden
-paths completed at version 5. The Provider-B response-lost goblin rejoined only
-through trusted reconciliation at version 6. All three reservations were
-released, exactly three mock effects remain, temporary credentials were revoked
-with readback, and admission is disabled. Human comprehension remains
-`NOT_RUN`; automated comprehension is adjunct evidence only. This does not
-prove real payment or settlement, independently operated provider fulfilment,
-production safety, customer demand or customer value.
+The hosted run retained useful source facts: two golden mock effects, one
+response-lost effect, revoked temporary credentials, and a disabled g5 policy.
+Its live collector refused before final admission, however, and the packet was
+rebuilt later. The retained packet therefore proves local integrity only. A
+fresh repair must persist immutable payment proposal facts, make agent commands
+source-issued, close stale/relationless recovery, remove the hidden rich human
+projection, bind an immutable deployment URL, and retain post-disable state in
+a v2 packet before the hosted class can be reconsidered. Human comprehension
+remains `NOT_RUN`; automated comprehension is adjunct evidence only.
 
 ## Deferred decisions
 

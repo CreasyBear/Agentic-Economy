@@ -168,3 +168,12 @@ independent settlement, independently operated provider, provider onboarding,
 ranking, comparison UI, automatic fallback, workflow composition, broad
 Activity surface, standing-mandate selector, Full autonomy, BTC-specific shared
 component or model-generated executable UI.
+
+## Phase 3C verification reopening — 2026-07-21
+
+P3C-R1 through P3C-R11 remain unchecked. The retained v1 packet was rebuilt
+after the live collector refused and therefore establishes only
+`local_packet_integrity_only`. The repair contract is
+`03C-REPAIR-PLAN.md`. P3C-R10 cannot close until eligible human comprehension
+sessions satisfy the frozen instrument; the automated result remains
+`automated_adjunct_only`.

@@ -466,3 +466,13 @@ The final claim is only authenticated exact-revision hosted labelled-mock
 sandbox evidence; human comprehension remains `NOT_RUN` and real provider,
 payment, settlement, fulfilment, safety, demand and customer value remain
 unproven.
+
+## Post-closeout audit correction — 2026-07-21
+
+Generation 5 produced valuable hosted observations, but the live collector did
+not admit the final evidence class. It returned
+`unsafe_uncertainty_continuation`; the packet was reconstructed afterward and
+verified only by the offline integrity path. The final-class statement above
+is therefore superseded by `local_packet_integrity_only` pending a fresh v2
+exact-revision run. The repair uses generation 6 and retains every earlier
+generation as provenance.

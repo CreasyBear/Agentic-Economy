@@ -1,5 +1,5 @@
 ---
-status: accepted_and_implemented_for_phase_3c
+status: accepted_with_phase_3c_verification_reopened
 date: 2026-07-20
 amended: 2026-07-21
 decision_owner: Founder
@@ -8,7 +8,7 @@ applies:
   - ADR-010
   - ADR-019
   - ADR-020
-evidence_ceiling: authenticated_exact_revision_hosted_sandbox
+evidence_ceiling: local_packet_integrity_only_pending_fresh_live_admission
 ---
 
 # Hosted paid-operation trial boundaries
@@ -289,3 +289,31 @@ unrelated failures, missing tests, wrong reasons, and unexpected passes.
 Production implementation remains absent. Plan 02 may begin only after the
 classified report and clean import-boundary gate have the disposition recorded
 in the Plan 01 handoff.
+
+## Post-closeout verification amendment — 2026-07-21
+
+The hosted closeout above is retained as historical provenance, but its final
+evidence admission is superseded. The live collector refused
+`unsafe_uncertainty_continuation`; the packet was rebuilt afterward from
+retained facts and passed only the offline integrity verifier. Offline or
+post-hoc reconstruction cannot mint
+`authenticated_exact_revision_hosted_sandbox`.
+
+The repair preserves every authority and reconciliation decision in this ADR
+and adds four narrower requirements:
+
+1. The full material payment proposal is immutable source-owned data. Cold
+   reconstruction may not consult current provider configuration, and a mock
+   effect must bind the same proposal digest.
+2. Authenticated agent projections return closed server-issued command
+   descriptors. Unclassified post-command transport results expose inspect-only
+   `update_not_confirmed`; they never permit replay.
+3. Human hosted proof contains only semantic digest and invocation version.
+   Rich human truth is established through the rendered card and attributable
+   source observation, not hidden executable JSON.
+4. A v2 live collector must bind every lifecycle call to one immutable exact-SHA
+   deployment URL and retain independently read post-disable admission state.
+
+Until a fresh collector completes those checks, the claim ceiling is source,
+focused local/mock fixtures, historical hosted observations, and
+`local_packet_integrity_only`. Human comprehension remains `NOT_RUN`.
