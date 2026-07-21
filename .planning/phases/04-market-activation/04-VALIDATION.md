@@ -19,6 +19,15 @@ failures are recorded with ownership and do not become implementation loops.
 
 ## Phase 4A falsifiers
 
+- the Business Account is merely a listing or capability-onboarding wrapper;
+- a business cannot manage multiple members, services or operations;
+- the last active owner can be removed, suspended or demoted;
+- founder assist borrows owner authority or hides its actor identity;
+- support replies and private customer-success notes share visibility;
+- account closure deletes history or leaves new work routeable;
+- a commercial form creates paid, invoice or settlement truth;
+- an intended navigation destination has no source-backed route/readback;
+- portfolio/detail reads grow with unrelated Business Accounts;
 - any owner/form/projection fact alone makes supply routeable;
 - raw credentials or auth headers can enter durable/shared records;
 - an open endpoint is blocked for lacking credentials, or an authenticated
@@ -38,6 +47,15 @@ failures are recorded with ownership and do not become implementation loops.
 Required evals include exact ceiling/one-over page limits, duplicate draft
 commands, stale revisions, private/redirected probe targets, readiness expiry,
 withdrawal, projection rebuild and 1k/10k unrelated-record query budgets.
+
+Also run the ten Business Account completion scenarios in
+`04A-BUSINESS-ACCOUNT-MANAGEMENT.md`, including membership, multiple services,
+support, commercial context, offboarding and direct-URL restoration.
+
+Only parcel 4A-A may aggregate these results into Phase 4A acceptance. It runs
+after source integration, UI integration and parent-owned route generation.
+4B cannot start from an earlier parcel even if every focused child command is
+green.
 
 The parent regenerates the route tree after owner routes land and verifies the
 four exact route IDs/imports before focused route tests and typecheck. Generated
@@ -121,11 +139,13 @@ identities. The expected command families are:
 
 ```text
 npm exec -- vitest run tests/unit/capability-supply tests/unit/registry
+npm exec -- vitest run tests/unit/business-account tests/unit/business tests/unit/catalog
 npm exec -- vitest run tests/unit/reference-digital-procurement
 npm exec -- vitest run tests/unit/customer-request
 npm exec -- vitest run tests/integration/capability-supply-onboarding*.test.ts
+npm exec -- vitest run tests/integration/business-account-*.test.ts
 npm exec -- vitest run tests/integration/*three-quotes*.test.ts tests/integration/*quote-to-close*.test.ts
-npm exec -- playwright test tests/e2e/supply-onboarding.spec.ts tests/e2e/phase4-three-quotes.spec.ts tests/e2e/phase4-quote-to-close.spec.ts
+npm exec -- playwright test tests/e2e/business-account-management.spec.ts tests/e2e/business-account-founder-console.spec.ts tests/e2e/supply-onboarding.spec.ts tests/e2e/phase4-three-quotes.spec.ts tests/e2e/phase4-quote-to-close.spec.ts
 npm run test:imports
 npm run typecheck
 npm run lint

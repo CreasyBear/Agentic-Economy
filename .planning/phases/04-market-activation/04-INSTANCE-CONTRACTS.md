@@ -1,8 +1,9 @@
 # Phase 4 master/child worktree contracts
 
-This file is the dispatch authority. A child receives one parcel copied
-verbatim, with placeholders replaced by the parent. “Inspect and improve” is
-not a valid task.
+This file is the common dispatch contract and the Phase 4B/4C dispatch
+authority. `04A-INSTANCE-CONTRACTS.md` is the sole Phase 4A dispatch authority.
+A child receives one active parcel copied verbatim, with placeholders replaced
+by the parent. “Inspect and improve” is not a valid task.
 
 ## Parent preflight
 
@@ -34,7 +35,10 @@ Every child is told:
 > You are not alone in this repository. Work only in your assigned worktree and
 > exact writable paths. Read AGENTS.md, PRODUCT.md, DESIGN.md, the accepted
 > Phase 4 ADRs, 04-CONTEXT, 04-PLAN, 04-UI-SPEC, 04-VALIDATION and this parcel
-> completely before editing. Live source decides what exists. Preserve every
+> completely before editing. Phase 4A children also read
+> 04A-BUSINESS-ACCOUNT-MANAGEMENT, 04A-INSTANCE-CONTRACTS and ADR-024
+> completely. Live source decides
+> what exists. Preserve every
 > inherited or sibling change. Do not install packages, edit generated Convex
 > output, deploy, contact a provider, use real credentials/payment, stage broad
 > paths, clean, reset, restore or delete permanently. Run the named RED before
@@ -72,7 +76,14 @@ it. Children never write outside their source/test ownership.
 The parent audits every diff and reruns the focused command before integrating.
 Children do not merge siblings or make completion claims.
 
-## Parcel 4A-01 — Identity, custody and onboarding RED/contracts
+## Superseded narrow 4A parcel history — do not dispatch
+
+All sections from this heading through the historical `Parent cut 4A-R` are
+non-executable provenance from the earlier onboarding-only plan. They are
+replaced in full by `04A-INSTANCE-CONTRACTS.md`. No child may receive or claim
+completion from these historical parcels.
+
+### Historical 4A-01 — Business Account, custody and onboarding contracts
 
 **Starts from:** final Phase 3C integration base.
 
@@ -82,33 +93,60 @@ Children do not merge siblings or make completion claims.
 - `src/modules/capability-supply/internal/convex-schema.ts`
 - `src/modules/capability-supply/internal/credential-custody.ts`
 - `src/modules/capability-supply/internal/environment-credential-custody.ts`
+- `src/modules/business-account/public.ts`
+- `src/modules/business-account/internal/schema.ts`
+- `src/modules/business-account/internal/validators.ts`
+- `src/modules/security/public.ts`
+- `convex/schema.ts`
 - `tests/unit/capability-supply/onboarding-contract.test.ts`
 - `tests/integration/capability-supply-onboarding.test.ts`
+- `tests/unit/business-account/contracts.test.ts`
+- `tests/unit/business-account/schema.test.ts`
+- `tests/imports/business-account-boundaries.test.ts`
 
 **RED:** `owner_or_form_input_cannot_create_routeable_supply` and
-`raw_credential_material_is_rejected`.
+`raw_credential_material_is_rejected`, plus
+`business_account_is_not_business_identity_membership_or_routeability`.
 
-**Implement:** strict draft schema, revision/status contract, token-identifier
-authority type, opaque custody port, schema/index additions and hostile gate
-substitutions. No Convex route or UI.
+**Implement:** ADR-024 relationship/membership/invitation/task/note/support/
+commercial/activity contracts and schema, strict capability draft schema,
+revision/status contracts, token-identifier authority type, opaque custody port
+and hostile gate substitutions. No Convex route or UI. Use the exact lifecycle,
+roles and indexes in `04A-BUSINESS-ACCOUNT-MANAGEMENT.md`.
+
+Define `businessAccountSummaryItems` as a removable portfolio projection with
+`businessId`, relationship revision/status, assigned admin, health,
+attention reasons, bounded source counts and `updatedAt`. Exact indexes:
+
+- `by_businessId`;
+- `by_relationshipStatus_and_updatedAt`;
+- `by_assignedAdminTokenIdentifier_and_relationshipStatus_and_updatedAt`;
+- `by_health_and_updatedAt`.
+
+Portfolio pages read at most 51 rows to return 50 plus continuation. One account
+dashboard reads exactly one summary and at most 10 current members, services,
+operations, tasks and support cases per section; larger sections return counts
+and explicit detail continuations. No account projection is canonical truth.
 
 **Command:**
 
 ```text
-npm exec -- vitest run tests/unit/capability-supply/onboarding-contract.test.ts tests/integration/capability-supply-onboarding.test.ts
+npm exec -- vitest run tests/unit/capability-supply/onboarding-contract.test.ts tests/integration/capability-supply-onboarding.test.ts tests/unit/business-account/contracts.test.ts tests/unit/business-account/schema.test.ts
 git diff --check
 ```
 
-Expected RED: both named cases fail because credential mode/draft authority is
-absent. Expected GREEN: both reject before canonical supply mutation. Handoff:
+Expected RED: named cases fail because account separation, credential mode or
+draft authority is absent. Expected GREEN: all reject before canonical business
+or supply mutation and all tables have bounded intended indexes. Handoff:
 `.planning/handoffs/phase-04/4A-01.json`.
 
 **Stop:** owner identity cannot be derived server-side; credential custody
-requires raw material in Convex; canonical publication must be duplicated.
+requires raw material in Convex; canonical publication must be duplicated; a
+new account record would replace `businesses` or Customer Request.
 
 **Ceiling:** source plus focused in-memory/mock custody fixtures.
 
-## Parcel 4A-02 — Canonical owner token-identifier migration
+### Historical 4A-02 — Canonical identity, membership and invitations
 
 **Starts from:** parent-integrated 4A-01.
 
@@ -119,22 +157,44 @@ requires raw material in Convex; canonical publication must be duplicated.
 - `src/modules/business/internal/claim.ts`
 - `src/modules/business/internal/visibility.ts`
 - `convex/business.ts`
+- `src/modules/business-account/internal/membership.ts`
+- `src/modules/business-account/internal/invitations.ts`
+- `src/modules/business-account/authorization.ts`
+- `src/modules/inquiries/inquiry.functions.ts`
+- `src/modules/settings/settings.functions.ts`
+- `src/modules/settings/public.ts`
+- `src/modules/settings/internal/schema.ts`
+- `convex/businessAccount.ts`
+- `convex/inquiries.ts`
+- `convex/settings.ts`
 - `tests/unit/business/claim.test.ts`
 - `tests/unit/business/suppression.test.ts`
 - `tests/integration/durable-claim-route.test.ts`
+- `tests/unit/business-account/membership.test.ts`
+- `tests/integration/business-account-membership.test.ts`
+- `tests/unit/convex/inquiries-runtime.test.ts`
+- `tests/unit/actions/settings-preferences.test.ts`
 
 **RED:** `owner_token_identifier_is_canonical` fails because owner records and
-publication authorization still resolve only `clerkUserId`/subject.
+publication authorization still resolve only `clerkUserId`/subject;
+`last_active_business_owner_cannot_be_removed` and
+`invitation_is_expiring_single_use_and_business_bound` fail because there is no
+team authority model.
 
 **Implement:** optional token-identifier compatibility field/index, exact
 server-derived dual-read, bounded idempotent backfill command and closure test.
 Historical `ownerId` and `clerkUserId` remain unchanged; caller input never
-selects identity.
+selects identity. Implement multi-business memberships, role checks, hashed
+single-use invitations, ownership transfer, suspension/revocation and last-owner
+protection from server-derived identity. Replace single-owner authorization on
+the intended owner inquiry/settings paths with business-bound membership roles:
+operations/admin/owner may handle enquiries; viewer remains read-only; billing
+cannot acquire operations authority merely from its label.
 
 **RED/GREEN command:**
 
 ```text
-npm exec -- vitest run tests/unit/business/claim.test.ts tests/unit/business/suppression.test.ts tests/integration/durable-claim-route.test.ts
+npm exec -- vitest run tests/unit/business/claim.test.ts tests/unit/business/suppression.test.ts tests/integration/durable-claim-route.test.ts tests/unit/business-account/membership.test.ts tests/integration/business-account-membership.test.ts tests/unit/convex/inquiries-runtime.test.ts tests/unit/actions/settings-preferences.test.ts
 git diff --check
 ```
 
@@ -144,7 +204,7 @@ rows dual-read during migration, cross-owner access is non-enumerating. Handoff:
 
 **Stop:** global migration requires rewriting owner IDs or any unlisted module.
 
-## Parcel 4A-03 — Durable onboarding application
+### Historical 4A-03 — Relationship, profile, services and onboarding application
 
 **Starts from:** parent-integrated 4A-02.
 
@@ -152,21 +212,55 @@ rows dual-read during migration, cross-owner access is non-enumerating. Handoff:
 
 - `src/modules/capability-supply/onboarding-application.ts`
 - `src/modules/capability-supply/onboarding-projection.ts`
+- `src/modules/business-account/internal/relationship.ts`
+- `src/modules/business-account/application.ts`
+- `src/modules/business-account/profile-application.ts`
+- `src/modules/business-account/support.ts`
+- `src/modules/business-account/customer-success.ts`
+- `src/modules/business-account/commercial.ts`
+- `src/modules/business-account/data-export.ts`
+- `src/modules/business-account/closure.ts`
+- `src/modules/business-account/business-account.functions.ts`
+- `src/modules/business/public.ts`
+- `src/modules/business/internal/profile.ts`
+- `src/modules/catalog/public.ts`
+- `src/modules/catalog/internal/schema.ts`
+- `src/modules/catalog/owner-profile.ts`
+- `src/modules/catalog/owner-services.ts`
 - `convex/capabilitySupplyOnboarding.ts`
+- `convex/businessAccount.ts`
+- `convex/business.ts`
+- `convex/catalog.ts`
+- `src/modules/security/internal/admin-authority.ts`
+- `convex/authz.ts`
 - `tests/integration/capability-supply-onboarding-application.test.ts`
 - `tests/integration/business-owner-token-identifier.test.ts`
+- `tests/integration/business-account-lifecycle.test.ts`
+- `tests/integration/business-account-profile-services.test.ts`
+- `tests/integration/business-account-support-commercial.test.ts`
+- `tests/integration/business-account-export-closure.test.ts`
+- `tests/unit/security/admin-authority.test.ts`
 
-**RED:** `draft_publish_failure_creates_no_partial_routeable_supply`.
+**RED:** `draft_publish_failure_creates_no_partial_routeable_supply`,
+`relationship_state_does_not_publish_or_route_supply` and
+`profile_service_revision_conflict_preserves_current_truth`.
 
 **Implement:** expected-revision draft commands; authenticated owner derivation;
-bounded owner reads; canonical publish orchestration; inactive-on-readiness-
-failure behavior; resumable migration. Never accept public `ownerId` as
-authority.
+bounded owner reads; complete relationship lifecycle; revision-checked business
+profile and zero-to-many service editing/preview/publication; canonical
+capability publish orchestration; inactive-on-readiness-failure behavior;
+support cases/messages, private notes, assigned tasks and truthful
+no-charge/manual/provider-managed commercial context; resumable migration.
+Never accept public `ownerId` as authority. Lifecycle
+pause/offboarding/closure withdraws future work but preserves references.
+Export is bounded, attributable and reference-based. Add explicit admin actions
+for relationship/support/commercial transitions; founder commands never borrow
+business-member authority.
 
 **RED/GREEN command:**
 
 ```text
-npm exec -- vitest run tests/integration/capability-supply-onboarding-application.test.ts tests/integration/business-owner-token-identifier.test.ts tests/integration/capability-publication-security.test.ts
+npm exec -- vitest run tests/integration/capability-supply-onboarding-application.test.ts tests/integration/business-owner-token-identifier.test.ts tests/integration/business-account-lifecycle.test.ts tests/integration/business-account-profile-services.test.ts tests/integration/business-account-support-commercial.test.ts tests/integration/business-account-export-closure.test.ts tests/integration/capability-publication-security.test.ts tests/unit/security/admin-authority.test.ts
 git diff --check
 ```
 
@@ -177,7 +271,7 @@ Handoff: `.planning/handoffs/phase-04/4A-03.json`.
 **Stop:** mutation cannot keep the draft/publish boundary truthful; migration
 requires rewriting historical identities; owner access becomes enumerable.
 
-## Parcel 4A-04 — Routeable operation projection and bounded discovery
+### Historical 4A-04 — Account projections, routeable discovery and bounded reads
 
 **Starts from:** parent-integrated 4A-03.
 
@@ -189,21 +283,31 @@ requires rewriting historical identities; owner access becomes enumerable.
 - `convex/registry.ts`
 - `src/modules/capability-supply/internal/graph/query-graph.ts`
 - `src/modules/capability-supply/internal/eligibility/list.ts`
+- `src/modules/business-account/account-summary.ts`
+- `src/modules/business-account/activity-projection.ts`
+- `src/modules/business-account/portfolio-query.ts`
+- `convex/businessAccount.ts`
 - `tests/unit/registry/operation-projection.test.ts`
 - `tests/integration/routeable-operation-search.test.ts`
+- `tests/integration/business-account-dashboard-query.test.ts`
+- `tests/integration/business-account-portfolio-query.test.ts`
 
-**RED:** `ten_thousand_unrelated_operations_do_not_increase_page_read_budget`.
+**RED:** `ten_thousand_unrelated_operations_do_not_increase_page_read_budget`
+and `ten_thousand_unrelated_business_accounts_do_not_increase_portfolio_or_dashboard_page_budget`.
 
 **Implement:** removable projection; index
 `by_routeabilityStatus_and_readinessValidUntil`; batches of 100 for expiry;
 three cursor pages/150 hard scan ceiling; explicit incomplete coverage;
 canonical exact revalidation; query counters. Do not modify public catalog
-service inventory or create a registry aggregate.
+service inventory or create a registry aggregate. Add removable account-summary
+and activity projections referencing membership, relationship, catalog,
+capability, inquiry, action, support and commercial source records. Portfolio
+filters use lifecycle/assignee/health/update indexes; no N+1 hydration.
 
 **RED/GREEN command:**
 
 ```text
-npm exec -- vitest run tests/unit/registry/operation-projection.test.ts tests/integration/routeable-operation-search.test.ts
+npm exec -- vitest run tests/unit/registry/operation-projection.test.ts tests/integration/routeable-operation-search.test.ts tests/integration/business-account-dashboard-query.test.ts tests/integration/business-account-portfolio-query.test.ts
 npm exec -- vitest run tests/unit/registry/schema.test.ts
 git diff --check
 ```
@@ -215,12 +319,25 @@ incomplete state. Handoff: `.planning/handoffs/phase-04/4A-04.json`.
 **Stop:** query needs a full-network scan; projection is required to reconstruct
 canonical supply; public search could authorize execution.
 
-## Parcel 4A-05 — Owner/founder onboarding UI
+### Historical 4A-05 — Complete Business Account workspace
 
 **Starts from:** parent-integrated 4A-04 after projection DTO freeze.
 
 **Owns only:**
 
+- `src/components/ae/business-account/BusinessAccountDashboard.tsx`
+- `src/components/ae/business-account/BusinessProfileEditor.tsx`
+- `src/components/ae/business-account/BusinessTeamManager.tsx`
+- `src/components/ae/business-account/BusinessServiceManager.tsx`
+- `src/components/ae/business-account/BusinessConnectionList.tsx`
+- `src/components/ae/business-account/BusinessWorkList.tsx`
+- `src/components/ae/business-account/BusinessActivityList.tsx`
+- `src/components/ae/business-account/BusinessCommercialSummary.tsx`
+- `src/components/ae/business-account/BusinessSupportWorkspace.tsx`
+- `src/components/ae/layout/AeOperatorShell.tsx`
+- `src/components/ae/layout/AeOperatorSidebar.tsx`
+- `src/components/ae/layout/AeOperatorSectionNav.tsx`
+- `src/components/ae/layout/AeOperatorCommandMenu.tsx`
 - `src/components/ae/supply-onboarding/AeCapabilityList.tsx`
 - `src/components/ae/supply-onboarding/AeCapabilitySetupForm.tsx`
 - `src/components/ae/supply-onboarding/AeCapabilityReadiness.tsx`
@@ -228,33 +345,60 @@ canonical supply; public search could authorize execution.
 - `src/routes/_operator/owner.capabilities.tsx`
 - `src/routes/_operator/owner.capabilities.new.tsx`
 - `src/routes/_operator/owner.capabilities.$publicationRef.tsx`
-- `src/routes/_operator/admin.supply-onboarding.$caseRef.tsx`
+- `src/routes/_operator/owner.index.tsx`
+- `src/routes/_operator/owner.business.tsx`
+- `src/routes/_operator/owner.team.tsx`
+- `src/routes/_operator/owner.services.tsx`
+- `src/routes/_operator/owner.connections.tsx`
+- `src/routes/_operator/owner.work.tsx`
+- `src/routes/_operator/owner.activity.tsx`
+- `src/routes/_operator/owner.commercial.tsx`
+- `src/routes/_operator/owner.support.tsx`
+- `src/routes/_operator/owner.support.$caseRef.tsx`
+- `src/routes/_operator/owner.settings.tsx`
+- `src/routes/_operator.tsx`
 - `src/lib/operator/navigation.ts`
+- `tests/unit/business-account/dashboard-ui.test.tsx`
+- `tests/unit/business-account/team-ui.test.tsx`
+- `tests/unit/business-account/profile-services-ui.test.tsx`
+- `tests/unit/business-account/support-commercial-ui.test.tsx`
 - `tests/unit/supply-onboarding/capability-list.test.tsx`
 - `tests/unit/supply-onboarding/capability-setup.test.tsx`
 - `tests/e2e/supply-onboarding.spec.ts`
+- `tests/e2e/business-account-management.spec.ts`
 
-**RED:** `published_profile_with_failed_readiness_is_not_rendered_as_live`.
+**RED:** `business_account_is_not_a_listing_or_capability_draft`,
+`owner_navigation_remains_usable_across_eleven_account_destinations`,
+`dead_navigation_is_not_mature_product` and
+`published_profile_with_failed_readiness_is_not_rendered_as_live`.
 
-**Implement:** source-driven six-movement setup, all canonical states, mock
-labels, error focus, keyboard and narrow-screen behavior. Missing source fields
-are a stop; client inference is forbidden.
+**Implement:** the complete owner IA and mature state matrix from
+`04A-BUSINESS-ACCOUNT-MANAGEMENT.md`, plus source-driven operation setup.
+Dashboard attention/work comes from the account summary; profile, team,
+services, connections, work, activity, commercial and support stay distinct.
+Every intended navigation destination has a source-backed route/readback; hide
+any unsupported legacy destination. Include mock labels, error focus, keyboard,
+direct-URL resume and narrow-screen behavior. Missing source fields are a stop;
+client inference is forbidden.
 
-**Stop:** UI needs to parse contracts/provider responses, hold secrets, or
-decide routeability.
+**Stop:** UI needs to parse contracts/provider responses, hold secrets, decide
+routeability/membership/commercial truth, or substitute a dead placeholder for
+an intended destination.
 
 **RED/GREEN command:**
 
 ```text
-npm exec -- vitest run tests/unit/supply-onboarding/capability-list.test.tsx tests/unit/supply-onboarding/capability-setup.test.tsx
-npm exec -- playwright test tests/e2e/supply-onboarding.spec.ts
+npm exec -- vitest run tests/unit/business-account/dashboard-ui.test.tsx tests/unit/business-account/team-ui.test.tsx tests/unit/business-account/profile-services-ui.test.tsx tests/unit/business-account/support-commercial-ui.test.tsx tests/unit/supply-onboarding/capability-list.test.tsx tests/unit/supply-onboarding/capability-setup.test.tsx tests/unit/operator-navigation.test.ts
+npm exec -- playwright test tests/e2e/business-account-management.spec.ts tests/e2e/supply-onboarding.spec.ts
 git diff --check
 ```
 
-Expected GREEN: all canonical states, keyboard/320px behavior and persistent
-fixture labels. Handoff: `.planning/handoffs/phase-04/4A-05.json`.
+Expected GREEN: a direct-URL, reload-safe owner can complete the ten account
+scenarios, every intended navigation item resolves, and all canonical states
+work at keyboard/320px with persistent fixture labels. Handoff:
+`.planning/handoffs/phase-04/4A-05.json`.
 
-## Parcel 4A-06 — Credential-mode transport integration
+### Historical 4A-06 — Credential-mode transport integration
 
 **Starts from:** parent-integrated 4A-05.
 
@@ -308,19 +452,83 @@ mode changes binding/probe identity and cannot reuse prior readiness. Handoff:
 the mode would be caller-selected at execution, or shared records would need
 raw credential material.
 
-## Parent cut 4A-R — Generate and verify route reachability
+### Historical 4A-07 — Founder/customer-success console
 
-**Starts from:** parent-integrated 4A-06. This is not child work.
+**Starts from:** parent-integrated 4A-06.
+
+**Owns only:**
+
+- `src/components/ae/business-account/admin/BusinessPortfolio.tsx`
+- `src/components/ae/business-account/admin/BusinessAccountOverview.tsx`
+- `src/components/ae/business-account/admin/BusinessOnboardingWorkspace.tsx`
+- `src/components/ae/business-account/admin/BusinessOperationsInspector.tsx`
+- `src/components/ae/business-account/admin/BusinessSupportManager.tsx`
+- `src/components/ae/business-account/admin/BusinessCommercialManager.tsx`
+- `src/components/ae/business-account/admin/BusinessAccountAudit.tsx`
+- `src/routes/_operator/admin.businesses.tsx`
+- `src/routes/_operator/admin.businesses.$businessId.tsx`
+- `src/routes/_operator/admin.businesses.$businessId.onboarding.tsx`
+- `src/routes/_operator/admin.businesses.$businessId.operations.tsx`
+- `src/routes/_operator/admin.businesses.$businessId.support.tsx`
+- `src/routes/_operator/admin.businesses.$businessId.commercial.tsx`
+- `src/routes/_operator/admin.businesses.$businessId.activity.tsx`
+- `src/lib/operator/navigation.ts`
+- `tests/unit/business-account/admin-portfolio-ui.test.tsx`
+- `tests/unit/business-account/admin-account-ui.test.tsx`
+- `tests/e2e/business-account-founder-console.spec.ts`
+
+**RED:** `founder_assist_is_not_owner_impersonation` and
+`portfolio_page_budget_is_constant_at_ten_thousand_accounts`.
+
+**Implement:** the founder IA in `04A-BUSINESS-ACCOUNT-MANAGEMENT.md` using
+explicit admin membership and source-issued commands/readbacks. Portfolio
+supports indexed lifecycle/assignee/health filters and cursor pagination.
+Detail exposes people, profile, supply, work, onboarding tasks, support,
+commercial context and source-linked activity without copying their truth.
+Private notes and customer-visible support are visibly and structurally
+separate. Lifecycle reduction requires reason/evidence.
+
+**RED/GREEN command:**
+
+```text
+npm exec -- vitest run tests/unit/business-account/admin-portfolio-ui.test.tsx tests/unit/business-account/admin-account-ui.test.tsx tests/integration/business-account-portfolio-query.test.ts tests/integration/business-account-lifecycle.test.ts
+npm exec -- playwright test tests/e2e/business-account-founder-console.spec.ts
+git diff --check
+```
+
+Expected GREEN: the founder can complete onboarding/support/commercial/
+offboarding scenarios without database edits or borrowed owner authority, and
+the 10,000-account fixture keeps the declared page read budget. Handoff:
+`.planning/handoffs/phase-04/4A-07.json`.
+
+**Stop:** any command requires owner impersonation, raw credential handling,
+unbounded portfolio hydration, or UI-authored business/readiness truth.
+
+### Historical parent cut 4A-R — Generate and verify route reachability
+
+**Starts from:** parent-integrated 4A-07. This is not child work.
 
 The parent runs the repository's existing route generator and owns only
-`src/routeTree.gen.ts` for this cut. It verifies imports and route IDs for:
+`src/routeTree.gen.ts` for this cut. It verifies imports and route IDs for every
+route in the Business Account and founder IA, including:
 
+- `/owner`;
+- `/owner/business`;
+- `/owner/team`;
+- `/owner/services`;
 - `/owner/capabilities`;
 - `/owner/capabilities/new`;
 - `/owner/capabilities/$publicationRef`;
-- `/admin/supply-onboarding/$caseRef`.
+- `/owner/connections`;
+- `/owner/work`;
+- `/owner/activity`;
+- `/owner/commercial`;
+- `/owner/support` and `/owner/support/$caseRef`;
+- `/admin/businesses` and every planned `/admin/businesses/$businessId/**`
+  child route.
 
-The parent then runs the focused supply-onboarding route tests and typecheck.
+The parent then runs the focused Business Account, founder-console and
+supply-onboarding route tests plus typecheck.
 Children remain forbidden from editing generated route output manually. If the
 generator changes any other generated artifact or an unrelated route, stop and
 classify the diff before integration. Handoff:
@@ -328,7 +536,7 @@ classify the diff before integration. Handoff:
 
 ## Parcel 4B-01 — Reference RFQ contract and three mock adapters
 
-**Starts from:** parent-integrated 4A-R.
+**Starts from:** parent-integrated 4A-A from `04A-INSTANCE-CONTRACTS.md`.
 
 **Owns only:**
 

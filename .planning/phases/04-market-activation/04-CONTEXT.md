@@ -16,6 +16,7 @@ governing_decisions:
   - ADR-021
   - proposed ADR-022
   - proposed ADR-023
+  - proposed ADR-024
 ---
 
 # Phase 4 — Market activation context
@@ -26,7 +27,8 @@ Phase 4 turns AE from a hosted operation exemplar into a founder-operable
 commercial loop:
 
 ```text
-make one business routeable
+establish and operate one credible Business Account
+  → make its supported operations routeable
   → obtain three attributable quotes for one clear customer need
   → compare what actually came back
   → authorize one exact offer
@@ -54,12 +56,15 @@ this Customer Request, not a kernel cardinality.
 
 ## Phase outcomes
 
-### Phase 4A — Routeable supply onboarding
+### Phase 4A — Business Account management
 
-A founder or authenticated business owner can take one business from public
-facts to one admitted, bound, readiness-checked and publishable operation. The
-surface states exactly why the operation is draft, blocked, ready, published,
-stale or paused.
+A founder can manage the complete relationship with a participating business,
+and authenticated business members can operate their own account. This covers
+team access, business profile and services, registered operations and
+connections, enquiries and work, activity, support, truthful commercial
+context, lifecycle control and offboarding. Routeability is one account state,
+not the account itself. The complete contract is
+`04A-BUSINESS-ACCOUNT-MANAGEMENT.md`.
 
 ### Phase 4B — Three viable quotes
 
@@ -79,6 +84,8 @@ payment, fulfilment and outcome truth remain separate.
 
 - Business identity and public listing remain owned by `business` and
   `catalog`.
+- Business Account relationship, team membership, support and customer-success
+  work follow proposed ADR-024 and never replace business identity.
 - Executable supply remains owned by the existing capability contract,
   offering, binding, publication, eligibility and readiness graph.
 - Customer Request owns the broader objective, requirements, sourcing coverage,
@@ -88,7 +95,9 @@ payment, fulfilment and outcome truth remain separate.
 - Operation-owned results remain authoritative. Customer Request and Activity
   store references and continuity projections, not competing business truth.
 - `/` remains Ask. `/registry` remains business/supply discovery. Protected
-  `/owner/capabilities` activates supply. `/activity` resumes customer work.
+  `/owner/**` is the complete Business Account workspace; capability activation
+  is one area within it. `/admin/businesses/**` is the founder/customer-success
+  console. `/activity` resumes demand-side customer work.
 - Human and structured-agent surfaces consume the same source-created semantic
   objects. Components do not parse provider payloads.
 - The existing paid-operation card stays paid-operation-specific. A non-paid
@@ -108,6 +117,9 @@ Phase 4 does not require or claim:
 - a second registry, authority system or provider control plane;
 - production safety or unattended Full autonomy.
 
+Phase 4A does include truthful commercial-account presentation, but not a fake
+billing processor. A no-charge or manual arrangement is a valid mature state.
+
 ## Source snapshot and rebase rule
 
 Planning was grounded against the shared tree at `2debf4b9` and the read-only
@@ -122,7 +134,7 @@ outcome without a source contradiction.
 After that check, the parent updates `.planning/ROADMAP.md` and
 `.planning/STATE.md` in one exact-path documentation commit: record the true
 Phase 3C result/revision, add the 4A → 4B → 4C graph, and make 4A the next
-transition only after the founder accepts ADR-022/023. Until then, this package
+transition only after the founder accepts ADR-022/023/024. Until then, this package
 is the complete proposed plan and does not falsely mark implementation active.
 
 ## Program end condition

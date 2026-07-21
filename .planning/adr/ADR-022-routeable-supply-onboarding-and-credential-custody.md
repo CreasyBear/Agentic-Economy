@@ -7,6 +7,9 @@
 
 ## Decision
 
+Routeable supply onboarding is one workflow inside the Business Account defined
+by ADR-024. It is not the complete provider/customer-management product.
+
 AE will productize supply onboarding as a protected workflow over the existing
 Business and Capability Supply source owners. It will not create another
 provider, tool or executable-supply registry.

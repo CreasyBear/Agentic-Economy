@@ -5,6 +5,9 @@
 | Product fact | Current source owner | Phase 4 action |
 |---|---|---|
 | Business identity/claim | `src/modules/business/**`, `convex/business.ts` | Reuse; migrate owner authorization to token identifier |
+| Business Account relationship/team | absent; current `owners` is a single-person compatibility record | Add ADR-024 membership, invitation, relationship and lifecycle owners without replacing `businesses` |
+| Business support/customer success | absent as an account domain | Add source-owned cases, tasks and private notes; never reuse Request problems or inquiry truth |
+| Business commercial context | navigation/audit vocabulary exists; no complete billing source or route | Add truthful no-charge/manual/provider-managed context only; hide or replace unsupported billing destinations |
 | Public listing/services | `src/modules/catalog/**`, `convex/catalog.ts` | Keep discovery-only; do not make executable registry |
 | Capability contract | `src/modules/capability-contract-registry/**` | Reuse exact active contract/digest |
 | Offering/binding/publication/readiness | `src/modules/capability-supply/**`, `convex/capabilitySupply*.ts` | Add onboarding application/projection, custody port and bounded reads |
@@ -21,6 +24,13 @@
 
 ### Phase 4A
 
+- `businessRelationships`, `businessMemberships` and
+  `businessMemberInvitations` with ADR-024 lifecycle and authority indexes.
+- `businessSuccessTasks`, `businessSuccessNotes`, `businessSupportCases` and
+  bounded case messages.
+- one `businessCommercialAccounts` current relationship row per business; no
+  invoice, payment or settlement fabrication.
+- removable `businessAccountActivityItems` referencing source events.
 - `capabilityOnboardingDrafts` with exact revision/owner/business/source/digests,
   `credentialMode: none | managed_ref`, opaque managed reference, issues and
   publication reference.
@@ -49,6 +59,8 @@ projection. Business results stay with their operation owner.
 ## Query and performance contract
 
 - All growing lists paginate or use explicit cap-plus-one reads.
+- Business portfolio, membership, task, support and activity lists use the
+  indexes and constant page budgets in `04A-BUSINESS-ACCOUNT-MANAGEMENT.md`.
 - Public search returns at most 50 and does not hydrate the full supply graph.
   It follows at most three cursor pages/150 candidates and returns an explicit
   incomplete-coverage state when that ceiling prevents an exhaustive page.
@@ -80,6 +92,9 @@ projection. Business results stay with their operation owner.
    `.collect()` reads. Fix only those used by Phase 4 intended surfaces.
 6. Existing `supplied-quote` source is explicitly development evidence and may
    not be renamed/promoted as the product RFQ operation.
+7. Current owner IA is Status/Inquiries/Settings-shaped, has no team or
+   relationship aggregate, and advertises incomplete advanced destinations.
+   Phase 4A must implement or remove every intended destination.
 
 ## Security and privacy contract
 

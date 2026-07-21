@@ -5,7 +5,7 @@ status: proposed_ready_for_founder_review
 depends_on:
   - final Phase 3C integration revision
 subphases:
-  - 04A-routeable-supply-onboarding
+  - 04A-business-account-management
   - 04B-three-viable-quotes
   - 04C-close-one-and-see-it-through
 ---
@@ -15,7 +15,7 @@ subphases:
 ## What we are building
 
 Phase 4 makes AE usable for founder-led market activation. The founder can
-onboard supply, enter a customer need, show current comparable offers, and
+onboard and manage Business Accounts, enter a customer need, show current comparable offers, and
 start one exact provider operation without asking an engineer to edit data or
 explain the control plane.
 
@@ -52,20 +52,28 @@ Published operation                 Honest comparison              Activity/reco
 8. Real provider/customer onboarding is not an implementation dependency.
    Fixtures are persistently labelled. Claims never exceed the evidence class.
 
-## Phase 4A — Routeable supply onboarding
+## Phase 4A — Business Account management
 
 ### 4A outcome
 
-An authenticated owner or authorized founder operator can resume a business
-onboarding case, configure one supported operation, connect an opaque
-credential reference, run a guarded readiness check, see exact blockers, and
-publish or pause it. Public discovery shows the operation only while its
-canonical routeability facts are current.
+An authenticated business team can manage its complete account, and an
+authorized founder can manage the relationship without database edits or
+impersonation. The surface covers people and roles, business profile and
+multiple services, operations and connections, enquiries and work, activity,
+support, commercial context, lifecycle controls and offboarding. Public
+discovery shows operations only while canonical routeability facts are current.
+
+`04A-BUSINESS-ACCOUNT-MANAGEMENT.md` is the complete Phase 4A product and data
+contract. `04A-INSTANCE-CONTRACTS.md` is its sole child-dispatch authority. The
+common and 4B/4C contracts remain in `04-INSTANCE-CONTRACTS.md`. A working
+capability wizard without the surrounding Business Account and
+founder/customer-success surfaces is not Phase 4A.
 
 ### 4A-0 — Freeze contracts and hostile substitutions
 
 Parent owns ADR-022 acceptance candidate and freezes these terms:
 
+- ADR-024 Business Account, membership and relationship ownership;
 - draft versus canonical supply;
 - token-identifier owner authority;
 - opaque credential-custody port;
@@ -86,11 +94,13 @@ The first child writes RED tests before implementation. Required substitutions:
 Every mutation must remove routeability. No form success or projection row may
 override the source graph.
 
-### 4A-1 — Canonical identity, custody and onboarding draft
+### 4A-1 — Business identity, relationship, membership and onboarding drafts
 
-Add a resumable capability-onboarding draft owned by capability supply. It
+Add the Business Account relationship and team model defined in ADR-024, plus
+resumable profile/service and capability-onboarding drafts. Capability supply
 stores canonical JSON/digests and an opaque `credentialRef`, never secret
-material.
+material. Membership authority is separate from account relationship and
+routeability.
 
 Draft status is one of:
 
@@ -139,6 +149,11 @@ probe target/digest, so changing it invalidates earlier readiness evidence.
 End condition: the draft survives reload, rejects raw credentials, enforces
 expected revision, and cannot independently create routeable supply.
 
+The same end condition covers membership invitation/acceptance/revocation,
+last-owner protection, multi-business membership and complete account lifecycle
+transitions. No membership or relationship state creates public or executable
+supply.
+
 ### 4A-2 — Publish, readiness and operation projection
 
 The application service validates the draft, calls the existing canonical
@@ -174,46 +189,69 @@ End condition: a projection can be deleted/rebuilt without losing supply; an
 expired or withdrawn operation disappears from routeable discovery; 10,000
 unrelated operations do not expand the read budget for one page.
 
-### 4A-3 — Owner/founder surface
+### 4A-3 — Business workspace and founder/customer-success surface
 
 Create protected routes:
 
+- `/owner` — account health, work, blockers and next actions;
+- `/owner/business` — profile, contacts, locations and visibility;
+- `/owner/team` — invitations, roles and access lifecycle;
+- `/owner/services` — multiple discoverable services;
 - `/owner/capabilities` — list current operations and blockers;
 - `/owner/capabilities/new` — configure one operation;
 - `/owner/capabilities/$publicationRef` — inspect, test, publish, pause or repair;
-- `/admin/supply-onboarding/$caseRef` — founder-assisted draft and admission
-  case without owner impersonation or raw credential custody.
+- `/owner/connections` — endpoint/adapter readiness;
+- `/owner/work` and `/owner/activity` — bounded referenced work and history;
+- `/owner/commercial` — truthful no-charge/manual/provider-managed context;
+- `/owner/support` — durable customer-visible support cases;
+- `/admin/businesses` and `/admin/businesses/$businessId/**` — portfolio,
+  onboarding, operations, support, commercial context and activity without
+  owner impersonation or raw credential custody.
 
 The route sequence is:
 
 ```text
-business identity → public profile → supported operation → connection
-→ readiness → publish/pause
+business relationship → people and roles → profile and services
+→ supported operations → connections/readiness → ongoing work and support
+→ pause/offboard/close
 ```
 
 The UI renders only source-issued state and allowed commands. It must visibly
 distinguish profile publication, operation registration, mechanical
 eligibility, current readiness and intended-surface reachability.
 
-End condition: a fresh evaluator can identify what is public, what operation
-is supported, whether it is routeable, the exact blocker and the consequence
-of publish/pause/update.
+End condition: a fresh evaluator can administer and use the account without
+engineering help, identify what is public and routeable, handle team access,
+enquiries, support and lifecycle changes, and understand every next action.
 
 ### 4A-4 — 4A integration evidence
 
-Run the owner workflow with three labelled fixture cases:
+Run the owner/founder workflow with labelled fixture cases covering the full
+state matrix in `04A-BUSINESS-ACCOUNT-MANAGEMENT.md`, including:
 
 1. valid contract, missing credential;
 2. ready then readiness-expired;
-3. published then paused/withdrawn.
+3. published then paused/withdrawn;
+4. invitation acceptance, role refusal and last-owner protection;
+5. multiple services and operations with mixed readiness;
+6. open/resolved support and truthful no-charge commercial state;
+7. at-risk, offboarding and closed accounts retaining history.
 
 Generate a source/local packet that recomputes gate dispositions and projection
 digests. Hosted readback is optional until the Phase 4C release cut. Do not call
 fixtures real providers.
 
 The parent then runs the repository's route generator, owns only the generated
-route-tree diff, verifies the four owner/founder route IDs and imports, and runs
-focused route tests plus typecheck. Children do not edit generated routes.
+route-tree diff, verifies every Business Account and founder route ID/import,
+and runs focused route tests plus typecheck. Children do not edit generated
+routes.
+
+After route generation, parcel 4A-A runs all ten Business Account completion
+scenarios, hostile membership/offboarding substitutions, constant query
+budgets, direct-URL restoration, accessibility and clean-revision packet
+verification. It is the only parcel permitted to close 4A. Phase 4B starts from
+the parent-integrated 4A-A revision, never from a capability or route-generation
+parcel alone.
 
 ## Phase 4B — Three viable quotes
 

@@ -11,8 +11,9 @@ authority: DESIGN.md
 
 The interface should make one sentence true:
 
-> A business can show what it can do; a customer can ask for it; AE can compare
-> real responses and safely start the chosen work.
+> A business can confidently operate its AE account and show what it can do; a
+> customer can ask for it; AE can compare real responses and safely start the
+> chosen work.
 
 The primary object remains the customer's objective and current work. Capability
 setup is a protected supply-side workflow. Quote details and action detail
@@ -28,9 +29,19 @@ support the outcome; they do not become the product home.
 | Request detail | `/activity/$requestRef` | Requirements, sourcing, options, selected work and recovery |
 | Action detail | action-class route | Inspect one exact action and safe continuation |
 | Supply entry | `/claim` | Establish business identity and explain operation activation |
+| Business home | `/owner` | Account health, current work, blockers and next actions |
+| Business profile | `/owner/business` | Identity, locations, contacts, visibility and preview |
+| Team | `/owner/team` | Invitations, roles and access lifecycle |
+| Services | `/owner/services` | Multiple discoverable customer services |
 | Owner operations | `/owner/capabilities` | Configure and maintain supported operations |
 | Owner operation | `/owner/capabilities/$publicationRef` | Connection, readiness, publication, pause and repair |
-| Founder assist | `/admin/supply-onboarding/$caseRef` | Assist a draft without impersonation or secret custody |
+| Connections | `/owner/connections` | Endpoint, adapter and readiness state |
+| Business work | `/owner/work` | Current/completed attributable work |
+| Business activity | `/owner/activity` | Source-linked account history |
+| Commercial | `/owner/commercial` | Truthful plan/charge arrangement, including no-charge |
+| Support | `/owner/support` | Open and continue support cases |
+| Founder portfolio | `/admin/businesses` | Search/filter Business Accounts and onboarding pipeline |
+| Founder account | `/admin/businesses/$businessId` | Relationship, people, supply, work, support and lifecycle |
 | For agents | existing agent entry | Explain and expose the matching structured contracts |
 
 `/registry` never owns a Customer Request comparison. `/activity` never owns
@@ -70,7 +81,21 @@ domain panel. Domain detail stays in `QuoteComparisonView` or
 `AePaidOperationCard`; the shell owns only identity, status, consequence
 summary, evidence label and detail relation.
 
-## Phase 4A surface states
+## Phase 4A Business Account surface
+
+The Business Account uses one coherent shell and navigation. Capability setup
+is a child workflow, not the home page. The dashboard leads with attention and
+work, not protocol health. It must remain useful for an account with no
+routeable operations, multiple operations, or a paused/closed relationship.
+
+Relationship states are `prospect`, `onboarding`, `active`, `paused`,
+`at_risk`, `offboarding` and `closed`. Membership, profile publication,
+service state and operation routeability remain separate dimensions.
+
+Required mature views and interaction states are defined in
+`04A-BUSINESS-ACCOUNT-MANAGEMENT.md`.
+
+### Operation activation states
 
 | State | Meaning | Only valid movement |
 |---|---|---|
@@ -88,6 +113,11 @@ summary, evidence label and detail relation.
 The owner must be able to answer without technical detail: what customers can
 ask the business to do, what is public, what AE connects to, whether it is
 actually ready, what blocks it, and what publish/pause changes.
+
+The founder must also be able to answer: who owns the relationship, who can act
+for the business, what onboarding/support work is outstanding, what commercial
+arrangement actually applies, why the account is at risk or paused, and what
+offboarding will stop or preserve.
 
 ## Phase 4B request and quote states
 
@@ -180,6 +210,11 @@ independent settlement, fulfilment, traction or production readiness.
 | RED | Required proof |
 |---|---|
 | `profile_publication_is_not_operation_routeability` | A published listing with failed readiness never says available/live |
+| `business_account_is_not_a_listing_or_capability_draft` | Dashboard, team, support, commercial and lifecycle survive with zero routeable operations |
+| `membership_is_not_business_identity` | Multi-business membership, role refusal and last-owner protection are source-enforced |
+| `founder_assist_is_not_impersonation` | Admin commands remain attributable and never borrow owner authority |
+| `commercial_context_is_not_payment_truth` | No-charge/manual/provider-managed states never invent invoices or settlement |
+| `closure_is_not_deletion` | Future access/work withdraws while attributable history remains readable |
 | `three_attempts_do_not_collapse_into_one_loading_state` | Per-supplier progress and uncertainty survive reload |
 | `partial_or_expired_quotes_are_not_ranked_as_complete` | Coverage, expiry and comparability are visible |
 | `selection_is_not_authority_or_execution` | Three distinct durable states and copy |
@@ -193,6 +228,8 @@ independent settlement, fulfilment, traction or production readiness.
   operation setup.
 - `claim.success.tsx` can imply “live” from discovery publication alone.
 - owner status and capability cards are inquiry/listing-shaped.
+- the owner shell contains dead or incomplete advanced destinations; Phase 4A
+  must implement or remove them rather than using navigation as evidence;
 - the current Options panel is quote-shaped and should become a quote-domain
   panel, not the universal option renderer.
 - `AeCustomerRequestWorkspace.tsx` is already a large browser host; split it
