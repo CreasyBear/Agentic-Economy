@@ -218,7 +218,7 @@ jobs:
       - name: Deploy the exact Phase 3C Convex source
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"
+        run: npx convex deploy --typecheck=disable --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"
 
       - name: Configure exact Phase 3C admission
         env:

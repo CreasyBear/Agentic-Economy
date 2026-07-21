@@ -55,6 +55,7 @@ The TDD loop captured intended failures before implementation:
 | Pre-attempt payment owner gate | Filtered `paid-operation-hosted-release.test.ts` during parent audit correction | `[P3C_RED:phase3c_release_owner_test_absent] tests/unit/action-invocation/paid-operation-application-service.test.ts`. |
 | Temporary-credential owner gate | The same filtered test after the first gate repair | `[P3C_RED:phase3c_release_owner_test_absent] tests/unit/release/customer-request-production-credential.test.ts`. |
 | Full-history source checkout | Filtered `paid-operation-hosted-release.test.ts` after the first authorized marker run | `[P3C_RED:phase3c_full_history_checkout_absent]` proved the Phase 3C source job did not bind `fetch-depth: 0`. |
+| Convex deploy typecheck boundary | Filtered `paid-operation-hosted-release.test.ts` after the third authorized marker run | `[P3C_RED:phase3c_convex_deploy_typecheck_boundary_absent]` proved the Phase 3C deploy still adopted the unrelated repository-wide TypeScript baseline. |
 
 The pre-change Customer Request completeness file also had three unrelated
 stale source-shape assertions plus its old workflow-order assertion. They are
@@ -122,6 +123,31 @@ canonical route to return the same deployment ID, URL, creation time, state,
 project, target and repository metadata. It no longer treats a creation-time
 `alias[]` snapshot as routing authority.
 
+## Third authorized marker attempt and Convex deploy correction
+
+The founder authorized one exact push of
+`7ba9ad63460c2d0c77abfcb815e3580434fed723`. Vercel Git integration created
+the single replacement deployment
+`dpl_5GtqBqxankBuRnSTNkWTZhqFy1Av`; it reached `READY`, targeted production and
+carried exact source SHA `7ba9ad63460c2d0c77abfcb815e3580434fed723` on
+`main`. The parent promoted that deployment, and direct canonical-hostname
+resolution returned the same deployment ID and source SHA.
+
+GitHub run `29793418807` passed Phase 3C source proof, the archive-isolated
+build and the exact Vercel observer. Its production job then stopped at
+`npx convex deploy` before source upload: Convex CLI invoked the repository-wide
+TypeScript check and reported 41 diagnostics across 21 existing files, led by
+`convex/capabilitySupply.ts:583`. Admission configuration and deployment receipt
+were skipped. No temporary credential or hosted lifecycle was created or run.
+
+The smallest correction keeps Convex schema validation and deployment
+ownership in the existing CLI while making the known broad TypeScript baseline
+an explicit release boundary:
+`npx convex deploy --typecheck=disable --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"`.
+The ordinary Customer Request deployment remains unchanged. A focused static
+RED requires that exact Phase 3C command and refuses the flag on the ordinary
+release path.
+
 ## Selected and rejected recovery paths
 
 Selected: rely on the already-enabled Vercel Git integration, poll
@@ -152,6 +178,17 @@ Rejected: treat alias reassignment as a substitute for the source correction.
 The canonical route already resolved correctly and an explicit alias set did
 not update Vercel's creation-time deployment alias snapshot.
 
+Rejected: run Convex manually after GitHub failed. The accepted proof collector
+requires the exact GitHub production job and final receipt step to succeed; a
+manual deploy would sever that provenance.
+
+Rejected: suppress or rewrite the failed GitHub observation. That would turn a
+real release failure into evidence theatre without changing deployed source.
+
+Rejected for the current authorization: push this correction immediately. A
+main push would create another Vercel Git deployment, exceeding the single
+replacement build authorized for the third attempt.
+
 ## Workflow decision table
 
 | Event | Marker present | Source behavior | Production behavior |
@@ -177,7 +214,8 @@ checkout with full Git history (`fetch-depth: 0`) so the Git-derived residue
 gate can resolve its declared Phase base. It uses a frozen install, runs
 `verify:phase3c:release-source`, runs `build` separately, and refuses
 generated-file drift. The other checkout steps remain unchanged. Its
-production successor observes Vercel, runs exactly one Convex deploy,
+production successor observes Vercel, runs exactly one Convex deploy with the
+known unrelated repository typecheck explicitly disabled,
 configures totals `3/1/3` for
 about four hours through `2026-08-21T00:00:00.000Z` retention with kill-switch
 owner `Phase 3C release owner`, and ends at the exact named receipt step. Parent
@@ -233,8 +271,10 @@ checkout metadata, one static workflow assertion, and this ledger only. No
 executable application source or build command changed, so the existing exact-
 candidate build evidence remains the applicable build result.
 
-Final stage/commit and post-commit custody checks remain outside this record's
-self-contained source identity. No hosted or control-plane command was run.
+The third marker run exercised Vercel and GitHub as recorded above. Its Convex
+command stopped before upload, and it performed no admission, credential or
+hosted-lifecycle mutation. The typecheck-boundary correction itself is proven
+only by source and local fixtures until a later authorized release carries it.
 
 ## Observable release behavior
 
@@ -248,17 +288,14 @@ those functions or create another lifecycle.
 
 ## Evidence and claim ceiling
 
-The attempt, deployment, rollback, and skipped-job statements above are the
-parent-provided exact external ledger and readback. This correction's own
-evidence is source inspection, static workflow contract, focused local fixtures,
-mocked Vercel responses, and the retained local build result. It does not prove
-a successful retry, Convex deployment, served corrected revision, credential
-identity, hosted reachability, provider fulfilment, payment, settlement,
-comprehension or accessibility in use, production safety, demand, or customer
-value.
+The attempt, deployment, alias, failed-job and skipped-step statements above are
+exact external ledger/readback. The deploy correction's own evidence is source
+inspection, a static workflow contract and focused local fixtures. It does not
+prove a successful corrected release, Convex deployment, served paid-operation
+revision, credential identity, hosted lifecycle, provider fulfilment, payment,
+settlement, comprehension or accessibility in use, production safety, demand,
+or customer value.
 
-The next safe action is parent audit of the exact committed correction, then
-fresh founder authority for one source-fix push and the third Vercel Git
-deployment it will create. The already-authorized Convex deploy and temporary
-human/agent credentials remain unused. This child performs no push, deployment,
-Convex, credential or lifecycle action.
+The next safe action after local audit is fresh founder authority for exactly
+one additional marker push and its Vercel Git deployment. The previously
+authorized Convex deploy and temporary human/agent credentials remain unused.

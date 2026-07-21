@@ -820,6 +820,13 @@ describe('paid-operation hosted proof integrity and live admission', () => {
       'npm exec -- tsx tools/release/observe-vercel-git-source-deployment.ts',
     )
     expect(phase3CProduction.match(/npx convex deploy/gu)).toHaveLength(1)
+    expect(
+      phase3CProduction,
+      '[P3C_RED:phase3c_convex_deploy_typecheck_boundary_absent]',
+    ).toContain(
+      'npx convex deploy --typecheck=disable --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"',
+    )
+    expect(legacyHosted).not.toContain('convex deploy --typecheck=disable')
     expect(phase3CProduction.match(
       /npx convex run hostedPaidOperation:configurePhase3CAdmission/gu,
     )).toHaveLength(1)
