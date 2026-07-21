@@ -30,7 +30,10 @@ test.describe('Phase 3C exact-revision hosted paid-operation sandbox', () => {
         },
         deployment: {
           id: liveConfig.vercelDeploymentId,
+          immutableUrl: liveConfig.immutableDeploymentUrl,
           productionUrl: liveConfig.productionUrl,
+          projectId: liveConfig.vercelProjectId,
+          projectName: 'agentic-economy',
         },
         github: {
           runId: liveConfig.githubRunId,
@@ -41,11 +44,12 @@ test.describe('Phase 3C exact-revision hosted paid-operation sandbox', () => {
       },
       {
         repositoryRoot: process.cwd(),
-        baseUrl: `https://${liveConfig.productionUrl}`,
+        baseUrl: `https://${liveConfig.immutableDeploymentUrl}`,
         browser,
         vercel: {
           apiToken: liveConfig.vercelApiToken,
           deploymentId: liveConfig.vercelDeploymentId,
+          projectId: liveConfig.vercelProjectId,
           ...(liveConfig.vercelTeamId === undefined
             ? {}
             : { teamId: liveConfig.vercelTeamId }),
@@ -83,7 +87,9 @@ function readLiveConfig() {
   const expectedRevision = required('AE_PAID_OPERATION_EXPECTED_REVISION')
   const expectedTree = required('AE_PAID_OPERATION_EXPECTED_TREE')
   const vercelDeploymentId = required('AE_PAID_OPERATION_VERCEL_DEPLOYMENT_ID')
+  const immutableDeploymentUrl = required('AE_PAID_OPERATION_VERCEL_IMMUTABLE_URL')
   const productionUrl = required('AE_PAID_OPERATION_PRODUCTION_URL')
+  const vercelProjectId = required('AE_PAID_OPERATION_VERCEL_PROJECT_ID')
   const githubRunId = required('AE_PAID_OPERATION_GITHUB_RUN_ID')
   const githubRunAttempt = Number(required('AE_PAID_OPERATION_GITHUB_RUN_ATTEMPT'))
   const convexDeployment = required('CONVEX_DEPLOYMENT')
@@ -97,14 +103,20 @@ function readLiveConfig() {
     throw new Error('exact_hosted_environment_invalid')
   }
   const url = new URL(`https://${productionUrl}`)
-  if (url.hostname !== productionUrl || url.pathname !== '/') {
+  const immutableUrl = new URL(`https://${immutableDeploymentUrl}`)
+  if (url.hostname !== productionUrl || url.pathname !== '/'
+    || immutableUrl.hostname !== immutableDeploymentUrl
+    || immutableUrl.pathname !== '/'
+    || immutableDeploymentUrl === productionUrl) {
     throw new Error('production_url_must_be_hostname')
   }
   return {
     expectedRevision,
     expectedTree,
     vercelDeploymentId,
+    immutableDeploymentUrl,
     productionUrl,
+    vercelProjectId,
     githubRunId,
     githubRunAttempt,
     convexDeployment,

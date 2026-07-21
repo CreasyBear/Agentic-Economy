@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
 import { verifyPacketIntegrity } from './paid-operation-hosted-proof-contract'
@@ -7,13 +8,17 @@ export * from './paid-operation-hosted-live-collector'
 export * from './paid-operation-hosted-journey'
 
 async function main(): Promise<void> {
-  if (process.argv.length !== 3
+  if (process.argv.length < 3
+    || process.argv.length > 4
     || process.argv[2] !== '--verify-packet-integrity') {
-    throw new Error('usage: --verify-packet-integrity')
+    throw new Error('usage: --verify-packet-integrity [packet-file]')
   }
-  const serialized = process.env.AE_PAID_OPERATION_HOSTED_PACKET_JSON
+  const packetPath = process.argv[3]
+  const serialized = packetPath === undefined
+    ? process.env.AE_PAID_OPERATION_HOSTED_PACKET_JSON
+    : readFileSync(packetPath, 'utf8')
   if (serialized === undefined || serialized.trim() === '') {
-    throw new Error('AE_PAID_OPERATION_HOSTED_PACKET_JSON is required')
+    throw new Error('packet file or AE_PAID_OPERATION_HOSTED_PACKET_JSON is required')
   }
 
   let packet: unknown

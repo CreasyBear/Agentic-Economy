@@ -11,22 +11,28 @@ import {
 type Projection = z.infer<typeof projectionSchema>
 type ProviderKey = 'A' | 'B'
 type ResultState = 'valid' | 'not_delivered'
+export type PaidOperationHostedJourneyCommand = Readonly<{
+  command: 'inspect' | 'authorize' | 'execute' | 'reconcile'
+  commandIdRequired: boolean
+  expectedInvocationVersion: number
+  requiredInput: readonly [] | readonly ['accept']
+  relation: Readonly<{ method: 'GET' | 'POST'; href: string }>
+}>
+
+export type PaidOperationHostedHumanSurfaceProof = Readonly<{
+  semanticDigest: string
+  expectedInvocationVersion: number
+  visibleAssertions: readonly string[]
+}>
 
 export type PaidOperationHostedJourneyCheckpoint = Readonly<{
   stage: 'ready_for_permission' | 'payment_prepared'
-  observedVersion: 1 | 2
-  human: Readonly<{
-    semanticDigest: string
-    observedVersion: 1 | 2
-    evidenceClass: 'hosted_labelled_mock_candidate'
-    decisionLabel: 'Ready for permission' | 'Payment prepared'
-    paymentSubmissionLabel: 'Not submitted'
-    settlementLabel: 'No settlement evidence'
-    resultLabel: 'Not received'
-    nextCommand: 'authorize' | 'execute'
+  expectedInvocationVersion: 1 | 2
+  human: PaidOperationHostedHumanSurfaceProof | null
+  agent: Readonly<{
     projection: Projection
-  }> | null
-  agent: Projection | null
+    command: PaidOperationHostedJourneyCommand
+  }>
 }>
 
 export type PaidOperationHostedJourneyScenario = Readonly<{
@@ -36,6 +42,7 @@ export type PaidOperationHostedJourneyScenario = Readonly<{
   providerId: 'provider:a' | 'provider:b'
   operationKey: 'btc-usd-a' | 'btc-usd-b'
   operationRevision: string
+  lifecycleOrigin: string
   checkpoints: readonly [
     PaidOperationHostedJourneyCheckpoint,
     PaidOperationHostedJourneyCheckpoint,
@@ -50,11 +57,15 @@ export type PaidOperationHostedJourneyScenario = Readonly<{
     execute: string
     reconcile?: string
   }>
-  projections: Readonly<{
-    humanWarm: Projection | null
-    humanCold: Projection | null
-    agentWarm: Projection | null
-    agentCold: Projection | null
+  followedCommands: readonly PaidOperationHostedJourneyCommand[]
+  humanProof: Readonly<{
+    warm: PaidOperationHostedHumanSurfaceProof
+    cold: PaidOperationHostedHumanSurfaceProof
+  }> | null
+  agentProof: Readonly<{
+    warm: Projection
+    cold: Projection
+    terminalCommand: PaidOperationHostedJourneyCommand
   }>
 }>
 
@@ -71,6 +82,7 @@ export type PaidOperationHostedJourneyInput = Readonly<{
   servedBinding: Readonly<{
     deploymentId: string
     sourceRevision: string
+    immutableUrl: string
     productionUrl: string
   }>
   browser: Browser
@@ -98,7 +110,7 @@ export async function runPaidOperationHostedJourney(
       captureCheckpoint: async (version) =>
         await captureHumanCheckpoint(input, page, human.invocationRef, version),
       captureTerminal: async () =>
-        await captureHumanTerminalProjections(input, page, human.invocationRef, 5, 'valid'),
+        await captureHumanTerminalProof(input, page, human.invocationRef, 5, 'valid'),
       authorize: async () => {
         await page.getByRole('button', { name: 'Authorize up to $0.01' }).click()
         await waitForHumanCardVersion(page, 2)
@@ -111,45 +123,84 @@ export async function runPaidOperationHostedJourney(
         authorize: 'phase3c-human-a-authorize',
         execute: 'phase3c-human-a-execute',
       },
+      followedCommands: [],
     })
 
     const agentA = await createAgentOperation(input, 'A')
-    const agentAScenario = await runGoldenScenario({
-      input,
-      actorClass: 'agent',
-      scenario: EXPECTED_SCENARIO_ORDER[1],
-      invocationRef: agentA.invocationRef,
-      captureCheckpoint: async (version) =>
-        await captureAgentCheckpoint(input, agentA.invocationRef, version),
-      captureTerminal: async () =>
-        await captureAgentTerminalProjections(input, agentA.invocationRef, 5, 'valid'),
-      authorize: async () => {
-        await runAgentCommand(input, agentA.invocationRef, {
-          command: 'authorize',
-          commandId: 'phase3c-agent-a-authorize',
-          expectedInvocationVersion: 1,
-          accept: true,
-        })
-      },
-      execute: async () => {
-        await runAgentCommand(input, agentA.invocationRef, {
-          command: 'execute',
-          commandId: 'phase3c-agent-a-execute',
-          expectedInvocationVersion: 2,
-        })
-      },
-      commandIds: {
-        authorize: 'phase3c-agent-a-authorize',
-        execute: 'phase3c-agent-a-execute',
-      },
-    })
+    const agentAScenario = await runAgentGoldenScenario(input, agentA)
 
     const goblin = await createAgentOperation(input, 'B')
-    const goblinScenario = await runGoblinScenario(input, goblin.invocationRef)
+    const goblinScenario = await runGoblinScenario(input, goblin)
 
     return { scenarios: [humanScenario, agentAScenario, goblinScenario] }
   } finally {
     await context.close()
+  }
+}
+
+async function runAgentGoldenScenario(
+  input: PaidOperationHostedJourneyInput,
+  operation: Awaited<ReturnType<typeof createAgentOperation>>,
+): Promise<PaidOperationHostedJourneyScenario> {
+  const readySnapshot = await readAgentSnapshotAtRelation(input, operation.inspectHref)
+  const ready = checkpointFromAgentSnapshot(readySnapshot, operation.invocationRef, 1)
+  const authorizeCommandId = 'phase3c-agent-a-authorize'
+  const preparedSnapshot = normalizeAgentSnapshot(await runAgentCommand(
+    input,
+    operation.invocationRef,
+    ready.agent.command,
+    { commandId: authorizeCommandId, accept: true },
+  ))
+  const prepared = checkpointFromAgentSnapshot(
+    preparedSnapshot,
+    operation.invocationRef,
+    2,
+  )
+  const executeCommandId = 'phase3c-agent-a-execute'
+  const terminalWarm = normalizeAgentSnapshot(await runAgentCommand(
+    input,
+    operation.invocationRef,
+    prepared.agent.command,
+    { commandId: executeCommandId },
+  ))
+  assertTerminalProjection(terminalWarm.projection, 5, 'valid')
+  const terminalCommand = requireSingleCommand(
+    terminalWarm.commands,
+    'inspect',
+    operation.invocationRef,
+  )
+  const terminalCold = await readAgentSnapshotAtRelation(
+    input,
+    terminalCommand.relation.href,
+  )
+  assertTerminalProjection(terminalCold.projection, 5, 'valid')
+  if (terminalWarm.projection.semanticDigest !== terminalCold.projection.semanticDigest) {
+    throw new Error('journey_terminal_warm_cold_mismatch')
+  }
+  const identity = operationFromProjection(terminalWarm.projection)
+  if (identity.providerId !== 'provider:a' || identity.operationKey !== 'btc-usd-a') {
+    throw new Error('journey_provider_a_identity_mismatch')
+  }
+  return {
+    scenario: EXPECTED_SCENARIO_ORDER[1],
+    actorClass: 'agent',
+    invocationRef: operation.invocationRef,
+    lifecycleOrigin: exactLifecycleOrigin(input),
+    ...identity,
+    checkpoints: [ready, prepared],
+    observedStages: [
+      { stage: 'created', invocationVersion: 1, continuations: ['authorize'] },
+      { stage: 'authorized', invocationVersion: 2, continuations: ['execute'] },
+      { stage: 'completed', invocationVersion: 5, continuations: ['inspect'] },
+    ],
+    commandIds: { authorize: authorizeCommandId, execute: executeCommandId },
+    followedCommands: [ready.agent.command, prepared.agent.command],
+    humanProof: null,
+    agentProof: {
+      warm: terminalWarm.projection,
+      cold: terminalCold.projection,
+      terminalCommand,
+    },
   }
 }
 
@@ -159,17 +210,26 @@ async function runGoldenScenario(input: Readonly<{
   scenario: typeof EXPECTED_SCENARIO_ORDER[0] | typeof EXPECTED_SCENARIO_ORDER[1]
   invocationRef: string
   captureCheckpoint: (version: 1 | 2) => Promise<PaidOperationHostedJourneyCheckpoint>
-  captureTerminal: () => Promise<PaidOperationHostedJourneyScenario['projections']>
-  authorize: () => Promise<void>
-  execute: () => Promise<void>
+  captureTerminal: () => Promise<Pick<
+    PaidOperationHostedJourneyScenario,
+    'humanProof' | 'agentProof'
+  >>
+  authorize: (checkpoint: PaidOperationHostedJourneyCheckpoint) => Promise<void>
+  execute: (checkpoint: PaidOperationHostedJourneyCheckpoint) => Promise<void>
   commandIds: Readonly<{ authorize: string; execute: string }>
+  followedCommands:
+    | readonly PaidOperationHostedJourneyCommand[]
+    | ((
+        ready: PaidOperationHostedJourneyCheckpoint,
+        prepared: PaidOperationHostedJourneyCheckpoint,
+      ) => readonly PaidOperationHostedJourneyCommand[])
 }>): Promise<PaidOperationHostedJourneyScenario> {
   const ready = await input.captureCheckpoint(1)
-  await input.authorize()
+  await input.authorize(ready)
   const prepared = await input.captureCheckpoint(2)
-  await input.execute()
-  const projections = await input.captureTerminal()
-  const operation = operationFromProjection(primaryProjection(projections))
+  await input.execute(prepared)
+  const terminal = await input.captureTerminal()
+  const operation = operationFromProjection(terminal.agentProof.warm)
   if (operation.providerId !== 'provider:a' || operation.operationKey !== 'btc-usd-a') {
     throw new Error('journey_provider_a_identity_mismatch')
   }
@@ -177,6 +237,7 @@ async function runGoldenScenario(input: Readonly<{
     scenario: input.scenario,
     actorClass: input.actorClass,
     invocationRef: input.invocationRef,
+    lifecycleOrigin: exactLifecycleOrigin(input.input),
     ...operation,
     checkpoints: [ready, prepared],
     observedStages: [
@@ -185,30 +246,40 @@ async function runGoldenScenario(input: Readonly<{
       { stage: 'completed', invocationVersion: 5, continuations: ['inspect'] },
     ],
     commandIds: input.commandIds,
-    projections,
+    followedCommands: typeof input.followedCommands === 'function'
+      ? input.followedCommands(ready, prepared)
+      : input.followedCommands,
+    ...terminal,
   }
 }
 
 async function runGoblinScenario(
   input: PaidOperationHostedJourneyInput,
-  invocationRef: string,
+  operation: Awaited<ReturnType<typeof createAgentOperation>>,
 ): Promise<PaidOperationHostedJourneyScenario> {
-  const ready = await captureAgentCheckpoint(input, invocationRef, 1)
+  const { invocationRef } = operation
+  const ready = checkpointFromAgentSnapshot(
+    await readAgentSnapshotAtRelation(input, operation.inspectHref),
+    invocationRef,
+    1,
+  )
   const authorizeCommandId = 'phase3c-goblin-b-authorize'
-  await runAgentCommand(input, invocationRef, {
-    command: 'authorize',
+  const preparedSnapshot = normalizeAgentSnapshot(await runAgentCommand(
+    input,
+    invocationRef,
+    ready.agent.command,
+    {
     commandId: authorizeCommandId,
-    expectedInvocationVersion: 1,
     accept: true,
-  })
-  const prepared = await captureAgentCheckpoint(input, invocationRef, 2)
+    },
+  ))
+  const prepared = checkpointFromAgentSnapshot(preparedSnapshot, invocationRef, 2)
   const executeCommandId = 'phase3c-goblin-b-execute'
-  const responseLost = await runAgentCommand(input, invocationRef, {
-    command: 'execute',
+  const responseLost = await runAgentCommand(input, invocationRef, prepared.agent.command, {
     commandId: executeCommandId,
-    expectedInvocationVersion: 2,
   })
-  const responseLostProjection = normalizeAgentProjection(responseLost)
+  const responseLostSnapshot = normalizeAgentSnapshot(responseLost)
+  const responseLostProjection = responseLostSnapshot.projection
   assertProjectionState(responseLostProjection, {
     version: 5,
     paymentAuthorization: 'created',
@@ -217,27 +288,44 @@ async function runGoblinScenario(
     resultDelivery: 'not_delivered',
     continuations: ['reconcile'],
   })
+  const reconcileDescriptor = requireSingleCommand(
+    responseLostSnapshot.commands,
+    'reconcile',
+    invocationRef,
+  )
   const reconciliationCommandId = 'phase3c-goblin-b-reconcile'
-  await runAgentCommand(input, invocationRef, {
-    command: 'reconcile',
-    commandId: reconciliationCommandId,
-    expectedInvocationVersion: 5,
-  })
-  const projections = await captureAgentTerminalProjections(
+  const terminalWarm = normalizeAgentSnapshot(await runAgentCommand(
     input,
     invocationRef,
-    6,
-    'not_delivered',
+    reconcileDescriptor,
+    {
+    commandId: reconciliationCommandId,
+    },
+  ))
+  assertTerminalProjection(terminalWarm.projection, 6, 'not_delivered')
+  const terminalCommand = requireSingleCommand(
+    terminalWarm.commands,
+    'inspect',
+    invocationRef,
   )
-  const operation = operationFromProjection(primaryProjection(projections))
-  if (operation.providerId !== 'provider:b' || operation.operationKey !== 'btc-usd-b') {
+  const terminalCold = await readAgentSnapshotAtRelation(
+    input,
+    terminalCommand.relation.href,
+  )
+  assertTerminalProjection(terminalCold.projection, 6, 'not_delivered')
+  if (terminalWarm.projection.semanticDigest !== terminalCold.projection.semanticDigest) {
+    throw new Error('journey_terminal_warm_cold_mismatch')
+  }
+  const identity = operationFromProjection(terminalWarm.projection)
+  if (identity.providerId !== 'provider:b' || identity.operationKey !== 'btc-usd-b') {
     throw new Error('journey_provider_b_identity_mismatch')
   }
   return {
     scenario: EXPECTED_SCENARIO_ORDER[2],
     actorClass: 'agent_goblin',
     invocationRef,
-    ...operation,
+    lifecycleOrigin: exactLifecycleOrigin(input),
+    ...identity,
     checkpoints: [ready, prepared],
     observedStages: [
       { stage: 'created', invocationVersion: 1, continuations: ['authorize'] },
@@ -250,7 +338,17 @@ async function runGoblinScenario(
       execute: executeCommandId,
       reconcile: reconciliationCommandId,
     },
-    projections,
+    followedCommands: [
+      ready.agent.command,
+      prepared.agent.command,
+      reconcileDescriptor,
+    ],
+    humanProof: null,
+    agentProof: {
+      warm: terminalWarm.projection,
+      cold: terminalCold.projection,
+      terminalCommand,
+    },
   }
 }
 
@@ -261,8 +359,9 @@ async function captureHumanCheckpoint(
   version: 1 | 2,
 ): Promise<PaidOperationHostedJourneyCheckpoint> {
   await navigateToDetail(input, page, invocationRef, version)
-  const projection = await readHumanProjection(page)
-  assertCheckpointProjection(projection, version)
+  const human = await readHumanSurfaceProof(page)
+  const agent = await readAgentSnapshot(input, invocationRef, version)
+  assertCheckpointProjection(agent.projection, version)
 
   const card = semanticCard(page)
   const observedVersion = Number(await card.getAttribute('data-invocation-version'))
@@ -278,7 +377,9 @@ async function captureHumanCheckpoint(
     'Not received',
   ]
   if (observedVersion !== version
-    || semanticDigest !== projection.semanticDigest
+    || semanticDigest !== human.semanticDigest
+    || human.expectedInvocationVersion !== version
+    || human.semanticDigest !== agent.projection.semanticDigest
     || evidenceClass !== 'hosted_labelled_mock_candidate'
     || required.some((label) => !body.includes(label))) {
     throw new Error(`journey_checkpoint_v${version}_mismatch`)
@@ -293,34 +394,33 @@ async function captureHumanCheckpoint(
   }
   return {
     stage: version === 1 ? 'ready_for_permission' : 'payment_prepared',
-    observedVersion: version,
+    expectedInvocationVersion: version,
     human: {
-      semanticDigest,
-      observedVersion: version,
-      evidenceClass: 'hosted_labelled_mock_candidate',
-      decisionLabel,
-      paymentSubmissionLabel: 'Not submitted',
-      settlementLabel: 'No settlement evidence',
-      resultLabel: 'Not received',
-      nextCommand,
-      projection,
+      ...human,
+      visibleAssertions: required,
     },
-    agent: null,
+    agent: {
+      projection: agent.projection,
+      command: requireSingleCommand(agent.commands, nextCommand, invocationRef),
+    },
   }
 }
 
-async function captureAgentCheckpoint(
-  input: PaidOperationHostedJourneyInput,
+function checkpointFromAgentSnapshot(
+  agent: ReturnType<typeof normalizeAgentSnapshot>,
   invocationRef: string,
   version: 1 | 2,
-): Promise<PaidOperationHostedJourneyCheckpoint> {
-  const agent = await readAgentProjection(input, invocationRef, version)
-  assertCheckpointProjection(agent, version)
+): PaidOperationHostedJourneyCheckpoint {
+  assertCheckpointProjection(agent.projection, version)
+  const command = version === 1 ? 'authorize' : 'execute'
   return {
     stage: version === 1 ? 'ready_for_permission' : 'payment_prepared',
-    observedVersion: version,
+    expectedInvocationVersion: version,
     human: null,
-    agent,
+    agent: {
+      projection: agent.projection,
+      command: requireSingleCommand(agent.commands, command, invocationRef),
+    },
   }
 }
 
@@ -344,62 +444,56 @@ function assertCheckpointProjection(projection: Projection, version: 1 | 2): voi
       })
 }
 
-async function captureHumanTerminalProjections(
+async function captureHumanTerminalProof(
   input: PaidOperationHostedJourneyInput,
   page: Page,
   invocationRef: string,
   version: 5 | 6,
   result: ResultState,
-): Promise<PaidOperationHostedJourneyScenario['projections']> {
+): Promise<Pick<PaidOperationHostedJourneyScenario, 'humanProof' | 'agentProof'>> {
   await navigateToDetail(input, page, invocationRef, version)
-  const humanWarm = await readHumanProjection(page)
-  assertTerminalProjection(humanWarm, version, result)
-  await assertTerminalDom(page, humanWarm, version, result)
+  const humanWarm = await readHumanSurfaceProof(page)
+  const agentWarm = await readAgentSnapshot(input, invocationRef, version)
+  assertTerminalProjection(agentWarm.projection, version, result)
+  const warmAssertions = await assertTerminalDom(page, humanWarm, version, result)
+  assertHumanAgentParity(humanWarm, agentWarm.projection)
 
-  const humanCold = await restoreInNewAuthenticatedContext(
+  const humanCold = await restoreHumanInNewAuthenticatedContext(
     input,
     invocationRef,
     version,
     result,
   )
-  if (humanWarm.semanticDigest !== humanCold.semanticDigest) {
+  const agentCold = await readAgentSnapshot(input, invocationRef, version)
+  assertTerminalProjection(agentCold.projection, version, result)
+  assertHumanAgentParity(humanCold, agentCold.projection)
+  if (humanWarm.semanticDigest !== humanCold.semanticDigest
+    || agentWarm.projection.semanticDigest !== agentCold.projection.semanticDigest) {
     throw new Error('journey_terminal_warm_cold_mismatch')
   }
   return {
-    humanWarm,
-    humanCold,
-    agentWarm: null,
-    agentCold: null,
+    humanProof: {
+      warm: { ...humanWarm, visibleAssertions: warmAssertions },
+      cold: humanCold,
+    },
+    agentProof: {
+      warm: agentWarm.projection,
+      cold: agentCold.projection,
+      terminalCommand: requireSingleCommand(
+        agentCold.commands,
+        'inspect',
+        invocationRef,
+      ),
+    },
   }
 }
 
-async function captureAgentTerminalProjections(
+async function restoreHumanInNewAuthenticatedContext(
   input: PaidOperationHostedJourneyInput,
   invocationRef: string,
   version: 5 | 6,
   result: ResultState,
-): Promise<PaidOperationHostedJourneyScenario['projections']> {
-  const agentWarm = await readAgentProjection(input, invocationRef, version)
-  assertTerminalProjection(agentWarm, version, result)
-  const agentCold = await readAgentProjection(input, invocationRef, version)
-  assertTerminalProjection(agentCold, version, result)
-  if (agentWarm.semanticDigest !== agentCold.semanticDigest) {
-    throw new Error('journey_terminal_warm_cold_mismatch')
-  }
-  return {
-    humanWarm: null,
-    humanCold: null,
-    agentWarm,
-    agentCold,
-  }
-}
-
-async function restoreInNewAuthenticatedContext(
-  input: PaidOperationHostedJourneyInput,
-  invocationRef: string,
-  version: 5 | 6,
-  result: ResultState,
-): Promise<Projection> {
+): Promise<PaidOperationHostedHumanSurfaceProof> {
   const context = await input.browser.newContext({
     extraHTTPHeaders: humanHeaders(input),
     serviceWorkers: 'block',
@@ -407,39 +501,34 @@ async function restoreInNewAuthenticatedContext(
   try {
     const page = await context.newPage()
     await navigateToDetail(input, page, invocationRef, version)
-    const projection = await readHumanProjection(page)
-    assertTerminalProjection(projection, version, result)
-    await assertTerminalDom(page, projection, version, result)
-    return projection
+    const proof = await readHumanSurfaceProof(page)
+    const visibleAssertions = await assertTerminalDom(page, proof, version, result)
+    return { ...proof, visibleAssertions }
   } finally {
     await context.close()
   }
 }
 
-function primaryProjection(
-  projections: PaidOperationHostedJourneyScenario['projections'],
-): Projection {
-  const projection = projections.humanWarm ?? projections.agentWarm
-  if (projection === null) throw new Error('journey_projection_missing')
-  return projection
-}
-
 async function assertTerminalDom(
   page: Page,
-  projection: Projection,
+  proof: PaidOperationHostedHumanSurfaceProof,
   version: 5 | 6,
   result: ResultState,
-): Promise<void> {
+): Promise<readonly string[]> {
   const card = semanticCard(page)
   const body = await card.innerText()
+  const visibleAssertions = [
+    'Observed by provider',
+    '$0.01 settled in recorded sandbox evidence',
+    result === 'valid' ? 'Validated' : 'Not received',
+  ]
   if (Number(await card.getAttribute('data-invocation-version')) !== version
-    || await card.getAttribute('data-semantic-digest') !== projection.semanticDigest
+    || await card.getAttribute('data-semantic-digest') !== proof.semanticDigest
     || await card.getAttribute('data-evidence-class') !== 'hosted_labelled_mock_candidate'
-    || !body.includes('Observed by provider')
-    || !body.includes('$0.01 settled in recorded sandbox evidence')
-    || !body.includes(result === 'valid' ? 'Validated' : 'Not received')) {
+    || visibleAssertions.some((label) => !body.includes(label))) {
     throw new Error('journey_terminal_human_readback_mismatch')
   }
+  return visibleAssertions
 }
 
 function assertTerminalProjection(
@@ -514,8 +603,9 @@ function assertServedDeploymentBindingBeforeFirstLifecyclePost(
     || !response.ok()
     || !/^dpl_[A-Za-z0-9]+$/u.test(input.servedBinding.deploymentId)
     || !/^[0-9a-f]{40}$/u.test(input.servedBinding.sourceRevision)
-    || baseUrl.hostname !== input.servedBinding.productionUrl
-    || responseUrl?.hostname !== input.servedBinding.productionUrl
+    || baseUrl.hostname !== input.servedBinding.immutableUrl
+    || responseUrl?.hostname !== input.servedBinding.immutableUrl
+    || input.servedBinding.immutableUrl === input.servedBinding.productionUrl
     || responseUrl.pathname !== '/actions/paid/new'
     || !response.headers()['x-vercel-id']?.trim()) {
     throw new Error('served_revision_deployment_binding_mismatch')
@@ -525,7 +615,7 @@ function assertServedDeploymentBindingBeforeFirstLifecyclePost(
 async function createAgentOperation(
   input: PaidOperationHostedJourneyInput,
   providerKey: ProviderKey,
-): Promise<Readonly<{ invocationRef: string }>> {
+): Promise<Readonly<{ invocationRef: string; inspectHref: string }>> {
   const response = await input.fetch(new URL('/api/v1/paid-operations', input.baseUrl), {
     method: 'POST',
     headers: agentHeaders(input),
@@ -537,35 +627,47 @@ async function createAgentOperation(
   if (!isRecord(value)
     || value.kind !== 'created'
     || typeof value.invocationRef !== 'string'
-    || value.expectedInvocationVersion !== 1) {
+    || value.expectedInvocationVersion !== 1
+    || !isRecord(value.relation)
+    || typeof value.relation.inspect !== 'string') {
     throw new Error('journey_agent_creation_response_invalid')
   }
-  return { invocationRef: value.invocationRef }
+  assertExactLifecycleUrl(input, value.relation.inspect)
+  return { invocationRef: value.invocationRef, inspectHref: value.relation.inspect }
 }
 
 async function runAgentCommand(
   input: PaidOperationHostedJourneyInput,
   invocationRef: string,
-  body: Readonly<Record<string, unknown>>,
+  descriptor: PaidOperationHostedJourneyCommand,
+  declaredInput: Readonly<{ commandId: string; accept?: true }>,
 ): Promise<unknown> {
-  const response = await input.fetch(
-    new URL(
-      `/api/v1/paid-operations/${encodeURIComponent(invocationRef)}/commands`,
-      input.baseUrl,
-    ),
-    {
-      method: 'POST',
-      headers: agentHeaders(input),
-      body: JSON.stringify(body),
-      redirect: 'error',
-    },
-  )
+  validateCommandDescriptor(input, descriptor, invocationRef)
+  if (descriptor.command === 'inspect'
+    || descriptor.relation.method !== 'POST'
+    || !descriptor.commandIdRequired
+    || (descriptor.requiredInput.length === 1) !== (declaredInput.accept === true)) {
+    throw new Error('journey_agent_command_descriptor_invalid')
+  }
+  const response = await input.fetch(resolveLifecycleUrl(input, descriptor.relation.href), {
+    method: descriptor.relation.method,
+    headers: agentHeaders(input),
+    body: JSON.stringify({
+      command: descriptor.command,
+      commandId: declaredInput.commandId,
+      expectedInvocationVersion: descriptor.expectedInvocationVersion,
+      ...(declaredInput.accept === true ? { accept: true } : {}),
+    }),
+    redirect: 'error',
+  })
   const value: unknown = await response.json()
   if (!response.ok) throw new Error(`journey_agent_command_not_confirmed:${response.status}`)
   return value
 }
 
-async function readHumanProjection(page: Page): Promise<Projection> {
+async function readHumanSurfaceProof(
+  page: Page,
+): Promise<PaidOperationHostedHumanSurfaceProof> {
   const embedded = page.locator('script[data-paid-operation-human-projection]')
   if (await embedded.count() !== 1) {
     throw new Error('journey_human_projection_missing')
@@ -579,29 +681,27 @@ async function readHumanProjection(page: Page): Promise<Projection> {
     throw new Error('journey_human_projection_invalid')
   }
   if (!isRecord(value)
-    || value.kind !== 'human_rich_paid_operation'
-    || !isRecord(value.semantics)
+    || Object.keys(value).sort().join(',')
+      !== 'expectedInvocationVersion,semanticDigest'
     || typeof value.semanticDigest !== 'string'
-    || value.semanticDigest !== canonicalProofDigest(value.semantics)
-    || value.semantics.schema !== 'agentic-paid-operation:v1'
-    || !isRecord(value.semantics.identity)
-    || !isRecord(value.semantics.environment)) {
+    || !/^sha256:[0-9a-f]{64}$/u.test(value.semanticDigest)
+    || typeof value.expectedInvocationVersion !== 'number'
+    || !Number.isSafeInteger(value.expectedInvocationVersion)
+    || value.expectedInvocationVersion < 1) {
     throw new Error('journey_human_projection_invalid')
   }
-  return projectionSchema.parse({
-    schema: value.semantics.schema,
-    semantics: value.semantics,
+  return {
     semanticDigest: value.semanticDigest,
-    observedVersion: value.semantics.identity.expectedInvocationVersion,
-    evidenceClass: value.semantics.environment.evidenceClass,
-  })
+    expectedInvocationVersion: value.expectedInvocationVersion,
+    visibleAssertions: [],
+  }
 }
 
-async function readAgentProjection(
+async function readAgentSnapshot(
   input: PaidOperationHostedJourneyInput,
   invocationRef: string,
   version: number,
-): Promise<Projection> {
+): Promise<ReturnType<typeof normalizeAgentSnapshot>> {
   const url = new URL(
     `/api/v1/paid-operations/${encodeURIComponent(invocationRef)}`,
     input.baseUrl,
@@ -613,7 +713,22 @@ async function readAgentProjection(
     cache: 'no-store',
   })
   if (!response.ok) throw new Error(`journey_agent_inspect_failed:${response.status}`)
-  return normalizeAgentProjection(await response.json())
+  return normalizeAgentSnapshot(await response.json())
+}
+
+async function readAgentSnapshotAtRelation(
+  input: PaidOperationHostedJourneyInput,
+  href: string,
+): Promise<ReturnType<typeof normalizeAgentSnapshot>> {
+  const url = resolveLifecycleUrl(input, href)
+  const response = await input.fetch(url, {
+    method: 'GET',
+    headers: agentHeaders(input),
+    redirect: 'error',
+    cache: 'no-store',
+  })
+  if (!response.ok) throw new Error(`journey_agent_inspect_failed:${response.status}`)
+  return normalizeAgentSnapshot(await response.json())
 }
 
 async function waitForHumanCardVersion(page: Page, version: 2 | 5): Promise<void> {
@@ -624,11 +739,19 @@ async function waitForHumanCardVersion(page: Page, version: 2 | 5): Promise<void
 }
 
 export function normalizeAgentProjection(value: unknown): Projection {
+  return normalizeAgentSnapshot(value).projection
+}
+
+export function normalizeAgentSnapshot(value: unknown): Readonly<{
+  projection: Projection
+  commands: readonly PaidOperationHostedJourneyCommand[]
+}> {
   if (!isRecord(value)
     || value.kind !== 'accepted'
     || value.schema !== 'agentic-paid-operation:v1'
     || !isRecord(value.projection)
-    || !isRecord(value.environment)) {
+    || !isRecord(value.environment)
+    || !Array.isArray(value.commands)) {
     throw new Error('journey_agent_projection_invalid')
   }
   const semantics = value.projection.semantics
@@ -637,13 +760,125 @@ export function normalizeAgentProjection(value: unknown): Projection {
     || semanticDigest !== canonicalProofDigest(semantics)) {
     throw new Error('journey_agent_projection_digest_invalid')
   }
-  return projectionSchema.parse({
+  const projection = projectionSchema.parse({
     schema: value.schema,
     semantics,
     semanticDigest,
     observedVersion: value.expectedInvocationVersion,
     evidenceClass: value.environment.evidenceClass,
   })
+  const commands = value.commands.map((descriptor) =>
+    parseCommandDescriptor(descriptor))
+  return { projection, commands }
+}
+
+function parseCommandDescriptor(value: unknown): PaidOperationHostedJourneyCommand {
+  if (!isRecord(value)
+    || !['inspect', 'authorize', 'execute', 'reconcile'].includes(String(value.command))
+    || typeof value.commandIdRequired !== 'boolean'
+    || !Number.isSafeInteger(value.expectedInvocationVersion)
+    || Number(value.expectedInvocationVersion) < 1
+    || !Array.isArray(value.requiredInput)
+    || !isRecord(value.relation)
+    || !['GET', 'POST'].includes(String(value.relation.method))
+    || typeof value.relation.href !== 'string') {
+    throw new Error('journey_agent_command_descriptor_invalid')
+  }
+  const requiredInput = value.requiredInput
+  if (!(requiredInput.length === 0
+    || (requiredInput.length === 1 && requiredInput[0] === 'accept'))) {
+    throw new Error('journey_agent_command_descriptor_invalid')
+  }
+  return {
+    command: value.command as PaidOperationHostedJourneyCommand['command'],
+    commandIdRequired: value.commandIdRequired,
+    expectedInvocationVersion: Number(value.expectedInvocationVersion),
+    requiredInput: requiredInput as [] | ['accept'],
+    relation: {
+      method: value.relation.method as 'GET' | 'POST',
+      href: value.relation.href,
+    },
+  }
+}
+
+function requireSingleCommand(
+  commands: readonly PaidOperationHostedJourneyCommand[],
+  command: PaidOperationHostedJourneyCommand['command'],
+  invocationRef: string,
+): PaidOperationHostedJourneyCommand {
+  const matches = commands.filter((descriptor) => descriptor.command === command)
+  if (commands.length !== 1 || matches.length !== 1) {
+    throw new Error('journey_agent_command_descriptor_invalid')
+  }
+  const descriptor = matches[0]!
+  const expectedMethod = command === 'inspect' ? 'GET' : 'POST'
+  const expectedInput = command === 'authorize' ? ['accept'] : []
+  const relation = new URL(descriptor.relation.href, 'https://descriptor.invalid')
+  const expectedPath = command === 'inspect'
+    ? `/api/v1/paid-operations/${encodeURIComponent(invocationRef)}`
+    : `/api/v1/paid-operations/${encodeURIComponent(invocationRef)}/commands`
+  const expectedSearch = command === 'inspect'
+    ? `?expectedInvocationVersion=${descriptor.expectedInvocationVersion}`
+    : ''
+  if (descriptor.relation.method !== expectedMethod
+    || descriptor.commandIdRequired !== (command !== 'inspect')
+    || JSON.stringify(descriptor.requiredInput) !== JSON.stringify(expectedInput)
+    || relation.pathname !== expectedPath
+    || relation.search !== expectedSearch
+    || relation.hash !== ''
+    || relation.username !== ''
+    || relation.password !== '') {
+    throw new Error('journey_agent_command_descriptor_invalid')
+  }
+  return descriptor
+}
+
+function validateCommandDescriptor(
+  input: PaidOperationHostedJourneyInput,
+  descriptor: PaidOperationHostedJourneyCommand,
+  invocationRef: string,
+): void {
+  const exact = requireSingleCommand([descriptor], descriptor.command, invocationRef)
+  resolveLifecycleUrl(input, exact.relation.href)
+}
+
+function assertHumanAgentParity(
+  human: PaidOperationHostedHumanSurfaceProof,
+  agent: Projection,
+): void {
+  if (human.semanticDigest !== agent.semanticDigest
+    || human.expectedInvocationVersion !== agent.observedVersion) {
+    throw new Error('journey_human_agent_semantic_mismatch')
+  }
+}
+
+function exactLifecycleOrigin(input: PaidOperationHostedJourneyInput): string {
+  const origin = new URL(input.baseUrl).origin
+  if (new URL(input.baseUrl).hostname !== input.servedBinding.immutableUrl
+    || input.servedBinding.immutableUrl === input.servedBinding.productionUrl) {
+    throw new Error('served_revision_deployment_binding_mismatch')
+  }
+  return origin
+}
+
+function resolveLifecycleUrl(
+  input: PaidOperationHostedJourneyInput,
+  href: string,
+): URL {
+  const url = new URL(href, input.baseUrl)
+  assertExactLifecycleUrl(input, url.href)
+  return url
+}
+
+function assertExactLifecycleUrl(
+  input: PaidOperationHostedJourneyInput,
+  href: string,
+): void {
+  const url = new URL(href, input.baseUrl)
+  if (url.origin !== exactLifecycleOrigin(input)
+    || url.hostname === input.servedBinding.productionUrl) {
+    throw new Error('journey_mutable_host_forbidden')
+  }
 }
 
 function operationFromProjection(projection: Projection): Readonly<{

@@ -395,7 +395,7 @@ describe('paid-operation hosted proof integrity and live admission', () => {
           args,
           ...(options.env === undefined ? {} : { env: options.env }),
         }
-        return JSON.stringify(contentFixture().sourceObservation)
+        return JSON.stringify(liveSourceObservationFixture())
       },
     )
 
@@ -462,27 +462,17 @@ describe('paid-operation hosted proof integrity and live admission', () => {
   it('keeps an injected full live path local and queries raw state only after revocation', async () => {
     const events: string[] = []
     const fetch = fakeLiveCollectionFetch(events)
-    const exec = async (file: string, args: readonly string[]) => {
-      if (file === 'git') {
-        if (args[0] === 'rev-parse' && args[1] === 'HEAD') return SOURCE_REVISION
-        if (args[0] === 'rev-parse') return SOURCE_TREE
-        if (args[0] === 'status') return ''
-      }
-      if (file === 'npx') {
-        events.push('convex_observation')
-        return JSON.stringify(contentFixture().sourceObservation)
-      }
-      throw new Error(`unexpected_exec:${file}:${args.join(':')}`)
-    }
+    const exec = fakeLiveCollectionExec(events)
     const result = await collectAndAdmitLivePaidOperationHostedEvidence(
       liveTargetFixture(),
       {
         repositoryRoot: process.cwd(),
-        baseUrl: 'https://agentic-economy.ai',
+        baseUrl: 'https://ae-exact.vercel.app',
         browser: { newContext: async () => undefined } as never,
         vercel: {
           apiToken: 'vercel-test-token',
           deploymentId: 'dpl_exact',
+          projectId: 'prj_exact',
         },
         clerk: {
           secretKey: 'clerk-test-secret',
@@ -514,6 +504,162 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     )
     expect(events).toContain('key_revocation_readback')
     expect(events).toContain('session_revocation_readback')
+    expect(events).toContain('admission_disabled')
+    expect(events).toContain('admission_disabled_readback')
+    if (result.kind === 'local_live_path_verified') {
+      expect(result.packet.schema).toBe('agentic-paid-operation-hosted-proof:v2')
+      expect(result.packet.convex.afterShutdown.state).toBe('disabled')
+      expect(result.packet.deployment.beforeLifecycle)
+        .toEqual(result.packet.deployment.afterLifecycle)
+    }
+  })
+
+  it('refuses v2 deployment, proposal, descriptor, credential, human payload, and shutdown forgery', async () => {
+    const packet = await collectLocalV2Packet()
+    const mutateV2 = (mutate: (copy: typeof packet) => void) => {
+      const copy = structuredClone(packet)
+      mutate(copy)
+      return rechecksum(copy as unknown as Record<string, unknown>)
+    }
+    const refreshBinding = (
+      binding: typeof packet.deployment.beforeLifecycle,
+    ) => {
+      const { bindingDigest: _oldDigest, ...unsigned } = binding
+      binding.bindingDigest = canonicalProofDigest(unsigned)
+    }
+
+    const aliasDrift = mutateV2((copy) => {
+      copy.deployment.afterLifecycle.alias.resolvedDeploymentId = 'dpl_other'
+      refreshBinding(copy.deployment.afterLifecycle)
+    })
+    expect(verifyPacketIntegrity(aliasDrift)).toEqual({
+      kind: 'refused', code: 'deployment_binding_mismatch',
+    })
+
+    const wrongSha = mutateV2((copy) => {
+      copy.deployment.beforeLifecycle.exact.gitSha = 'f'.repeat(40)
+      copy.deployment.afterLifecycle.exact.gitSha = 'f'.repeat(40)
+      refreshBinding(copy.deployment.beforeLifecycle)
+      refreshBinding(copy.deployment.afterLifecycle)
+    })
+    expect(verifyPacketIntegrity(wrongSha)).toEqual({
+      kind: 'refused', code: 'deployment_binding_mismatch',
+    })
+
+    const proposalMismatch = mutateV2((copy) => {
+      copy.scenarios[0].paymentProposalDigest = DIGEST('f')
+    })
+    expect(verifyPacketIntegrity(proposalMismatch)).toEqual({
+      kind: 'refused', code: 'payment_proposal_binding_mismatch',
+    })
+
+    const mutableCommandHost = mutateV2((copy) => {
+      copy.scenarios[1].followedCommands[0]!.relation.href =
+        'https://agentic-economy.ai/api/v1/paid-operations/forged/commands'
+    })
+    expect(verifyPacketIntegrity(mutableCommandHost)).toEqual({
+      kind: 'refused', code: 'agent_command_descriptor_mismatch',
+    })
+
+    const commandPathDrift = mutateV2((copy) => {
+      const descriptor = copy.scenarios[1].followedCommands[0]!
+      descriptor.relation.href = descriptor.relation.href.replace(
+        '/commands',
+        '/shadow/commands',
+      )
+    })
+    expect(verifyPacketIntegrity(commandPathDrift)).toEqual({
+      kind: 'refused', code: 'agent_command_descriptor_mismatch',
+    })
+
+    const commandVersionDrift = mutateV2((copy) => {
+      copy.scenarios[1].followedCommands[0]!.expectedInvocationVersion = 9
+    })
+    expect(verifyPacketIntegrity(commandVersionDrift)).toEqual({
+      kind: 'refused', code: 'agent_command_descriptor_mismatch',
+    })
+
+    const checkpointProjectionDrift = mutateV2((copy) => {
+      const semantics = copy.scenarios[1].checkpoints[0].agent.projection
+        .semantics as Record<string, unknown>
+      semantics.paymentAuthorization = { state: 'created' }
+    })
+    expect(verifyPacketIntegrity(checkpointProjectionDrift)).toEqual({
+      kind: 'refused', code: 'projection_semantics_mismatch',
+    })
+
+    const credentialMismatch = mutateV2((copy) => {
+      copy.credentials.humanSession.callerDigest = DIGEST('f')
+    })
+    expect(verifyPacketIntegrity(credentialMismatch)).toEqual({
+      kind: 'refused', code: 'credential_revocation_mismatch',
+    })
+
+    const richHumanPayload = structuredClone(packet) as unknown as Record<string, unknown>
+    const scenarios = richHumanPayload.scenarios as Array<Record<string, unknown>>
+    const humanProof = scenarios[0]!.humanProof as Record<string, unknown>
+    humanProof.semantics = { providerId: 'provider:a', payment: 'settled' }
+    expect(verifyPacketIntegrity(rechecksum(richHumanPayload))).toEqual({
+      kind: 'refused', code: 'packet_schema_invalid',
+    })
+
+    const enabledAfterRun = mutateV2((copy) => {
+      copy.convex.afterShutdown.state = 'enabled'
+    })
+    expect(verifyPacketIntegrity(enabledAfterRun)).toEqual({
+      kind: 'refused', code: 'admission_shutdown_mismatch',
+    })
+  })
+
+  it('refuses a torn canonical alias before credentials and rechecks it after cleanup', async () => {
+    const events: string[] = []
+    const baseFetch = fakeLiveCollectionFetch(events)
+    let vercelReads = 0
+    const fetch = (async (input, init) => {
+      const url = new URL(
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url,
+      )
+      if (url.hostname === 'api.vercel.com') {
+        vercelReads += 1
+        if (vercelReads === 4) {
+          return Response.json({
+            id: 'dpl_other',
+            readyState: 'READY',
+            target: 'production',
+            projectId: 'prj_exact',
+            name: 'agentic-economy',
+            url: 'ae-other.vercel.app',
+            meta: {
+              githubCommitSha: SOURCE_REVISION,
+              githubCommitRef: 'main',
+              githubCommitOrg: 'CreasyBear',
+              githubCommitRepo: 'Agentic-Economy',
+            },
+          })
+        }
+      }
+      return await baseFetch(input, init)
+    }) as typeof globalThis.fetch
+    const result = await collectAndAdmitLivePaidOperationHostedEvidence(
+      liveTargetFixture(),
+      liveContextFixture(),
+      {
+        fetch,
+        exec: fakeLiveCollectionExec(events),
+        runJourney: async (input) => {
+          expect(input.baseUrl).toBe('https://ae-exact.vercel.app')
+          expect(input.baseUrl).not.toContain('agentic-economy.ai')
+          return journeyObservationFixture()
+        },
+      },
+    )
+    expect(result).toEqual({ kind: 'refused', code: 'live_vercel_control_plane_mismatch' })
+    expect(events).toContain('admission_disabled_readback')
+    expect(vercelReads).toBe(4)
   })
 
   it.each([
@@ -536,6 +682,7 @@ describe('paid-operation hosted proof integrity and live admission', () => {
   }) => {
     const events: string[] = []
     let gitCalls = 0
+    const baseExec = fakeLiveCollectionExec(events)
     const result = await collectAndAdmitLivePaidOperationHostedEvidence(
       liveTargetFixture(),
       liveContextFixture(),
@@ -556,11 +703,7 @@ describe('paid-operation hosted proof integrity and live admission', () => {
               return finalObservation ? finalStatus : ''
             }
           }
-          if (file === 'npx') {
-            events.push('convex_observation')
-            return JSON.stringify(contentFixture().sourceObservation)
-          }
-          throw new Error(`unexpected_exec:${file}:${args.join(':')}`)
+          return await baseExec(file, args)
         },
         runJourney: async () => journeyObservationFixture(),
       },
@@ -579,6 +722,7 @@ describe('paid-operation hosted proof integrity and live admission', () => {
 
   it('revokes both temporary credentials and skips raw observation when the journey fails', async () => {
     const events: string[] = []
+    const baseExec = fakeLiveCollectionExec(events)
     const result = await collectAndAdmitLivePaidOperationHostedEvidence(
       liveTargetFixture(),
       liveContextFixture(),
@@ -592,8 +736,12 @@ describe('paid-operation hosted proof integrity and live admission', () => {
             if (args[0] === 'rev-parse') return SOURCE_TREE
             if (args[0] === 'status') return ''
           }
-          events.push('unexpected_raw_observation')
-          throw new Error('raw_observation_must_not_run')
+          if (file === 'npx'
+            && args[2] === 'hostedPaidOperation:phase3CHostedProofObservation') {
+            events.push('unexpected_raw_observation')
+            throw new Error('raw_observation_must_not_run')
+          }
+          return await baseExec(file, args)
         },
         runJourney: async () => {
           throw new Error('journey_failed')
@@ -607,6 +755,45 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(events).toContain('session_revoked')
     expect(events).toContain('session_revocation_readback')
     expect(events).not.toContain('unexpected_raw_observation')
+    expect(events).toContain('admission_disabled_readback')
+  })
+
+  it('shuts down an enabled admission policy when its pre-lifecycle counters refuse collection', async () => {
+    const events: string[] = []
+    const baseExec = fakeLiveCollectionExec(events)
+    let admissionReads = 0
+    const result = await collectAndAdmitLivePaidOperationHostedEvidence(
+      liveTargetFixture(),
+      liveContextFixture(),
+      {
+        fetch: fakeLiveCollectionFetch(events),
+        exec: async (file, args) => {
+          if (file === 'npx'
+            && args[2] === 'hostedPaidOperation:phase3CAdmissionStatus'
+            && admissionReads++ === 0) {
+            events.push('admission_pre_read')
+            return JSON.stringify({
+              ...admissionStateFixture('enabled'),
+              counters: {
+                admittedTotal: 1,
+                activeReservations: 0,
+                admittedInWindow: 1,
+              },
+            })
+          }
+          return await baseExec(file, args)
+        },
+        runJourney: async () => {
+          throw new Error('journey_must_not_run')
+        },
+      },
+    )
+
+    expect(result).toEqual({ kind: 'refused', code: 'admission_shutdown_mismatch' })
+    expect(events).toContain('admission_disabled')
+    expect(events).toContain('admission_disabled_readback')
+    expect(events).not.toContain('session_revoked')
+    expect(events).not.toContain('convex_observation')
   })
 
   it('refuses forged control-plane fields with a valid checksum against authoritative evidence', () => {
@@ -728,8 +915,8 @@ describe('paid-operation hosted proof integrity and live admission', () => {
       'assertServedDeploymentBindingBeforeFirstLifecyclePost',
     )
     const firstPost = journey.indexOf('Create sandbox operation')
-    const golden = journey.slice(
-      journey.indexOf('async function runGoldenScenario'),
+    const agentGolden = journey.slice(
+      journey.indexOf('async function runAgentGoldenScenario'),
       journey.indexOf('async function runGoblinScenario'),
     )
     const goblin = journey.slice(
@@ -746,18 +933,11 @@ describe('paid-operation hosted proof integrity and live admission', () => {
     expect(journey).toContain('`/actions/paid/${encodeURIComponent(invocationRef)}`')
     expect(binding).toBeGreaterThan(-1)
     expect(binding).toBeLessThan(firstPost)
-    expect(golden.indexOf('captureCheckpoint')).toBeLessThan(
-      golden.indexOf('await input.authorize()'),
-    )
-    expect(golden.lastIndexOf('captureCheckpoint')).toBeLessThan(
-      golden.indexOf('await input.execute()'),
-    )
-    expect(goblin.indexOf('captureAgentCheckpoint')).toBeLessThan(
-      goblin.indexOf("command: 'authorize'"),
-    )
-    expect(goblin.lastIndexOf('captureAgentCheckpoint')).toBeLessThan(
-      goblin.indexOf("command: 'execute'"),
-    )
+    expect(agentGolden).toContain('ready.agent.command')
+    expect(agentGolden).toContain('prepared.agent.command')
+    expect(agentGolden).toContain('terminalCommand.relation.href')
+    expect(agentGolden).not.toContain('/commands`')
+    expect(goblin).toContain('reconcileDescriptor')
     expect(journey).toContain("paymentAuthorization: 'created'")
     expect(journey).toContain("paymentSubmission: 'not_submitted'")
     expect(journey).toContain("settlement: 'no_evidence'")
@@ -773,14 +953,18 @@ describe('paid-operation hosted proof integrity and live admission', () => {
       journey,
       '[P3C_RED:surface_owner_crossing_not_removed]',
     ).toContain('async function captureHumanCheckpoint')
-    expect(journey).toContain('async function captureAgentCheckpoint')
+    expect(journey).toContain('function checkpointFromAgentSnapshot')
     expect(journey).toContain("actorClass: 'human'")
     expect(
       journey,
       '[P3C_RED:permission_control_pair_not_observed]',
     ).toContain('const expectedCommandCount = version === 1 ? 2 : 1')
-    expect(journey).toContain('await restoreInNewAuthenticatedContext')
-    expect(journey).toContain("command: 'reconcile'")
+    expect(journey).toContain('await restoreHumanInNewAuthenticatedContext')
+    expect(journey).toContain("'reconcile'")
+    expect(journey).toContain('input.servedBinding.immutableUrl')
+    expect(journey).toContain('journey_mutable_host_forbidden')
+    expect(journey).toContain("'expectedInvocationVersion,semanticDigest'")
+    expect(journey).not.toContain('human_rich_paid_operation')
     expect(journey).not.toMatch(/retry|switch_provider|reconciliationEvidence/iu)
     expect(source).toContain('collectAndAdmitLivePaidOperationHostedEvidence')
     expect(source).not.toContain('authenticated_exact_revision_hosted_sandbox')
@@ -936,7 +1120,8 @@ describe('paid-operation hosted proof integrity and live admission', () => {
       'tools/release/verify-paid-operation-hosted-release.ts',
       'utf8',
     )
-    expect(verifier).toContain('AE_PAID_OPERATION_HOSTED_PACKET_JSON is required')
+    expect(verifier).toContain('usage: --verify-packet-integrity [packet-file]')
+    expect(verifier).toContain('readFileSync(packetPath')
     expect(readFileSync(
       'tests/deploy-smoke/paid-operation-hosted-sandbox-smoke.spec.ts',
       'utf8',
@@ -1474,6 +1659,46 @@ function refreshRawObservation(
   observation.observationDigest = canonicalProofDigest(unsigned)
 }
 
+function liveSourceObservationFixture() {
+  const observation = structuredClone(contentFixture().sourceObservation) as ReturnType<
+    typeof rawObservationFixture
+  > & {
+    deployment: { receipt: { receiptRef: string } }
+    policy: { policyRef: string }
+    invocations: Array<{ effects: Array<{ proposalDigest?: string }> }>
+  }
+  observation.deployment.receipt.receiptRef =
+    'phase3c-paid-operation-exact-revision-deployment:g6'
+  const {
+    receiptDigest: _oldReceiptDigest,
+    ...unsignedReceipt
+  } = observation.deployment.receipt
+  observation.deployment.receipt.receiptDigest = canonicalProofDigest(unsignedReceipt)
+  observation.policy.policyRef = 'phase-3c-hosted-paid-operation-trial:g6'
+  for (const [index, invocation] of observation.invocations.entries()) {
+    ;(invocation.effects[0]! as typeof invocation.effects[number] & {
+      proposalDigest: string
+    }).proposalDigest = DIGEST(String(index + 4))
+  }
+  refreshRawObservation(observation)
+  return observation
+}
+
+function admissionStateFixture(state: 'enabled' | 'disabled') {
+  return {
+    kind: 'configured',
+    policyDigest: DIGEST('a'),
+    sourceRevision: SOURCE_REVISION,
+    state,
+    bounds: { total: 3, concurrency: 1, rate: 3 },
+    admissionEndsAt: '2026-07-22T00:00:00.000Z',
+    retainThrough: '2026-08-21T00:00:00.000Z',
+    counters: state === 'enabled'
+      ? { admittedTotal: 0, activeReservations: 0, admittedInWindow: 0 }
+      : { admittedTotal: 3, activeReservations: 0, admittedInWindow: 3 },
+  }
+}
+
 function authoritativeEvidenceFrom(packet: ReturnType<typeof completePacket>) {
   return {
     source: structuredClone(packet.source),
@@ -1508,54 +1733,133 @@ function journeyObservationFixture(): PaidOperationHostedJourneyObservation {
     'provider:b',
     6,
   )
+  const checkpoint = (
+    scenario: ReturnType<typeof scenarioFixture>,
+    version: 1 | 2,
+    humanSurface: boolean,
+  ) => {
+    const legacy = scenario.checkpoints[version - 1]!
+    const projection = legacy.human?.projection ?? legacy.agent!
+    const command = version === 1 ? 'authorize' as const : 'execute' as const
+    return {
+      stage: version === 1 ? 'ready_for_permission' as const : 'payment_prepared' as const,
+      expectedInvocationVersion: version,
+      human: humanSurface
+        ? {
+            semanticDigest: projection.semanticDigest,
+            expectedInvocationVersion: version,
+            visibleAssertions: version === 1
+              ? ['Ready for permission', 'Not submitted', 'No settlement evidence']
+              : ['Payment prepared', 'Not submitted', 'No settlement evidence'],
+          }
+        : null,
+      agent: {
+        projection,
+        command: commandDescriptor(scenario.invocationRef, command, version),
+      },
+    }
+  }
+  const terminal = (scenario: ReturnType<typeof scenarioFixture>) =>
+    scenario.projections.humanWarm ?? scenario.projections.agentWarm!
+  const scenarioV2 = (
+    scenario: ReturnType<typeof scenarioFixture>,
+    actorClass: 'human' | 'agent' | 'agent_goblin',
+    commandIds: { authorize: string; execute: string; reconcile?: string },
+  ) => {
+    const final = terminal(scenario)
+    const terminalVersion = final.observedVersion
+    const commands = [
+      commandDescriptor(scenario.invocationRef, 'authorize', 1),
+      commandDescriptor(scenario.invocationRef, 'execute', 2),
+      ...(actorClass === 'agent_goblin'
+        ? [commandDescriptor(scenario.invocationRef, 'reconcile', 5)]
+        : []),
+    ]
+    const humanProof = actorClass === 'human'
+      ? {
+          warm: {
+            semanticDigest: final.semanticDigest,
+            expectedInvocationVersion: terminalVersion,
+            visibleAssertions: ['Observed by provider', '$0.01 settled', 'Validated'],
+          },
+          cold: {
+            semanticDigest: final.semanticDigest,
+            expectedInvocationVersion: terminalVersion,
+            visibleAssertions: ['Observed by provider', '$0.01 settled', 'Validated'],
+          },
+        }
+      : null
+    return {
+      scenario: scenario.scenario,
+      actorClass,
+      invocationRef: scenario.invocationRef,
+      providerId: scenario.providerId,
+      operationKey: scenario.operationKey,
+      operationRevision: scenario.operationRevision,
+      lifecycleOrigin: 'https://ae-exact.vercel.app',
+      checkpoints: [
+        checkpoint(scenario, 1, actorClass === 'human'),
+        checkpoint(scenario, 2, actorClass === 'human'),
+      ],
+      observedStages: actorClass === 'agent_goblin'
+        ? [
+            { stage: 'created' as const, invocationVersion: 1 as const, continuations: ['authorize' as const] },
+            { stage: 'authorized' as const, invocationVersion: 2 as const, continuations: ['execute' as const] },
+            { stage: 'response_lost' as const, invocationVersion: 5 as const, continuations: ['reconcile' as const] },
+            { stage: 'reconciled' as const, invocationVersion: 6 as const, continuations: ['inspect' as const] },
+          ]
+        : [
+            { stage: 'created' as const, invocationVersion: 1 as const, continuations: ['authorize' as const] },
+            { stage: 'authorized' as const, invocationVersion: 2 as const, continuations: ['execute' as const] },
+            { stage: 'completed' as const, invocationVersion: 5 as const, continuations: ['inspect' as const] },
+          ],
+      commandIds,
+      followedCommands: actorClass === 'human' ? [] : commands,
+      humanProof,
+      agentProof: {
+        warm: final,
+        cold: structuredClone(final),
+        terminalCommand: commandDescriptor(
+          scenario.invocationRef,
+          'inspect',
+          terminalVersion,
+        ),
+      },
+    }
+  }
   return {
     scenarios: [
-      {
-        ...human,
-        scenario: 'human_provider_a_golden',
-        actorClass: 'human',
-        observedStages: [
-          { stage: 'created', invocationVersion: 1, continuations: ['authorize'] },
-          { stage: 'authorized', invocationVersion: 2, continuations: ['execute'] },
-          { stage: 'completed', invocationVersion: 5, continuations: ['inspect'] },
-        ],
-        commandIds: {
-          authorize: 'command:human:authorize',
-          execute: 'command:human:execute',
-        },
-      },
-      {
-        ...agent,
-        scenario: 'agent_provider_a_golden',
-        actorClass: 'agent',
-        observedStages: [
-          { stage: 'created', invocationVersion: 1, continuations: ['authorize'] },
-          { stage: 'authorized', invocationVersion: 2, continuations: ['execute'] },
-          { stage: 'completed', invocationVersion: 5, continuations: ['inspect'] },
-        ],
-        commandIds: {
-          authorize: 'command:agent:authorize',
-          execute: 'command:agent:execute',
-        },
-      },
-      {
-        ...goblin,
-        scenario: 'provider_b_response_lost_uncertainty_goblin',
-        actorClass: 'agent_goblin',
-        observedStages: [
-          { stage: 'created', invocationVersion: 1, continuations: ['authorize'] },
-          { stage: 'authorized', invocationVersion: 2, continuations: ['execute'] },
-          { stage: 'response_lost', invocationVersion: 5, continuations: ['reconcile'] },
-          { stage: 'reconciled', invocationVersion: 6, continuations: ['inspect'] },
-        ],
-        commandIds: {
-          authorize: 'command:goblin:authorize',
-          execute: 'command:goblin:execute',
-          reconcile: 'command:goblin:reconcile',
-        },
-      },
+      scenarioV2(human, 'human', {
+        authorize: 'command:human:authorize', execute: 'command:human:execute',
+      }),
+      scenarioV2(agent, 'agent', {
+        authorize: 'command:agent:authorize', execute: 'command:agent:execute',
+      }),
+      scenarioV2(goblin, 'agent_goblin', {
+        authorize: 'command:goblin:authorize', execute: 'command:goblin:execute',
+        reconcile: 'command:goblin:reconcile',
+      }),
     ],
   } as unknown as PaidOperationHostedJourneyObservation
+}
+
+function commandDescriptor(
+  invocationRef: string,
+  command: 'inspect' | 'authorize' | 'execute' | 'reconcile',
+  expectedInvocationVersion: number,
+) {
+  return {
+    command,
+    commandIdRequired: command !== 'inspect',
+    expectedInvocationVersion,
+    requiredInput: command === 'authorize' ? ['accept'] as const : [] as const,
+    relation: {
+      method: command === 'inspect' ? 'GET' as const : 'POST' as const,
+      href: command === 'inspect'
+        ? `/api/v1/paid-operations/${encodeURIComponent(invocationRef)}?expectedInvocationVersion=${expectedInvocationVersion}`
+        : `/api/v1/paid-operations/${encodeURIComponent(invocationRef)}/commands`,
+    },
+  }
 }
 
 function fakeLiveCollectionFetch(events: string[]): typeof fetch {
@@ -1583,7 +1887,8 @@ function fakeLiveCollectionFetch(events: string[]): typeof fetch {
         id: 'dpl_exact',
         readyState: 'READY',
         target: 'production',
-        alias: ['agentic-economy.ai'],
+        projectId: 'prj_exact',
+        name: 'agentic-economy',
         url: 'ae-exact.vercel.app',
         meta: {
           githubCommitSha: SOURCE_REVISION,
@@ -1661,6 +1966,55 @@ function fakeLiveCollectionFetch(events: string[]): typeof fetch {
   }) as typeof fetch
 }
 
+function fakeLiveCollectionExec(events: string[]) {
+  let admissionDisabled = false
+  return async (file: string, args: readonly string[]) => {
+    if (file === 'git') {
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return SOURCE_REVISION
+      if (args[0] === 'rev-parse') return SOURCE_TREE
+      if (args[0] === 'status') return ''
+    }
+    if (file === 'npx') {
+      const functionName = args[2]
+      if (functionName === 'hostedPaidOperation:phase3CAdmissionStatus') {
+        events.push(admissionDisabled ? 'admission_disabled_readback' : 'admission_pre_read')
+        return JSON.stringify(admissionStateFixture(
+          admissionDisabled ? 'disabled' : 'enabled',
+        ))
+      }
+      if (functionName === 'hostedPaidOperation:disablePhase3CAdmission') {
+        admissionDisabled = true
+        events.push('admission_disabled')
+        return JSON.stringify({ kind: 'disabled', policyDigest: DIGEST('a') })
+      }
+      if (functionName === 'hostedPaidOperation:phase3CHostedProofObservation') {
+        events.push('convex_observation')
+        return JSON.stringify(liveSourceObservationFixture())
+      }
+    }
+    throw new Error(`unexpected_exec:${file}:${args.join(':')}`)
+  }
+}
+
+async function collectLocalV2Packet() {
+  const events: string[] = []
+  const result = await collectAndAdmitLivePaidOperationHostedEvidence(
+    liveTargetFixture(),
+    liveContextFixture(),
+    {
+      fetch: fakeLiveCollectionFetch(events),
+      exec: fakeLiveCollectionExec(events),
+      runJourney: async () => journeyObservationFixture(),
+    },
+  )
+  if (result.kind !== 'local_live_path_verified') {
+    throw new Error(`v2_fixture_collection_failed:${
+      result.kind === 'refused' ? result.code : result.kind
+    }`)
+  }
+  return result.packet
+}
+
 function liveTargetFixture() {
   return {
     source: {
@@ -1669,7 +2023,10 @@ function liveTargetFixture() {
     },
     deployment: {
       id: 'dpl_exact',
+      immutableUrl: 'ae-exact.vercel.app',
       productionUrl: 'agentic-economy.ai',
+      projectId: 'prj_exact',
+      projectName: 'agentic-economy',
     },
     github: { runId: '123456', runAttempt: 1 },
     automatedInstrumentDigest:
@@ -1681,11 +2038,12 @@ function liveTargetFixture() {
 function liveContextFixture() {
   return {
     repositoryRoot: process.cwd(),
-    baseUrl: 'https://agentic-economy.ai',
+    baseUrl: 'https://ae-exact.vercel.app',
     browser: { newContext: async () => undefined } as never,
     vercel: {
       apiToken: 'vercel-test-token',
       deploymentId: 'dpl_exact',
+      projectId: 'prj_exact',
     },
     clerk: {
       secretKey: 'clerk-test-secret',

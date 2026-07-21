@@ -4,7 +4,7 @@ import { dirname, normalize, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const PHASE_BASE = '2debf4b9f65ce228491f7d3d17ed1654a23bb496'
-const EXPECTED_PHASE_ARTIFACT_COUNT = 97
+const EXPECTED_PHASE_ARTIFACT_COUNT = 100
 const CLASSIFICATION_PATH =
   '.planning/phases/03c-hosted-paid-operation-product-trial/03C-CLOSURE-CLASSIFICATION.md'
 const CLASSIFICATIONS = [

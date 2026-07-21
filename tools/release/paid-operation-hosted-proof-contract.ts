@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto'
 
 import { z } from 'zod'
 
-export const PAID_OPERATION_HOSTED_PROOF_SCHEMA =
+export const PAID_OPERATION_HOSTED_PROOF_SCHEMA_V1 =
   'agentic-paid-operation-hosted-proof:v1' as const
+export const PAID_OPERATION_HOSTED_PROOF_SCHEMA =
+  'agentic-paid-operation-hosted-proof:v2' as const
 export const PAID_OPERATION_HOSTED_EVIDENCE_CLASS =
   'authenticated_exact_revision_hosted_sandbox' as const
 export const PAID_OPERATION_PACKET_INTEGRITY_CLASS =
@@ -17,6 +19,10 @@ export const EXPECTED_SCENARIO_ORDER = [
 export const EXPECTED_AUTOMATED_INSTRUMENT_DIGEST =
   'sha256:526b009ddbf476758a06abf5768fe8459a1a5c29411c98ebfd5d131084452719' as const
 export const EXPECTED_RESIDUAL_REVIEW_DATE = '2026-08-21' as const
+export const PHASE3C_POLICY_REF =
+  'phase-3c-hosted-paid-operation-trial:g6' as const
+export const PHASE3C_DEPLOYMENT_RECEIPT_REF =
+  'phase3c-paid-operation-exact-revision-deployment:g6' as const
 const EXPECTED_RESIDUAL_RECORD_CLASSES = [
   'policy',
   'counter',
@@ -271,7 +277,7 @@ export const sourceObservationSchema = z.strictObject({
   observationDigest: digestSchema,
 })
 export const packetContentSchema = z.strictObject({
-  schema: z.literal(PAID_OPERATION_HOSTED_PROOF_SCHEMA),
+  schema: z.literal(PAID_OPERATION_HOSTED_PROOF_SCHEMA_V1),
   collectedAs: z.literal('hosted_candidate'),
   source: sourceSchema,
   deployment: deploymentSchema,
@@ -369,7 +375,177 @@ export const packetSchema = packetContentSchema.extend({
   }),
 })
 
+const paidOperationAgentCommandDescriptorSchema = z.strictObject({
+  command: z.enum(['inspect', 'authorize', 'execute', 'reconcile']),
+  commandIdRequired: z.boolean(),
+  expectedInvocationVersion: z.number().int().positive(),
+  requiredInput: z.union([
+    z.tuple([]),
+    z.tuple([z.literal('accept')]),
+  ]),
+  relation: z.strictObject({
+    method: z.enum(['GET', 'POST']),
+    href: z.string().min(1),
+  }),
+})
+
+const humanSurfaceProofSchema = z.strictObject({
+  semanticDigest: digestSchema,
+  expectedInvocationVersion: z.number().int().positive(),
+  visibleAssertions: z.array(z.string().min(1)).min(1).max(12),
+})
+
+const journeyCheckpointSchemaV2 = z.strictObject({
+  stage: z.enum(['ready_for_permission', 'payment_prepared']),
+  expectedInvocationVersion: z.union([z.literal(1), z.literal(2)]),
+  human: humanSurfaceProofSchema.nullable(),
+  agent: z.strictObject({
+    projection: projectionSchema,
+    command: paidOperationAgentCommandDescriptorSchema,
+  }),
+})
+
+export const scenarioSchemaV2 = z.strictObject({
+  scenario: z.enum(EXPECTED_SCENARIO_ORDER),
+  actorClass: z.enum(['human', 'agent', 'agent_goblin']),
+  invocationRef: z.string().min(1),
+  providerId: z.enum(['provider:a', 'provider:b']),
+  operationKey: z.enum(['btc-usd-a', 'btc-usd-b']),
+  operationRevision: z.string().min(1),
+  paymentProposalDigest: digestSchema,
+  lifecycleOrigin: z.string().url(),
+  checkpoints: z.tuple([journeyCheckpointSchemaV2, journeyCheckpointSchemaV2]),
+  followedCommands: z.array(paidOperationAgentCommandDescriptorSchema).max(3),
+  transitions: z.array(transitionSchema).min(4).max(5),
+  humanProof: z.strictObject({
+    warm: humanSurfaceProofSchema,
+    cold: humanSurfaceProofSchema,
+  }).nullable(),
+  agentProof: z.strictObject({
+    warm: projectionSchema,
+    cold: projectionSchema,
+    terminalCommand: paidOperationAgentCommandDescriptorSchema,
+  }),
+})
+
+const effectObservationSchemaV2 = effectObservationSchema.extend({
+  proposalDigest: digestSchema,
+})
+const invocationObservationSchemaV2 = invocationObservationSchema.extend({
+  effects: z.array(effectObservationSchemaV2).max(CHILD_CAP),
+})
+export const sourceObservationSchemaV2 = sourceObservationSchema.extend({
+  deployment: sourceObservationSchema.shape.deployment.extend({
+    receipt: sourceObservationSchema.shape.deployment.shape.receipt.extend({
+      receiptRef: z.literal(PHASE3C_DEPLOYMENT_RECEIPT_REF),
+    }),
+  }),
+  policy: sourceObservationSchema.shape.policy.extend({
+    policyRef: z.literal(PHASE3C_POLICY_REF),
+  }),
+  invocations: z.array(invocationObservationSchemaV2).length(3),
+})
+
+export const phase3CAdmissionStateSchema = z.strictObject({
+  kind: z.literal('configured'),
+  policyDigest: digestSchema,
+  sourceRevision: revisionSchema,
+  state: z.enum(['enabled', 'disabled']),
+  bounds: z.strictObject({
+    total: z.literal(3),
+    concurrency: z.literal(1),
+    rate: z.literal(3),
+  }),
+  admissionEndsAt: z.iso.datetime({ offset: true }),
+  retainThrough: z.iso.datetime({ offset: true }),
+  counters: z.strictObject({
+    admittedTotal: z.number().int().nonnegative(),
+    activeReservations: z.number().int().nonnegative(),
+    admittedInWindow: z.number().int().nonnegative(),
+  }),
+})
+
+export const deploymentSchemaV2 = deploymentSchema.extend({
+  projectId: z.string().min(1),
+  projectName: z.literal('agentic-economy'),
+})
+const aliasBindingSchemaV2 = z.strictObject({
+  hostname: z.string().min(1),
+  resolvedDeploymentId: z.string().regex(/^dpl_[A-Za-z0-9]+$/u),
+  resolvedImmutableHostname: z.string().min(1),
+})
+export const vercelBindingSchemaV2 = z.strictObject({
+  exact: deploymentSchemaV2,
+  alias: aliasBindingSchemaV2,
+  bindingDigest: digestSchema,
+})
+
+export const packetContentSchemaV2 = z.strictObject({
+  schema: z.literal(PAID_OPERATION_HOSTED_PROOF_SCHEMA),
+  collectedAs: z.literal('fresh_authoritative_v2'),
+  source: sourceSchema,
+  deployment: z.strictObject({
+    beforeLifecycle: vercelBindingSchemaV2,
+    afterLifecycle: vercelBindingSchemaV2,
+  }),
+  githubDeployment: githubDeploymentSchema,
+  convex: z.strictObject({
+    queryMode: z.literal('authenticated_cli_configured_project_prod'),
+    configuredDeployment: z.string().regex(/^(?:dev|prod):[A-Za-z0-9-]+$/u),
+    queryUrl: z.string().url(),
+    deploymentName: z.string().min(1),
+    sourceRevision: revisionSchema,
+    sourceTree: z.string().regex(/^[0-9a-f]{40}$/u),
+    deploymentReceiptDigest: digestSchema,
+    beforeLifecycle: phase3CAdmissionStateSchema,
+    observation: sourceObservationSchemaV2,
+    afterShutdown: phase3CAdmissionStateSchema,
+  }),
+  actors: packetContentSchema.shape.actors,
+  credentials: z.strictObject({
+    subjectPrincipalDigest: digestSchema,
+    humanSession: z.strictObject({
+      callerDigest: digestSchema,
+      sessionDigest: digestSchema,
+      issued: z.literal(true),
+      revoked: z.literal(true),
+      independentRevocationReadback: z.literal(true),
+    }),
+    agentKey: z.strictObject({
+      callerDigest: digestSchema,
+      issued: z.literal(true),
+      revoked: z.literal(true),
+      independentRevocationReadback: z.literal(true),
+      requiredScopes: z.tuple([z.literal('paid_operation:invoke')]),
+      secondsUntilExpiration: z.literal(3_600),
+    }),
+  }),
+  providers: packetContentSchema.shape.providers,
+  scenarioOrder: packetContentSchema.shape.scenarioOrder,
+  scenarios: z.tuple([scenarioSchemaV2, scenarioSchemaV2, scenarioSchemaV2]),
+  comprehension: packetContentSchema.shape.comprehension,
+  residualRecords: packetContentSchema.shape.residualRecords,
+  claimCeiling: z.literal('pending_live_evidence_admission'),
+})
+export const packetSchemaV2 = packetContentSchemaV2.extend({
+  checksum: z.strictObject({
+    algorithm: z.literal('sha256'),
+    digest: digestSchema,
+  }),
+})
+
+export const authoritativeEvidenceSchemaV2 = packetContentSchemaV2.omit({
+  schema: true,
+  collectedAs: true,
+  comprehension: true,
+  residualRecords: true,
+  claimCeiling: true,
+})
+
 export type PaidOperationHostedProofPacket = z.infer<typeof packetSchema>
+export type PaidOperationHostedProofPacketV2 = z.infer<typeof packetSchemaV2>
+export type AuthoritativePaidOperationLiveEvidenceV2 =
+  z.infer<typeof authoritativeEvidenceSchemaV2>
 export type PaidOperationPacketIntegrityResult =
   | Readonly<{
       kind: 'packet_integrity_verified'
@@ -407,6 +583,11 @@ export type PaidOperationHostedProofFailureCode =
   | 'live_convex_observation_mismatch'
   | 'live_human_readback_mismatch'
   | 'live_agent_readback_mismatch'
+  | 'deployment_binding_mismatch'
+  | 'payment_proposal_binding_mismatch'
+  | 'agent_command_descriptor_mismatch'
+  | 'human_surface_proof_mismatch'
+  | 'admission_shutdown_mismatch'
   | 'live_collection_failed'
 
 export const authoritativeEvidenceSchema = z.strictObject({
@@ -427,7 +608,10 @@ export const liveCollectionTargetSchema = z.strictObject({
   }),
   deployment: z.strictObject({
     id: z.string().regex(/^dpl_[A-Za-z0-9]+$/u),
+    immutableUrl: z.string().min(1),
     productionUrl: z.string().min(1),
+    projectId: z.string().min(1),
+    projectName: z.literal('agentic-economy'),
   }),
   github: z.strictObject({
     runId: z.string().regex(/^[1-9][0-9]*$/u),
@@ -466,7 +650,13 @@ export function parsePaidOperationHostedProofPacket(
   return packetSchema.parse(input)
 }
 
-export function verifyPacketIntegrity(input: unknown): PaidOperationPacketIntegrityResult {
+export function parsePaidOperationHostedProofPacketV2(
+  input: unknown,
+): PaidOperationHostedProofPacketV2 {
+  return packetSchemaV2.parse(input)
+}
+
+function verifyV1PacketIntegrity(input: unknown): PaidOperationPacketIntegrityResult {
   if (containsValue(input, PAID_OPERATION_HOSTED_EVIDENCE_CLASS)) {
     return refused('final_evidence_class_preclaimed')
   }
@@ -738,7 +928,7 @@ export function verifyPacketIntegrity(input: unknown): PaidOperationPacketIntegr
   }
 }
 
-export function compareAuthoritativeLiveEvidence(
+function compareAuthoritativeLiveEvidenceV1(
   packetInput: unknown,
   evidenceInput: unknown,
 ):
@@ -773,6 +963,467 @@ export function compareAuthoritativeLiveEvidence(
     return refused('live_human_readback_mismatch')
   }
   return { kind: 'live_evidence_matches' }
+}
+
+export function verifyPacketIntegrity(input: unknown): PaidOperationPacketIntegrityResult {
+  return isRecord(input) && input.schema === PAID_OPERATION_HOSTED_PROOF_SCHEMA
+    ? verifyV2PacketIntegrity(input)
+    : verifyV1PacketIntegrity(input)
+}
+
+export function compareAuthoritativeLiveEvidence(
+  packetInput: unknown,
+  evidenceInput: unknown,
+):
+  | Readonly<{ kind: 'live_evidence_matches' }>
+  | Readonly<{ kind: 'refused'; code: PaidOperationHostedProofFailureCode }> {
+  if (!isRecord(packetInput) || packetInput.schema !== PAID_OPERATION_HOSTED_PROOF_SCHEMA) {
+    return compareAuthoritativeLiveEvidenceV1(packetInput, evidenceInput)
+  }
+  const integrity = verifyV2PacketIntegrity(packetInput)
+  if (integrity.kind === 'refused') return integrity
+  const packetResult = packetSchemaV2.safeParse(packetInput)
+  const evidenceResult = authoritativeEvidenceSchemaV2.safeParse(evidenceInput)
+  if (!packetResult.success || !evidenceResult.success) {
+    return refused('live_collection_failed')
+  }
+  const packet = packetResult.data
+  const evidence = evidenceResult.data
+  if (!sameJson(packet.source, evidence.source)) return refused('live_source_mismatch')
+  if (!sameJson(packet.deployment, evidence.deployment)) {
+    return refused('live_vercel_control_plane_mismatch')
+  }
+  if (!sameJson(packet.githubDeployment, evidence.githubDeployment)) {
+    return refused('live_github_deployment_mismatch')
+  }
+  if (!sameJson(packet.convex, evidence.convex)) {
+    return refused('live_convex_observation_mismatch')
+  }
+  if (!sameJson(packet.actors, evidence.actors)
+    || !sameJson(packet.credentials, evidence.credentials)) {
+    return refused('credential_revocation_mismatch')
+  }
+  if (!sameJson(packet.providers, evidence.providers)
+    || !sameJson(packet.scenarioOrder, evidence.scenarioOrder)
+    || !sameJson(packet.scenarios, evidence.scenarios)) {
+    return refused('live_agent_readback_mismatch')
+  }
+  return { kind: 'live_evidence_matches' }
+}
+
+function verifyV2PacketIntegrity(input: unknown): PaidOperationPacketIntegrityResult {
+  if (containsValue(input, PAID_OPERATION_HOSTED_EVIDENCE_CLASS)) {
+    return refused('final_evidence_class_preclaimed')
+  }
+  if (containsForbiddenReconciliationTruth(input)) {
+    return refused('caller_reconciliation_truth_forbidden')
+  }
+  if (containsRawMaterial(input)) return refused('raw_material_forbidden')
+  if (isRecord(input) && isRecord(input.checksum)
+    && typeof input.checksum.digest === 'string') {
+    const unsignedInput = structuredClone(input)
+    delete unsignedInput.checksum
+    if (input.checksum.digest !== canonicalProofDigest(unsignedInput)) {
+      return refused('packet_checksum_mismatch')
+    }
+  }
+  const parsed = packetSchemaV2.safeParse(input)
+  if (!parsed.success) return refused('packet_schema_invalid')
+  const packet = parsed.data
+  const { checksum, ...unsigned } = packet
+  if (checksum.digest !== canonicalProofDigest(unsigned)) {
+    return refused('packet_checksum_mismatch')
+  }
+  if (packet.source.expectedRevision !== packet.source.observedRevision
+    || packet.source.expectedTree !== packet.source.observedTree
+    || !packet.source.clean) {
+    return refused('source_assertion_mismatch')
+  }
+
+  const before = packet.deployment.beforeLifecycle
+  const after = packet.deployment.afterLifecycle
+  if (!sameJson(before, after)
+    || !vercelBindingValid(before, packet.source.observedRevision)) {
+    return refused('deployment_binding_mismatch')
+  }
+  if (packet.githubDeployment.headSha !== packet.source.observedRevision
+    || packet.githubDeployment.repository !== 'CreasyBear/Agentic-Economy'
+    || packet.githubDeployment.ref !== 'main') {
+    return refused('deployment_receipt_mismatch')
+  }
+
+  const observation = packet.convex.observation
+  const receipt = observation.deployment.receipt
+  const { receiptDigest, ...unsignedReceipt } = receipt
+  if (receiptDigest !== canonicalProofDigest(unsignedReceipt)
+    || receipt.sourceRevision !== packet.source.observedRevision
+    || receipt.sourceTree !== packet.source.observedTree
+    || receipt.githubRunId !== packet.githubDeployment.runId
+    || receipt.githubRunAttempt !== packet.githubDeployment.runAttempt
+    || receipt.githubRepository !== packet.githubDeployment.repository
+    || receipt.githubRef !== packet.githubDeployment.ref
+    || receipt.githubWorkflow !== packet.githubDeployment.workflowPath
+    || receipt.githubJob !== packet.githubDeployment.job.name
+    || receipt.githubStep !== packet.githubDeployment.step.name
+    || packet.convex.sourceRevision !== receipt.sourceRevision
+    || packet.convex.sourceTree !== receipt.sourceTree
+    || packet.convex.deploymentName !== receipt.deploymentName
+    || packet.convex.deploymentReceiptDigest !== receiptDigest
+    || new URL(packet.convex.queryUrl).hostname
+      !== `${packet.convex.deploymentName}.convex.cloud`) {
+    return refused('convex_identity_mismatch')
+  }
+
+  const pre = packet.convex.beforeLifecycle
+  const post = packet.convex.afterShutdown
+  if (pre.state !== 'enabled'
+    || pre.sourceRevision !== packet.source.observedRevision
+    || pre.counters.admittedTotal !== 0
+    || pre.counters.activeReservations !== 0
+    || pre.counters.admittedInWindow !== 0
+    || observation.policy.enabled !== true
+    || observation.policy.sourceRevision !== pre.sourceRevision
+    || observation.policy.policyDigest !== pre.policyDigest
+    || observation.counters.admittedTotal !== 3
+    || observation.counters.activeReservations !== 0
+    || observation.counters.admittedInWindow < 1
+    || observation.counters.admittedInWindow > 3
+    || post.state !== 'disabled'
+    || post.sourceRevision !== pre.sourceRevision
+    || post.policyDigest !== pre.policyDigest
+    || !sameJson(post.bounds, pre.bounds)
+    || post.counters.admittedTotal !== 3
+    || post.counters.activeReservations !== 0
+    || post.counters.admittedInWindow < 1
+    || post.counters.admittedInWindow > 3) {
+    return refused('admission_shutdown_mismatch')
+  }
+  if (!observationDigestsValidV2(observation)) {
+    return refused('internal_observation_mismatch')
+  }
+  if (packet.credentials.subjectPrincipalDigest !== packet.actors.human.principalDigest
+    || packet.actors.human.principalDigest !== packet.actors.agent.principalDigest
+    || packet.credentials.humanSession.callerDigest !== packet.actors.human.callerDigest
+    || packet.credentials.agentKey.callerDigest !== packet.actors.agent.callerDigest
+    || !packet.credentials.humanSession.issued
+    || !packet.credentials.humanSession.revoked
+    || !packet.credentials.humanSession.independentRevocationReadback
+    || !packet.credentials.agentKey.issued
+    || !packet.credentials.agentKey.revoked
+    || !packet.credentials.agentKey.independentRevocationReadback) {
+    return refused('credential_revocation_mismatch')
+  }
+  if (!sameJson(packet.scenarioOrder, EXPECTED_SCENARIO_ORDER)
+    || packet.scenarios.some(
+      (scenario, index) => scenario.scenario !== EXPECTED_SCENARIO_ORDER[index],
+    )
+    || new Set(packet.scenarios.map((scenario) => scenario.invocationRef)).size !== 3
+    || new Set(observation.invocations.map((invocation) => invocation.invocationRef)).size !== 3) {
+    return refused('scenario_order_mismatch')
+  }
+  const cohortDigest = canonicalProofDigest({
+    schema: 'phase3c-paid-operation-proof-cohort:v1',
+    invocationRefs: packet.scenarios.map((scenario) => scenario.invocationRef),
+  })
+  if (observation.cohort.cohortDigest !== cohortDigest
+    || observation.cohort.headers !== 3
+    || observation.cohort.reservations !== 3
+    || packet.providers[0].operationRevision !== packet.scenarios[0].operationRevision
+    || packet.providers[0].operationRevision !== packet.scenarios[1].operationRevision
+    || packet.providers[1].operationRevision !== packet.scenarios[2].operationRevision
+    || observation.policy.principalDigest !== packet.actors.human.principalDigest
+    || !sameJson(observation.policy.bounds, pre.bounds)
+    || observation.policy.admissionEndsAt !== pre.admissionEndsAt
+    || observation.policy.retainThrough !== pre.retainThrough
+    || post.admissionEndsAt !== pre.admissionEndsAt
+    || post.retainThrough !== pre.retainThrough
+    || packet.residualRecords.killSwitchOwnerDigest
+      !== observation.policy.killSwitchOwnerDigest
+    || packet.residualRecords.reviewDate !== observation.policy.retainThrough.slice(0, 10)) {
+    return refused('internal_observation_mismatch')
+  }
+  if (observation.invocations.some(
+    (invocation) => invocation.reservation.state !== 'released',
+  )) return refused('active_reservation_mismatch')
+  const immutableOrigin = normalizeOrigin(`https://${before.exact.url}`)
+  for (const [index, scenario] of packet.scenarios.entries()) {
+    const observed = observation.invocations[index]
+    const expected = expectedScenario(index)
+    if (observed === undefined
+      || observed.invocationRef !== scenario.invocationRef
+      || observed.providerId !== scenario.providerId
+      || observed.operationKey !== scenario.operationKey
+      || observed.operationRevision !== scenario.operationRevision
+      || scenario.lifecycleOrigin !== immutableOrigin
+      || observed.effects.length !== 1
+      || observed.counts.effects !== 1
+      || observed.effects[0]?.proposalDigest !== scenario.paymentProposalDigest) {
+      return refused('payment_proposal_binding_mismatch')
+    }
+    if (scenario.actorClass !== expected.actorClass
+      || scenario.providerId !== expected.providerId
+      || scenario.operationKey !== expected.operationKey
+      || !transitionsMatch(scenario.transitions, expected.transitions)) {
+      return refused('transition_invariant_mismatch')
+    }
+    const expectedCallerDigest = index === 0
+      ? packet.actors.human.callerDigest
+      : packet.actors.agent.callerDigest
+    if (observed.ownerPrincipalDigest !== packet.actors.human.principalDigest
+      || observed.ownerCallerDigest !== expectedCallerDigest
+      || observed.controlOwnerPrincipalDigest !== observed.ownerPrincipalDigest
+      || observed.controlOwnerCallerDigest !== observed.ownerCallerDigest
+      || observed.commands.some((command) =>
+        command.principalDigest !== packet.actors.human.principalDigest
+        || command.callerDigest !== expectedCallerDigest)
+      || observed.attempts.some((attempt) =>
+        attempt.actorPrincipalDigest !== packet.actors.human.principalDigest
+        || attempt.actorCallerDigest !== expectedCallerDigest)) {
+      return refused('actor_identity_mismatch')
+    }
+    if (observed.counts.attempts !== 1
+      || observed.counts.headers !== 1
+      || observed.counts.sources !== 1
+      || observed.counts.payments !== 1
+      || observed.counts.reservations !== 1
+      || observed.counts.effects !== 1
+      || observed.counts.effectGenerations !== 1
+      || observed.counts.evidenceReferences !== (index === 2 ? 2 : 1)
+      || observed.attempts.length !== 1
+      || observed.effects.length !== 1) {
+      return refused('effect_count_mismatch')
+    }
+    const attempt = observed.attempts[0]!
+    const effect = observed.effects[0]!
+    if (attempt.attemptNumber !== 1
+      || attempt.effectGeneration !== 1
+      || attempt.attemptIdentityDigest !== effect.attemptIdentityDigest
+      || attempt.release !== 'released'
+      || attempt.outcome !== (index === 2 ? 'reconciled_released' : 'returned')
+      || effect.effectGeneration !== 1
+      || effect.paymentIdentifierDigest !== observed.paymentIdentifierDigest
+      || effect.providerId !== scenario.providerId
+      || effect.operationKey !== scenario.operationKey
+      || effect.operationRevision !== scenario.operationRevision
+      || effect.effect !== 'released'
+      || effect.payment !== 'settled'
+      || effect.delivery !== (index === 2 ? 'response_lost' : 'returned')) {
+      return refused('effect_count_mismatch')
+    }
+    if (scenario.transitions.some((transition) =>
+      transition.attemptIdentityDigest !== (
+        transition.invocationVersion >= 4 ? attempt.attemptIdentityDigest : null
+      )
+      || transition.effectObservationDigest !== (
+        transition.invocationVersion >= 5 ? effect.observationDigest : null
+      ))
+      || !rawCommandsMatchTransitions(observed.commands, scenario.transitions)
+      || observed.counts.commands !== scenario.transitions.length
+      || observed.commands.length !== scenario.transitions.length) {
+      return refused('transition_invariant_mismatch')
+    }
+    if (index === 2) {
+      const reconciliationInput = scenario.transitions[4]?.reconciliationInput
+      const observedReconciliation = observed.commands.find(
+        (command) => command.invocationVersion === 6,
+      )
+      if (reconciliationInput === undefined
+        || observedReconciliation === undefined
+        || observedReconciliation.commandIdDigest !== proofReferenceDigest(
+          cohortDigest,
+          'command-id',
+          reconciliationInput.commandId,
+        )
+        || reconciliationInput.command !== 'reconcile'
+        || reconciliationInput.expectedInvocationVersion !== 5) {
+        return refused('transition_invariant_mismatch')
+      }
+    }
+    if (!scenarioDescriptorsValid(scenario, immutableOrigin)) {
+      return refused('agent_command_descriptor_mismatch')
+    }
+    if (!journeyCheckpointsValidV2(scenario)) {
+      return refused('projection_semantics_mismatch')
+    }
+    const warm = scenario.agentProof.warm
+    const cold = scenario.agentProof.cold
+    if (warm.semanticDigest !== canonicalProofDigest(warm.semantics)
+      || cold.semanticDigest !== canonicalProofDigest(cold.semantics)
+      || warm.semanticDigest !== cold.semanticDigest
+      || !sameJson(warm.semantics, cold.semantics)
+      || warm.observedVersion !== observed.invocationVersion
+      || cold.observedVersion !== observed.invocationVersion
+      || !semanticsMatchObservation(
+        warm.semantics,
+        scenario as unknown as PaidOperationHostedProofPacket['scenarios'][number],
+        observed,
+        index === 2,
+      )) {
+      return refused('projection_semantics_mismatch')
+    }
+    const humanProof = scenario.humanProof
+    if (index === 0) {
+      if (humanProof === null
+        || humanProof.warm.semanticDigest !== warm.semanticDigest
+        || humanProof.cold.semanticDigest !== cold.semanticDigest
+        || humanProof.warm.expectedInvocationVersion !== warm.observedVersion
+        || humanProof.cold.expectedInvocationVersion !== cold.observedVersion
+        || humanProof.warm.visibleAssertions.length < 3
+        || humanProof.cold.visibleAssertions.length < 3) {
+        return refused('human_surface_proof_mismatch')
+      }
+    } else if (humanProof !== null) {
+      return refused('human_surface_proof_mismatch')
+    }
+  }
+  if (observation.invocations.reduce(
+    (total, invocation) => total + invocation.effects.length,
+    0,
+  ) !== 3) {
+    return refused('effect_count_mismatch')
+  }
+  return {
+    kind: 'packet_integrity_verified',
+    evidenceClass: PAID_OPERATION_PACKET_INTEGRITY_CLASS,
+    packetDigest: packet.checksum.digest,
+  }
+}
+
+function vercelBindingValid(
+  binding: z.infer<typeof vercelBindingSchemaV2>,
+  sourceRevision: string,
+): boolean {
+  const { bindingDigest, ...unsigned } = binding
+  const exact = binding.exact
+  return bindingDigest === canonicalProofDigest(unsigned)
+    && exact.gitSha === sourceRevision
+    && exact.gitRef === 'main'
+    && exact.repository === 'CreasyBear/Agentic-Economy'
+    && exact.readyState === 'READY'
+    && exact.target === 'production'
+    && exact.url !== exact.productionUrl
+    && binding.alias.hostname === exact.productionUrl
+    && binding.alias.resolvedDeploymentId === exact.id
+    && binding.alias.resolvedImmutableHostname === exact.url
+}
+
+function scenarioDescriptorsValid(
+  scenario: z.infer<typeof scenarioSchemaV2>,
+  immutableOrigin: string,
+): boolean {
+  const expectedCommands = scenario.actorClass === 'human'
+    ? []
+    : scenario.actorClass === 'agent_goblin'
+      ? ['authorize', 'execute', 'reconcile']
+      : ['authorize', 'execute']
+  if (!sameJson(
+    scenario.followedCommands.map((descriptor) => descriptor.command),
+    expectedCommands,
+  )) return false
+  if (scenario.checkpoints[0].expectedInvocationVersion !== 1
+    || scenario.checkpoints[1].expectedInvocationVersion !== 2
+    || scenario.checkpoints[0].agent.command.expectedInvocationVersion !== 1
+    || scenario.checkpoints[1].agent.command.expectedInvocationVersion !== 2
+    || scenario.checkpoints[0].agent.command.command !== 'authorize'
+    || scenario.checkpoints[1].agent.command.command !== 'execute') return false
+  if (scenario.actorClass !== 'human'
+    && (!sameJson(scenario.followedCommands[0], scenario.checkpoints[0].agent.command)
+      || !sameJson(scenario.followedCommands[1], scenario.checkpoints[1].agent.command))) {
+    return false
+  }
+  const all = [
+    ...scenario.followedCommands,
+    scenario.agentProof.terminalCommand,
+    ...scenario.checkpoints.map((checkpoint) => checkpoint.agent.command),
+  ]
+  for (const descriptor of all) {
+    const expectedMethod = descriptor.command === 'inspect' ? 'GET' : 'POST'
+    const expectedInput = descriptor.command === 'authorize' ? ['accept'] : []
+    const expectedVersion = descriptor.command === 'authorize'
+      ? 1
+      : descriptor.command === 'execute'
+        ? 2
+        : descriptor.command === 'reconcile'
+          ? 5
+          : scenario.agentProof.warm.observedVersion
+    if (descriptor.relation.method !== expectedMethod
+      || descriptor.commandIdRequired !== (descriptor.command !== 'inspect')
+      || descriptor.expectedInvocationVersion !== expectedVersion
+      || !sameJson(descriptor.requiredInput, expectedInput)) return false
+    let resolved: URL
+    try {
+      resolved = new URL(descriptor.relation.href, immutableOrigin)
+    } catch {
+      return false
+    }
+    const expectedPath = descriptor.command === 'inspect'
+      ? `/api/v1/paid-operations/${encodeURIComponent(scenario.invocationRef)}`
+      : `/api/v1/paid-operations/${encodeURIComponent(scenario.invocationRef)}/commands`
+    const expectedSearch = descriptor.command === 'inspect'
+      ? `?expectedInvocationVersion=${expectedVersion}`
+      : ''
+    if (normalizeOrigin(resolved.origin) !== immutableOrigin
+      || resolved.pathname !== expectedPath
+      || resolved.search !== expectedSearch
+      || resolved.hash !== ''
+      || resolved.username !== ''
+      || resolved.password !== '') {
+      return false
+    }
+  }
+  return scenario.agentProof.terminalCommand.command === 'inspect'
+    && scenario.agentProof.terminalCommand.expectedInvocationVersion
+      === scenario.agentProof.warm.observedVersion
+}
+
+function observationDigestsValidV2(
+  observation: z.infer<typeof sourceObservationSchemaV2>,
+): boolean {
+  for (const invocation of observation.invocations) {
+    const { observationDigest, ...unsignedInvocation } = invocation
+    if (observationDigest !== canonicalProofDigest(unsignedInvocation)) return false
+  }
+  const { kind: _kind, observationDigest, ...unsignedObservation } = observation
+  return observationDigest === canonicalProofDigest(unsignedObservation)
+}
+
+function journeyCheckpointsValidV2(
+  scenario: z.infer<typeof scenarioSchemaV2>,
+): boolean {
+  for (const [index, checkpoint] of scenario.checkpoints.entries()) {
+    const expectedVersion = index === 0 ? 1 : 2
+    const expectedStage = index === 0 ? 'ready_for_permission' : 'payment_prepared'
+    const expectedAuthorization = index === 0 ? 'not_created' : 'created'
+    const expectedContinuation = index === 0 ? 'authorize' : 'execute'
+    const projection = checkpoint.agent.projection
+    if (checkpoint.stage !== expectedStage
+      || checkpoint.expectedInvocationVersion !== expectedVersion
+      || projection.observedVersion !== expectedVersion
+      || projection.semanticDigest !== canonicalProofDigest(projection.semantics)
+      || readPath(projection.semantics, ['paymentAuthorization', 'state'])
+        !== expectedAuthorization
+      || readPath(projection.semantics, ['paymentSubmission', 'state'])
+        !== 'not_submitted'
+      || readPath(projection.semantics, ['settlement', 'state']) !== 'no_evidence'
+      || readPath(projection.semantics, ['resultDelivery', 'state']) !== 'not_delivered'
+      || continuationKinds(projection.semantics).join(',') !== expectedContinuation) {
+      return false
+    }
+    if (scenario.actorClass === 'human') {
+      if (checkpoint.human === null
+        || checkpoint.human.semanticDigest !== projection.semanticDigest
+        || checkpoint.human.expectedInvocationVersion !== expectedVersion
+        || checkpoint.human.visibleAssertions.length < 3) return false
+    } else if (checkpoint.human !== null) {
+      return false
+    }
+  }
+  return true
+}
+
+function normalizeOrigin(value: string): string {
+  const url = new URL(value)
+  return `${url.protocol}//${url.host}`
 }
 
 function verifyScenarioProjections(
