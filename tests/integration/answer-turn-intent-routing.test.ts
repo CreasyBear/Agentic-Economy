@@ -137,7 +137,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       const frames = parseStream(await response.text())
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
-      expect(server.requests).toHaveLength(2)
+      expect(server.requests).toHaveLength(1)
       const firstPrompt = server.requests[0]?.messages.find((message) => message.role === 'user')?.content ?? ''
       expect(firstPrompt).toContain('User query: paramata')
       expect(firstPrompt).not.toContain('<catalog_data>')

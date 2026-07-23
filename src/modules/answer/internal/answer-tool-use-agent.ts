@@ -326,6 +326,22 @@ async function runRealToolUseAgent(
     }
   }
 
+  // Once the source-owned registry has answered, do not make the user wait for
+  // a second model call merely to restate those facts. The generative surface
+  // composes the grounded snapshot below; the model remains responsible for
+  // interpreting the need and selecting the read tool.
+  if (toolCalls.some((call) => call.toolId === 'registry.search' && call.status === 'complete')) {
+    return buildAgentResult(
+      input,
+      buildGroundedToolFallbackProse(input.query, providers, offeringSources),
+      toolCalls,
+      providers,
+      offeringSources,
+      timings,
+      modelRequests,
+    )
+  }
+
   // Exhausted rounds: request a final prose-only completion.
   let finalPayload: OpenRouterResponse
   try {

@@ -41,7 +41,7 @@ describe('actionToOpenRouterTool', () => {
 })
 
 describe('runAnswerToolUseAgent — tool-choice recovery', () => {
-  it('feeds actual tool result JSON back to the model before final prose', async () => {
+  it('returns source-owned registry evidence without waiting for a second model call', async () => {
     const server = await startOpenRouterServer([
       {
         id: 'chatcmpl-round-1',
@@ -77,29 +77,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
           },
         ],
       },
-      {
-        id: 'chatcmpl-round-2',
-        model: 'test-model-resolved',
-        usage: {
-          prompt_tokens: 140,
-          completion_tokens: 42,
-          total_tokens: 182,
-          cost: 0.00000182,
-        },
-        choices: [
-          {
-            finish_reason: 'stop',
-            message: {
-              content: JSON.stringify({
-                oneLine: 'One listed business matches this need.',
-                summary:
-                  'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-                whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
-              }),
-            },
-          },
-        ],
-      },
     ])
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -119,7 +96,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       expect(result.offeringSources.flatMap((source) => source.offerings).every(
         (offering) => offering.revision > 0,
       )).toBe(true)
-      expect(result.modelRequests).toHaveLength(2)
+      expect(result.modelRequests).toHaveLength(1)
       expect(result.modelRequests[0]).toMatchObject({
         seq: 0,
         provider: 'openrouter',
@@ -136,42 +113,28 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         },
         costUsd: 0.00000125,
       })
-      expect(result.modelRequests[1]).toMatchObject({
-        seq: 1,
-        provider: 'openrouter',
-        model: 'test-model-resolved',
-        status: 'ok',
-        responseId: 'chatcmpl-round-2',
-        stopReason: 'stop',
-        usage: {
-          inputTokens: 140,
-          outputTokens: 42,
-          totalTokens: 182,
-        },
-        costUsd: 0.00000182,
-      })
       const harnessReport = buildHarnessRunReport({ models: result.modelRequests })
       expect(harnessReport.summary.models).toMatchObject({
-        total: 2,
-        ok: 2,
+        total: 1,
+        ok: 1,
         byProvider: {
           openrouter: {
-            total: 2,
-            ok: 2,
+            total: 1,
+            ok: 1,
           },
         },
       })
       expect(harnessReport.summary.usage).toMatchObject({
-        inputTokens: 240,
-        outputTokens: 67,
-        totalTokens: 307,
+        inputTokens: 100,
+        outputTokens: 25,
+        totalTokens: 125,
       })
       expect(harnessReport.summary.cost).toEqual({
-        estimatedUsd: 0.00000307,
+        estimatedUsd: 0.00000125,
         unavailableReasons: [],
       })
       expect(result.timings.filter((timing) => timing.name === 'model.openrouter_round')).toHaveLength(1)
-      expect(result.timings.filter((timing) => timing.name === 'model.openrouter_final_prose')).toHaveLength(1)
+      expect(result.timings.filter((timing) => timing.name === 'model.openrouter_final_prose')).toHaveLength(0)
     } finally {
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -182,7 +145,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     }
 
     const requests = server.requests
-    expect(requests).toHaveLength(2)
+    expect(requests).toHaveLength(1)
     expect(requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
       'registry.search',
       'registry.detail',
@@ -192,66 +155,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     expect(requests[0]?.tools?.map((tool) => tool.function.name)).not.toContain(
       'inquiry.submit',
     )
-    expect(requests[1]?.tools).toBeUndefined()
-    expect(requests[1]?.tool_choice).toBe('none')
-
-    const toolMessage = requests[1]?.messages.find((message) => message.role === 'tool')
-    expect(toolMessage?.tool_call_id).toBe('call-search-1')
-    expect(toolMessage?.content).not.toContain('Accepted')
-
-    const toolResult = JSON.parse(toolMessage!.content) as {
-      kind: string
-      items: readonly { slug: string }[]
-    }
-    expect(toolResult.kind).toBe('ok')
-    expect(toolResult.items.map((item) => item.slug)).toContain(
-      'parramatta-emergency-plumbing',
-    )
-  })
-
-  it('returns grounded catalogue evidence when final prose generation misses its deadline', async () => {
-    const server = await startOpenRouterServer(
-      [
-        toolResponse([
-          {
-            toolId: 'registry.search',
-            input: { query: 'parramatta', mode: 'whole_catalogue' },
-          },
-        ]),
-        proseResponse(matchingProviderProse()),
-      ],
-      { delaysMs: [0, 100] },
-    )
-    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-
-    try {
-      const result = await runAnswerToolUseAgent({
-        query: 'paramata',
-        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
-        modelRequestTimeoutMs: 25,
-      })
-
-      expect(result.gate.ok).toBe(true)
-      expect(result.offeringSources.map((source) => source.business.slug)).toContain(
-        'parramatta-emergency-plumbing',
-      )
-      expect(result.prose).toMatchObject({
-        oneLine: 'I found 2 published options to inspect.',
-        whatToDoNow: 'Review the published details and compare the facts that matter most to you.',
-      })
-      expect(result.modelRequests).toEqual([
-        expect.objectContaining({ seq: 0, status: 'ok' }),
-        expect.objectContaining({ seq: 1, status: 'error', costUnavailableReason: 'request_failed' }),
-      ])
-    } finally {
-      if (previousLocalRegistry === undefined) {
-        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-      } else {
-        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
-      }
-      await server.close()
-    }
   })
 
   it('fails closed if the model emits a tool call when tools are disabled', async () => {
@@ -337,12 +240,6 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
           status: 'ok',
           stopReason: 'tool_calls',
         }),
-        expect.objectContaining({
-          provider: 'openrouter',
-          model: 'test-model',
-          status: 'ok',
-          stopReason: 'stop',
-        }),
       ])
       expect(result.toolCalls[0]?.toolId).toBe('registry.search')
       expect(result.gate.ok).toBe(true)
@@ -386,7 +283,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     }
   })
 
-  it('refuses over-budget tool calls from the same assistant message and requests final prose without tools', async () => {
+  it('retains over-budget refusals while returning the completed source search', async () => {
     const server = await startOpenRouterServer(toolThenProseResponses({
       toolCalls: [
         { id: 'call-search-allowed', toolId: 'registry.search', input: { query: 'parramatta' } },
@@ -429,7 +326,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         kind: 'refused',
         code: 'budget_exceeded',
       })
-      expect(result.modelRequests).toHaveLength(2)
+      expect(result.modelRequests).toHaveLength(1)
       expect(result.modelRequests[0]).toMatchObject({ stopReason: 'tool_calls' })
       expect(result.gate.ok).toBe(true)
     } finally {
@@ -441,27 +338,12 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       await server.close()
     }
 
-    expect(server.requests).toHaveLength(2)
+    expect(server.requests).toHaveLength(1)
     expect(server.requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
       'registry.search',
       'registry.detail',
     ])
     expect(server.requests[0]?.tool_choice).toBe('auto')
-    expect(server.requests[1]?.tools).toBeUndefined()
-    expect(server.requests[1]?.tool_choice).toBe('none')
-    expect(server.requests[1]?.response_format?.type).toBe('json_schema')
-    expect(server.requests[1]?.messages.at(-1)?.content).toContain('Stop calling tools')
-
-    const toolMessages = server.requests[1]?.messages.filter((message) => message.role === 'tool') ?? []
-    expect(toolMessages).toHaveLength(2)
-    expect(toolMessages.map((message) => message.tool_call_id)).toEqual([
-      'call-search-allowed',
-      'call-detail-over-budget',
-    ])
-    expect(JSON.parse(toolMessages[1]!.content)).toEqual({
-      kind: 'refused',
-      code: 'budget_exceeded',
-    })
   })
 
   it('persists active near-me context on location-free registry searches', async () => {
@@ -714,10 +596,7 @@ function proseResponse(prose: OpenRouterProsePlan): unknown {
   }
 }
 
-async function startOpenRouterServer(
-  responses: readonly unknown[],
-  options: { delaysMs?: readonly number[] } = {},
-) {
+async function startOpenRouterServer(responses: readonly unknown[]) {
   const requests: OpenRouterTestRequest[] = []
   const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const body = JSON.parse(await readRequestBody(request)) as OpenRouterTestRequest
@@ -727,10 +606,6 @@ async function startOpenRouterServer(
       response.writeHead(500, { 'content-type': 'application/json' })
       response.end(JSON.stringify({ error: 'unexpected_openrouter_request' }))
       return
-    }
-    const delayMs = options.delaysMs?.[requests.length - 1] ?? 0
-    if (delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
     }
     response.writeHead(200, { 'content-type': 'application/json' })
     response.end(JSON.stringify(payload))
