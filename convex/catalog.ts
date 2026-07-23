@@ -8,6 +8,7 @@ import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { stableHash } from '../src/modules/common/stable-hash'
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
+  markPublicOfferingRevisionWithdrawn,
   rebuildBusinessSupplyProjectionSnapshotCommand,
 } from './catalogSupplyProjection'
 import {
@@ -21,9 +22,12 @@ import {
   upsertAccessPathInState,
   withdrawAccessPathInState,
   type OfferingAccessPathDescriptor,
+  type OfferingComparisonEnvelope,
   type OfferingSourceResult,
   type OfferingSourceState,
+  resolveHistoricalPublicOffering,
   validateServiceCatalogInput,
+  validateOfferingComparisonEnvelope,
 } from '../src/modules/catalog/public'
 import { requireAdminAuthority } from '../src/modules/security/public'
 import type { AccessPathRef, BusinessId, OfferingRef } from '../src/modules/common/ids'
@@ -49,6 +53,7 @@ const serviceArg = v.object({
 const offeringFactsArg = v.object({
   name: v.string(), category: v.string(), summary: v.string(),
   serviceAreaSummary: v.optional(v.string()), availabilitySummary: v.optional(v.string()), pricingSummary: v.optional(v.string()),
+  comparison: v.optional(v.any()),
 })
 const humanAccessPathArg = v.object({ kind: v.literal('human_request'), channel: v.union(v.literal('phone'), v.literal('website'), v.literal('ae_inquiry')), disclosure: v.string(), url: v.optional(v.string()) })
 const externalAccessPathArg = v.object({
@@ -444,11 +449,67 @@ export const reviseBusinessOffering = mutationGeneric({
 })
 
 export const changeBusinessOfferingStatus = mutationGeneric({
-  args: { businessId: v.id('businesses'), offeringRef: v.string(), operationKey: v.string(), correlationId: v.string(), expectedRevision: v.number(), status: v.union(v.literal('draft'), v.literal('published'), v.literal('paused'), v.literal('retired')), ...sourceWriteArgs },
+  args: {
+    businessId: v.id('businesses'),
+    offeringRef: v.string(),
+    operationKey: v.string(),
+    correlationId: v.string(),
+    expectedRevision: v.number(),
+    status: v.union(v.literal('draft'), v.literal('published'), v.literal('paused'), v.literal('retired')),
+    historicalDisplayDisposition: v.optional(v.union(
+      v.literal('retain_safe_history'),
+      v.literal('hidden_privacy'),
+      v.literal('hidden_safety'),
+    )),
+    ...sourceWriteArgs,
+  },
   returns: offeringCommandResult,
-  handler: async (ctx, args) => runOfferingSourceMutation(ctx, args, (state, authority, now) => changeOfferingStatusInState(state, {
-    authority, operationKey: args.operationKey, offeringRef: args.offeringRef as OfferingRef, expectedRevision: args.expectedRevision, status: args.status, now,
-  })),
+  handler: async (ctx, args) => {
+    if (args.status === 'published' && args.historicalDisplayDisposition !== undefined) {
+      return {
+        kind: 'error' as const,
+        code: 'invalid_offering',
+        reason: 'Historical withdrawal disposition applies only when an Offering leaves publication.',
+      }
+    }
+    return runOfferingSourceMutation(
+      ctx,
+      args,
+      (state, authority, now) => changeOfferingStatusInState(state, {
+        authority,
+        operationKey: args.operationKey,
+        offeringRef: args.offeringRef as OfferingRef,
+        expectedRevision: args.expectedRevision,
+        status: args.status,
+        now,
+      }),
+      args.status === 'published'
+        ? undefined
+        : async (db, result, now) => {
+            const changed = result.value as { businessId?: string; offeringRef?: string; currentRevision?: number }
+            if (
+              changed.businessId === undefined
+              || changed.offeringRef === undefined
+              || changed.currentRevision === undefined
+            ) return
+            const revision = await db.query('businessOfferingRevisions')
+              .withIndex(
+                'by_offeringRef_and_revision',
+                (q) => q.eq('offeringRef', changed.offeringRef).eq('revision', changed.currentRevision),
+              )
+              .unique()
+            if (revision === null) return
+            await markPublicOfferingRevisionWithdrawn(db, {
+              businessId: changed.businessId,
+              offeringRef: changed.offeringRef,
+              revision: changed.currentRevision,
+              offeringSourceHash: stringField(revision, 'sourceHash'),
+              withdrawnAt: now,
+              safeDisplayDisposition: args.historicalDisplayDisposition ?? 'retain_safe_history',
+            })
+          },
+    )
+  },
 })
 
 export const upsertOfferingAccessPath = mutationGeneric({
@@ -472,6 +533,11 @@ async function runOfferingSourceMutation(
   ctx: { db: object; auth: { getUserIdentity: () => Promise<unknown> } },
   args: { businessId: string; operationKey: string; correlationId: string; sourceWrite?: unknown },
   mutate: (state: OfferingSourceState, authority: { actorRef?: string; ownerRef: string; businessOwnerRef: string }, now: number) => OfferingSourceResult<unknown>,
+  afterPersist?: (
+    db: RuntimeDb,
+    result: Extract<OfferingSourceResult<unknown>, { kind: 'ok' }>,
+    now: number,
+  ) => Promise<void>,
 ) {
   const admitted = await requireSourceWrite(ctx as never, args as never, 'catalog_publish')
   if (admitted.kind === 'rejected') return { kind: 'error' as const, code: 'operation_conflict', reason: admitted.reason }
@@ -487,10 +553,12 @@ async function runOfferingSourceMutation(
   const owner = await db.get(ownerId)
   const businessOwnerRef = owner === null ? '' : stringField(owner, 'clerkUserId')
   const state = await loadOfferingSourceState(db, args.businessId, businessOwnerRef)
-  const result = mutate(state, { actorRef: actor.clerkUserId, ownerRef: businessOwnerRef, businessOwnerRef }, Date.now())
+  const now = Date.now()
+  const result = mutate(state, { actorRef: actor.clerkUserId, ownerRef: businessOwnerRef, businessOwnerRef }, now)
   if (result.kind === 'error') return { kind: 'error' as const, code: result.code, reason: result.reason }
   const persisted = await persistOfferingSourceState(db, args.businessId, state, result.state)
   if (persisted.kind === 'error') return persisted
+  await afterPersist?.(db, result, now)
   await ensureGreenfieldOfferingCutover(db, args.businessId, Date.now())
   // Source success is authoritative even if the removable projection cannot rebuild.
   await rebuildBusinessSupplyProjectionSnapshotCommand(db, args.businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, args.businessId, Date.now()), Date.now())
@@ -498,6 +566,101 @@ async function runOfferingSourceMutation(
   const resultRef = value.offeringRef ?? value.accessPathRef
   return { kind: 'ok' as const, code: result.code, ...(resultRef === undefined ? {} : { resultRef }), ...(value.currentRevision === undefined ? {} : { currentRevision: value.currentRevision }) }
 }
+
+export const readHistoricalPublicOfferingRevision = queryGeneric({
+  args: {
+    businessId: v.id('businesses'),
+    offeringRef: v.string(),
+    revision: v.number(),
+    offeringSourceHash: v.string(),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const db = runtimeDb(ctx.db)
+    const business = await db.get(args.businessId)
+    const businessIsPublic = business !== null && stringField(business, 'publicStatus') === 'published'
+    const isSuppressed = await hasActiveBusinessSuppression(db, args.businessId)
+    const base = {
+      selection: {
+        businessId: args.businessId as unknown as BusinessId,
+        offeringRef: args.offeringRef as OfferingRef,
+        revision: args.revision,
+        offeringSourceHash: args.offeringSourceHash as never,
+      },
+      business: {
+        businessId: args.businessId as unknown as BusinessId,
+        isPublic: businessIsPublic,
+        isSuppressed,
+      },
+    }
+    if (!businessIsPublic || isSuppressed) {
+      return resolveHistoricalPublicOffering(base)
+    }
+
+    const history = await db.query('offeringPublicRevisionHistory')
+      .withIndex(
+        'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+        (q) => q
+          .eq('businessId', args.businessId)
+          .eq('offeringRef', args.offeringRef)
+          .eq('revision', args.revision)
+          .eq('offeringSourceHash', args.offeringSourceHash),
+      )
+      .unique()
+    if (history === null) {
+      return resolveHistoricalPublicOffering(base)
+    }
+    const historyRecord = {
+      businessId: stringField(history, 'businessId') as BusinessId,
+      offeringRef: stringField(history, 'offeringRef') as OfferingRef,
+      revision: numberField(history, 'revision'),
+      offeringSourceHash: stringField(history, 'offeringSourceHash') as never,
+      publishedAt: numberField(history, 'publishedAt'),
+      ...(typeof history.withdrawnAt === 'number' ? { withdrawnAt: history.withdrawnAt } : {}),
+      safeDisplayDisposition: safeDisplayDisposition(history),
+    }
+    if (historyRecord.safeDisplayDisposition !== 'retain_safe_history') {
+      return resolveHistoricalPublicOffering({ ...base, history: historyRecord })
+    }
+
+    const offering = await db.query('businessOfferings')
+      .withIndex('by_offeringRef', (q) => q.eq('offeringRef', args.offeringRef))
+      .unique()
+    const selected = await db.query('businessOfferingRevisions')
+      .withIndex(
+        'by_offeringRef_and_revision',
+        (q) => q.eq('offeringRef', args.offeringRef).eq('revision', args.revision),
+      )
+      .unique()
+    if (offering === null || selected === null) {
+      return resolveHistoricalPublicOffering({ ...base, history: historyRecord })
+    }
+    const offeringRecord = {
+      offeringRef: stringField(offering, 'offeringRef') as OfferingRef,
+      businessId: stringField(offering, 'businessId') as BusinessId,
+      currentRevision: numberField(offering, 'currentRevision'),
+      status: offeringStatus(offering),
+      createdAt: numberField(offering, 'createdAt'),
+      updatedAt: numberField(offering, 'updatedAt'),
+    }
+    const selectedRevision = revisionFromRow(selected)
+    const current = offeringRecord.status === 'published' && offeringRecord.currentRevision > args.revision
+      ? await db.query('businessOfferingRevisions')
+          .withIndex(
+            'by_offeringRef_and_revision',
+            (q) => q.eq('offeringRef', args.offeringRef).eq('revision', offeringRecord.currentRevision),
+          )
+          .unique()
+      : null
+    return resolveHistoricalPublicOffering({
+      ...base,
+      history: historyRecord,
+      offering: offeringRecord,
+      selectedRevision,
+      ...(current === null ? {} : { currentRevision: revisionFromRow(current) }),
+    })
+  },
+})
 
 export const retryBusinessSupplyProjection = mutationGeneric({
   args: { businessId: v.id('businesses') }, returns: v.any(),
@@ -664,7 +827,7 @@ async function loadOfferingSourceState(db: RuntimeDb, businessId: string, actorR
   ])
   return {
     offerings: offerings.map((row) => ({ offeringRef: stringField(row, 'offeringRef') as OfferingRef, businessId: stringField(row, 'businessId') as BusinessId, currentRevision: numberField(row, 'currentRevision'), status: offeringStatus(row), createdAt: numberField(row, 'createdAt'), updatedAt: numberField(row, 'updatedAt') })),
-    revisions: revisions.map((row) => ({ offeringRef: stringField(row, 'offeringRef') as OfferingRef, businessId: stringField(row, 'businessId') as BusinessId, revision: numberField(row, 'revision'), name: stringField(row, 'name'), category: stringField(row, 'category'), summary: stringField(row, 'summary'), ...(optionalStringField(row, 'serviceAreaSummary') ? { serviceAreaSummary: stringField(row, 'serviceAreaSummary') } : {}), ...(optionalStringField(row, 'availabilitySummary') ? { availabilitySummary: stringField(row, 'availabilitySummary') } : {}), ...(optionalStringField(row, 'pricingSummary') ? { pricingSummary: stringField(row, 'pricingSummary') } : {}), sourceHash: stringField(row, 'sourceHash') as never, createdAt: numberField(row, 'createdAt') })),
+    revisions: revisions.map((row) => ({ offeringRef: stringField(row, 'offeringRef') as OfferingRef, businessId: stringField(row, 'businessId') as BusinessId, revision: numberField(row, 'revision'), name: stringField(row, 'name'), category: stringField(row, 'category'), summary: stringField(row, 'summary'), ...(optionalStringField(row, 'serviceAreaSummary') ? { serviceAreaSummary: stringField(row, 'serviceAreaSummary') } : {}), ...(optionalStringField(row, 'availabilitySummary') ? { availabilitySummary: stringField(row, 'availabilitySummary') } : {}), ...(optionalStringField(row, 'pricingSummary') ? { pricingSummary: stringField(row, 'pricingSummary') } : {}), ...comparisonFromRow(row), sourceHash: stringField(row, 'sourceHash') as never, createdAt: numberField(row, 'createdAt') })),
     accessPaths: accessPaths.map((row) => ({ accessPathRef: stringField(row, 'accessPathRef') as AccessPathRef, businessId: stringField(row, 'businessId') as BusinessId, offeringRef: stringField(row, 'offeringRef') as OfferingRef, offeringRevision: numberField(row, 'offeringRevision'), offeringSourceHash: stringField(row, 'offeringSourceHash') as never, status: accessPathStatus(row), descriptor: row.descriptor as OfferingAccessPathDescriptor, sourceHash: stringField(row, 'sourceHash') as never, createdAt: numberField(row, 'createdAt'), updatedAt: numberField(row, 'updatedAt') })),
     operations: operations.filter((row) => stringField(row, 'scope') === 'catalog_offering').map((row) => ({ actorRef: stringField(row, 'actorRef'), operationName: stringField(row, 'operationName'), operationKey: stringField(row, 'key'), requestHash: stringField(row, 'requestHash') as never, resultRef: stringArrayField(row, 'effectRefs')[0] ?? '' })),
   }
@@ -714,6 +877,33 @@ export async function ensureGreenfieldOfferingCutover(db: RuntimeDb, businessId:
 function offeringStatus(row: RuntimeDocument): 'draft' | 'published' | 'paused' | 'retired' {
   const value = stringField(row, 'status'); return value === 'published' || value === 'paused' || value === 'retired' ? value : 'draft'
 }
+
+function safeDisplayDisposition(
+  row: RuntimeDocument,
+): 'retain_safe_history' | 'hidden_privacy' | 'hidden_safety' {
+  const value = stringField(row, 'safeDisplayDisposition')
+  return value === 'hidden_privacy' || value === 'hidden_safety'
+    ? value
+    : 'retain_safe_history'
+}
+
+function revisionFromRow(row: RuntimeDocument) {
+  return {
+    offeringRef: stringField(row, 'offeringRef') as OfferingRef,
+    businessId: stringField(row, 'businessId') as BusinessId,
+    revision: numberField(row, 'revision'),
+    name: stringField(row, 'name'),
+    category: stringField(row, 'category'),
+    summary: stringField(row, 'summary'),
+    ...(optionalStringField(row, 'serviceAreaSummary') ? { serviceAreaSummary: stringField(row, 'serviceAreaSummary') } : {}),
+    ...(optionalStringField(row, 'availabilitySummary') ? { availabilitySummary: stringField(row, 'availabilitySummary') } : {}),
+    ...(optionalStringField(row, 'pricingSummary') ? { pricingSummary: stringField(row, 'pricingSummary') } : {}),
+    ...comparisonFromRow(row),
+    sourceHash: stringField(row, 'sourceHash') as never,
+    createdAt: numberField(row, 'createdAt'),
+  }
+}
+
 function accessPathStatus(row: RuntimeDocument): 'draft' | 'published' | 'withdrawn' {
   const value = stringField(row, 'status'); return value === 'published' || value === 'withdrawn' ? value : 'draft'
 }
@@ -1547,6 +1737,17 @@ function capabilityStatus(document: RuntimeDocument): PublicCapability['status']
 
 function projectionKind(document: RuntimeDocument): RegistryAttempt['projectionKind'] {
   return stringField(document, 'projectionKind') === 'service_catalog' ? 'service_catalog' : 'business_catalog'
+}
+
+function comparisonFromRow(
+  row: RuntimeDocument,
+): Readonly<{ comparison?: OfferingComparisonEnvelope }> {
+  if (row.comparison === undefined) return {}
+  const parsed = validateOfferingComparisonEnvelope(row.comparison)
+  if (parsed.kind === 'invalid') {
+    throw new Error('Stored Offering comparison profile is invalid.')
+  }
+  return { comparison: parsed.envelope }
 }
 
 function trustTier(document: RuntimeDocument): PublicCatalog['trustTier'] {

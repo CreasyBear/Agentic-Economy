@@ -50,6 +50,27 @@ access-path crosswalks with source hashes; never infer identity from names or
 search terms. Dual-read disagreement refuses cutover and leaves the v1 public
 projection authoritative. Physical retirement is a later bounded decision.
 
+## Historical public Offering revisions
+
+Previously public Offering revisions use the accepted
+`retain-safe-history` policy. Ordinary withdrawal stops the Offering from
+appearing in new discovery, records `withdrawnAt`, and retains the exact
+historically public revision for later inspection. Publication evidence is
+keyed by the exact business, Offering reference, revision and source hash; the
+existence of an immutable revision row alone never proves that it was public.
+
+Safe display is evaluated again on every historical read. A business that is
+no longer public, an active live-business suppression, a privacy withdrawal, a
+safety withdrawal, a never-public revision, a business mismatch or a source
+hash mismatch refuses before revision facts are returned. Privacy and safety
+withdrawals set an explicit hidden safe-display disposition and take effect
+immediately.
+
+A retained historical read never substitutes the current Offering revision.
+When a newer revision is currently public, its exact identity may be returned
+separately as a current-version notice. The caller must make a distinct choice
+to inspect it.
+
 ## Acceptance
 
 The contract must demonstrate: a published business with no Offerings; an

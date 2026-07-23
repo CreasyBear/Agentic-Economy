@@ -45,6 +45,7 @@ export {
   buildBusinessSupplyProjection,
   buildPublicOfferingSupplyProjection,
   validateOfferingAccessPath,
+  validateOfferingComparisonEnvelope,
 } from './internal/offering-supply'
 
 export type {
@@ -62,12 +63,26 @@ export type {
   OfferingAccessPathDescriptor,
   OfferingAccessPathRecord,
   OfferingAccessPathStatus,
+  OfferingComparisonEnvelope,
+  OfferingComparisonEnvelopeValidation,
   OfferingSupportProjection,
   PublicAccessPath,
   PublicBusinessProfile,
   PublicOfferingSupplyProjection,
   PublicSupportReason,
 } from './internal/offering-supply'
+
+export {
+  OfferingHistorySafeDisplayDispositionValues,
+  resolveHistoricalPublicOffering,
+} from './internal/offering-public-history'
+
+export type {
+  HistoricalOfferingSelection,
+  OfferingHistorySafeDisplayDisposition,
+  OfferingPublicRevisionHistoryRecord,
+  ResolveHistoricalPublicOfferingResult,
+} from './internal/offering-public-history'
 
 export {
   MAX_LEGACY_MIGRATION_BATCH,

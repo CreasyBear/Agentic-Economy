@@ -5,6 +5,8 @@ import type {
   SourceHash,
 } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
+import type { StableHashValue } from '@/modules/common/stable-hash'
+import { z } from 'zod'
 
 export const BusinessOfferingStatusValues = ['draft', 'published', 'paused', 'retired'] as const
 export type BusinessOfferingStatus = (typeof BusinessOfferingStatusValues)[number]
@@ -45,9 +47,110 @@ export type BusinessOfferingRevisionRecord = Readonly<{
   serviceAreaSummary?: string
   availabilitySummary?: string
   pricingSummary?: string
+  comparison?: OfferingComparisonEnvelope
   sourceHash: SourceHash
   createdAt: number
 }>
+
+const boundedText = (maximum: number) => z.string().trim().min(1).max(maximum)
+const observedAt = z.number().finite().nonnegative()
+const factSource = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('business_supplied') }),
+  z.strictObject({
+    kind: z.literal('publicly_observed'),
+    referenceUrl: z.string().url().max(2_048).optional(),
+  }),
+  z.strictObject({
+    kind: z.literal('ae_support'),
+    actionId: boundedText(160),
+    actionVersion: boundedText(80),
+  }),
+])
+
+function comparisonFact<T extends z.ZodType>(value: T) {
+  return z.discriminatedUnion('kind', [
+    z.strictObject({
+      kind: z.literal('known'),
+      value,
+      source: factSource,
+      observedAt,
+      validUntil: observedAt.optional(),
+    }).refine(
+      (fact) => fact.validUntil === undefined || fact.validUntil >= fact.observedAt,
+      { message: 'validUntil must not precede observedAt' },
+    ),
+    z.strictObject({
+      kind: z.literal('unknown'),
+      explanation: boundedText(500),
+      source: factSource,
+      observedAt,
+    }),
+    z.strictObject({
+      kind: z.literal('not_supplied'),
+      source: factSource,
+      observedAt,
+    }),
+    z.strictObject({
+      kind: z.literal('stale'),
+      lastKnown: value.optional(),
+      source: factSource,
+      observedAt,
+      validUntil: observedAt,
+    }).refine(
+      (fact) => fact.validUntil >= fact.observedAt,
+      { message: 'validUntil must not precede observedAt' },
+    ),
+  ])
+}
+
+const priceBasisValue = z.strictObject({
+  description: boundedText(500),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  amountMinor: z.number().int().nonnegative().safe().optional(),
+  unit: z.enum(['total', 'hour', 'day', 'month', 'request', 'unit']),
+})
+
+const professionalServiceProfile = z.strictObject({
+  profileId: z.literal('professional_service:v1'),
+  scopeBasis: comparisonFact(boundedText(500)),
+  priceBasis: comparisonFact(priceBasisValue),
+  timingBasis: comparisonFact(boundedText(500)),
+  serviceArea: comparisonFact(boundedText(500)),
+})
+
+const machineDataProfile = z.strictObject({
+  profileId: z.literal('machine_data:v1'),
+  interfaceFormat: comparisonFact(z.enum(['graphql', 'rest_json', 'csv', 'other'])),
+  requestMethod: comparisonFact(z.enum(['GET', 'POST'])),
+  authentication: comparisonFact(z.enum(['none', 'api_key', 'oauth2', 'other'])),
+  priceBasis: comparisonFact(priceBasisValue),
+  freshnessOrUpdateCadence: comparisonFact(boundedText(500)),
+})
+
+const offeringComparisonEnvelope = z.strictObject({
+  schemaVersion: z.literal('offering-comparison:v1'),
+  profile: z.discriminatedUnion('profileId', [
+    professionalServiceProfile,
+    machineDataProfile,
+  ]),
+})
+
+export type OfferingComparisonEnvelope =
+  & z.infer<typeof offeringComparisonEnvelope>
+  & Readonly<{ [key: string]: StableHashValue }>
+
+export type OfferingComparisonEnvelopeValidation =
+  | Readonly<{ kind: 'valid'; envelope: OfferingComparisonEnvelope }>
+  | Readonly<{ kind: 'invalid'; reason: 'invalid_comparison_profile' }>
+
+export function validateOfferingComparisonEnvelope(
+  input: unknown,
+): OfferingComparisonEnvelopeValidation {
+  const parsed = offeringComparisonEnvelope.safeParse(input)
+  return parsed.success
+    ? { kind: 'valid', envelope: parsed.data as OfferingComparisonEnvelope }
+    : { kind: 'invalid', reason: 'invalid_comparison_profile' }
+}
 
 export type HumanRequestAccessPathDescriptor = Readonly<{
   kind: 'human_request'
@@ -109,6 +212,7 @@ export type BusinessOfferingProjection = Readonly<{
   serviceAreaSummary?: string
   availabilitySummary?: string
   pricingSummary?: string
+  comparison?: OfferingComparisonEnvelope
 }>
 
 export type PublicOfferingSupplyProjection = Readonly<{
@@ -200,6 +304,7 @@ export function buildPublicOfferingSupplyProjection(input: Readonly<{
     ...(input.revision.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: input.revision.serviceAreaSummary }),
     ...(input.revision.availabilitySummary === undefined ? {} : { availabilitySummary: input.revision.availabilitySummary }),
     ...(input.revision.pricingSummary === undefined ? {} : { pricingSummary: input.revision.pricingSummary }),
+    ...(input.revision.comparison === undefined ? {} : { comparison: input.revision.comparison }),
   }
 
   return {

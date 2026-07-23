@@ -5,6 +5,7 @@ import {
   type OfferingAccessPathDescriptor,
   type OfferingAccessPathRecord,
   type OfferingSupportProjection,
+  validateOfferingComparisonEnvelope,
 } from '../src/modules/catalog/internal/offering-supply'
 import type { AccessPathRef, BusinessId, OfferingRef } from '../src/modules/common/ids'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
@@ -23,17 +24,32 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(db: Runtime
   ])
   const offeringRecords = offerings.map(toOffering)
   const revisionRecords = revisions.map(toRevision)
+  if (revisionRecords.some((revision) => revision === undefined)) {
+    return markPending(db, businessId, 'offering_comparison_invalid', now)
+  }
+  const validRevisionRecords = revisionRecords.filter(
+    (revision): revision is BusinessOfferingRevisionRecord => revision !== undefined,
+  )
   const pathRecords = paths.map(toPath)
-  if (offeringRecords.some((offering) => !revisionRecords.some((revision) => revision.offeringRef === offering.offeringRef && revision.revision === offering.currentRevision))) {
+  if (offeringRecords.some((offering) => !validRevisionRecords.some((revision) => revision.offeringRef === offering.offeringRef && revision.revision === offering.currentRevision))) {
     return markPending(db, businessId, 'offering_revision_missing', now)
   }
   const projection = buildBusinessSupplyProjection({
     business: { businessId: businessId as BusinessId, slug: field(business, 'slug'), name: field(business, 'name'), category: field(context, 'category'), suburb: field(context, 'suburb'), stateTerritory: field(context, 'stateTerritory'), ...(optional(business, 'publishedPhone') ? { publishedPhone: field(business, 'publishedPhone') } : {}), ...(optional(context, 'postcode') ? { postcode: field(context, 'postcode') } : {}), publicUrl: `/${field(business, 'slug')}` },
     businessIsPublic: !await suppressed(db, businessId),
-    offerings: offeringRecords.map((offering) => ({ offering, revision: revisionRecords.find((item) => item.offeringRef === offering.offeringRef && item.revision === offering.currentRevision)!, accessPaths: pathRecords.filter((item) => item.offeringRef === offering.offeringRef), support: sanitizeSupport(supportByOfferingRef[offering.offeringRef], now) })),
+    offerings: offeringRecords.map((offering) => ({ offering, revision: validRevisionRecords.find((item) => item.offeringRef === offering.offeringRef && item.revision === offering.currentRevision)!, accessPaths: pathRecords.filter((item) => item.offeringRef === offering.offeringRef), support: sanitizeSupport(supportByOfferingRef[offering.offeringRef], now) })),
     sourceRevision: Math.max(number(business, 'updatedAt'), ...offeringRecords.map((item) => item.updatedAt), 0), observedAt: now,
   })
   if (projection.kind === 'unavailable') return markPending(db, businessId, projection.reason, now)
+  for (const publicOffering of projection.projection.offerings) {
+    const revision = validRevisionRecords.find((item) => (
+      item.offeringRef === publicOffering.offering.offeringRef
+      && item.revision === publicOffering.offering.revision
+    ))
+    if (revision !== undefined) {
+      await recordPublicOfferingRevisionHistory(db, revision, now)
+    }
+  }
   const existing = await db.query('businessSupplyProjectionSnapshots').withIndex('by_businessId', (q) => q.eq('businessId', businessId)).unique()
   const row = { businessId, sourceRevision: projection.projection.sourceRevision, sourceDigest: projection.projection.sourceDigest, observedAt: now, disposition: projection.projection.disposition, projectionJson: JSON.stringify(projection.projection), status: 'current', updatedAt: now }
   if (existing === null) await db.insert('businessSupplyProjectionSnapshots', row); else await db.patch(existing._id, row)
@@ -71,5 +87,69 @@ function field(row: RuntimeDocument, key: string) { return typeof row[key] === '
 function optional(row: RuntimeDocument, key: string) { return typeof row[key] === 'string' ? row[key] as string : undefined }
 function number(row: RuntimeDocument, key: string) { return typeof row[key] === 'number' ? row[key] as number : 0 }
 function toOffering(row: RuntimeDocument): BusinessOfferingRecord { const status = field(row, 'status'); return { offeringRef: field(row, 'offeringRef') as OfferingRef, businessId: field(row, 'businessId') as BusinessId, currentRevision: number(row, 'currentRevision'), status: status === 'published' || status === 'paused' || status === 'retired' ? status : 'draft', createdAt: number(row, 'createdAt'), updatedAt: number(row, 'updatedAt') } }
-function toRevision(row: RuntimeDocument): BusinessOfferingRevisionRecord { return { offeringRef: field(row, 'offeringRef') as OfferingRef, businessId: field(row, 'businessId') as BusinessId, revision: number(row, 'revision'), name: field(row, 'name'), category: field(row, 'category'), summary: field(row, 'summary'), ...(optional(row, 'serviceAreaSummary') ? { serviceAreaSummary: field(row, 'serviceAreaSummary') } : {}), ...(optional(row, 'availabilitySummary') ? { availabilitySummary: field(row, 'availabilitySummary') } : {}), ...(optional(row, 'pricingSummary') ? { pricingSummary: field(row, 'pricingSummary') } : {}), sourceHash: field(row, 'sourceHash') as never, createdAt: number(row, 'createdAt') } }
+function toRevision(row: RuntimeDocument): BusinessOfferingRevisionRecord | undefined {
+  const comparison = row.comparison === undefined
+    ? undefined
+    : validateOfferingComparisonEnvelope(row.comparison)
+  if (comparison?.kind === 'invalid') return undefined
+  return { offeringRef: field(row, 'offeringRef') as OfferingRef, businessId: field(row, 'businessId') as BusinessId, revision: number(row, 'revision'), name: field(row, 'name'), category: field(row, 'category'), summary: field(row, 'summary'), ...(optional(row, 'serviceAreaSummary') ? { serviceAreaSummary: field(row, 'serviceAreaSummary') } : {}), ...(optional(row, 'availabilitySummary') ? { availabilitySummary: field(row, 'availabilitySummary') } : {}), ...(optional(row, 'pricingSummary') ? { pricingSummary: field(row, 'pricingSummary') } : {}), ...(comparison?.kind === 'valid' ? { comparison: comparison.envelope } : {}), sourceHash: field(row, 'sourceHash') as never, createdAt: number(row, 'createdAt') }
+}
 function toPath(row: RuntimeDocument): OfferingAccessPathRecord { const status = field(row, 'status'); return { accessPathRef: field(row, 'accessPathRef') as AccessPathRef, businessId: field(row, 'businessId') as BusinessId, offeringRef: field(row, 'offeringRef') as OfferingRef, offeringRevision: number(row, 'offeringRevision'), offeringSourceHash: field(row, 'offeringSourceHash') as never, status: status === 'published' || status === 'withdrawn' ? status : 'draft', descriptor: row.descriptor as OfferingAccessPathDescriptor, sourceHash: field(row, 'sourceHash') as never, createdAt: number(row, 'createdAt'), updatedAt: number(row, 'updatedAt') } }
+
+async function recordPublicOfferingRevisionHistory(
+  db: RuntimeDb,
+  revision: BusinessOfferingRevisionRecord,
+  now: number,
+) {
+  const existing = await db.query('offeringPublicRevisionHistory')
+    .withIndex(
+      'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+      (q) => q
+        .eq('businessId', revision.businessId)
+        .eq('offeringRef', revision.offeringRef)
+        .eq('revision', revision.revision)
+        .eq('offeringSourceHash', revision.sourceHash),
+    )
+    .unique()
+  if (existing === null) {
+    await db.insert('offeringPublicRevisionHistory', {
+      businessId: revision.businessId,
+      offeringRef: revision.offeringRef,
+      revision: revision.revision,
+      offeringSourceHash: revision.sourceHash,
+      publishedAt: now,
+      safeDisplayDisposition: 'retain_safe_history',
+    })
+  } else if (field(existing, 'safeDisplayDisposition') === 'retain_safe_history') {
+    await db.patch(existing._id, { withdrawnAt: undefined })
+  }
+}
+
+export async function markPublicOfferingRevisionWithdrawn(
+  db: RuntimeDb,
+  input: Readonly<{
+    businessId: string
+    offeringRef: string
+    revision: number
+    offeringSourceHash: string
+    withdrawnAt: number
+    safeDisplayDisposition: 'retain_safe_history' | 'hidden_privacy' | 'hidden_safety'
+  }>,
+): Promise<'recorded' | 'never_public'> {
+  const existing = await db.query('offeringPublicRevisionHistory')
+    .withIndex(
+      'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+      (q) => q
+        .eq('businessId', input.businessId)
+        .eq('offeringRef', input.offeringRef)
+        .eq('revision', input.revision)
+        .eq('offeringSourceHash', input.offeringSourceHash),
+    )
+    .unique()
+  if (existing === null) return 'never_public'
+  await db.patch(existing._id, {
+    withdrawnAt: input.withdrawnAt,
+    safeDisplayDisposition: input.safeDisplayDisposition,
+  })
+  return 'recorded'
+}

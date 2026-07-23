@@ -3,12 +3,14 @@ import type { AccessPathRef, BusinessId, OfferingRef, SourceHash } from '@/modul
 
 import {
   validateOfferingAccessPath,
+  validateOfferingComparisonEnvelope,
   type BusinessOfferingRecord,
   type BusinessOfferingRevisionRecord,
   type BusinessOfferingStatus,
   type OfferingAccessPathDescriptor,
   type OfferingAccessPathRecord,
   type OfferingAccessPathStatus,
+  type OfferingComparisonEnvelope,
 } from './offering-supply'
 
 export const MAX_OFFERINGS_PER_BUSINESS = 100
@@ -36,6 +38,11 @@ export type OfferingFactsInput = Readonly<{
   serviceAreaSummary?: string
   availabilitySummary?: string
   pricingSummary?: string
+  comparison?: unknown
+}>
+
+type ValidatedOfferingFactsInput = Omit<OfferingFactsInput, 'comparison'> & Readonly<{
+  comparison?: OfferingComparisonEnvelope
 }>
 
 export type OfferingSourceErrorCode =
@@ -213,16 +220,21 @@ function authorize(state: OfferingSourceState, authority: Authority): OfferingSo
   }
 }
 
-function validateFacts(input: OfferingFactsInput): OfferingFactsInput | undefined {
+function validateFacts(input: OfferingFactsInput): ValidatedOfferingFactsInput | undefined {
   const clean = (value: string | undefined, maximum: number) => value?.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maximum)
   const serviceAreaSummary = clean(input.serviceAreaSummary, 500)
   const availabilitySummary = clean(input.availabilitySummary, 500)
   const pricingSummary = clean(input.pricingSummary, 500)
+  const comparison = input.comparison === undefined
+    ? undefined
+    : validateOfferingComparisonEnvelope(input.comparison)
+  if (comparison?.kind === 'invalid') return undefined
   const facts = {
     name: clean(input.name, 160) ?? '', category: clean(input.category, 120) ?? '', summary: clean(input.summary, 1_000) ?? '',
     ...(serviceAreaSummary ? { serviceAreaSummary } : {}),
     ...(availabilitySummary ? { availabilitySummary } : {}),
     ...(pricingSummary ? { pricingSummary } : {}),
+    ...(comparison?.kind === 'valid' ? { comparison: comparison.envelope } : {}),
   }
   return facts.name && facts.category && facts.summary ? facts : undefined
 }

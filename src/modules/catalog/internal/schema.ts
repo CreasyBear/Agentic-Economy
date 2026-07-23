@@ -1,5 +1,6 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import type { GenericValidator } from 'convex/values'
 
 import { literalUnion } from '@/modules/common/convex-literals'
 import {
@@ -9,10 +10,54 @@ import {
   ExternalOperationProvenanceValues,
   FirstRequestModeValues,
   HumanRequestChannelValues,
+  OfferingHistorySafeDisplayDispositionValues,
   OfferingAccessPathStatusValues,
   PublicFirstRequestChannelValues,
   ServiceCapabilityStatusValues,
 } from '@/modules/catalog/public'
+
+const comparisonFactSource = v.union(
+  v.object({ kind: v.literal('business_supplied') }),
+  v.object({ kind: v.literal('publicly_observed'), referenceUrl: v.optional(v.string()) }),
+  v.object({ kind: v.literal('ae_support'), actionId: v.string(), actionVersion: v.string() }),
+)
+
+function comparisonFact(value: GenericValidator) {
+  return v.union(
+    v.object({ kind: v.literal('known'), value, source: comparisonFactSource, observedAt: v.number(), validUntil: v.optional(v.number()) }),
+    v.object({ kind: v.literal('unknown'), explanation: v.string(), source: comparisonFactSource, observedAt: v.number() }),
+    v.object({ kind: v.literal('not_supplied'), source: comparisonFactSource, observedAt: v.number() }),
+    v.object({ kind: v.literal('stale'), lastKnown: v.optional(value), source: comparisonFactSource, observedAt: v.number(), validUntil: v.number() }),
+  )
+}
+
+const priceBasisValue = v.object({
+  description: v.string(),
+  currency: v.optional(v.string()),
+  amountMinor: v.optional(v.number()),
+  unit: v.union(v.literal('total'), v.literal('hour'), v.literal('day'), v.literal('month'), v.literal('request'), v.literal('unit')),
+})
+
+const offeringComparisonEnvelope = v.object({
+  schemaVersion: v.literal('offering-comparison:v1'),
+  profile: v.union(
+    v.object({
+      profileId: v.literal('professional_service:v1'),
+      scopeBasis: comparisonFact(v.string()),
+      priceBasis: comparisonFact(priceBasisValue),
+      timingBasis: comparisonFact(v.string()),
+      serviceArea: comparisonFact(v.string()),
+    }),
+    v.object({
+      profileId: v.literal('machine_data:v1'),
+      interfaceFormat: comparisonFact(v.union(v.literal('graphql'), v.literal('rest_json'), v.literal('csv'), v.literal('other'))),
+      requestMethod: comparisonFact(v.union(v.literal('GET'), v.literal('POST'))),
+      authentication: comparisonFact(v.union(v.literal('none'), v.literal('api_key'), v.literal('oauth2'), v.literal('other'))),
+      priceBasis: comparisonFact(priceBasisValue),
+      freshnessOrUpdateCadence: comparisonFact(v.string()),
+    }),
+  ),
+})
 
 const humanRequestAccessPath = v.object({
   kind: v.literal('human_request'),
@@ -59,11 +104,25 @@ export const catalogTables = {
     serviceAreaSummary: v.optional(v.string()),
     availabilitySummary: v.optional(v.string()),
     pricingSummary: v.optional(v.string()),
+    comparison: v.optional(offeringComparisonEnvelope),
     sourceHash: v.string(),
     createdAt: v.number(),
   })
     .index('by_offeringRef_and_revision', ['offeringRef', 'revision'])
     .index('by_businessId_and_createdAt', ['businessId', 'createdAt']),
+
+  offeringPublicRevisionHistory: defineTable({
+    businessId: v.id('businesses'),
+    offeringRef: v.string(),
+    revision: v.number(),
+    offeringSourceHash: v.string(),
+    publishedAt: v.number(),
+    withdrawnAt: v.optional(v.number()),
+    safeDisplayDisposition: literalUnion(OfferingHistorySafeDisplayDispositionValues),
+  }).index(
+    'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+    ['businessId', 'offeringRef', 'revision', 'offeringSourceHash'],
+  ),
 
   offeringAccessPaths: defineTable({
     accessPathRef: v.string(),

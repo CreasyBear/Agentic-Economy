@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 
 import {
   resolveHistoricalPublicOffering,
@@ -119,5 +120,27 @@ describe('historical public Offering resolution', () => {
     }],
   ] as const)('applies live or retained-history suppression before returning facts: %s', (reason, overrides) => {
     expect(resolve(overrides)).toEqual({ kind: 'unavailable', reason })
+  })
+
+  it('uses one exact bounded history index and checks live suppression before revision reads', () => {
+    const source = readFileSync(
+      new URL('../../../convex/catalog.ts', import.meta.url),
+      'utf8',
+    )
+    const queryStart = source.indexOf('export const readHistoricalPublicOfferingRevision')
+    const queryEnd = source.indexOf('export const retryBusinessSupplyProjection', queryStart)
+    const query = source.slice(queryStart, queryEnd)
+
+    expect(query).toContain(
+      'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+    )
+    expect(query).toContain('.unique()')
+    expect(query).not.toContain('.collect()')
+    expect(query.indexOf('hasActiveBusinessSuppression')).toBeLessThan(
+      query.indexOf("db.query('offeringPublicRevisionHistory')"),
+    )
+    expect(query.indexOf("db.query('offeringPublicRevisionHistory')")).toBeLessThan(
+      query.indexOf("db.query('businessOfferingRevisions')"),
+    )
   })
 })
