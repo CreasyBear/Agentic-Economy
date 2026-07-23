@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { runAnswerGate } from '@/modules/answer/public'
+import {
+  COLD_START_WEBSITE_REFLECTION,
+  buildColdStartWebsiteClarification,
+  runAnswerGate,
+} from '@/modules/answer/public'
 import type { AnswerSnapshot } from '@/modules/answer/public'
 
 function snapshot(overrides: Partial<AnswerSnapshot> = {}): AnswerSnapshot {
@@ -97,6 +101,21 @@ describe('runAnswerGate', () => {
       }),
       allowedSlugs: new Set<string>(),
     })
+    expect(result.ok).toBe(true)
+  })
+
+  it('accepts a complete typed clarification without inventing legacy summary prose', () => {
+    const result = runAnswerGate({
+      snapshot: snapshot({
+        providers: [],
+        oneLine: COLD_START_WEBSITE_REFLECTION,
+        summary: '',
+        nextStep: '',
+        decisionSupport: buildColdStartWebsiteClarification(['website:v1:simple']),
+      }),
+      allowedSlugs: new Set<string>(),
+    })
+
     expect(result.ok).toBe(true)
   })
 

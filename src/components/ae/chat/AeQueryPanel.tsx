@@ -41,6 +41,7 @@ export function AeQueryPanel({
         busy={busy}
         examples={examples}
         focusOnMount={focusOnMount}
+        submitLabel={showExamples ? 'Find businesses' : 'Search'}
         {...(placeholder === undefined ? {} : { placeholder, inputLabel: placeholder })}
       />
       {loopHint !== undefined && loopHint.length > 0 ? (

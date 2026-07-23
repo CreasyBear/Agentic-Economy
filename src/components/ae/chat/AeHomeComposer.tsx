@@ -31,21 +31,20 @@ export function AeHomeComposer({ initialQuery = '', onThreadCreated }: AeHomeCom
     setError(false)
 
     const clientTurnKey = crypto.randomUUID()
+    let createdThreadId: string | undefined
     void streamAnswerTurnRequest({
       query,
       searchContext: { ...DEFAULT_AE_SEARCH_CONTEXT, timing, ...(timingDate === undefined ? {} : { timingDate }) },
       clientTurnKey,
       onFrame: () => undefined,
       onThread: ({ threadId }) => {
-        void promoteReadableThread(threadId, onThreadCreated).then((promoted) => {
-          if (promoted) return
-          submittingRef.current = false
-          setBusy(false)
-          setError(true)
-        })
+        createdThreadId = threadId
       },
-    }).then((outcome) => {
-      if (outcome === 'done') return
+    }).then(async (outcome) => {
+      if (outcome === 'done' && createdThreadId !== undefined) {
+        const promoted = await promoteReadableThread(createdThreadId, onThreadCreated)
+        if (promoted) return
+      }
       submittingRef.current = false
       setBusy(false)
       setError(true)
@@ -86,8 +85,22 @@ async function promoteReadableThread(threadId: string, onReadable: (threadId: st
     try {
       const response = await fetch(`/api/answer/threads/${encodeURIComponent(threadId)}`, { credentials: 'same-origin' })
       if (response.ok) {
-        onReadable(threadId)
-        return true
+        const projection: unknown = await response.json()
+        if (
+          typeof projection === 'object'
+          && projection !== null
+          && 'turns' in projection
+          && Array.isArray(projection.turns)
+          && projection.turns.some((turn) => (
+            typeof turn === 'object'
+            && turn !== null
+            && 'status' in turn
+            && turn.status === 'complete'
+          ))
+        ) {
+          onReadable(threadId)
+          return true
+        }
       }
     } catch {
       // The active answer stream remains authoritative while readback catches up.

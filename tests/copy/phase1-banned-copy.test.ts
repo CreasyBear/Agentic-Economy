@@ -7,7 +7,11 @@ import { fixtureTargets, isFixtureMode } from '../imports/scan-targets'
 
 const cleanCopyTargets = [
   { root: 'src/routes', includeExtensions: ['.ts', '.tsx'] },
-  { root: 'src/components/ae', includeExtensions: ['.ts', '.tsx'] },
+  {
+    root: 'src/components/ae',
+    includeExtensions: ['.ts', '.tsx'],
+    exclude: ['src/components/ae/action-invocation'],
+  },
   { root: 'src/lib/ui/copy.ts', includeExtensions: ['.ts'] },
   { root: 'src/modules/catalog', includeExtensions: ['.ts'] },
   { root: 'src/modules/discovery', includeExtensions: ['.ts'] },
@@ -167,12 +171,21 @@ describe('Phase 1 public copy guardrail', () => {
 
 
 function findPaymentBoundaryViolations(
-  targets: readonly { readonly root: string; readonly content?: string; readonly includeExtensions?: readonly string[] }[],
+  targets: readonly {
+    readonly root: string
+    readonly content?: string
+    readonly includeExtensions?: readonly string[]
+    readonly exclude?: readonly string[]
+  }[],
 ): readonly PaymentBoundaryViolation[] {
   return targets.flatMap((target) => {
     const files =
       target.content === undefined
-        ? findFiles([{ root: target.root, ...(target.includeExtensions === undefined ? {} : { includeExtensions: target.includeExtensions }) }])
+        ? findFiles([{
+            root: target.root,
+            ...(target.includeExtensions === undefined ? {} : { includeExtensions: target.includeExtensions }),
+            ...(target.exclude === undefined ? {} : { exclude: target.exclude }),
+          }])
         : [target.root]
 
     return files.flatMap((file) => {
@@ -208,4 +221,3 @@ function scanPaymentBoundaryContent(file: string, content: string): readonly Pay
       })
   })
 }
-

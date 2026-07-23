@@ -258,7 +258,7 @@ export function buildColdStartRetrievalSnapshot(input: {
       ? {}
       : { offeringSources: [...input.offeringSources] }),
     decisionSupport,
-    summary: `${decisionSupport.searchedSupplyStatement} Agentic Economy does not book or take payment on this page.`,
+    summary: 'These results use registered published details. Agentic Economy does not book or take payment on this page.',
     nextStep: '',
     agentJsonUrl: buildAgentJsonUrl('website Perth', 3),
     layoutProfile: 'discovery_full',

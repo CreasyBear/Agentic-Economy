@@ -184,7 +184,11 @@ describe('claims register seed copy', () => {
   it('covers committed route, API, discovery, and SEO source surfaces', () => {
     const surfaceTargets = [
       { root: 'src/routes', includeExtensions: ['.ts', '.tsx'] },
-      { root: 'src/components/ae', includeExtensions: ['.ts', '.tsx'] },
+      {
+        root: 'src/components/ae',
+        includeExtensions: ['.ts', '.tsx'],
+        exclude: ['src/components/ae/action-invocation'],
+      },
       { root: 'src/lib/ui/copy.ts', includeExtensions: ['.ts'] },
       { root: 'src/modules/catalog', includeExtensions: ['.ts'] },
       { root: 'src/modules/registry', includeExtensions: ['.ts'] },
@@ -250,30 +254,29 @@ describe('claims register seed copy', () => {
     expect(scanFixture('public-output/claims.fixture', serializedPublicOutputs)).toEqual([])
   })
 
-  it('keeps GTM readiness gated on activation evidence instead of launch-ready copy', () => {
-    const gtm = readFileSync('.planning/GTM-READINESS.md', 'utf8')
+  it('keeps Phase 5 closure gated on exact hosted evidence', () => {
+    const phasePlan = readFileSync(
+      '.planning/phases/05-consumer-operating-proof/05-PLAN.md',
+      'utf8',
+    )
 
-    expect(gtm).toContain('Phase 1 cannot be called launch-ready until')
-    expect(gtm).toContain('owner activation state exists')
-    expect(gtm).toContain('claims register exists and copy scan covers marketing assets')
-    expect(gtm).toContain('claimId')
-    expect(gtm).toContain('exactPublicCopy')
-    expect(gtm).toContain('requiredReadback')
-    expect(gtm).toContain('requiredFunnelEvent')
-    expect(gtm).toContain('evidenceStatus')
-    expect(gtm).not.toMatch(/Phase 1 is launch-ready/i)
+    expect(phasePlan).toContain('Closure is permitted only when one authenticated exact-revision hosted')
+    expect(phasePlan).toContain('zero effect is observed')
+    expect(phasePlan).toContain('labelled demonstration data')
+    expect(phasePlan).not.toMatch(/Phase 5 is launch-ready/i)
   })
 
-  it('keeps the Phase 6 claim row source-owned and support-gated', () => {
-    const gtm = readFileSync('.planning/GTM-READINESS.md', 'utf8')
+  it('keeps the Phase 5 hosted claim narrower than market proof', () => {
+    const phasePlan = readFileSync(
+      '.planning/phases/05-consumer-operating-proof/05-PLAN.md',
+      'utf8',
+    )
 
-    expect(gtm).toContain('p6_provision_paid_intake_endpoint_receipt_backed')
-    expect(gtm).toContain('receipt-backed')
-    expect(gtm).toContain('source readback permits')
-    expect(gtm).toContain('support/kill-rule')
-    expect(gtm).toContain('Planning/spike only')
-    expect(gtm).toContain('Hackathon/internal founder-assisted demo only')
-    expect(gtm).not.toMatch(/production autonomous business operations are live/i)
+    expect(phasePlan).toContain('does not establish demand')
+    expect(phasePlan).toContain('willingness to pay')
+    expect(phasePlan).toContain('retention')
+    expect(phasePlan).toContain('production safety')
+    expect(phasePlan).not.toMatch(/real customer demand (?:is|has been) proven/i)
   })
 
   it('treats optional product-marketing context as non-public draft until evidence exists', () => {

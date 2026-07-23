@@ -2,7 +2,8 @@ import type { FollowUpIntent } from '../answer-thread.schema'
 
 const BOOKING_PATTERNS = [
   /\bbook\b/i,
-  /\bpay\b/i,
+  /\bpay\s+(?:them|him|her|it|now|the\s+(?:business|provider|invoice|bill))\b/i,
+  /\bmake\s+(?:a\s+)?payment\b/i,
   /\bcharge\b/i,
   /\bdispatch\b/i,
   /\bconfirm\s+(my|the)\s+(booking|appointment)/i,

@@ -111,6 +111,10 @@ describe('AeChat route promotion', () => {
 
     await act(async () => {
       testState.latestTranscriptProps?.onThreadCreated?.('thread-promoted-1')
+      testState.latestTranscriptProps?.onSettledTurn?.(
+        buildProjection('thread-promoted-1', 'Grounded answer').turns[0]!,
+        1,
+      )
       await Promise.resolve()
     })
 

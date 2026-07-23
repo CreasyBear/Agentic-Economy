@@ -27,8 +27,16 @@ export type RunAnswerGateInput = {
 export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
   const { snapshot, allowedSlugs } = input
   const copyId = makeGateCopyId()
+  const decisionSupportCopy = collectDecisionSupportCopy(snapshot)
+  const hasLegacyProse =
+    snapshot.oneLine.trim().length > 0
+    && snapshot.summary.trim().length > 0
+    && snapshot.nextStep.trim().length > 0
+  const hasDecisionSupportProse =
+    snapshot.oneLine.trim().length > 0
+    && decisionSupportCopy.length > 0
 
-  if (snapshot.oneLine.trim().length === 0 || snapshot.summary.trim().length === 0 || snapshot.nextStep.trim().length === 0) {
+  if (!hasLegacyProse && !hasDecisionSupportProse) {
     return { ok: false, code: 'empty_prose', copyId }
   }
 
@@ -41,7 +49,12 @@ export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
     }
   }
 
-  const humanText = joinHumanCopy([snapshot.oneLine, snapshot.summary, snapshot.nextStep])
+  const humanText = joinHumanCopy([
+    snapshot.oneLine,
+    snapshot.summary,
+    snapshot.nextStep,
+    ...decisionSupportCopy,
+  ])
 
   if (hasEpistemicVocabulary(humanText)) {
     return { ok: false, code: 'epistemic_vocabulary', copyId }
@@ -60,6 +73,25 @@ export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
   }
 
   return { ok: true }
+}
+
+function collectDecisionSupportCopy(snapshot: AnswerSnapshot): string[] {
+  const support = snapshot.decisionSupport
+  if (support === undefined) return []
+  if (support.stage === 'clarification') {
+    return [
+      support.reflection,
+      support.clarification.question,
+      ...support.clarification.choices.map((choice) => choice.label),
+    ]
+  }
+  return [
+    support.reflection,
+    support.posture,
+    support.searchedSupplyStatement,
+    ...support.prices.flatMap((price) => [price.label, price.value]),
+    ...support.safeContinuations.map((continuation) => continuation.label),
+  ]
 }
 
 function makeGateCopyId(): string {

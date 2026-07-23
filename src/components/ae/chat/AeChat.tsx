@@ -45,6 +45,7 @@ import {
   type ChatFunnelEvent,
 } from './chat-funnel'
 import { buildFollowUpComposerCopy } from './composer-copy'
+import { writeThreadProjectionHandoff } from './thread-projection-handoff'
 
 export type AeChatProps = {
   threadId?: string | null
@@ -110,6 +111,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [refinementComposerOpen, setRefinementComposerOpen] = useState(false)
   const pendingThreadIdRef = useRef<string | null>(null)
+  const settledProjectionHandoffRef = useRef<PublicThreadProjection | null>(null)
   const mobileSidebarReturnFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -321,6 +323,11 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     if (threadIdForTurn === null) {
       return
     }
+    settledProjectionHandoffRef.current = {
+      threadId: threadIdForTurn,
+      title: threadsRef.current.find((thread) => thread.threadId === threadIdForTurn)?.title ?? turn.query,
+      turns: [turn],
+    }
     setOptimisticTurns((current) => {
       const nextRecord = {
         threadId: threadIdForTurn,
@@ -367,7 +374,17 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     const pendingId = pendingThreadIdRef.current
     if (routeThreadId === null && pendingId !== null) {
       pendingThreadIdRef.current = null
-      void Promise.resolve(navigate({ to: '/t/$threadId', params: { threadId: pendingId }, replace: true })).finally(() => {
+      const handoff = settledProjectionHandoffRef.current?.threadId === pendingId
+        ? settledProjectionHandoffRef.current
+        : undefined
+      if (handoff !== undefined) {
+        writeThreadProjectionHandoff(handoff)
+      }
+      void Promise.resolve(navigate({
+        to: '/t/$threadId',
+        params: { threadId: pendingId },
+        replace: true,
+      })).finally(() => {
         clearLiveTurnIfSettled(settledGeneration)
         void refreshThreads()
       })

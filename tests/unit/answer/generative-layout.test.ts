@@ -216,6 +216,36 @@ describe('buildMessagePartsFromSnapshot', () => {
 })
 
 describe('buildArtifactsFromSnapshot artifact budgets', () => {
+  it('keeps typed decision support in the clarification layout', () => {
+    const artifacts = buildArtifactsFromSnapshot({
+      query: 'simple startup website in Perth',
+      oneLine: 'One material question remains.',
+      providers: [],
+      decisionSupport: {
+        kind: 'cold_start_decision_support',
+        stage: 'clarification',
+        reflection: 'You need a simple website for a small startup in Perth. You would prefer someone local or an affordable freelancer, and you want to understand the likely price.',
+        confirmedConstraintIds: ['website:v1:simple'],
+        clarification: {
+          id: 'website:v1:function',
+          question: 'Does the website only need to explain your business and collect enquiries, or must customers buy, book or log in?',
+          choices: [
+            { id: 'brochure_enquiries', label: 'Information and enquiries' },
+          ],
+        },
+      },
+      summary: '',
+      nextStep: '',
+      agentJsonUrl: '',
+      layoutProfile: 'clarification',
+    })
+
+    expect(artifacts.map((artifact) => artifact.kind)).toEqual([
+      'one-line',
+      'decision-support',
+    ])
+  })
+
   it('budgets compare turns to one comparison surface, prose, and next step', () => {
     const artifacts = buildArtifactsFromSnapshot({
       query: 'compare these plumbers',

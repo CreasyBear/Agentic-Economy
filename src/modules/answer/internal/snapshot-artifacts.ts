@@ -266,6 +266,7 @@ function capArtifactForBudget(
           }
     }
     case 'one-line':
+    case 'decision-support':
     case 'selected-provider':
     case 'recovery-prompts':
     case 'location-map':

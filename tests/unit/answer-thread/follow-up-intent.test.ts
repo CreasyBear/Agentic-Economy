@@ -9,6 +9,11 @@ describe('follow-up intent router', () => {
 
   it('detects unsupported booking requests', () => {
     expect(classifyFollowUpIntent('book the first one for me', 1)).toBe('unsupported')
+    expect(classifyFollowUpIntent('pay the business now', 1)).toBe('unsupported')
+  })
+
+  it('keeps price research on the discovery path', () => {
+    expect(classifyFollowUpIntent('who should I consider and what should I expect to pay?', 0)).toBe('refine_search')
   })
 
   it('detects boundary questions', () => {

@@ -33,6 +33,7 @@ const DEFAULT_EXAMPLES: readonly string[] = [
 ]
 
 const QUERY_MAX_LENGTH = 200
+const LANDING_DRAFT_STORAGE_KEY = 'ae.answerDraft.v1'
 
 // Stable accessible name for the query field. The visible placeholder rotates
 // with context (examples, follow-up prompts), but the searchbox's name must not
@@ -96,6 +97,12 @@ function AeAnswerPromptInputInner({
   const compact = compactOverride ?? examples.length === 0
 
   useEffect(() => {
+    if (!hydrated || compact || value.length > 0) return
+    const draft = readLandingDraft()
+    if (draft.length > 0) setValue(draft)
+  }, [compact, hydrated, value.length])
+
+  useEffect(() => {
     const input = inputRef.current
     if (input === null) {
       return
@@ -123,7 +130,9 @@ function AeAnswerPromptInputInner({
   )
 
   function updateValue(nextValue: string) {
-    setValue(nextValue.slice(0, QUERY_MAX_LENGTH))
+    const bounded = nextValue.slice(0, QUERY_MAX_LENGTH)
+    setValue(bounded)
+    if (!compact) writeLandingDraft(bounded)
   }
 
   function submitQuery(query: string) {
@@ -131,6 +140,7 @@ function AeAnswerPromptInputInner({
     if (trimmed.length === 0 || busy || !timingDateValid) {
       return
     }
+    if (!compact) writeLandingDraft('')
     onSubmit(trimmed, timing, timing === 'date' ? timingDate : undefined)
   }
 
@@ -265,4 +275,26 @@ function localToday(now = new Date()): string {
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function readLandingDraft(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return (window.sessionStorage.getItem(LANDING_DRAFT_STORAGE_KEY) ?? '').slice(0, QUERY_MAX_LENGTH)
+  } catch {
+    return ''
+  }
+}
+
+function writeLandingDraft(value: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (value.length === 0) {
+      window.sessionStorage.removeItem(LANDING_DRAFT_STORAGE_KEY)
+    } else {
+      window.sessionStorage.setItem(LANDING_DRAFT_STORAGE_KEY, value)
+    }
+  } catch {
+    // Draft recovery is optional when browser storage is unavailable.
+  }
 }
