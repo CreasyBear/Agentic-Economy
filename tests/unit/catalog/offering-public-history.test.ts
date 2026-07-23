@@ -55,17 +55,24 @@ const history: OfferingPublicRevisionHistoryRecord = {
   safeDisplayDisposition: 'retain_safe_history',
 }
 
-function resolve(
-  overrides: Partial<Parameters<typeof resolveHistoricalPublicOffering>[0]> = {},
-) {
+type HistoricalResolveInput = Parameters<typeof resolveHistoricalPublicOffering>[0]
+type HistoricalResolveOverrides =
+  & Omit<Partial<HistoricalResolveInput>, 'history'>
+  & { history?: HistoricalResolveInput['history'] | undefined }
+
+function resolve(overrides: HistoricalResolveOverrides = {}) {
+  const { history: historyOverride, ...remainingOverrides } = overrides
+  const includeHistory = !Object.prototype.hasOwnProperty.call(overrides, 'history')
+    || historyOverride !== undefined
+
   return resolveHistoricalPublicOffering({
     selection: { businessId, offeringRef, revision: 1, offeringSourceHash: selectedHash },
     business: { businessId, isPublic: true, isSuppressed: false },
     offering,
     selectedRevision,
-    history,
     currentRevision,
-    ...overrides,
+    ...(includeHistory ? { history: historyOverride ?? history } : {}),
+    ...remainingOverrides,
   })
 }
 
@@ -91,7 +98,10 @@ describe('historical public Offering resolution', () => {
     expect(result.kind === 'resolved' ? result.revision.revision : undefined).toBe(1)
   })
 
-  it.each([
+  const unavailableCases: ReadonlyArray<readonly [
+    string,
+    HistoricalResolveOverrides,
+  ]> = [
     ['never_public', { history: undefined }],
     ['business_mismatch', {
       history: { ...history, businessId: otherBusinessId },
@@ -107,7 +117,9 @@ describe('historical public Offering resolution', () => {
         offeringSourceHash: selectedHash,
       },
     }],
-  ] as const)('refuses %s without revealing selected facts', (reason, overrides) => {
+  ]
+
+  it.each(unavailableCases)('refuses %s without revealing selected facts', (reason, overrides) => {
     expect(resolve(overrides)).toEqual({ kind: 'unavailable', reason })
   })
 
@@ -174,9 +186,14 @@ describe('historical public Offering resolution', () => {
     async (safeDisplayDisposition) => {
       const patches: Array<Record<string, unknown>> = []
       const row = { _id: 'history:1', safeDisplayDisposition }
-      const query = {
+      type HistoryQuery = {
+        eq: () => HistoryQuery
+        withIndex: (_name: string, select: (builder: HistoryQuery) => HistoryQuery) => HistoryQuery
+        unique: () => Promise<typeof row>
+      }
+      const query: HistoryQuery = {
         eq: () => query,
-        withIndex: (_name: string, select: (builder: typeof query) => typeof query) => select(query),
+        withIndex: (_name, select) => select(query),
         unique: async () => row,
       }
       const db = {

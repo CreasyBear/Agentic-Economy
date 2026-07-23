@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
 import type { AnswerSource } from '@/modules/answer/public'
-import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 describe('AeProviderCard answer variant', () => {
   afterEach(() => {
@@ -39,7 +39,7 @@ describe('AeProviderCard registry variant', () => {
     expect(screen.getByText('Demo Plumbing')).toBeTruthy()
     expect(screen.getByText('Plumber')).toBeTruthy()
     expect(screen.getByText('Joondalup, WA')).toBeTruthy()
-    expect(screen.getByText('Joondalup and nearby suburbs')).toBeTruthy()
+    expect(screen.getByText('Emergency plumbing')).toBeTruthy()
     expect(screen.getByText('No reply history yet')).toBeTruthy()
     expect(screen.getByText('Phone not published here')).toBeTruthy()
     expect(screen.queryByRole('link', { name: /Call/ })).toBeNull()
@@ -58,7 +58,7 @@ describe('AeProviderCard registry variant', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy details' }))
 
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
-    expect(writeText.mock.calls[0]?.[0]).toContain('Service area: Joondalup and nearby suburbs')
+    expect(writeText.mock.calls[0]?.[0]).toContain('Offerings: Emergency plumbing')
     expect(writeText.mock.calls[0]?.[0]).toContain('Phone: Phone not published here')
     expect(screen.getByRole('button', { name: 'Details copied' })).toBeTruthy()
   })
@@ -87,36 +87,32 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
   }
 }
 
-function registryBusiness(): PublicBusinessCatalogApiDto {
+function registryBusiness(): PublicBusinessCatalogApiV2Dto {
   return {
+    schemaVersion: 'public-business-catalog-api:v2',
+    businessId: 'business:demo-plumbing',
     slug: 'demo-plumbing',
     name: 'Demo Plumbing',
     category: 'Plumber',
     suburb: 'Joondalup',
     stateTerritory: 'WA',
     publicUrl: '/demo-plumbing',
-    trustTier: 'listed',
-    publicStatus: 'published',
-    indexStatus: 'indexed',
-    discoveryStatus: 'available',
-    schemaVersion: 'public-business-catalog-api:v1',
-    updatedAt: 1_700_000_000_000,
-    photos: [],
-    services: [{
-      slug: 'emergency-plumbing',
+    observedAt: 1_700_000_000_000,
+    disposition: 'current',
+    offerings: [{
+      offeringRef: 'offering:demo-plumbing:emergency',
+      revision: 1,
       name: 'Emergency plumbing',
       category: 'Plumber',
       summary: 'Urgent plumbing support.',
-      serviceArea: 'Joondalup and nearby suburbs',
-      hoursOrUnknown: 'Unknown',
-      firstRequest: {
-        mode: 'not_available_yet',
-        publicDisclosure: 'Contact details are not published here.',
-        publicChannel: 'not_available',
-        noContactReason: 'No public contact path.',
-      },
-      status: 'published',
-      capabilities: [],
+      serviceAreaSummary: 'Joondalup and nearby suburbs',
+      accessPaths: [],
+      support: { integrated: false, aeSupportedAction: false },
     }],
+    accessSummary: {
+      humanRequest: false,
+      externalOperation: false,
+      aeSupportedAction: false,
+    },
   }
 }
