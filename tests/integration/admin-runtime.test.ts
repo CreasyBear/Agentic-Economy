@@ -123,7 +123,12 @@ describe('admin Convex runtime controls', () => {
     expect(bootstrapped).toMatchObject({
       kind: 'ok',
       code: 'admin_membership_bootstrapped',
-      membership: { clerkUserId: 'user_owner', role: 'owner_admin', state: 'active' },
+      membership: {
+        clerkUserId: 'user_owner',
+        tokenIdentifier: 'clerk|user_owner',
+        role: 'owner_admin',
+        state: 'active',
+      },
     })
     expect(db.dump('adminMemberships')).toHaveLength(1)
     expect(db.dump('adminMembershipAuditEvents')).toHaveLength(2)

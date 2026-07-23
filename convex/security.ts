@@ -78,6 +78,7 @@ const adminReadbackRepairAction = v.union(
 
 const adminMembershipResult = v.object({
   clerkUserId: v.string(),
+  tokenIdentifier: v.optional(v.string()),
   role: adminRole,
   state: adminMembershipState,
   grantedBy: v.string(),
