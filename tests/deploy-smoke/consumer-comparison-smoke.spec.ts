@@ -56,7 +56,7 @@ test('authenticated exact-revision deployment serves the public zero-effect comp
   // instead of racing a visibly disabled choice on a hosted response.
   await expect(brochureChoice).toBeEnabled({ timeout: 60_000 })
   await brochureChoice.click()
-  await expect(page.getByRole('region', { name: 'Decision support' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Decision support' })).toBeVisible({ timeout: 30_000 })
   const browseHref = await page.getByRole('link', { name: 'Browse registered supply' }).getAttribute('href')
   expect(browseHref).toMatch(/q=.*information.*enquiries/iu)
 
