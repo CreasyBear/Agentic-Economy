@@ -87,6 +87,7 @@ function collectDecisionSupportCopy(snapshot: AnswerSnapshot): string[] {
   }
   return [
     support.reflection,
+    support.clarificationQuestion,
     support.posture,
     support.searchedSupplyStatement,
     ...support.prices.flatMap((price) => [price.label, price.value]),

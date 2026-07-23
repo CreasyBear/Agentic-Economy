@@ -12,11 +12,15 @@ describe('paid operation development surface inventory exclusion', () => {
   })
 
   it('is not imported by production source or route files', () => {
-    const productionFiles = sourceFiles('src')
+    const productionFiles = sourceFiles('src').filter(
+      (path) => !path.startsWith('src/components/ae/action-invocation/'),
+    )
     const importers = productionFiles.filter((path) => {
       const source = readFileSync(path, 'utf8')
       return source.includes('paid-operation-surface-host')
         || source.includes('paid-operation-browser')
+        || source.includes('components/ae/action-invocation')
+        || source.includes('AePaidOperationCard')
     })
 
     expect(importers).toEqual([])

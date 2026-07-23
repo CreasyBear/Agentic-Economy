@@ -14,6 +14,9 @@ describe('follow-up intent router', () => {
 
   it('keeps price research on the discovery path', () => {
     expect(classifyFollowUpIntent('who should I consider and what should I expect to pay?', 0)).toBe('refine_search')
+    expect(classifyFollowUpIntent('what do they charge?', 1)).toBe('refine_search')
+    expect(classifyFollowUpIntent('compare their charges', 1)).toBe('compare_known')
+    expect(classifyFollowUpIntent('charge my card now', 1)).toBe('unsupported')
   })
 
   it('detects boundary questions', () => {

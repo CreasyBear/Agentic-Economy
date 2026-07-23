@@ -8,7 +8,6 @@ import { Card } from '@astryxdesign/core/Card'
 import { Text } from '@astryxdesign/core/Text'
 
 import {
-  COLD_START_WEBSITE_CLARIFICATION,
   artifactsToMessageParts,
   inferLayoutProfileFromArtifacts,
   type AnswerLayoutProfile,
@@ -869,7 +868,7 @@ function ColdStartDecisionSupportView({
 
   return (
     <section className={`${REVEAL_ENTER} grid gap-4 rounded-lg border border-border bg-surface p-4`} aria-label="Decision support">
-      <p className="max-w-[68ch] text-sm text-secondary">{COLD_START_WEBSITE_CLARIFICATION}</p>
+      <p className="max-w-[68ch] text-sm text-secondary">{support.clarificationQuestion}</p>
       <p className="text-sm text-secondary">{support.searchedSupplyStatement}</p>
       {support.prices.length === 0 ? null : (
         <dl className="grid gap-3 sm:grid-cols-2">
@@ -884,7 +883,12 @@ function ColdStartDecisionSupportView({
       <div className="flex flex-wrap gap-2">
         {support.safeContinuations.map((continuation) => (
           continuation.kind === 'browse_registered_supply' ? (
-            <Button key={continuation.kind} label={continuation.label} href="/registry?q=&limit=10" variant="secondary" />
+            <Button
+              key={continuation.kind}
+              label={continuation.label}
+              href={`/registry?q=${encodeURIComponent(support.reflection)}&limit=10`}
+              variant="secondary"
+            />
           ) : (
             <Button
               key={continuation.constraintId}

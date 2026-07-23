@@ -14,7 +14,8 @@ test.describe('thread-first answer flow', () => {
     await startFirstThread(page, testInfo.project.name)
     await waitForReadyAnswer(page)
 
-    await expect(page.getByRole('button', { name: /narrow to parramatta/i })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Published offerings' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Review business' })).toHaveCount(2)
     await expect(page.getByRole('button', { name: /get as agent json/i })).toBeVisible()
 
     // Cited provider cards and boundary copy require the dev server to run the
@@ -31,10 +32,10 @@ test.describe('thread-first answer flow', () => {
     test.skip(testInfo.project.name === 'compact-chromium', 'The recent-questions sidebar is not shown by default on compact viewports.')
     await startFirstThread(page, testInfo.project.name)
     await waitForReadyAnswer(page)
-    await expect(page.getByRole('button', { name: /narrow to parramatta/i })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('region', { name: 'Published offerings' })).toBeVisible({ timeout: 15_000 })
     const firstThreadUrl = page.url()
 
-    await page.getByRole('link', { name: /new question/i }).click()
+    await page.getByRole('link', { name: /ask another/i }).click()
     await expect(page).toHaveURL(/\/(?:\?q=)?$/)
 
     await startThreadFromQueryUrl(page, SECOND_QUERY, { expectTranscript: false })
@@ -72,11 +73,12 @@ async function startThreadFromQueryUrl(
 }
 
 async function submitThreadQuery(page: Page, query: string) {
-  const searchbox = page.getByRole('searchbox', { name: /what do you need done/i }).last()
+  const search = page.getByRole('search', { name: /find local service businesses/i })
+  const searchbox = search.getByRole('searchbox')
   await expect(searchbox).toBeEditable({ timeout: 30_000 })
   await searchbox.fill(query)
   await expect(searchbox).toHaveValue(query)
-  const sendButton = page.getByRole('button', { name: /^send$/i })
+  const sendButton = search.getByRole('button', { name: /^find businesses$/i })
   await expect(sendButton).toBeEnabled()
   await sendButton.click()
   await expect(page).toHaveURL(/\/t\//, { timeout: 30_000 })

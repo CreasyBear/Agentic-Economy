@@ -4,7 +4,7 @@ const BOOKING_PATTERNS = [
   /\bbook\b/i,
   /\bpay\s+(?:them|him|her|it|now|the\s+(?:business|provider|invoice|bill))\b/i,
   /\bmake\s+(?:a\s+)?payment\b/i,
-  /\bcharge\b/i,
+  /\bcharge\s+(?:me|my\s+(?:card|account)|it|now|the\s+(?:card|account))\b/i,
   /\bdispatch\b/i,
   /\bconfirm\s+(my|the)\s+(booking|appointment)/i,
   /\bschedule\b/i,

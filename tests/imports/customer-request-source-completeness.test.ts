@@ -226,7 +226,8 @@ describe('CustomerRequest source completeness', () => {
     expect(ui).toContain('ACTIVE_REQUEST_STORAGE_KEY')
     expect(ui).toContain('/options`')
     const publicHome = readFileSync('src/routes/index.tsx', 'utf8')
-    expect(publicHome).toContain('AeCustomerRequestWorkspace')
+    expect(publicHome).toContain('AeChat')
+    expect(publicHome).not.toContain('AeCustomerRequestWorkspace')
     expect(publicHome).not.toContain('AeHomeComposer')
     for (const route of [
       'src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.messages.ts', 'src/routes/api.requests.$requestRef.options.ts',

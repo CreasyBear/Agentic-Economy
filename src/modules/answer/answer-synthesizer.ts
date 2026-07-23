@@ -208,6 +208,7 @@ export type ColdStartDecisionResultSupport = Readonly<{
   outcome: ColdStartDecisionOutcome
   confirmedChoiceId: WebsiteFunctionChoice
   reflection: typeof COLD_START_WEBSITE_REFLECTION
+  clarificationQuestion: typeof COLD_START_WEBSITE_CLARIFICATION
   posture: string
   confirmedConstraintIds: readonly WebsiteDecisionConstraintId[]
   searchedSupplyStatement: string
@@ -269,6 +270,7 @@ export function projectColdStartDecisionSupport(
     outcome: source.outcome,
     confirmedChoiceId: source.confirmedChoiceId,
     reflection: COLD_START_WEBSITE_REFLECTION,
+    clarificationQuestion: COLD_START_WEBSITE_CLARIFICATION,
     posture: coldStartOutcomePosture(source),
     confirmedConstraintIds: [...source.confirmedConstraintIds],
     searchedSupplyStatement: source.searchedRegisteredSupplyCount === 1

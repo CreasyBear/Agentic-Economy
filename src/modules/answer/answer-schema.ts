@@ -86,6 +86,7 @@ const ColdStartDecisionSupportSchema: z.ZodType<ColdStartDecisionSupport> = z.di
     outcome: z.enum(ColdStartDecisionOutcomeValues),
     confirmedChoiceId: z.enum(WebsiteFunctionChoiceValues),
     reflection: z.literal(COLD_START_WEBSITE_REFLECTION),
+    clarificationQuestion: z.literal(COLD_START_WEBSITE_CLARIFICATION),
     posture: z.string(),
     confirmedConstraintIds: z.array(WebsiteDecisionConstraintIdSchema),
     searchedSupplyStatement: z.string(),

@@ -5,10 +5,7 @@ import { z } from 'zod'
 
 import { AeCustomerRecord } from '@/components/ae/inquiries/AeCustomerRecord'
 import { AeChat } from '@/components/ae/chat/AeChat'
-import {
-  clearThreadProjectionHandoff,
-  readThreadProjectionHandoff,
-} from '@/components/ae/chat/thread-projection-handoff'
+import { takeThreadProjectionHandoff } from '@/components/ae/chat/thread-projection-handoff'
 import { getPublicThreadProjection, type PublicThreadProjection } from '@/modules/answer-thread/public'
 import { buildPublicThreadSeo, type PublicThreadSeoContract } from '@/modules/seo/public'
 import {
@@ -74,14 +71,11 @@ export const Route = createFileRoute('/t/$threadId')({
 function ThreadPage() {
   const { threadId } = Route.useParams()
   const { projection } = Route.useLoaderData()
-  const [projectionHandoff, setProjectionHandoff] = useState<PublicThreadProjection | null>(null)
+  const [projectionHandoff] = useState<PublicThreadProjection | null>(
+    () => projection === null ? takeThreadProjectionHandoff(threadId) : null,
+  )
   const [accessKey, setAccessKey] = useState<string>()
   useEffect(() => {
-    if (projection === null) {
-      setProjectionHandoff(readThreadProjectionHandoff(threadId))
-    } else {
-      clearThreadProjectionHandoff(threadId)
-    }
     securePrivateRecordLocation(window.location, window.history)
     const bootstrappedAccessKey = readPrivateRecordAccessKey(threadId)
     if (bootstrappedAccessKey !== undefined) {
@@ -93,13 +87,19 @@ function ThreadPage() {
   const readableProjection = projection ?? projectionHandoff
 
   return accessKey === undefined
-    ? <AeChat threadId={threadId} initialProjection={readableProjection} />
+    ? (
+        <AeChat
+          threadId={threadId}
+          initialProjection={readableProjection}
+          initialProjectionIsTransient={projection === null && projectionHandoff !== null}
+        />
+      )
     : <AeCustomerRecord threadId={threadId} accessKey={accessKey} />
 }
 
 export async function loadThreadRouteReadback(threadId: string): Promise<ThreadRouteReadback> {
   try {
-    const projection = await readSettledThreadProjection(threadId)
+    const projection = await getPublicThreadProjection(threadId)
     if (projection === null) {
       return unavailableThreadRouteReadback()
     }
@@ -121,20 +121,4 @@ export async function loadThreadRouteReadback(threadId: string): Promise<ThreadR
 
 function unavailableThreadRouteReadback(): ThreadRouteReadback {
   return { projection: null, seo: undefined }
-}
-
-async function readSettledThreadProjection(threadId: string): Promise<PublicThreadProjection | null> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const projection = await getPublicThreadProjection(threadId)
-    if (hasSettledTurn(projection)) {
-      return projection
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, 100))
-  }
-  const projection = await getPublicThreadProjection(threadId)
-  return hasSettledTurn(projection) ? projection : null
-}
-
-function hasSettledTurn(projection: PublicThreadProjection | null): projection is PublicThreadProjection {
-  return projection?.turns.some((turn) => turn.status === 'complete' || turn.status === 'error') === true
 }

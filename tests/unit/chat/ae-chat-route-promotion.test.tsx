@@ -149,6 +149,34 @@ describe('AeChat route promotion', () => {
     expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('none')
   })
 
+  it('treats a route handoff as transient and drops it when source readback refuses it', async () => {
+    const transientProjection = buildProjection('thread-one', 'Transient answer')
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/answer/threads/thread-one')) {
+        return new Response(JSON.stringify({}), { status: 404 })
+      }
+      if (url.includes('/api/answer/threads')) {
+        return new Response(JSON.stringify({ threads: [] }))
+      }
+      return new Response(JSON.stringify({}), { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <AeChat
+        threadId="thread-one"
+        initialProjection={transientProjection}
+        initialProjectionIsTransient
+      />,
+    )
+
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('thread-one')
+    await waitFor(() => expect(screen.getByText('Thread unavailable')).toBeTruthy())
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('none')
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/answer/threads/thread-one'))).toBe(true)
+  })
+
   it('places the retention disclosure after the rendered transcript results', () => {
     render(<AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />)
 

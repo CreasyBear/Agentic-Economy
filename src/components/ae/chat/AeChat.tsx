@@ -51,6 +51,7 @@ export type AeChatProps = {
   threadId?: string | null
   initialQuery?: string | null
   initialProjection?: PublicThreadProjection | null
+  initialProjectionIsTransient?: boolean
 }
 
 type LiveTurn = {
@@ -85,7 +86,12 @@ let fallbackThreadRecordsSnapshot = EMPTY_THREAD_RECORDS_SNAPSHOT
 let preferFallbackThreadRecordsSnapshot = false
 const threadRecordsSubscribers = new Set<() => void>()
 
-export function AeChat({ threadId = null, initialQuery = null, initialProjection }: AeChatProps) {
+export function AeChat({
+  threadId = null,
+  initialQuery = null,
+  initialProjection,
+  initialProjectionIsTransient = false,
+}: AeChatProps) {
   const navigate = useNavigate()
   const routeThreadId = threadId
   const initialRouteQuery = routeThreadId === null ? (initialQuery?.trim() ?? '') : ''
@@ -130,10 +136,14 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     routeThreadId !== null && initialProjection?.threadId === routeThreadId ? initialProjection : null
   const fetchedRouteProjection = fetchedProjection?.threadId === routeThreadId ? fetchedProjection : null
   const serverProjection =
-    routeThreadId === null ? null : (fetchedRouteProjection?.projection ?? initialRouteProjection ?? null)
+    routeThreadId === null
+      ? null
+      : fetchedRouteProjection === null
+        ? initialRouteProjection
+        : fetchedRouteProjection.projection
   const projectionUnavailable =
     routeThreadId !== null &&
-    (initialProjection === null || (initialRouteProjection === null && fetchedRouteProjection?.unavailable === true))
+    (initialProjection === null || fetchedRouteProjection?.unavailable === true)
   const streamingThreadId = routeThreadId ?? sessionThreadId
   const activeLiveTurnId = liveTurn?.turnId ?? null
   const projection = useMemo(
@@ -230,11 +240,11 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     if (routeThreadId === null) {
       return
     }
-    if (initialProjection?.threadId === routeThreadId || initialProjection === null) {
+    if (initialProjection?.threadId === routeThreadId && !initialProjectionIsTransient) {
       return
     }
     void refreshProjection(routeThreadId)
-  }, [routeThreadId, initialProjection, refreshProjection])
+  }, [routeThreadId, initialProjection, initialProjectionIsTransient, refreshProjection])
 
 
   useEffect(() => {

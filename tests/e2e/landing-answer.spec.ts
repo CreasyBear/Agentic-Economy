@@ -22,10 +22,12 @@ test.describe('landing query -> thread answer', () => {
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
     await expectQueryInTranscript(page, query)
 
-    await expect(page.getByRole('link', { name: demoBusiness.businessName })).toBeVisible()
-    await expect(page.getByRole('link', { name: /Parramatta Emergency Plumbing/i })).toBeVisible()
-    await expect(page.getByText(/publish service coverage/i).first()).toBeVisible()
-    await expect(page.getByText(/Open a listed business page and send an inquiry/i).first()).toBeVisible()
+    const offerings = page.getByRole('region', { name: 'Published offerings' })
+    await expect(offerings).toBeVisible()
+    await expect(offerings.getByText(demoBusiness.businessName, { exact: false })).toBeVisible()
+    await expect(offerings.getByText(/Parramatta Emergency Plumbing/i)).toBeVisible()
+    await expect(offerings.getByRole('link', { name: 'Review business' })).toHaveCount(2)
+    await expect(page.getByText(/Inspect each offering and business page/i).first()).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
     expect(bodyText).not.toMatch(/\b(?:KNOWN|UNKNOWN|UNAVAILABLE)\b/)
