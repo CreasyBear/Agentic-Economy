@@ -441,10 +441,51 @@ export const reportProblem = internalMutation({
       reason: v.union(v.literal('request_not_found'), v.literal('evidence_not_found')),
     }),
   ),
-  handler: async (ctx, args) => (
-    await reportProblemMachine(args, problemMutationPorts(ctx))
+  handler: async (ctx, args) => writableProblemReportResult(
+    await reportProblemMachine(args, problemMutationPorts(ctx)),
   ),
 })
+
+function writableProblemReportResult(
+  result: Awaited<ReturnType<typeof reportProblemMachine>>,
+) {
+  if (result.kind === 'conflict') return { kind: 'conflict' as const }
+  if (result.kind === 'refused') {
+    return { kind: 'refused' as const, reason: result.reason }
+  }
+  if (result.kind === 'reported') return {
+    kind: 'reported' as const,
+    reportRef: result.reportRef,
+    reportedAt: result.reportedAt,
+    affected: {
+      step: result.affected.step,
+      ...(result.affected.attemptRef === undefined
+        ? {}
+        : { attemptRef: result.affected.attemptRef }),
+      ...(result.affected.business === undefined
+        ? {}
+        : { business: result.affected.business }),
+    },
+    visibility: result.visibility,
+    evidence: result.evidence.map((evidence) => ({ ...evidence })),
+  }
+  return {
+    kind: 'replayed' as const,
+    reportRef: result.reportRef,
+    reportedAt: result.reportedAt,
+    affected: {
+      step: result.affected.step,
+      ...(result.affected.attemptRef === undefined
+        ? {}
+        : { attemptRef: result.affected.attemptRef }),
+      ...(result.affected.business === undefined
+        ? {}
+        : { business: result.affected.business }),
+    },
+    visibility: result.visibility,
+    evidence: result.evidence.map((evidence) => ({ ...evidence })),
+  }
+}
 
 const businessCausalityPosition = v.union(
   v.literal('supports'),
@@ -936,4 +977,3 @@ function parseBoundedJson(value: string): JsonValue | undefined {
     return undefined
   }
 }
-

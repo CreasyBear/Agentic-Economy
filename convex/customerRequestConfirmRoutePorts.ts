@@ -11,7 +11,25 @@ export function confirmRoutePorts(ctx: ActionCtx): ConfirmRoutePorts {
     projectCurrentRoutePlans: compare.projectCurrentRoutePlans,
     getCurrentRoutePlanGeneration: compare.getCurrentRoutePlanGeneration as ConfirmRoutePorts['getCurrentRoutePlanGeneration'],
     issueConfirmMandate: (input) => ctx.runMutation(
-      internal.customerRequestRouteMandate.issue, input,
-    ) as ReturnType<ConfirmRoutePorts['issueConfirmMandate']>,
+      internal.customerRequestRouteMandate.issue,
+      {
+        requestId: input.requestId,
+        expectedRequestRevision: input.expectedRequestRevision,
+        expectedGenerationRef: input.expectedGenerationRef,
+        selectedRoutePlanId: input.selectedRoutePlanId,
+        maximumTotalSpend: { ...input.maximumTotalSpend },
+        expiresAt: input.expiresAt,
+        idempotencyKey: input.idempotencyKey,
+        ...(input.serviceAuthorization === undefined ? {} : {
+          serviceAuthorization: {
+            command: { ...input.serviceAuthorization.command },
+            assertion: {
+              ...input.serviceAuthorization.assertion,
+              scopes: [...input.serviceAuthorization.assertion.scopes],
+            },
+          },
+        }),
+      },
+    ),
   }
 }
