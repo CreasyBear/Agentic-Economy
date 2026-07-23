@@ -269,7 +269,10 @@ jobs:
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
-          operator_key="$(npx convex env get AE_SOURCE_WRITE_KEY_OPERATOR --prod)"
+          if ! operator_key="$(npx convex env get AE_SOURCE_WRITE_KEY_OPERATOR --prod 2>/dev/null)" || [ -z "${operator_key}" ]; then
+            operator_key="phase5-release-v1:$(openssl rand -hex 32)"
+            npx convex env set AE_SOURCE_WRITE_KEY_OPERATOR "${operator_key}" --prod
+          fi
           issuer="$(npx convex env get CLERK_JWT_ISSUER_DOMAIN --prod)"
           if [ -z "${operator_key}" ] || [ -z "${issuer}" ] || [ -z "${AE_PHASE5_ADMIN_SUBJECT}" ]; then
             echo 'Phase 5 release administration is not configured.' >&2

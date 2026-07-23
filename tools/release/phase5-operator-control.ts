@@ -23,7 +23,7 @@ process.stdout.write(JSON.stringify({
   identity: {
     subject,
     issuer,
-    tokenIdentifier: `phase5-release|${subject}`,
+    tokenIdentifier: `${issuer}|${subject}`,
   },
   args: {
     key: 'offering_public_projection_enabled',
