@@ -27,6 +27,17 @@ import type {
   PublishedInquiryTargetResolution,
 } from './internal/search'
 export {
+  decodeStoredBusinessSupplyProjection,
+  offeringComparisonEnvelopeSchema,
+  publicBusinessCatalogApiV2DtoSchema,
+  publicBusinessCatalogApiV2PageSchema,
+  publicBusinessCatalogV2DetailResultSchema,
+  publicOfferingDtoSchema,
+} from './internal/offering-snapshot-codec'
+export type {
+  StoredBusinessSupplyProjectionDecodeResult,
+} from './internal/offering-snapshot-codec'
+export {
   PublicBusinessCatalogApiSchemaVersion,
   adaptLegacyCatalogToOfferingApi,
   projectBusinessSupplyToPublicApi,

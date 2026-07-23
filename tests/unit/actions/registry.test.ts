@@ -56,9 +56,9 @@ describe('action registry', () => {
     expect(action?.parameters.map((parameter) => parameter.name)).toEqual(['websiteUrl', 'abn'])
   })
 
-  it('exposes only registry search and detail to the internal answer thread', () => {
+  it('keeps registry v2 actions out of Answer Thread until its v2 consumer migration', () => {
     const exposed = listActions().filter((action) => action.surfaces.includes('answerThread')).map((action) => action.id)
-    expect(exposed).toEqual(['registry.search', 'registry.detail'])
+    expect(exposed).toEqual([])
   })
 
   it('carries output validation schemas on every action', () => {
@@ -161,14 +161,14 @@ describe('action registry', () => {
     const search = findAction('registry.search')
     expect(search).toBeDefined()
     expect(search?.readOnly).toBe(true)
-    expect(search?.surfaces).toContain('answerThread')
+    expect(search?.surfaces).not.toContain('answerThread')
     expect(search?.boundaries.join(' ')).toMatch(/book|charge|dispatch|inquiry/i)
     expect(search?.parameters.map((p) => p.name)).toContain('query')
 
     const detail = findAction('registry.detail')
     expect(detail).toBeDefined()
     expect(detail?.readOnly).toBe(true)
-    expect(detail?.surfaces).toContain('answerThread')
+    expect(detail?.surfaces).not.toContain('answerThread')
     expect(detail?.parameters.map((p) => p.name)).toContain('slug')
   })
 

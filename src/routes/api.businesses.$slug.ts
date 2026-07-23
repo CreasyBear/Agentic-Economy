@@ -2,21 +2,22 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { registryDetailAction } from '@/modules/registry/registry.actions'
 import { legacyPublicRegistryDetail } from '@/modules/registry/registry.functions'
-import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 import { jsonResponse } from './api.businesses'
 
 export const Route = createFileRoute('/api/businesses/$slug')({
   server: {
     handlers: {
-      GET: ({ params }) => handleDurableBusinessDetailRequest(params.slug),
+      GET: ({ params, request }) => handleDurableBusinessDetailRequest(params.slug, request),
     },
   },
 })
 
-export async function handleDurableBusinessDetailRequest(slug: string): Promise<Response> {
-  const result = await readPublicOfferingRegistryBusinessDetail(
-    registryDetailAction.schema.parse({ slug }),
-  )
+export async function handleDurableBusinessDetailRequest(
+  slug: string,
+  request = new Request(`https://ae.invalid/api/businesses/${encodeURIComponent(slug)}`),
+): Promise<Response> {
+  const data = registryDetailAction.schema.parse({ slug })
+  const result = await registryDetailAction.run({ data, context: { request } })
 
   if (result.kind === 'not_found') {
     return jsonResponse(result, { status: 404 })

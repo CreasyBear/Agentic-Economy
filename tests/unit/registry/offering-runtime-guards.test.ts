@@ -51,6 +51,8 @@ describe('Offering registry runtime guards', () => {
           },
         }],
       },
+      projectionWithInvalidComparisonWindow(valid, 'known'),
+      projectionWithInvalidComparisonWindow(valid, 'stale'),
     ]) {
       expect(decodeStoredBusinessSupplyProjection(hostile)).toEqual({
         kind: 'invalid',
@@ -83,6 +85,34 @@ describe('Offering registry runtime guards', () => {
       { ...publicDto, credentials: { apiKey: 'private' } },
       { ...publicDto, services: [] },
       { ...publicDto, trustTier: 'claimed' },
+      {
+        ...publicDto,
+        offerings: [{
+          offeringRef: 'offering:1',
+          revision: 1,
+          name: 'Native advisory',
+          category: 'Advisory',
+          summary: 'Native Offering.',
+          comparison: projectionWithInvalidComparisonWindow(nativeProjection(), 'known')
+            .offerings[0]!.offering.comparison,
+          accessPaths: [],
+          support: { integrated: false, aeSupportedAction: false },
+        }],
+      },
+      {
+        ...publicDto,
+        offerings: [{
+          offeringRef: 'offering:1',
+          revision: 1,
+          name: 'Native advisory',
+          category: 'Advisory',
+          summary: 'Native Offering.',
+          comparison: projectionWithInvalidComparisonWindow(nativeProjection(), 'stale')
+            .offerings[0]!.offering.comparison,
+          accessPaths: [],
+          support: { integrated: false, aeSupportedAction: false },
+        }],
+      },
     ]) {
       expect(publicBusinessCatalogApiV2DtoSchema.safeParse(hostile).success).toBe(false)
     }
@@ -141,6 +171,44 @@ function fact<T>(value: T) {
   }
 }
 
+function projectionWithInvalidComparisonWindow(
+  projection: ReturnType<typeof nativeProjection>,
+  kind: 'known' | 'stale',
+) {
+  const invalidFact = kind === 'known'
+    ? {
+        kind,
+        value: 'Invalid window',
+        source: { kind: 'business_supplied' as const },
+        observedAt: 100,
+        validUntil: 99,
+      }
+    : {
+        kind,
+        lastKnown: 'Invalid window',
+        source: { kind: 'business_supplied' as const },
+        observedAt: 100,
+        validUntil: 99,
+      }
+  const offering = projection.offerings[0]!
+  return {
+    ...projection,
+    offerings: [{
+      ...offering,
+      offering: {
+        ...offering.offering,
+        comparison: {
+          schemaVersion: 'offering-comparison:v1' as const,
+          profile: {
+            ...offering.offering.comparison.profile,
+            scopeBasis: invalidFact,
+          },
+        },
+      },
+    }],
+  }
+}
+
 class SuppressedReader {
   tablesRead: string[] = []
   query(table: string) {
@@ -159,11 +227,20 @@ class NativeReader {
     const rows: Record<string, RuntimeDocument[]> = {
       suppressionRules: [],
       catalogSupplyCutovers: [{ _id: 'cutover', businessId: 'business:1', mode: 'offering' }],
-      businessSupplyProjectionSnapshots: [{ _id: 'snapshot', businessId: 'business:1', status: 'current', projectionJson: JSON.stringify({
+      businessSupplyProjectionSnapshots: [{
+        _id: 'snapshot',
+        businessId: 'business:1',
+        status: 'current',
+        sourceRevision: 1,
+        sourceDigest: 'hash:projection',
+        observedAt: 100,
+        disposition: 'current',
+        projectionJson: JSON.stringify({
         business: { businessId: 'business:1', slug: 'native', name: 'Native Co', category: 'Advisory', suburb: 'Perth', stateTerritory: 'WA', publicUrl: '/native' },
         offerings: [{ offering: { offeringRef: 'offering:1', revision: 1, name: 'Native advisory', category: 'Advisory', summary: 'Native Offering.' }, accessPaths: [], support: { integrated: false, routeable: false, reasons: ['not_integrated'] } }],
-        sourceRevision: 1, sourceDigest: 'hash:projection', observedAt: Date.now(), disposition: 'current',
-      }) }],
+        sourceRevision: 1, sourceDigest: 'hash:projection', observedAt: 100, disposition: 'current',
+      }),
+      }],
     }
     let selected = [...(rows[table] ?? [])]
     const query = { withIndex: (_: string, select: (builder: any) => unknown) => { const builder = { eq: (field: string, value: unknown) => { selected = selected.filter((row) => row[field] === value); return builder } }; select(builder); return query }, unique: async () => selected.length === 1 ? selected[0]! : null, collect: async () => selected }

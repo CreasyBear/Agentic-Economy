@@ -1,13 +1,17 @@
 import { queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
+import type { GenericValidator } from 'convex/values'
 
 import {
   catalogFromRows,
   projectRegistryCatalogApiItem,
 } from '../src/modules/catalog/public'
-import type { BusinessSupplyProjection } from '../src/modules/catalog/public'
 import {
   adaptLegacyCatalogToOfferingApi,
+  decodeStoredBusinessSupplyProjection,
+  publicBusinessCatalogApiV2DtoSchema,
+  publicBusinessCatalogApiV2PageSchema,
+  publicBusinessCatalogV2DetailResultSchema,
   projectBusinessSupplyToPublicApi,
 } from '../src/modules/registry/public'
 
@@ -118,6 +122,187 @@ const detailResult = v.union(
     kind: v.literal('found'),
     schemaVersion: v.literal('public-business-catalog-api:v1'),
     business: catalogItemDto,
+  }),
+  v.object({
+    kind: v.literal('not_found'),
+    code: v.literal('business_not_found'),
+    reason: v.string(),
+  }),
+)
+
+const offeringFactSource = v.union(
+  v.object({ kind: v.literal('business_supplied') }),
+  v.object({
+    kind: v.literal('publicly_observed'),
+    referenceUrl: v.optional(v.string()),
+  }),
+  v.object({
+    kind: v.literal('ae_support'),
+    actionId: v.string(),
+    actionVersion: v.string(),
+  }),
+)
+
+function offeringComparisonFact<Value extends GenericValidator>(value: Value) {
+  return v.union(
+    v.object({
+      kind: v.literal('known'),
+      value,
+      source: offeringFactSource,
+      observedAt: v.number(),
+      validUntil: v.optional(v.number()),
+    }),
+    v.object({
+      kind: v.literal('unknown'),
+      explanation: v.string(),
+      source: offeringFactSource,
+      observedAt: v.number(),
+    }),
+    v.object({
+      kind: v.literal('not_supplied'),
+      source: offeringFactSource,
+      observedAt: v.number(),
+    }),
+    v.object({
+      kind: v.literal('stale'),
+      lastKnown: v.optional(value),
+      source: offeringFactSource,
+      observedAt: v.number(),
+      validUntil: v.number(),
+    }),
+  )
+}
+
+const offeringPriceBasis = v.object({
+  description: v.string(),
+  currency: v.optional(v.string()),
+  amountMinor: v.optional(v.number()),
+  unit: v.union(
+    v.literal('total'),
+    v.literal('hour'),
+    v.literal('day'),
+    v.literal('month'),
+    v.literal('request'),
+    v.literal('unit'),
+  ),
+})
+
+const offeringComparison = v.object({
+  schemaVersion: v.literal('offering-comparison:v1'),
+  profile: v.union(
+    v.object({
+      profileId: v.literal('professional_service:v1'),
+      scopeBasis: offeringComparisonFact(v.string()),
+      priceBasis: offeringComparisonFact(offeringPriceBasis),
+      timingBasis: offeringComparisonFact(v.string()),
+      serviceArea: offeringComparisonFact(v.string()),
+    }),
+    v.object({
+      profileId: v.literal('machine_data:v1'),
+      interfaceFormat: offeringComparisonFact(v.union(
+        v.literal('graphql'),
+        v.literal('rest_json'),
+        v.literal('csv'),
+        v.literal('other'),
+      )),
+      requestMethod: offeringComparisonFact(v.union(v.literal('GET'), v.literal('POST'))),
+      authentication: offeringComparisonFact(v.union(
+        v.literal('none'),
+        v.literal('api_key'),
+        v.literal('oauth2'),
+        v.literal('other'),
+      )),
+      priceBasis: offeringComparisonFact(offeringPriceBasis),
+      freshnessOrUpdateCadence: offeringComparisonFact(v.string()),
+    }),
+  ),
+})
+
+const offeringAccessPath = v.union(
+  v.object({
+    accessPathRef: v.string(),
+    kind: v.literal('human_request'),
+    channel: v.union(v.literal('phone'), v.literal('website'), v.literal('ae_inquiry')),
+    disclosure: v.string(),
+    url: v.optional(v.string()),
+  }),
+  v.object({
+    accessPathRef: v.string(),
+    kind: v.literal('external_operation'),
+    name: v.string(),
+    summary: v.string(),
+    url: v.string(),
+    method: v.optional(v.string()),
+    documentationUrl: v.optional(v.string()),
+    interfaceDescription: v.optional(v.object({
+      format: v.string(),
+      url: v.optional(v.string()),
+    })),
+    authenticationSummary: v.optional(v.string()),
+    pricingSummary: v.optional(v.string()),
+    provenance: v.union(v.literal('business_declared'), v.literal('publicly_observed')),
+  }),
+)
+
+const offeringDto = v.object({
+  offeringRef: v.string(),
+  revision: v.number(),
+  name: v.string(),
+  category: v.string(),
+  summary: v.string(),
+  serviceAreaSummary: v.optional(v.string()),
+  availabilitySummary: v.optional(v.string()),
+  pricingSummary: v.optional(v.string()),
+  comparison: v.optional(offeringComparison),
+  accessPaths: v.array(offeringAccessPath),
+  support: v.object({
+    integrated: v.boolean(),
+    aeSupportedAction: v.boolean(),
+    observedAt: v.optional(v.number()),
+    validUntil: v.optional(v.number()),
+  }),
+})
+
+const offeringBusinessDto = v.object({
+  schemaVersion: v.literal('public-business-catalog-api:v2'),
+  businessId: v.string(),
+  slug: v.string(),
+  name: v.string(),
+  category: v.string(),
+  suburb: v.string(),
+  stateTerritory: v.string(),
+  publishedPhone: v.optional(v.string()),
+  postcode: v.optional(v.string()),
+  publicUrl: v.string(),
+  observedAt: v.number(),
+  disposition: v.union(v.literal('current'), v.literal('partial'), v.literal('stale')),
+  offerings: v.array(offeringDto),
+  accessSummary: v.object({
+    humanRequest: v.boolean(),
+    externalOperation: v.boolean(),
+    aeSupportedAction: v.boolean(),
+  }),
+})
+
+const offeringPageResult = v.object({
+  kind: v.literal('ok'),
+  schemaVersion: v.literal('public-business-catalog-api:v2'),
+  query: v.optional(v.string()),
+  items: v.array(offeringBusinessDto),
+  pagination: v.object({
+    cursor: v.optional(v.string()),
+    nextCursor: v.optional(v.string()),
+    limit: v.number(),
+    total: v.number(),
+    hasMore: v.boolean(),
+  }),
+})
+
+const offeringDetailResult = v.union(
+  v.object({
+    kind: v.literal('found'),
+    schemaVersion: v.literal('public-business-catalog-api:v2'),
+    business: offeringBusinessDto,
   }),
   v.object({
     kind: v.literal('not_found'),
@@ -294,14 +479,14 @@ export const listPublicBusinessOfferingSupply = queryGeneric({
     cursor: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
-  returns: v.any(),
+  returns: offeringPageResult,
   handler: async (ctx, args) => {
     const db = runtimeReader(ctx.db)
     const input = queryInput(args)
     const rows = await readPublishedBusinessRows(db, input.cursor, normalizeLimit(input.limit) + 1)
     const items = (await Promise.all(rows.map((business) => readOfferingSupplyForBusiness(db, business))))
       .filter((item): item is NonNullable<typeof item> => item !== undefined)
-    return paginateOfferingSupply(items, input)
+    return toConvexOfferingPage(paginateOfferingSupply(items, input))
   },
 })
 
@@ -313,43 +498,48 @@ export const searchPublicBusinessOfferingSupply = queryGeneric({
     cursor: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
-  returns: v.any(),
+  returns: offeringPageResult,
   handler: async (ctx, args) => {
     const db = runtimeReader(ctx.db)
     const input = queryInput(args)
     const needle = normalizeSearchText(args.query)
-    if (needle.length === 0) return paginateOfferingSupply([], input, '')
+    if (needle.length === 0) {
+      return toConvexOfferingPage(paginateOfferingSupply([], input, ''))
+    }
     const tokens = needle.split(' ').filter((token) => !SEARCH_STOP_WORDS.has(token)).map(normalizeSearchToken)
     const locationKey = resolveSearchLocationKey(args)
-    const rows = await readPublishedBusinessRows(db, undefined, CATALOG_TOTAL_COUNT_LIMIT + 1)
+    const rows = await readOfferingSearchCandidateBusinesses(
+      db,
+      needle,
+      tokens,
+      locationKey,
+      normalizeLimit(input.limit) + 1,
+    )
     const items = (await Promise.all(rows.map((business) => readOfferingSupplyForBusiness(db, business))))
       .filter((item): item is NonNullable<typeof item> => item !== undefined)
-      .filter((item) => {
-        const places = [item.suburb, `${item.suburb} ${item.stateTerritory}`, item.stateTerritory, item.postcode]
-          .filter((value): value is string => typeof value === 'string').map(normalizeSearchText)
-        if (locationKey !== undefined && !places.includes(locationKey)) return false
-        const haystack = normalizeSearchText([item.name, item.category, item.suburb, item.stateTerritory, ...item.offerings.flatMap((offering) => [offering.name, offering.category, offering.summary])].join(' '))
-        return (tokens.length === 0 ? [needle] : tokens).every((token) => haystack.includes(token))
-      })
-    return paginateOfferingSupply(items, input, needle)
+    return toConvexOfferingPage(paginateOfferingSupply(items, input, needle))
   },
 })
 
 export const getPublicBusinessOfferingSupplyBySlug = queryGeneric({
   args: { slug: v.string() },
-  returns: v.any(),
+  returns: offeringDetailResult,
   handler: async (ctx, args) => {
     const db = runtimeReader(ctx.db)
     const business = await db.query('businesses')
       .withIndex('by_slug', (query) => query.eq('slug', normalizeSlug(args.slug)))
       .unique()
     if (business === null || stringField(business, 'publicStatus') !== 'published') {
-      return { kind: 'not_found', code: 'business_not_found', reason: 'No public business catalog exists for this slug.' }
+      return toConvexOfferingDetail({
+        kind: 'not_found',
+        code: 'business_not_found',
+        reason: 'No public business catalog exists for this slug.',
+      })
     }
     const item = await readOfferingSupplyForBusiness(db, business)
-    return item === undefined
+    return toConvexOfferingDetail(item === undefined
       ? { kind: 'not_found', code: 'business_not_found', reason: 'No current public Offering projection exists for this business.' }
-      : { kind: 'found', schemaVersion: 'public-business-catalog-api:v2', business: item }
+      : { kind: 'found', schemaVersion: 'public-business-catalog-api:v2', business: item })
   },
 })
 
@@ -587,6 +777,36 @@ async function readPublishedBusinessRows(
   )
 }
 
+async function readOfferingSearchCandidateBusinesses(
+  db: RuntimeDb,
+  query: string,
+  tokens: readonly string[],
+  locationKey: string | undefined,
+  limit: number,
+): Promise<RuntimeDocument[]> {
+  const searchText = tokens.length === 0 ? query : tokens.join(' ')
+  const documents = await takeDocuments(
+    boundedQuery(db.query('registrySearchDocuments')).withSearchIndex(
+      'search_searchText_by_publicStatus',
+      (search) =>
+        search.search('searchText', searchText).eq('publicStatus', 'published'),
+    ),
+    Math.min(SEARCH_DOCUMENT_CANDIDATE_LIMIT, Math.max(limit * 4, limit)),
+  )
+  const slugs = uniqueBusinessSlugs(
+    documents.filter((document) => matchesSearchDocument(document, tokens, locationKey)),
+  ).slice(0, limit)
+  const businesses = await Promise.all(slugs.map(async (slug) => {
+    const business = await db.query('businesses')
+      .withIndex('by_slug', (index) => index.eq('slug', slug))
+      .unique()
+    return business !== null && stringField(business, 'publicStatus') === 'published'
+      ? business
+      : undefined
+  }))
+  return businesses.filter((business): business is RuntimeDocument => business !== undefined)
+}
+
 async function publishedCursorSlug(
   db: RuntimeDb,
   cursor: string,
@@ -660,13 +880,16 @@ export async function readOfferingSupplyForBusiness(
   const json = stringField(snapshot, 'projectionJson')
   if (json === undefined) return undefined
   try {
-    const projection = JSON.parse(json) as BusinessSupplyProjection
+    const decoded = decodeStoredBusinessSupplyProjection(JSON.parse(json))
+    if (decoded.kind === 'invalid') return undefined
+    const projection = decoded.projection
     if (
-      projection === null
-      || typeof projection !== 'object'
-      || !Array.isArray(projection.offerings)
-      || projection.business?.businessId !== business._id
-      || projection.business?.slug !== stringField(business, 'slug')
+      projection.business.businessId !== business._id
+      || projection.business.slug !== stringField(business, 'slug')
+      || projection.sourceRevision !== numberField(snapshot, 'sourceRevision')
+      || projection.sourceDigest !== stringField(snapshot, 'sourceDigest')
+      || projection.observedAt !== numberField(snapshot, 'observedAt')
+      || projection.disposition !== stringField(snapshot, 'disposition')
     ) return undefined
     // Mask expired readiness at read time so public support cannot outlive its evidence.
     const projected = projectBusinessSupplyToPublicApi(projection, Date.now())
@@ -702,6 +925,245 @@ function paginateOfferingSupply(
       hasMore: next !== undefined,
     },
   }
+}
+
+function toConvexOfferingPage(input: unknown) {
+  const page = publicBusinessCatalogApiV2PageSchema.parse(input)
+  return {
+    kind: page.kind,
+    schemaVersion: page.schemaVersion,
+    ...(page.query === undefined ? {} : { query: page.query }),
+    items: page.items.map(toConvexOfferingBusiness),
+    pagination: {
+      ...(page.pagination.cursor === undefined ? {} : { cursor: page.pagination.cursor }),
+      ...(page.pagination.nextCursor === undefined ? {} : { nextCursor: page.pagination.nextCursor }),
+      limit: page.pagination.limit,
+      total: page.pagination.total,
+      hasMore: page.pagination.hasMore,
+    },
+  }
+}
+
+function toConvexOfferingDetail(input: unknown) {
+  const result = publicBusinessCatalogV2DetailResultSchema.parse(input)
+  return result.kind === 'not_found'
+    ? {
+        kind: result.kind,
+        code: result.code,
+        reason: result.reason,
+      }
+    : {
+        kind: result.kind,
+        schemaVersion: result.schemaVersion,
+        business: toConvexOfferingBusiness(result.business),
+      }
+}
+
+function toConvexOfferingBusiness(
+  business: ReturnType<typeof publicBusinessCatalogApiV2DtoForConversion>,
+) {
+  return {
+    schemaVersion: business.schemaVersion,
+    businessId: business.businessId,
+    slug: business.slug,
+    name: business.name,
+    category: business.category,
+    suburb: business.suburb,
+    stateTerritory: business.stateTerritory,
+    ...(business.publishedPhone === undefined ? {} : { publishedPhone: business.publishedPhone }),
+    ...(business.postcode === undefined ? {} : { postcode: business.postcode }),
+    publicUrl: business.publicUrl,
+    observedAt: business.observedAt,
+    disposition: business.disposition,
+    offerings: business.offerings.map((offering) => ({
+      offeringRef: offering.offeringRef,
+      revision: offering.revision,
+      name: offering.name,
+      category: offering.category,
+      summary: offering.summary,
+      ...(offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: offering.serviceAreaSummary }),
+      ...(offering.availabilitySummary === undefined ? {} : { availabilitySummary: offering.availabilitySummary }),
+      ...(offering.pricingSummary === undefined ? {} : { pricingSummary: offering.pricingSummary }),
+      ...(offering.comparison === undefined
+        ? {}
+        : { comparison: toConvexOfferingComparison(offering.comparison) }),
+      accessPaths: offering.accessPaths.map((path) => path.kind === 'human_request'
+        ? {
+            accessPathRef: path.accessPathRef,
+            kind: path.kind,
+            channel: path.channel,
+            disclosure: path.disclosure,
+            ...(path.url === undefined ? {} : { url: path.url }),
+          }
+        : {
+            accessPathRef: path.accessPathRef,
+            kind: path.kind,
+            name: path.name,
+            summary: path.summary,
+            url: path.url,
+            ...(path.method === undefined ? {} : { method: path.method }),
+            ...(path.documentationUrl === undefined ? {} : { documentationUrl: path.documentationUrl }),
+            ...(path.interfaceDescription === undefined
+              ? {}
+              : {
+                  interfaceDescription: {
+                    format: path.interfaceDescription.format,
+                    ...(path.interfaceDescription.url === undefined ? {} : { url: path.interfaceDescription.url }),
+                  },
+                }),
+            ...(path.authenticationSummary === undefined ? {} : { authenticationSummary: path.authenticationSummary }),
+            ...(path.pricingSummary === undefined ? {} : { pricingSummary: path.pricingSummary }),
+            provenance: path.provenance,
+          }),
+      support: {
+        integrated: offering.support.integrated,
+        aeSupportedAction: offering.support.aeSupportedAction,
+        ...(offering.support.observedAt === undefined ? {} : { observedAt: offering.support.observedAt }),
+        ...(offering.support.validUntil === undefined ? {} : { validUntil: offering.support.validUntil }),
+      },
+    })),
+    accessSummary: {
+      humanRequest: business.accessSummary.humanRequest,
+      externalOperation: business.accessSummary.externalOperation,
+      aeSupportedAction: business.accessSummary.aeSupportedAction,
+    },
+  }
+}
+
+type PublicOfferingComparison = NonNullable<
+  ReturnType<typeof publicBusinessCatalogApiV2DtoForConversion>['offerings'][number]['comparison']
+>
+
+type ComparisonFactSource =
+  | Readonly<{ kind: 'business_supplied' }>
+  | Readonly<{ kind: 'publicly_observed'; referenceUrl?: string | undefined }>
+  | Readonly<{ kind: 'ae_support'; actionId: string; actionVersion: string }>
+
+type ComparisonFact<Value> =
+  | Readonly<{
+      kind: 'known'
+      value: Value
+      source: ComparisonFactSource
+      observedAt: number
+      validUntil?: number | undefined
+    }>
+  | Readonly<{
+      kind: 'unknown'
+      explanation: string
+      source: ComparisonFactSource
+      observedAt: number
+    }>
+  | Readonly<{
+      kind: 'not_supplied'
+      source: ComparisonFactSource
+      observedAt: number
+    }>
+  | Readonly<{
+      kind: 'stale'
+      lastKnown?: Value | undefined
+      source: ComparisonFactSource
+      observedAt: number
+      validUntil: number
+    }>
+
+function toConvexComparisonSource(source: ComparisonFactSource) {
+  if (source.kind === 'business_supplied') return { kind: source.kind }
+  if (source.kind === 'ae_support') {
+    return {
+      kind: source.kind,
+      actionId: source.actionId,
+      actionVersion: source.actionVersion,
+    }
+  }
+  return {
+    kind: source.kind,
+    ...(source.referenceUrl === undefined ? {} : { referenceUrl: source.referenceUrl }),
+  }
+}
+
+function toConvexComparisonFact<Input, Output>(
+  fact: ComparisonFact<Input>,
+  mapValue: (value: Input) => Output,
+) {
+  if (fact.kind === 'known') {
+    return {
+      kind: fact.kind,
+      value: mapValue(fact.value),
+      source: toConvexComparisonSource(fact.source),
+      observedAt: fact.observedAt,
+      ...(fact.validUntil === undefined ? {} : { validUntil: fact.validUntil }),
+    }
+  }
+  if (fact.kind === 'stale') {
+    return {
+      kind: fact.kind,
+      ...(fact.lastKnown === undefined ? {} : { lastKnown: mapValue(fact.lastKnown) }),
+      source: toConvexComparisonSource(fact.source),
+      observedAt: fact.observedAt,
+      validUntil: fact.validUntil,
+    }
+  }
+  if (fact.kind === 'unknown') {
+    return {
+      kind: fact.kind,
+      explanation: fact.explanation,
+      source: toConvexComparisonSource(fact.source),
+      observedAt: fact.observedAt,
+    }
+  }
+  return {
+    kind: fact.kind,
+    source: toConvexComparisonSource(fact.source),
+    observedAt: fact.observedAt,
+  }
+}
+
+function toConvexPriceBasis(value: {
+  description: string
+  currency?: string | undefined
+  amountMinor?: number | undefined
+  unit: 'total' | 'hour' | 'day' | 'month' | 'request' | 'unit'
+}) {
+  return {
+    description: value.description,
+    ...(value.currency === undefined ? {} : { currency: value.currency }),
+    ...(value.amountMinor === undefined ? {} : { amountMinor: value.amountMinor }),
+    unit: value.unit,
+  }
+}
+
+function toConvexOfferingComparison(comparison: PublicOfferingComparison) {
+  const identity = <Value>(value: Value): Value => value
+  if (comparison.profile.profileId === 'professional_service:v1') {
+    return {
+      schemaVersion: comparison.schemaVersion,
+      profile: {
+        profileId: comparison.profile.profileId,
+        scopeBasis: toConvexComparisonFact(comparison.profile.scopeBasis, identity),
+        priceBasis: toConvexComparisonFact(comparison.profile.priceBasis, toConvexPriceBasis),
+        timingBasis: toConvexComparisonFact(comparison.profile.timingBasis, identity),
+        serviceArea: toConvexComparisonFact(comparison.profile.serviceArea, identity),
+      },
+    }
+  }
+  return {
+    schemaVersion: comparison.schemaVersion,
+    profile: {
+      profileId: comparison.profile.profileId,
+      interfaceFormat: toConvexComparisonFact(comparison.profile.interfaceFormat, identity),
+      requestMethod: toConvexComparisonFact(comparison.profile.requestMethod, identity),
+      authentication: toConvexComparisonFact(comparison.profile.authentication, identity),
+      priceBasis: toConvexComparisonFact(comparison.profile.priceBasis, toConvexPriceBasis),
+      freshnessOrUpdateCadence: toConvexComparisonFact(
+        comparison.profile.freshnessOrUpdateCadence,
+        identity,
+      ),
+    },
+  }
+}
+
+function publicBusinessCatalogApiV2DtoForConversion(input: unknown) {
+  return publicBusinessCatalogApiV2DtoSchema.parse(input)
 }
 
 async function resolvePublishedInquiryTargetFromDb(

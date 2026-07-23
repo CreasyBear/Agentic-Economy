@@ -36,6 +36,7 @@ export type PublicOfferingDto = Readonly<{
   serviceAreaSummary?: string
   availabilitySummary?: string
   pricingSummary?: string
+  comparison?: BusinessSupplyProjection['offerings'][number]['offering']['comparison']
   accessPaths: readonly PublicOfferingAccessPathDto[]
   support: Readonly<{
     integrated: boolean
@@ -106,6 +107,7 @@ export function projectBusinessSupplyToPublicApi(
     ...(item.offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: item.offering.serviceAreaSummary }),
     ...(item.offering.availabilitySummary === undefined ? {} : { availabilitySummary: item.offering.availabilitySummary }),
     ...(item.offering.pricingSummary === undefined ? {} : { pricingSummary: item.offering.pricingSummary }),
+    ...(item.offering.comparison === undefined ? {} : { comparison: item.offering.comparison }),
     accessPaths: item.accessPaths.map(projectAccessPath),
     support: {
       integrated: item.support.integrated,

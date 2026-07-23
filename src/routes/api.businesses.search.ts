@@ -2,12 +2,12 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { registrySearchAction } from '@/modules/registry/registry.actions'
 import { legacyPublicRegistrySearch } from '@/modules/registry/registry.functions'
-import { readPublicOfferingRegistrySearchPage } from '@/modules/registry/registry.functions'
-import type { PublicBusinessCatalogSearchInput } from '@/modules/registry/public'
 import {
+  assertOnlySearchParams,
   jsonResponse,
   optionalCursor,
   optionalLimit,
+  strictOptionalLimit,
 } from './api.businesses'
 
 export const Route = createFileRoute('/api/businesses/search')({
@@ -20,14 +20,15 @@ export const Route = createFileRoute('/api/businesses/search')({
 
 export async function handleDurableSearchBusinessesRequest(request: Request): Promise<Response> {
   const url = new URL(request.url)
+  assertOnlySearchParams(url.searchParams, ['q', 'mode', 'location', 'cursor', 'limit'])
   const data = registrySearchAction.schema.parse({
     query: url.searchParams.get('q') ?? '',
-    ...optionalSearchMode(url.searchParams.get('mode')),
+    ...strictOptionalSearchMode(url.searchParams.get('mode')),
     ...optionalSearchLocation(url.searchParams.get('location')),
     ...optionalCursor(url.searchParams.get('cursor')),
-    ...optionalLimit(url.searchParams.get('limit')),
+    ...strictOptionalLimit(url.searchParams.get('limit')),
   })
-  const result = await readPublicOfferingRegistrySearchPage(data as PublicBusinessCatalogSearchInput)
+  const result = await registrySearchAction.run({ data, context: { request } })
 
   return jsonResponse(result)
 }
@@ -55,6 +56,13 @@ function optionalSearchMode(
     return { mode: 'whole_catalogue' }
   }
   return {}
+}
+
+function strictOptionalSearchMode(value: string | null): { mode?: string } {
+  if (value === null || value.trim().length === 0) return {}
+  if (value === 'near') return { mode: 'near_me' }
+  if (value === 'catalogue' || value === 'catalog') return { mode: 'whole_catalogue' }
+  return { mode: value }
 }
 
 function optionalSearchLocation(value: string | null): { location?: string } {

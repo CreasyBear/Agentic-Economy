@@ -2,19 +2,13 @@ import { z } from 'zod'
 
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
-  readPublicRegistryBusinessDetail,
-  readPublicRegistryCatalogPage,
-  readPublicRegistrySearchPage,
+  readPublicOfferingRegistryBusinessDetail,
+  readPublicOfferingRegistryPage,
+  readPublicOfferingRegistrySearchPage,
 } from '@/modules/registry/registry.functions'
 import {
-  projectCurrentPublicInquiryDetail,
-  projectCurrentPublicInquiryPage,
-} from '@/modules/registry/public-inquiry-projection'
-import type {
-  PublicBusinessCatalogApiDto,
-  PublicBusinessCatalogApiPage,
-  PublicBusinessCatalogDetailResult,
-  PublicBusinessCatalogQueryInput,
+  publicBusinessCatalogApiV2PageSchema,
+  publicBusinessCatalogV2DetailResultSchema,
 } from '@/modules/registry/public'
 
 /**
@@ -32,7 +26,7 @@ import type {
  * expose private owner fields, raw DB rows, or booking/payment/dispatch claims.
  */
 
-const registryListInputSchema = z.object({
+const registryListInputSchema = z.strictObject({
   cursor: z.string().max(200).optional().describe('Pagination cursor from a previous catalog page'),
   limit: z
     .number()
@@ -68,70 +62,6 @@ const registrySearchInputSchema = z.strictObject({
 const registryDetailInputSchema = z.strictObject({
   slug: z.string().min(1).max(200).describe('Published business slug'),
 })
-
-const publicBusinessCatalogApiDtoOutputSchema = z.strictObject({
-  slug: z.string(),
-  name: z.string(),
-  category: z.string(),
-  suburb: z.string(),
-  stateTerritory: z.string(),
-  publishedPhone: z.string().optional(),
-  postcode: z.string().optional(),
-  publicUrl: z.string(),
-  trustTier: z.string(),
-  publicStatus: z.literal('published'),
-  indexStatus: z.string(),
-  discoveryStatus: z.string(),
-  schemaVersion: z.string(),
-  updatedAt: z.number(),
-  photos: z.array(z.strictObject({ url: z.string(), alt: z.string() })),
-  responseTimeMinutes: z.number().optional(),
-  services: z.array(
-    z.strictObject({
-      slug: z.string(),
-      name: z.string(),
-      category: z.string(),
-      summary: z.string(),
-      serviceArea: z.string(),
-      hoursOrUnknown: z.string(),
-      firstRequest: z.strictObject({
-        mode: z.string(),
-        publicDisclosure: z.string(),
-        publicChannel: z.string(),
-        noContactReason: z.string().optional(),
-      }),
-      status: z.literal('published'),
-      capabilities: z.array(z.strictObject({ kind: z.string(), status: z.string() })),
-    })
-  ),
-}) as z.ZodType<PublicBusinessCatalogApiDto>
-
-const registryPageOutputSchema = z.strictObject({
-  kind: z.literal('ok'),
-  schemaVersion: z.string(),
-  query: z.string().optional(),
-  items: z.array(publicBusinessCatalogApiDtoOutputSchema),
-  pagination: z.strictObject({
-    cursor: z.string().optional(),
-    nextCursor: z.string().optional(),
-    limit: z.number().int().nonnegative(),
-    total: z.number().int().nonnegative(),
-    hasMore: z.boolean(),
-  }),
-}) as z.ZodType<PublicBusinessCatalogApiPage>
-
-const registryDetailOutputSchema = z.discriminatedUnion('kind', [
-  z.strictObject({
-    kind: z.literal('found'),
-    schemaVersion: z.string(),
-    business: publicBusinessCatalogApiDtoOutputSchema,
-  }),
-  z.strictObject({
-    kind: z.literal('not_found'),
-    code: z.literal('business_not_found'),
-    reason: z.string(),
-  }),
-]) as z.ZodType<PublicBusinessCatalogDetailResult>
 
 const listParameters: readonly ActionParameter[] = [
   {
@@ -202,17 +132,26 @@ export const registryListAction = defineAction({
     'Returns only public catalog facts for published listings.',
     'Availability, quotes, and job acceptance still need a human reply through the listing or qualified inquiry path.',
   ],
-  schema: registryListInputSchema as z.ZodType<PublicBusinessCatalogQueryInput>,
-  outputSchema: registryPageOutputSchema,
+  schema: registryListInputSchema,
+  outputSchema: publicBusinessCatalogApiV2PageSchema,
   parameters: listParameters,
   readOnly: true,
   surfaces: ['http', 'agentJson'],
+  invocationContract: {
+    version: 'registry.list:v2',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['cursor', 'limit'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['public_registry_list_result'],
+    safeContinuations: ['inspect_result'],
+    invalidationConditions: ['action_contract_version_changed', 'cursor_changed', 'limit_changed'],
+  },
   run: async ({ data }) => {
-    const page = await projectCurrentPublicInquiryPage(await readPublicRegistryCatalogPage({
+    return publicBusinessCatalogApiV2PageSchema.parse(await readPublicOfferingRegistryPage({
       ...(data.cursor === undefined ? {} : { cursor: data.cursor.trim() }),
       ...(data.limit === undefined ? {} : { limit: data.limit }),
     }))
-    return page as PublicBusinessCatalogApiPage
   },
 })
 
@@ -220,29 +159,38 @@ export const registrySearchAction = defineAction({
   id: 'registry.search',
   name: 'Search listed businesses',
   summary:
-    'Search the Agentic Economy catalog for published local service businesses. ' +
+    'Search the Agentic Economy catalog for published businesses and Offerings. ' +
     'Returns the same public catalog subset as /api/businesses/search. ' +
     'Read-only and public-fact-only; always use this before naming providers in an answer.',
   boundaries: [
     'Read-only. Does not book, charge, dispatch, or send inquiries.',
-    'Returns only public catalog facts: slug, name, category, suburb, services, and published contact capabilities.',
+    'Returns only public business and Offering facts, exact revisions, public access paths, and named AE support posture.',
     'The registry is literal. Misspelled suburbs (e.g. "paramata") do not auto-correct; choose better search arguments instead.',
     'Availability, quotes, and job acceptance still need a human reply through the listing or qualified inquiry path.',
   ],
   schema: registrySearchInputSchema,
-  outputSchema: registryPageOutputSchema,
+  outputSchema: publicBusinessCatalogApiV2PageSchema,
   parameters: searchParameters,
   readOnly: true,
-  surfaces: ['http', 'agentJson', 'answerThread'],
-  run: async ({ data, context }) => {
-    const page = await projectCurrentPublicInquiryPage(await readPublicRegistrySearchPage({
+  surfaces: ['http', 'agentJson'],
+  invocationContract: {
+    version: 'registry.search:v2',
+    consequenceClass: 'read_only',
+    materialInputPaths: ['query', 'cursor', 'limit', 'mode', 'location'],
+    authorityRequirement: 'none',
+    retryClass: 'replayable',
+    expectedEvidence: ['public_registry_search_result'],
+    safeContinuations: ['inspect_result'],
+    invalidationConditions: ['action_contract_version_changed', 'search_input_changed'],
+  },
+  run: async ({ data }) => {
+    return publicBusinessCatalogApiV2PageSchema.parse(await readPublicOfferingRegistrySearchPage({
       query: data.query.trim(),
       ...(data.limit === undefined ? {} : { limit: data.limit }),
       ...(data.cursor === undefined ? {} : { cursor: data.cursor.trim() }),
       ...(data.mode === undefined ? {} : { mode: data.mode }),
       ...(data.location === undefined ? {} : { location: data.location.trim() }),
-    }, context.timing === undefined ? {} : { timing: context.timing }))
-    return page as PublicBusinessCatalogApiPage
+    }))
   },
 })
 
@@ -258,12 +206,12 @@ export const registryDetailAction = defineAction({
     'A not_found result means no public listing exists for that slug; do not invent provider details.',
   ],
   schema: registryDetailInputSchema,
-  outputSchema: registryDetailOutputSchema,
+  outputSchema: publicBusinessCatalogV2DetailResultSchema,
   parameters: detailParameters,
   readOnly: true,
-  surfaces: ['http', 'agentJson', 'answerThread'],
+  surfaces: ['http', 'agentJson'],
   invocationContract: {
-    version: 'registry.detail:v1',
+    version: 'registry.detail:v2',
     consequenceClass: 'read_only',
     materialInputPaths: ['slug'],
     authorityRequirement: 'none',
@@ -274,13 +222,12 @@ export const registryDetailAction = defineAction({
   },
   run: async ({ data, context }) => {
     if (context.developmentOnlyRegistryDetailAdapter !== undefined) {
-      return registryDetailOutputSchema.parse(
+      return publicBusinessCatalogV2DetailResultSchema.parse(
         await context.developmentOnlyRegistryDetailAdapter({ slug: data.slug.trim() }),
       )
     }
-    const result = await projectCurrentPublicInquiryDetail(
-      await readPublicRegistryBusinessDetail({ slug: data.slug.trim() }),
+    return publicBusinessCatalogV2DetailResultSchema.parse(
+      await readPublicOfferingRegistryBusinessDetail({ slug: data.slug.trim() }),
     )
-    return result as PublicBusinessCatalogDetailResult
   },
 })

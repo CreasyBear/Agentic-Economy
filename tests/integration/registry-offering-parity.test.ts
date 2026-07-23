@@ -25,19 +25,21 @@ describe('Offering-v2 registry HTTP/action parity', () => {
   it('round-trips both closed profiles through list/search/detail actions without semantic loss', async () => {
     const businesses = [professionalProjection(), machineProjection()]
       .map((projection) => projectBusinessSupplyToPublicApi(projection))
-    const page = {
+    const page = registryListAction.outputSchema.parse({
       kind: 'ok' as const,
       schemaVersion: 'public-business-catalog-api:v2' as const,
       items: businesses,
       pagination: { limit: 10, total: 2, hasMore: false },
-    }
+    })
     const listRun = vi.spyOn(registryListAction, 'run').mockResolvedValue(page)
-    const searchRun = vi.spyOn(registrySearchAction, 'run').mockResolvedValue({ ...page, query: 'fixture' })
-    const detailRun = vi.spyOn(registryDetailAction, 'run').mockResolvedValue({
+    const searchPage = registrySearchAction.outputSchema.parse({ ...page, query: 'fixture' })
+    const searchRun = vi.spyOn(registrySearchAction, 'run').mockResolvedValue(searchPage)
+    const detailResult = registryDetailAction.outputSchema.parse({
       kind: 'found',
       schemaVersion: 'public-business-catalog-api:v2',
       business: businesses[0]!,
     })
+    const detailRun = vi.spyOn(registryDetailAction, 'run').mockResolvedValue(detailResult)
 
     const httpList = await (await handleDurableListBusinessesRequest(
       new Request('https://ae.example/api/businesses?limit=10'),
@@ -51,12 +53,8 @@ describe('Offering-v2 registry HTTP/action parity', () => {
     expect(searchRun).toHaveBeenCalledOnce()
     expect(detailRun).toHaveBeenCalledOnce()
     expect(digest(httpList)).toBe(digest(page))
-    expect(digest(httpSearch)).toBe(digest({ ...page, query: 'fixture' }))
-    expect(digest(httpDetail)).toBe(digest({
-      kind: 'found',
-      schemaVersion: 'public-business-catalog-api:v2',
-      business: businesses[0],
-    }))
+    expect(digest(httpSearch)).toBe(digest(searchPage))
+    expect(digest(httpDetail)).toBe(digest(detailResult))
     expect(httpList.items.map((item: { offerings: unknown[] }) => item.offerings)).toHaveLength(2)
     expect(JSON.stringify([httpList, httpSearch, httpDetail])).not.toMatch(
       /services|trustTier|legacy-offering|contactAvailabilityOrder|sourceHash|credentials|adapterConfig|privateReasons/u,
@@ -126,7 +124,7 @@ function projection(
         name: `${slug} Offering`,
         category: 'Fixture',
         summary: 'Labelled fixture Offering.',
-        comparison,
+        ...(comparison === undefined ? {} : { comparison }),
       },
       accessPaths: [],
       support: {

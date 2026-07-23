@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { registryListAction } from '@/modules/registry/registry.actions'
-import { legacyPublicRegistryList, readPublicOfferingRegistryPage } from '@/modules/registry/registry.functions'
+import { legacyPublicRegistryList } from '@/modules/registry/registry.functions'
 
 export const Route = createFileRoute('/api/businesses')({
   server: {
@@ -13,11 +13,12 @@ export const Route = createFileRoute('/api/businesses')({
 
 export async function handleDurableListBusinessesRequest(request: Request): Promise<Response> {
   const url = new URL(request.url)
+  assertOnlySearchParams(url.searchParams, ['cursor', 'limit'])
   const data = registryListAction.schema.parse({
     ...optionalCursor(url.searchParams.get('cursor')),
-    ...optionalLimit(url.searchParams.get('limit')),
+    ...strictOptionalLimit(url.searchParams.get('limit')),
   })
-  const result = await readPublicOfferingRegistryPage(data)
+  const result = await registryListAction.run({ data, context: { request } })
 
   return jsonResponse(result)
 }
@@ -67,4 +68,21 @@ export function optionalCursor(value: string | null): { cursor?: string } {
 export function optionalLimit(value: string | null): { limit?: number } {
   const limit = numericParam(value)
   return limit === undefined ? {} : { limit }
+}
+
+export function strictOptionalLimit(value: string | null): { limit?: number } {
+  if (value === null || value.trim().length === 0) return {}
+  return { limit: Number(value) }
+}
+
+export function assertOnlySearchParams(
+  params: URLSearchParams,
+  allowed: readonly string[],
+): void {
+  const allowedNames = new Set(allowed)
+  for (const name of params.keys()) {
+    if (!allowedNames.has(name)) {
+      throw new Error(`Unsupported query parameter: ${name}`)
+    }
+  }
 }
