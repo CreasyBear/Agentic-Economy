@@ -365,7 +365,10 @@ jobs:
           CONSUMER_COMPARISON_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
           CONSUMER_COMPARISON_ARTIFACT_DIR: ${{ github.workspace }}/output/phase5-hosted
           CONSUMER_COMPARISON_PACKET_PATH: ${{ github.workspace }}/output/phase5-hosted/consumer-comparison-evidence.json
-        run: npm exec -- tsx tools/release/run-consumer-comparison-hosted-proof.ts
+        run: |
+          mkdir -p output/phase5-hosted
+          printf '/output/phase5-hosted/\n' >> .git/info/exclude
+          npm exec -- tsx tools/release/run-consumer-comparison-hosted-proof.ts
 
       - name: Refuse post-proof source drift
         run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain=v1 --untracked-files=all)"
