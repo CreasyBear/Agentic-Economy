@@ -2,6 +2,7 @@ import {
   buildArtifactsFromSnapshot,
   type AnswerSnapshot,
   type AnswerSource,
+  type ColdStartDecisionClarificationSupport,
   type AnswerWorkStep,
 } from '@/modules/answer/public'
 import {
@@ -368,6 +369,13 @@ export function collectLatestFrozenAllowedSlugs(priorTurns: readonly AnswerTurnR
   return [...(readLatestFrozenEvidence(priorTurns)?.allowedSlugs ?? [])]
 }
 
+export function collectLatestColdStartClarification(
+  priorTurns: readonly AnswerTurnRecordLite[],
+): ColdStartDecisionClarificationSupport | undefined {
+  const support = readLatestFrozenEvidence(priorTurns)?.decisionSupport
+  return support?.stage === 'clarification' ? support : undefined
+}
+
 function readLatestFrozenEvidence(priorTurns: readonly AnswerTurnRecordLite[]): FrozenTurnEvidence | undefined {
   const sorted = priorTurns.slice().sort((left, right) => right.seq - left.seq)
   for (const turn of sorted) {
@@ -391,6 +399,7 @@ function buildFrozenEvidence(
   return {
     providers: snapshot.providers,
     ...(snapshot.offeringSources === undefined ? {} : { offeringSources: snapshot.offeringSources }),
+    ...(snapshot.decisionSupport === undefined ? {} : { decisionSupport: snapshot.decisionSupport }),
     allowedSlugs: [...allowedSlugs],
     agentJsonUrl: snapshot.agentJsonUrl,
     ...(searchContext === undefined ? {} : { searchContext }),

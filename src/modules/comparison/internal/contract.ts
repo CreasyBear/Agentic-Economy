@@ -161,6 +161,7 @@ export type ExactPublicOfferingReadResult =
         | 'revision_unavailable'
         | 'privacy_withdrawn'
         | 'safety_withdrawn'
+        | 'ambiguous_history'
     }>
 
 export type LiveOfferingAvailabilityResult =
@@ -202,6 +203,7 @@ export type ComparisonSelectionRefusalReason =
   | 'revision_unavailable'
   | 'privacy_withdrawn'
   | 'safety_withdrawn'
+  | 'ambiguous_history'
   | 'lineage_mismatch'
   | 'invalid_comparison_profile'
 

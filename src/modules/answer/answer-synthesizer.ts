@@ -1,4 +1,10 @@
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import {
+  WebsiteDecisionConstraintIds as ComparisonWebsiteDecisionConstraintIds,
+  WebsiteFunctionChoiceValues as ComparisonWebsiteFunctionChoiceValues,
+  type WebsiteDecisionConstraintId as ComparisonWebsiteDecisionConstraintId,
+  type WebsiteFunctionChoice as ComparisonWebsiteFunctionChoice,
+} from '@/modules/comparison/public'
 
 import type { AnswerArtifact } from './answer-schema'
 import type { AnswerLayoutProfile } from './internal/answer-layout-profile'
@@ -139,6 +145,192 @@ export type OfferingAnswerSource = Readonly<{
   detailUrl: string
 }>
 
+export const ColdStartDecisionOutcomeValues = [
+  'no_registered_supply',
+  'no_current_match',
+  'one_plausible_option',
+  'insufficient_comparable_evidence',
+  'constraints_too_narrow',
+  'usable_comparison',
+  'unsupported_category',
+] as const
+
+export type ColdStartDecisionOutcome =
+  (typeof ColdStartDecisionOutcomeValues)[number]
+
+export const WebsiteDecisionConstraintIds =
+  ComparisonWebsiteDecisionConstraintIds
+export type WebsiteDecisionConstraintId =
+  ComparisonWebsiteDecisionConstraintId
+
+export const WebsiteFunctionChoiceValues =
+  ComparisonWebsiteFunctionChoiceValues
+export type WebsiteFunctionChoice = ComparisonWebsiteFunctionChoice
+
+export const ColdStartPriceEvidenceClassValues = [
+  'provider_published_price',
+  'observed_market_range',
+  'community_anecdote',
+  'ae_estimate',
+  'price_unavailable',
+] as const
+
+export type ColdStartPriceEvidenceClass = (typeof ColdStartPriceEvidenceClassValues)[number]
+
+export type ColdStartPriceEvidence = Readonly<{
+  evidenceClass: ColdStartPriceEvidenceClass
+  value: string
+}>
+
+export type ColdStartDecisionSourceResult = Readonly<{
+  outcome: ColdStartDecisionOutcome
+  confirmedChoiceId: WebsiteFunctionChoice
+  confirmedConstraintIds: readonly WebsiteDecisionConstraintId[]
+  searchedRegisteredSupplyCount: number
+  prices: readonly ColdStartPriceEvidence[]
+  relaxableConstraintId?: Extract<WebsiteDecisionConstraintId, 'website:v1:perth_local_preference' | 'website:v1:affordability_preference'>
+}>
+
+export type ColdStartDecisionSafeContinuation =
+  | Readonly<{
+      kind: 'browse_registered_supply'
+      label: 'Browse registered supply'
+    }>
+  | Readonly<{
+      kind: 'relax_named_preference'
+      constraintId: Extract<WebsiteDecisionConstraintId, 'website:v1:perth_local_preference' | 'website:v1:affordability_preference'>
+      label: 'I’m flexible'
+    }>
+
+export type ColdStartDecisionResultSupport = Readonly<{
+  kind: 'cold_start_decision_support'
+  stage: 'result'
+  outcome: ColdStartDecisionOutcome
+  confirmedChoiceId: WebsiteFunctionChoice
+  reflection: typeof COLD_START_WEBSITE_REFLECTION
+  posture: string
+  confirmedConstraintIds: readonly WebsiteDecisionConstraintId[]
+  searchedSupplyStatement: string
+  prices: readonly Readonly<{ label: string; value: string }>[]
+  safeContinuations: readonly ColdStartDecisionSafeContinuation[]
+}>
+
+export type ColdStartDecisionClarificationSupport = Readonly<{
+  kind: 'cold_start_decision_support'
+  stage: 'clarification'
+  reflection: typeof COLD_START_WEBSITE_REFLECTION
+  confirmedConstraintIds: readonly WebsiteDecisionConstraintId[]
+  clarification: Readonly<{
+    id: 'website:v1:function'
+    question: typeof COLD_START_WEBSITE_CLARIFICATION
+    choices: readonly Readonly<{
+      id: WebsiteFunctionChoice
+      label: string
+    }>[]
+  }>
+}>
+
+export type ColdStartDecisionSupport =
+  | ColdStartDecisionClarificationSupport
+  | ColdStartDecisionResultSupport
+
+export const COLD_START_WEBSITE_REFLECTION =
+  'You need a simple website for a small startup in Perth. You would prefer someone local or an affordable freelancer, and you want to understand the likely price.' as const
+
+export const COLD_START_WEBSITE_CLARIFICATION =
+  'Does the website only need to explain your business and collect enquiries, or must customers buy, book or log in?' as const
+
+export function buildColdStartWebsiteClarification(
+  confirmedConstraintIds: readonly WebsiteDecisionConstraintId[],
+): ColdStartDecisionClarificationSupport {
+  return {
+    kind: 'cold_start_decision_support',
+    stage: 'clarification',
+    reflection: COLD_START_WEBSITE_REFLECTION,
+    confirmedConstraintIds: [...confirmedConstraintIds],
+    clarification: {
+      id: 'website:v1:function',
+      question: COLD_START_WEBSITE_CLARIFICATION,
+      choices: [
+        { id: 'brochure_enquiries', label: 'Information and enquiries' },
+        { id: 'transactional', label: 'Customers need to buy, book or log in' },
+        { id: 'im_not_sure', label: 'I’m not sure' },
+      ],
+    },
+  }
+}
+
+export function projectColdStartDecisionSupport(
+  source: ColdStartDecisionSourceResult,
+): ColdStartDecisionResultSupport {
+  return {
+    kind: 'cold_start_decision_support',
+    stage: 'result',
+    outcome: source.outcome,
+    confirmedChoiceId: source.confirmedChoiceId,
+    reflection: COLD_START_WEBSITE_REFLECTION,
+    posture: coldStartOutcomePosture(source),
+    confirmedConstraintIds: [...source.confirmedConstraintIds],
+    searchedSupplyStatement: source.searchedRegisteredSupplyCount === 1
+      ? 'AE searched 1 item of registered supply with the constraints you confirmed.'
+      : `AE searched ${source.searchedRegisteredSupplyCount} items of registered supply with the constraints you confirmed.`,
+    prices: source.prices.map((price) => ({
+      label: coldStartPriceEvidenceLabel(price.evidenceClass),
+      value: price.value,
+    })),
+    safeContinuations: source.outcome === 'constraints_too_narrow'
+      && source.relaxableConstraintId !== undefined
+      ? [{
+          kind: 'relax_named_preference',
+          constraintId: source.relaxableConstraintId,
+          label: 'I’m flexible',
+        }]
+      : [{ kind: 'browse_registered_supply', label: 'Browse registered supply' }],
+  }
+}
+
+function coldStartOutcomePosture(source: ColdStartDecisionSourceResult): string {
+  switch (source.outcome) {
+    case 'no_registered_supply':
+      return 'AE does not yet have a registered Offering for this kind of work.'
+    case 'no_current_match':
+      return 'AE found registered Offerings in this category, but none currently match the constraints you confirmed.'
+    case 'one_plausible_option':
+      return 'AE found one current option that appears relevant. That is not enough to compare the market or call it the best choice.'
+    case 'insufficient_comparable_evidence':
+      return 'AE found possible options, but there is not enough current comparable information to distinguish them responsibly.'
+    case 'constraints_too_narrow':
+      return `AE found no current match with all of these preferences. You can choose whether to relax ${coldStartConstraintLabel(source.relaxableConstraintId)}.`
+    case 'usable_comparison':
+      return 'AE found current options with enough comparable published information to support a grounded comparison.'
+    case 'unsupported_category':
+      return 'AE cannot yet interpret and search this kind of request reliably.'
+  }
+}
+
+function coldStartConstraintLabel(
+  constraintId: ColdStartDecisionSourceResult['relaxableConstraintId'],
+): string {
+  switch (constraintId) {
+    case 'website:v1:perth_local_preference':
+      return 'the local preference'
+    case 'website:v1:affordability_preference':
+      return 'the affordability preference'
+    default:
+      return 'a named preference'
+  }
+}
+
+function coldStartPriceEvidenceLabel(evidenceClass: ColdStartPriceEvidenceClass): string {
+  switch (evidenceClass) {
+    case 'provider_published_price': return 'Provider-published price'
+    case 'observed_market_range': return 'Observed market range'
+    case 'community_anecdote': return 'Community anecdote'
+    case 'ae_estimate': return 'AE estimate'
+    case 'price_unavailable': return 'Price unavailable'
+  }
+}
+
 /** The final, fully-assembled answer (carried by the `complete` event). */
 export type AnswerSnapshot = {
   query: string
@@ -146,6 +338,7 @@ export type AnswerSnapshot = {
   providers: readonly AnswerSource[]
   /** Strict v2-native sources in registry-returned order. Never adapted into providers. */
   offeringSources?: readonly OfferingAnswerSource[]
+  decisionSupport?: ColdStartDecisionSupport
   /** Chosen provider for compact inquiry-path confirmations. */
   selectedProvider?: AnswerSource
   summary: string

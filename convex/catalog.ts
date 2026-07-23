@@ -4,7 +4,7 @@ import { v } from 'convex/values'
 import { readActiveAdminMembership, resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
-import type { RuntimeDb, RuntimeDocument } from './source_state'
+import type { RuntimeDb, RuntimeDocument, RuntimeQuery } from './source_state'
 import { stableHash } from '../src/modules/common/stable-hash'
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
@@ -568,6 +568,152 @@ async function runOfferingSourceMutation(
   const resultRef = value.offeringRef ?? value.accessPathRef
   return { kind: 'ok' as const, code: result.code, ...(resultRef === undefined ? {} : { resultRef }), ...(value.currentRevision === undefined ? {} : { currentRevision: value.currentRevision }) }
 }
+
+export const readPublicComparisonOfferingReference = queryGeneric({
+  args: {
+    businessId: v.string(),
+    offeringRef: v.string(),
+    revision: v.number(),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    if (
+      !Number.isSafeInteger(args.revision)
+      || args.revision <= 0
+      || args.offeringRef.length === 0
+    ) {
+      return { kind: 'unavailable' as const, reason: 'revision_unavailable' as const }
+    }
+    const normalizedBusinessId = ctx.db.normalizeId('businesses', args.businessId)
+    if (normalizedBusinessId === null) {
+      return { kind: 'unavailable' as const, reason: 'business_mismatch' as const }
+    }
+    const businessId = normalizedBusinessId
+    const db = runtimeDb(ctx.db)
+    const business = await db.get(normalizedBusinessId)
+    if (business === null || stringField(business, 'publicStatus') !== 'published') {
+      return { kind: 'unavailable' as const, reason: 'business_not_public' as const }
+    }
+    if (await hasActiveBusinessSuppression(db, businessId)) {
+      return { kind: 'unavailable' as const, reason: 'business_suppressed' as const }
+    }
+    if (args.offeringRef.startsWith('legacy-offering:')) {
+      return { kind: 'unavailable' as const, reason: 'legacy_reference' as const }
+    }
+
+    const historyQuery = db.query('offeringPublicRevisionHistory')
+      .withIndex(
+        'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+        (q) => q
+          .eq('businessId', businessId)
+          .eq('offeringRef', args.offeringRef)
+          .eq('revision', args.revision),
+      ) as RuntimeQuery & Required<Pick<RuntimeQuery, 'take'>>
+    const histories = await historyQuery.take(2)
+    if (histories.length === 0) {
+      return { kind: 'unavailable' as const, reason: 'never_public' as const }
+    }
+    if (histories.length > 1) {
+      return { kind: 'unavailable' as const, reason: 'ambiguous_history' as const }
+    }
+    const history = histories[0]!
+    const offeringSourceHash = stringField(history, 'offeringSourceHash')
+    const base = {
+      selection: {
+        businessId: businessId as unknown as BusinessId,
+        offeringRef: args.offeringRef as OfferingRef,
+        revision: args.revision,
+        offeringSourceHash: offeringSourceHash as never,
+      },
+      business: {
+        businessId: businessId as unknown as BusinessId,
+        isPublic: true,
+        isSuppressed: false,
+      },
+      history: {
+        businessId: stringField(history, 'businessId') as BusinessId,
+        offeringRef: stringField(history, 'offeringRef') as OfferingRef,
+        revision: numberField(history, 'revision'),
+        offeringSourceHash: offeringSourceHash as never,
+        publishedAt: numberField(history, 'publishedAt'),
+        ...(typeof history.withdrawnAt === 'number' ? { withdrawnAt: history.withdrawnAt } : {}),
+        safeDisplayDisposition: safeDisplayDisposition(history),
+      },
+    }
+    if (base.history.safeDisplayDisposition !== 'retain_safe_history') {
+      return resolveHistoricalPublicOffering(base)
+    }
+
+    const offering = await db.query('businessOfferings')
+      .withIndex('by_offeringRef', (q) => q.eq('offeringRef', args.offeringRef))
+      .unique()
+    const selected = await db.query('businessOfferingRevisions')
+      .withIndex(
+        'by_offeringRef_and_revision',
+        (q) => q.eq('offeringRef', args.offeringRef).eq('revision', args.revision),
+      )
+      .unique()
+    if (offering === null || selected === null) {
+      return resolveHistoricalPublicOffering(base)
+    }
+    const offeringRecord = {
+      offeringRef: stringField(offering, 'offeringRef') as OfferingRef,
+      businessId: stringField(offering, 'businessId') as BusinessId,
+      currentRevision: numberField(offering, 'currentRevision'),
+      status: offeringStatus(offering),
+      createdAt: numberField(offering, 'createdAt'),
+      updatedAt: numberField(offering, 'updatedAt'),
+    }
+    const current = offeringRecord.status === 'published'
+      && offeringRecord.currentRevision > args.revision
+      ? await db.query('businessOfferingRevisions')
+          .withIndex(
+            'by_offeringRef_and_revision',
+            (q) => q
+              .eq('offeringRef', args.offeringRef)
+              .eq('revision', offeringRecord.currentRevision),
+          )
+          .unique()
+      : null
+    const resolution = resolveHistoricalPublicOffering({
+      ...base,
+      offering: offeringRecord,
+      selectedRevision: revisionFromRow(selected),
+      ...(current === null ? {} : { currentRevision: revisionFromRow(current) }),
+    })
+    if (resolution.kind === 'unavailable') return resolution
+
+    return {
+      kind: 'resolved' as const,
+      business: {
+        businessId,
+        slug: stringField(business, 'slug'),
+        name: stringField(business, 'name'),
+      },
+      offering: {
+        offeringRef: resolution.revision.offeringRef,
+        revision: resolution.revision.revision,
+        name: resolution.revision.name,
+        category: resolution.revision.category,
+        summary: resolution.revision.summary,
+        ...(resolution.revision.comparison === undefined
+          ? {}
+          : { comparison: resolution.revision.comparison }),
+      },
+      publication: resolution.publication,
+      projectionDisposition: 'current' as const,
+      ...(resolution.newerCurrentRevision === undefined
+        ? {}
+        : {
+            currentReference: {
+              businessId: resolution.newerCurrentRevision.businessId,
+              offeringRef: resolution.newerCurrentRevision.offeringRef,
+              offeringRevision: resolution.newerCurrentRevision.revision,
+            },
+          }),
+    }
+  },
+})
 
 export const readHistoricalPublicOfferingRevision = queryGeneric({
   args: {

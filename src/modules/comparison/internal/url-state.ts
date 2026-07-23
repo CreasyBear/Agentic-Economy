@@ -86,6 +86,23 @@ export function serializeComparisonUrlState(
   return `?${params.toString()}`
 }
 
+export function appendComparisonUrlState(
+  href: string,
+  input: Readonly<{
+    selections: readonly ComparisonSelectionRef[]
+    priorities: readonly ComparisonPriorityId[]
+  }> | ComparisonUrlState,
+): string {
+  const [path, rawQuery = ''] = href.split('?', 2)
+  const params = new URLSearchParams(rawQuery)
+  params.delete('selection')
+  params.delete('priority')
+  const canonical = new URLSearchParams(serializeComparisonUrlState(input).slice(1))
+  for (const [key, value] of canonical) params.append(key, value)
+  const query = params.toString()
+  return query.length === 0 ? (path ?? '') : `${path ?? ''}?${query}`
+}
+
 function parseSelection(encoded: string): ComparisonSelectionRef | undefined {
   let value: unknown
   try {

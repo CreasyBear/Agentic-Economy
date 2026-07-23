@@ -13,7 +13,13 @@ import {
   type AnswerLayoutProfile,
   type AnswerMessagePart,
 } from '@/modules/answer/public'
-import type { AnswerArtifact, AnswerCompareField, AnswerSource, OfferingAnswerSource } from '@/modules/answer/public'
+import type {
+  AnswerArtifact,
+  AnswerCompareField,
+  AnswerSource,
+  ColdStartDecisionSupport,
+  OfferingAnswerSource,
+} from '@/modules/answer/public'
 import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
 import { AeKicker } from '@/components/ae/primitives/AeKicker'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
@@ -44,6 +50,7 @@ export type AeGenerativeAnswerProps = {
   errorMessage?: ReactNode | null
   /** Thread this answer belongs to, if one exists yet. Lets provider links carry a "back to answer" origin instead of always falling back to home. */
   threadId?: string
+  onFollowUp?: (query: string) => void
 }
 
 export function AeGenerativeAnswer({
@@ -56,6 +63,7 @@ export function AeGenerativeAnswer({
   phase = 'idle',
   errorMessage = null,
   threadId,
+  onFollowUp,
 }: AeGenerativeAnswerProps) {
   const profile = inferLayoutProfileFromArtifacts({
     artifacts,
@@ -143,6 +151,7 @@ export function AeGenerativeAnswer({
           phase={phase}
           threadId={threadId}
           hasAnswerFirstSummary={hasSummary}
+          onFollowUp={onFollowUp}
         />
       )}
 
@@ -155,6 +164,7 @@ export function AeGenerativeAnswer({
           phase={phase}
           threadId={threadId}
           hasAnswerFirstSummary={hasSummary}
+          onFollowUp={onFollowUp}
         />
       ))}
 
@@ -414,6 +424,7 @@ function AnswerPartView({
   phase,
   threadId,
   hasAnswerFirstSummary,
+  onFollowUp,
 }: {
   part: AnswerMessagePart
   query: string
@@ -421,6 +432,7 @@ function AnswerPartView({
   phase: AeGenerativeAnswerPhase
   threadId: string | undefined
   hasAnswerFirstSummary: boolean
+  onFollowUp: ((query: string) => void) | undefined
 }) {
   switch (part.kind) {
     case 'one-line':
@@ -431,6 +443,8 @@ function AnswerPartView({
       return <ProviderCardsRail providers={part.providers} scroll={part.scroll === true} threadId={threadId} />
     case 'offering-cards':
       return <OfferingCards sources={part.sources} threadId={threadId} />
+    case 'decision-support':
+      return <ColdStartDecisionSupportView support={part.support} onFollowUp={onFollowUp} />
     case 'provider-compare-table':
       return hasAnswerFirstSummary ? (
         <details className={`${REVEAL_ENTER} group rounded-lg border border-border bg-surface`}>
@@ -725,7 +739,11 @@ function ProviderCompareRow({
   fields: readonly AnswerCompareField[]
   threadId: string | undefined
 }) {
-  const detailSearch = threadId === undefined ? {} : { from: 'thread' as const, id: threadId }
+  const detailSearch = {
+    selection: [] as string[],
+    priority: [] as string[],
+    ...(threadId === undefined ? {} : { from: 'thread' as const, id: threadId }),
+  }
 
   return (
     <tr>
@@ -814,6 +832,69 @@ function RecoveryPrompts({
           ))}
         </ul>
       ) : null}
+    </section>
+  )
+}
+
+function ColdStartDecisionSupportView({
+  support,
+  onFollowUp,
+}: {
+  support: ColdStartDecisionSupport
+  onFollowUp: ((query: string) => void) | undefined
+}) {
+  if (support.stage === 'clarification') {
+    return (
+      <section className={`${REVEAL_ENTER} grid gap-4 rounded-lg border border-border bg-surface p-4`} aria-label="One question before the search">
+        <p className="max-w-[68ch] text-pretty text-base leading-relaxed text-primary">
+          {support.clarification.question}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {support.clarification.choices.map((choice) => (
+            <Button
+              key={choice.id}
+              label={choice.label}
+              type="button"
+              variant="secondary"
+              className="min-h-11"
+              isDisabled={onFollowUp === undefined}
+              onClick={() => onFollowUp?.(choice.label)}
+            />
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section className={`${REVEAL_ENTER} grid gap-4 rounded-lg border border-border bg-surface p-4`} aria-label="Decision support">
+      <p className="text-sm text-secondary">{support.searchedSupplyStatement}</p>
+      {support.prices.length === 0 ? null : (
+        <dl className="grid gap-3 sm:grid-cols-2">
+          {support.prices.map((price) => (
+            <div key={`${price.label}:${price.value}`} className="grid gap-1">
+              <dt className="text-sm font-semibold text-primary">{price.label}</dt>
+              <dd className="m-0 text-sm text-secondary">{price.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {support.safeContinuations.map((continuation) => (
+          continuation.kind === 'browse_registered_supply' ? (
+            <Button key={continuation.kind} label={continuation.label} href="/registry?q=&limit=10" variant="secondary" />
+          ) : (
+            <Button
+              key={continuation.constraintId}
+              label={continuation.label}
+              type="button"
+              variant="secondary"
+              isDisabled={onFollowUp === undefined}
+              onClick={() => onFollowUp?.(continuation.label)}
+            />
+          )
+        ))}
+      </div>
     </section>
   )
 }

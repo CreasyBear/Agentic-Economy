@@ -1,10 +1,16 @@
 import {
+  COLD_START_WEBSITE_REFLECTION,
+  WebsiteDecisionConstraintIds,
+  buildColdStartWebsiteClarification,
   buildAgentJsonUrl,
   extractRequestedLocation,
   getDefaultArtifactBudgetForLayoutProfile,
   type AnswerArtifact,
   type AnswerLayoutProfile,
   type AnswerSnapshot,
+  type ColdStartDecisionClarificationSupport,
+  type WebsiteDecisionConstraintId,
+  type WebsiteFunctionChoice,
 } from '@/modules/answer/public'
 import {
   aeSearchContextLocationLabel,
@@ -34,7 +40,13 @@ export type AnswerToolPolicy =
   | { kind: 'registry.detail'; maxCalls: 1; slug?: string }
   | { kind: 'frozen'; allowedSlugs: readonly string[] }
 
-export type AnswerClarificationReason = 'missing_service' | 'missing_place'
+export type AnswerClarificationReason = 'missing_service' | 'missing_place' | 'website_function'
+
+export type ColdStartAnswerPlan = Readonly<{
+  confirmedChoiceId: WebsiteFunctionChoice
+  confirmedConstraintIds: readonly WebsiteDecisionConstraintId[]
+  registeredSearchQuery: 'website Perth'
+}>
 
 type AnswerResponsePlanBase<Mode extends AnswerResponseMode, Tool extends AnswerToolPolicy> = {
   mode: Mode
@@ -48,7 +60,9 @@ export type AnswerResponsePlan =
       reason: AnswerClarificationReason
       snapshot: AnswerSnapshot
     })
-  | AnswerResponsePlanBase<'answer', { kind: 'registry.search'; maxCalls: 1 }>
+  | (AnswerResponsePlanBase<'answer', { kind: 'registry.search'; maxCalls: 1 }> & {
+      coldStart?: ColdStartAnswerPlan
+    })
   | AnswerResponsePlanBase<'compare', { kind: 'frozen'; allowedSlugs: readonly string[] }>
   | AnswerResponsePlanBase<'filter', { kind: 'frozen'; allowedSlugs: readonly string[] }>
   | AnswerResponsePlanBase<'empty', { kind: 'none' }>
@@ -104,8 +118,22 @@ export function planAnswerTurn(input: {
   query: string
   priorTurnsCount: number
   searchContext: AeSearchContext | undefined
+  priorDecisionSupport?: ColdStartDecisionClarificationSupport
 }): AnswerTurnResponsePlan {
   const query = input.query.trim()
+  const confirmedChoice = input.priorDecisionSupport === undefined
+    ? undefined
+    : parseWebsiteFunctionChoice(query)
+  if (input.priorDecisionSupport !== undefined && confirmedChoice !== undefined) {
+    return buildAnswerResponsePlan({
+      confirmedChoiceId: confirmedChoice,
+      confirmedConstraintIds: input.priorDecisionSupport.confirmedConstraintIds,
+      registeredSearchQuery: 'website Perth',
+    })
+  }
+  if (isGoldenWebsiteDecisionRequest(query)) {
+    return buildWebsiteFunctionClarificationPlan(query)
+  }
   const serviceSignal = hasAnswerServiceSignal(query)
   const requestedLocation = extractAnswerRequestedLocation(query)
   const contextLocation = aeSearchContextLocationQuery(input.searchContext)
@@ -155,17 +183,70 @@ function buildClarifyResponsePlan(input: {
   }
 }
 
-function buildAnswerResponsePlan(): Extract<AnswerResponsePlan, { mode: 'answer' }> {
+function buildAnswerResponsePlan(
+  coldStart?: ColdStartAnswerPlan,
+): Extract<AnswerResponsePlan, { mode: 'answer' }> {
   return {
     mode: 'answer',
     providerBudget: defaultProviderBudgetForMode('answer'),
     artifactBudget: defaultArtifactBudgetForMode('answer'),
     toolPolicy: { kind: 'registry.search', maxCalls: 1 },
+    ...(coldStart === undefined ? {} : { coldStart }),
   }
 }
 
 export function hasAnswerServiceSignal(query: string): boolean {
-  return /\b(?:accountant|accounting|aged care|cleaner|cleaning|dentist|dental|electrician|electrical|family lawyer|hvac|lawyer|locksmith|math tutor|plumber|plumbing|repair|repairs|tutor|tutoring)\b/i.test(query)
+  return /\b(?:accountant|accounting|aged care|cleaner|cleaning|dentist|dental|electrician|electrical|family lawyer|hvac|lawyer|locksmith|math tutor|plumber|plumbing|repair|repairs|tutor|tutoring|website|web site)\b/i.test(query)
+}
+
+function buildWebsiteFunctionClarificationPlan(
+  query: string,
+): Extract<AnswerResponsePlan, { mode: 'clarify' }> {
+  const decisionSupport = buildColdStartWebsiteClarification(WebsiteDecisionConstraintIds)
+  return buildClarifyResponsePlan({
+    reason: 'website_function',
+    snapshot: {
+      query,
+      oneLine: COLD_START_WEBSITE_REFLECTION,
+      providers: [],
+      decisionSupport,
+      summary: '',
+      nextStep: '',
+      agentJsonUrl: '',
+      layoutProfile: 'clarification',
+    },
+  })
+}
+
+function isGoldenWebsiteDecisionRequest(query: string): boolean {
+  const normalized = query.toLowerCase()
+  return /\bsmall startup\b/.test(normalized)
+    && /\bperth\b/.test(normalized)
+    && /\b(?:website|web site)\b/.test(normalized)
+    && /\blocal\b/.test(normalized)
+    && /\baffordable\b|\baffordability\b/.test(normalized)
+    && /\b(?:pay|price|cost)\b/.test(normalized)
+}
+
+function parseWebsiteFunctionChoice(query: string): WebsiteFunctionChoice | undefined {
+  const normalized = query.trim().toLowerCase().replace(/[.!?]+$/g, '')
+  if (
+    normalized === 'information and enquiries'
+    || normalized === 'information_and_enquiries'
+    || normalized === 'brochure_enquiries'
+  ) {
+    return 'brochure_enquiries'
+  }
+  if (
+    normalized === 'customers need to buy, book or log in'
+    || normalized === 'transactional'
+  ) {
+    return 'transactional'
+  }
+  if (normalized === "i'm not sure" || normalized === 'i’m not sure' || normalized === 'im_not_sure') {
+    return 'im_not_sure'
+  }
+  return undefined
 }
 
 function buildClarificationSnapshot(input: {

@@ -1,5 +1,10 @@
 import type { AnswerArtifact, AnswerCompareField } from '../answer-schema'
-import type { AnswerSnapshot, AnswerSource, OfferingAnswerSource } from '../answer-synthesizer'
+import type {
+  AnswerSnapshot,
+  AnswerSource,
+  ColdStartDecisionSupport,
+  OfferingAnswerSource,
+} from '../answer-synthesizer'
 import { resolveLayoutProfile, type AnswerLayoutProfile } from './answer-layout-profile'
 import {
   buildArtifactsFromSnapshot,
@@ -14,6 +19,7 @@ export type AnswerMessagePart =
   | { kind: 'selected-provider'; provider: AnswerSource }
   | { kind: 'provider-cards'; providers: AnswerSnapshot['providers']; scroll?: boolean }
   | { kind: 'offering-cards'; sources: readonly OfferingAnswerSource[] }
+  | { kind: 'decision-support'; support: ColdStartDecisionSupport }
   | {
       kind: 'provider-compare-table'
       providers: readonly AnswerSource[]
@@ -80,6 +86,9 @@ export function artifactsToMessageParts(
         break
       case 'offering-cards':
         parts.push({ kind: 'offering-cards', sources: artifact.sources })
+        break
+      case 'decision-support':
+        parts.push({ kind: 'decision-support', support: artifact.support })
         break
       case 'provider-compare-table':
         parts.push({

@@ -17,15 +17,36 @@ import {
 } from 'lucide-react'
 
 import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
+import {
+  comparisonSelectionId,
+  type ExactOfferingReference,
+} from '@/modules/comparison/public'
 import { offeringSupportCopy, presentOfferingAccessPath } from './offering-presentation'
 
 export type AeOfferingSupplyListProps = Readonly<{
   offerings: readonly PublicOfferingSupplyProjection[]
   disposition?: 'current' | 'partial' | 'stale'
   observedAt?: number
+  business?: Readonly<{ businessId: string; name: string; slug: string }>
+  selectedSelectionIds?: readonly string[]
+  detailSearch?: string
+  onToggleComparison?: (input: Readonly<{
+    selectionId: string
+    reference: ExactOfferingReference
+    selected: boolean
+  }>) => void
 }>
 
-export function AeOfferingSupplyList({ offerings, disposition = 'current', observedAt }: AeOfferingSupplyListProps) {
+export function AeOfferingSupplyList({
+  offerings,
+  disposition = 'current',
+  observedAt,
+  business,
+  selectedSelectionIds = [],
+  detailSearch = '',
+  onToggleComparison,
+}: AeOfferingSupplyListProps) {
+  const selectionFull = selectedSelectionIds.length >= 4
   return (
     <section aria-labelledby="business-offerings-title" className="grid gap-5">
       <div className="flex flex-col gap-3 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
@@ -61,15 +82,56 @@ export function AeOfferingSupplyList({ offerings, disposition = 'current', obser
         </Card>
       ) : (
         <div className="grid gap-4">
-          {offerings.map((offering) => <OfferingCard key={offering.offering.offeringRef} offering={offering} />)}
+          {offerings.map((offering) => {
+            const selectionId = business === undefined
+              ? undefined
+              : offeringSelectionId(business.businessId, offering, observedAt)
+            return (
+              <OfferingCard
+                key={offering.offering.offeringRef}
+                offering={offering}
+                selected={selectionId !== undefined && selectedSelectionIds.includes(selectionId)}
+                selectionFull={selectionFull}
+                {...(business === undefined ? {} : { business })}
+                {...(selectionId === undefined ? {} : { selectionId })}
+                {...(observedAt === undefined ? {} : { observedAt })}
+                detailSearch={detailSearch}
+                {...(onToggleComparison === undefined ? {} : { onToggleComparison })}
+              />
+            )
+          })}
+          {selectionFull && onToggleComparison !== undefined ? (
+            <Text type="supporting" color="secondary">
+              Comparison list full — remove one to add another.
+            </Text>
+          ) : null}
         </div>
       )}
     </section>
   )
 }
 
-function OfferingCard({ offering }: { offering: PublicOfferingSupplyProjection }) {
+function OfferingCard({
+  offering,
+  business,
+  selectionId,
+  observedAt,
+  selected,
+  selectionFull,
+  onToggleComparison,
+  detailSearch,
+}: {
+  offering: PublicOfferingSupplyProjection
+  business?: Readonly<{ businessId: string; name: string; slug: string }>
+  selectionId?: string
+  observedAt?: number
+  selected: boolean
+  selectionFull: boolean
+  onToggleComparison?: AeOfferingSupplyListProps['onToggleComparison']
+  detailSearch: string
+}) {
   const support = offeringSupportCopy(offering.support)
+  const cardObservedAt = observedAt ?? offering.support.observedAt
   return (
     <Card padding={0} className="grid min-w-0 overflow-hidden border border-border shadow-low" aria-labelledby={`offering-${offering.offering.offeringRef}`}>
       <div className="h-1.5 bg-accent" aria-hidden="true" />
@@ -80,11 +142,48 @@ function OfferingCard({ offering }: { offering: PublicOfferingSupplyProjection }
           <Heading id={`offering-${offering.offering.offeringRef}`} level={3}>{offering.offering.name}</Heading>
         </HStack>
         <Text color="primary" display="block" className="max-w-3xl text-pretty text-base leading-relaxed">{offering.offering.summary}</Text>
+        <Text type="supporting" color="secondary" display="block">
+          Revision {offering.offering.revision}
+          {cardObservedAt === undefined ? null : ` · Observed ${formatDate(cardObservedAt)}`}
+        </Text>
         <dl className="grid gap-2 pt-2 text-sm sm:grid-cols-3">
-          {offering.offering.serviceAreaSummary === undefined ? null : <OptionalFact icon={<MapPinIcon aria-hidden="true" />} label="Service area" value={offering.offering.serviceAreaSummary} />}
-          {offering.offering.availabilitySummary === undefined ? null : <OptionalFact icon={<CalendarClockIcon aria-hidden="true" />} label="Availability" value={offering.offering.availabilitySummary} />}
-          {offering.offering.pricingSummary === undefined ? null : <OptionalFact icon={<BanknoteIcon aria-hidden="true" />} label="Pricing" value={offering.offering.pricingSummary} />}
+          <OptionalFact icon={<MapPinIcon aria-hidden="true" />} label="Service area" value={offering.offering.serviceAreaSummary ?? 'Not supplied'} />
+          <OptionalFact icon={<CalendarClockIcon aria-hidden="true" />} label="Availability" value={offering.offering.availabilitySummary ?? 'Not supplied'} />
+          <OptionalFact icon={<BanknoteIcon aria-hidden="true" />} label="Pricing" value={offering.offering.pricingSummary ?? 'Not supplied'} />
         </dl>
+        {business === undefined ? null : (
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button
+              href={`/${encodeURIComponent(business.slug)}/offerings/${encodeURIComponent(offering.offering.offeringRef)}${detailSearch}`}
+              label="View Offering"
+              variant="secondary"
+              className="min-h-11"
+            />
+            {onToggleComparison === undefined || selectionId === undefined ? null : (
+              <button
+                type="button"
+                aria-pressed={selected}
+                aria-label={`${selected ? 'Remove' : 'Add'} ${offering.offering.name} ${selected ? 'from' : 'to'} comparison`}
+                disabled={!selected && selectionFull}
+                className="min-h-11 rounded-md border border-border px-4 font-semibold text-primary focus-visible:outline-2 focus-visible:outline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => onToggleComparison({
+                  selectionId,
+                  reference: {
+                    businessId: business.businessId,
+                    offeringRef: offering.offering.offeringRef,
+                    offeringRevision: offering.offering.revision,
+                  },
+                  selected: !selected,
+                })}
+              >
+                {selected ? 'Remove from compare' : 'Add to compare'}
+              </button>
+            )}
+          </div>
+        )}
+        {!selected && selectionFull ? (
+          <Text type="supporting" color="secondary">Comparison list full — remove one to add another.</Text>
+        ) : null}
       </div>
 
       <Divider />
@@ -113,6 +212,19 @@ function OfferingCard({ offering }: { offering: PublicOfferingSupplyProjection }
   )
 }
 
+function offeringSelectionId(
+  businessId: string,
+  offering: PublicOfferingSupplyProjection,
+  observedAt?: number,
+): string {
+  return comparisonSelectionId({
+    businessId,
+    offeringRef: offering.offering.offeringRef,
+    offeringRevision: offering.offering.revision,
+    projectionObservedAt: observedAt ?? offering.support.observedAt ?? 0,
+  })
+}
+
 function OptionalFact({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return <div className="grid gap-2 rounded-lg bg-muted/45 p-3"><dt className="flex items-center gap-2 font-medium text-secondary"><span className="text-accent [&>svg]:size-4">{icon}</span>{label}</dt><dd className="m-0 break-words text-primary">{value}</dd></div>
 }
@@ -133,8 +245,17 @@ function AccessPathItem({ path }: { path: PublicOfferingSupplyProjection['access
           <Text type="supporting" color="secondary" display="block">{presentation.detail}</Text>
         </div>
       </div>
-      {presentation.href === undefined ? null : (
-        <Button href={presentation.href} label={presentation.external ? 'View published details' : presentation.label} variant="secondary" size="sm" className="min-h-11 w-full sm:w-auto" />
+      {presentation.href === undefined ? null : presentation.external ? (
+        <a
+          href={presentation.href}
+          rel="noopener noreferrer"
+          referrerPolicy="no-referrer"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-border px-3 text-sm font-semibold text-primary sm:w-auto"
+        >
+          View published details
+        </a>
+      ) : (
+        <Button href={presentation.href} label={presentation.label} variant="secondary" size="sm" className="min-h-11 w-full sm:w-auto" />
       )}
       {presentation.technical === undefined ? null : (
         <div className="grid gap-2">
@@ -168,4 +289,13 @@ function accessIcon(kind: 'phone' | 'website' | 'ae_inquiry' | 'external_operati
   if (kind === 'website') return <Globe2Icon className="size-4" aria-hidden="true" />
   if (kind === 'ae_inquiry') return <MessageSquareTextIcon className="size-4" aria-hidden="true" />
   return <Code2Icon className="size-4" aria-hidden="true" />
+}
+
+function formatDate(timestamp: number): string {
+  return new Intl.DateTimeFormat('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(timestamp))
 }

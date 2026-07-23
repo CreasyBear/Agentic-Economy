@@ -1,52 +1,59 @@
-import { useMemo, useState, type CSSProperties, type FormEvent } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { createServerFn, useServerFn } from '@tanstack/react-start'
+import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Center } from '@astryxdesign/core/Center'
 import { Grid } from '@astryxdesign/core/Grid'
-import { FormLayout } from '@astryxdesign/core/FormLayout'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { Layout, LayoutContent, LayoutHeader } from '@astryxdesign/core/Layout'
 import { Section } from '@astryxdesign/core/Section'
 import { HStack, StackItem, VStack } from '@astryxdesign/core/Stack'
 import { Selector } from '@astryxdesign/core/Selector'
 import { TextInput } from '@astryxdesign/core/TextInput'
-import { TextArea } from '@astryxdesign/core/TextArea'
 import { Toolbar } from '@astryxdesign/core/Toolbar'
-import { Token } from '@astryxdesign/core/Token'
 import { SearchIcon } from 'lucide-react'
 
 import { AeRegistryFunnelBoot } from '@/components/ae/layout/AeRegistryFunnelBoot'
-import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeAnimatedNumber } from '@/components/ae/motion/AeAnimatedNumber'
 import { emitRegistryResultClick } from '@/lib/observability/registry-click'
 import type { PublicBusinessCatalogApiV2Dto, PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
 import { readPublicOfferingRegistryPage, readPublicOfferingRegistrySearchPage } from '@/modules/registry/registry.functions'
-import { captureDemandSignalServer, type DemandCaptureServerResult } from '@/modules/demand/demand.functions'
+import {
+  appendComparisonUrlState,
+  parseComparisonUrlState,
+  type ComparisonUrlState,
+} from '@/modules/comparison/public'
+import { normalizeComparisonRouteSearch } from './compare'
 
 type RegistrySearchParams = {
   q: string
   limit: number
   cursor?: string
+  selection?: readonly string[]
+  priority?: readonly string[]
 }
 
 type RegistryRouteReadback = {
   result: PublicBusinessCatalogApiV2Page
   query: string
   limit: number
+  comparisonState: ComparisonUrlState
+  comparisonSearchRefused: boolean
 }
 
-const defaultRegistryHeadline = 'Who does what, near you.'
-const defaultRegistryVisualHeadline = 'Who does what, near you.'
+const defaultRegistryHeadline = 'Find businesses and Offerings'
+const defaultRegistryVisualHeadline = 'Find businesses and Offerings'
 
 const registrySearchParamsSchema = z.object({
   q: z.string(),
   limit: z.number(),
   cursor: z.string().optional(),
+  selection: z.array(z.string().max(1_500)).max(5).optional(),
+  priority: z.array(z.string().max(120)).max(4).optional(),
 })
 
 export const readRegistryRouteServer = createServerFn()
@@ -56,6 +63,8 @@ export const readRegistryRouteServer = createServerFn()
       q: data.q,
       limit: data.limit,
       ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
+      ...(data.selection === undefined ? {} : { selection: data.selection }),
+      ...(data.priority === undefined ? {} : { priority: data.priority }),
     }),
   )
 
@@ -65,8 +74,9 @@ export const Route = createFileRoute('/registry')({
     const limitValue = typeof search.limit === 'string' ? Number(search.limit) : Number(search.limit ?? 10)
     const limit = Number.isFinite(limitValue) ? Math.min(Math.max(Math.trunc(limitValue), 1), 20) : 10
     const cursor = typeof search.cursor === 'string' && search.cursor.trim().length > 0 ? search.cursor.trim() : undefined
+    const comparison = normalizeComparisonRouteSearch(search)
 
-    return { q, limit, ...(cursor === undefined ? {} : { cursor }) }
+    return { q, limit, ...comparison, ...(cursor === undefined ? {} : { cursor }) }
   },
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => readRegistryRouteServer({ data: deps }),
@@ -82,16 +92,32 @@ export const Route = createFileRoute('/registry')({
 })
 
 export async function loadRegistryRouteReadback(deps: RegistrySearchParams): Promise<RegistryRouteReadback> {
+  const parsedComparison = parseComparisonUrlState(toComparisonSearchParams(deps))
+  const comparisonState = parsedComparison.kind === 'accepted'
+    ? parsedComparison.state
+    : { version: 'offering-comparison:v1' as const, selections: [], priorities: [] }
   const result =
     deps.q.length === 0
       ? await readPublicOfferingRegistryPage({ limit: deps.limit, ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }) })
       : await readPublicOfferingRegistrySearchPage({ query: deps.q, limit: deps.limit, ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }) })
 
-  return { result, query: deps.q, limit: deps.limit }
+  return {
+    result,
+    query: deps.q,
+    limit: deps.limit,
+    comparisonState,
+    comparisonSearchRefused: parsedComparison.kind === 'refused',
+  }
 }
 
 function RegistryRoute() {
-  const { result, query, limit } = Route.useLoaderData()
+  const {
+    result,
+    query,
+    limit,
+    comparisonState,
+    comparisonSearchRefused,
+  } = Route.useLoaderData()
   const hasQuery = query.length > 0
   const isEmpty = result.items.length === 0
   const [activeCategory, setActiveCategory] = useState('All')
@@ -106,7 +132,7 @@ function RegistryRoute() {
       sorted.sort((a, b) => a.name.localeCompare(b.name))
     } else if (sortOrder === 'Z-A') {
       sorted.sort((a, b) => b.name.localeCompare(a.name))
-    } else if (sortOrder === 'Newest') {
+    } else if (sortOrder === 'Newest observed') {
       sorted.sort((a, b) => b.observedAt - a.observedAt)
     }
     return sorted
@@ -125,7 +151,7 @@ function RegistryRoute() {
                 {hasQuery ? `Results for “${query}”` : defaultRegistryVisualHeadline}
               </Heading>
               <Text type="large" color="secondary" display="block">
-                Compare local businesses by service, area, and how to reach them.
+                Browse published details, then compare the Offerings that fit.
               </Text>
             </VStack>
           </LayoutHeader>
@@ -142,13 +168,20 @@ function RegistryRoute() {
                 setActiveCategory={setActiveCategory}
                 sortOrder={sortOrder}
                 setSortOrder={setSortOrder}
+                comparisonState={comparisonState}
               />
+              {comparisonSearchRefused ? (
+                <Card padding={4} role="status">
+                  <Text color="secondary">The comparison state in this link was not valid, so no Offerings were selected.</Text>
+                </Card>
+              ) : null}
               <RegistryContextCards />
               {isEmpty ? (
-                <RegistryDemandCaptureEmptyState
+                <RegistryInspectOnlyEmptyState
                   key={query.length > 0 ? `search-${query}` : 'browse-empty'}
                   query={query}
                   showClearSearch={hasQuery}
+                  comparisonState={comparisonState}
                 />
               ) : null}
               {!isEmpty ? (
@@ -166,7 +199,7 @@ function RegistryRoute() {
                       <Text type="supporting" color="secondary">No results found in this category.</Text>
                     </Center>
                   ) : (
-                    <RegistryLibraryGrid items={filteredItems} query={query} />
+                    <RegistryLibraryGrid items={filteredItems} query={query} comparisonState={comparisonState} />
                   )}
                   <RegistryPagination
                     query={query}
@@ -174,6 +207,7 @@ function RegistryRoute() {
                     {...(result.pagination.cursor === undefined ? {} : { cursor: result.pagination.cursor })}
                     {...(result.pagination.nextCursor === undefined ? {} : { nextCursor: result.pagination.nextCursor })}
                     hasMore={result.pagination.hasMore}
+                    comparisonState={comparisonState}
                   />
                 </VStack>
               ) : null}
@@ -206,6 +240,7 @@ function RegistrySearchControls({
   setActiveCategory,
   sortOrder,
   setSortOrder,
+  comparisonState,
 }: {
   initialSearch: string
   limit: number
@@ -214,6 +249,7 @@ function RegistrySearchControls({
   setActiveCategory: (value: string) => void
   sortOrder: string
   setSortOrder: (value: string) => void
+  comparisonState: ComparisonUrlState
 }) {
   const [search, setSearch] = useState(() => initialSearch)
 
@@ -222,8 +258,19 @@ function RegistrySearchControls({
       <VStack gap={4}>
         <form action="/registry" method="get" className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
           <input type="hidden" name="limit" value={String(limit)} />
+          {comparisonState.selections.map((selection) => (
+            <input
+              key={`${selection.businessId}:${selection.offeringRef}:${selection.offeringRevision}`}
+              type="hidden"
+              name="selection"
+              value={JSON.stringify(selection)}
+            />
+          ))}
+          {comparisonState.priorities.map((priority) => (
+            <input key={priority} type="hidden" name="priority" value={priority} />
+          ))}
           <TextInput
-            label="Business, service, or place"
+            label="Business, Offering, or place"
             htmlName="q"
             value={search}
             onChange={setSearch}
@@ -250,7 +297,7 @@ function RegistrySearchControls({
             <Selector
               label="Sort by"
               isLabelHidden
-              options={['A-Z', 'Z-A', 'Newest']}
+              options={['A-Z', 'Z-A', 'Newest observed']}
               value={sortOrder}
               onChange={(value) => setSortOrder(value ?? 'A-Z')}
             />
@@ -280,111 +327,30 @@ function RegistryContextCards() {
   )
 }
 
-type DemandCaptureField = 'service' | 'suburb' | 'note' | 'queryText'
-
-function RegistryDemandCaptureEmptyState({ query, showClearSearch }: { query: string; showClearSearch: boolean }) {
-  const captureDemandSignal = useServerFn(captureDemandSignalServer)
-  const [service, setService] = useState(() => query)
-  const [suburb, setSuburb] = useState('')
-  const [note, setNote] = useState('')
-  const [pending, setPending] = useState(false)
-  const [result, setResult] = useState<DemandCaptureServerResult | undefined>()
-  const [fieldError, setFieldError] = useState<{ field: DemandCaptureField; message: string } | undefined>()
-  const submittedOk = result?.kind === 'ok'
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setResult(undefined)
-    setFieldError(undefined)
-
-    const cleanService = service.trim()
-    if (cleanService.length === 0) {
-      setFieldError({ field: 'service', message: 'Enter what you needed.' })
-      return
-    }
-
-    const cleanSuburb = suburb.trim()
-    if (cleanSuburb.length === 0) {
-      setFieldError({ field: 'suburb', message: 'Enter the suburb or local area.' })
-      return
-    }
-
-    setPending(true)
-    try {
-      const captured = await captureDemandSignal({
-        data: {
-          service: cleanService,
-          suburb: cleanSuburb,
-          ...(note.trim().length === 0 ? {} : { note }),
-          ...(query.length === 0 ? {} : { queryText: query }),
-        },
-      })
-      setResult(captured)
-      if (captured.kind === 'error' && captured.field !== undefined) {
-        setFieldError({ field: captured.field, message: captured.reason })
-      }
-    } finally {
-      setPending(false)
-    }
-  }
-
+function RegistryInspectOnlyEmptyState({
+  showClearSearch,
+  comparisonState,
+}: {
+  query: string
+  showClearSearch: boolean
+  comparisonState: ComparisonUrlState
+}) {
   return (
     <Card padding={6}>
       <Center>
         <VStack gap={4} className="w-full max-w-2xl">
           <VStack gap={2}>
-            <Heading level={2}>No businesses here yet.</Heading>
-            <Text color="secondary" display="block">Tell us what you needed. We&apos;re expanding here.</Text>
+            <Heading level={2}>No published Offerings match this search</Heading>
+            <Text color="secondary" display="block">Try a broader service, business, or place.</Text>
           </VStack>
-
-          {submittedOk ? (
-            <Text type="large" weight="semibold" color="primary" display="block" role="status">
-              Got it. We're expanding here.
-            </Text>
-          ) : (
-            <form onSubmit={handleSubmit} className="w-full" noValidate>
-              <FormLayout>
-                <TextInput
-                  label="Service needed"
-                  htmlName="service"
-                  value={service}
-                  isDisabled={pending}
-                  {...(fieldError?.field === 'service' ? { status: { type: 'error' as const, message: fieldError.message } } : {})}
-                  onChange={setService}
-                />
-                <TextInput
-                  label="Suburb"
-                  htmlName="suburb"
-                  value={suburb}
-                  isDisabled={pending}
-                  {...(fieldError?.field === 'suburb' ? { status: { type: 'error' as const, message: fieldError.message } } : {})}
-                  onChange={setSuburb}
-                />
-                <TextArea
-                  label="Optional note"
-                  value={note}
-                  rows={3}
-                  maxLength={280}
-                  isDisabled={pending}
-                  {...(fieldError?.field === 'note' ? { status: { type: 'error' as const, message: fieldError.message } } : {})}
-                  onChange={setNote}
-                />
-                {result?.kind === 'error' && fieldError === undefined ? (
-                  <Text color="secondary" display="block" role="alert">{result.reason}</Text>
-                ) : null}
-                <Button
-                  label={pending ? 'Saving...' : 'Tell us what you needed'}
-                  variant="primary"
-                  type="submit"
-                  isLoading={pending}
-                  isDisabled={pending}
-                />
-              </FormLayout>
-            </form>
-          )}
-
           <HStack gap={2} wrap="wrap" hAlign="center">
-            {showClearSearch ? <Button label="Clear search" variant="secondary" href="/registry?q=&limit=10" /> : null}
+            {showClearSearch ? (
+              <Button
+                label="Clear search"
+                variant="secondary"
+                href={appendComparisonUrlState('/registry?q=&limit=10', comparisonState)}
+              />
+            ) : null}
             <Button label="Own a business? List it free" variant="secondary" href="/claim" />
           </HStack>
         </VStack>
@@ -393,19 +359,90 @@ function RegistryDemandCaptureEmptyState({ query, showClearSearch }: { query: st
   )
 }
 
-function RegistryLibraryGrid({ items, query }: { items: readonly PublicBusinessCatalogApiV2Dto[]; query: string }) {
+function RegistryLibraryGrid({
+  items,
+  query,
+  comparisonState,
+}: {
+  items: readonly PublicBusinessCatalogApiV2Dto[]
+  query: string
+  comparisonState: ComparisonUrlState
+}) {
   return (
     <Grid columns={{ minWidth: 320 }} gap={4} aria-label="Business results">
       {items.map((item, index) => (
-        <AeProviderCard
+        <RegistryBusinessOfferingCard
           key={item.slug}
-          variant="registry"
           item={item}
+          comparisonState={comparisonState}
           onView={() => { void emitRegistryResultClick({ slug: item.slug, query, position: index + 1 }) }}
         />
       ))}
     </Grid>
   )
+}
+
+function RegistryBusinessOfferingCard({
+  item,
+  onView,
+  comparisonState,
+}: {
+  item: PublicBusinessCatalogApiV2Dto
+  onView: () => void
+  comparisonState: ComparisonUrlState
+}) {
+  const offerings = item.offerings.slice(0, 2)
+  const location = [item.suburb, item.stateTerritory].filter(Boolean).join(', ')
+  return (
+    <Card padding={5} className="grid h-full content-start gap-4" aria-labelledby={`registry-${item.slug}`}>
+      <div className="grid gap-1">
+        <Text type="supporting" color="secondary">{item.category}</Text>
+        <Heading id={`registry-${item.slug}`} level={3}>{item.name}</Heading>
+        <Text type="supporting" color="secondary">{location || 'Location not supplied'}</Text>
+      </div>
+      <Text type="supporting" color="secondary">
+        {item.offerings.length} published {item.offerings.length === 1 ? 'Offering' : 'Offerings'}
+      </Text>
+      {offerings.length === 0 ? (
+        <Text color="secondary">No Offerings published yet.</Text>
+      ) : (
+        <ul className="m-0 grid list-none gap-3 p-0">
+          {offerings.map((offering) => (
+            <li key={`${offering.offeringRef}:${offering.revision}`} className="grid gap-1 border-b border-border pb-3 last:border-0">
+              <Text weight="semibold">{offering.name}</Text>
+              <Text type="supporting" color="secondary">{offering.summary}</Text>
+              <a
+                href={appendComparisonUrlState(
+                  `/${encodeURIComponent(item.slug)}/offerings/${encodeURIComponent(offering.offeringRef)}`,
+                  comparisonState,
+                )}
+                className="min-h-11 justify-self-start py-2 font-semibold underline underline-offset-4"
+              >
+                View Offering
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      <a
+        href={appendComparisonUrlState(
+          `/${encodeURIComponent(item.slug)}?from=registry`,
+          comparisonState,
+        )}
+        onClick={onView}
+        className="mt-auto min-h-11 justify-self-start py-2 font-semibold underline underline-offset-4"
+      >
+        View business
+      </a>
+    </Card>
+  )
+}
+
+function toComparisonSearchParams(search: RegistrySearchParams): URLSearchParams {
+  const params = new URLSearchParams()
+  for (const selection of search.selection ?? []) params.append('selection', selection)
+  for (const priority of search.priority ?? []) params.append('priority', priority)
+  return params
 }
 
 const thumbnailWrapper: CSSProperties = {
@@ -425,14 +462,41 @@ function resultSummary(total: number, query: string): string {
   return `${label}.`
 }
 
-function RegistryPagination({ query, limit, cursor, nextCursor, hasMore }: { query: string; limit: number; cursor?: string; nextCursor?: string; hasMore: boolean }) {
+function RegistryPagination({
+  query,
+  limit,
+  cursor,
+  nextCursor,
+  hasMore,
+  comparisonState,
+}: {
+  query: string
+  limit: number
+  cursor?: string
+  nextCursor?: string
+  hasMore: boolean
+  comparisonState: ComparisonUrlState
+}) {
   return (
     <nav aria-label="Business results pagination" className="flex items-center justify-between gap-3">
       <div className="min-h-10 flex items-center">
-        {cursor !== undefined ? <Button label="Back to start" variant="secondary" href={`/registry?q=${encodeURIComponent(query)}&limit=${limit}`} /> : <Text type="supporting" color="secondary">First page</Text>}
+        {cursor !== undefined ? (
+          <Button
+            label="Back to start"
+            variant="secondary"
+            href={appendComparisonUrlState(`/registry?q=${encodeURIComponent(query)}&limit=${limit}`, comparisonState)}
+          />
+        ) : <Text type="supporting" color="secondary">First page</Text>}
       </div>
       {hasMore && nextCursor !== undefined ? (
-        <Button label="Next" variant="secondary" href={`/registry?q=${encodeURIComponent(query)}&limit=${limit}&cursor=${encodeURIComponent(nextCursor)}`} />
+        <Button
+          label="Next"
+          variant="secondary"
+          href={appendComparisonUrlState(
+            `/registry?q=${encodeURIComponent(query)}&limit=${limit}&cursor=${encodeURIComponent(nextCursor)}`,
+            comparisonState,
+          )}
+        />
       ) : (
         <Button label="Next" type="button" variant="secondary" isDisabled />
       )}

@@ -44,6 +44,7 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
     oneLine: prose.oneLine,
     providers: evidence.providers,
     ...(evidence.offeringSources === undefined ? {} : { offeringSources: evidence.offeringSources }),
+    ...(evidence.decisionSupport === undefined ? {} : { decisionSupport: evidence.decisionSupport }),
     ...(turn.intent === 'inquiry_handoff' && evidence.providers.length === 1
       ? { selectedProvider: evidence.providers[0] }
       : {}),

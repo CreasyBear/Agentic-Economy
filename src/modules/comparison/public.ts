@@ -39,6 +39,7 @@ export type {
 export type { OfferingComparisonEnvelope } from '@/modules/catalog/public'
 
 export {
+  appendComparisonUrlState,
   parseComparisonUrlState,
   serializeComparisonUrlState,
 } from './internal/url-state'
@@ -51,3 +52,34 @@ export {
   projectComparisonProfile,
   projectComparisonRows,
 } from './internal/projection'
+export {
+  PublicDecisionCategoryIds,
+  PublicDecisionOutcomeValues,
+  WebsiteDecisionConstraintIds,
+  WebsiteFunctionChoiceValues,
+  deriveRegisteredConstraintEligibility,
+  projectPublicDecisionSourceResult,
+} from './internal/decision-support'
+export {
+  comparisonPresentationDigest,
+  resolveComparisonPresentation,
+} from './internal/presentation'
+export type {
+  ComparisonPresentationPlan,
+  ComparisonPresentationResolution,
+} from './internal/presentation'
+export type {
+  ComparisonPresentationAdapter,
+  ComparisonPresentationAdapterResult,
+  ComparisonPresentationProposal,
+} from './internal/presentation-adapter'
+export type {
+  PublicDecisionCategoryId,
+  PublicDecisionOutcome,
+  PublicDecisionPriceEvidence,
+  PublicDecisionSourceResult,
+  RegisteredConstraintDisposition,
+  RegisteredConstraintEligibilityEvidence,
+  WebsiteDecisionConstraintId,
+  WebsiteFunctionChoice,
+} from './internal/decision-support'
