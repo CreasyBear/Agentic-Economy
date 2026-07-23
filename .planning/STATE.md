@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
-status: complete
-stopped_at: Phase 05 context gathered
-last_updated: "2026-07-23T00:12:20.433Z"
+status: planned
+stopped_at: Phase 05 planned; execution blocked on Gate 0 Offering custody
+last_updated: "2026-07-23T03:22:32Z"
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 4
+  total_plans: 8
+  completed_plans: 0
   percent: 17
-current_phase: 3B
-current_phase_name: second-provider-plugin-test
+current_phase: 05
+current_phase_name: consumer-decision-support
 ---
 
 # Current state
@@ -26,35 +26,40 @@ that a second operation-owned provider can use the same paid-operation host,
 semantics and query-agnostic renderer without fallback or a second product
 stack.
 
+Phase 05 is planned as a public, no-login, inspect-only decision-support loop:
+browse businesses, inspect one Offering, shortlist exact Offering revisions,
+compare source-owned facts and explain trade-offs against stated priorities.
+The former quote-to-close Phase 5 scope is superseded and deferred.
+
 ## Next transition
 
-Choose the next product outcome. Phase 3B does not authorize provider ranking,
-automatic fallback, hosted exposure or a broader workflow product.
+Execute Plan 05-01 only after the parent supplies one exact clean Offering
+predecessor revision/tree, a literal custody allowlist and named ownership for
+the inherited typecheck failures. No later Phase 05 plan may dispatch from the
+current dirty shared tree.
 
 ## Remaining evidence gaps
 
-- no real screen-reader session or human comprehension study has been run;
-- the development file port is labelled evidence infrastructure, not
-  production persistence;
-
-- no hosted, real-payment, independent-settlement, provider or customer proof
-  follows from the completed source loop.
+- the Offering-v2 predecessor lane is not yet a clean integrated revision;
+- human HTTP and registered registry actions do not yet share Offering-v2
+  semantics;
+- historical public Offering-revision eligibility and comparison do not yet
+  exist in integrated source;
+- no Phase 05 source, browser, hosted, provider or customer evidence exists.
 
 ## Evidence ceiling
 
-Phase 3B source through `db7a8552` proves two operation-owned mock providers,
-strict provider-specific normalization, explicit pre-authority selection,
-separate consequence identities, no automatic fallback, cross-provider
-reconciliation/restore refusal and recomputed evidence tooling. Closure binds
-one clean exact-revision packet to the final documentation revision and an
-independent review with no unresolved P0/P1. This remains labelled local/mock
-mechanism evidence only.
+Current Phase 05 artefacts prove only that the founder decisions, source map,
+UI contract, validation strategy and eight dependency-ordered implementation
+plans have been independently checked. They do not prove implemented
+comparison, hosted behavior, demand, customer value, supplier quality,
+fulfilment, willingness to pay, retention, revenue or production safety.
 
 Historical state, roadmap, requirements and scopes are preserved under
 `.planning/archive/pre-product-conversion-rebaseline-20260720/`.
 
 ## Session
 
-**Last session:** 2026-07-23T00:12:20.428Z
-**Stopped at:** Phase 05 context gathered
-**Resume file:** .planning/phases/05-consumer-operating-proof/05-CONTEXT.md
+**Last session:** 2026-07-23T03:22:32Z
+**Stopped at:** Phase 05 planned; execution blocked on Gate 0 Offering custody
+**Resume file:** .planning/phases/05-consumer-operating-proof/05-01-PLAN.md

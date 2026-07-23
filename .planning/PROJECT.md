@@ -35,8 +35,10 @@ account or supply platform.
 
 ADR-024 owns Business Account/customer-management meaning. ADR-025 owns the
 separation of AE account Commercial truth, operation payment, Usage, telemetry
-and future payouts. Phase 5, not Phase 4, owns future quote-to-close and real
-customer operating proof.
+and future payouts. Founder-accepted Phase 5 supersedes the earlier
+quote-to-close wording: it owns a public, no-login, entirely `inspect_only`
+Offering decision loop. Quote/request/inquiry, close/start and real-customer
+operating proof are explicitly deferred beyond Phase 5.
 
 ## Current evidence
 

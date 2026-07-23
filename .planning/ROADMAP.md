@@ -21,7 +21,7 @@ Phase 3 — Protocol/kernel → product conversion (complete)
                          ↓
 Phase 4 — Business Account and routeable-supply maturity (planning accepted)
                          ↓
-Phase 5 — Demand-side quote-to-close and customer operating proof (future)
+Phase 5 — Public Offering comparison proof (planned behind Gate 0)
 ```
 
 ## Phase 1 — Action Invocation foundation
@@ -115,16 +115,52 @@ safety.
 
 **Authority:** `.planning/phases/04-market-activation/`
 
-## Phase 5 — Demand-side quote-to-close and customer operating proof
+## Phase 5 — Public Offering comparison proof
 
-**Status:** future; not Phase 4 dispatch authority
-**Goal:** prove demand-side sourcing, comparison, selection, close/start and
-real customer operating outcomes against independently routeable supply.
+**Status:** planned; implementation blocked on exact Offering predecessor custody
+**Goal:** a public visitor or agent can browse businesses, inspect an Offering,
+shortlist exact Offering revisions, compare source-owned facts and understand
+trade-offs against stated priorities without login or external effect.
 
-The historical Phase 4B three-quote and Phase 4C quote-to-close proposals move
-here as inputs. They do not become active acceptance until separately planned
-and accepted. Sales tactics, incentives, liquidity and retention mechanisms
-also remain product research until tied to a concrete customer loop.
+This founder-accepted goal supersedes the earlier Phase 5 quote-to-close and
+real-customer-operating wording. The entire phase is `inspect_only`. It does not
+request a quote, contact a business, initiate inquiry, create Customer Request,
+invoke an endpoint, authorize, book, pay, dispatch or claim fulfilment.
+
+**Requirements:**
+
+- `P5-CUSTODY`: one exact committed/integrated Offering predecessor revision and
+  tree owns schema, generated edges, native/cutover identity and fail-closed flags.
+- `P5-CATALOG`: catalog owns exact historical public-revision eligibility and
+  strict `professional_service:v1` / `machine_data:v1` facts.
+- `P5-REGISTRY`: public HTTP and registered registry actions expose the same safe
+  Offering-v2 semantics and reject hostile/private/legacy projection residue.
+- `P5-COMPARE`: comparison resolves at most four exact Offering revisions,
+  defaults unranked and orders only by inspectable stated-priority lexicography.
+- `P5-HUMAN`: public Astryx routes cover browse, Offering detail, URL shortlist
+  and accessible comparison states without inquiry or effect controls.
+- `P5-AGENT`: fixed public anonymous `POST /api/compare` executes only the
+  registered inspect-only comparison action, consumes the same semantic object
+  as the actual human loader and passes zero-effect vertical/horizontal evals.
+- `P5-EVIDENCE`: one authenticated exact-revision hosted readback over labelled
+  demonstration data produces a frozen independently verified evidence packet.
+
+**Plans:** 8 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — freeze and integrate the exact Offering predecessor lane
+- [ ] 05-02-PLAN.md — historical public revisions and closed fact profiles
+- [ ] 05-03-PLAN.md — strict registry codecs, registered actions and three public HTTP adapters
+- [ ] 05-04-PLAN.md — Answer, Answer Thread and discovery Offering-v2 consumer migration with literal inventory enforcement
+- [ ] 05-05-PLAN.md — pure exact-revision comparison semantics and URL state
+- [ ] 05-06-PLAN.md — public Offering detail, shortlist and Astryx comparison UI
+- [ ] 05-07-PLAN.md — fixed comparison POST, actual-loader parity, effect fences and transfer evals
+- [ ] 05-08-PLAN.md — clean integration, accessibility, hosted readback and evidence closeout
+
+Historical Phase 4B three-quote and Phase 4C quote-to-close proposals remain
+research provenance only. Quote/request/inquiry, close/start, independently
+operated supply, real-customer evidence, sales tactics, incentives, liquidity
+and retention mechanisms are deferred beyond this phase.
 
 ## Deferred decisions
 
