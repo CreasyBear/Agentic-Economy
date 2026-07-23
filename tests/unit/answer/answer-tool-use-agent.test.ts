@@ -86,6 +86,9 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
         config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+        // Match the hosted answer-turn budget: a completed search must return
+        // immediately even when further tool calls would still be permitted.
+        maxToolCalls: 4,
       })
 
       expect(result.gate.ok).toBe(true)

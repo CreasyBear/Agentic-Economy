@@ -320,26 +320,24 @@ async function runRealToolUseAgent(
         content: safeToolResultJsonForPrompt(result.resultJson),
       })
     }
+    // A completed catalogue search is already enough to form the source-owned
+    // answer. Return in this round so larger hosted tool budgets do not trigger
+    // another model request before the grounded result is committed.
+    if (toolCalls.some((call) => call.toolId === 'registry.search' && call.status === 'complete')) {
+      return buildAgentResult(
+        input,
+        buildGroundedToolFallbackProse(input.query, providers, offeringSources),
+        toolCalls,
+        providers,
+        offeringSources,
+        timings,
+        modelRequests,
+      )
+    }
     if (toolCallAttempts >= maxToolCalls) {
       updateLastModelTiming(timings, { toolBudgetExhausted: true, maxToolCalls })
       break
     }
-  }
-
-  // Once the source-owned registry has answered, do not make the user wait for
-  // a second model call merely to restate those facts. The generative surface
-  // composes the grounded snapshot below; the model remains responsible for
-  // interpreting the need and selecting the read tool.
-  if (toolCalls.some((call) => call.toolId === 'registry.search' && call.status === 'complete')) {
-    return buildAgentResult(
-      input,
-      buildGroundedToolFallbackProse(input.query, providers, offeringSources),
-      toolCalls,
-      providers,
-      offeringSources,
-      timings,
-      modelRequests,
-    )
   }
 
   // Exhausted rounds: request a final prose-only completion.
