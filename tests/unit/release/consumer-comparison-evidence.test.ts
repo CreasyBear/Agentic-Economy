@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createConsumerComparisonEvidence,
   writeConsumerComparisonEvidenceOnce,
+  type ConsumerComparisonEvidence,
   type ConsumerComparisonEvidenceInput,
 } from '../../../tools/release/consumer-comparison-evidence'
 import {
@@ -71,6 +72,7 @@ function validInput(files = fixtureFiles()): ConsumerComparisonEvidenceInput {
         businessId: `business:${index}`,
         offeringRef: `offering:${index}`,
         revision: index + 1,
+        projectionObservedAt: 1_784_805_000_000 + index,
         profileVersion,
         dataLabel: 'labelled_demo' as const,
         canonicalUrl: comparisonUrl(index),
@@ -177,32 +179,51 @@ describe('consumer comparison release evidence', () => {
       identitySource: 'provider_authenticated_release_readback',
     })
     expect(packet.artifacts.humanLoaderResponse.digest).toBe(packet.artifacts.structuredPostResponse.digest)
-    expect(verifyConsumerComparisonEvidence(packet, { revision, tree })).toEqual({ ok: true, errors: [] })
+    expect(verifyConsumerComparisonEvidence(packet, {
+      revision,
+      tree,
+      deploymentId: 'dpl_phase05',
+      artifactRoot: input.source.cwd,
+    })).toEqual({ ok: true, errors: [] })
 
     const serialized = JSON.stringify(packet)
     expect(serialized).not.toContain(input.deployment.smokeAuth)
-    expect(serialized).not.toContain('humanLoaderResponse":{')
+    expect(serialized).not.toContain('"posture":"unranked"')
     expect(serialized).not.toMatch(/authorization|credential|customerText|sourceHash|privateProjection|providerEffect/iu)
   })
 
   it('independently detects artifact, tuple, profile, zero-effect and semantic tampering', async () => {
-    const input = validInput()
-    const packet = await createConsumerComparisonEvidence(input, dependencies)
-
-    writeFileSync(packet.artifacts.humanLoaderResponse.path, '{"changed":true}')
-    expect(verifyConsumerComparisonEvidence(packet, { revision, tree }).errors).toContain('artifact_digest_mismatch')
+    const artifactPacket = await createConsumerComparisonEvidence(validInput(), dependencies)
+    writeFileSync(artifactPacket.artifacts.humanLoaderResponse.path, '{"changed":true}')
+    expect(verifyConsumerComparisonEvidence(artifactPacket, {
+      revision,
+      tree,
+      deploymentId: 'dpl_phase05',
+      artifactRoot: artifactPacket.artifacts.humanLoaderResponse.path.replace(/\/human\.json$/u, ''),
+    }).errors).toContain('artifact_digest_mismatch')
 
     const cases = [
-      (candidate: typeof packet) => { candidate.data.selections[0]!.revision = 99 },
-      (candidate: typeof packet) => { candidate.data.selections[0]!.profileVersion = 'machine_data:v1' },
-      (candidate: typeof packet) => { candidate.data.selections[0]!.canonicalUrl = comparisonUrl(1) },
-      (candidate: typeof packet) => { candidate.artifacts.zeroEffectObservation.digest = `sha256:${'e'.repeat(64)}` },
+      (candidate: ConsumerComparisonEvidence) => { candidate.data.selections[0]!.revision = 99 },
+      (candidate: ConsumerComparisonEvidence) => { candidate.data.selections[0]!.profileVersion = 'machine_data:v1' },
+      (candidate: ConsumerComparisonEvidence) => { candidate.data.selections[0]!.canonicalUrl = comparisonUrl(1) },
+      (candidate: ConsumerComparisonEvidence) => { candidate.artifacts.zeroEffectObservation.digest = `sha256:${'e'.repeat(64)}` },
+      (candidate: ConsumerComparisonEvidence) => { candidate.deployment.deploymentId = 'dpl_other' },
+      (candidate: ConsumerComparisonEvidence) => {
+        candidate.artifacts.humanLoaderResponse.semanticDigest = `sha256:${'f'.repeat(64)}`
+        candidate.artifacts.structuredPostResponse.semanticDigest = `sha256:${'f'.repeat(64)}`
+      },
     ]
     for (const mutate of cases) {
+      const packet = await createConsumerComparisonEvidence(validInput(), dependencies)
       const candidate = structuredClone(packet)
       mutate(candidate)
       candidate.packetChecksum = checksumConsumerComparisonEvidence(candidate)
-      expect(verifyConsumerComparisonEvidence(candidate, { revision, tree }).ok).toBe(false)
+      expect(verifyConsumerComparisonEvidence(candidate, {
+        revision,
+        tree,
+        deploymentId: 'dpl_phase05',
+        artifactRoot: packet.artifacts.humanLoaderResponse.path.replace(/\/human\.json$/u, ''),
+      }).ok).toBe(false)
     }
   })
 
