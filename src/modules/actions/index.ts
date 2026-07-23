@@ -13,6 +13,7 @@
 
 import type { AnyAction } from '@/modules/common/action'
 import { collectSuppliedCandidateQuoteAction } from '@/modules/capability-supply/supplied-quote.actions'
+import { comparisonCompareAction } from '@/modules/comparison/comparison.actions'
 import {
   customerRequestCancelAction,
   customerRequestConfirmAction,
@@ -38,6 +39,7 @@ import { storefrontImportDraftAction } from '@/modules/storefront/storefront.act
 
 const actions: readonly AnyAction[] = [
   collectSuppliedCandidateQuoteAction,
+  comparisonCompareAction,
   customerRequestConfirmAction,
   customerRequestRunAction,
   customerRequestCancelAction,

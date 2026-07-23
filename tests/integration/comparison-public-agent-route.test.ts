@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { findAction, resolveActionContract } from '@/modules/actions'
 import { buildComparisonRouteReadback } from '@/routes/compare'
@@ -27,11 +27,14 @@ const validBody = {
 
 describe('fixed public comparison agent route', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-23T10:00:00Z'))
     process.env.NODE_ENV = 'test'
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
   })
 
@@ -102,6 +105,21 @@ describe('fixed public comparison agent route', () => {
         'content-length': String(20_000),
       },
       body: JSON.stringify(validBody),
+    }))
+    expect(response.status).toBe(413)
+  })
+
+  it.each([
+    ['without a declared length', undefined],
+    ['with an under-reported length', '20'],
+  ])('measures actual oversized bytes %s', async (_label, contentLength) => {
+    const response = await handleCompareRequest(new Request('https://ae.example/api/compare', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(contentLength === undefined ? {} : { 'content-length': contentLength }),
+      },
+      body: JSON.stringify({ ...validBody, padding: 'x'.repeat(20_000) }),
     }))
     expect(response.status).toBe(413)
   })

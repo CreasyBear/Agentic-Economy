@@ -22,11 +22,16 @@ const selections = [
 
 describe('human and structured comparison parity', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-23T10:00:00Z'))
     vi.stubEnv('NODE_ENV', 'test')
     vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
   })
 
-  afterEach(() => vi.unstubAllEnvs())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllEnvs()
+  })
 
   it('runs through the validated read-only harness and deep-equals the human result', async () => {
     const priorities = ['professional_service:v1:lowest_total_price'] as const
@@ -49,7 +54,10 @@ describe('human and structured comparison parity', () => {
     expect(human.kind).toBe('ready')
     if (human.kind !== 'ready') return
 
-    expect(outcome.result.output).toEqual(human.comparison)
+    expect(outcome.result.output).toEqual({
+      kind: 'comparison',
+      ...human.comparison,
+    })
     expect(JSON.stringify(outcome.result.output)).not.toMatch(
       /sourceHash|credential|adapterConfig|privateReason|retry|inquiry|booking|payment/i,
     )
