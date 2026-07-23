@@ -54,6 +54,7 @@ import type { HarnessModelRequestRecord, HarnessModelUsage, HarnessRunLoop } fro
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MAX_ROUNDS = 4
 const DEFAULT_LIMIT = 3
+const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 15_000
 const ANSWER_PROSE_RESPONSE_FORMAT = {
   type: 'json_schema',
   json_schema: {
@@ -107,6 +108,8 @@ export type AnswerToolUseAgentInput = {
   maxToolCalls?: number
   /** Hard cap for model-supplied registry.search limit values. */
   maxRegistrySearchLimit?: number
+  /** Internal/test override for the per-request model deadline. */
+  modelRequestTimeoutMs?: number
 }
 
 export type AnswerToolUseAgentResult = {
@@ -324,25 +327,41 @@ async function runRealToolUseAgent(
   }
 
   // Exhausted rounds: request a final prose-only completion.
-  const finalPayload = await runOpenRouterModelRequest({
-    input,
-    config,
-    modelRequests,
-    timings,
-    timingName: 'model.openrouter_final_prose',
-    timingMetadata: {
-      tools: 0,
-    },
-    tools: [],
-    messages: [
-      ...messages,
-      {
-        role: 'user',
-        content:
-          'Stop calling tools. Return AnswerProse JSON now: {"oneLine","summary","whatToDoNow"}.',
+  let finalPayload: OpenRouterResponse
+  try {
+    finalPayload = await runOpenRouterModelRequest({
+      input,
+      config,
+      modelRequests,
+      timings,
+      timingName: 'model.openrouter_final_prose',
+      timingMetadata: {
+        tools: 0,
       },
-    ],
-  })
+      tools: [],
+      messages: [
+        ...messages,
+        {
+          role: 'user',
+          content:
+            'Stop calling tools. Return AnswerProse JSON now: {"oneLine","summary","whatToDoNow"}.',
+        },
+      ],
+    })
+  } catch (error) {
+    if (toolCalls.length === 0) {
+      throw error
+    }
+    return buildAgentResult(
+      input,
+      buildGroundedToolFallbackProse(input.query, providers, offeringSources),
+      toolCalls,
+      providers,
+      offeringSources,
+      timings,
+      modelRequests,
+    )
+  }
   updateLastModelStopReason(modelRequests, 'final_prose')
   const prose = parseProse(finalPayload.choices?.[0]?.message?.content)
   if (prose === undefined) {
@@ -371,6 +390,7 @@ async function runOpenRouterModelRequest(input: {
       model,
       tools: input.tools,
       messages: input.messages,
+      timeoutMs: input.input.modelRequestTimeoutMs ?? DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
       ...(input.input.signal === undefined ? {} : { signal: input.input.signal }),
     })
     const payload = input.input.harnessLoop === undefined
@@ -524,6 +544,34 @@ function buildLocationScopedProse(input: {
   }
 }
 
+function buildGroundedToolFallbackProse(
+  query: string,
+  providers: readonly AnswerSource[],
+  offeringSources: readonly OfferingAnswerSource[],
+): AnswerProse {
+  const names = offeringSources.length > 0
+    ? offeringSources.map((source) => source.business.name)
+    : providers.map((provider) => provider.name)
+  const uniqueNames = [...new Set(names)]
+  const count = uniqueNames.length
+
+  if (count === 0) {
+    return {
+      oneLine: `I couldn't find a listed match for "${query}" yet.`,
+      summary: 'The live catalogue search returned no published options for this need.',
+      whatToDoNow: 'Browse registered supply or try a broader description, nearby place, or different priority.',
+    }
+  }
+
+  return {
+    oneLine: count === 1 ? 'I found 1 published option to inspect.' : `I found ${count} published options to inspect.`,
+    summary: count === 1
+      ? 'The live catalogue returned one published option relevant to this search. Agentic Economy does not book or take payment from this answer.'
+      : `The live catalogue returned ${count} published options relevant to this search. Agentic Economy does not book or take payment from this answer.`,
+    whatToDoNow: 'Review the published details and compare the facts that matter most to you.',
+  }
+}
+
 function listAnswerModelToolActions(): AnyAction[] {
   return ANSWER_READ_TOOL_IDS.map((toolId) => {
     const action = findAnswerReadToolAction(toolId)
@@ -605,8 +653,13 @@ async function postChatCompletion(input: {
   model?: string
   tools: readonly ReturnType<typeof actionToOpenRouterTool>[]
   messages: readonly OpenRouterMessage[]
+  timeoutMs: number
   signal?: AbortSignal
 }): Promise<OpenRouterResponse> {
+  const timeoutSignal = AbortSignal.timeout(Math.max(1, Math.round(input.timeoutMs)))
+  const signal = input.signal === undefined
+    ? timeoutSignal
+    : AbortSignal.any([input.signal, timeoutSignal])
   const response = await fetch(`${input.config.apiBaseUrl ?? OPENROUTER_URL}`, {
     method: 'POST',
     headers: {
@@ -623,7 +676,7 @@ async function postChatCompletion(input: {
         : { tools: input.tools, tool_choice: 'auto', parallel_tool_calls: false }),
       temperature: 0.2,
     }),
-    ...(input.signal === undefined ? {} : { signal: input.signal }),
+    signal,
   })
 
   if (!response.ok) {

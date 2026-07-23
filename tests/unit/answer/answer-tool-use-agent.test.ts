@@ -209,6 +209,51 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     )
   })
 
+  it('returns grounded catalogue evidence when final prose generation misses its deadline', async () => {
+    const server = await startOpenRouterServer(
+      [
+        toolResponse([
+          {
+            toolId: 'registry.search',
+            input: { query: 'parramatta', mode: 'whole_catalogue' },
+          },
+        ]),
+        proseResponse(matchingProviderProse()),
+      ],
+      { delaysMs: [0, 100] },
+    )
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'paramata',
+        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+        modelRequestTimeoutMs: 25,
+      })
+
+      expect(result.gate.ok).toBe(true)
+      expect(result.offeringSources.map((source) => source.business.slug)).toContain(
+        'parramatta-emergency-plumbing',
+      )
+      expect(result.prose).toMatchObject({
+        oneLine: 'I found 2 published options to inspect.',
+        whatToDoNow: 'Review the published details and compare the facts that matter most to you.',
+      })
+      expect(result.modelRequests).toEqual([
+        expect.objectContaining({ seq: 0, status: 'ok' }),
+        expect.objectContaining({ seq: 1, status: 'error', costUnavailableReason: 'request_failed' }),
+      ])
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      await server.close()
+    }
+  })
+
   it('fails closed if the model emits a tool call when tools are disabled', async () => {
     const modelRequests: unknown[] = []
 
@@ -669,7 +714,10 @@ function proseResponse(prose: OpenRouterProsePlan): unknown {
   }
 }
 
-async function startOpenRouterServer(responses: readonly unknown[]) {
+async function startOpenRouterServer(
+  responses: readonly unknown[],
+  options: { delaysMs?: readonly number[] } = {},
+) {
   const requests: OpenRouterTestRequest[] = []
   const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const body = JSON.parse(await readRequestBody(request)) as OpenRouterTestRequest
@@ -679,6 +727,10 @@ async function startOpenRouterServer(responses: readonly unknown[]) {
       response.writeHead(500, { 'content-type': 'application/json' })
       response.end(JSON.stringify({ error: 'unexpected_openrouter_request' }))
       return
+    }
+    const delayMs = options.delaysMs?.[requests.length - 1] ?? 0
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
     }
     response.writeHead(200, { 'content-type': 'application/json' })
     response.end(JSON.stringify(payload))
