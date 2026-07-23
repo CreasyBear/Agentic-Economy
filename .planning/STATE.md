@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
+status: complete
+stopped_at: Phase 05 context gathered
+last_updated: "2026-07-23T00:12:20.433Z"
+progress:
+  total_phases: 6
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 4
+  percent: 17
 current_phase: 3B
 current_phase_name: second-provider-plugin-test
-status: complete
-stopped_at: "Phase 3B closed at the labelled local/mock conformance boundary"
-last_updated: "2026-07-20"
-progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 1
-  completed_plans: 1
-  percent: 100
 ---
 
 # Current state
@@ -36,6 +36,7 @@ automatic fallback, hosted exposure or a broader workflow product.
 - no real screen-reader session or human comprehension study has been run;
 - the development file port is labelled evidence infrastructure, not
   production persistence;
+
 - no hosted, real-payment, independent-settlement, provider or customer proof
   follows from the completed source loop.
 
@@ -51,3 +52,9 @@ mechanism evidence only.
 
 Historical state, roadmap, requirements and scopes are preserved under
 `.planning/archive/pre-product-conversion-rebaseline-20260720/`.
+
+## Session
+
+**Last session:** 2026-07-23T00:12:20.428Z
+**Stopped at:** Phase 05 context gathered
+**Resume file:** .planning/phases/05-consumer-operating-proof/05-CONTEXT.md
