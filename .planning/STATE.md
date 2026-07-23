@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 status: in_progress
-stopped_at: Phase 05 Plan 05-06 complete; Plan 05-07 active
-last_updated: "2026-07-23T10:30:00Z"
+stopped_at: Phase 05 Plan 05-07 complete; Plan 05-08 active
+last_updated: "2026-07-23T11:30:00Z"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 7
+  percent: 88
 current_phase: 05
 current_phase_name: consumer-decision-support
 ---
@@ -68,17 +68,24 @@ reach exact Offering evidence and comparison through one material
 clarification; compact and wide local-mock browser journeys pass with no
 consequential transport.
 
+Plan 05-07 integrated fixed structured comparison parity at
+`e427c09329a688ea3ff4fc4de2c79a2ff9f53312` with tree
+`debe4598db8dc9dcfdece764c61c3f661512b92b`. Anonymous
+`POST /api/compare` executes only the registered read-only action, deep-agrees
+with the human application result, emits zero control/effect records and
+transfers across both closed profiles.
+
 ## Next transition
 
-Execute Plan 05-07 from the exact Plan 05-06 result. Register one fixed
-inspect-only comparison action and public POST adapter, prove actual human-loader
-and agent parity, fence effects recursively and run both-profile transfer evals.
+Execute Plan 05-08 from the exact Plan 05-07 result. Build the revision-bound
+release tooling, close the complete clean source/browser/type/build gate, run
+bounded first-session/accessibility verification, deploy only that exact
+candidate through the configured release path and verify the frozen packet.
 
 ## Remaining evidence gaps
 
-- structured-agent comparison reachability and actual-loader parity are not yet
-  implemented;
-- no Phase 05 hosted, provider or customer evidence exists.
+- the fully integrated codegen/type/browser/release gate has not yet run;
+- no Phase 05 exact-revision hosted evidence exists.
 - the isolated Convex dry-run could not execute because `CONVEX_DEPLOYMENT` is
   unset; no `convex dev` or control-plane loop was started.
 
@@ -86,16 +93,16 @@ and agent parity, fence effects recursively and run both-profile transfer evals.
 
 Current Phase 05 evidence proves the committed Offering-v2 predecessor,
 historical-public resolution, closed comparison profiles, strict registry
-parity, the visible Answer bridge, pure comparison semantics and a labelled
-local-mock human browser loop. It does not yet prove structured-agent parity,
-hosted behavior, demand, customer value, supplier quality, fulfilment,
-willingness to pay, retention, revenue or production safety.
+parity, the visible Answer bridge, pure comparison semantics, a labelled
+local-mock human browser loop and matching structured-agent semantics. It does
+not yet prove hosted behavior, demand, customer value, supplier quality,
+fulfilment, willingness to pay, retention, revenue or production safety.
 
 Historical state, roadmap, requirements and scopes are preserved under
 `.planning/archive/pre-product-conversion-rebaseline-20260720/`.
 
 ## Session
 
-**Last session:** 2026-07-23T10:30:00Z
-**Stopped at:** Phase 05 Plan 05-06 complete; Plan 05-07 active
-**Resume file:** .planning/phases/05-consumer-operating-proof/05-07-PLAN.md
+**Last session:** 2026-07-23T11:30:00Z
+**Stopped at:** Phase 05 Plan 05-07 complete; Plan 05-08 active
+**Resume file:** .planning/phases/05-consumer-operating-proof/05-08-PLAN.md

@@ -124,7 +124,7 @@ safety.
 
 ## Phase 5 — Public Offering comparison proof
 
-**Status:** in progress; public answer-first comparison integrated, Plan 05-07 active
+**Status:** in progress; human/agent comparison parity integrated, Plan 05-08 active
 **Goal:** a public visitor or agent can browse businesses, inspect an Offering,
 shortlist exact Offering revisions, compare source-owned facts and understand
 trade-offs against stated priorities without login or external effect.
@@ -158,7 +158,7 @@ invoke an endpoint, authorize, book, pay, dispatch or claim fulfilment.
 - `P5-EVIDENCE`: one authenticated exact-revision hosted readback over labelled
   demonstration data produces a frozen independently verified evidence packet.
 
-**Plans:** 6/8 plans executed
+**Plans:** 7/8 plans executed
 
 Plans:
 
@@ -168,7 +168,7 @@ Plans:
 - [x] 05-04-PLAN.md — Answer, Answer Thread and discovery Offering-v2 consumer migration with literal inventory enforcement
 - [x] 05-05-PLAN.md — pure exact-revision comparison semantics and URL state
 - [x] 05-06-PLAN.md — public Offering detail, shortlist and Astryx comparison UI
-- [ ] 05-07-PLAN.md — fixed comparison POST, actual-loader parity, effect fences and transfer evals
+- [x] 05-07-PLAN.md — fixed comparison POST, actual-loader parity, effect fences and transfer evals
 - [ ] 05-08-PLAN.md — clean integration, accessibility, hosted readback and evidence closeout
 
 Historical Phase 4B three-quote and Phase 4C quote-to-close proposals remain
