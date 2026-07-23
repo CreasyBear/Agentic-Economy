@@ -587,7 +587,7 @@ export function AeChat({
               onThreadCreated={handleThreadCreated}
               onStreamEnd={handleStreamEnd}
               onSettledTurn={handleSettledTurn}
-              {...(streamingThreadId === null || streamingBusy ? {} : { onFollowUp: handleFollowUp })}
+              {...(routeThreadId === null || streamingBusy ? {} : { onFollowUp: handleFollowUp })}
               {...(routeThreadId === null ? {} : { onChangeCriteria: handleChangeCriteria })}
               onRetry={handleRetry}
             />

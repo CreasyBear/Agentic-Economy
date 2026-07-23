@@ -126,7 +126,7 @@ describe('AeChat route promotion', () => {
       await Promise.resolve()
     })
 
-    expect(testState.latestTranscriptProps?.onFollowUp).toEqual(expect.any(Function))
+    expect(testState.latestTranscriptProps?.onFollowUp).toBeUndefined()
     expect(testState.navigateCalls).toEqual([
       {
         to: '/t/$threadId',
