@@ -151,6 +151,47 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
     expect(summary.compareDocumentPosition(disclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(disclosure.closest('details')?.open).toBe(false)
   })
+
+  it('renders Offering-v2 business and Offering names without legacy trust or contact labels', () => {
+    const artifacts = [{
+      kind: 'offering-cards',
+      sources: [{
+        sourceKind: 'offering_v2',
+        citationIndex: 1,
+        business: {
+          businessId: 'business:profile-pair',
+          slug: 'profile-pair',
+          name: 'Profile Pair',
+          category: 'Data',
+          suburb: 'Perth',
+          stateTerritory: 'WA',
+          publicUrl: '/profile-pair',
+          observedAt: 1,
+          disposition: 'current',
+          accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false },
+        },
+        offerings: [
+          { offeringRef: 'offering:professional', revision: 7, name: 'Website discovery', category: 'Professional service', summary: 'Bounded discovery.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
+          { offeringRef: 'offering:data', revision: 11, name: 'Current inventory feed', category: 'Machine data', summary: 'Read-only data.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
+        ],
+        detailUrl: '/profile-pair',
+      }],
+    }] as unknown as AnswerArtifact[]
+
+    renderWithRouter(
+      <AeGenerativeAnswer
+        artifacts={artifacts}
+        query="show current data"
+        layoutProfile="discovery_full"
+        phase="complete"
+      />,
+    )
+
+    expect(screen.getByText('Profile Pair')).toBeTruthy()
+    expect(screen.getByText('Website discovery')).toBeTruthy()
+    expect(screen.getByText('Current inventory feed')).toBeTruthy()
+    expect(screen.queryByText(/verified|trust|response time|phone/i)).toBeNull()
+  })
 })
 
 function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {

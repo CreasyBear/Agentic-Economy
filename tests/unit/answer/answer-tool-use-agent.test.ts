@@ -112,9 +112,13 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       })
 
       expect(result.gate.ok).toBe(true)
-      expect(result.providers.map((provider) => provider.slug)).toContain(
+      expect(result.providers).toEqual([])
+      expect(result.offeringSources.map((source) => source.business.slug)).toContain(
         'parramatta-emergency-plumbing',
       )
+      expect(result.offeringSources.flatMap((source) => source.offerings).every(
+        (offering) => offering.revision > 0 && offering.comparison?.profile.profileId !== undefined,
+      )).toBe(true)
       expect(result.modelRequests).toHaveLength(2)
       expect(result.modelRequests[0]).toMatchObject({
         seq: 0,
@@ -296,7 +300,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       ])
       expect(result.toolCalls[0]?.toolId).toBe('registry.search')
       expect(result.gate.ok).toBe(true)
-      expect(result.snapshot.providers.map((provider) => provider.slug)).toContain(
+      expect(result.snapshot.offeringSources?.map((source) => source.business.slug)).toContain(
         'parramatta-emergency-plumbing',
       )
     } finally {

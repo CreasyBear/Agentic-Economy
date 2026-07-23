@@ -168,4 +168,87 @@ describe('public thread projection', () => {
     })
     expect(JSON.stringify(projection)).not.toMatch(/toolCalls|resultSummaryJson|inputJson|resultHash|harnessRun|toolsInvoked|registry\.search|registry\.detail/)
   })
+
+  it('replays exact Offering-v2 sources without exposing private tool evidence', () => {
+    const source = offeringSource()
+    const projection = buildPublicThreadProjection(
+      {
+        threadId: 'thread-offering',
+        pseudonymousSessionId: 'session-secret',
+        title: 'data feed',
+        sharePolicy: 'public',
+        createdAt: 1,
+        updatedAt: 2,
+      },
+      [{
+        turnId: 'turn-offering',
+        threadId: 'thread-offering',
+        seq: 1,
+        query: 'current data feed',
+        intent: 'refine_search',
+        evidenceJson: JSON.stringify({
+          providers: [],
+          offeringSources: [source],
+          allowedSlugs: ['profile-pair'],
+          agentJsonUrl: '/api/businesses/search?q=data',
+          toolCalls: [{ inputJson: '{"secret":"private"}', resultHash: 'private-hash' }],
+        }),
+        snapshotHash: 'snapshot-secret',
+        proseJson: JSON.stringify({ oneLine: 'One listing matches.', summary: '', nextStep: '' }),
+        artifactKindsJson: '["one-line","offering-cards"]',
+        status: 'complete',
+        createdAt: 3,
+      }],
+    )
+
+    const offeringCards = projection.turns[0]?.artifacts.find(
+      (artifact) => artifact.kind === 'offering-cards',
+    )
+    expect(offeringCards).toEqual({ kind: 'offering-cards', sources: [source] })
+    expect(JSON.stringify(projection)).not.toMatch(/private-hash|snapshot-secret|session-secret|toolCalls|inputJson/)
+  })
 })
+
+function offeringSource() {
+  return {
+    sourceKind: 'offering_v2' as const,
+    citationIndex: 1,
+    business: {
+      businessId: 'business:profile-pair',
+      slug: 'profile-pair',
+      name: 'Profile Pair',
+      category: 'Data',
+      suburb: 'Perth',
+      stateTerritory: 'WA',
+      publicUrl: '/profile-pair',
+      observedAt: 1_000,
+      disposition: 'current' as const,
+      accessSummary: {
+        humanRequest: false,
+        externalOperation: false,
+        aeSupportedAction: false,
+      },
+    },
+    offerings: [{
+      offeringRef: 'offering:data',
+      revision: 11,
+      name: 'Current inventory feed',
+      category: 'Machine data',
+      summary: 'Read-only data.',
+      comparison: {
+        schemaVersion: 'offering-comparison:v1' as const,
+        profile: {
+          profileId: 'machine_data:v1' as const,
+          interfaceFormat: { kind: 'known' as const, value: 'rest_json' },
+          requestMethod: { kind: 'known' as const, value: 'GET' },
+          authentication: { kind: 'known' as const, value: 'api_key' },
+          priceBasis: { kind: 'unknown' as const },
+          freshnessOrUpdateCadence: { kind: 'known' as const, value: 'hourly' },
+        },
+      },
+      accessPaths: [],
+      support: { integrated: false, aeSupportedAction: false },
+    }],
+    detailUrl: '/profile-pair',
+  }
+}

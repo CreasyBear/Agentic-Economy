@@ -114,6 +114,34 @@ describe('reduceAnswerTurnEvent', () => {
     expect(replaced.artifacts).toHaveLength(1)
   })
 
+  it('merges Offering-v2 cards idempotently and caps them in source order', () => {
+    const sources = [1, 2, 3, 4].map((citationIndex) => ({
+      ...offeringSource(),
+      citationIndex,
+      business: {
+        ...offeringSource().business,
+        slug: `business-${citationIndex}`,
+        name: `Business ${citationIndex}`,
+      },
+    }))
+    const artifact = {
+      kind: 'offering-cards',
+      sources,
+    } as unknown as AnswerEvent extends never ? never : Extract<AnswerEvent, { type: 'artifact' }>['artifact']
+    const withCards = reduceAnswerTurnEvent(initialAnswerTurnUiState, {
+      type: 'artifact',
+      artifact,
+    })
+    const replaced = reduceAnswerTurnEvent(withCards, { type: 'artifact', artifact })
+    const cards = replaced.artifacts.find((candidate) => candidate.kind === 'offering-cards')
+
+    expect(replaced.artifacts.filter((candidate) => candidate.kind === 'offering-cards')).toHaveLength(1)
+    expect(cards).toMatchObject({
+      kind: 'offering-cards',
+      sources: sources.slice(0, 3),
+    })
+  })
+
   it('marks complete on complete event', () => {
     const complete = reduceAnswerTurnEvent(initialAnswerTurnUiState, {
       type: 'complete',
@@ -185,3 +213,24 @@ describe('reduceAnswerTurnEvent', () => {
     expect(stopped.workLog[0]?.durationMs).toBeGreaterThanOrEqual(0)
   })
 })
+
+function offeringSource() {
+  return {
+    sourceKind: 'offering_v2' as const,
+    citationIndex: 1,
+    business: {
+      businessId: 'business:1',
+      slug: 'business-1',
+      name: 'Business 1',
+      category: 'Data',
+      suburb: 'Perth',
+      stateTerritory: 'WA',
+      publicUrl: '/business-1',
+      observedAt: 1,
+      disposition: 'current' as const,
+      accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false },
+    },
+    offerings: [],
+    detailUrl: '/business-1',
+  }
+}

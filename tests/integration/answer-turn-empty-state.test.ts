@@ -127,18 +127,34 @@ describe('POST /api/answer/turn empty-state queries', () => {
         throw new Error('expected complete event')
       }
 
-      expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
+      expect(complete.answer.providers).toEqual([])
+      expect(complete.answer.offeringSources?.map((source) => source.business.slug)).toEqual([
         'plumbing-demo',
         'parramatta-emergency-plumbing',
       ])
-      expect(complete.answer.summary).toContain('publish service coverage')
+      expect(complete.answer.offeringSources?.flatMap((source) => source.offerings).every(
+        (offering) => offering.revision > 0 && offering.comparison?.profile.profileId !== undefined,
+      )).toBe(true)
+      const offeringArtifact = frames
+        .map((frame) => frame.event)
+        .find((event) => event.type === 'artifact' && event.artifact.kind === 'offering-cards')
+      expect(offeringArtifact).toMatchObject({
+        type: 'artifact',
+        artifact: {
+          kind: 'offering-cards',
+          sources: complete.answer.offeringSources,
+        },
+      })
+      expect(complete.answer.oneLine).not.toContain('No listed businesses match')
 
       const persisted = turns.at(0) as { evidenceJson: string } | undefined
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
+        offeringSources?: typeof complete.answer.offeringSources
         toolCalls?: readonly { toolId?: string; inputJson?: string }[]
         timings?: readonly { name?: string }[]
         workLog?: readonly { id?: string; status?: string; detailRows?: readonly { label?: string; value?: string }[] }[]
       }
+      expect(evidence.offeringSources).toEqual(complete.answer.offeringSources)
       expect(evidence.toolCalls?.[0]?.toolId).toBe('registry.search')
       expect(JSON.parse(evidence.toolCalls?.[0]?.inputJson ?? '{}')).toMatchObject({
         query: 'emergency plumber parramatta',
