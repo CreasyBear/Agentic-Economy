@@ -96,7 +96,9 @@ test('authenticated exact-revision deployment serves the public zero-effect comp
   })
 
   const mainText = await page.getByRole('main').innerText()
-  const humanSemanticDigest = await page.getByRole('main').getAttribute('data-semantic-digest')
+  const semanticSurface = page.locator('[data-semantic-digest]')
+  await expect(semanticSurface).toHaveCount(1)
+  const humanSemanticDigest = await semanticSurface.getAttribute('data-semantic-digest')
   expect(humanSemanticDigest).toBe(structuredSemanticDigest)
   expect(mainText).toMatch(/Nothing here contacts a business or runs an endpoint/iu)
   const humanPath = join(config.artifactDirectory, 'human-loader-response.json')
