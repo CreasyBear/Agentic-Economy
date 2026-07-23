@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AeOfferingDetail } from '@/components/ae/comparison/AeOfferingDetail'
+import { AeOfferingComparison } from '@/components/ae/comparison/AeOfferingComparison'
 import { AeShortlistBar } from '@/components/ae/comparison/AeShortlistBar'
 import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
 import { brandNonEmpty } from '@/modules/common/ids'
@@ -18,6 +19,8 @@ import {
 } from '@/routes/compare'
 import {
   appendComparisonUrlState,
+  buildComparisonBrief,
+  compareOfferings,
   parseComparisonUrlState,
   type ComparisonUrlState,
 } from '@/modules/comparison/public'
@@ -256,6 +259,60 @@ describe('public comparison route contract', () => {
       robots: 'noindex,follow',
       cacheControl: 'no-store',
     })
+  })
+})
+
+describe('answer-first responsive comparison evidence', () => {
+  it('keeps source answer and caveats before one default-closed native evidence disclosure', () => {
+    const comparison = compareOfferings({
+      selections: [selection('one'), selection('two')],
+      priorities: [],
+    })
+    render(
+      <AeOfferingComparison
+        comparison={comparison}
+        brief={buildComparisonBrief(comparison)}
+      />,
+    )
+
+    const heading = screen.getByRole('heading', { name: 'Not ranked' })
+    const notes = screen.getByRole('region', { name: 'Important comparison notes' })
+    const disclosure = screen.getByText('See full comparison').closest('details')
+    expect(disclosure).not.toBeNull()
+    expect(disclosure?.hasAttribute('open')).toBe(false)
+    expect(heading.compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(notes.compareDocumentPosition(disclosure!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /call|inquiry|book|pay|run|endpoint/i })).toBeNull()
+  })
+
+  it('projects identical semantic cells in a desktop table and mobile fact list', () => {
+    const comparison = compareOfferings({
+      selections: [selection('one'), selection('two')],
+      priorities: [],
+    })
+    render(
+      <AeOfferingComparison
+        comparison={comparison}
+        brief={buildComparisonBrief(comparison)}
+      />,
+    )
+
+    const desktop = document.querySelector('[data-comparison-projection="desktop"]')
+    const mobile = document.querySelector('[data-comparison-projection="mobile"]')
+    expect(desktop?.tagName).toBe('TABLE')
+    expect(mobile?.tagName).toBe('DL')
+    expect(desktop?.className).toContain('md:table')
+    expect(mobile?.className).toContain('md:hidden')
+
+    const desktopFacts = [...desktop!.querySelectorAll('[data-fact-id]')].map((node) => ({
+      id: node.getAttribute('data-fact-id'),
+      text: node.textContent,
+    }))
+    const mobileFacts = [...mobile!.querySelectorAll('[data-fact-id]')].map((node) => ({
+      id: node.getAttribute('data-fact-id'),
+      text: node.textContent,
+    }))
+    expect(mobileFacts).toEqual(desktopFacts)
   })
 })
 
