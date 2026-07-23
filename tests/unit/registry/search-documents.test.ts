@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
+import { rebuildBusinessSupplyProjectionSnapshotCommand } from '../../../convex/catalogSupplyProjection'
+import type { RuntimeDb, RuntimeDocument } from '../../../convex/source_state'
+import type { BusinessSupplyProjection } from '@/modules/catalog/public'
+import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
 import {
+  buildOfferingV2RegistrySearchDocument,
   buildRegistrySearchDocumentsForCatalog,
   documentMatchesRegistryQuery,
   resolveRegistrySearchLocation,
@@ -91,7 +96,224 @@ describe('registry search documents', () => {
       }),
     ).toMatchObject({ key: 'perth', source: 'input' })
   })
+
+  it('builds one strict business-level v2 document with both profile facts and exact revisions', () => {
+    const projection = offeringProjection()
+    const document = buildOfferingV2RegistrySearchDocument(projection)
+
+    expect(document).toMatchObject({
+      documentId: 'offering-v2__native-supply',
+      schemaVersion: 'registry-search-document:v2',
+      businessSlug: 'native-supply',
+      offerings: [
+        {
+          offeringRef: 'offering:professional',
+          revision: 2,
+          name: 'Native advisory',
+          comparison: { profile: { profileId: 'professional_service:v1' } },
+        },
+        {
+          offeringRef: 'offering:machine',
+          revision: 4,
+          name: 'Native telemetry',
+          comparison: { profile: { profileId: 'machine_data:v1' } },
+        },
+      ],
+    })
+    expect(document.searchText).toContain('fixed scope')
+    expect(document.searchText).toContain('graphql')
+    expect(JSON.stringify(document)).not.toMatch(
+      /services|trustTier|firstRequest|sourceHash|credentials|adapterConfig|privateReasons/u,
+    )
+  })
+
+  it('atomically replaces and removes the v2 document from the projection rebuild transition', async () => {
+    const db = new OfferingProjectionDb(offeringProjectionSeed())
+
+    expect(
+      await rebuildBusinessSupplyProjectionSnapshotCommand(
+        db as unknown as RuntimeDb,
+        'business:1',
+        {},
+        100,
+      ),
+    ).toMatchObject({ kind: 'ok' })
+    expect(db.tables.registrySearchDocuments).toHaveLength(1)
+    expect(db.tables.registrySearchDocuments?.[0]).toMatchObject({
+      schemaVersion: 'registry-search-document:v2',
+      businessSlug: 'native-supply',
+      offerings: [{ offeringRef: 'offering:professional', revision: 2 }],
+    })
+
+    db.tables.businessOfferings![0]!.status = 'retired'
+    db.tables.businessOfferings![1]!.status = 'retired'
+    expect(
+      await rebuildBusinessSupplyProjectionSnapshotCommand(
+        db as unknown as RuntimeDb,
+        'business:1',
+        {},
+        101,
+      ),
+    ).toMatchObject({ kind: 'ok' })
+    expect(db.tables.registrySearchDocuments).toEqual([])
+  })
 })
+
+function offeringProjection(): BusinessSupplyProjection {
+  return {
+    business: {
+      businessId: brandNonEmpty('business:1', 'BusinessId'),
+      slug: 'native-supply',
+      name: 'Native Supply',
+      category: 'Professional and machine data',
+      suburb: 'Perth',
+      stateTerritory: 'WA',
+      publicUrl: '/native-supply',
+    },
+    offerings: [
+      {
+        offering: {
+          offeringRef: brandNonEmpty('offering:professional', 'OfferingRef'),
+          revision: 2,
+          name: 'Native advisory',
+          category: 'Advisory',
+          summary: 'Professional advice for a fixed scope.',
+          comparison: {
+            schemaVersion: 'offering-comparison:v1',
+            profile: {
+              profileId: 'professional_service:v1',
+              scopeBasis: known('Fixed scope'),
+              priceBasis: known({ description: 'Quoted total', currency: 'AUD', amountMinor: 20_000, unit: 'total' }),
+              timingBasis: known('Two weeks'),
+              serviceArea: known('Perth'),
+            },
+          },
+        },
+        accessPaths: [],
+        support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
+      },
+      {
+        offering: {
+          offeringRef: brandNonEmpty('offering:machine', 'OfferingRef'),
+          revision: 4,
+          name: 'Native telemetry',
+          category: 'Machine data',
+          summary: 'Hourly operational telemetry.',
+          comparison: {
+            schemaVersion: 'offering-comparison:v1',
+            profile: {
+              profileId: 'machine_data:v1',
+              interfaceFormat: known('graphql'),
+              requestMethod: known('POST'),
+              authentication: known('api_key'),
+              priceBasis: known({ description: 'Per request', currency: 'AUD', amountMinor: 5, unit: 'request' }),
+              freshnessOrUpdateCadence: known('Updated hourly'),
+            },
+          },
+        },
+        accessPaths: [],
+        support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
+      },
+    ],
+    sourceRevision: 4,
+    sourceDigest: brandNonEmpty('hash:projection', 'SourceHash'),
+    observedAt: 100,
+    disposition: 'current',
+  }
+}
+
+function known<Value>(value: Value) {
+  return {
+    kind: 'known' as const,
+    value,
+    source: { kind: 'business_supplied' as const },
+    observedAt: 100,
+  }
+}
+
+function offeringProjectionSeed(): Record<string, RuntimeDocument[]> {
+  const projection = offeringProjection()
+  return {
+    operatorControls: [{ _id: 'control', key: 'offering_public_projection_enabled', enabled: true }],
+    businesses: [{ _id: 'business:1', publicStatus: 'published', slug: 'native-supply', name: 'Native Supply', updatedAt: 4 }],
+    businessContexts: [{ _id: 'context:1', businessId: 'business:1', category: 'Professional and machine data', suburb: 'Perth', stateTerritory: 'WA' }],
+    businessOfferings: projection.offerings.map((item) => ({
+      _id: `business-offering:${item.offering.revision}`,
+      businessId: 'business:1',
+      offeringRef: item.offering.offeringRef,
+      currentRevision: item.offering.revision,
+      status: 'published',
+      createdAt: 1,
+      updatedAt: item.offering.revision,
+    })),
+    businessOfferingRevisions: projection.offerings.map((item) => ({
+      _id: `business-offering-revision:${item.offering.revision}`,
+      businessId: 'business:1',
+      ...item.offering,
+      sourceHash: `hash:${item.offering.revision}`,
+      createdAt: 1,
+    })),
+    offeringAccessPaths: [],
+    suppressionRules: [],
+    businessSupplyProjectionSnapshots: [],
+    offeringPublicRevisionHistory: [],
+    registrySearchDocuments: [{
+      _id: 'registry-search-document:stale',
+      documentId: 'offering-v2__native-supply',
+      schemaVersion: 'registry-search-document:v2',
+      businessSlug: 'native-supply',
+      searchText: 'stale removed term',
+    }],
+  }
+}
+
+class OfferingProjectionDb {
+  constructor(readonly tables: Record<string, RuntimeDocument[]>) {}
+
+  async get(id: string) {
+    return Object.values(this.tables).flat().find((row) => row._id === id) ?? null
+  }
+
+  async insert(table: string, value: Record<string, unknown>) {
+    const id = `${table}:new`
+    ;(this.tables[table] ??= []).push({ _id: id, ...value })
+    return id
+  }
+
+  async patch(id: string, value: Record<string, unknown>) {
+    const row = Object.values(this.tables).flat().find((item) => item._id === id)
+    if (row !== undefined) Object.assign(row, value)
+  }
+
+  async delete(id: string) {
+    for (const rows of Object.values(this.tables)) {
+      const index = rows.findIndex((row) => row._id === id)
+      if (index >= 0) rows.splice(index, 1)
+    }
+  }
+
+  query(table: string) {
+    let rows = [...(this.tables[table] ?? [])]
+    const query = {
+      withIndex: (
+        _name: string,
+        select: (builder: { eq: (field: string, value: unknown) => typeof builder }) => unknown,
+      ) => {
+        const builder = {
+          eq: (field: string, value: unknown) => {
+            rows = rows.filter((row) => row[field] === value)
+            return builder
+          },
+        }
+        select(builder)
+        return query
+      },
+      collect: async () => rows,
+      unique: async () => rows.length === 1 ? rows[0]! : null,
+    }
+    return query
+  }
+}
 
 function catalog(
   overrides: Partial<PublicBusinessCatalogApiDto> & { serviceArea?: string } = {},

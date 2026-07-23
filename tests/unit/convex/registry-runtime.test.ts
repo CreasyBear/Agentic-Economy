@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getPublicBusinessCatalogBySlug,
   listPublicBusinessCatalog,
+  searchPublicBusinessOfferingSupply,
   searchPublicBusinessCatalog,
 } from '../../../convex/registry'
 
@@ -14,7 +15,7 @@ type Filter =
 type ReadTrace = {
   tableName: string
   indexName?: string
-  operation: 'collect' | 'first' | 'take' | 'unique'
+  operation: 'collect' | 'first' | 'paginate' | 'take' | 'unique'
   limit?: number
   filters: Filter[]
 }
@@ -30,6 +31,11 @@ type Query = {
   withSearchIndex: (indexName: string, callback: (query: IndexBuilder) => IndexBuilder) => Query
   collect: () => Promise<Row[]>
   first: () => Promise<Row | null>
+  paginate: (input: { cursor: string | null; numItems: number }) => Promise<{
+    page: Row[]
+    isDone: boolean
+    continueCursor: string
+  }>
   take: (limit: number) => Promise<Row[]>
   unique: () => Promise<Row | null>
 }
@@ -40,6 +46,13 @@ type Db = {
 }
 
 type QueryCtx = { db: Db }
+type OfferingSearchPage = {
+  items: Array<{ slug: string }>
+  pagination: {
+    nextCursor?: string
+    hasMore: boolean
+  }
+}
 
 const listHandler = (listPublicBusinessCatalog as unknown as {
   _handler: (ctx: QueryCtx, args: { cursor?: string; limit?: number }) => Promise<unknown>
@@ -58,6 +71,18 @@ const searchHandler = (searchPublicBusinessCatalog as unknown as {
 })._handler
 const detailHandler = (getPublicBusinessCatalogBySlug as unknown as {
   _handler: (ctx: QueryCtx, args: { slug: string }) => Promise<unknown>
+})._handler
+const offeringSearchHandler = (searchPublicBusinessOfferingSupply as unknown as {
+  _handler: (
+    ctx: QueryCtx,
+    args: {
+      query: string
+      mode?: 'near_me' | 'whole_catalogue'
+      location?: string
+      cursor?: string
+      limit?: number
+    },
+  ) => Promise<OfferingSearchPage>
 })._handler
 
 describe('Convex registry public read paths', () => {
@@ -160,6 +185,38 @@ describe('Convex registry public read paths', () => {
       ),
     ).toEqual([])
   })
+
+  it('paginates native Offering-v2 search with opaque cursors and no first-window overlap', async () => {
+    const db = new FakeDb()
+    seedOfferingSearchBusiness(db, 1)
+    seedOfferingSearchBusiness(db, 2)
+
+    const first = await offeringSearchHandler(
+      { db },
+      { query: 'graphquasar', limit: 1 },
+    )
+    const second = await offeringSearchHandler(
+      { db },
+      { query: 'graphquasar', limit: 1, cursor: first.pagination.nextCursor },
+    )
+
+    expect(first.items.map((item: { slug: string }) => item.slug)).toEqual(['native-business-001'])
+    expect(second.items.map((item: { slug: string }) => item.slug)).toEqual(['native-business-002'])
+    expect(first.pagination.nextCursor).toBe('opaque:1')
+    expect(second.pagination.hasMore).toBe(false)
+    expect(
+      db.reads.filter((read) =>
+        read.tableName === 'registrySearchDocuments'
+        && read.indexName === 'search_v2_searchText_by_schemaVersion_and_publicStatus'
+        && read.operation === 'paginate'
+        && read.filters.some((filter) =>
+          filter.op === 'eq'
+          && filter.field === 'schemaVersion'
+          && filter.value === 'registry-search-document:v2'
+        )
+      ),
+    ).toHaveLength(2)
+  })
 })
 
 class FakeIndexBuilder implements IndexBuilder {
@@ -209,6 +266,24 @@ class FakeQuery implements Query {
   async first(): Promise<Row | null> {
     this.db.trace(this.tableName, 'first', this.filters, this.indexName)
     return this.apply().at(0) ?? null
+  }
+
+  async paginate(input: { cursor: string | null; numItems: number }) {
+    this.db.trace(this.tableName, 'paginate', this.filters, this.indexName, input.numItems)
+    const rows = this.apply()
+    const start = input.cursor === null
+      ? 0
+      : Number.parseInt(input.cursor.replace(/^opaque:/u, ''), 10)
+    if (!Number.isSafeInteger(start) || start < 0 || start > rows.length) {
+      throw new Error('Invalid cursor')
+    }
+    const page = rows.slice(start, start + input.numItems)
+    const next = start + page.length
+    return {
+      page,
+      isDone: next >= rows.length,
+      continueCursor: `opaque:${next}`,
+    }
   }
 
   async take(limit: number): Promise<Row[]> {
@@ -337,6 +412,93 @@ function seedCatalogs(db: FakeDb, count: number): void {
       updatedAt: index,
     })
   }
+}
+
+function seedOfferingSearchBusiness(db: FakeDb, index: number): void {
+  const suffix = String(index).padStart(3, '0')
+  const businessId = `businesses:native-${suffix}`
+  const slug = `native-business-${suffix}`
+  const offeringRef = `offering:native-${suffix}`
+  db.seed('businesses', {
+    _id: businessId,
+    _creationTime: index,
+    slug,
+    name: `Native Business ${suffix}`,
+    publicStatus: 'published',
+  })
+  db.seed('catalogSupplyCutovers', {
+    _id: `catalogSupplyCutovers:${suffix}`,
+    _creationTime: index,
+    businessId,
+    mode: 'offering',
+  })
+  db.seed('businessSupplyProjectionSnapshots', {
+    _id: `businessSupplyProjectionSnapshots:${suffix}`,
+    _creationTime: index,
+    businessId,
+    sourceRevision: index,
+    sourceDigest: `hash:projection:${suffix}`,
+    observedAt: 100,
+    disposition: 'current',
+    status: 'current',
+    projectionJson: JSON.stringify({
+      business: {
+        businessId,
+        slug,
+        name: `Native Business ${suffix}`,
+        category: 'Machine data',
+        suburb: 'Perth',
+        stateTerritory: 'WA',
+        publicUrl: `/${slug}`,
+      },
+      offerings: [{
+        offering: {
+          offeringRef,
+          revision: index,
+          name: `Graphquasar telemetry ${suffix}`,
+          category: 'Machine data',
+          summary: 'Native Offering-only search term.',
+        },
+        accessPaths: [],
+        support: {
+          integrated: false,
+          routeable: false,
+          reasons: ['not_integrated'],
+        },
+      }],
+      sourceRevision: index,
+      sourceDigest: `hash:projection:${suffix}`,
+      observedAt: 100,
+      disposition: 'current',
+    }),
+    updatedAt: 100,
+  })
+  db.seed('registrySearchDocuments', {
+    _id: `registrySearchDocuments:v2:${suffix}`,
+    _creationTime: index,
+    documentId: `offering-v2__${slug}`,
+    schemaVersion: 'registry-search-document:v2',
+    businessSlug: slug,
+    businessName: `Native Business ${suffix}`,
+    businessCategory: 'Machine data',
+    suburb: 'Perth',
+    stateTerritory: 'WA',
+    publicStatus: 'published',
+    placeKeys: ['perth', 'perth wa', 'wa'],
+    searchText: `native business ${suffix} graphquasar telemetry machine data`,
+    offerings: [{
+      offeringRef,
+      revision: index,
+      name: `Graphquasar telemetry ${suffix}`,
+      category: 'Machine data',
+      summary: 'Native Offering-only search term.',
+    }],
+    sourceRevision: index,
+    sourceDigest: `hash:projection:${suffix}`,
+    observedAt: 100,
+    generatedHash: `hash:search:${suffix}`,
+    updatedAt: 100,
+  })
 }
 
 function matchesFilter(row: Row, filter: Filter): boolean {

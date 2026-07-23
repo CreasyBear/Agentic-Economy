@@ -494,6 +494,11 @@ describe('Convex schema', () => {
           searchField: 'searchText',
           filterFields: ['publicStatus'],
         }),
+        expect.objectContaining({
+          indexDescriptor: 'search_v2_searchText_by_schemaVersion_and_publicStatus',
+          searchField: 'searchText',
+          filterFields: ['schemaVersion', 'publicStatus'],
+        }),
       ]),
     )
   })
