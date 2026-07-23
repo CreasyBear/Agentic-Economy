@@ -54,7 +54,7 @@ import type { HarnessModelRequestRecord, HarnessModelUsage, HarnessRunLoop } fro
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MAX_ROUNDS = 4
 const DEFAULT_LIMIT = 3
-const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 15_000
+const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 4_000
 const ANSWER_PROSE_RESPONSE_FORMAT = {
   type: 'json_schema',
   json_schema: {
