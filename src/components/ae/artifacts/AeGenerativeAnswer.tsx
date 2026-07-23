@@ -81,7 +81,11 @@ export function AeGenerativeAnswer({
     ? 'font-heading text-2xl leading-snug text-balance'
     : 'text-base font-medium leading-snug'
   const hasProviderEvidence = parts.some(isProviderEvidencePart)
-  const hasSummary = parts.some((part) => part.kind === 'prose' && part.text.trim().length > 0)
+  const summaryPart = parts.find(
+    (part): part is Extract<AnswerMessagePart, { kind: 'prose' }> =>
+      part.kind === 'prose' && part.text.trim().length > 0,
+  )
+  const hasSummary = summaryPart !== undefined
   const hasNextStep = parts.some((part) => part.kind === 'what-to-do-now' && part.text.trim().length > 0)
 
   return (
@@ -131,24 +135,50 @@ export function AeGenerativeAnswer({
         </div>
       ) : null}
 
-      {/* The handoff record only means something once there are real listings to route to.
-         On an empty or clarify turn it just restates "nothing found", so it stays out. */}
-      {hasProviderEvidence ? (
-        <AeAnswerJourney
+      {summaryPart === undefined ? null : (
+        <AnswerPartView
+          part={summaryPart}
+          query={query}
+          empty={empty}
           phase={phase}
-          profile={profile}
-          progress={{
-            headline: headline.length > 0,
-            providerEvidence: hasProviderEvidence,
-            summary: hasSummary,
-            nextStep: hasNextStep,
-          }}
+          threadId={threadId}
+          hasAnswerFirstSummary={hasSummary}
         />
-      ) : null}
+      )}
 
-      {parts.map((part) => (
-        <AnswerPartView key={part.kind} part={part} query={query} empty={empty} phase={phase} threadId={threadId} />
+      {parts.filter((part) => part.kind !== 'prose').map((part) => (
+        <AnswerPartView
+          key={part.kind}
+          part={part}
+          query={query}
+          empty={empty}
+          phase={phase}
+          threadId={threadId}
+          hasAnswerFirstSummary={hasSummary}
+        />
       ))}
+
+      {/* The construction record supports inspection without competing with the answer.
+          It stays complete and reachable, but ordinary users do not need to read it first. */}
+      {hasProviderEvidence ? (
+        <details className="group rounded-md border border-border bg-surface">
+          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+            How AE checked this
+          </summary>
+          <div className="border-t border-border p-4">
+            <AeAnswerJourney
+              phase={phase}
+              profile={profile}
+              progress={{
+                headline: headline.length > 0,
+                providerEvidence: hasProviderEvidence,
+                summary: hasSummary,
+                nextStep: hasNextStep,
+              }}
+            />
+          </div>
+        </details>
+      ) : null}
 
       {phase === 'complete' && !empty ? (
         <p className="sr-only" role="status">
@@ -382,12 +412,14 @@ function AnswerPartView({
   empty,
   phase,
   threadId,
+  hasAnswerFirstSummary,
 }: {
   part: AnswerMessagePart
   query: string
   empty: boolean
   phase: AeGenerativeAnswerPhase
   threadId: string | undefined
+  hasAnswerFirstSummary: boolean
 }) {
   switch (part.kind) {
     case 'one-line':
@@ -397,7 +429,21 @@ function AnswerPartView({
     case 'provider-cards':
       return <ProviderCardsRail providers={part.providers} scroll={part.scroll === true} threadId={threadId} />
     case 'provider-compare-table':
-      return (
+      return hasAnswerFirstSummary ? (
+        <details className={`${REVEAL_ENTER} group rounded-lg border border-border bg-surface`}>
+          <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+            <span>See full comparison</span>
+            <span className="font-mono text-2xs text-secondary">{listingCountLabel(part.providers.length)}</span>
+          </summary>
+          <div className="border-t border-border">
+            <ProviderCompareTable
+              providers={part.providers}
+              threadId={threadId}
+              {...(part.fields === undefined ? {} : { fields: part.fields })}
+            />
+          </div>
+        </details>
+      ) : (
         <ProviderCompareTable
           providers={part.providers}
           threadId={threadId}

@@ -47,8 +47,8 @@ created: 2026-07-23
 | Wave 2 / 05-02 | Accepted withdrawal policy, exact history and both closed profile versions | T-05-02 | decision + unit/Convex | `npm exec -- vitest run tests/unit/catalog/offering-public-history.test.ts tests/unit/comparison/contract.test.ts tests/unit/comparison/profiles.test.ts` | ❌ |
 | Wave 3 / 05-03 | Both profiles round-trip catalog → strict registry codecs/Convex returns → registered actions → three public HTTP adapters | T-05-03 | unit/integration/action | `npm exec -- vitest run tests/unit/actions/registry.test.ts tests/unit/registry/offering-api-projection.test.ts tests/unit/registry/offering-runtime-guards.test.ts tests/integration/registry-api.test.ts tests/integration/registry-offering-parity.test.ts` | ❌ |
 | Wave 4 / 05-04 | Answer, Answer Thread and discovery consumers preserve Offering-v2 and literal inventory rejects undeclared consumers | T-05-04 | integration/import/copy | `npm exec -- vitest run tests/integration/answer-tool-calls.test.ts tests/integration/discovery-llms-offering-parity.test.ts tests/integration/registry-offering-parity.test.ts tests/unit/answer/answer-tool-use-agent.test.ts && npm run test:copy && npm run test:imports` | ❌ |
-| Wave 5 / 05-05 | Pure comparison across current/partial/stale/unknown/not-comparable, ties and priorities | T-05-05 | unit | `npm exec -- vitest run tests/unit/comparison/contract.test.ts tests/unit/comparison/profiles.test.ts tests/unit/comparison/resolve.test.ts tests/unit/comparison/compare.test.ts` | ❌ |
-| Wave 6 / 05-06 | Actual public loader/detail/shortlist/compare refresh/share and automated accessibility | T-05-06 | UI/e2e/a11y | `npm exec -- vitest run tests/unit/ui/offering-comparison.test.tsx && npm exec -- playwright test tests/e2e/comparison-surface.spec.ts tests/e2e/a11y/comparison.spec.ts` | ❌ |
+| Wave 5 / 05-05 | Pure comparison plus complete deterministic brief across current/partial/stale/unknown/not-comparable, ties and priorities | T-05-05 | unit | `npm exec -- vitest run tests/unit/comparison/contract.test.ts tests/unit/comparison/profiles.test.ts tests/unit/comparison/resolve.test.ts tests/unit/comparison/compare.test.ts tests/unit/comparison/brief.test.ts` | ❌ |
+| Wave 6 / 05-06 | Answer-first public loader/detail/shortlist/compare, bounded presentation fallback, refresh/share and automated accessibility | T-05-06 | unit/UI/e2e/a11y | `npm exec -- vitest run tests/unit/comparison/presentation.test.ts tests/unit/ui/offering-comparison.test.tsx && npm exec -- playwright test tests/e2e/comparison-surface.spec.ts tests/e2e/a11y/comparison.spec.ts` | ❌ |
 | Wave 7 / 05-07 | Fixed anonymous POST, actual loader/action parity, inspect-only fence and transfer eval | T-05-07 | integration/import/eval | `npm exec -- vitest run tests/integration/comparison-public-agent-route.test.ts tests/integration/comparison-surface-parity.test.ts tests/imports/comparison-boundaries.test.ts tests/eval/offering-comparison-transfer.test.ts` | ❌ |
 | Wave 8 / 05-08 source gate | Clean integrated codegen/typecheck/build and all named focused matrices | T-05-08 | source/build | Full 05-01..07 matrix plus `npm run test:copy`, `npm run test:seo`, `npm run test:imports`, `npm run check:convex-codegen`, `npm run typecheck`, `npm run build`, clean-tree check | ❌ |
 | Wave 8 / 05-08 human gate | 320px, 400% zoom, VoiceOver reading order/table headers and focus recovery | T-05-08 | bounded human verification | automated browser specs plus exact-revision manual record | ❌ |
@@ -71,14 +71,20 @@ created: 2026-07-23
 13. Both closed profile payloads survive catalog → registry HTTP → registered action without loss or reinterpretation.
 14. `POST /api/compare` imports only `comparisonCompareAction`, accepts no caller-selected action ID, returns malformed 400/oversized 413 and ordinary unavailable/unranked 200.
 15. External POST and the actual human `/compare` loader deep-agree and both re-resolve suppression/publication with zero effect.
+16. Direct posture, decisive differences and all mandatory caveats render before the full comparison; the complete evidence remains keyboard reachable in one disclosure.
+17. Missing, invalid, slow, unsafe, disabled or switched-model presentation output cannot delay, reorder, weaken or remove the deterministic answer.
+18. Presentation proposals containing free text, component names, URLs, actions, ARIA, unknown/duplicate IDs or the wrong semantic digest fall back without partial application.
 
 ## Vertical and Horizontal Evals
 
 **Vertical:** A visitor browses a professional-service Offering, selects two
-exact revisions, receives an unranked comparison, supplies a current comparable
-priority, sees an inspectable order, shares and refreshes the URL, then sees a
-changed revision disclosed without historical substitution. Unknown/stale
-material keeps the result unranked and the effect ledger remains empty.
+exact revisions, receives an answer-first unranked posture with decisive
+differences and caveats, supplies a current comparable priority, sees an
+inspectable order, discloses the full comparison, shares and refreshes the URL,
+then sees a changed revision disclosed without historical substitution.
+Unknown/stale material keeps the result unranked and the effect ledger remains
+empty. The same loop remains complete with presentation composition disabled or
+failed.
 
 **Horizontal:** The same resolver, comparator, human route and agent action
 compare two machine/data Offerings. Only the closed profile projector changes.
@@ -93,7 +99,7 @@ coverage, not a supply or demand claim.
 - [ ] Freeze and integrate the inherited Offering lane with exact commit/tree and custody.
 - [ ] Decide and implement historical-public revision eligibility through an accepted ADR amendment or new ADR.
 - [ ] Add strict v2 stored-snapshot and Convex return codecs.
-- [ ] Add `tests/unit/comparison/contract.test.ts`, `profiles.test.ts`, `compare.test.ts` and `resolve.test.ts`.
+- [ ] Add `tests/unit/comparison/contract.test.ts`, `profiles.test.ts`, `compare.test.ts`, `brief.test.ts`, `presentation.test.ts` and `resolve.test.ts`.
 - [ ] Add registry/comparison human-agent parity and forbidden-import tests.
 - [ ] Add `tests/integration/comparison-public-agent-route.test.ts` for the fixed POST status/auth/schema/no-store/actual-loader contract.
 - [ ] Add comparison UI, browser, accessibility and two-category transfer evals.
@@ -104,7 +110,7 @@ coverage, not a supply or demand claim.
 | Behavior | Why manual | Instructions |
 |---|---|---|
 | 400% zoom and narrow responsive integrity | Visual relationships need observation beyond DOM assertions | Against the exact clean candidate, inspect all canonical states at 320px and 400% zoom; confirm no hidden facts/actions, overlap, clipping or page-level overflow. |
-| VoiceOver reading order, table headers and focus recovery | Automated checks cannot establish the named interaction behavior in the actual assistive technology | Record browser/OS/VoiceOver versions; navigate headings/regions, table row/column headers and mobile fact relationships; exercise remove/apply/replace focus recovery. This is bounded observation, not comprehension proof. |
+| VoiceOver answer/disclosure reading order, table headers and focus recovery | Automated checks cannot establish the named interaction behavior in the actual assistive technology | Record browser/OS/VoiceOver versions; verify answer/caveat order and **See full comparison** announcement, then navigate table row/column headers and mobile fact relationships; exercise remove/apply/replace focus recovery. This is bounded observation, not comprehension proof. |
 | Exact hosted share/readback | Requires one configured hosted revision | Open the frozen comparison URL from a fresh browser, compare human and agent results, and record served revision plus packet digests. |
 
 ## Validation Sign-Off

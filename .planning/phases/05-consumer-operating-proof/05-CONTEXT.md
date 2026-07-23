@@ -38,6 +38,7 @@ quote-to-close material is research provenance, not current acceptance.
 - **D-10:** Human and agent surfaces derive from one Offering-based comparison semantic contract. Phase 5 must reconcile the legacy service-shaped registry action output before claiming parity.
 - **D-11:** Access-path facts may remain visible, but Phase 5 comparison actions are limited to view Offering, add/remove shortlist item, compare and change priorities. It must not initiate inquiry, endpoint invocation or another external effect.
 - **D-12:** Comparison must remain query-, provider- and category-agnostic at the shared envelope. Category-specific renderers or fact profiles cannot become a second workflow or control plane.
+- **D-17:** Human comparison is answer-first GenUI: the primary customer presentation adapts registered composition to the question, category, and device while source-owned posture, decisive differences, and every material caveat precede a native **See full comparison** disclosure. The model-neutral adapter may select only registered density/emphasis IDs bound to the semantic digest. It cannot supply truth, order, actions, controls, disclosure state, accessibility semantics, or code; absence, failure, or model switching retains the complete deterministic surface.
 
 ### Evidence and closure
 - **D-13:** Closure requires durable source, public human routes, equivalent structured agent actions and exact-revision hosted readback using clearly labelled demo data.
@@ -99,7 +100,7 @@ quote-to-close material is research provenance, not current acceptance.
 <specifics>
 ## Specific Ideas
 
-- The desired experience should feel like a familiar retail or travel comparison surface: public browsing, concrete Offering detail, explicit shortlist and side-by-side differences.
+- The desired experience combines public browsing and concrete Offering detail with the answer-first behavior people now expect from AI search: direct grounded answer, decisive differences, unavoidable caveats, then complete side-by-side evidence on demand.
 - The first falsification pair is a professional service and a GraphQL/data-style machine Offering.
 - A comparison should say “not ranked” when the facts or priorities do not justify ordering.
 

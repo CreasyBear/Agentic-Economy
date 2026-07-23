@@ -17,7 +17,7 @@ created: 2026-07-23
 
 This phase helps a visitor decide which exact Offering deserves further consideration. It does not help them contact, invoke, book, pay, dispatch, or authorize anything.
 
-The experience must feel like a familiar retail or travel comparison surface: browse without an account, open concrete details, add up to four items, compare them side by side, state priorities if desired, and share the resulting URL. Its source-truth contract is stricter than a typical marketplace: the selected revision, business, provenance, observed date, freshness, missing material, comparability, and any newer revision remain visible.
+The experience must feel like the emerging answer-first search surface rather than a catalogue the visitor must manually decode. Browse remains available without an account, but comparison leads with a concise grounded answer, the two or three differences that matter, and anything that could change the answer. The complete side-by-side evidence remains one disclosure away and the resulting URL remains shareable. Its source-truth contract is stricter than a typical marketplace: the selected revision, business, provenance, observed date, freshness, missing material, comparability, and any newer revision remain visible.
 
 The default result is **Not ranked**. The interface may show an order only after the visitor states priorities and the source-owned comparison result says every decisive fact is current and comparable. The UI never computes, weights, scores, or silently reorders Offerings.
 
@@ -45,7 +45,7 @@ Do not create or extend bespoke `Ae*` presentation primitives, route CSS, a rout
 
 ## Visual Direction
 
-Calm, dense decision support. The page ground is warm eucalyptus-tinted canvas; facts sit on white surfaces; slate supports hierarchy; eucalyptus marks the primary action and current selection only. Comparison should resemble a well-edited product specification sheet, not an analytics dashboard.
+Calm, concise decision support with dense evidence on demand. The first viewport answers the visitor's question; it does not begin with a matrix. The page ground is warm eucalyptus-tinted canvas; facts sit on white surfaces; slate supports hierarchy; eucalyptus marks the primary action and current selection only. The disclosed comparison should resemble a well-edited product specification sheet, not an analytics dashboard.
 
 No hero treatment on product routes. No gradients, glass, glowing graphs, decorative scoring rings, oversized metrics, uniform feature-card grids, or animated ranking. The Offering name, business, selected revision, result posture, and material differences lead.
 
@@ -165,10 +165,12 @@ Task order:
 
 1. Selected Offering controls.
 2. Priority controls.
-3. Result posture and explanation.
-4. Comparison matrix/list.
-5. Provenance/currentness detail.
-6. Share action.
+3. Direct result posture: ordered, unranked, blocked, partial, or unavailable.
+4. Two or three source-owned decisive differences plus every material stale, unknown, changed-revision, or not-comparable caveat.
+5. One obvious continuation: change priorities or inspect an Offering.
+6. Native disclosure **See full comparison** containing the complete comparison matrix/list.
+7. Provenance/currentness detail.
+8. Share action.
 
 The first Offering is never visually preselected as winner. URL order is selection order and is not evidence order. If the semantic owner returns an ordered result, render an **Ordered by your priorities** section before the matrix that states the priority sequence and decisive facts. Do not renumber columns as ranks; a text list may say **1. [Offering]** only inside that explicit ordered-result section.
 
@@ -182,11 +184,36 @@ The first Offering is never visually preselected as winner. URL order is selecti
 | Offering detail | Astryx `Layout`, `Card`, `Banner`, `Badge`, `Divider`, `Text`, `Button` | New thin route/composition. It receives one exact source semantic object and does not reconstruct facts, support, or currentness. |
 | Shortlist | Astryx `Card`, `Button`, `Badge`/`Token` | New `AeShortlistBar` composition; URL-backed only, maximum four, removable items, no persistence/login. |
 | Comparison | Astryx `Table` or native semantic table with Astryx tokens; existing `ProviderCompareTable` mechanics as reference | New Offering-based composition. Do not reuse `AnswerSource`, business rows, trust fields, empty-string cells, or contact-availability ordering. |
+| Answer-first GenUI presentation | Astryx `Card`, `Banner`, `Button`, native `details`/`summary` | Primary comparison experience: a comparison-owned `ComparisonPresentationV1` adapts registered compositions to the question, category, and device over `offering-comparison:v1`. It may choose only bounded density/emphasis using existing semantic IDs. Invalid, absent, slow, disabled, or unsafe proposals use the complete deterministic answer-first fallback. |
 | Priority editor | Astryx `Selector`, `Button`, `Divider` | Closed dimensions and directions from semantic contract; keyboard move up/down; no drag-only reorder or free text. |
 | State feedback | Astryx `Banner`, `Skeleton`, `EmptyState`; one bounded live region | Map ordinary discriminated outcomes to exact public copy below; never show internal status/reason literals. |
 | Share | Existing clipboard pattern may inform behavior | Copy the canonical validated compare URL. No saved record, analytics payload containing selections, or share-token service. |
 
 Required ownership split: source comparison semantics decide cells, comparability, reasons, priority order, and newer-revision state. Route loaders resolve URL references. Components render. Components must not parse category facts, compare values, infer freshness, or sort.
+
+## Answer-first Composition Contract
+
+The comparison owner emits stable fact, dimension, reason, caveat, section, and safe-action IDs. A deterministic brief selects the result posture, decisive reasons, foregroundable facts, required caveats, and allowed inspect-only actions. It is complete without a model.
+
+A model-neutral GenUI presentation adapter may propose only:
+
+- `mode`: `answer_first` or `guided_compare`;
+- up to three existing dimension/reason IDs to foreground;
+- one registered density and one registered responsive composition suitable for
+  the current question, category, and device class.
+
+The proposal contains no facts, ranks, scores, URLs, HTML, JSX, component names, ARIA, control labels, actions, authority, or free-form category keys. It is schema-validated, duplicate-free, digest-bound to the exact semantic result, and resolved to registry-owned Astryx compositions. Provider-authored text is untrusted data and cannot become composition instructions.
+
+Every accepted composition and fallback renders:
+
+1. the source-owned result posture in plain language;
+2. the decisive differences or the reason AE cannot responsibly order the options;
+3. every material unknown, stale, changed, unavailable, or not-comparable caveat;
+4. the exact Offering identities and revisions;
+5. only source-owned inspect-only continuations;
+6. **See full comparison**, reconstructable without a model.
+
+Model timeout, unavailability, schema failure, unknown IDs, unsafe content, feature disablement, or model switching cannot delay or remove the deterministic answer. Every disclosure remains initially closed and user-operated; no accepted proposal may change disclosure state. The canonical URL preserves comparison truth, not a generated layout or prose. Structured agents continue to receive `offering-comparison:v1`; presentation metadata is not agent truth.
 
 ## Shortlist Interaction Contract
 
@@ -214,7 +241,7 @@ Required ownership split: source comparison semantics decide cells, comparabilit
 
 ## Comparison Reading Contract
 
-### Wide layout
+### Wide layout — disclosed full evidence
 
 At `md` and wider, use a native table (or Astryx `Table` that emits native table semantics):
 

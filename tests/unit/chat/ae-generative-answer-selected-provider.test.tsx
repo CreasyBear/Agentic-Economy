@@ -14,7 +14,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
     cleanup()
   })
 
-  it('presents provider matches as an actionable shortlist before answer prose', () => {
+  it('leads with the grounded answer before the supporting shortlist', () => {
     const artifacts: AnswerArtifact[] = [
       { kind: 'one-line', text: 'One listed business matches this request.' },
       { kind: 'provider-cards', providers: [provider()] },
@@ -44,7 +44,8 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
 
     expect(shortlist.contains(screen.getByText('These are the listed businesses AE found for this request.'))).toBe(true)
     expect(shortlist.contains(screen.getByText('Ask this business'))).toBe(true)
-    expect(shortlist.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(summary.compareDocumentPosition(shortlist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText('How AE checked this').closest('details')?.open).toBe(false)
   })
 
   it('shows the chosen provider before routing to the inquiry form', () => {
@@ -113,6 +114,42 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
     expect(screen.getByText('Northside Plumbing').closest('a')?.getAttribute('href')).toBe(
       '/northside-plumbing?from=thread&id=thread-compare',
     )
+    expect(screen.queryByText('See full comparison')).toBeNull()
+    expect(screen.getByText('Demo Plumbing')).toBeTruthy()
+    expect(screen.getByText('Northside Plumbing')).toBeTruthy()
+  })
+
+  it('puts full comparison behind disclosure only when a summary leads', () => {
+    const artifacts: AnswerArtifact[] = [
+      { kind: 'one-line', text: 'Compare these two listed businesses.' },
+      {
+        kind: 'provider-compare-table',
+        providers: [
+          provider(),
+          provider({ citationIndex: 2, slug: 'northside-plumbing', name: 'Northside Plumbing' }),
+        ],
+      },
+      {
+        kind: 'prose',
+        block: 'summary',
+        text: 'Demo Plumbing is the stronger fit on the facts currently supplied.',
+      },
+    ]
+
+    renderWithRouter(
+      <AeGenerativeAnswer
+        artifacts={artifacts}
+        query="compare the top two"
+        layoutProfile="compare_pair"
+        phase="complete"
+      />,
+    )
+
+    const summary = screen.getByText('Demo Plumbing is the stronger fit on the facts currently supplied.')
+    const disclosure = screen.getByText('See full comparison')
+
+    expect(summary.compareDocumentPosition(disclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(disclosure.closest('details')?.open).toBe(false)
   })
 })
 

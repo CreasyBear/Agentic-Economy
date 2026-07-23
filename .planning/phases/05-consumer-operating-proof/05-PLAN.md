@@ -4,7 +4,7 @@ status: planned_blocked_on_gate_0
 goal: public inspect-only exact-Offering comparison
 plans: 8
 waves: 8
-authority: founder-accepted 05-CONTEXT.md D-01 through D-16
+authority: founder-accepted 05-CONTEXT.md D-01 through D-17
 ---
 
 # Phase 05 execution authority
@@ -74,8 +74,8 @@ alone merges children and confirms the next wave base.
 | 05-02 | `src/modules/catalog/internal/offering-{supply,source,public-history}.ts`, catalog public/schema owner, `convex/catalog*.ts` bounded history/query owners, accepted ADR-026 amendment | `tests/unit/catalog/offering-public-history.test.ts`, comparison contract/profile tests | exact previously-public revision resolves without substitution; two closed profile versions validate |
 | 05-03 | `src/modules/registry/{public.ts,registry.functions.ts,registry.actions.ts}`, strict v2 projection/codecs, Convex return validation and three public business HTTP adapters | registry action/API/parity/runtime-guard tests including both profile versions | Catalog facts survive registry HTTP → registered action unchanged and safe |
 | 05-04 | registry-adjacent, Answer, Answer Thread and discovery Offering-v2 consumers plus a literal source-facing inventory gate | Answer tool-call, discovery parity, copy and import checks | every live action-output consumer is explicit, profile-preserving and unable to reconstruct `services[]` |
-| 05-05 | `src/modules/comparison/internal/{contract,profiles/*,resolve,compare,projection}.ts`, `public.ts` | resolver/comparator tests | at most four exact refs compare; default/tie/blockers unranked; priority order inspectable |
-| 05-06 | public registry/business/Offering/compare routes, Phase-5 comparison components, generated route tree | UI, copy, SEO, browser and accessibility specs | no-login visitor browses, shortlists, refreshes/shares and reads exact responsive comparison |
+| 05-05 | `src/modules/comparison/internal/{contract,profiles/*,resolve,compare,brief,projection}.ts`, `public.ts` | resolver/comparator/brief tests | at most four exact refs compare; default/tie/blockers unranked; priority order and complete deterministic brief inspectable |
+| 05-06 | public registry/business/Offering/compare routes, bounded presentation resolver/adapter, answer-first comparison components, generated route tree | presentation, UI, copy, SEO, browser and accessibility specs | no-login visitor receives a direct grounded answer, reads decisive differences/caveats, can disclose full evidence, and refreshes/shares exact truth even without a model |
 | 05-07 | comparison registered action plus fixed anonymous `POST /api/compare` importing only `comparisonCompareAction` | actual loader/POST parity, recursive import fence and vertical/horizontal transfer evals | agent receives the same semantics as the real public loader and no effect owner is reachable |
 | 05-08 | release tooling, clean parent integration gate, manual accessibility checkpoint, hosted smoke and closeout | typecheck/build/codegen/focused matrices, VoiceOver notes, frozen manifest and zero-effect readback | exact integrated revision passes source and human checks before the same revision is hosted |
 
@@ -102,10 +102,11 @@ incoherent tree.
 | CONTEXT | D-07, D-08, D-09 | provenance, closed profiles, no score, unranked default | 02, 05 | COVERED |
 | CONTEXT | D-10, D-11, D-12 | one human/agent semantic owner, effect fence, category neutrality | 03, 04, 05, 06, 07 | COVERED |
 | CONTEXT | D-13, D-14, D-15, D-16 | two-category exact hosted evidence and claim ceiling | 07, 08 | COVERED |
+| CONTEXT | D-17 | answer-first deterministic brief, bounded model-neutral presentation and complete fallback | 05, 06, 08 | COVERED |
 | RESEARCH | — | Max four selections, max three closed priorities, strict codecs, indexed reads, no-store transient comparison | 02–07 | COVERED |
 | RESEARCH | — | ADR decision before historical-public meaning changes | 02 | COVERED |
 | RESEARCH | — | Existing public registry routes execute registry actions; fixed anonymous comparison POST proves reachability; descriptor presence is insufficient | 03, 04, 07 | COVERED |
-| RESEARCH | — | native table / equivalent mobile `dl`, state matrix, zero-effect browser proof | 06 | COVERED |
+| RESEARCH | — | answer-first brief, native disclosed table / equivalent mobile `dl`, bounded presentation fallback, state matrix and zero-effect browser proof | 05, 06 | COVERED |
 | RESEARCH | — | exact deployment identity and independently verified frozen packet | 08 | COVERED |
 
 Deferred signed-in saving, quote/request/inquiry, Customer Request/RoutePlan,
