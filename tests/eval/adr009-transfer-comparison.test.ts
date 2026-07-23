@@ -7,7 +7,7 @@ import {
 } from './support/adr009-transfer-comparison'
 
 const controlledEvents: TransferBoundaryEvent[] = [
-  { kind: 'approval_policy', policy: 'ask', reason: 'exact invocation authority' },
+  { kind: 'approval_policy', policy: 'prompt', reason: 'exact invocation authority' },
   { kind: 'authority_decision', invocationRef: 'dev:invocation' },
   { kind: 'user_or_supervisor_decision', invocationRef: 'dev:invocation' },
   { kind: 'direct_runner_started', actionId: 'supply.collectDevelopmentQuote' },
@@ -28,7 +28,7 @@ function passingEvidence(): TransferEvidence {
         { kind: 'direct_runner_returned', actionId: 'registry.detail', outcome: 'not_found' },
       ],
       direct_consequential: [
-        { kind: 'approval_policy', policy: 'ask', reason: 'consequential' },
+        { kind: 'approval_policy', policy: 'prompt', reason: 'consequential' },
         { kind: 'direct_runner_started', actionId: 'supply.collectDevelopmentQuote' },
         { kind: 'direct_runner_returned', actionId: 'supply.collectDevelopmentQuote', outcome: 'quote_returned' },
       ],

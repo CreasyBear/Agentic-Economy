@@ -409,7 +409,18 @@ function wrapLocalE2eInquiryServerBackend(local: LocalE2eInquiryServerBackend): 
         if (resolved.kind === 'error') {
           return resolved
         }
-        return local.submitPublicInquiry(data, resolved.target) as PublicInquirySubmitServerResult
+        return local.submitPublicInquiry({
+          target: data.target,
+          body: data.body,
+          contact: {
+            ...(data.contact.name === undefined ? {} : { name: data.contact.name }),
+            ...(data.contact.email === undefined ? {} : { email: data.contact.email }),
+            ...(data.contact.phone === undefined ? {} : { phone: data.contact.phone }),
+          },
+          expectedDigest: data.expectedDigest,
+          ...(data.operationKey === undefined ? {} : { operationKey: data.operationKey }),
+          ...(data.inquiryOrigin === undefined ? {} : { inquiryOrigin: data.inquiryOrigin }),
+        }, resolved.target) as PublicInquirySubmitServerResult
       } catch (error) {
         return inquirySourceError(error)
       }
