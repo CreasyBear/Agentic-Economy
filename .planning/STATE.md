@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 status: in_progress
-stopped_at: Phase 05 Plan 05-04 complete; Plan 05-05 active
-last_updated: "2026-07-23T07:25:00Z"
+stopped_at: Phase 05 Plan 05-05 complete; Plan 05-06 active
+last_updated: "2026-07-23T08:00:00Z"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 4
-  percent: 50
+  completed_plans: 5
+  percent: 63
 current_phase: 05
 current_phase_name: consumer-decision-support
 ---
@@ -55,16 +55,22 @@ Plan 05-04 integrated the Offering-v2 consumer bridge at
 Answer, Answer Thread persistence/replay, discovery and a visible
 `offering-cards` artifact without legacy reconstruction or ranking.
 
+Plan 05-05 integrated pure exact-revision comparison semantics at
+`a4f06577056d06b51f842e81125e3193781e6ca3` with tree
+`c8c74ed4a812efbfbd4812c64289352e7f343219`. Comparison is bounded, defaults
+unranked, orders only by the minimal stated-priority prefix, and keeps URL
+observation time non-authoritative.
+
 ## Next transition
 
-Execute Plan 05-05 from the exact Plan 05-04 result. Build pure exact-revision
-comparison semantics and strict shareable URL state before adding the public
-comparison interface.
+Execute Plan 05-06 from the exact Plan 05-05 result. Build the public Offering
+detail, shortlist and answer-first Astryx comparison experience over the pure
+comparison owner.
 
 ## Remaining evidence gaps
 
-- exact comparison semantics and the public answer-first experience do not yet
-  exist in integrated source;
+- the public answer-first comparison experience does not yet exist in
+  integrated source;
 - no Phase 05 browser, hosted, provider or customer evidence exists.
 - the isolated Convex dry-run could not execute because `CONVEX_DEPLOYMENT` is
   unset; no `convex dev` or control-plane loop was started.
@@ -74,8 +80,8 @@ comparison interface.
 Current Phase 05 evidence proves a committed Offering-v2 predecessor,
 historical-public resolution, closed comparison profiles and strict
 HTTP/registered-action registry parity plus a visible local Answer artifact
-with focused fixtures. It does not yet prove the completed comparison product,
-hosted behavior, demand, customer value, supplier quality,
+and pure comparison semantics with focused fixtures. It does not yet prove the
+completed comparison product, hosted behavior, demand, customer value, supplier quality,
 fulfilment, willingness to pay, retention, revenue or production safety.
 
 Historical state, roadmap, requirements and scopes are preserved under
@@ -83,6 +89,6 @@ Historical state, roadmap, requirements and scopes are preserved under
 
 ## Session
 
-**Last session:** 2026-07-23T07:25:00Z
-**Stopped at:** Phase 05 Plan 05-04 complete; Plan 05-05 active
-**Resume file:** .planning/phases/05-consumer-operating-proof/05-05-PLAN.md
+**Last session:** 2026-07-23T08:00:00Z
+**Stopped at:** Phase 05 Plan 05-05 complete; Plan 05-06 active
+**Resume file:** .planning/phases/05-consumer-operating-proof/05-06-PLAN.md
