@@ -273,6 +273,14 @@ jobs:
             operator_key="phase5-release-v1:$(openssl rand -hex 32)"
             npx convex env set AE_SOURCE_WRITE_KEY_OPERATOR "${operator_key}" --prod
           fi
+          if ! bootstrap_principals="$(npx convex env get ADMIN_BOOTSTRAP_PRINCIPAL_IDS --prod 2>/dev/null)" || [ -z "${bootstrap_principals}" ]; then
+            bootstrap_principals="${AE_PHASE5_ADMIN_SUBJECT}"
+            npx convex env set ADMIN_BOOTSTRAP_PRINCIPAL_IDS "${bootstrap_principals}" --prod
+          fi
+          if ! printf ',%s,' "${bootstrap_principals}" | grep -Fq ",${AE_PHASE5_ADMIN_SUBJECT},"; then
+            echo 'The configured Phase 5 principal is not admitted for owner bootstrap.' >&2
+            exit 1
+          fi
           issuer="$(npx convex env get CLERK_JWT_ISSUER_DOMAIN --prod)"
           if [ -z "${operator_key}" ] || [ -z "${issuer}" ] || [ -z "${AE_PHASE5_ADMIN_SUBJECT}" ]; then
             echo 'Phase 5 release administration is not configured.' >&2
@@ -284,9 +292,20 @@ jobs:
             npm exec -- tsx tools/release/phase5-operator-control.ts
           )"
           identity="$(printf '%s' "${control}" | jq -cer '.identity')"
-          args="$(printf '%s' "${control}" | jq -cer '.args')"
-          result="$(npx convex run observability:setOperatorControl "${args}" --identity "${identity}" --prod)"
+          bootstrap_args="$(printf '%s' "${control}" | jq -cer '.bootstrapArgs')"
+          control_args="$(printf '%s' "${control}" | jq -cer '.controlArgs')"
+          bootstrap_result="$(npx convex run security:bootstrapOwnerAdmin "${bootstrap_args}" --identity "${identity}" --prod)"
+          if ! printf '%s' "${bootstrap_result}" | jq -e '
+            (.kind == "ok" and .code == "admin_membership_bootstrapped")
+            or (.kind == "error" and .reason == "owner_admin_already_exists")
+          ' >/dev/null; then
+            printf '%s' "${bootstrap_result}" | jq -c '{kind,code,reason}' >&2
+            echo 'Phase 5 owner administration could not be established.' >&2
+            exit 1
+          fi
+          result="$(npx convex run observability:setOperatorControl "${control_args}" --identity "${identity}" --prod)"
           if ! printf '%s' "${result}" | jq -e '.kind == "ok" and .readback.effectiveEnabled == true' >/dev/null; then
+            printf '%s' "${result}" | jq -c '{kind,code,reason}' >&2
             echo 'Phase 5 public Offering projection was not enabled.' >&2
             exit 1
           fi
