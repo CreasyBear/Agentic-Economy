@@ -113,6 +113,9 @@ describe('answer response planner', () => {
         decisionSupport: first.snapshot.decisionSupport,
       }),
     }])
+    if (priorDecisionSupport === undefined) {
+      throw new Error('expected durable clarification evidence')
+    }
 
     expect(planAnswerTurn({
       query: 'Information and enquiries',

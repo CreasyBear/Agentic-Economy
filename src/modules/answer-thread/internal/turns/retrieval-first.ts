@@ -15,9 +15,11 @@ import {
   deriveRegisteredConstraintEligibility,
   projectPublicDecisionSourceResult,
   type PublicDecisionSourceResult,
-  type ResolveComparisonSelectionsResult,
-  type ResolvedComparisonSelection,
+  resolveComparisonSelections,
+  type ComparisonOfferingReadPort,
+  type ComparisonSelectionRef,
 } from '@/modules/comparison/public'
+import { createComparisonOfferingReadPort } from '@/modules/comparison/comparison.functions'
 import {
   aeSearchContextLocationQuery,
   type AeSearchContext,
@@ -137,7 +139,7 @@ async function streamRetrievalFirstTurn(
         query: ctx.query,
         confirmedChoiceId: plan.coldStart.confirmedChoiceId,
         confirmedConstraintIds: plan.coldStart.confirmedConstraintIds,
-        sourceDecision: resolveColdStartSourceDecision({
+        sourceDecision: await resolveColdStartSourceDecision({
           sources: [],
           confirmedChoiceId: plan.coldStart.confirmedChoiceId,
           confirmedConstraintIds: plan.coldStart.confirmedConstraintIds,
@@ -192,7 +194,7 @@ async function streamRetrievalFirstTurn(
           query: ctx.query,
           confirmedChoiceId: plan.coldStart.confirmedChoiceId,
           confirmedConstraintIds: plan.coldStart.confirmedConstraintIds,
-          sourceDecision: resolveColdStartSourceDecision({
+          sourceDecision: await resolveColdStartSourceDecision({
             sources: result.offeringSources,
             confirmedChoiceId: plan.coldStart.confirmedChoiceId,
             confirmedConstraintIds: plan.coldStart.confirmedConstraintIds,
@@ -263,59 +265,38 @@ export function buildColdStartRetrievalSnapshot(input: {
   }
 }
 
-function resolveColdStartSourceDecision(input: {
+export async function resolveColdStartSourceDecision(input: {
   sources: readonly OfferingAnswerSource[]
   confirmedChoiceId: WebsiteFunctionChoice
   confirmedConstraintIds: readonly WebsiteDecisionConstraintId[]
-}): PublicDecisionSourceResult {
-  const selections = input.sources.flatMap((source) => (
-    source.offerings.map((offering): ResolvedComparisonSelection => ({
-      selection: {
+  port?: ComparisonOfferingReadPort
+  resolvedAt?: number
+}): Promise<PublicDecisionSourceResult> {
+  const candidateReferences: ComparisonSelectionRef[] = input.sources.flatMap((source) => (
+    source.offerings.map((offering): ComparisonSelectionRef => ({
         businessId: source.business.businessId,
         offeringRef: offering.offeringRef,
         offeringRevision: offering.revision,
         projectionObservedAt: source.business.observedAt,
-      },
-      business: {
-        businessId: source.business.businessId,
-        slug: source.business.slug,
-        name: source.business.name,
-      },
-      offering: {
-        offeringRef: offering.offeringRef,
-        revision: offering.revision,
-        name: offering.name,
-        category: offering.category,
-        summary: offering.summary,
-        ...(offering.comparison === undefined
-          ? {}
-          : { comparison: offering.comparison }),
-      },
-      publication: {
-        publishedAt: source.business.observedAt,
-        safeDisplayDisposition: 'retain_safe_history',
-      },
-      projectionDisposition: source.business.disposition,
-      resolvedAt: source.business.observedAt,
     }))
   ))
-  const resolution: ResolveComparisonSelectionsResult = {
-    kind: 'resolved',
-    disposition: selections.some(
-      ({ projectionDisposition }) => projectionDisposition !== 'current',
-    )
-      ? 'partial'
-      : 'current',
-    selections,
-    refusals: [],
-  }
+  const resolution = await resolveComparisonSelections({
+    state: {
+      version: 'offering-comparison:v1',
+      selections: candidateReferences,
+      priorities: ['professional_service:v1:lowest_total_price'],
+    },
+    resolvedAt: input.resolvedAt ?? Date.now(),
+    port: input.port ?? createComparisonOfferingReadPort(),
+  })
   const comparison = compareOfferings({
-    selections,
+    selections: resolution.selections,
     priorities: ['professional_service:v1:lowest_total_price'],
+    refusedSelectionCount: resolution.refusals.length,
   })
   const eligibility = deriveRegisteredConstraintEligibility({
     categoryId: 'website:v1',
-    registeredSupplyCount: selections.length,
+    registeredSupplyCount: candidateReferences.length,
     resolution,
     comparison,
     confirmedChoiceId: input.confirmedChoiceId,
