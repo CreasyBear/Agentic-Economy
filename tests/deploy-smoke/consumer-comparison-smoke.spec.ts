@@ -51,9 +51,8 @@ test('authenticated exact-revision deployment serves the public zero-effect comp
   await page.waitForURL(/\/t\//)
   const brochureChoice = page.getByRole('button', { name: 'Information and enquiries' })
   await expect(brochureChoice).toBeVisible()
-  // The clarification can render from the streamed semantic event before the
-  // thread continuation is durably addressable. Wait for that real boundary
-  // instead of racing a visibly disabled choice on a hosted response.
+  // The clarification can render before the route-owned thread continuation is
+  // mounted. Wait for that real boundary instead of racing a disabled choice.
   await expect(brochureChoice).toBeEnabled({ timeout: 60_000 })
   await brochureChoice.click()
   await expect(page.getByRole('region', { name: 'Decision support' })).toBeVisible({ timeout: 30_000 })
@@ -61,7 +60,8 @@ test('authenticated exact-revision deployment serves the public zero-effect comp
   expect(browseHref).toMatch(/q=.*information.*enquiries/iu)
 
   await page.goto(new URL(browseHref!, config.baseUrl).href, { waitUntil: 'networkidle' })
-  await expect(page.getByRole('heading', { name: /find businesses and offerings/i })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: /results for/iu })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'No published Offerings match this search' })).toBeVisible()
 
   for (const detailUrl of config.detailUrls) {
     await page.goto(new URL(detailUrl, config.baseUrl).href, { waitUntil: 'networkidle' })
