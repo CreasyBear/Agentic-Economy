@@ -14,7 +14,7 @@ const requiredCommands = [
   'npm run check:convex-codegen',
   'test -z "$(git status --porcelain=v1 --untracked-files=all)"',
 ]
-const sha256 = /^sha256:[a-f0-9]{64}$/u
+const semanticDigest = /^hash:[a-f0-9]{8}$/u
 const gitObject = /^[a-f0-9]{40}$/u
 const forbiddenKey = /auth(?:orization|token)?|credential|customer.?text|source.?hash|private.?projection|provider.?effect|api.?key|secret/iu
 
@@ -295,7 +295,11 @@ function isPrivateHost(hostname: string): boolean {
 function readPublicResponse(path: string): { semanticDigest: string } {
   const value: unknown = JSON.parse(readFileSync(path, 'utf8'))
   assertNoUnownedMaterial(value)
-  if (!isRecord(value) || typeof value.semanticDigest !== 'string' || !sha256.test(value.semanticDigest)) {
+  if (
+    !isRecord(value)
+    || typeof value.semanticDigest !== 'string'
+    || !semanticDigest.test(value.semanticDigest)
+  ) {
     throw new Error('public_response_semantic_digest_invalid')
   }
   return { semanticDigest: value.semanticDigest }

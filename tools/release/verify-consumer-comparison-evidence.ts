@@ -14,6 +14,7 @@ const requiredCommands = [
   'test -z "$(git status --porcelain=v1 --untracked-files=all)"',
 ]
 const digestPattern = /^sha256:[a-f0-9]{64}$/u
+const semanticDigestPattern = /^hash:[a-f0-9]{8}$/u
 
 export function verifyConsumerComparisonEvidence(
   input: unknown,
@@ -96,7 +97,11 @@ function verifyPublicResponse(
   if (artifact === undefined) return
   try {
     const value: unknown = JSON.parse(readFileSync(artifact.path, 'utf8'))
-    if (!isRecord(value) || value.semanticDigest !== artifact.semanticDigest || !digestPattern.test(artifact.semanticDigest)) {
+    if (
+      !isRecord(value)
+      || value.semanticDigest !== artifact.semanticDigest
+      || !semanticDigestPattern.test(artifact.semanticDigest)
+    ) {
       errors.push('public_response_semantics_invalid')
     }
     if (containsForbiddenMaterial(value)) errors.push('sensitive_or_unowned_material')

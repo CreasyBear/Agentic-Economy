@@ -50,7 +50,7 @@ function fixtureFiles(): Readonly<{
   const structured = join(directory, 'structured.json')
   const zeroEffect = join(directory, 'zero-effect.json')
   const screenshot = join(directory, 'comparison.png')
-  const result = { kind: 'comparison', semanticDigest: `sha256:${'c'.repeat(64)}`, posture: 'unranked' }
+  const result = { kind: 'comparison', semanticDigest: 'hash:c0ffee12', posture: 'unranked' }
   writeFileSync(human, JSON.stringify(result))
   writeFileSync(structured, JSON.stringify(result))
   writeFileSync(zeroEffect, JSON.stringify({
@@ -270,8 +270,8 @@ describe('consumer comparison release evidence', () => {
       (candidate: ConsumerComparisonEvidence) => { candidate.artifacts.zeroEffectObservation.digest = `sha256:${'e'.repeat(64)}` },
       (candidate: ConsumerComparisonEvidence) => { candidate.deployment.deploymentId = 'dpl_other' },
       (candidate: ConsumerComparisonEvidence) => {
-        candidate.artifacts.humanLoaderResponse.semanticDigest = `sha256:${'f'.repeat(64)}`
-        candidate.artifacts.structuredPostResponse.semanticDigest = `sha256:${'f'.repeat(64)}`
+        candidate.artifacts.humanLoaderResponse.semanticDigest = 'hash:ffffffff'
+        candidate.artifacts.structuredPostResponse.semanticDigest = 'hash:ffffffff'
       },
     ]
     for (const mutate of cases) {
