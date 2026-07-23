@@ -311,6 +311,11 @@ describe('CustomerRequest source completeness', () => {
 
     expect(workflow).not.toMatch(/kernel-proof|PROOF_MANIFEST|\.mjs|\.mts/)
     expect(workflow).toContain('cancel-in-progress: false')
+    expect(workflow).toContain('npx convex env get AE_SOURCE_WRITE_KEY_SESSION --prod')
+    expect(workflow).toContain('npx convex env set AE_SOURCE_WRITE_KEY_SESSION "${session_key}" --prod')
+    expect(workflow).toContain(
+      'npx vercel env add AE_SOURCE_WRITE_KEY_SESSION production --force --sensitive',
+    )
     expect(sourceProof.match(/npm install --global npm@11\.5\.1/gu)).toHaveLength(1)
     expect(sourceProof).toContain(
       "if: github.event_name != 'push' || (!contains(github.event.head_commit.message, '[phase3c-hosted-trial]') && !contains(github.event.head_commit.message, '[phase5-consumer-comparison]'))",

@@ -248,6 +248,19 @@ jobs:
           printf 'CONSUMER_COMPARISON_EXPECTED_REVISION=%s\n' "${AE_RELEASE_SOURCE_REVISION}" >> "${GITHUB_ENV}"
           printf 'CONSUMER_COMPARISON_EXPECTED_TREE=%s\n' "${source_tree}" >> "${GITHUB_ENV}"
 
+      - name: Ensure one shared server-owned answer-session signing key
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if ! session_key="$(npx convex env get AE_SOURCE_WRITE_KEY_SESSION --prod 2>/dev/null)" || [ -z "${session_key}" ]; then
+            session_key="phase5-session-v1:$(openssl rand -hex 32)"
+            npx convex env set AE_SOURCE_WRITE_KEY_SESSION "${session_key}" --prod
+          fi
+          echo "::add-mask::${session_key}"
+          printf '%s' "${session_key}" \
+            | npx vercel env add AE_SOURCE_WRITE_KEY_SESSION production --force --sensitive --token "${VERCEL_TOKEN}"
+
       - name: Deploy the exact clean Phase 5 web source
         id: deploy
         env:
