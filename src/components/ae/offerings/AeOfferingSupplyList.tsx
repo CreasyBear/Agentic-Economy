@@ -158,6 +158,7 @@ function OfferingCard({
               <button
                 type="button"
                 aria-pressed={selected}
+                aria-label={`${selected ? 'Remove' : 'Add'} ${offering.offering.name} ${selected ? 'from' : 'to'} comparison`}
                 disabled={!selected && selectionFull}
                 className="min-h-11 rounded-md border border-border px-4 font-semibold text-primary focus-visible:outline-2 focus-visible:outline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => onToggleComparison({
@@ -170,7 +171,7 @@ function OfferingCard({
                   selected: !selected,
                 })}
               >
-                {selected ? `Remove ${offering.offering.name} from comparison` : `Add ${offering.offering.name} to comparison`}
+                {selected ? 'Remove from compare' : 'Add to compare'}
               </button>
             )}
           </div>

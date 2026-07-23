@@ -50,11 +50,12 @@ export function AeOfferingDetail({
         <button
           type="button"
           aria-pressed={selected}
+          aria-label={`${selected ? 'Remove' : 'Add'} ${selection.offering.name} ${selected ? 'from' : 'to'} comparison`}
           disabled={selectionDisabled}
           onClick={onToggle}
           className="min-h-11 justify-self-start rounded-md border border-border px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-4"
         >
-          {selected ? 'Remove' : 'Add'} {selection.offering.name} {selected ? 'from' : 'to'} comparison
+          {selected ? 'Remove from compare' : 'Add to compare'}
         </button>
       </header>
       <Card padding={4} className="grid gap-4 border border-border">

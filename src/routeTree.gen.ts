@@ -18,6 +18,7 @@ import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as ForAgentsRouteImport } from './routes/for-agents'
 import { Route as EngineRouteImport } from './routes/engine'
+import { Route as CompareRouteImport } from './routes/compare'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as OperatorRouteImport } from './routes/_operator'
@@ -67,6 +68,7 @@ import { Route as OperatorAdminInquiriesRouteImport } from './routes/_operator/a
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
 import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
+import { Route as SlugOfferingsOfferingRefRouteImport } from './routes/$slug.offerings.$offeringRef'
 import { Route as ApiV1RequestsSchemaRouteImport } from './routes/api.v1.requests.schema'
 import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.requests.$requestRef'
 import { Route as ApiSandboxProvidersWorkflowRouteImport } from './routes/api.sandbox.providers.workflow'
@@ -149,6 +151,11 @@ const ForAgentsRoute = ForAgentsRouteImport.update({
 const EngineRoute = EngineRouteImport.update({
   id: '/engine',
   path: '/engine',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompareRoute = CompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClaimRoute = ClaimRouteImport.update({
@@ -404,6 +411,12 @@ const OperatorAdminAuditEventsRoute =
     path: '/admin/audit-events',
     getParentRoute: () => OperatorRoute,
   } as any)
+const SlugOfferingsOfferingRefRoute =
+  SlugOfferingsOfferingRefRouteImport.update({
+    id: '/offerings/$offeringRef',
+    path: '/offerings/$offeringRef',
+    getParentRoute: () => SlugRoute,
+  } as any)
 const ApiV1RequestsSchemaRoute = ApiV1RequestsSchemaRouteImport.update({
   id: '/schema',
   path: '/schema',
@@ -644,6 +657,7 @@ export interface FileRoutesByFullPath {
   '/SKILL.md': typeof SKILLDotmdRoute
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/compare': typeof CompareRoute
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/help': typeof HelpRoute
@@ -667,6 +681,7 @@ export interface FileRoutesByFullPath {
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
+  '/$slug/offerings/$offeringRef': typeof SlugOfferingsOfferingRefRoute
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/claims': typeof OperatorAdminClaimsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
@@ -741,6 +756,7 @@ export interface FileRoutesByTo {
   '/SKILL.md': typeof SKILLDotmdRoute
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/compare': typeof CompareRoute
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/help': typeof HelpRoute
@@ -764,6 +780,7 @@ export interface FileRoutesByTo {
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
+  '/$slug/offerings/$offeringRef': typeof SlugOfferingsOfferingRefRoute
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/claims': typeof OperatorAdminClaimsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
@@ -840,6 +857,7 @@ export interface FileRoutesById {
   '/_operator': typeof OperatorRouteWithChildren
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/compare': typeof CompareRoute
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/help': typeof HelpRoute
@@ -863,6 +881,7 @@ export interface FileRoutesById {
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
+  '/$slug/offerings/$offeringRef': typeof SlugOfferingsOfferingRefRoute
   '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/_operator/admin/claims': typeof OperatorAdminClaimsRoute
   '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
@@ -939,6 +958,7 @@ export interface FileRouteTypes {
     | '/SKILL.md'
     | '/about'
     | '/claim'
+    | '/compare'
     | '/engine'
     | '/for-agents'
     | '/help'
@@ -962,6 +982,7 @@ export interface FileRouteTypes {
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
+    | '/$slug/offerings/$offeringRef'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
@@ -1036,6 +1057,7 @@ export interface FileRouteTypes {
     | '/SKILL.md'
     | '/about'
     | '/claim'
+    | '/compare'
     | '/engine'
     | '/for-agents'
     | '/help'
@@ -1059,6 +1081,7 @@ export interface FileRouteTypes {
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
+    | '/$slug/offerings/$offeringRef'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
@@ -1134,6 +1157,7 @@ export interface FileRouteTypes {
     | '/_operator'
     | '/about'
     | '/claim'
+    | '/compare'
     | '/engine'
     | '/for-agents'
     | '/help'
@@ -1157,6 +1181,7 @@ export interface FileRouteTypes {
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
+    | '/$slug/offerings/$offeringRef'
     | '/_operator/admin/audit-events'
     | '/_operator/admin/claims'
     | '/_operator/admin/index-health'
@@ -1233,6 +1258,7 @@ export interface RootRouteChildren {
   OperatorRoute: typeof OperatorRouteWithChildren
   AboutRoute: typeof AboutRoute
   ClaimRoute: typeof ClaimRouteWithChildren
+  CompareRoute: typeof CompareRoute
   EngineRoute: typeof EngineRoute
   ForAgentsRoute: typeof ForAgentsRoute
   HelpRoute: typeof HelpRoute
@@ -1333,6 +1359,13 @@ declare module '@tanstack/react-router' {
       path: '/engine'
       fullPath: '/engine'
       preLoaderRoute: typeof EngineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/compare': {
+      id: '/compare'
+      path: '/compare'
+      fullPath: '/compare'
+      preLoaderRoute: typeof CompareRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/claim': {
@@ -1678,6 +1711,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAdminAuditEventsRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/$slug/offerings/$offeringRef': {
+      id: '/$slug/offerings/$offeringRef'
+      path: '/offerings/$offeringRef'
+      fullPath: '/$slug/offerings/$offeringRef'
+      preLoaderRoute: typeof SlugOfferingsOfferingRefRouteImport
+      parentRoute: typeof SlugRoute
+    }
     '/api/v1/requests/schema': {
       id: '/api/v1/requests/schema'
       path: '/schema'
@@ -1950,11 +1990,13 @@ declare module '@tanstack/react-router' {
 interface SlugRouteChildren {
   SlugInquiryRoute: typeof SlugInquiryRoute
   SlugUcpRoute: typeof SlugUcpRoute
+  SlugOfferingsOfferingRefRoute: typeof SlugOfferingsOfferingRefRoute
 }
 
 const SlugRouteChildren: SlugRouteChildren = {
   SlugInquiryRoute: SlugInquiryRoute,
   SlugUcpRoute: SlugUcpRoute,
+  SlugOfferingsOfferingRefRoute: SlugOfferingsOfferingRefRoute,
 }
 
 const SlugRouteWithChildren = SlugRoute._addFileChildren(SlugRouteChildren)
@@ -2285,6 +2327,7 @@ const rootRouteChildren: RootRouteChildren = {
   OperatorRoute: OperatorRouteWithChildren,
   AboutRoute: AboutRoute,
   ClaimRoute: ClaimRouteWithChildren,
+  CompareRoute: CompareRoute,
   EngineRoute: EngineRoute,
   ForAgentsRoute: ForAgentsRoute,
   HelpRoute: HelpRoute,

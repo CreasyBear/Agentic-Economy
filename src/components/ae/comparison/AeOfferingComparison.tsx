@@ -1,0 +1,178 @@
+import { Card } from '@astryxdesign/core/Card'
+import { Heading, Text } from '@astryxdesign/core/Text'
+
+import type {
+  ComparisonCell,
+  ComparisonDecisionBrief,
+  OfferingComparisonResult,
+} from '@/modules/comparison/public'
+
+export type AeOfferingComparisonProps = Readonly<{
+  comparison: OfferingComparisonResult
+  brief: ComparisonDecisionBrief
+}>
+
+export function AeOfferingComparison({
+  comparison,
+  brief,
+}: AeOfferingComparisonProps) {
+  const foreground = new Set(brief.foregroundableFactIds)
+  const foregroundRows = comparison.rows.filter((row) => (
+    row.cells.some((cell) => foreground.has(cell.factId))
+  ))
+
+  return (
+    <section className="grid gap-6" aria-labelledby="comparison-result-heading">
+      <Card padding={5} className="grid gap-3 border border-border">
+        <Heading id="comparison-result-heading" level={2}>
+          {comparison.ordering.kind === 'ordered' ? 'Ordered by your priorities' : 'Not ranked'}
+        </Heading>
+        <Text color="secondary">
+          {orderingCopy(comparison)}
+        </Text>
+        {foregroundRows.length === 0 ? null : (
+          <dl className="grid gap-3">
+            {foregroundRows.map((row) => (
+              <div key={row.dimensionId} className="grid gap-2">
+                <dt className="font-semibold text-primary">{dimensionLabel(row.dimensionId)}</dt>
+                {row.cells.map((cell, index) => (
+                  <dd key={cell.factId} className="m-0 text-secondary">
+                    {comparison.selections[index]?.offering.name ?? 'Offering'}: {formatCell(cell.cell)}
+                  </dd>
+                ))}
+              </div>
+            ))}
+          </dl>
+        )}
+      </Card>
+
+      {brief.mandatoryCaveatIds.length === 0 ? null : (
+        <Card padding={4} className="grid gap-2 border border-border" aria-label="Important comparison notes">
+          {brief.mandatoryCaveatIds.map((caveat) => (
+            <Text key={caveat} type="supporting" color="secondary">
+              {caveatCopy(caveat)}
+            </Text>
+          ))}
+        </Card>
+      )}
+
+      <details className="rounded-lg border border-border bg-card p-4">
+        <summary className="min-h-11 cursor-pointer py-2 font-semibold text-primary focus-visible:outline-2 focus-visible:outline-offset-4">
+          See full comparison
+        </summary>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <caption className="sr-only">
+              Published facts from the exact Offering revisions selected
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col" className="border-b border-border p-3">Published fact</th>
+                {comparison.selections.map((selection) => (
+                  <th
+                    key={`${selection.business.businessId}:${selection.offering.offeringRef}:${selection.offering.revision}`}
+                    scope="col"
+                    className="border-b border-border p-3"
+                  >
+                    {selection.offering.name}
+                    <span className="block text-sm font-normal text-secondary">
+                      {selection.business.name} · Revision {selection.offering.revision}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {comparison.rows.map((row) => (
+                <tr key={row.dimensionId}>
+                  <th scope="row" className="border-b border-border p-3">
+                    {dimensionLabel(row.dimensionId)}
+                  </th>
+                  {row.cells.map((cell) => (
+                    <td key={cell.factId} className="border-b border-border p-3 text-secondary">
+                      {formatCell(cell.cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+  )
+}
+
+function orderingCopy(comparison: OfferingComparisonResult): string {
+  if (comparison.ordering.kind === 'ordered') {
+    return 'The order uses only the priorities you selected and the first comparable published difference.'
+  }
+  switch (comparison.ordering.reason) {
+    case 'insufficient_selections':
+      return 'Add one more Offering to compare.'
+    case 'no_priority':
+      return 'Choose priorities if you want an evidence-based order. Otherwise, compare the differences side by side.'
+    case 'tie':
+      return 'These Offerings are tied on your stated priorities.'
+    case 'missing_material_fact':
+      return 'A material fact is not known or was not supplied for every Offering.'
+    case 'stale_fact':
+      return 'A fact needed for ordering is out of date.'
+    case 'not_comparable':
+      return 'The selected fact cannot be compared for every Offering.'
+    case 'partial_projection':
+      return 'Some published details are still updating.'
+    case 'unavailable_selection':
+      return 'One or more selected Offering versions are no longer available to compare.'
+  }
+}
+
+function caveatCopy(caveat: ComparisonDecisionBrief['mandatoryCaveatIds'][number]): string {
+  switch (caveat) {
+    case 'caveat:insufficient_selections': return 'At least two Offerings are needed for a comparison.'
+    case 'caveat:no_priority': return 'No priority order has been applied.'
+    case 'caveat:missing_fact': return 'A material fact is not known or was not supplied.'
+    case 'caveat:stale_fact': return 'At least one material fact is out of date.'
+    case 'caveat:not_comparable': return 'At least one profile-specific fact is not comparable.'
+    case 'caveat:partial_projection': return 'Some safely published details may still be updating.'
+    case 'caveat:unavailable_selection':
+    case 'caveat:selection_refused': return 'A selected Offering version is not available to compare.'
+    case 'caveat:tie': return 'The selected priorities do not produce a unique order.'
+    case 'caveat:newer_revision': return 'A newer revision exists. The selected revision has not been replaced.'
+    case 'caveat:published_information': return 'This comparison uses published information and does not contact a business or run an endpoint.'
+  }
+}
+
+function formatCell(cell: ComparisonCell): string {
+  if (cell.kind === 'unknown') return 'Not known'
+  if (cell.kind === 'not_supplied') return 'Not supplied'
+  if (cell.kind === 'stale') {
+    return cell.lastKnown === undefined
+      ? 'Out of date'
+      : `Out of date · ${formatKnownValue(cell.lastKnown)}`
+  }
+  if (cell.kind === 'not_comparable') return 'Not comparable'
+  return formatKnownValue(cell.value)
+}
+
+function formatKnownValue(value: string | number | { description: string }): string {
+  return typeof value === 'object' ? value.description : String(value)
+}
+
+function dimensionLabel(id: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    'common:business_name': 'Business',
+    'common:offering_name': 'Offering',
+    'common:offering_revision': 'Offering revision',
+    'professional_service:v1:scope_basis': 'Scope',
+    'professional_service:v1:price_basis': 'Price',
+    'professional_service:v1:timing_basis': 'Timing',
+    'professional_service:v1:service_area': 'Service area',
+    'machine_data:v1:interface_format': 'Interface',
+    'machine_data:v1:request_method': 'Request method',
+    'machine_data:v1:authentication': 'Access',
+    'machine_data:v1:price_basis': 'Price',
+    'machine_data:v1:freshness_or_update_cadence': 'Update cadence',
+  }
+  return labels[id] ?? 'Published fact'
+}

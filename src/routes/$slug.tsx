@@ -7,12 +7,22 @@ import { Skeleton } from '@astryxdesign/core/Skeleton'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
+import { AeShortlistBar } from '@/components/ae/comparison/AeShortlistBar'
+import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
 import { offeringApiDtoToSupplyView } from '@/components/ae/offerings/offering-presentation'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 import { readPublicTargetAdmissionServer } from '@/modules/inquiries/inquiry.functions'
+import { createComparisonOfferingReadPort } from '@/modules/comparison/comparison.functions'
+import {
+  comparisonSelectionId,
+  parseComparisonUrlState,
+  resolveComparisonSelections,
+  serializeComparisonUrlState,
+  type ComparisonSelectionRef,
+} from '@/modules/comparison/public'
 import {
   buildPublicInquiryAffordance,
   projectPublicInquiryAvailability,
@@ -20,8 +30,12 @@ import {
 } from '@/modules/inquiries/route-readbacks'
 import { serializeJsonLd } from '@/modules/seo/public'
 import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
+import {
+  normalizeComparisonRouteSearch,
+  type ComparisonRouteSearch,
+} from './compare'
 
-type ProviderListingSearch = {
+type ProviderListingSearch = ComparisonRouteSearch & {
   from?: 'thread' | 'registry'
   id?: string
 }
@@ -30,15 +44,30 @@ export const Route = createFileRoute('/$slug')({
   validateSearch: (search: Record<string, unknown>): ProviderListingSearch => {
     const from = search.from === 'thread' || search.from === 'registry' ? search.from : undefined
     const id = typeof search.id === 'string' && search.id.trim().length > 0 ? search.id.trim() : undefined
+    const comparison = normalizeComparisonRouteSearch(search)
     return {
+      ...comparison,
       ...(from === undefined ? {} : { from }),
       ...(id === undefined ? {} : { id }),
     }
   },
-  loader: async ({ params }) => {
+  loaderDeps: ({ search }) => search,
+  loader: async ({ params, deps }) => {
+    const parsedComparison = parseComparisonUrlState(comparisonSearchParams(deps))
+    const comparisonState = parsedComparison.kind === 'accepted'
+      ? parsedComparison.state
+      : { version: 'offering-comparison:v1' as const, selections: [], priorities: [] }
     const page = await readPublicBusinessPageServer({ data: { slug: params.slug } })
     if (page.kind === 'not_found') {
-      return { page, seo: undefined, admission: undefined, supply: undefined }
+      return {
+        page,
+        seo: undefined,
+        admission: undefined,
+        supply: undefined,
+        comparisonState,
+        comparisonSearchRefused: parsedComparison.kind === 'refused',
+        shortlist: undefined,
+      }
     }
     const offeringDetail = await readPublicOfferingRegistryBusinessDetail({ slug: params.slug })
     // The v2 read owns cutover semantics. Once a business is in Offering mode,
@@ -49,6 +78,9 @@ export const Route = createFileRoute('/$slug')({
         seo: undefined,
         admission: undefined,
         supply: undefined,
+        comparisonState,
+        comparisonSearchRefused: parsedComparison.kind === 'refused',
+        shortlist: undefined,
       }
     }
     const target = selectPublicInquiryTarget(page.catalog)
@@ -56,11 +88,19 @@ export const Route = createFileRoute('/$slug')({
       ? undefined
       : await readPublicTargetAdmissionServer({ data: target })
     const seo = buildPublicBusinessRouteSeo(page.catalog, await readCanonicalBaseUrlServer())
+    const shortlist = await resolveComparisonSelections({
+      state: comparisonState,
+      resolvedAt: Date.now(),
+      port: createComparisonOfferingReadPort(),
+    })
     return {
       page,
       seo,
       admission: admissionResult?.kind === 'ok' ? admissionResult.admission : undefined,
       supply: offeringApiDtoToSupplyView(offeringDetail.business),
+      comparisonState,
+      comparisonSearchRefused: parsedComparison.kind === 'refused',
+      shortlist,
     }
   },
   head: ({ loaderData }) => {
@@ -230,7 +270,14 @@ function PublicBusinessRoute() {
   const { slug } = Route.useParams()
   const { from, id } = Route.useSearch()
   const location = useLocation()
-  const { page, admission, supply } = Route.useLoaderData()
+  const {
+    page,
+    admission,
+    supply,
+    comparisonState,
+    comparisonSearchRefused,
+    shortlist,
+  } = Route.useLoaderData()
 
   if (location.pathname !== `/${slug}`) {
     return <Outlet />
@@ -260,10 +307,75 @@ function PublicBusinessRoute() {
         catalog={catalog}
         inquiryAffordance={inquiryAffordance}
         agentJsonUrl={agentJsonUrl}
-        {...(supply === undefined ? {} : { supply })}
         {...(from === undefined ? {} : { backFrom: from })}
         {...(id === undefined ? {} : { backThreadId: id })}
       />
+      {supply === undefined ? null : (
+        <section
+          className="mx-auto grid w-full max-w-7xl gap-6 px-4 pb-12 md:px-6"
+          aria-label="Phase 5 decision-support task"
+        >
+          {comparisonSearchRefused ? (
+            <Card padding={4} role="status">
+              The comparison state in this link was not valid, so no Offerings were selected.
+            </Card>
+          ) : null}
+          <AeOfferingSupplyList
+            offerings={supply.offerings}
+            disposition={supply.disposition}
+            observedAt={supply.observedAt}
+            business={{
+              businessId: catalog.businessId,
+              name: catalog.name,
+              slug: catalog.slug,
+            }}
+            selectedSelectionIds={comparisonState.selections.map(comparisonSelectionId)}
+            onToggleComparison={({ reference, selected }) => {
+              const selection: ComparisonSelectionRef = {
+                ...reference,
+                projectionObservedAt: supply.observedAt,
+              }
+              const idToToggle = comparisonSelectionId(selection)
+              const selections = selected
+                ? comparisonState.selections.length >= 4
+                  ? comparisonState.selections
+                  : [...comparisonState.selections, selection]
+                : comparisonState.selections.filter((candidate) => (
+                    comparisonSelectionId(candidate) !== idToToggle
+                  ))
+              window.location.assign(
+                `/${encodeURIComponent(catalog.slug)}${serializeComparisonUrlState({
+                  selections,
+                  priorities: comparisonState.priorities,
+                })}`,
+              )
+            }}
+          />
+          {shortlist === undefined || shortlist.selections.length === 0 ? null : (
+            <AeShortlistBar
+              selections={shortlist.selections}
+              compareHref={`/compare${serializeComparisonUrlState(comparisonState)}`}
+              onRemove={(selectionId) => {
+                window.location.assign(
+                  `/${encodeURIComponent(catalog.slug)}${serializeComparisonUrlState({
+                    selections: comparisonState.selections.filter((selection) => (
+                      comparisonSelectionId(selection) !== selectionId
+                    )),
+                    priorities: comparisonState.priorities,
+                  })}`,
+                )
+              }}
+            />
+          )}
+        </section>
+      )}
     </AePublicShell>
   )
+}
+
+function comparisonSearchParams(search: ComparisonRouteSearch): URLSearchParams {
+  const params = new URLSearchParams()
+  for (const selection of search.selection) params.append('selection', selection)
+  for (const priority of search.priority) params.append('priority', priority)
+  return params
 }
