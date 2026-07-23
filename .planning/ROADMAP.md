@@ -124,7 +124,7 @@ safety.
 
 ## Phase 5 — Public Offering comparison proof
 
-**Status:** planned; implementation blocked on exact Offering predecessor custody
+**Status:** in progress; exact Offering predecessor integrated, Plan 05-02 active
 **Goal:** a public visitor or agent can browse businesses, inspect an Offering,
 shortlist exact Offering revisions, compare source-owned facts and understand
 trade-offs against stated priorities without login or external effect.
@@ -158,11 +158,10 @@ invoke an endpoint, authorize, book, pay, dispatch or claim fulfilment.
 - `P5-EVIDENCE`: one authenticated exact-revision hosted readback over labelled
   demonstration data produces a frozen independently verified evidence packet.
 
-**Plans:** 1/9 plans executed
+**Plans:** 1/8 plans executed
 
 Plans:
 
-- [ ] 05-PLAN.md
 - [x] 05-01-PLAN.md — freeze and integrate the exact Offering predecessor lane
 - [ ] 05-02-PLAN.md — historical public revisions and closed fact profiles
 - [ ] 05-03-PLAN.md — strict registry codecs, registered actions and three public HTTP adapters
