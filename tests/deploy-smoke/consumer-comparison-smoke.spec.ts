@@ -72,7 +72,7 @@ test('authenticated exact-revision deployment serves the public zero-effect comp
   await page.goto(compareUrl.href, { waitUntil: 'networkidle' })
   await expect(page.getByRole('heading', { level: 1, name: 'Compare Offerings' })).toBeVisible()
   await expect(page.getByText('4 of 4 selected').first()).toBeVisible()
-  await expect(page.getByText('Local demo evidence', { exact: true })).toBeVisible()
+  await expect(page.getByText('Labelled demo website starter', { exact: true }).first()).toBeVisible()
 
   const response = await request.post(new URL('/api/compare', config.baseUrl).href, {
     headers: vercelProtectionBypassHeaders(),
