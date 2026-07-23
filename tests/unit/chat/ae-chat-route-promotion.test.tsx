@@ -119,13 +119,14 @@ describe('AeChat route promotion', () => {
     })
 
     expect(screen.getByTestId('thread-transcript').getAttribute('data-route-thread-id')).toBe('thread-promoted-1')
-    expect(testState.latestTranscriptProps?.onFollowUp).toEqual(expect.any(Function))
+    expect(testState.latestTranscriptProps?.onFollowUp).toBeUndefined()
 
     await act(async () => {
       testState.latestTranscriptProps?.onStreamEnd?.('complete')
       await Promise.resolve()
     })
 
+    expect(testState.latestTranscriptProps?.onFollowUp).toEqual(expect.any(Function))
     expect(testState.navigateCalls).toEqual([
       {
         to: '/t/$threadId',
