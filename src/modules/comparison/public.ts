@@ -60,6 +60,19 @@ export {
   deriveRegisteredConstraintEligibility,
   projectPublicDecisionSourceResult,
 } from './internal/decision-support'
+export {
+  comparisonPresentationDigest,
+  resolveComparisonPresentation,
+} from './internal/presentation'
+export type {
+  ComparisonPresentationPlan,
+  ComparisonPresentationResolution,
+} from './internal/presentation'
+export type {
+  ComparisonPresentationAdapter,
+  ComparisonPresentationAdapterResult,
+  ComparisonPresentationProposal,
+} from './internal/presentation-adapter'
 export type {
   PublicDecisionCategoryId,
   PublicDecisionOutcome,

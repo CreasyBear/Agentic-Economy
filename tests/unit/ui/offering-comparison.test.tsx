@@ -16,6 +16,8 @@ import {
   buildComparisonRouteReadback,
   comparisonRouteMetadata,
   normalizeComparisonRouteSearch,
+  PriorityControls,
+  ShareComparison,
 } from '@/routes/compare'
 import {
   appendComparisonUrlState,
@@ -313,12 +315,134 @@ describe('answer-first responsive comparison evidence', () => {
       text: node.textContent,
     }))
     expect(mobileFacts).toEqual(desktopFacts)
+    expect(desktopFacts.every(({ text }) => (
+      text?.includes('Source:')
+      && text.includes('Observed:')
+      && text.includes('Currentness:')
+    ))).toBe(true)
+  })
+
+  it('applies only registered presentation density and emphasis to the complete surface', () => {
+    const comparison = compareOfferings({
+      selections: [selection('one'), selection('two')],
+      priorities: [],
+    })
+    const brief = buildComparisonBrief(comparison)
+    const emphasized = brief.foregroundableFactIds[0]!
+    const { container } = render(
+      <AeOfferingComparison
+        comparison={comparison}
+        brief={brief}
+        presentation={{
+          mode: 'guided_compare',
+          density: 'concise',
+          responsiveComposition: 'guided_sections',
+          emphasisIds: [emphasized],
+        }}
+      />,
+    )
+
+    const surface = container.querySelector('[data-presentation-mode="guided_compare"]')
+    expect(surface?.className).toContain('gap-4')
+    expect(surface?.querySelector('.ring-2')).not.toBeNull()
+    expect(screen.getByText('See full comparison')).toBeTruthy()
+  })
+})
+
+describe('bounded comparison route controls', () => {
+  it('preserves TanStack-decoded exact selections for source validation', () => {
+    const exact = selection('decoded').selection
+    expect(normalizeComparisonRouteSearch({
+      selection: exact,
+      priority: [],
+    })).toEqual({
+      selection: [JSON.stringify(exact)],
+      priority: [],
+    })
+    expect(normalizeComparisonRouteSearch({
+      selection: [['nested-is-not-an-exact-selection']],
+      priority: [],
+    }).selection).toEqual([])
+  })
+
+  it('shows only priorities shared by every selected profile', () => {
+    const onFeedback = vi.fn()
+    const view = render(
+      <PriorityControls
+        selectionRefs={[selection('professional').selection]}
+        resolvedSelections={[selection('professional')]}
+        priorities={[]}
+        onFeedback={onFeedback}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Add Lowest published total price' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /request price|authentication|GraphQL/i })).toBeNull()
+
+    view.rerender(
+      <PriorityControls
+        selectionRefs={[
+          selection('professional').selection,
+          machineSelection('machine').selection,
+        ]}
+        resolvedSelections={[selection('professional'), machineSelection('machine')]}
+        priorities={[]}
+        onFeedback={onFeedback}
+      />,
+    )
+    expect(screen.getByText('No registered priority applies to the selected Offering profiles.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Add / })).toBeNull()
+  })
+
+  it('keeps priority order explicit until Apply priorities', () => {
+    const onFeedback = vi.fn()
+    render(
+      <PriorityControls
+        selectionRefs={[machineSelection('machine').selection]}
+        resolvedSelections={[machineSelection('machine')]}
+        priorities={[
+          'machine_data:v1:lowest_request_price',
+          'machine_data:v1:no_authentication_preferred',
+        ]}
+        onFeedback={onFeedback}
+      />,
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Move down' })[0]!)
+    expect(onFeedback).toHaveBeenCalledWith('Lowest published request price moved down.')
+    const apply = screen.getByRole('link', { name: 'Apply priorities' })
+    const parsed = parseComparisonUrlState(new URL(apply.getAttribute('href')!, 'https://ae.example').searchParams)
+    expect(parsed).toMatchObject({
+      kind: 'accepted',
+      state: {
+        priorities: [
+          'machine_data:v1:no_authentication_preferred',
+          'machine_data:v1:lowest_request_price',
+        ],
+      },
+    })
+  })
+
+  it('reports share success and failure through the caller-owned bounded status', async () => {
+    const onFeedback = vi.fn()
+    const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('blocked'))
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    render(<ShareComparison href="/compare?selection=exact" onFeedback={onFeedback} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy comparison link' }))
+    await waitFor(() => expect(onFeedback).toHaveBeenCalledWith('Comparison link copied.'))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy comparison link' }))
+    await waitFor(() => expect(onFeedback).toHaveBeenCalledWith(
+      'Could not copy the comparison link. Copy it from the address bar.',
+    ))
   })
 })
 
 const source = { kind: 'business_supplied' as const }
 
-function known(value: string) {
+function known<const Value extends string>(value: Value) {
   return { kind: 'known' as const, value, source, observedAt: 100 }
 }
 
@@ -364,6 +488,38 @@ function selection(suffix: string): ResolvedComparisonSelection {
     publication: { publishedAt: 100, safeDisplayDisposition: 'retain_safe_history' },
     projectionDisposition: 'current',
     resolvedAt: 150,
+  }
+}
+
+function machineSelection(suffix: string): ResolvedComparisonSelection {
+  const base = selection(suffix)
+  return {
+    ...base,
+    offering: {
+      ...base.offering,
+      category: 'Machine data',
+      comparison: {
+        schemaVersion: 'offering-comparison:v1',
+        profile: {
+          profileId: 'machine_data:v1',
+          interfaceFormat: known('rest_json' as const),
+          requestMethod: known('GET' as const),
+          authentication: known('api_key' as const),
+          priceBasis: {
+            kind: 'known',
+            value: {
+              description: 'AUD 0.01 per request',
+              currency: 'AUD',
+              amountMinor: 1,
+              unit: 'request',
+            },
+            source,
+            observedAt: 100,
+          },
+          freshnessOrUpdateCadence: known('Hourly'),
+        },
+      },
+    },
   }
 }
 

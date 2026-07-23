@@ -1,4 +1,6 @@
 import type { ComparisonDecisionBrief } from './contract'
+import type { OfferingComparisonResult } from './contract'
+import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
 import type {
   ComparisonPresentationAdapterResult,
   ComparisonPresentationProposal,
@@ -33,6 +35,13 @@ const PROPOSAL_KEYS = [
   'responsiveComposition',
   'emphasisIds',
 ] as const
+
+export function comparisonPresentationDigest(input: Readonly<{
+  comparison: OfferingComparisonResult
+  brief: ComparisonDecisionBrief
+}>): string {
+  return stableHash(structuredClone(input) as StableHashValue)
+}
 
 export function resolveComparisonPresentation(input: Readonly<{
   semanticDigest: string

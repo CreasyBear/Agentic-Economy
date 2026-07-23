@@ -1,28 +1,45 @@
 import { Card } from '@astryxdesign/core/Card'
 import { Heading, Text } from '@astryxdesign/core/Text'
+import { comparisonSelectionId } from '@/modules/comparison/public'
 
 import type {
   ComparisonCell,
   ComparisonDecisionBrief,
+  ComparisonPresentationPlan,
   OfferingComparisonResult,
 } from '@/modules/comparison/public'
 
 export type AeOfferingComparisonProps = Readonly<{
   comparison: OfferingComparisonResult
   brief: ComparisonDecisionBrief
+  presentation?: ComparisonPresentationPlan
 }>
 
 export function AeOfferingComparison({
   comparison,
   brief,
+  presentation = {
+    mode: 'answer_first',
+    density: 'comfortable',
+    responsiveComposition: 'answer_then_evidence',
+    emphasisIds: [],
+  },
 }: AeOfferingComparisonProps) {
+  const compact = presentation.density === 'concise'
+  const guided = presentation.responsiveComposition === 'guided_sections'
   const foreground = new Set(brief.foregroundableFactIds)
   const foregroundRows = comparison.rows.filter((row) => (
     row.cells.some((cell) => foreground.has(cell.factId))
   ))
 
   return (
-    <section className="grid gap-6" aria-labelledby="comparison-result-heading">
+    <section
+      className={`grid ${compact ? 'gap-4' : guided ? 'gap-8' : 'gap-6'}`}
+      aria-labelledby="comparison-result-heading"
+      data-presentation-mode={presentation.mode}
+      data-presentation-density={presentation.density}
+      data-responsive-composition={presentation.responsiveComposition}
+    >
       <Card padding={5} className="grid gap-3 border border-border">
         <Heading id="comparison-result-heading" level={2}>
           {comparison.ordering.kind === 'ordered' ? 'Ordered by your priorities' : 'Not ranked'}
@@ -33,7 +50,10 @@ export function AeOfferingComparison({
         {foregroundRows.length === 0 ? null : (
           <dl className="grid gap-3">
             {foregroundRows.map((row) => (
-              <div key={row.dimensionId} className="grid gap-2">
+              <div
+                key={row.dimensionId}
+                className={`grid gap-2 ${row.cells.some((cell) => presentation.emphasisIds.includes(cell.factId)) ? 'rounded-md ring-2 ring-border p-2' : ''}`}
+              >
                 <dt className="font-semibold text-primary">{dimensionLabel(row.dimensionId)}</dt>
                 {row.cells.map((cell, index) => (
                   <dd key={cell.factId} className="m-0 text-secondary">
@@ -47,9 +67,19 @@ export function AeOfferingComparison({
       </Card>
 
       {brief.mandatoryCaveatIds.length === 0 ? null : (
-        <Card padding={4} className="grid gap-2 border border-border" aria-label="Important comparison notes">
+        <Card
+          padding={4}
+          className="grid gap-2 border border-border"
+          role="region"
+          aria-label="Important comparison notes"
+        >
           {brief.mandatoryCaveatIds.map((caveat) => (
-            <Text key={caveat} type="supporting" color="secondary">
+            <Text
+              key={caveat}
+              type="supporting"
+              color="secondary"
+              className={presentation.emphasisIds.includes(caveat) ? 'font-semibold text-primary' : undefined}
+            >
               {caveatCopy(caveat)}
             </Text>
           ))}
@@ -60,8 +90,38 @@ export function AeOfferingComparison({
         <summary className="min-h-11 cursor-pointer py-2 font-semibold text-primary focus-visible:outline-2 focus-visible:outline-offset-4">
           See full comparison
         </summary>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full border-collapse text-left">
+        <div className="mt-4">
+          <div className="mb-5 grid gap-3 md:grid-cols-2">
+            {comparison.selections.map((selection) => (
+              <section
+                key={comparisonSelectionId(selection.selection)}
+                id={`selected-evidence-${comparisonSelectionId(selection.selection)}`}
+                tabIndex={-1}
+                className="grid gap-1 rounded-md border border-border p-3 focus-visible:outline-2 focus-visible:outline-offset-4"
+                aria-label={`Selected evidence for ${selection.offering.name}`}
+              >
+                <Heading level={3}>{selection.offering.name}</Heading>
+                <Text type="supporting" color="secondary">
+                  {selection.business.name} · Revision {selection.offering.revision}
+                </Text>
+                <Text type="supporting" color="secondary">
+                  Published by the business · Observed {formatObservedDate(selection.publication.publishedAt)}
+                </Text>
+                <Text type="supporting" color="secondary">
+                  {selection.projectionDisposition === 'current'
+                    ? 'Current when resolved'
+                    : selection.projectionDisposition === 'stale'
+                      ? 'Out of date when resolved'
+                      : 'Some published details were still updating'}
+                </Text>
+              </section>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
+          <table
+            className="hidden w-full border-collapse text-left md:table"
+            data-comparison-projection="desktop"
+          >
             <caption className="sr-only">
               Published facts from the exact Offering revisions selected
             </caption>
@@ -89,14 +149,40 @@ export function AeOfferingComparison({
                     {dimensionLabel(row.dimensionId)}
                   </th>
                   {row.cells.map((cell) => (
-                    <td key={cell.factId} className="border-b border-border p-3 text-secondary">
-                      {formatCell(cell.cell)}
+                    <td
+                      key={cell.factId}
+                      className="border-b border-border p-3 text-secondary"
+                      data-fact-id={cell.factId}
+                    >
+                      {formatEvidenceCell(cell.cell)}
                     </td>
                   ))}
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
+          <dl
+            className="grid gap-4 md:hidden"
+            data-comparison-projection="mobile"
+            aria-label="Published facts from the exact Offering revisions selected"
+          >
+            {comparison.rows.flatMap((row) => (
+              row.cells.map((cell, index) => (
+                <div key={cell.factId} className="grid gap-1 border-b border-border pb-4">
+                  <dt className="font-semibold text-primary">
+                    {comparison.selections[index]?.offering.name ?? 'Offering'} · {dimensionLabel(row.dimensionId)}
+                  </dt>
+                  <dd
+                    className="m-0 text-secondary"
+                    data-fact-id={cell.factId}
+                  >
+                    {formatEvidenceCell(cell.cell)}
+                  </dd>
+                </div>
+              ))
+            ))}
+          </dl>
         </div>
       </details>
     </section>
@@ -157,6 +243,44 @@ function formatCell(cell: ComparisonCell): string {
 
 function formatKnownValue(value: string | number | { description: string }): string {
   return typeof value === 'object' ? value.description : String(value)
+}
+
+function formatEvidenceCell(cell: ComparisonCell): string {
+  if (cell.kind === 'not_comparable') {
+    return 'Not comparable · Source: Not comparable · Observed: Not established · Currentness: Not established'
+  }
+  const source = sourceLabel(cell.source)
+  const observed = formatObservedDate(cell.observedAt)
+  if (cell.kind === 'unknown') {
+    return `Not known · Source: ${source} · Observed: ${observed} · Currentness: Not established`
+  }
+  if (cell.kind === 'not_supplied') {
+    return `Not supplied · Source: ${source} · Observed: ${observed} · Currentness: Not established`
+  }
+  if (cell.kind === 'stale') {
+    const value = cell.lastKnown === undefined
+      ? 'Out of date'
+      : `Out of date · ${formatKnownValue(cell.lastKnown)}`
+    return `${value} · Source: ${source} · Observed: ${observed} · Currentness: Out of date`
+  }
+  return `${formatKnownValue(cell.value)} · Source: ${source} · Observed: ${observed} · Currentness: Current when resolved`
+}
+
+function sourceLabel(source: Exclude<ComparisonCell, { kind: 'not_comparable' }>['source']): string {
+  switch (source.kind) {
+    case 'business_supplied': return 'Published by the business'
+    case 'publicly_observed': return 'Publicly observed'
+    case 'ae_support': return 'Supported by AE evidence'
+  }
+}
+
+function formatObservedDate(observedAt: number): string {
+  return new Intl.DateTimeFormat('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(observedAt))
 }
 
 function dimensionLabel(id: string): string {

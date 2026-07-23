@@ -3,6 +3,7 @@ import {
   sourceQuery,
 } from '@/lib/server/convex-source'
 import { validateOfferingComparisonEnvelope } from '@/modules/catalog/public'
+import { configuredLocalE2EComparisonRead } from './internal/local-e2e-read-port'
 import type {
   ComparisonOfferingReadPort,
   ExactOfferingReference,
@@ -71,10 +72,12 @@ export type PublicComparisonOfferingTransportResult =
 export function createComparisonOfferingReadPort(options: Readonly<{
   read?: (args: ReadArgs) => Promise<unknown>
 }> = {}): ComparisonOfferingReadPort {
-  const read = options.read ?? ((args: ReadArgs) => callPublicSourceQuery(
-    readPublicComparisonOfferingReferenceQuery,
-    args,
-  ))
+  const read = options.read
+    ?? configuredLocalE2EComparisonRead()
+    ?? ((args: ReadArgs) => callPublicSourceQuery(
+      readPublicComparisonOfferingReferenceQuery,
+      args,
+    ))
   const reads = new Map<string, Promise<PublicComparisonOfferingTransportResult>>()
 
   function load(reference: ExactOfferingReference) {
