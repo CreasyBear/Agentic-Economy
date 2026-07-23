@@ -179,17 +179,9 @@ function progressivePause(pauseMs: number): Promise<void> {
     return Promise.resolve()
   }
 
-  const { promise, resolve } = (
-    Promise as PromiseConstructor & {
-      withResolvers: <T>() => {
-        promise: Promise<T>
-        resolve: (value: T | PromiseLike<T>) => void
-        reject: (reason?: unknown) => void
-      }
-    }
-  ).withResolvers<void>()
-  setTimeout(resolve, pauseMs)
-  return promise
+  return new Promise((resolve) => {
+    setTimeout(resolve, pauseMs)
+  })
 }
 
 export type { AnswerArtifact }

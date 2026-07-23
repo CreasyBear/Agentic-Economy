@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { emitSnapshotEvents, type AnswerSnapshot } from '@/modules/answer/public'
 
 describe('emitSnapshotEvents', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('preserves selected-provider, next-step, summary, and completion order', async () => {
     const events = []
     for await (const event of emitSnapshotEvents(snapshot(), { emitThinking: false, pauseMs: 0 })) {
@@ -22,6 +26,30 @@ describe('emitSnapshotEvents', () => {
     expect(events[3]).toMatchObject({ type: 'artifact', artifact: { kind: 'selected-provider' } })
     expect(events[5]).toMatchObject({ type: 'summary-delta', delta: 'First sentence.' })
     expect(events[6]).toMatchObject({ type: 'summary-delta', delta: 'Second sentence.' })
+  })
+
+  it('streams with the Node 20 promise surface used by hosted functions', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const descriptor = Object.getOwnPropertyDescriptor(Promise, 'withResolvers')
+    Object.defineProperty(Promise, 'withResolvers', {
+      configurable: true,
+      value: undefined,
+      writable: true,
+    })
+
+    try {
+      const events = []
+      for await (const event of emitSnapshotEvents(snapshot(), { emitThinking: false, pauseMs: 1 })) {
+        events.push(event)
+      }
+      expect(events.at(-1)?.type).toBe('complete')
+    } finally {
+      if (descriptor === undefined) {
+        Reflect.deleteProperty(Promise, 'withResolvers')
+      } else {
+        Object.defineProperty(Promise, 'withResolvers', descriptor)
+      }
+    }
   })
 })
 

@@ -212,9 +212,6 @@ export async function streamAnswerTurn(
 
   if (finalState.captured !== undefined) {
     if (persistResult?.ok !== true) {
-      if (persistResult === undefined) {
-        reportAnswerTurnRunFailure(runResult.error)
-      }
       send({
         type: 'error',
         code: persistResult?.failureReason === undefined
@@ -232,23 +229,6 @@ export async function streamAnswerTurn(
   }
 
   return { threadId, turnId, turnSeq }
-}
-
-function reportAnswerTurnRunFailure(error: unknown): void {
-  const diagnostic = error instanceof Error
-    ? {
-        name: error.name,
-        message: error.message.slice(0, 500),
-        code: 'code' in error && typeof error.code === 'string' ? error.code : undefined,
-      }
-    : {
-        name: typeof error,
-        message: String(error).slice(0, 500),
-      }
-  // This server-only diagnostic is intentionally bounded and excludes request,
-  // query, provider payload, stack, cause, credentials, and admission material.
-  // oxlint-disable-next-line no-console
-  console.error('[answer-turn:persist-phase]', diagnostic)
 }
 
 function answerTurnRunFailureCode(error: unknown): string {

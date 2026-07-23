@@ -105,11 +105,9 @@ async function promoteReadableThread(threadId: string, onReadable: (threadId: st
     } catch {
       // The active answer stream remains authoritative while readback catches up.
     }
-    const { promise, resolve } = (Promise as PromiseConstructor & {
-      withResolvers: <T>() => { promise: Promise<T>; resolve: (value: T | PromiseLike<T>) => void }
-    }).withResolvers<void>()
-    setTimeout(resolve, 250)
-    await promise
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 250)
+    })
   }
   return false
 }
