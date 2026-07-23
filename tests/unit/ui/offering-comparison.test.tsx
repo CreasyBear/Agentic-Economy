@@ -92,7 +92,7 @@ describe('render-only Offering decision surfaces', () => {
     )
 
     expect(screen.getByRole('heading', { name: 'Offering detail' })).toBeTruthy()
-    expect(screen.getByText('Revision 1')).toBeTruthy()
+    expect(screen.getAllByText('Revision 1')).toHaveLength(2)
     expect(screen.getByText('Observed 1 Jan 1970')).toBeTruthy()
     expect(screen.getByText('Brochure website')).toBeTruthy()
     expect(screen.getByText('Not supplied')).toBeTruthy()
@@ -114,8 +114,8 @@ function fact(label: string, cell: ComparisonCell) {
   return { id: `fact:${label.toLowerCase()}`, label, cell }
 }
 
-function known(value: string): ComparisonCell {
-  return { kind: 'known', value, source, observedAt: 100 }
+function known(value: string) {
+  return { kind: 'known' as const, value, source, observedAt: 100 }
 }
 
 function comparisonId(item: ResolvedComparisonSelection): string {

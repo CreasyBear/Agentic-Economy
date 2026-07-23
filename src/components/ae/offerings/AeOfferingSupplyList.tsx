@@ -23,9 +23,24 @@ export type AeOfferingSupplyListProps = Readonly<{
   offerings: readonly PublicOfferingSupplyProjection[]
   disposition?: 'current' | 'partial' | 'stale'
   observedAt?: number
+  business?: Readonly<{ name: string; slug: string }>
+  selectedOfferingRefs?: readonly string[]
+  onToggleComparison?: (input: Readonly<{
+    offeringRef: string
+    revision: number
+    selected: boolean
+  }>) => void
 }>
 
-export function AeOfferingSupplyList({ offerings, disposition = 'current', observedAt }: AeOfferingSupplyListProps) {
+export function AeOfferingSupplyList({
+  offerings,
+  disposition = 'current',
+  observedAt,
+  business,
+  selectedOfferingRefs = [],
+  onToggleComparison,
+}: AeOfferingSupplyListProps) {
+  const selectionFull = selectedOfferingRefs.length >= 4
   return (
     <section aria-labelledby="business-offerings-title" className="grid gap-5">
       <div className="flex flex-col gap-3 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
@@ -61,15 +76,45 @@ export function AeOfferingSupplyList({ offerings, disposition = 'current', obser
         </Card>
       ) : (
         <div className="grid gap-4">
-          {offerings.map((offering) => <OfferingCard key={offering.offering.offeringRef} offering={offering} />)}
+          {offerings.map((offering) => (
+            <OfferingCard
+              key={offering.offering.offeringRef}
+              offering={offering}
+              selected={selectedOfferingRefs.includes(offering.offering.offeringRef)}
+              selectionFull={selectionFull}
+              {...(business === undefined ? {} : { business })}
+              {...(observedAt === undefined ? {} : { observedAt })}
+              {...(onToggleComparison === undefined ? {} : { onToggleComparison })}
+            />
+          ))}
+          {selectionFull && onToggleComparison !== undefined ? (
+            <Text type="supporting" color="secondary">
+              Comparison list full — remove one to add another.
+            </Text>
+          ) : null}
         </div>
       )}
     </section>
   )
 }
 
-function OfferingCard({ offering }: { offering: PublicOfferingSupplyProjection }) {
+function OfferingCard({
+  offering,
+  business,
+  observedAt,
+  selected,
+  selectionFull,
+  onToggleComparison,
+}: {
+  offering: PublicOfferingSupplyProjection
+  business?: Readonly<{ name: string; slug: string }>
+  observedAt?: number
+  selected: boolean
+  selectionFull: boolean
+  onToggleComparison?: AeOfferingSupplyListProps['onToggleComparison']
+}) {
   const support = offeringSupportCopy(offering.support)
+  const cardObservedAt = observedAt ?? offering.support.observedAt
   return (
     <Card padding={0} className="grid min-w-0 overflow-hidden border border-border shadow-low" aria-labelledby={`offering-${offering.offering.offeringRef}`}>
       <div className="h-1.5 bg-accent" aria-hidden="true" />
@@ -80,11 +125,43 @@ function OfferingCard({ offering }: { offering: PublicOfferingSupplyProjection }
           <Heading id={`offering-${offering.offering.offeringRef}`} level={3}>{offering.offering.name}</Heading>
         </HStack>
         <Text color="primary" display="block" className="max-w-3xl text-pretty text-base leading-relaxed">{offering.offering.summary}</Text>
+        <Text type="supporting" color="secondary" display="block">
+          Revision {offering.offering.revision}
+          {cardObservedAt === undefined ? null : ` · Observed ${formatDate(cardObservedAt)}`}
+        </Text>
         <dl className="grid gap-2 pt-2 text-sm sm:grid-cols-3">
-          {offering.offering.serviceAreaSummary === undefined ? null : <OptionalFact icon={<MapPinIcon aria-hidden="true" />} label="Service area" value={offering.offering.serviceAreaSummary} />}
-          {offering.offering.availabilitySummary === undefined ? null : <OptionalFact icon={<CalendarClockIcon aria-hidden="true" />} label="Availability" value={offering.offering.availabilitySummary} />}
-          {offering.offering.pricingSummary === undefined ? null : <OptionalFact icon={<BanknoteIcon aria-hidden="true" />} label="Pricing" value={offering.offering.pricingSummary} />}
+          <OptionalFact icon={<MapPinIcon aria-hidden="true" />} label="Service area" value={offering.offering.serviceAreaSummary ?? 'Not supplied'} />
+          <OptionalFact icon={<CalendarClockIcon aria-hidden="true" />} label="Availability" value={offering.offering.availabilitySummary ?? 'Not supplied'} />
+          <OptionalFact icon={<BanknoteIcon aria-hidden="true" />} label="Pricing" value={offering.offering.pricingSummary ?? 'Not supplied'} />
         </dl>
+        {business === undefined ? null : (
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button
+              href={`/${encodeURIComponent(business.slug)}/offerings/${encodeURIComponent(offering.offering.offeringRef)}`}
+              label="View Offering"
+              variant="secondary"
+              className="min-h-11"
+            />
+            {onToggleComparison === undefined ? null : (
+              <button
+                type="button"
+                aria-pressed={selected}
+                disabled={!selected && selectionFull}
+                className="min-h-11 rounded-md border border-border px-4 font-semibold text-primary focus-visible:outline-2 focus-visible:outline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => onToggleComparison({
+                  offeringRef: offering.offering.offeringRef,
+                  revision: offering.offering.revision,
+                  selected: !selected,
+                })}
+              >
+                {selected ? `Remove ${offering.offering.name} from comparison` : `Add ${offering.offering.name} to comparison`}
+              </button>
+            )}
+          </div>
+        )}
+        {!selected && selectionFull ? (
+          <Text type="supporting" color="secondary">Comparison list full — remove one to add another.</Text>
+        ) : null}
       </div>
 
       <Divider />
@@ -168,4 +245,13 @@ function accessIcon(kind: 'phone' | 'website' | 'ae_inquiry' | 'external_operati
   if (kind === 'website') return <Globe2Icon className="size-4" aria-hidden="true" />
   if (kind === 'ae_inquiry') return <MessageSquareTextIcon className="size-4" aria-hidden="true" />
   return <Code2Icon className="size-4" aria-hidden="true" />
+}
+
+function formatDate(timestamp: number): string {
+  return new Intl.DateTimeFormat('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(timestamp))
 }
