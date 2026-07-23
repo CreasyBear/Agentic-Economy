@@ -54,8 +54,12 @@ describe('render-only Offering decision surfaces', () => {
           offering('three'),
           offering('four'),
         ]}
-        business={{ name: 'Studio', slug: 'studio' }}
-        selectedOfferingRefs={['offering:one', 'offering:two', 'offering:three', 'offering:four']}
+        business={{ businessId: 'business:studio', name: 'Studio', slug: 'studio' }}
+        selectedSelectionIds={['one', 'two', 'three', 'four'].map((suffix) => exactSelectionId(
+          'business:studio',
+          `offering:${suffix}`,
+          1,
+        ))}
         onToggleComparison={onToggle}
       />,
     )
@@ -64,8 +68,12 @@ describe('render-only Offering decision surfaces', () => {
     expect(remove.getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(remove)
     expect(onToggle).toHaveBeenCalledWith({
-      offeringRef: 'offering:two',
-      revision: 1,
+      selectionId: exactSelectionId('business:studio', 'offering:two', 1),
+      reference: {
+        businessId: 'business:studio',
+        offeringRef: 'offering:two',
+        offeringRevision: 1,
+      },
       selected: false,
     })
     expect(screen.getAllByText('Comparison list full — remove one to add another.').length).toBeGreaterThan(0)
@@ -75,8 +83,8 @@ describe('render-only Offering decision surfaces', () => {
     render(
       <AeOfferingSupplyList
         offerings={[offering('same', 2)]}
-        business={{ name: 'Studio', slug: 'studio' }}
-        selectedOfferingRefs={['offering:same']}
+        business={{ businessId: 'business:studio', name: 'Studio', slug: 'studio' }}
+        selectedSelectionIds={[exactSelectionId('business:studio', 'offering:same', 1)]}
         onToggleComparison={vi.fn()}
       />,
     )
@@ -139,6 +147,10 @@ function known(value: string) {
 
 function comparisonId(item: ResolvedComparisonSelection): string {
   const { businessId, offeringRef, offeringRevision } = item.selection
+  return exactSelectionId(businessId, offeringRef, offeringRevision)
+}
+
+function exactSelectionId(businessId: string, offeringRef: string, offeringRevision: number): string {
   return `selection:${businessId.length}:${businessId}${offeringRef.length}:${offeringRef}${String(offeringRevision).length}:${offeringRevision}`
 }
 

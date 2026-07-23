@@ -17,17 +17,21 @@ import {
 } from 'lucide-react'
 
 import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
+import {
+  comparisonSelectionId,
+  type ExactOfferingReference,
+} from '@/modules/comparison/public'
 import { offeringSupportCopy, presentOfferingAccessPath } from './offering-presentation'
 
 export type AeOfferingSupplyListProps = Readonly<{
   offerings: readonly PublicOfferingSupplyProjection[]
   disposition?: 'current' | 'partial' | 'stale'
   observedAt?: number
-  business?: Readonly<{ name: string; slug: string }>
-  selectedOfferingRefs?: readonly string[]
+  business?: Readonly<{ businessId: string; name: string; slug: string }>
+  selectedSelectionIds?: readonly string[]
   onToggleComparison?: (input: Readonly<{
-    offeringRef: string
-    revision: number
+    selectionId: string
+    reference: ExactOfferingReference
     selected: boolean
   }>) => void
 }>
@@ -37,10 +41,10 @@ export function AeOfferingSupplyList({
   disposition = 'current',
   observedAt,
   business,
-  selectedOfferingRefs = [],
+  selectedSelectionIds = [],
   onToggleComparison,
 }: AeOfferingSupplyListProps) {
-  const selectionFull = selectedOfferingRefs.length >= 4
+  const selectionFull = selectedSelectionIds.length >= 4
   return (
     <section aria-labelledby="business-offerings-title" className="grid gap-5">
       <div className="flex flex-col gap-3 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
@@ -76,17 +80,23 @@ export function AeOfferingSupplyList({
         </Card>
       ) : (
         <div className="grid gap-4">
-          {offerings.map((offering) => (
-            <OfferingCard
-              key={offering.offering.offeringRef}
-              offering={offering}
-              selected={selectedOfferingRefs.includes(offering.offering.offeringRef)}
-              selectionFull={selectionFull}
-              {...(business === undefined ? {} : { business })}
-              {...(observedAt === undefined ? {} : { observedAt })}
-              {...(onToggleComparison === undefined ? {} : { onToggleComparison })}
-            />
-          ))}
+          {offerings.map((offering) => {
+            const selectionId = business === undefined
+              ? undefined
+              : offeringSelectionId(business.businessId, offering, observedAt)
+            return (
+              <OfferingCard
+                key={offering.offering.offeringRef}
+                offering={offering}
+                selected={selectionId !== undefined && selectedSelectionIds.includes(selectionId)}
+                selectionFull={selectionFull}
+                {...(business === undefined ? {} : { business })}
+                {...(selectionId === undefined ? {} : { selectionId })}
+                {...(observedAt === undefined ? {} : { observedAt })}
+                {...(onToggleComparison === undefined ? {} : { onToggleComparison })}
+              />
+            )
+          })}
           {selectionFull && onToggleComparison !== undefined ? (
             <Text type="supporting" color="secondary">
               Comparison list full — remove one to add another.
@@ -101,13 +111,15 @@ export function AeOfferingSupplyList({
 function OfferingCard({
   offering,
   business,
+  selectionId,
   observedAt,
   selected,
   selectionFull,
   onToggleComparison,
 }: {
   offering: PublicOfferingSupplyProjection
-  business?: Readonly<{ name: string; slug: string }>
+  business?: Readonly<{ businessId: string; name: string; slug: string }>
+  selectionId?: string
   observedAt?: number
   selected: boolean
   selectionFull: boolean
@@ -142,15 +154,19 @@ function OfferingCard({
               variant="secondary"
               className="min-h-11"
             />
-            {onToggleComparison === undefined ? null : (
+            {onToggleComparison === undefined || selectionId === undefined ? null : (
               <button
                 type="button"
                 aria-pressed={selected}
                 disabled={!selected && selectionFull}
                 className="min-h-11 rounded-md border border-border px-4 font-semibold text-primary focus-visible:outline-2 focus-visible:outline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => onToggleComparison({
-                  offeringRef: offering.offering.offeringRef,
-                  revision: offering.offering.revision,
+                  selectionId,
+                  reference: {
+                    businessId: business.businessId,
+                    offeringRef: offering.offering.offeringRef,
+                    offeringRevision: offering.offering.revision,
+                  },
                   selected: !selected,
                 })}
               >
@@ -188,6 +204,19 @@ function OfferingCard({
       </div>
     </Card>
   )
+}
+
+function offeringSelectionId(
+  businessId: string,
+  offering: PublicOfferingSupplyProjection,
+  observedAt?: number,
+): string {
+  return comparisonSelectionId({
+    businessId,
+    offeringRef: offering.offering.offeringRef,
+    offeringRevision: offering.offering.revision,
+    projectionObservedAt: observedAt ?? offering.support.observedAt ?? 0,
+  })
 }
 
 function OptionalFact({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
