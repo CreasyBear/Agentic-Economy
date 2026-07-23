@@ -166,10 +166,15 @@ function serviceFixture(
     human: projectRichPaidOperation(semantics),
     agent: projectStructuredPaidOperation(semantics),
   }
-  const command = vi.fn(async () => ({ kind: 'accepted', value: projection }) as const)
+  const command = vi.fn(async (
+    _input: Parameters<PaidOperationApplicationService['command']>[0],
+  ): Promise<Awaited<ReturnType<PaidOperationApplicationService['command']>>> => ({
+    kind: 'accepted',
+    value: projection,
+  }))
   const service: PaidOperationApplicationService = {
-    inspect: vi.fn(() => ({ kind: 'accepted', value: projection })),
-    command,
+    inspect: (_input) => ({ kind: 'accepted', value: projection }),
+    command: (input) => command(input),
   }
   return { service, projection, command }
 }
