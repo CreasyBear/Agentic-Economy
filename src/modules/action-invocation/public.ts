@@ -1,4 +1,5 @@
 export {
+  acceptedAuthorityValue,
   actionInvocationOriginValue,
   attemptReleaseValue,
   attemptTransitionValue,
@@ -8,4 +9,5 @@ export {
   invocationActorValue,
   invocationControlValue,
   invocationFreshnessValue,
+  hostedPaidOperationPaymentProposalValue,
 } from './internal/convex-schema'

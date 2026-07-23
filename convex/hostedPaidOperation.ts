@@ -22,7 +22,7 @@ import {
   invocationControlValue,
   invocationFreshnessValue,
   hostedPaidOperationPaymentProposalValue,
-} from '../src/modules/action-invocation/internal/convex-schema'
+} from '../src/modules/action-invocation/public'
 import { internalMutation, internalQuery } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 
