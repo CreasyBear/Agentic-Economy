@@ -160,12 +160,12 @@ describe('historical public Offering resolution', () => {
     expect(query).toContain('.eq(\'businessId\', businessId)')
     expect(query).toContain('.eq(\'offeringRef\', args.offeringRef)')
     expect(query).toContain('.eq(\'revision\', args.revision)')
-    expect(query).toContain('.take(2)')
+    expect(query).toContain('historyQuery.take(2)')
     expect(query).not.toContain('.collect()')
     expect(query).not.toContain('.filter(')
     expect(query).not.toContain('offeringSourceHash: v.string()')
     expect(query.indexOf('hasActiveBusinessSuppression')).toBeLessThan(
-      query.indexOf("db.query('offeringPublicRevisionHistory')"),
+      query.indexOf("query('offeringPublicRevisionHistory')"),
     )
   })
 
