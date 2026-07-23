@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 status: in_progress
-stopped_at: Phase 05 Plan 05-05 complete; Plan 05-06 active
-last_updated: "2026-07-23T08:00:00Z"
+stopped_at: Phase 05 Plan 05-06 complete; Plan 05-07 active
+last_updated: "2026-07-23T10:30:00Z"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
-  percent: 63
+  completed_plans: 6
+  percent: 75
 current_phase: 05
 current_phase_name: consumer-decision-support
 ---
@@ -61,34 +61,41 @@ Plan 05-05 integrated pure exact-revision comparison semantics at
 unranked, orders only by the minimal stated-priority prefix, and keeps URL
 observation time non-authoritative.
 
+Plan 05-06 integrated the public answer-first customer loop at
+`b221dc04286f57df07473e636707c2b2dce74c84` with tree
+`8580c82d3fad1f6e3c6ae1c3a6e6841e2065baaf`. A blank-session request can
+reach exact Offering evidence and comparison through one material
+clarification; compact and wide local-mock browser journeys pass with no
+consequential transport.
+
 ## Next transition
 
-Execute Plan 05-06 from the exact Plan 05-05 result. Build the public Offering
-detail, shortlist and answer-first Astryx comparison experience over the pure
-comparison owner.
+Execute Plan 05-07 from the exact Plan 05-06 result. Register one fixed
+inspect-only comparison action and public POST adapter, prove actual human-loader
+and agent parity, fence effects recursively and run both-profile transfer evals.
 
 ## Remaining evidence gaps
 
-- the public answer-first comparison experience does not yet exist in
-  integrated source;
-- no Phase 05 browser, hosted, provider or customer evidence exists.
+- structured-agent comparison reachability and actual-loader parity are not yet
+  implemented;
+- no Phase 05 hosted, provider or customer evidence exists.
 - the isolated Convex dry-run could not execute because `CONVEX_DEPLOYMENT` is
   unset; no `convex dev` or control-plane loop was started.
 
 ## Evidence ceiling
 
-Current Phase 05 evidence proves a committed Offering-v2 predecessor,
-historical-public resolution, closed comparison profiles and strict
-HTTP/registered-action registry parity plus a visible local Answer artifact
-and pure comparison semantics with focused fixtures. It does not yet prove the
-completed comparison product, hosted behavior, demand, customer value, supplier quality,
-fulfilment, willingness to pay, retention, revenue or production safety.
+Current Phase 05 evidence proves the committed Offering-v2 predecessor,
+historical-public resolution, closed comparison profiles, strict registry
+parity, the visible Answer bridge, pure comparison semantics and a labelled
+local-mock human browser loop. It does not yet prove structured-agent parity,
+hosted behavior, demand, customer value, supplier quality, fulfilment,
+willingness to pay, retention, revenue or production safety.
 
 Historical state, roadmap, requirements and scopes are preserved under
 `.planning/archive/pre-product-conversion-rebaseline-20260720/`.
 
 ## Session
 
-**Last session:** 2026-07-23T08:00:00Z
-**Stopped at:** Phase 05 Plan 05-05 complete; Plan 05-06 active
-**Resume file:** .planning/phases/05-consumer-operating-proof/05-06-PLAN.md
+**Last session:** 2026-07-23T10:30:00Z
+**Stopped at:** Phase 05 Plan 05-06 complete; Plan 05-07 active
+**Resume file:** .planning/phases/05-consumer-operating-proof/05-07-PLAN.md
