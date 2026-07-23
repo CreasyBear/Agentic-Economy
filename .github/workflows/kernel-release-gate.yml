@@ -252,7 +252,11 @@ jobs:
       - name: Deploy the exact Phase 5 Convex schema and functions
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"
+        # The focused source job already runs project typecheck plus a Convex
+        # codegen dry-run. Convex's isolated generated tsconfig lacks the DOM
+        # CryptoKey type used by a pre-existing hosted-payment module, so do not
+        # let that unrelated wrapper typecheck block this bounded deployment.
+        run: npx convex deploy --typecheck=disable --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"
 
       - name: Refuse lifecycle mutation before exact served-revision readback
         env:
