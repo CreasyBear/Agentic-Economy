@@ -55,6 +55,7 @@ export async function provideCustomerRequestFacts(
     })
   }
   const selections = current.aggregate.plan.actions.flatMap((action) => {
+    if (!isComparablePlanAction(action)) return []
     const model = graph.models.find((candidate) => (
       sameCapabilityContractRef(candidate.contractRef, action.contractRef)
     ))
@@ -91,4 +92,27 @@ export async function provideCustomerRequestFacts(
     graph,
     now: Date.now(),
   })
+}
+
+type ComparablePlanAction = Readonly<{
+  selectionKey: string
+  semanticDigest: string
+  contractRef: Readonly<{
+    capabilityId: string
+    version: number
+    contractDigest: string
+  }>
+}>
+
+function isComparablePlanAction(action: unknown): action is ComparablePlanAction {
+  if (!isRecord(action) || !isRecord(action.contractRef)) return false
+  return typeof action.selectionKey === 'string'
+    && typeof action.semanticDigest === 'string'
+    && typeof action.contractRef.capabilityId === 'string'
+    && typeof action.contractRef.version === 'number'
+    && typeof action.contractRef.contractDigest === 'string'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

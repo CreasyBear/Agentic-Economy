@@ -56,6 +56,9 @@ export function attachCompletedTaskReference(
     actor: { principalRef: input.principalRef, callerRef: input.callerRef },
   })
   if (identity.kind === 'refused') return { kind: 'refused', reason: identity.code }
+  if (!isReferenceableBusinessOutcome(identity.businessOutcome)) {
+    return { kind: 'refused', reason: 'outcome_not_referenceable' }
+  }
 
   const referenceRef = `completed-task:${canonicalDigest({
     invocationRef: identity.invocationRef,
@@ -96,4 +99,10 @@ export function attachCompletedTaskReference(
     reference,
     noEffect: true,
   }
+}
+
+function isReferenceableBusinessOutcome(
+  outcome: string,
+): outcome is CustomerRequestCompletedTaskReference['businessOutcome'] {
+  return outcome === 'completed' || outcome === 'queued_communication'
 }
