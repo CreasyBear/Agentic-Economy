@@ -156,9 +156,9 @@ jobs:
               src/components/ae/chat/AeThreadTurnStreamSection.tsx|\
               src/modules/answer-thread/internal/answer-turn-finalization.ts|\
               src/modules/answer-thread/internal/turn-orchestrator.ts|\
-            src/modules/answer/internal/emit-snapshot-events.ts|\
-            src/modules/comparison/internal/presentation.ts|\
-            src/modules/dev/internal/dev-seed-fixture.ts|\
+              src/modules/answer/internal/emit-snapshot-events.ts|\
+              src/modules/comparison/internal/presentation.ts|\
+              src/modules/dev/internal/dev-seed-fixture.ts|\
               src/modules/observability/internal/literals.ts|\
               src/modules/observability/internal/operator-controls.ts|\
               src/routes/\$slug.offerings.\$offeringRef.tsx|\
@@ -171,9 +171,9 @@ jobs:
               tests/unit/answer-thread/cold-start-persistence.test.ts|\
               tests/unit/answer/emit-snapshot-events.test.ts|\
               tests/unit/chat/ae-chat-route-promotion.test.tsx|\
-            tests/unit/chat/ae-thread-turn-stream-section.test.tsx|\
-            tests/unit/comparison/presentation.test.ts|\
-            tests/unit/dev/dev-seed-fixture.test.ts|\
+              tests/unit/chat/ae-thread-turn-stream-section.test.tsx|\
+              tests/unit/comparison/presentation.test.ts|\
+              tests/unit/dev/dev-seed-fixture.test.ts|\
               tests/unit/release/consumer-comparison-evidence.test.ts|\
               tools/release/consumer-comparison-evidence.ts|\
               tools/release/phase5-operator-control.ts|\
