@@ -4,9 +4,19 @@ import {
   provideCustomerRequestFacts,
   type ProvideFactsPorts,
 } from '@/modules/customer-request/application/public'
+import {
+  defineCapabilityContract,
+  openCapabilityDecisionModel,
+} from '@/modules/capability-contract/public'
+import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 
 const NOW = Date.now()
-const contractRef = { capabilityId: 'cap:ride', version: 1, contractDigest: 'digest:1' }
+const model = openCapabilityDecisionModel(
+  defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT),
+)
+const contractRef = model.contractRef
+const requiredInput = model.inputs.find(({ annotationId }) => annotationId === 'request_context')
+if (requiredInput === undefined) throw new Error('customer_request_test_input_missing')
 
 const requirement = {
   kind: 'contract_fact' as const,
@@ -14,10 +24,10 @@ const requirement = {
   customerLabel: 'Destination',
   targets: [{
     contractRef,
-    selectionKey: 'sel:1',
-    inputKey: 'destination',
-    inputPointer: '/destination',
-    schemaIdentity: 'schema:destination',
+    selectionKey: model.selectionKey,
+    inputKey: requiredInput.key,
+    inputPointer: requiredInput.inputPointer,
+    schemaIdentity: requiredInput.schemaIdentity,
   }],
 }
 
@@ -44,8 +54,8 @@ const aggregate = {
   plan: {
     actions: [{
       actionId: 'action:1',
-      selectionKey: 'sel:1',
-      semanticDigest: 'sem:1',
+      selectionKey: model.selectionKey,
+      semanticDigest: model.semanticDigest,
       contractRef,
     }],
     planRevisionId: 'plan:1',
@@ -57,18 +67,6 @@ const aggregate = {
     proposalDigest: 'prop:1',
   },
   aggregateDigest: 'agg:1',
-}
-
-const model = {
-  selectionKey: 'sel:1',
-  semanticDigest: 'sem:1',
-  contractRef,
-  inputs: [{
-    key: 'destination',
-    inputPointer: '/destination',
-    schemaIdentity: 'schema:destination',
-  }],
-  assessInput: vi.fn(() => ({ kind: 'viable' as const, stage: 'option_selection' as const })),
 }
 
 const graph = {
@@ -217,14 +215,7 @@ describe('customer-request provide-facts', () => {
     const ports = basePorts({
       loadRequestGraph: vi.fn(async () => ({
         ...graph,
-        models: [{
-          ...model,
-          inputs: [{
-            key: 'other',
-            inputPointer: '/other',
-            schemaIdentity: 'schema:other',
-          }],
-        }],
+        models: [],
       })),
     })
     const result = await provideCustomerRequestFacts(baseInput, ports)

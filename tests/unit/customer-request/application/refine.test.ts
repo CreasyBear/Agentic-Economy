@@ -4,10 +4,18 @@ import {
   refineCustomerRequest,
   type RefineCustomerRequestPorts,
 } from '@/modules/customer-request/application/public'
+import {
+  defineCapabilityContract,
+  openCapabilityDecisionModel,
+} from '@/modules/capability-contract/public'
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
+import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 
 const NOW = Date.now()
-const contractRef = { capabilityId: 'cap:ride', version: 1, contractDigest: 'digest:1' }
+const model = openCapabilityDecisionModel(
+  defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT),
+)
+const contractRef = model.contractRef
 const routePlanId = 'route:1'
 const generationRef = 'gen:1'
 const routeRef = customerRouteRef(generationRef, routePlanId)
@@ -34,8 +42,8 @@ const aggregate = {
   plan: {
     actions: [{
       actionId: 'action:1',
-      selectionKey: 'sel:1',
-      semanticDigest: 'sem:1',
+      selectionKey: model.selectionKey,
+      semanticDigest: model.semanticDigest,
       contractRef,
     }],
     planRevisionId: 'plan:1',
@@ -47,13 +55,6 @@ const aggregate = {
     proposalDigest: 'prop:1',
   },
   aggregateDigest: 'agg:1',
-}
-
-const model = {
-  selectionKey: 'sel:1',
-  semanticDigest: 'sem:1',
-  contractRef,
-  inputs: [],
 }
 
 const graph = {
@@ -301,7 +302,7 @@ describe('customer-request refine', () => {
     const ports = basePorts({
       loadRequestGraph: vi.fn(async () => ({
         ...graph,
-        models: [{ ...model, selectionKey: 'sel:other' }],
+        models: [],
       })),
     })
     const result = await refineCustomerRequest({

@@ -101,7 +101,7 @@ function basePorts(overrides: Partial<CompareResumePorts> = {}): CompareResumePo
   return {
     runEgress: vi.fn(),
     resumeEgress: vi.fn(),
-    resumeRequestEgress: vi.fn(async () => ({ kind: 'completed', states: [] })),
+    resumeRequestEgress: vi.fn(async () => ({ kind: 'completed' as const, states: [] })),
     preparationMaterialDigest: vi.fn(),
     preparePreparedAction: vi.fn(),
     loadCurrent: vi.fn(async () => ({
@@ -123,15 +123,10 @@ function basePorts(overrides: Partial<CompareResumePorts> = {}): CompareResumePo
       revision: 3,
       state: 'options_ready' as const,
       summary: 'Options ready',
-      nextAction: 'choose_option' as const,
+      nextAction: 'inspect_options' as const,
       missingFields: [],
       criteria: [],
       options: [],
-      decision: {
-        generationRef: 'gen:1',
-        outcome: { kind: 'routes_available' as const },
-        routes: [],
-      },
     })),
     resumePreparation: vi.fn(async () => ({ kind: 'not_found' as const })),
     egressStatus: vi.fn(async () => ({ operationCount: 0, states: [] })),
