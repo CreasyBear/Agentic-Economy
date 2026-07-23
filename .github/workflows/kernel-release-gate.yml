@@ -160,6 +160,7 @@ jobs:
               src/modules/dev/internal/dev-seed-fixture.ts|\
               src/modules/observability/internal/literals.ts|\
               src/modules/observability/internal/operator-controls.ts|\
+              src/routes/\$slug.offerings.\$offeringRef.tsx|\
               src/routes/compare.tsx|\
               tests/deploy-smoke/consumer-comparison-smoke.spec.ts|\
               tests/imports/customer-request-source-completeness.test.ts|\

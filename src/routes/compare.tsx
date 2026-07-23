@@ -118,7 +118,7 @@ function CompareRoute() {
   if (readback.kind === 'refused') {
     return (
       <AePublicShell>
-        <main className="mx-auto grid w-full max-w-5xl gap-6 px-4 py-10 md:px-6">
+        <div className="mx-auto grid w-full max-w-5xl gap-6 px-4 py-10 md:px-6">
           <Heading level={1}>Compare Offerings</Heading>
           <Card padding={5} className="grid gap-3" role="status">
             <Heading level={2}>This comparison link is not valid</Heading>
@@ -127,7 +127,7 @@ function CompareRoute() {
             </Text>
             <Button label="Browse businesses" href="/registry?q=&limit=10" variant="primary" />
           </Card>
-        </main>
+        </div>
       </AePublicShell>
     )
   }
@@ -141,7 +141,7 @@ function CompareRoute() {
 
   return (
     <AePublicShell>
-      <main
+      <div
         className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 md:px-6"
         data-semantic-digest={readback.semanticDigest}
       >
@@ -283,7 +283,7 @@ function CompareRoute() {
             </p>
           </>
         )}
-      </main>
+      </div>
     </AePublicShell>
   )
 }

@@ -132,7 +132,7 @@ function OfferingDetailRoute() {
   if (data.kind !== 'found' || data.detail === undefined) {
     return (
       <AePublicShell>
-        <main className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-12 md:px-6">
+        <div className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-12 md:px-6">
           <Heading level={1}>Offering unavailable</Heading>
           <Text color="secondary">This Offering is not publicly available right now.</Text>
           <a
@@ -141,7 +141,7 @@ function OfferingDetailRoute() {
           >
             Back to business
           </a>
-        </main>
+        </div>
       </AePublicShell>
     )
   }
@@ -170,7 +170,7 @@ function OfferingDetailRoute() {
 
   return (
     <AePublicShell>
-      <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 md:px-6">
+      <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 md:px-6">
         <nav aria-label="Breadcrumb" className="text-sm text-secondary">
           <a
             href={appendComparisonUrlState('/registry?q=&limit=10', data.state)}
@@ -265,7 +265,7 @@ function OfferingDetailRoute() {
             }}
           />
         )}
-      </main>
+      </div>
     </AePublicShell>
   )
 }
