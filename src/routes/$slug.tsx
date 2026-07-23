@@ -17,6 +17,7 @@ import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/reg
 import { readPublicTargetAdmissionServer } from '@/modules/inquiries/inquiry.functions'
 import { createComparisonOfferingReadPort } from '@/modules/comparison/comparison.functions'
 import {
+  appendComparisonUrlState,
   comparisonSelectionId,
   parseComparisonUrlState,
   resolveComparisonSelections,
@@ -309,6 +310,9 @@ function PublicBusinessRoute() {
         agentJsonUrl={agentJsonUrl}
         {...(from === undefined ? {} : { backFrom: from })}
         {...(id === undefined ? {} : { backThreadId: id })}
+        {...(from === 'registry'
+          ? { backHref: appendComparisonUrlState('/registry?q=&limit=10', comparisonState) }
+          : {})}
       />
       {supply === undefined ? null : (
         <section
@@ -330,6 +334,7 @@ function PublicBusinessRoute() {
               slug: catalog.slug,
             }}
             selectedSelectionIds={comparisonState.selections.map(comparisonSelectionId)}
+            detailSearch={serializeComparisonUrlState(comparisonState)}
             onToggleComparison={({ reference, selected }) => {
               const selection: ComparisonSelectionRef = {
                 ...reference,

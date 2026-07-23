@@ -15,6 +15,7 @@ import {
 } from '@/components/ae/offerings/offering-presentation'
 import { createComparisonOfferingReadPort } from '@/modules/comparison/comparison.functions'
 import {
+  appendComparisonUrlState,
   comparisonSelectionId,
   parseComparisonUrlState,
   resolveComparisonSelections,
@@ -40,21 +41,32 @@ export const readOfferingDetailRouteServer = createServerFn({ method: 'GET' })
   .validator((data) => offeringDetailInput.parse(data))
   .handler(async ({ data }) => {
     setResponseHeader('Cache-Control', 'no-store')
+    const parsed = parseComparisonUrlState(toSearchParams(data.search))
+    const state = parsed.kind === 'accepted'
+      ? parsed.state
+      : { version: 'offering-comparison:v1' as const, selections: [], priorities: [] }
     const businessResult = await readPublicOfferingRegistryBusinessDetail({
       slug: data.slug,
     })
-    if (businessResult.kind === 'not_found') return businessResult
+    if (businessResult.kind === 'not_found') {
+      return {
+        ...businessResult,
+        state,
+        searchRefused: parsed.kind === 'refused',
+      }
+    }
     const supply = offeringApiDtoToSupplyView(businessResult.business)
     const offering = supply.offerings.find((candidate) => (
       candidate.offering.offeringRef === data.offeringRef
     ))
     if (offering === undefined) {
-      return { kind: 'not_found' as const, code: 'offering_not_found' as const }
+      return {
+        kind: 'not_found' as const,
+        code: 'offering_not_found' as const,
+        state,
+        searchRefused: parsed.kind === 'refused',
+      }
     }
-    const parsed = parseComparisonUrlState(toSearchParams(data.search))
-    const state = parsed.kind === 'accepted'
-      ? parsed.state
-      : { version: 'offering-comparison:v1' as const, selections: [], priorities: [] }
     const detailSelection: ComparisonSelectionRef = {
       businessId: businessResult.business.businessId,
       offeringRef: offering.offering.offeringRef,
@@ -123,7 +135,10 @@ function OfferingDetailRoute() {
         <main className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-12 md:px-6">
           <Heading level={1}>Offering unavailable</Heading>
           <Text color="secondary">This Offering is not publicly available right now.</Text>
-          <a className="font-semibold underline" href={`/${encodeURIComponent(params.slug)}`}>
+          <a
+            className="font-semibold underline"
+            href={appendComparisonUrlState(`/${encodeURIComponent(params.slug)}`, data.state)}
+          >
             Back to business
           </a>
         </main>
@@ -157,9 +172,17 @@ function OfferingDetailRoute() {
     <AePublicShell>
       <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 md:px-6">
         <nav aria-label="Breadcrumb" className="text-sm text-secondary">
-          <a href="/registry?q=&limit=10" className="underline">Businesses</a>
+          <a
+            href={appendComparisonUrlState('/registry?q=&limit=10', data.state)}
+            className="underline"
+          >
+            Businesses
+          </a>
           {' / '}
-          <a href={`/${encodeURIComponent(data.business.slug)}`} className="underline">
+          <a
+            href={appendComparisonUrlState(`/${encodeURIComponent(data.business.slug)}`, data.state)}
+            className="underline"
+          >
             {data.business.name}
           </a>
           {' / '}
@@ -190,7 +213,12 @@ function OfferingDetailRoute() {
                   <Text weight="semibold">{path.label}</Text>
                   <Text color="secondary">{path.detail}</Text>
                   {path.href === undefined ? null : (
-                    <a href={path.href} className="min-h-11 justify-self-start py-2 font-semibold underline">
+                    <a
+                      href={path.href}
+                      rel={path.external ? 'noopener noreferrer' : undefined}
+                      referrerPolicy={path.external ? 'no-referrer' : undefined}
+                      className="min-h-11 justify-self-start py-2 font-semibold underline"
+                    >
                       View published details
                     </a>
                   )}

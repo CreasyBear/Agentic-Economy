@@ -29,6 +29,7 @@ export type AeOfferingSupplyListProps = Readonly<{
   observedAt?: number
   business?: Readonly<{ businessId: string; name: string; slug: string }>
   selectedSelectionIds?: readonly string[]
+  detailSearch?: string
   onToggleComparison?: (input: Readonly<{
     selectionId: string
     reference: ExactOfferingReference
@@ -42,6 +43,7 @@ export function AeOfferingSupplyList({
   observedAt,
   business,
   selectedSelectionIds = [],
+  detailSearch = '',
   onToggleComparison,
 }: AeOfferingSupplyListProps) {
   const selectionFull = selectedSelectionIds.length >= 4
@@ -93,6 +95,7 @@ export function AeOfferingSupplyList({
                 {...(business === undefined ? {} : { business })}
                 {...(selectionId === undefined ? {} : { selectionId })}
                 {...(observedAt === undefined ? {} : { observedAt })}
+                detailSearch={detailSearch}
                 {...(onToggleComparison === undefined ? {} : { onToggleComparison })}
               />
             )
@@ -116,6 +119,7 @@ function OfferingCard({
   selected,
   selectionFull,
   onToggleComparison,
+  detailSearch,
 }: {
   offering: PublicOfferingSupplyProjection
   business?: Readonly<{ businessId: string; name: string; slug: string }>
@@ -124,6 +128,7 @@ function OfferingCard({
   selected: boolean
   selectionFull: boolean
   onToggleComparison?: AeOfferingSupplyListProps['onToggleComparison']
+  detailSearch: string
 }) {
   const support = offeringSupportCopy(offering.support)
   const cardObservedAt = observedAt ?? offering.support.observedAt
@@ -149,7 +154,7 @@ function OfferingCard({
         {business === undefined ? null : (
           <div className="flex flex-wrap gap-2 pt-2">
             <Button
-              href={`/${encodeURIComponent(business.slug)}/offerings/${encodeURIComponent(offering.offering.offeringRef)}`}
+              href={`/${encodeURIComponent(business.slug)}/offerings/${encodeURIComponent(offering.offering.offeringRef)}${detailSearch}`}
               label="View Offering"
               variant="secondary"
               className="min-h-11"
@@ -240,8 +245,17 @@ function AccessPathItem({ path }: { path: PublicOfferingSupplyProjection['access
           <Text type="supporting" color="secondary" display="block">{presentation.detail}</Text>
         </div>
       </div>
-      {presentation.href === undefined ? null : (
-        <Button href={presentation.href} label={presentation.external ? 'View published details' : presentation.label} variant="secondary" size="sm" className="min-h-11 w-full sm:w-auto" />
+      {presentation.href === undefined ? null : presentation.external ? (
+        <a
+          href={presentation.href}
+          rel="noopener noreferrer"
+          referrerPolicy="no-referrer"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-border px-3 text-sm font-semibold text-primary sm:w-auto"
+        >
+          View published details
+        </a>
+      ) : (
+        <Button href={presentation.href} label={presentation.label} variant="secondary" size="sm" className="min-h-11 w-full sm:w-auto" />
       )}
       {presentation.technical === undefined ? null : (
         <div className="grid gap-2">

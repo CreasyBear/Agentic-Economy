@@ -16,6 +16,11 @@ import {
   comparisonRouteMetadata,
   normalizeComparisonRouteSearch,
 } from '@/routes/compare'
+import {
+  appendComparisonUrlState,
+  parseComparisonUrlState,
+  type ComparisonUrlState,
+} from '@/modules/comparison/public'
 
 afterEach(cleanup)
 
@@ -100,6 +105,54 @@ describe('render-only Offering decision surfaces', () => {
     expect(screen.getByRole('button', {
       name: 'Add Offering same to comparison',
     }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('keeps the canonical cross-business shortlist through browse, detail, and back links', () => {
+    const state: ComparisonUrlState = {
+      version: 'offering-comparison:v1',
+      selections: [
+        selection('one').selection,
+        selection('two').selection,
+      ],
+      priorities: ['professional_service:v1:lowest_total_price'],
+    }
+    const paths = [
+      appendComparisonUrlState('/registry?q=website&limit=10', state),
+      appendComparisonUrlState('/business-two?from=registry', state),
+      appendComparisonUrlState('/business-two/offerings/offering%3Atwo', state),
+      appendComparisonUrlState('/registry?q=&limit=10', state),
+    ]
+
+    for (const href of paths) {
+      const query = new URL(href, 'https://agentic.example').searchParams
+      query.delete('q')
+      query.delete('limit')
+      query.delete('from')
+      expect(parseComparisonUrlState(query)).toEqual({ kind: 'accepted', state })
+      expect(href).not.toMatch(/sourceHash|token|facts=/)
+    }
+
+    render(
+      <AeOfferingSupplyList
+        offerings={[offering('two')]}
+        business={{ businessId: 'business:two', name: 'Business two', slug: 'business-two' }}
+        detailSearch={appendComparisonUrlState('', state)}
+      />,
+    )
+    expect(screen.getByRole('link', { name: 'View Offering' }).getAttribute('href'))
+      .toBe(paths[2])
+  })
+
+  it('does not disclose a referrer when opening external published details', () => {
+    render(
+      <AeOfferingSupplyList
+        offerings={[externalOffering('external')]}
+      />,
+    )
+
+    const link = screen.getByRole('link', { name: 'View published details' })
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(link.getAttribute('referrerpolicy')).toBe('no-referrer')
   })
 
   it('renders source semantic cells, provenance, and currentness without effect controls', () => {
@@ -300,5 +353,21 @@ function offering(suffix: string, revision = 1): PublicOfferingSupplyProjection 
     },
     accessPaths: [],
     support: { integrated: false, routeable: false, reasons: ['not_integrated'], observedAt: 100 },
+  }
+}
+
+function externalOffering(suffix: string): PublicOfferingSupplyProjection {
+  return {
+    ...offering(suffix),
+    accessPaths: [{
+      accessPathRef: brandNonEmpty(`access:${suffix}`, 'AccessPathRef'),
+      descriptor: {
+        kind: 'external_operation',
+        name: 'Published API',
+        summary: 'Read the published operation details.',
+        url: 'https://provider.example/operation',
+        provenance: 'business_declared',
+      },
+    }],
   }
 }

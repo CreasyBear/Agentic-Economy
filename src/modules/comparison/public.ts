@@ -39,6 +39,7 @@ export type {
 export type { OfferingComparisonEnvelope } from '@/modules/catalog/public'
 
 export {
+  appendComparisonUrlState,
   parseComparisonUrlState,
   serializeComparisonUrlState,
 } from './internal/url-state'

@@ -29,6 +29,7 @@ export type AeProviderListingPageProps = {
   supply?: PublicOfferingSupplyView
   backFrom?: 'thread' | 'registry'
   backThreadId?: string
+  backHref?: string
 }
 
 const ownerReplyStamp = 'owner confirms on reply'
@@ -42,6 +43,7 @@ export function AeProviderListingPage({
   supply,
   backFrom,
   backThreadId,
+  backHref,
 }: AeProviderListingPageProps) {
   const presentation = buildProviderPresentation(catalog)
   const trust = buildListingTrustProjection(catalog, inquiryAffordance.kind === 'available')
@@ -62,7 +64,11 @@ export function AeProviderListingPage({
   return (
     <article className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-8 md:px-6 md:py-10">
       <nav aria-label="Return to your previous view">
-        <ListingBackLink {...(backFrom === undefined ? {} : { from: backFrom })} {...(backThreadId === undefined ? {} : { threadId: backThreadId })} />
+        <ListingBackLink
+          {...(backFrom === undefined ? {} : { from: backFrom })}
+          {...(backThreadId === undefined ? {} : { threadId: backThreadId })}
+          {...(backHref === undefined ? {} : { hrefOverride: backHref })}
+        />
       </nav>
 
       <ListingFirstScreen
@@ -601,8 +607,17 @@ function readOfficeAddress(catalog: PublicRouteCatalogContract): string | undefi
   return value !== undefined && value.length > 0 ? value : undefined
 }
 
-function ListingBackLink({ from, threadId }: { from?: 'thread' | 'registry'; threadId?: string }) {
-  const href = from === 'thread' && threadId !== undefined ? `/t/${encodeURIComponent(threadId)}` : from === 'registry' ? '/registry?q=&limit=10' : '/'
+function ListingBackLink({
+  from,
+  threadId,
+  hrefOverride,
+}: {
+  from?: 'thread' | 'registry'
+  threadId?: string
+  hrefOverride?: string
+}) {
+  const href = hrefOverride
+    ?? (from === 'thread' && threadId !== undefined ? `/t/${encodeURIComponent(threadId)}` : from === 'registry' ? '/registry?q=&limit=10' : '/')
   const label = from === 'thread' && threadId !== undefined ? 'Back to answer' : from === 'registry' ? 'Back to results' : 'Ask another'
   return (
     <RouterLink href={href} className="inline-flex min-h-11 items-center gap-2 text-sm text-secondary underline-offset-4 hover:underline">
