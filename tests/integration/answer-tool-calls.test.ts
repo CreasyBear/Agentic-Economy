@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { runAnswerToolCall } from '@/modules/answer-thread/internal/tool-runner'
+import { toAnswerSource } from '@/modules/answer/public'
 import {
   buildPublicThreadProjection,
   type AnswerThreadRecord,
@@ -12,6 +14,83 @@ import {
   setAnswerToolCallPortForTests,
 } from '@/modules/answer-thread/testing'
 import type { AnswerToolCallRecord } from '@/modules/answer-thread/tooling'
+import { HarnessRunLoop } from '@/modules/harness/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+
+const offeringV2Business = {
+  schemaVersion: 'public-business-catalog-api:v2',
+  businessId: 'business:profile-pair',
+  slug: 'profile-pair',
+  name: 'Profile Pair',
+  category: 'Mixed demonstration',
+  suburb: 'Perth',
+  stateTerritory: 'WA',
+  publishedPhone: '+61 8 0000 0000',
+  publicUrl: '/profile-pair',
+  observedAt: 1_725_000_000_000,
+  disposition: 'current',
+  offerings: [
+    {
+      offeringRef: 'offering:professional',
+      revision: 7,
+      name: 'Website discovery',
+      category: 'Professional service',
+      summary: 'A bounded discovery engagement.',
+      comparison: {
+        schemaVersion: 'offering-comparison:v1',
+        profile: {
+          profileId: 'professional_service:v1',
+          scopeBasis: known('Discovery and recommendation'),
+          priceBasis: known({
+            description: 'Fixed discovery fee',
+            currency: 'AUD',
+            amountMinor: 125_000,
+            unit: 'total',
+          }),
+          timingBasis: known('Two weeks'),
+          serviceArea: known('Perth'),
+        },
+      },
+      accessPaths: [],
+      support: { integrated: false, aeSupportedAction: false },
+    },
+    {
+      offeringRef: 'offering:machine',
+      revision: 11,
+      name: 'Current inventory feed',
+      category: 'Machine data',
+      summary: 'A read-only inventory feed.',
+      comparison: {
+        schemaVersion: 'offering-comparison:v1',
+        profile: {
+          profileId: 'machine_data:v1',
+          interfaceFormat: known('rest_json'),
+          requestMethod: known('GET'),
+          authentication: known('api_key'),
+          priceBasis: known({
+            description: 'Per request',
+            currency: 'AUD',
+            amountMinor: 2,
+            unit: 'request',
+          }),
+          freshnessOrUpdateCadence: known('Updated every hour'),
+        },
+      },
+      accessPaths: [],
+      support: {
+        integrated: true,
+        aeSupportedAction: false,
+        observedAt: 1_724_999_000_000,
+        validUntil: 1_725_086_400_000,
+      },
+    },
+  ],
+  accessSummary: {
+    humanRequest: false,
+    externalOperation: false,
+    aeSupportedAction: false,
+  },
+} as const satisfies PublicBusinessCatalogApiV2Dto
 
 describe('answerToolCalls persistence', () => {
   let resetThreadPort: () => void
@@ -186,6 +265,56 @@ describe('answerToolCalls persistence', () => {
   })
 })
 
+describe('Offering-v2 answer consumption', () => {
+  it('preserves exact revisions and both closed profiles in the Answer source without rebuilding services', () => {
+    const source = toAnswerSource(offeringV2Business, 1)
+
+    expect(source.businessId).toBe(offeringV2Business.businessId)
+    expect(source.observedAt).toBe(offeringV2Business.observedAt)
+    expect(source.disposition).toBe('current')
+    expect(source.offerings).toEqual(offeringV2Business.offerings)
+    expect(source.offerings.map((offering) => [
+      offering.offeringRef,
+      offering.revision,
+      offering.comparison?.profile.profileId,
+    ])).toEqual([
+      ['offering:professional', 7, 'professional_service:v1'],
+      ['offering:machine', 11, 'machine_data:v1'],
+    ])
+    expect(source.services).toEqual([])
+    expect(source).not.toHaveProperty('inquiryUrl')
+    expect(source).not.toHaveProperty('publishedPhone')
+  })
+
+  it('carries the strict Offering result through the Answer Thread tool runner unchanged', async () => {
+    const harnessLoop = new HarnessRunLoop({
+      toolContext: {
+        developmentOnlyRegistryDetailAdapter: async () => ({
+          kind: 'found',
+          schemaVersion: 'public-business-catalog-api:v2',
+          business: offeringV2Business,
+        }),
+      },
+    })
+
+    const result = await runAnswerToolCall({
+      toolId: 'registry.detail',
+      input: { slug: offeringV2Business.slug },
+      turnId: 'turn-offering-v2',
+      seq: 1,
+      harnessLoop,
+    })
+
+    expect(result.record.status).toBe('complete')
+    expect(result.providers[0]?.offerings).toEqual(offeringV2Business.offerings)
+    expect(JSON.parse(result.record.resultJson)).toEqual({
+      kind: 'found',
+      schemaVersion: 'public-business-catalog-api:v2',
+      business: offeringV2Business,
+    })
+  })
+})
+
 async function createThread(threadId: string, sessionId: string, title: string): Promise<void> {
   const { createAnswerThread } = await import('@/modules/answer-thread/answer-thread.functions')
   await createAnswerThread({ threadId, pseudonymousSessionId: sessionId, title })
@@ -210,5 +339,14 @@ function buildToolCall(
     resultHash: 'hash:tool',
     status: 'complete',
     createdAt: 1_000,
+  }
+}
+
+function known<T>(value: T) {
+  return {
+    kind: 'known' as const,
+    value,
+    source: { kind: 'business_supplied' as const },
+    observedAt: 1_724_999_000_000,
   }
 }
