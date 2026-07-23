@@ -151,11 +151,11 @@ jobs:
               convex/security.ts|\
               package.json|\
               src/components/ae/chat/AeChat.tsx|\
-    src/components/ae/chat/AeThreadTranscript.tsx|\
-    src/components/ae/chat/AeThreadTurnStreamSection.tsx|\
-    src/modules/answer-thread/internal/answer-turn-finalization.ts|\
-    src/modules/answer-thread/internal/turn-orchestrator.ts|\
-    src/modules/dev/internal/dev-seed-fixture.ts|\
+              src/components/ae/chat/AeThreadTranscript.tsx|\
+              src/components/ae/chat/AeThreadTurnStreamSection.tsx|\
+              src/modules/answer-thread/internal/answer-turn-finalization.ts|\
+              src/modules/answer-thread/internal/turn-orchestrator.ts|\
+              src/modules/dev/internal/dev-seed-fixture.ts|\
               src/modules/observability/internal/literals.ts|\
               src/modules/observability/internal/operator-controls.ts|\
               src/routes/compare.tsx|\
