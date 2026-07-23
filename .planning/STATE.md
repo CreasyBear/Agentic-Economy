@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 status: in_progress
-stopped_at: Phase 05 Plan 05-01 complete; Plan 05-02 active
-last_updated: "2026-07-23T05:30:35Z"
+stopped_at: Phase 05 Plan 05-02 complete; Plan 05-03 active
+last_updated: "2026-07-23T06:00:00Z"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 1
-  percent: 17
+  completed_plans: 2
+  percent: 25
 current_phase: 05
 current_phase_name: consumer-decision-support
 ---
@@ -38,25 +38,31 @@ Plan 05-01 integrated the exact Offering-v2 predecessor at
 previously public revisions remain inspectable unless privacy, safety or live
 business suppression requires hiding them.
 
+Plan 05-02 integrated historical-public eligibility and two closed comparison
+profiles at `f5052328992756dda839c21474a95a1833ac7ed2` with tree
+`f2445954d070e620de0e0dff0223e33e626d50cd`. Privacy and safety hiding is
+monotonic; later ordinary withdrawal cannot re-expose a hidden revision.
+
 ## Next transition
 
-Execute Plan 05-02 from the exact Plan 05-01 result. Add historical-public
-eligibility and two closed Offering fact profiles without current-revision
-substitution, then continue the dependency-ordered Phase 05 plans.
+Execute Plan 05-03 from the exact Plan 05-02 result. Add strict Offering-v2
+registry codecs, registered inspect-only actions and three thin public HTTP
+adapters without widening into comparison, inquiry or execution.
 
 ## Remaining evidence gaps
 
 - human HTTP and registered registry actions do not yet share Offering-v2
   semantics;
-- historical public Offering-revision eligibility and comparison do not yet
+- exact comparison semantics and the public answer-first experience do not yet
   exist in integrated source;
-- no Phase 05 source, browser, hosted, provider or customer evidence exists.
+- no Phase 05 browser, hosted, provider or customer evidence exists.
 
 ## Evidence ceiling
 
-Current Phase 05 evidence proves a committed Offering-v2 predecessor with
-focused local fixtures and build evidence. It does not yet prove implemented
-comparison, hosted behavior, demand, customer value, supplier quality,
+Current Phase 05 evidence proves a committed Offering-v2 predecessor,
+historical-public resolution and closed comparison profiles with focused local
+fixtures. It does not yet prove the completed comparison product, hosted
+behavior, demand, customer value, supplier quality,
 fulfilment, willingness to pay, retention, revenue or production safety.
 
 Historical state, roadmap, requirements and scopes are preserved under
@@ -64,6 +70,6 @@ Historical state, roadmap, requirements and scopes are preserved under
 
 ## Session
 
-**Last session:** 2026-07-23T05:30:35Z
-**Stopped at:** Phase 05 Plan 05-01 complete; Plan 05-02 active
-**Resume file:** .planning/phases/05-consumer-operating-proof/05-02-PLAN.md
+**Last session:** 2026-07-23T06:00:00Z
+**Stopped at:** Phase 05 Plan 05-02 complete; Plan 05-03 active
+**Resume file:** .planning/phases/05-consumer-operating-proof/05-03-PLAN.md
