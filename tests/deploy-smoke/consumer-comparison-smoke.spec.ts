@@ -49,8 +49,13 @@ test('authenticated exact-revision deployment serves the public zero-effect comp
   await search.getByRole('searchbox').fill(coldStartQuery)
   await search.getByRole('button', { name: /^find businesses$/i }).click()
   await page.waitForURL(/\/t\//)
-  await expect(page.getByRole('button', { name: 'Information and enquiries' })).toBeVisible()
-  await page.getByRole('button', { name: 'Information and enquiries' }).click()
+  const brochureChoice = page.getByRole('button', { name: 'Information and enquiries' })
+  await expect(brochureChoice).toBeVisible()
+  // The clarification can render from the streamed semantic event before the
+  // thread continuation is durably addressable. Wait for that real boundary
+  // instead of racing a visibly disabled choice on a hosted response.
+  await expect(brochureChoice).toBeEnabled({ timeout: 60_000 })
+  await brochureChoice.click()
   await expect(page.getByRole('region', { name: 'Decision support' })).toBeVisible()
   const browseHref = await page.getByRole('link', { name: 'Browse registered supply' }).getAttribute('href')
   expect(browseHref).toMatch(/q=.*information.*enquiries/iu)
