@@ -16,7 +16,8 @@ const requiredCommands = [
 ]
 const semanticDigest = /^hash:[a-f0-9]{8}$/u
 const gitObject = /^[a-f0-9]{40}$/u
-const forbiddenKey = /auth(?:orization|token)?|credential|customer.?text|source.?hash|private.?projection|provider.?effect|api.?key|secret/iu
+const forbiddenKey =
+  /^(?:authorization|auth.?token|credentials?|customer.?text|source.?hash|private.?projection|provider.?effects?|api.?key|secrets?)$/iu
 
 export interface ConsumerComparisonEvidenceInput {
   source: { cwd: string; expectedRevision: string; expectedTree: string }

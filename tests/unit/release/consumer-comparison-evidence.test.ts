@@ -50,7 +50,12 @@ function fixtureFiles(): Readonly<{
   const structured = join(directory, 'structured.json')
   const zeroEffect = join(directory, 'zero-effect.json')
   const screenshot = join(directory, 'comparison.png')
-  const result = { kind: 'comparison', semanticDigest: 'hash:c0ffee12', posture: 'unranked' }
+  const result = {
+    kind: 'comparison',
+    semanticDigest: 'hash:c0ffee12',
+    posture: 'unranked',
+    publishedFacts: { authentication: 'API key supported' },
+  }
   writeFileSync(human, JSON.stringify(result))
   writeFileSync(structured, JSON.stringify(result))
   writeFileSync(zeroEffect, JSON.stringify({

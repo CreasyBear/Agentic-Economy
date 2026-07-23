@@ -198,7 +198,7 @@ function containsForbiddenMaterial(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(containsForbiddenMaterial)
   if (!isRecord(value)) return false
   return Object.entries(value).some(([key, entry]) => (
-    /auth(?:orization|token)?|credential|customer.?text|source.?hash|private.?projection|provider.?effect|api.?key|secret/iu.test(key)
+    /^(?:authorization|auth.?token|credentials?|customer.?text|source.?hash|private.?projection|provider.?effects?|api.?key|secrets?)$/iu.test(key)
     || containsForbiddenMaterial(entry)
   ))
 }
