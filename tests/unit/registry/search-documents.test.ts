@@ -156,6 +156,30 @@ describe('registry search documents', () => {
       ),
     ).toMatchObject({ kind: 'ok' })
     expect(db.tables.registrySearchDocuments).toEqual([])
+
+    db.tables.businessOfferings![0]!.status = 'published'
+    db.tables.businessOfferings![1]!.status = 'published'
+    await rebuildBusinessSupplyProjectionSnapshotCommand(
+      db as unknown as RuntimeDb,
+      'business:1',
+      {},
+      102,
+    )
+    db.tables.suppressionRules!.push({
+      _id: 'suppression:1',
+      targetType: 'business',
+      targetRef: 'business:1',
+      status: 'active',
+    })
+    expect(
+      await rebuildBusinessSupplyProjectionSnapshotCommand(
+        db as unknown as RuntimeDb,
+        'business:1',
+        {},
+        103,
+      ),
+    ).toMatchObject({ kind: 'error' })
+    expect(db.tables.registrySearchDocuments).toEqual([])
   })
 })
 
