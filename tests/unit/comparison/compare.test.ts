@@ -5,11 +5,29 @@ import {
   compareOfferings,
   comparisonFactId,
   comparisonSelectionId,
+  projectComparisonRows,
   type OfferingComparisonEnvelope,
   type ResolvedComparisonSelection,
 } from '@/modules/comparison/public'
 
 describe('pure Offering comparison', () => {
+  it('never promotes a tampered URL observation timestamp into a public fact', () => {
+    const selection = professional('tampered-observation', knownPrice(100))
+    const tamperedTimestamp = 9_876_543_210
+    const rows = projectComparisonRows([{
+      ...selection,
+      selection: {
+        ...selection.selection,
+        projectionObservedAt: tamperedTimestamp,
+      },
+    }])
+
+    expect(rows.map(({ dimensionId }) => dimensionId)).not.toContain(
+      'common:projection_observed_at',
+    )
+    expect(JSON.stringify(rows)).not.toContain(String(tamperedTimestamp))
+  })
+
   it('defaults to explicit unranked when no priority was stated', () => {
     const selections = [professional('one', knownPrice(100)), professional('two', knownPrice(200))]
     expect(compareOfferings({ selections, priorities: [] })).toMatchObject({

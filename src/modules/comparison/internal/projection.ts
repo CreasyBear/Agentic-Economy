@@ -20,7 +20,6 @@ const COMMON_DIMENSIONS: readonly CommonComparisonDimensionId[] = [
   'common:business_name',
   'common:offering_name',
   'common:offering_revision',
-  'common:projection_observed_at',
 ]
 
 export function projectComparisonProfile(
@@ -97,12 +96,6 @@ function commonCell(
       return known(selection.offering.name, source, selection.publication.publishedAt)
     case 'common:offering_revision':
       return known(selection.offering.revision, source, selection.publication.publishedAt)
-    case 'common:projection_observed_at':
-      return known(
-        selection.selection.projectionObservedAt,
-        { kind: 'publicly_observed' },
-        selection.selection.projectionObservedAt,
-      )
   }
 }
 

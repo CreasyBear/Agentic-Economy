@@ -99,7 +99,6 @@ export type CommonComparisonDimensionId =
   | 'common:business_name'
   | 'common:offering_name'
   | 'common:offering_revision'
-  | 'common:projection_observed_at'
 
 export type ProfileComparisonDimensionId =
   | 'professional_service:v1:scope_basis'
