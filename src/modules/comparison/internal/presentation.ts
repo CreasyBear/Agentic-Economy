@@ -40,7 +40,17 @@ export function comparisonPresentationDigest(input: Readonly<{
   comparison: OfferingComparisonResult
   brief: ComparisonDecisionBrief
 }>): string {
-  return stableHash(structuredClone(input) as StableHashValue)
+  const comparison = {
+    ...input.comparison,
+    selections: input.comparison.selections.map((selection) => {
+      const { resolvedAt: _resolvedAt, ...semanticSelection } = selection
+      return semanticSelection
+    }),
+  }
+  return stableHash(structuredClone({
+    comparison,
+    brief: input.brief,
+  }) as StableHashValue)
 }
 
 export function resolveComparisonPresentation(input: Readonly<{

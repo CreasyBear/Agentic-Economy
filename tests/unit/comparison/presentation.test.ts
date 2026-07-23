@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { resolveComparisonPresentation } from '@/modules/comparison/internal/presentation'
+import {
+  comparisonPresentationDigest,
+  resolveComparisonPresentation,
+} from '@/modules/comparison/internal/presentation'
+import type { OfferingComparisonResult } from '@/modules/comparison/public'
 
 const deterministicBrief = {
   schemaVersion: 'offering-comparison-brief:v1' as const,
@@ -17,6 +21,60 @@ const deterministicBrief = {
 }
 
 describe('bounded comparison presentation', () => {
+  it('binds presentation parity to decision truth rather than independent read timestamps', () => {
+    const comparison = {
+      schemaVersion: 'offering-comparison:v1',
+      priorities: [],
+      selections: [{
+        selection: {
+          businessId: 'business:one',
+          offeringRef: 'offering:one',
+          offeringRevision: 1,
+          projectionObservedAt: 100,
+        },
+        business: { businessId: 'business:one', slug: 'one', name: 'Business one' },
+        offering: {
+          offeringRef: 'offering:one',
+          revision: 1,
+          name: 'Offering one',
+          category: 'Professional service',
+          summary: 'Published facts.',
+        },
+        publication: { publishedAt: 90, safeDisplayDisposition: 'retain_safe_history' },
+        projectionDisposition: 'current',
+        resolvedAt: 150,
+      }],
+      rows: [],
+      refusedSelectionCount: 0,
+      ordering: { kind: 'unranked', reason: 'no_priority' },
+    } as const satisfies OfferingComparisonResult
+
+    expect(comparisonPresentationDigest({
+      comparison,
+      brief: deterministicBrief,
+    })).toBe(comparisonPresentationDigest({
+      comparison: {
+        ...comparison,
+        selections: [{ ...comparison.selections[0], resolvedAt: 175 }],
+      },
+      brief: deterministicBrief,
+    }))
+
+    expect(comparisonPresentationDigest({
+      comparison,
+      brief: deterministicBrief,
+    })).not.toBe(comparisonPresentationDigest({
+      comparison: {
+        ...comparison,
+        selections: [{
+          ...comparison.selections[0],
+          offering: { ...comparison.selections[0].offering, revision: 2 },
+        }],
+      },
+      brief: deterministicBrief,
+    }))
+  })
+
   it('accepts only registered composition and existing semantic IDs bound to the digest', () => {
     expect(resolveComparisonPresentation({
       semanticDigest: 'comparison:digest:one',
