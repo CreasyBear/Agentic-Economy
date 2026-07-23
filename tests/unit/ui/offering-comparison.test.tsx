@@ -71,6 +71,21 @@ describe('render-only Offering decision surfaces', () => {
     expect(screen.getAllByText('Comparison list full — remove one to add another.').length).toBeGreaterThan(0)
   })
 
+  it('does not mark the current card selected when only an older exact revision is selected', () => {
+    render(
+      <AeOfferingSupplyList
+        offerings={[offering('same', 2)]}
+        business={{ name: 'Studio', slug: 'studio' }}
+        selectedOfferingRefs={['offering:same']}
+        onToggleComparison={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', {
+      name: 'Add Offering same to comparison',
+    }).getAttribute('aria-pressed')).toBe('false')
+  })
+
   it('renders source semantic cells, provenance, and currentness without effect controls', () => {
     const detail = selection('detail')
     render(
@@ -163,11 +178,11 @@ function selection(suffix: string): ResolvedComparisonSelection {
   }
 }
 
-function offering(suffix: string): PublicOfferingSupplyProjection {
+function offering(suffix: string, revision = 1): PublicOfferingSupplyProjection {
   return {
     offering: {
       offeringRef: brandNonEmpty(`offering:${suffix}`, 'OfferingRef'),
-      revision: 1,
+      revision,
       name: `Offering ${suffix}`,
       category: 'Professional service',
       summary: 'Published website service.',
