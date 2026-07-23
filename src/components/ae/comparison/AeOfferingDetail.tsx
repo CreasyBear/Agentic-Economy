@@ -12,7 +12,6 @@ export type AeOfferingDetailProps = Readonly<{
   selected: boolean
   onToggle: () => void
   selectionDisabled?: boolean
-  facts?: readonly Readonly<{ id: string; label: string; cell: ComparisonCell }>[]
 }>
 
 export function AeOfferingDetail({
@@ -20,20 +19,17 @@ export function AeOfferingDetail({
   selected,
   onToggle,
   selectionDisabled = false,
-  facts: suppliedFacts,
 }: AeOfferingDetailProps) {
   const projected = selection.offering.comparison === undefined
     ? undefined
     : projectComparisonProfile(selection.offering.comparison, selection.resolvedAt)
-  const facts = suppliedFacts ?? (
-    projected?.kind === 'projected'
-      ? projected.dimensions.map((fact) => ({
-          id: fact.dimensionId,
-          label: dimensionLabel(fact.dimensionId),
-          cell: fact.cell,
-        }))
-      : []
-  )
+  const facts = projected?.kind === 'projected'
+    ? projected.dimensions.map((fact) => ({
+        id: fact.dimensionId,
+        label: dimensionLabel(fact.dimensionId),
+        cell: fact.cell,
+      }))
+    : []
 
   return (
     <article className="grid gap-6" aria-labelledby="offering-detail-heading">

@@ -7,10 +7,7 @@ import { AeShortlistBar } from '@/components/ae/comparison/AeShortlistBar'
 import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
-import type {
-  ComparisonCell,
-  ResolvedComparisonSelection,
-} from '@/modules/comparison/public'
+import type { ResolvedComparisonSelection } from '@/modules/comparison/public'
 
 afterEach(cleanup)
 
@@ -81,13 +78,6 @@ describe('render-only Offering decision surfaces', () => {
         selection={detail}
         selected={false}
         onToggle={vi.fn()}
-        facts={[
-          fact('Scope', known('Brochure website')),
-          fact('Price', { kind: 'not_supplied', source, observedAt: 100 }),
-          fact('Timing', { kind: 'unknown', explanation: 'Not confirmed.', source, observedAt: 100 }),
-          fact('Area', { kind: 'stale', lastKnown: 'Perth', source, observedAt: 100, validUntil: 120 }),
-          fact('Interface', { kind: 'not_comparable', reason: 'profile_mismatch' }),
-        ]}
       />,
     )
 
@@ -98,7 +88,6 @@ describe('render-only Offering decision surfaces', () => {
     expect(screen.getByText('Not supplied')).toBeTruthy()
     expect(screen.getByText('Not known')).toBeTruthy()
     expect(screen.getByText('Out of date')).toBeTruthy()
-    expect(screen.getByText('Not comparable')).toBeTruthy()
     expect(screen.getByText('Published by the business')).toBeTruthy()
     expect(screen.getByText('Current when resolved')).toBeTruthy()
     const toggle = screen.getByRole('button', { name: 'Add Offering detail to comparison' })
@@ -106,13 +95,28 @@ describe('render-only Offering decision surfaces', () => {
     expect(screen.queryByRole('button', { name: /call|inquiry|book|pay|run|test endpoint/i })).toBeNull()
     expect(screen.queryByText(/KNOWN|UNKNOWN|UNAVAILABLE|NEXT_STEP/)).toBeNull()
   })
+
+  it('ignores caller-supplied arbitrary price and trust facts', () => {
+    const hostile = {
+      facts: [
+        { id: 'price', label: 'Best price', cell: { kind: 'known', value: 'Free forever' } },
+        { id: 'trust', label: 'Trust', cell: { kind: 'known', value: 'Verified winner' } },
+      ],
+    }
+    render(
+      <AeOfferingDetail
+        {...hostile}
+        selection={selection('hostile')}
+        selected={false}
+        onToggle={vi.fn()}
+      />,
+    )
+    expect(screen.queryByText(/Free forever|Verified winner|Best price/)).toBeNull()
+    expect(screen.getByText('Brochure website')).toBeTruthy()
+  })
 })
 
 const source = { kind: 'business_supplied' as const }
-
-function fact(label: string, cell: ComparisonCell) {
-  return { id: `fact:${label.toLowerCase()}`, label, cell }
-}
 
 function known(value: string) {
   return { kind: 'known' as const, value, source, observedAt: 100 }
