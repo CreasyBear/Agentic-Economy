@@ -607,7 +607,7 @@ describe('POST /api/answer/turn persistence resilience', () => {
       ).toBe(false)
       expect(frames.at(-1)?.event).toMatchObject({
         type: 'error',
-        code: 'answer_turn_persist_failed',
+        code: 'answer_turn_persist_failed_source_mutation',
       })
     } finally {
       restoreOpenRouter()

@@ -215,7 +215,7 @@ export async function streamAnswerTurn(
       send({
         type: 'error',
         code: persistResult?.failureReason === undefined
-          ? 'answer_turn_persist_failed'
+          ? answerTurnRunFailureCode(runResult.error)
           : `answer_turn_persist_failed_${persistResult.failureReason}`,
         copyId: makeCopyId(),
       })
@@ -229,6 +229,28 @@ export async function streamAnswerTurn(
   }
 
   return { threadId, turnId, turnSeq }
+}
+
+function answerTurnRunFailureCode(error: unknown): string {
+  if (error instanceof Error) {
+    const message = `${error.name}:${error.message}:${String(error.cause ?? '')}`
+    if (/abort|cancel/iu.test(message)) {
+      return 'answer_turn_persist_failed_run_aborted'
+    }
+    if (/timeout|timed.out/iu.test(message)) {
+      return 'answer_turn_persist_failed_run_timeout'
+    }
+    if (/source.write|signing.key|source_write|admission/iu.test(message)) {
+      return 'answer_turn_persist_failed_source_write_admission'
+    }
+    if (/convex|mutation|thread_|tool.call|fetch/iu.test(message)) {
+      return 'answer_turn_persist_failed_source_mutation'
+    }
+    if (/clone|serializ|json|stable.hash|undefined|null/iu.test(message)) {
+      return 'answer_turn_persist_failed_serialization'
+    }
+  }
+  return 'answer_turn_persist_failed_run_error'
 }
 
 function buildStreamAnswerTurnPhases(input: {

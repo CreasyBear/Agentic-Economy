@@ -161,8 +161,10 @@ jobs:
               src/routes/compare.tsx|\
               tests/deploy-smoke/consumer-comparison-smoke.spec.ts|\
               tests/imports/customer-request-source-completeness.test.ts|\
+              tests/integration/answer-turn-empty-state.test.ts|\
               tests/integration/consumer-comparison-demo-seed.test.ts|\
               tests/integration/admin-runtime.test.ts|\
+              tests/unit/answer-thread/cold-start-persistence.test.ts|\
               tests/unit/chat/ae-chat-route-promotion.test.tsx|\
               tests/unit/chat/ae-thread-turn-stream-section.test.tsx|\
               tests/unit/dev/dev-seed-fixture.test.ts|\
