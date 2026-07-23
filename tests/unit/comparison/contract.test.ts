@@ -1,53 +1,89 @@
 import { describe, expect, it } from 'vitest'
 
-import { validateOfferingComparisonEnvelope } from '@/modules/catalog/public'
+import {
+  parseComparisonUrlState,
+  serializeComparisonUrlState,
+  type ComparisonSelectionRef,
+} from '@/modules/comparison/public'
 
-const source = { kind: 'business_supplied' as const }
+const selection = (
+  suffix: string,
+  overrides: Partial<ComparisonSelectionRef> = {},
+): ComparisonSelectionRef => ({
+  businessId: `business:${suffix}`,
+  offeringRef: `offering:${suffix}`,
+  offeringRevision: 1,
+  projectionObservedAt: 100,
+  ...overrides,
+})
 
-describe('Offering comparison envelope', () => {
-  it('accepts explicit known, unknown, not supplied and stale fact states', () => {
-    const result = validateOfferingComparisonEnvelope({
-      schemaVersion: 'offering-comparison:v1',
-      profile: {
-        profileId: 'professional_service:v1',
-        scopeBasis: { kind: 'known', value: 'Five-page brochure site', source, observedAt: 10 },
-        priceBasis: { kind: 'not_supplied', source, observedAt: 10 },
-        timingBasis: {
-          kind: 'stale',
-          lastKnown: 'Four to six weeks',
-          source,
-          observedAt: 10,
-          validUntil: 20,
-        },
-        serviceArea: {
-          kind: 'unknown',
-          explanation: 'Remote delivery boundary was not stated.',
-          source,
-          observedAt: 10,
-        },
-      },
+describe('offering-comparison:v1 URL contract', () => {
+  it('round-trips only bounded exact references and closed priority IDs', () => {
+    const encoded = serializeComparisonUrlState({
+      selections: [selection('one'), selection('two', { offeringRevision: 2 })],
+      priorities: ['professional_service:v1:lowest_total_price'],
     })
 
-    expect(result.kind).toBe('valid')
+    expect(parseComparisonUrlState(encoded)).toEqual({
+      kind: 'accepted',
+      state: {
+        version: 'offering-comparison:v1',
+        selections: [selection('one'), selection('two', { offeringRevision: 2 })],
+        priorities: ['professional_service:v1:lowest_total_price'],
+      },
+    })
+    expect(decodeURIComponent(encoded)).not.toMatch(
+      /name|summary|price|currency|url|sourceHash|session|auth|token|customer/i,
+    )
   })
 
   it.each([
-    ['extra keys', { unexpected: true }],
-    ['arbitrary profile IDs', { profileId: 'anything:v1' }],
-    ['invalid dates', { scopeBasis: { kind: 'known', value: 'Site', source, observedAt: -1 } }],
-  ])('refuses %s rather than trusting a cast-only payload', (_label, profileOverride) => {
-    const input = {
-      schemaVersion: 'offering-comparison:v1',
-      profile: {
-        profileId: 'professional_service:v1',
-        scopeBasis: { kind: 'known', value: 'Site', source, observedAt: 10 },
-        priceBasis: { kind: 'not_supplied', source, observedAt: 10 },
-        timingBasis: { kind: 'not_supplied', source, observedAt: 10 },
-        serviceArea: { kind: 'not_supplied', source, observedAt: 10 },
-        ...profileOverride,
-      },
-    }
+    ['malformed selection', '?selection=not-json'],
+    ['duplicate selection', query([selection('one'), selection('one')], [])],
+    ['fifth selection', query(
+      [selection('1'), selection('2'), selection('3'), selection('4'), selection('5')],
+      [],
+    )],
+    ['fourth priority', query([selection('one')], [
+      'professional_service:v1:lowest_total_price',
+      'machine_data:v1:lowest_request_price',
+      'professional_service:v1:lowest_total_price',
+      'machine_data:v1:lowest_request_price',
+    ])],
+    ['unknown priority', query([selection('one')], ['reputation:highest'])],
+    ['non-positive revision', query([selection('one', { offeringRevision: 0 })], [])],
+    ['unexpected free text', `${query([selection('one')], [])}&query=cheap+and+local`],
+  ])('returns a bounded ordinary refusal for %s', (_label, encoded) => {
+    expect(parseComparisonUrlState(encoded)).toMatchObject({ kind: 'refused' })
+  })
 
-    expect(validateOfferingComparisonEnvelope(input)).toMatchObject({ kind: 'invalid' })
+  it('canonicalizes parameter order without reordering selections or priorities', () => {
+    const state = {
+      selections: [selection('two'), selection('one')],
+      priorities: [
+        'machine_data:v1:lowest_request_price',
+        'professional_service:v1:lowest_total_price',
+      ],
+    } as const
+
+    const first = serializeComparisonUrlState(state)
+    const parsed = parseComparisonUrlState(first)
+    expect(parsed.kind).toBe('accepted')
+    if (parsed.kind !== 'accepted') return
+    expect(serializeComparisonUrlState(parsed.state)).toBe(first)
+    expect(parsed.state.selections.map((item) => item.businessId)).toEqual([
+      'business:two',
+      'business:one',
+    ])
   })
 })
+
+function query(
+  selections: readonly ComparisonSelectionRef[],
+  priorities: readonly string[],
+): string {
+  const params = new URLSearchParams()
+  for (const item of selections) params.append('selection', JSON.stringify(item))
+  for (const priority of priorities) params.append('priority', priority)
+  return `?${params.toString()}`
+}

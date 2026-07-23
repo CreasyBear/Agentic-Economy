@@ -1,137 +1,109 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  createOfferingInState,
-  validateOfferingComparisonEnvelope,
-  type OfferingSourceState,
-} from '@/modules/catalog/public'
-import { brandNonEmpty } from '@/modules/common/ids'
+  projectComparisonProfile,
+  type OfferingComparisonEnvelope,
+} from '@/modules/comparison/public'
 
 const source = { kind: 'business_supplied' as const }
-const notSupplied = { kind: 'not_supplied' as const, source, observedAt: 10 }
+const known = <T>(value: T) => ({ kind: 'known' as const, value, source, observedAt: 10 })
 
-const professionalProfile = {
-  schemaVersion: 'offering-comparison:v1' as const,
+const professional = {
+  schemaVersion: 'offering-comparison:v1',
   profile: {
-    profileId: 'professional_service:v1' as const,
-    scopeBasis: { kind: 'known' as const, value: 'Brochure website', source, observedAt: 10 },
-    priceBasis: {
-      kind: 'known' as const,
-      value: { description: 'From AUD 2,500', currency: 'AUD', amountMinor: 250_000, unit: 'total' as const },
-      source,
-      observedAt: 10,
-    },
-    timingBasis: { kind: 'known' as const, value: 'Four to six weeks', source, observedAt: 10 },
-    serviceArea: { kind: 'known' as const, value: 'Perth and remote', source, observedAt: 10 },
+    profileId: 'professional_service:v1',
+    scopeBasis: known('Brochure website'),
+    priceBasis: known({
+      description: 'AUD 2,500 total',
+      currency: 'AUD',
+      amountMinor: 250_000,
+      unit: 'total',
+    }),
+    timingBasis: known('Four weeks'),
+    serviceArea: known('Perth'),
   },
-}
+} as const satisfies OfferingComparisonEnvelope
 
-const machineProfile = {
-  schemaVersion: 'offering-comparison:v1' as const,
+const machine = {
+  schemaVersion: 'offering-comparison:v1',
   profile: {
-    profileId: 'machine_data:v1' as const,
-    interfaceFormat: { kind: 'known' as const, value: 'graphql' as const, source, observedAt: 10 },
-    requestMethod: { kind: 'known' as const, value: 'POST' as const, source, observedAt: 10 },
-    authentication: { kind: 'known' as const, value: 'api_key' as const, source, observedAt: 10 },
-    priceBasis: {
-      kind: 'known' as const,
-      value: { description: 'AUD 0.01 per request', currency: 'AUD', amountMinor: 1, unit: 'request' as const },
-      source,
-      observedAt: 10,
-    },
-    freshnessOrUpdateCadence: { kind: 'known' as const, value: 'Updated every minute', source, observedAt: 10 },
+    profileId: 'machine_data:v1',
+    interfaceFormat: known('graphql'),
+    requestMethod: known('POST'),
+    authentication: known('api_key'),
+    priceBasis: known({
+      description: 'AUD 0.01 per request',
+      currency: 'AUD',
+      amountMinor: 1,
+      unit: 'request',
+    }),
+    freshnessOrUpdateCadence: known('Every minute'),
   },
-}
+} as const satisfies OfferingComparisonEnvelope
 
-describe('closed Offering comparison profiles', () => {
-  it('round-trips exactly professional_service:v1 and machine_data:v1', () => {
-    expect(validateOfferingComparisonEnvelope(professionalProfile)).toEqual({
-      kind: 'valid',
-      envelope: professionalProfile,
-    })
-    expect(validateOfferingComparisonEnvelope(machineProfile)).toEqual({
-      kind: 'valid',
-      envelope: machineProfile,
+describe('closed comparison profile projection', () => {
+  it('projects professional_service:v1 to closed registered dimensions', () => {
+    expect(projectComparisonProfile(professional, 10)).toMatchObject({
+      kind: 'projected',
+      profileId: 'professional_service:v1',
+      dimensions: [
+        { dimensionId: 'professional_service:v1:scope_basis' },
+        { dimensionId: 'professional_service:v1:price_basis' },
+        { dimensionId: 'professional_service:v1:timing_basis' },
+        { dimensionId: 'professional_service:v1:service_area' },
+      ],
     })
   })
 
-  it.each([
-    ['professional extra field', { ...professionalProfile, profile: { ...professionalProfile.profile, reputation: notSupplied } }],
-    ['machine invalid unit', {
-      ...machineProfile,
-      profile: {
-        ...machineProfile.profile,
-        priceBasis: {
-          kind: 'known',
-          value: { description: 'Per thing', currency: 'AUD', amountMinor: 1, unit: 'thing' },
-          source,
-          observedAt: 10,
-        },
-      },
-    }],
-    ['machine unbounded string', {
-      ...machineProfile,
-      profile: {
-        ...machineProfile.profile,
-        freshnessOrUpdateCadence: {
-          kind: 'known',
-          value: 'x'.repeat(501),
-          source,
-          observedAt: 10,
-        },
-      },
-    }],
-  ])('refuses %s', (_label, input) => {
-    expect(validateOfferingComparisonEnvelope(input)).toMatchObject({ kind: 'invalid' })
+  it('projects machine_data:v1 through the same host contract', () => {
+    expect(projectComparisonProfile(machine, 10)).toMatchObject({
+      kind: 'projected',
+      profileId: 'machine_data:v1',
+      dimensions: [
+        { dimensionId: 'machine_data:v1:interface_format' },
+        { dimensionId: 'machine_data:v1:request_method' },
+        { dimensionId: 'machine_data:v1:authentication' },
+        { dimensionId: 'machine_data:v1:price_basis' },
+        { dimensionId: 'machine_data:v1:freshness_or_update_cadence' },
+      ],
+    })
   })
 
-  it('includes validated profile facts in exact revision hashing while preserving explicit no-profile authoring', () => {
-    const empty: OfferingSourceState = { offerings: [], revisions: [], accessPaths: [], operations: [] }
-    const base = {
-      authority: { actorRef: 'owner:1', ownerRef: 'owner:1', businessOwnerRef: 'owner:1' },
-      operationKey: 'create',
-      businessId: brandNonEmpty('business:studio', 'BusinessId'),
-      now: 10,
-    }
-    const professional = createOfferingInState(empty, {
-      ...base,
-      offeringRef: brandNonEmpty('offering:professional', 'OfferingRef'),
-      facts: {
-        name: 'Website delivery',
-        category: 'Professional service',
-        summary: 'A small website.',
-        comparison: professionalProfile,
-      },
-    })
-    const machine = createOfferingInState(empty, {
-      ...base,
-      operationKey: 'create-machine',
-      offeringRef: brandNonEmpty('offering:machine', 'OfferingRef'),
-      facts: {
-        name: 'Data query',
-        category: 'Machine data',
-        summary: 'A GraphQL data interface.',
-        comparison: machineProfile,
-      },
-    })
-    const legacyCompatible = createOfferingInState(empty, {
-      ...base,
-      operationKey: 'create-compatible',
-      offeringRef: brandNonEmpty('offering:compatible', 'OfferingRef'),
-      facts: {
-        name: 'Existing authoring',
-        category: 'Service',
-        summary: 'No comparison profile has been supplied.',
-      },
-    })
+  it('does not infer comparability from matching price labels across profile or unit', () => {
+    const professionalPrice = projectComparisonProfile(professional, 10)
+    const machinePrice = projectComparisonProfile(machine, 10)
+    expect(professionalPrice.kind).toBe('projected')
+    expect(machinePrice.kind).toBe('projected')
+    if (professionalPrice.kind !== 'projected' || machinePrice.kind !== 'projected') return
 
-    expect(professional.kind).toBe('ok')
-    expect(machine.kind).toBe('ok')
-    expect(legacyCompatible.kind).toBe('ok')
-    if (professional.kind !== 'ok' || machine.kind !== 'ok') return
-    const professionalRevision = professional.state.revisions[0]
-    const machineRevision = machine.state.revisions[0]
-    expect(professionalRevision?.comparison).toEqual(professionalProfile)
-    expect(professionalRevision?.sourceHash).not.toBe(machineRevision?.sourceHash)
+    expect(professionalPrice.dimensions[1]?.dimensionId).not.toBe(
+      machinePrice.dimensions[3]?.dimensionId,
+    )
+    expect(professionalPrice.dimensions[1]?.comparisonKey).not.toBe(
+      machinePrice.dimensions[3]?.comparisonKey,
+    )
+  })
+
+  it('converts an expired known fact to stale without changing its source value', () => {
+    const expiring = {
+      ...professional,
+      profile: {
+        ...professional.profile,
+        scopeBasis: {
+          ...professional.profile.scopeBasis,
+          validUntil: 20,
+        },
+      },
+    } satisfies OfferingComparisonEnvelope
+
+    const projected = projectComparisonProfile(expiring, 21)
+    expect(projected.kind).toBe('projected')
+    if (projected.kind !== 'projected') return
+    expect(projected.dimensions[0]?.cell).toMatchObject({
+      kind: 'stale',
+      lastKnown: 'Brochure website',
+      observedAt: 10,
+      validUntil: 20,
+    })
   })
 })
