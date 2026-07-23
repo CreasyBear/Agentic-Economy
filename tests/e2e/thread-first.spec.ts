@@ -40,11 +40,15 @@ test.describe('thread-first answer flow', () => {
 
     await startThreadFromQueryUrl(page, SECOND_QUERY, { expectTranscript: false })
 
-    await expect(page.getByRole('complementary', { name: /recent questions/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /emergency plumber parramatta/i })).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByRole('link', { name: /emergency roofer nowhere 9999/i })).toBeVisible({ timeout: 15_000 })
+    const recentQuestions = page.getByRole('complementary', { name: /recent questions/i })
+    await expect(recentQuestions).toBeVisible()
+    const firstThreadLink = recentQuestions.locator(`a[href="${new URL(firstThreadUrl).pathname}"]`)
+    await expect(firstThreadLink).toBeVisible({ timeout: 15_000 })
+    await expect(
+      recentQuestions.getByRole('link', { name: /emergency roofer nowhere 9999/i }).first(),
+    ).toBeVisible({ timeout: 15_000 })
 
-    await page.getByRole('link', { name: /emergency plumber parramatta/i }).click()
+    await firstThreadLink.click()
     await expect(page).toHaveURL(firstThreadUrl)
   })
 })
