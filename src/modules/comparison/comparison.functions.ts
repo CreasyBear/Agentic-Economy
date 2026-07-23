@@ -4,12 +4,17 @@ import {
 } from '@/lib/server/convex-source'
 import { validateOfferingComparisonEnvelope } from '@/modules/catalog/public'
 import { configuredLocalE2EComparisonRead } from './internal/local-e2e-read-port'
+import { compareOfferings } from './internal/compare'
+import { resolveComparisonSelections } from './internal/resolve'
 import type {
   ComparisonOfferingReadPort,
+  ComparisonPriorityId,
+  ComparisonSelectionRef,
   ExactOfferingReference,
   ExactPublicOfferingReadResult,
   LiveOfferingAvailabilityResult,
-} from './public'
+  OfferingComparisonResult,
+} from './internal/contract'
 
 type ReadArgs = Readonly<{
   businessId: string
@@ -124,6 +129,35 @@ export function createComparisonOfferingReadPort(options: Readonly<{
       }
     },
   }
+}
+
+/**
+ * Public inspect-only comparison application seam.
+ *
+ * Callers provide exact public references and stated closed priorities. The
+ * server always re-resolves live eligibility and the exact historical
+ * publication before the pure comparator sees a selection.
+ */
+export async function comparePublicOfferingSelections(input: Readonly<{
+  selections: readonly ComparisonSelectionRef[]
+  priorities: readonly ComparisonPriorityId[]
+  resolvedAt?: number
+  port?: ComparisonOfferingReadPort
+}>): Promise<OfferingComparisonResult> {
+  const resolution = await resolveComparisonSelections({
+    state: {
+      version: 'offering-comparison:v1',
+      selections: input.selections,
+      priorities: input.priorities,
+    },
+    resolvedAt: input.resolvedAt ?? Date.now(),
+    port: input.port ?? createComparisonOfferingReadPort(),
+  })
+  return compareOfferings({
+    selections: resolution.selections,
+    priorities: input.priorities,
+    refusedSelectionCount: resolution.refusals.length,
+  })
 }
 
 function decodeTransport(input: unknown): PublicComparisonOfferingTransportResult {

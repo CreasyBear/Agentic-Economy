@@ -34,6 +34,7 @@ import { Route as IThreadIdRouteImport } from './routes/i.$threadId'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
 import { Route as ClaimFormRouteImport } from './routes/claim.form'
 import { Route as ApiRequestsRouteImport } from './routes/api.requests'
+import { Route as ApiCompareRouteImport } from './routes/api.compare'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as OperatorAgentAccessRouteImport } from './routes/_operator/agent-access'
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
@@ -230,6 +231,11 @@ const ClaimFormRoute = ClaimFormRouteImport.update({
 const ApiRequestsRoute = ApiRequestsRouteImport.update({
   id: '/api/requests',
   path: '/api/requests',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCompareRoute = ApiCompareRouteImport.update({
+  id: '/api/compare',
+  path: '/api/compare',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBusinessesRoute = ApiBusinessesRouteImport.update({
@@ -672,6 +678,7 @@ export interface FileRoutesByFullPath {
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/agent-access': typeof OperatorAgentAccessRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
+  '/api/compare': typeof ApiCompareRoute
   '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/form': typeof ClaimFormRoute
   '/claim/success': typeof ClaimSuccessRoute
@@ -771,6 +778,7 @@ export interface FileRoutesByTo {
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/agent-access': typeof OperatorAgentAccessRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
+  '/api/compare': typeof ApiCompareRoute
   '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/form': typeof ClaimFormRoute
   '/claim/success': typeof ClaimSuccessRoute
@@ -872,6 +880,7 @@ export interface FileRoutesById {
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/_operator/agent-access': typeof OperatorAgentAccessRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
+  '/api/compare': typeof ApiCompareRoute
   '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/form': typeof ClaimFormRoute
   '/claim/success': typeof ClaimSuccessRoute
@@ -973,6 +982,7 @@ export interface FileRouteTypes {
     | '/.well-known/http-message-signatures-directory'
     | '/agent-access'
     | '/api/businesses'
+    | '/api/compare'
     | '/api/requests'
     | '/claim/form'
     | '/claim/success'
@@ -1072,6 +1082,7 @@ export interface FileRouteTypes {
     | '/.well-known/http-message-signatures-directory'
     | '/agent-access'
     | '/api/businesses'
+    | '/api/compare'
     | '/api/requests'
     | '/claim/form'
     | '/claim/success'
@@ -1172,6 +1183,7 @@ export interface FileRouteTypes {
     | '/.well-known/http-message-signatures-directory'
     | '/_operator/agent-access'
     | '/api/businesses'
+    | '/api/compare'
     | '/api/requests'
     | '/claim/form'
     | '/claim/success'
@@ -1270,6 +1282,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   DotwellKnownHttpMessageSignaturesDirectoryRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
+  ApiCompareRoute: typeof ApiCompareRoute
   ApiRequestsRoute: typeof ApiRequestsRouteWithChildren
   IThreadIdRoute: typeof IThreadIdRoute
   QAnswerIdRoute: typeof QAnswerIdRoute
@@ -1471,6 +1484,13 @@ declare module '@tanstack/react-router' {
       path: '/api/requests'
       fullPath: '/api/requests'
       preLoaderRoute: typeof ApiRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/compare': {
+      id: '/api/compare'
+      path: '/api/compare'
+      fullPath: '/api/compare'
+      preLoaderRoute: typeof ApiCompareRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/businesses': {
@@ -2340,6 +2360,7 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownHttpMessageSignaturesDirectoryRoute:
     DotwellKnownHttpMessageSignaturesDirectoryRoute,
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
+  ApiCompareRoute: ApiCompareRoute,
   ApiRequestsRoute: ApiRequestsRouteWithChildren,
   IThreadIdRoute: IThreadIdRoute,
   QAnswerIdRoute: QAnswerIdRoute,
