@@ -294,6 +294,8 @@ describe('CustomerRequest source completeness', () => {
     for (const job of [
       '\n  source-proof:',
       '\n  hosted-proof:',
+      '\n  phase5-source-proof:',
+      '\n  phase5-production:',
       '\n  phase3c-source-proof:',
       '\n  phase3c-production:',
     ]) {
@@ -303,21 +305,21 @@ describe('CustomerRequest source completeness', () => {
 
     const sourceStart = workflow.indexOf('\n  source-proof:')
     const legacyStart = workflow.indexOf('\n  hosted-proof:')
-    const phase3CSourceStart = workflow.indexOf('\n  phase3c-source-proof:')
+    const phase5SourceStart = workflow.indexOf('\n  phase5-source-proof:')
     const sourceProof = workflow.slice(sourceStart, legacyStart)
-    const legacyHosted = workflow.slice(legacyStart, phase3CSourceStart)
+    const legacyHosted = workflow.slice(legacyStart, phase5SourceStart)
 
     expect(workflow).not.toMatch(/kernel-proof|PROOF_MANIFEST|\.mjs|\.mts/)
     expect(workflow).toContain('cancel-in-progress: false')
     expect(sourceProof.match(/npm install --global npm@11\.5\.1/gu)).toHaveLength(1)
     expect(sourceProof).toContain(
-      "if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[phase3c-hosted-trial]')",
+      "if: github.event_name != 'push' || (!contains(github.event.head_commit.message, '[phase3c-hosted-trial]') && !contains(github.event.head_commit.message, '[phase5-consumer-comparison]'))",
     )
     expect(sourceProof).toContain('Run source release contract')
 
     expect(legacyHosted.match(/npm install --global npm@11\.5\.1/gu)).toHaveLength(1)
     expect(legacyHosted).toContain(
-      "if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[phase3c-hosted-trial]')",
+      "if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[phase3c-hosted-trial]') && !contains(github.event.head_commit.message, '[phase5-consumer-comparison]')",
     )
     expect(legacyHosted).toContain('needs: source-proof')
     expect(legacyHosted).toContain('CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}')

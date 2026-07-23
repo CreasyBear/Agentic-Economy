@@ -21,6 +21,8 @@ export const OperatorControlKeyValues = [
   'billing_reconciliation_enabled',
   'business_actions_enabled',
   'business_action_attempts_enabled',
+  'offering_authoring_enabled',
+  'offering_public_projection_enabled',
 ] as const
 
 export const InvalidationSurfaceValues = ['public_catalog', 'registry_projection', 'discovery_manifest'] as const

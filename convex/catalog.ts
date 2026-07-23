@@ -23,6 +23,7 @@ import {
   withdrawAccessPathInState,
   type OfferingAccessPathDescriptor,
   type OfferingComparisonEnvelope,
+  type OfferingFactsInput,
   type OfferingSourceResult,
   type OfferingSourceState,
   resolveHistoricalPublicOffering,
@@ -567,6 +568,93 @@ async function runOfferingSourceMutation(
   const value = result.value as { offeringRef?: string; accessPathRef?: string; currentRevision?: number }
   const resultRef = value.offeringRef ?? value.accessPathRef
   return { kind: 'ok' as const, code: result.code, ...(resultRef === undefined ? {} : { resultRef }), ...(value.currentRevision === undefined ? {} : { currentRevision: value.currentRevision }) }
+}
+
+/**
+ * Exact internal adapter for labelled release inventory.
+ *
+ * It deliberately reuses the Offering source transition and operation ledger.
+ * The caller may not supply owner authority, status, revisions, or access paths.
+ */
+export async function seedLabelledComparisonOfferingCommand(
+  db: RuntimeDb,
+  input: Readonly<{
+    businessId: string
+    offeringRef: OfferingRef
+    operationKeyPrefix: string
+    facts: OfferingFactsInput
+  }>,
+  now: number,
+): Promise<
+  | Readonly<{ kind: 'ok'; projectionObservedAt: number }>
+  | Readonly<{ kind: 'error'; code: string; reason: string }>
+> {
+  const business = await db.get(input.businessId)
+  if (
+    business === null
+    || stringField(business, 'publicStatus') !== 'published'
+    || stringField(business, 'claimStatus') !== 'published'
+  ) {
+    return { kind: 'error', code: 'business_unavailable', reason: 'The labelled demo business is not public.' }
+  }
+  const owner = await db.get(stringField(business, 'ownerId'))
+  const ownerRef = owner === null ? '' : stringField(owner, 'clerkUserId')
+  if (ownerRef.length === 0) {
+    return { kind: 'error', code: 'owner_unavailable', reason: 'The labelled demo business owner is unavailable.' }
+  }
+
+  const before = await loadOfferingSourceState(db, input.businessId, ownerRef)
+  const authority = { actorRef: ownerRef, ownerRef, businessOwnerRef: ownerRef }
+  const created = createOfferingInState(before, {
+    authority,
+    operationKey: `${input.operationKeyPrefix}:create`,
+    businessId: input.businessId as BusinessId,
+    offeringRef: input.offeringRef,
+    facts: input.facts,
+    now,
+  })
+  if (created.kind === 'error') {
+    return { kind: 'error', code: created.code, reason: created.reason }
+  }
+  const published = changeOfferingStatusInState(created.state, {
+    authority,
+    operationKey: `${input.operationKeyPrefix}:publish`,
+    offeringRef: input.offeringRef,
+    expectedRevision: 1,
+    status: 'published',
+    now,
+  })
+  if (published.kind === 'error') {
+    return { kind: 'error', code: published.code, reason: published.reason }
+  }
+  const persisted = await persistOfferingSourceState(db, input.businessId, before, published.state)
+  if (persisted.kind === 'error') {
+    return { kind: 'error', code: persisted.code, reason: persisted.reason }
+  }
+
+  // These are dedicated Phase 5 demo identities. Selecting Offering source does
+  // not change any Phase 3 sandbox provider or customer-owned business.
+  await upsertCutover(db, input.businessId, {
+    mode: 'offering',
+    lastCheckStatus: 'matched',
+    postCutoverNativeChanges: false,
+  }, now)
+  const projection = await rebuildBusinessSupplyProjectionSnapshotCommand(
+    db,
+    input.businessId,
+    await deriveBusinessOfferingSupportFromCapabilitySupply(db, input.businessId, now),
+    now,
+  )
+  if (projection.kind === 'error') {
+    return { kind: 'error', code: projection.code, reason: 'The public Offering projection could not be rebuilt.' }
+  }
+  const snapshot = await db.query('businessSupplyProjectionSnapshots')
+    .withIndex('by_businessId', (query) => query.eq('businessId', input.businessId))
+    .unique()
+  if (snapshot === null) {
+    return { kind: 'error', code: 'projection_missing', reason: 'The public Offering projection is unavailable.' }
+  }
+  return { kind: 'ok', projectionObservedAt: numberField(snapshot, 'observedAt') }
 }
 
 export const readPublicComparisonOfferingReference = queryGeneric({

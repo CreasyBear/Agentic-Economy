@@ -17,7 +17,7 @@ concurrency:
 jobs:
   source-proof:
     name: Clean source, contract, browser, and build proof
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[phase3c-hosted-trial]')
+    if: github.event_name != 'push' || (!contains(github.event.head_commit.message, '[phase3c-hosted-trial]') && !contains(github.event.head_commit.message, '[phase5-consumer-comparison]'))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -39,7 +39,7 @@ jobs:
 
   hosted-proof:
     name: Exact-revision production deploy and authenticated Request readback
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[phase3c-hosted-trial]')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[phase3c-hosted-trial]') && !contains(github.event.head_commit.message, '[phase5-consumer-comparison]')
     needs: source-proof
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -125,6 +125,201 @@ jobs:
           AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON: '[{"name":"Sandbox Route Resolver","purposes":["resolve_sandbox_service_reference"]},{"name":"Sandbox Route Quoter","purposes":["prepare_sandbox_service_quote"]}]'
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run test:release:hosted
+
+  phase5-source-proof:
+    name: Phase 5 exact source, browser, and build proof
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[phase5-consumer-comparison]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Refuse changes outside the Phase 5 release parcel
+        run: |
+          while IFS= read -r changed_path; do
+            case "${changed_path}" in
+              .github/workflows/kernel-release-gate.yml|\
+              convex/catalog.ts|\
+              convex/consumerComparisonDemo.ts|\
+              convex/observability.ts|\
+              package.json|\
+              src/modules/dev/internal/dev-seed-fixture.ts|\
+              src/modules/observability/internal/literals.ts|\
+              src/modules/observability/internal/operator-controls.ts|\
+              src/routes/compare.tsx|\
+              tests/deploy-smoke/consumer-comparison-smoke.spec.ts|\
+              tests/imports/customer-request-source-completeness.test.ts|\
+              tests/integration/consumer-comparison-demo-seed.test.ts|\
+              tests/unit/dev/dev-seed-fixture.test.ts|\
+              tests/unit/release/consumer-comparison-evidence.test.ts|\
+              tools/release/consumer-comparison-evidence.ts|\
+              tools/release/phase5-operator-control.ts|\
+              tools/release/run-consumer-comparison-hosted-proof.ts|\
+              tools/release/verify-consumer-comparison-evidence.ts)
+                ;;
+              *)
+                echo "Path is outside the Phase 5 release parcel: ${changed_path}" >&2
+                exit 1
+                ;;
+            esac
+          done < <(git diff --name-only "${AE_RELEASE_SOURCE_REVISION}^" "${AE_RELEASE_SOURCE_REVISION}")
+
+      - name: Refuse a Phase 5 checkout other than the triggering revision
+        run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1
+
+      - name: Frozen Phase 5 dependency install
+        run: npm ci
+
+      - name: Install the Phase 5 browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the focused Phase 5 source contract
+        run: npm run verify:phase5:release-source
+
+      - name: Run the compact and wide Phase 5 browser contract
+        run: npm run verify:phase5:browser
+
+      - name: Refuse Phase 5 source or generated-file drift
+        run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+  phase5-production:
+    name: Phase 5 exact-revision hosted comparison proof
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[phase5-consumer-comparison]')
+    needs: phase5-source-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
+      AE_PHASE5_BASE_URL: https://agentic-economy-phi.vercel.app
+      AE_PHASE5_ADMIN_SUBJECT: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_SUBJECT }}
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_SUBJECT }}
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1
+
+      - name: Frozen Phase 5 production dependency install
+        run: npm ci
+
+      - name: Install the hosted-proof browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Bind the exact Phase 5 source identity
+        run: |
+          test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          source_tree="$(git rev-parse 'HEAD^{tree}')"
+          printf 'AE_RELEASE_SOURCE_TREE=%s\n' "${source_tree}" >> "${GITHUB_ENV}"
+          printf 'CONSUMER_COMPARISON_EXPECTED_REVISION=%s\n' "${AE_RELEASE_SOURCE_REVISION}" >> "${GITHUB_ENV}"
+          printf 'CONSUMER_COMPARISON_EXPECTED_TREE=%s\n' "${source_tree}" >> "${GITHUB_ENV}"
+
+      - name: Deploy the exact clean Phase 5 web source
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          deployment="$(npm exec -- tsx tools/release/deploy-customer-request-git-source.ts)"
+          echo "deployment_id=$(printf '%s' "${deployment}" | jq -er '.deploymentId')" >> "${GITHUB_OUTPUT}"
+
+      - name: Deploy the exact Phase 5 Convex schema and functions
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"
+
+      - name: Refuse lifecycle mutation before exact served-revision readback
+        env:
+          AE_CUSTOMER_REQUEST_BASE_URL: https://agentic-economy-phi.vercel.app
+          AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
+          AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: npm run test:release:hosted:readback
+
+      - name: Enable public Offering projection through audited admin control
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          operator_key="$(npx convex env get AE_SOURCE_WRITE_KEY_OPERATOR --prod)"
+          issuer="$(npx convex env get CLERK_JWT_ISSUER_DOMAIN --prod)"
+          if [ -z "${operator_key}" ] || [ -z "${issuer}" ] || [ -z "${AE_PHASE5_ADMIN_SUBJECT}" ]; then
+            echo 'Phase 5 release administration is not configured.' >&2
+            exit 1
+          fi
+          control="$(
+            AE_SOURCE_WRITE_KEY_OPERATOR="${operator_key}" \
+            AE_PHASE5_ADMIN_ISSUER="${issuer}" \
+            npm exec -- tsx tools/release/phase5-operator-control.ts
+          )"
+          identity="$(printf '%s' "${control}" | jq -cer '.identity')"
+          args="$(printf '%s' "${control}" | jq -cer '.args')"
+          result="$(npx convex run observability:setOperatorControl "${args}" --identity "${identity}" --prod)"
+          if ! printf '%s' "${result}" | jq -e '.kind == "ok" and .readback.effectiveEnabled == true' >/dev/null; then
+            echo 'Phase 5 public Offering projection was not enabled.' >&2
+            exit 1
+          fi
+
+      - name: Seed dedicated labelled Phase 5 comparison inventory
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          bootstrapped="$(npx convex run consumerComparisonDemo:bootstrapLabelledConsumerComparisonBusinesses '{}' --prod)"
+          if ! printf '%s' "${bootstrapped}" | jq -e '.kind == "bootstrapped" and .dataLabel == "labelled_demo" and (.seededSlugs | length) == 4' >/dev/null; then
+            echo 'Phase 5 labelled comparison businesses were not reconstructed.' >&2
+            exit 1
+          fi
+          seeded="$(npx convex run consumerComparisonDemo:seedLabelledConsumerComparisonDemo '{}' --prod)"
+          if ! printf '%s' "${seeded}" | jq -e '.kind == "seeded" and .dataLabel == "labelled_demo" and (.selections | length) == 4 and (.detailUrls | length) == 4' >/dev/null; then
+            echo 'Phase 5 labelled comparison inventory was not reconstructed.' >&2
+            exit 1
+          fi
+          printf 'CONSUMER_COMPARISON_SEED_VERSION=%s\n' "$(printf '%s' "${seeded}" | jq -er '.seedVersion')" >> "${GITHUB_ENV}"
+          printf 'CONSUMER_COMPARISON_SELECTIONS_JSON=%s\n' "$(printf '%s' "${seeded}" | jq -cer '.selections')" >> "${GITHUB_ENV}"
+          printf 'CONSUMER_COMPARISON_DETAIL_URLS_JSON=%s\n' "$(printf '%s' "${seeded}" | jq -cer '.detailUrls')" >> "${GITHUB_ENV}"
+
+      - name: Run and independently verify the hosted Phase 5 proof
+        env:
+          CONSUMER_COMPARISON_BASE_URL: https://agentic-economy-phi.vercel.app
+          CONSUMER_COMPARISON_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
+          CONSUMER_COMPARISON_ARTIFACT_DIR: ${{ github.workspace }}/output/phase5-hosted
+          CONSUMER_COMPARISON_PACKET_PATH: ${{ github.workspace }}/output/phase5-hosted/consumer-comparison-evidence.json
+        run: npm exec -- tsx tools/release/run-consumer-comparison-hosted-proof.ts
+
+      - name: Refuse post-proof source drift
+        run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Preserve the Phase 5 hosted evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-consumer-comparison-${{ github.sha }}
+          path: output/phase5-hosted
+          if-no-files-found: error
+          retention-days: 30
 
   phase3c-source-proof:
     name: Phase 3C clean source and build proof

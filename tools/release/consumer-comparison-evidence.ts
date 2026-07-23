@@ -9,15 +9,10 @@ import { verifyHostedCustomerRequestRelease } from './verify-customer-request-re
 
 const profiles = new Set(['machine_data:v1', 'professional_service:v1'])
 const requiredCommands = [
-  'vitest',
-  'playwright',
-  'test:copy',
-  'test:seo',
-  'test:imports',
-  'check:convex-codegen',
-  'typecheck',
-  'build',
-  'clean-tree-check',
+  'npm run verify:phase5:release-source',
+  'npm run verify:phase5:browser',
+  'npm run check:convex-codegen',
+  'test -z "$(git status --porcelain=v1 --untracked-files=all)"',
 ]
 const sha256 = /^sha256:[a-f0-9]{64}$/u
 const gitObject = /^[a-f0-9]{40}$/u
@@ -259,7 +254,10 @@ function assertSelectionUrl(
 }
 
 function assertCommands(commands: string[]): void {
-  if (requiredCommands.some((requiredCommand) => !commands.some((command) => command.includes(requiredCommand)))) {
+  if (
+    commands.length !== requiredCommands.length
+    || requiredCommands.some((requiredCommand, index) => commands[index] !== requiredCommand)
+  ) {
     throw new Error('mandatory_gate_command_missing')
   }
 }

@@ -7,7 +7,12 @@ import { pathToFileURL } from 'node:url'
 import type { ConsumerComparisonEvidence } from './consumer-comparison-evidence'
 
 const profiles = new Set(['machine_data:v1', 'professional_service:v1'])
-const requiredCommands = ['vitest', 'playwright', 'test:copy', 'test:seo', 'test:imports', 'check:convex-codegen', 'typecheck', 'build', 'clean-tree-check']
+const requiredCommands = [
+  'npm run verify:phase5:release-source',
+  'npm run verify:phase5:browser',
+  'npm run check:convex-codegen',
+  'test -z "$(git status --porcelain=v1 --untracked-files=all)"',
+]
 const digestPattern = /^sha256:[a-f0-9]{64}$/u
 
 export function verifyConsumerComparisonEvidence(
@@ -38,7 +43,10 @@ export function verifyConsumerComparisonEvidence(
   }
   if ([...profiles].some((profile) => (profileCounts.get(profile) ?? 0) < 2)) errors.push('two_selections_per_profile_required')
   if (!selectionUrlMatches(selections, packet.deployment?.baseUrl)) errors.push('selection_canonical_url_mismatch')
-  if (requiredCommands.some((required) => !packet.commands?.some((command) => command.includes(required)))) {
+  if (
+    packet.commands?.length !== requiredCommands.length
+    || requiredCommands.some((required, index) => packet.commands?.[index] !== required)
+  ) {
     errors.push('mandatory_gate_command_missing')
   }
 

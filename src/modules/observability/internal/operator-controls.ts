@@ -30,6 +30,8 @@ const defaultControlValues = {
   billing_reconciliation_enabled: true,
   business_actions_enabled: true,
   business_action_attempts_enabled: true,
+  offering_authoring_enabled: false,
+  offering_public_projection_enabled: false,
 } satisfies Record<OperatorControlKey, boolean>
 
 export function setOperatorControl(

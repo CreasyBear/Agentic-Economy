@@ -94,8 +94,9 @@ export async function buildComparisonRouteReadback(
     refusedSelectionCount: resolution.refusals.length,
   })
   const brief = buildComparisonBrief(comparison)
+  const semanticDigest = comparisonPresentationDigest({ comparison, brief })
   const presentation = resolveComparisonPresentation({
-    semanticDigest: comparisonPresentationDigest({ comparison, brief }),
+    semanticDigest,
     brief,
     adapter: { kind: 'disabled' },
   })
@@ -106,6 +107,7 @@ export async function buildComparisonRouteReadback(
     resolution,
     comparison,
     brief,
+    semanticDigest,
     presentation,
   }
 }
@@ -139,7 +141,10 @@ function CompareRoute() {
 
   return (
     <AePublicShell>
-      <main className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 md:px-6">
+      <main
+        className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 md:px-6"
+        data-semantic-digest={readback.semanticDigest}
+      >
         <header className="grid gap-2">
           <Heading level={1}>Compare Offerings</Heading>
           <Text type="large" color="secondary">

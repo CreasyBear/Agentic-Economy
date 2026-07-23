@@ -19,9 +19,21 @@ describe('buildDevSeedCatalogState', () => {
       { slug: 'sandbox-option-one', publicStatus: 'published', claimStatus: 'published' },
       { slug: 'sandbox-option-two', publicStatus: 'published', claimStatus: 'published' },
     ])
-    expect(
-      bundle.state.serviceCapabilities.every((capability) => capability.firstRequest.mode === 'inquiry_available')
-    ).toBe(true)
+    const phase5DemoBusinessIds = new Set(bundle.state.businesses
+      .filter((business) => business.slug.startsWith('sandbox-phase5-'))
+      .map((business) => business.businessId))
+    const phase5DemoCapabilities = bundle.state.serviceCapabilities.filter(
+      (capability) => phase5DemoBusinessIds.has(capability.businessId),
+    )
+    expect(phase5DemoCapabilities).toHaveLength(4)
+    expect(phase5DemoCapabilities.every((capability) => (
+      capability.firstRequest.mode === 'not_available_yet'
+      && capability.firstRequest.publicChannel === 'not_available'
+      && capability.callable === false
+    ))).toBe(true)
+    expect(bundle.state.serviceCapabilities
+      .filter((capability) => !phase5DemoBusinessIds.has(capability.businessId))
+      .every((capability) => capability.firstRequest.mode === 'inquiry_available')).toBe(true)
     expect(bundle.state.businesses).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slug: 'joondalup-rapid-plumbing',

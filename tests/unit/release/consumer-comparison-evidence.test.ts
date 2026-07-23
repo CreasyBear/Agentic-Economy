@@ -95,15 +95,10 @@ function validInput(files = fixtureFiles()): ConsumerComparisonEvidenceInput {
       screenshots: [{ state: 'unranked', path: files.screenshot }],
     },
     commands: [
-      'npm exec -- vitest run phase-05-focused-matrix',
-      'npm exec -- playwright test phase-05-browser-matrix',
-      'npm run test:copy',
-      'npm run test:seo',
-      'npm run test:imports',
+      'npm run verify:phase5:release-source',
+      'npm run verify:phase5:browser',
       'npm run check:convex-codegen',
-      'npm run typecheck',
-      'npm run build',
-      'git clean-tree-check',
+      'test -z "$(git status --porcelain=v1 --untracked-files=all)"',
     ],
     firstFailures: [],
   }
@@ -185,7 +180,9 @@ describe('consumer comparison release evidence', () => {
       ]))
     }],
     ['missing mandatory command', (input: ConsumerComparisonEvidenceInput) => {
-      input.commands = input.commands.filter((command) => command !== 'npm run typecheck')
+      input.commands = input.commands.filter(
+        (command) => command !== 'npm run verify:phase5:release-source',
+      )
     }],
   ])('refuses %s', async (_case, mutate) => {
     const input = structuredClone(validInput())

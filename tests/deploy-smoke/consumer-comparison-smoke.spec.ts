@@ -5,18 +5,21 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 
 import { verifyHostedCustomerRequestRelease } from '../../tools/release/verify-customer-request-release'
+import {
+  buildComparisonBrief,
+  comparisonPresentationDigest,
+  type OfferingComparisonResult,
+} from '../../src/modules/comparison/public'
 import { applyVercelProtectionBypassToPage, vercelProtectionBypassHeaders } from './vercel-bypass'
 
+const coldStartQuery =
+  'I run a small startup in Perth and need a simple website. I would prefer someone local or an affordable freelancer. Who should I consider, and roughly what should I expect to pay?'
+
 const requiredCommands = [
-  'npm exec -- vitest run phase-05-focused-matrix',
-  'npm exec -- playwright test phase-05-browser-matrix',
-  'npm run test:copy',
-  'npm run test:seo',
-  'npm run test:imports',
+  'npm run verify:phase5:release-source',
+  'npm run verify:phase5:browser',
   'npm run check:convex-codegen',
-  'npm run typecheck',
-  'npm run build',
-  'git clean-tree-check',
+  'test -z "$(git status --porcelain=v1 --untracked-files=all)"',
 ]
 
 test('authenticated exact-revision deployment serves the public zero-effect comparison loop', async ({ page, request }) => {
@@ -42,7 +45,17 @@ test('authenticated exact-revision deployment serves the public zero-effect comp
 
   await page.goto(new URL('/', config.baseUrl).href, { waitUntil: 'networkidle' })
   await expect(page.getByRole('heading', { name: 'What do you need done?' })).toBeVisible()
-  await page.goto(new URL('/registry?q=&limit=10', config.baseUrl).href, { waitUntil: 'networkidle' })
+  const search = page.getByRole('search', { name: /find local service businesses/i })
+  await search.getByRole('searchbox').fill(coldStartQuery)
+  await search.getByRole('button', { name: /^find businesses$/i }).click()
+  await page.waitForURL(/\/t\//)
+  await expect(page.getByRole('button', { name: 'Information and enquiries' })).toBeVisible()
+  await page.getByRole('button', { name: 'Information and enquiries' }).click()
+  await expect(page.getByRole('region', { name: 'Decision support' })).toBeVisible()
+  const browseHref = await page.getByRole('link', { name: 'Browse registered supply' }).getAttribute('href')
+  expect(browseHref).toMatch(/q=.*information.*enquiries/iu)
+
+  await page.goto(new URL(browseHref!, config.baseUrl).href, { waitUntil: 'networkidle' })
   await expect(page.getByRole('heading', { name: /find businesses and offerings/i })).toBeVisible()
 
   for (const detailUrl of config.detailUrls) {
@@ -71,26 +84,36 @@ test('authenticated exact-revision deployment serves the public zero-effect comp
   expect(response.status()).toBe(200)
   expect(response.headers()['cache-control']).toBe('no-store')
   const structuredResult: unknown = await response.json()
-  const semanticDigest = digest(stableJson(structuredResult))
+  const structuredComparison = structuredResult as OfferingComparisonResult
+  const structuredSemanticDigest = comparisonPresentationDigest({
+    comparison: structuredComparison,
+    brief: buildComparisonBrief(structuredComparison),
+  })
 
   const mainText = await page.getByRole('main').innerText()
+  const humanSemanticDigest = await page.getByRole('main').getAttribute('data-semantic-digest')
+  expect(humanSemanticDigest).toBe(structuredSemanticDigest)
   expect(mainText).toMatch(/Nothing here contacts a business or runs an endpoint/iu)
   const humanPath = join(config.artifactDirectory, 'human-loader-response.json')
   const structuredPath = join(config.artifactDirectory, 'structured-post-response.json')
   const zeroEffectPath = join(config.artifactDirectory, 'zero-effect-observation.json')
   const screenshotPath = join(config.artifactDirectory, 'comparison.png')
   writeOnce(humanPath, JSON.stringify({
-    semanticDigest,
+    semanticDigest: humanSemanticDigest,
     renderedTextDigest: digest(mainText),
     selectedCount: config.selections.length,
   }))
-  writeOnce(structuredPath, JSON.stringify({ semanticDigest, response: structuredResult }))
+  writeOnce(structuredPath, JSON.stringify({
+    semanticDigest: structuredSemanticDigest,
+    response: structuredResult,
+  }))
 
   const allowedRequests = [...new Set([...observedRequests, 'POST /api/compare'])]
+  const inspectOnlyPosts = new Set(['/api/answer/turn', '/api/compare'])
   const effectfulRequests = allowedRequests.filter((entry) => {
     const [method, pathname] = entry.split(' ', 2)
     if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return false
-    return !(method === 'POST' && pathname === '/api/compare')
+    return !(method === 'POST' && inspectOnlyPosts.has(pathname ?? ''))
   })
   expect(effectfulRequests).toEqual([])
   writeOnce(zeroEffectPath, JSON.stringify({
@@ -210,13 +233,4 @@ function writeOnce(path: string, content: string): void {
 
 function digest(value: string): string {
   return `sha256:${createHash('sha256').update(value).digest('hex')}`
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value !== null && typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(',')}}`
-  }
-  return JSON.stringify(value)
 }
