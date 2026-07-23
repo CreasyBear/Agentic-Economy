@@ -74,9 +74,9 @@ payment, booking, dispatch or provider-endpoint transport.
 - A proposed local-E2E shortcut that reconstructed exact history from current
   registry projection was rejected. Independent immutable fixture records now
   enter through the existing exact read-port boundary.
-- Canonical comparison URL state remains one bounded JSON-array `selection`
-  parameter. Test helpers were corrected rather than changing production URL
-  semantics.
+- Canonical comparison URL state remains one bounded repeated `selection`
+  parameter per exact Offering object. Test helpers were corrected rather than
+  changing production URL semantics.
 - Browser reduced-motion assertions accept Chromium's effective-zero
   `0.00001s` duration while retaining a strict one-millisecond ceiling.
 - Reflow uses the 320-CSS-pixel equivalent of 1280px at 400% zoom; artificial
