@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { catalogForBusinessFromLookup, readOfferingSupplyForBusiness } from '../../../convex/registry'
 import type { RuntimeDocument, RuntimeReader } from '../../../convex/source_state'
+import {
+  decodeStoredBusinessSupplyProjection,
+  publicBusinessCatalogApiV2DtoSchema,
+} from '@/modules/registry/public'
 
 describe('Offering registry runtime guards', () => {
   it('adapts a published legacy/compare profile with zero services to v2', () => {
@@ -25,7 +29,117 @@ describe('Offering registry runtime guards', () => {
     const item = await readOfferingSupplyForBusiness(db as unknown as RuntimeReader, { _id: 'business:1', slug: 'native', publicStatus: 'published' })
     expect(item).toMatchObject({ slug: 'native', offerings: [{ name: 'Native advisory' }] })
   })
+
+  it('strictly refuses hostile, private, extra, and legacy stored snapshot shapes', () => {
+    const valid = nativeProjection()
+    expect(decodeStoredBusinessSupplyProjection(valid)).toEqual({
+      kind: 'valid',
+      projection: valid,
+    })
+    for (const hostile of [
+      { ...valid, credentials: { apiKey: 'private' } },
+      { ...valid, adapterConfig: { endpoint: 'https://private.example' } },
+      { ...valid, privateReasons: ['internal'] },
+      { ...valid, services: [] },
+      {
+        ...valid,
+        offerings: [{
+          ...valid.offerings[0],
+          offering: {
+            ...valid.offerings[0]!.offering,
+            sourceHash: 'hash:private',
+          },
+        }],
+      },
+    ]) {
+      expect(decodeStoredBusinessSupplyProjection(hostile)).toEqual({
+        kind: 'invalid',
+        reason: 'invalid_offering_snapshot',
+      })
+    }
+  })
+
+  it('strictly refuses extra, private, and legacy fields in the public v2 DTO', () => {
+    const publicDto = {
+      schemaVersion: 'public-business-catalog-api:v2',
+      businessId: 'business:1',
+      slug: 'native',
+      name: 'Native Co',
+      category: 'Advisory',
+      suburb: 'Perth',
+      stateTerritory: 'WA',
+      publicUrl: '/native',
+      observedAt: 100,
+      disposition: 'current',
+      offerings: [],
+      accessSummary: {
+        humanRequest: false,
+        externalOperation: false,
+        aeSupportedAction: false,
+      },
+    }
+    for (const hostile of [
+      { ...publicDto, sourceHash: 'hash:private' },
+      { ...publicDto, credentials: { apiKey: 'private' } },
+      { ...publicDto, services: [] },
+      { ...publicDto, trustTier: 'claimed' },
+    ]) {
+      expect(publicBusinessCatalogApiV2DtoSchema.safeParse(hostile).success).toBe(false)
+    }
+  })
 })
+
+function nativeProjection() {
+  return {
+    business: {
+      businessId: 'business:1',
+      slug: 'native',
+      name: 'Native Co',
+      category: 'Advisory',
+      suburb: 'Perth',
+      stateTerritory: 'WA',
+      publicUrl: '/native',
+    },
+    offerings: [{
+      offering: {
+        offeringRef: 'offering:1',
+        revision: 1,
+        name: 'Native advisory',
+        category: 'Advisory',
+        summary: 'Native Offering.',
+        comparison: {
+          schemaVersion: 'offering-comparison:v1',
+          profile: {
+            profileId: 'professional_service:v1',
+            scopeBasis: fact('Fixed scope'),
+            priceBasis: fact({ description: 'Quoted total', currency: 'AUD', amountMinor: 10_000, unit: 'total' }),
+            timingBasis: fact('Two weeks'),
+            serviceArea: fact('Perth'),
+          },
+        },
+      },
+      accessPaths: [],
+      support: {
+        integrated: false,
+        routeable: false,
+        reasons: ['not_integrated'],
+      },
+    }],
+    sourceRevision: 1,
+    sourceDigest: 'hash:projection',
+    observedAt: 100,
+    disposition: 'current',
+  } as const
+}
+
+function fact<T>(value: T) {
+  return {
+    kind: 'known' as const,
+    value,
+    source: { kind: 'business_supplied' as const },
+    observedAt: 100,
+  }
+}
 
 class SuppressedReader {
   tablesRead: string[] = []

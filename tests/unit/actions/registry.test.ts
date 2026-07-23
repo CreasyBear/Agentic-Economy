@@ -67,43 +67,47 @@ describe('action registry', () => {
     }
   })
 
-  it('accepts slug-addressed public catalog DTOs and rejects internal business identity', () => {
+  it('accepts exact Offering-v2 DTOs and rejects legacy service/trust/contact ordering residue', () => {
     const business = {
+      schemaVersion: 'public-business-catalog-api:v2',
+      businessId: 'business:adelaide-emergency-plumbing',
       slug: 'adelaide-emergency-plumbing',
       name: 'Adelaide Emergency Plumbing',
       category: 'Emergency plumbing',
       suburb: 'Adelaide',
       stateTerritory: 'SA',
       publicUrl: '/adelaide-emergency-plumbing',
-      trustTier: 'claimed',
-      publicStatus: 'published' as const,
-      indexStatus: 'not_queued',
-      discoveryStatus: 'degraded',
-      schemaVersion: 'public-business-catalog-api:v1',
-      updatedAt: 1,
-      photos: [] as Array<{ url: string; alt: string }>,
-      services: [
-        {
-          slug: 'emergency-pipe-repair',
-          name: 'Emergency pipe repair',
-          category: 'Emergency plumbing',
-          summary: 'Urgent local plumbing.',
-          serviceArea: 'Adelaide and nearby suburbs',
-          hoursOrUnknown: 'Hours supplied by owner',
-          firstRequest: {
-            mode: 'inquiry_available',
-            publicDisclosure: 'Use the inquiry form for a first contact.',
-            publicChannel: 'public_business_contact',
+      observedAt: 1,
+      disposition: 'current' as const,
+      offerings: [{
+        offeringRef: 'offering:adelaide:emergency-pipe-repair',
+        revision: 2,
+        name: 'Emergency pipe repair',
+        category: 'Emergency plumbing',
+        summary: 'Urgent local plumbing.',
+        comparison: {
+          schemaVersion: 'offering-comparison:v1',
+          profile: {
+            profileId: 'professional_service:v1',
+            scopeBasis: known('Emergency repair'),
+            priceBasis: known({ description: 'Quoted total', currency: 'AUD', amountMinor: 15_000, unit: 'total' }),
+            timingBasis: known('Same day'),
+            serviceArea: known('Adelaide'),
           },
-          status: 'published' as const,
-          capabilities: [{ kind: 'phone_inquiry', status: 'available' }],
         },
-      ],
+        accessPaths: [],
+        support: { integrated: false, aeSupportedAction: false },
+      }],
+      accessSummary: {
+        humanRequest: false,
+        externalOperation: false,
+        aeSupportedAction: false,
+      },
     }
 
     const search = findAction('registry.search')!.outputSchema.safeParse({
       kind: 'ok',
-      schemaVersion: 'public-business-catalog-api:v1',
+      schemaVersion: 'public-business-catalog-api:v2',
       query: 'plumber',
       items: [business],
       pagination: { limit: 1, total: 1, hasMore: false },
@@ -112,16 +116,23 @@ describe('action registry', () => {
 
     const detail = findAction('registry.detail')!.outputSchema.safeParse({
       kind: 'found',
-      schemaVersion: 'public-business-catalog-api:v1',
+      schemaVersion: 'public-business-catalog-api:v2',
       business,
     })
     expect(detail.success).toBe(true)
 
-    expect(findAction('registry.detail')!.outputSchema.safeParse({
-      kind: 'found',
-      schemaVersion: 'public-business-catalog-api:v1',
-      business: { ...business, businessId: 'business:adelaide-emergency-plumbing' },
-    }).success).toBe(false)
+    for (const residue of [
+      { services: [] },
+      { trustTier: 'claimed' },
+      { syntheticOfferingRef: 'legacy-offering:adelaide:repair' },
+      { contactAvailabilityOrder: 1 },
+    ]) {
+      expect(findAction('registry.detail')!.outputSchema.safeParse({
+        kind: 'found',
+        schemaVersion: 'public-business-catalog-api:v2',
+        business: { ...business, ...residue },
+      }).success).toBe(false)
+    }
   })
 
   it('exposes schema metadata on agent-facing descriptors', () => {
@@ -228,3 +239,12 @@ describe('action registry', () => {
     expect(schema.safeParse({ ...baseInput, contact: { phone: '1'.repeat(33) } }).success).toBe(false)
   })
 })
+
+function known<T>(value: T) {
+  return {
+    kind: 'known' as const,
+    value,
+    source: { kind: 'business_supplied' as const },
+    observedAt: 1,
+  }
+}
