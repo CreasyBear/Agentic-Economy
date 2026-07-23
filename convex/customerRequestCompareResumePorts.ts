@@ -175,6 +175,10 @@ async function loadCurrentMandate(
     internal.customerRequestRouteMandate.getCurrentForPrincipal,
     input,
   )
+  if (result.kind === 'expired') return { kind: 'expired' }
+  if (result.kind === 'revoked' || result.kind === 'superseded') {
+    return { kind: 'consumed' }
+  }
   if (result.kind !== 'active') return { kind: 'not_found' }
   return {
     kind: 'active',
