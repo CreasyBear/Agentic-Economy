@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
+import { validateOfferingComparisonEnvelope } from '@/modules/catalog/public'
 import {
   compareOfferings,
+  comparisonFactId,
   comparisonSelectionId,
-  type ComparisonFact,
+  type OfferingComparisonEnvelope,
   type ResolvedComparisonSelection,
 } from '@/modules/comparison/public'
 
@@ -26,8 +28,14 @@ describe('pure Offering comparison', () => {
       kind: 'unranked',
       reason: 'tie',
       blockingFactIds: [
-        'fact:business:one:offering:one:1:professional_service:v1:price_basis',
-        'fact:business:two:offering:two:1:professional_service:v1:price_basis',
+        comparisonFactId(
+          selections[0]!.selection,
+          'professional_service:v1:price_basis',
+        ),
+        comparisonFactId(
+          selections[1]!.selection,
+          'professional_service:v1:price_basis',
+        ),
       ],
     })
     expect(JSON.stringify(result)).not.toMatch(/score|weight|tieBreak/i)
@@ -85,12 +93,106 @@ describe('pure Offering comparison', () => {
       ],
       decisivePriorityIds: ['professional_service:v1:lowest_total_price'],
       decisiveFactIds: [
-        'fact:business:cheap:offering:cheap:1:professional_service:v1:price_basis',
-        'fact:business:dear:offering:dear:1:professional_service:v1:price_basis',
+        comparisonFactId(cheaper.selection, 'professional_service:v1:price_basis'),
+        comparisonFactId(dearer.selection, 'professional_service:v1:price_basis'),
       ],
       reasonIds: ['reason:professional_service:v1:lowest_total_price'],
     })
     expect(JSON.stringify(result)).not.toMatch(/score|weight|model|reputation|trust/i)
+  })
+
+  it('uses priority sequence lexicographically rather than combining or weighting dimensions', () => {
+    const cheapWithAuth = machine('cheap', 1, 'api_key')
+    const dearWithoutAuth = machine('no-auth', 2, 'none')
+    const priceFirst = compareOfferings({
+      selections: [cheapWithAuth, dearWithoutAuth],
+      priorities: [
+        'machine_data:v1:lowest_request_price',
+        'machine_data:v1:no_authentication_preferred',
+      ],
+    })
+    const authenticationFirst = compareOfferings({
+      selections: [cheapWithAuth, dearWithoutAuth],
+      priorities: [
+        'machine_data:v1:no_authentication_preferred',
+        'machine_data:v1:lowest_request_price',
+      ],
+    })
+
+    expect(priceFirst.ordering.kind === 'ordered'
+      ? priceFirst.ordering.orderedSelectionIds[0]
+      : '').toContain('cheap')
+    expect(authenticationFirst.ordering.kind === 'ordered'
+      ? authenticationFirst.ordering.orderedSelectionIds[0]
+      : '').toContain('no-auth')
+  })
+
+  it('labels only the priority prefix that actually discriminates the set', () => {
+    const cheapWithAuth = machine('cheap-prefix', 1, 'api_key')
+    const dearWithoutAuth = machine('dear-prefix', 2, 'none')
+    const result = compareOfferings({
+      selections: [cheapWithAuth, dearWithoutAuth],
+      priorities: [
+        'machine_data:v1:lowest_request_price',
+        'machine_data:v1:no_authentication_preferred',
+      ],
+    })
+
+    expect(result.ordering).toMatchObject({
+      kind: 'ordered',
+      decisivePriorityIds: ['machine_data:v1:lowest_request_price'],
+      reasonIds: ['reason:machine_data:v1:lowest_request_price'],
+    })
+    expect(result.ordering.kind === 'ordered'
+      ? result.ordering.decisiveFactIds
+      : []).toHaveLength(2)
+  })
+
+  it('keeps a later non-decisive unknown visible without letting it veto priority one', () => {
+    const cheap = machine('cheap-later-unknown', 1, 'api_key')
+    const dear = machine('dear-later-unknown', 2, 'unknown')
+    const result = compareOfferings({
+      selections: [cheap, dear],
+      priorities: [
+        'machine_data:v1:lowest_request_price',
+        'machine_data:v1:no_authentication_preferred',
+      ],
+    })
+
+    expect(result.ordering).toMatchObject({
+      kind: 'ordered',
+      decisivePriorityIds: ['machine_data:v1:lowest_request_price'],
+    })
+    const authenticationRow = result.rows.find(
+      ({ dimensionId }) => dimensionId === 'machine_data:v1:authentication',
+    )
+    expect(authenticationRow?.cells.some(({ cell }) => cell.kind === 'unknown')).toBe(true)
+  })
+
+  it.each([
+    ['stale projection', 'stale', 'stale_fact'],
+    ['partial projection', 'partial', 'partial_projection'],
+  ] as const)('blocks known-cell ordering for %s', (_label, disposition, reason) => {
+    const left = { ...professional('one', knownPrice(100)), projectionDisposition: disposition }
+    const result = compareOfferings({
+      selections: [left, professional('two', knownPrice(200))],
+      priorities: ['professional_service:v1:lowest_total_price'],
+    })
+
+    expect(result.ordering).toEqual({ kind: 'unranked', reason })
+  })
+
+  it('blocks ordering when one selected URL item is unavailable', () => {
+    const result = compareOfferings({
+      selections: [professional('one', knownPrice(100)), professional('two', knownPrice(200))],
+      priorities: ['professional_service:v1:lowest_total_price'],
+      refusedSelectionCount: 1,
+    })
+
+    expect(result.ordering).toEqual({
+      kind: 'unranked',
+      reason: 'unavailable_selection',
+    })
   })
 
   it('changes the order when the decisive source fixture changes', () => {
@@ -132,9 +234,23 @@ function knownPrice(amountMinor: number) {
 
 function professional(
   suffix: string,
-  priceBasis: ComparisonFact<ReturnType<typeof priceValue>>,
+  priceBasis: Extract<
+    OfferingComparisonEnvelope['profile'],
+    { profileId: 'professional_service:v1' }
+  >['priceBasis'],
 ): ResolvedComparisonSelection {
   const known = <T>(value: T) => ({ kind: 'known' as const, value, source, observedAt: 100 })
+  const validated = validateOfferingComparisonEnvelope({
+    schemaVersion: 'offering-comparison:v1',
+    profile: {
+      profileId: 'professional_service:v1',
+      scopeBasis: known('Brochure website'),
+      priceBasis,
+      timingBasis: known('Four weeks'),
+      serviceArea: known('Perth'),
+    },
+  })
+  if (validated.kind === 'invalid') throw new Error('invalid professional fixture')
   return {
     selection: {
       businessId: `business:${suffix}`,
@@ -149,16 +265,7 @@ function professional(
       name: `Offering ${suffix}`,
       category: 'Professional service',
       summary: 'Published comparison facts.',
-      comparison: {
-        schemaVersion: 'offering-comparison:v1',
-        profile: {
-          profileId: 'professional_service:v1',
-          scopeBasis: known('Brochure website'),
-          priceBasis,
-          timingBasis: known('Four weeks'),
-          serviceArea: known('Perth'),
-        },
-      },
+      comparison: validated.envelope,
     },
     publication: { publishedAt: 90, safeDisplayDisposition: 'retain_safe_history' },
     projectionDisposition: 'current',
@@ -166,7 +273,11 @@ function professional(
   }
 }
 
-function machine(suffix: string, amountMinor: number): ResolvedComparisonSelection {
+function machine(
+  suffix: string,
+  amountMinor: number,
+  authentication: 'none' | 'api_key' | 'unknown' = 'api_key',
+): ResolvedComparisonSelection {
   const known = <T>(value: T) => ({ kind: 'known' as const, value, source, observedAt: 100 })
   return {
     selection: {
@@ -188,7 +299,14 @@ function machine(suffix: string, amountMinor: number): ResolvedComparisonSelecti
           profileId: 'machine_data:v1',
           interfaceFormat: known('graphql'),
           requestMethod: known('POST'),
-          authentication: known('api_key'),
+          authentication: authentication === 'unknown'
+            ? {
+                kind: 'unknown',
+                explanation: 'Authentication was not supplied.',
+                source,
+                observedAt: 100,
+              }
+            : known(authentication),
           priceBasis: known({
             description: 'AUD 0.01 per request',
             currency: 'AUD',

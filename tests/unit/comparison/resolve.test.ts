@@ -4,6 +4,7 @@ import {
   resolveComparisonSelections,
   type ComparisonOfferingReadPort,
   type ComparisonSelectionRef,
+  type ExactOfferingReference,
 } from '@/modules/comparison/public'
 
 const ref = (suffix: string, revision = 1): ComparisonSelectionRef => ({
@@ -102,7 +103,7 @@ describe('exact comparison selection resolution', () => {
 
   it('treats projectionObservedAt as context, never as a content selector', async () => {
     const selected = ref('observed')
-    const seen: ComparisonSelectionRef[] = []
+    const seen: ExactOfferingReference[] = []
     const port = portFor({
       history: async (selection) => {
         seen.push(selection)
@@ -116,12 +117,15 @@ describe('exact comparison selection resolution', () => {
       port,
     })
 
-    expect(seen).toEqual([selected])
+    expect(seen).toEqual([{
+      businessId: selected.businessId,
+      offeringRef: selected.offeringRef,
+      offeringRevision: selected.offeringRevision,
+    }])
     expect(Object.keys(seen[0] ?? {})).toEqual([
       'businessId',
       'offeringRef',
       'offeringRevision',
-      'projectionObservedAt',
     ])
   })
 
@@ -146,6 +150,25 @@ describe('exact comparison selection resolution', () => {
       refusals: [{ selection: selections[1], reason: 'offering_suppressed' }],
     })
   })
+
+  it('reports partial aggregate disposition when a selected projection is stale', async () => {
+    const selected = ref('stale')
+    const result = await resolveComparisonSelections({
+      state: { version: 'offering-comparison:v1', selections: [selected], priorities: [] },
+      resolvedAt: 200,
+      port: portFor({
+        history: async (reference) => ({
+          ...exact(reference),
+          projectionDisposition: 'stale',
+        }),
+      }),
+    })
+
+    expect(result).toMatchObject({
+      disposition: 'partial',
+      selections: [{ projectionDisposition: 'stale' }],
+    })
+  })
 })
 
 function portFor(overrides: Readonly<{
@@ -158,7 +181,7 @@ function portFor(overrides: Readonly<{
   }
 }
 
-function exact(selection: ComparisonSelectionRef) {
+function exact(selection: ExactOfferingReference) {
   return {
     kind: 'resolved' as const,
     business: {

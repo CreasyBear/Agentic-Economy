@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildComparisonBrief,
   compareOfferings,
+  comparisonFactId,
   type ResolvedComparisonSelection,
 } from '@/modules/comparison/public'
 
@@ -16,13 +17,19 @@ describe('deterministic comparison decision brief', () => {
     const first = buildComparisonBrief(comparison)
     const second = buildComparisonBrief(comparison)
     expect(first).toEqual(second)
+    const cheap = comparison.selections.find(
+      ({ selection }) => selection.businessId === 'business:cheap',
+    )!
+    const dear = comparison.selections.find(
+      ({ selection }) => selection.businessId === 'business:dear',
+    )!
     expect(first).toEqual({
       schemaVersion: 'offering-comparison-brief:v1',
       posture: 'ordered',
       decisiveReasonIds: ['reason:professional_service:v1:lowest_total_price'],
       foregroundableFactIds: [
-        'fact:business:cheap:offering:cheap:1:professional_service:v1:price_basis',
-        'fact:business:dear:offering:dear:1:professional_service:v1:price_basis',
+        comparisonFactId(cheap.selection, 'professional_service:v1:price_basis'),
+        comparisonFactId(dear.selection, 'professional_service:v1:price_basis'),
       ],
       mandatoryCaveatIds: ['caveat:published_information'],
       detailSectionIds: [

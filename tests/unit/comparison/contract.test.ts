@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   parseComparisonUrlState,
+  comparisonSelectionId,
   serializeComparisonUrlState,
   type ComparisonSelectionRef,
 } from '@/modules/comparison/public'
@@ -33,7 +34,7 @@ describe('offering-comparison:v1 URL contract', () => {
       },
     })
     expect(decodeURIComponent(encoded)).not.toMatch(
-      /name|summary|price|currency|url|sourceHash|session|auth|token|customer/i,
+      /businessName|offeringName|summary|amountMinor|currency|sourceHash|session|authToken|customer/i,
     )
   })
 
@@ -52,6 +53,8 @@ describe('offering-comparison:v1 URL contract', () => {
     ])],
     ['unknown priority', query([selection('one')], ['reputation:highest'])],
     ['non-positive revision', query([selection('one', { offeringRevision: 0 })], [])],
+    ['oversized business ID', query([selection('one', { businessId: `b:${'x'.repeat(299)}` })], [])],
+    ['oversized Offering ref', query([selection('one', { offeringRef: `o:${'x'.repeat(299)}` })], [])],
     ['unexpected free text', `${query([selection('one')], [])}&query=cheap+and+local`],
   ])('returns a bounded ordinary refusal for %s', (_label, encoded) => {
     expect(parseComparisonUrlState(encoded)).toMatchObject({ kind: 'refused' })
@@ -75,6 +78,27 @@ describe('offering-comparison:v1 URL contract', () => {
       'business:two',
       'business:one',
     ])
+  })
+
+  it('uses collision-free tuple IDs for adversarial colon-bearing references', () => {
+    const left = selection('left', {
+      businessId: 'business:a:b',
+      offeringRef: 'offering:c',
+    })
+    const right = selection('right', {
+      businessId: 'business:a',
+      offeringRef: 'b:offering:c',
+    })
+
+    expect(comparisonSelectionId(left)).not.toBe(comparisonSelectionId(right))
+  })
+
+  it('keeps hostile lone-surrogate URL input and tuple IDs total', () => {
+    const hostile = selection('hostile', { businessId: 'business:\ud800' })
+    const encoded = query([hostile], [])
+
+    expect(() => parseComparisonUrlState(encoded)).not.toThrow()
+    expect(() => comparisonSelectionId(hostile)).not.toThrow()
   })
 })
 
