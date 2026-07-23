@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { actionToHarnessTool, runHarnessTool } from '@/modules/harness/public'
+import { runHarnessTool } from '@/modules/harness/public'
+import {
+  actionToHarnessToolContract,
+  createHarnessToolBoundaryInstrumentation,
+  harnessToolContractToDefinition,
+  type HarnessToolBoundaryEvent,
+} from '@/modules/harness/tool-contract'
 import * as convexSource from '@/lib/server/convex-source'
 import { comparisonCompareAction } from '@/modules/comparison/comparison.actions'
 import { buildComparisonRouteReadback } from '@/routes/compare'
@@ -38,9 +44,16 @@ describe('human and structured comparison parity', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     const publicMutationSpy = vi.spyOn(convexSource, 'callPublicSourceMutation')
     const mutationSpy = vi.spyOn(convexSource, 'callSourceMutation')
+    const boundaryEvents: HarnessToolBoundaryEvent[] = []
+    const instrumentation = createHarnessToolBoundaryInstrumentation(
+      (event) => boundaryEvents.push(event),
+    )
     const priorities = ['professional_service:v1:lowest_total_price'] as const
     const outcome = await runHarnessTool({
-      tool: actionToHarnessTool(comparisonCompareAction),
+      tool: harnessToolContractToDefinition(actionToHarnessToolContract(
+        comparisonCompareAction,
+        instrumentation,
+      )),
       input: { selections, priorities },
       surface: 'agentJson',
       allowWrites: false,
@@ -68,5 +81,18 @@ describe('human and structured comparison parity', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(publicMutationSpy).not.toHaveBeenCalled()
     expect(mutationSpy).not.toHaveBeenCalled()
+    expect(instrumentation.snapshot()).toEqual({
+      actionInvocationEmissions: 0,
+      controlEmissions: 0,
+      attemptEmissions: 0,
+      historyEmissions: 0,
+      approvalPolicyEmissions: 1,
+    })
+    expect(boundaryEvents.filter(({ kind }) => [
+      'action_invocation',
+      'control',
+      'attempt',
+      'history',
+    ].includes(kind))).toEqual([])
   })
 })
