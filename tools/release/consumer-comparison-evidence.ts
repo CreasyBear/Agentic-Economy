@@ -220,35 +220,41 @@ function assertData(input: ConsumerComparisonEvidenceInput): void {
     const key = `${selection.businessId}\u0000${selection.offeringRef}\u0000${selection.revision}`
     if (exact.has(key)) throw new Error('duplicate_selection')
     exact.add(key)
-    assertSelectionUrl(selection, input.deployment.baseUrl)
   }
   if ([...profiles].some((profile) => (profileCounts.get(profile) ?? 0) < 2)) {
     throw new Error('two_selections_per_profile_required')
   }
+  assertSelectionUrl(input.data.selections, input.deployment.baseUrl)
 }
 
 function assertSelectionUrl(
-  selection: ConsumerComparisonEvidenceInput['data']['selections'][number],
+  selections: ConsumerComparisonEvidenceInput['data']['selections'],
   baseUrl: string,
 ): void {
-  const url = new URL(selection.canonicalUrl)
+  const [first] = selections
+  if (first === undefined || selections.some((selection) => selection.canonicalUrl !== first.canonicalUrl)) {
+    throw new Error('selection_canonical_url_mismatch')
+  }
+  const url = new URL(first.canonicalUrl)
   if (url.origin !== new URL(baseUrl).origin || url.pathname !== '/compare') {
     throw new Error('selection_canonical_url_mismatch')
   }
   const encoded = url.searchParams.getAll('selection')
-  if (encoded.length !== 1) throw new Error('selection_canonical_url_mismatch')
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(encoded[0]!)
-  } catch {
-    throw new Error('selection_canonical_url_mismatch')
-  }
-  if (!isRecord(parsed)
-    || parsed.businessId !== selection.businessId
-    || parsed.offeringRef !== selection.offeringRef
-    || parsed.offeringRevision !== selection.revision
-    || parsed.projectionObservedAt !== selection.projectionObservedAt) {
-    throw new Error('selection_canonical_url_mismatch')
+  if (encoded.length !== selections.length) throw new Error('selection_canonical_url_mismatch')
+  for (const [index, selection] of selections.entries()) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(encoded[index]!)
+    } catch {
+      throw new Error('selection_canonical_url_mismatch')
+    }
+    if (!isRecord(parsed)
+      || parsed.businessId !== selection.businessId
+      || parsed.offeringRef !== selection.offeringRef
+      || parsed.offeringRevision !== selection.revision
+      || parsed.projectionObservedAt !== selection.projectionObservedAt) {
+      throw new Error('selection_canonical_url_mismatch')
+    }
   }
 }
 

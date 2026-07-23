@@ -20,14 +20,21 @@ const tree = 'b'.repeat(40)
 const baseUrl = 'https://agentic-economy.example'
 const profiles = ['professional_service:v1', 'professional_service:v1', 'machine_data:v1', 'machine_data:v1'] as const
 
-function comparisonUrl(index: number): string {
+function comparisonUrl(selections: Array<{
+  businessId: string
+  offeringRef: string
+  revision: number
+  projectionObservedAt: number
+}>): string {
   const params = new URLSearchParams()
-  params.append('selection', JSON.stringify({
-    businessId: `business:${index}`,
-    offeringRef: `offering:${index}`,
-    offeringRevision: index + 1,
-    projectionObservedAt: 1_784_805_000_000 + index,
-  }))
+  for (const selection of selections) {
+    params.append('selection', JSON.stringify({
+      businessId: selection.businessId,
+      offeringRef: selection.offeringRef,
+      offeringRevision: selection.revision,
+      projectionObservedAt: selection.projectionObservedAt,
+    }))
+  }
   return `${baseUrl}/compare?${params.toString()}`
 }
 
@@ -58,6 +65,17 @@ function fixtureFiles(): Readonly<{
 }
 
 function validInput(files = fixtureFiles()): ConsumerComparisonEvidenceInput {
+  const selections = profiles.map((profileVersion, index) => ({
+    businessId: `business:${index}`,
+    offeringRef: `offering:${index}`,
+    revision: index + 1,
+    projectionObservedAt: 1_784_805_000_000 + index,
+    profileVersion,
+    dataLabel: 'labelled_demo' as const,
+    canonicalUrl: '',
+  }))
+  const canonicalUrl = comparisonUrl(selections)
+  for (const selection of selections) selection.canonicalUrl = canonicalUrl
   return {
     source: { cwd: files.directory, expectedRevision: revision, expectedTree: tree },
     deployment: {
@@ -68,15 +86,7 @@ function validInput(files = fixtureFiles()): ConsumerComparisonEvidenceInput {
     data: {
       label: 'labelled_demo',
       seedVersion: 'phase-05-demo:v1',
-      selections: profiles.map((profileVersion, index) => ({
-        businessId: `business:${index}`,
-        offeringRef: `offering:${index}`,
-        revision: index + 1,
-        projectionObservedAt: 1_784_805_000_000 + index,
-        profileVersion,
-        dataLabel: 'labelled_demo' as const,
-        canonicalUrl: comparisonUrl(index),
-      })),
+      selections,
     },
     artifacts: {
       humanLoaderResponse: files.human,
@@ -157,7 +167,22 @@ describe('consumer comparison release evidence', () => {
       input.data.selections[0]!.profileVersion = 'machine_data:v1'
     }],
     ['tuple URL mismatch', (input: ConsumerComparisonEvidenceInput) => {
-      input.data.selections[0]!.canonicalUrl = comparisonUrl(1)
+      setCanonicalUrl(input, comparisonUrl(input.data.selections.slice(1)))
+    }],
+    ['extra URL tuple', (input: ConsumerComparisonEvidenceInput) => {
+      setCanonicalUrl(input, comparisonUrl([
+        ...input.data.selections,
+        { businessId: 'business:extra', offeringRef: 'offering:extra', revision: 1, projectionObservedAt: 1 },
+      ]))
+    }],
+    ['reordered URL tuples', (input: ConsumerComparisonEvidenceInput) => {
+      setCanonicalUrl(input, comparisonUrl([...input.data.selections].reverse()))
+    }],
+    ['duplicate URL tuple', (input: ConsumerComparisonEvidenceInput) => {
+      setCanonicalUrl(input, comparisonUrl([
+        input.data.selections[0]!,
+        ...input.data.selections.slice(0, -1),
+      ]))
     }],
     ['missing mandatory command', (input: ConsumerComparisonEvidenceInput) => {
       input.commands = input.commands.filter((command) => command !== 'npm run typecheck')
@@ -205,7 +230,9 @@ describe('consumer comparison release evidence', () => {
     const cases = [
       (candidate: ConsumerComparisonEvidence) => { candidate.data.selections[0]!.revision = 99 },
       (candidate: ConsumerComparisonEvidence) => { candidate.data.selections[0]!.profileVersion = 'machine_data:v1' },
-      (candidate: ConsumerComparisonEvidence) => { candidate.data.selections[0]!.canonicalUrl = comparisonUrl(1) },
+      (candidate: ConsumerComparisonEvidence) => {
+        setCanonicalUrl(candidate, comparisonUrl(candidate.data.selections.slice(1)))
+      },
       (candidate: ConsumerComparisonEvidence) => { candidate.artifacts.zeroEffectObservation.digest = `sha256:${'e'.repeat(64)}` },
       (candidate: ConsumerComparisonEvidence) => { candidate.deployment.deploymentId = 'dpl_other' },
       (candidate: ConsumerComparisonEvidence) => {
@@ -251,3 +278,10 @@ describe('consumer comparison release evidence', () => {
     expect(() => writeConsumerComparisonEvidenceOnce(output, packet)).toThrow('evidence_manifest_already_exists')
   })
 })
+
+function setCanonicalUrl(
+  input: Pick<ConsumerComparisonEvidenceInput, 'data'> | Pick<ConsumerComparisonEvidence, 'data'>,
+  canonicalUrl: string,
+): void {
+  for (const selection of input.data.selections) selection.canonicalUrl = canonicalUrl
+}

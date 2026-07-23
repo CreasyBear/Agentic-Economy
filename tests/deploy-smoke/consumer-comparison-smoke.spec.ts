@@ -120,7 +120,7 @@ test('authenticated exact-revision deployment serves the public zero-effect comp
       selections: config.selections.map((selection) => ({
         ...selection,
         dataLabel: 'labelled_demo',
-        canonicalUrl: singleSelectionUrl(config.baseUrl, selection).href,
+        canonicalUrl: compareUrl.href,
       })),
     },
     artifacts: {
@@ -170,17 +170,6 @@ function configuration(): {
     detailUrls,
     artifactDirectory: required('CONSUMER_COMPARISON_ARTIFACT_DIR'),
   }
-}
-
-function singleSelectionUrl(baseUrl: URL, selection: Selection): URL {
-  const url = new URL('/compare', baseUrl)
-  url.searchParams.append('selection', JSON.stringify({
-    businessId: selection.businessId,
-    offeringRef: selection.offeringRef,
-    offeringRevision: selection.revision,
-    projectionObservedAt: selection.projectionObservedAt,
-  }))
-  return url
 }
 
 function combinedCompareUrl(baseUrl: URL, selections: Selection[]): URL {

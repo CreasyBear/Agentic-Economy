@@ -35,9 +35,9 @@ export function verifyConsumerComparisonEvidence(
       errors.push('selection_profile_or_label_invalid')
     }
     profileCounts.set(selection.profileVersion, (profileCounts.get(selection.profileVersion) ?? 0) + 1)
-    if (!selectionUrlMatches(selection, packet.deployment?.baseUrl)) errors.push('selection_canonical_url_mismatch')
   }
   if ([...profiles].some((profile) => (profileCounts.get(profile) ?? 0) < 2)) errors.push('two_selections_per_profile_required')
+  if (!selectionUrlMatches(selections, packet.deployment?.baseUrl)) errors.push('selection_canonical_url_mismatch')
   if (requiredCommands.some((required) => !packet.commands?.some((command) => command.includes(required)))) {
     errors.push('mandatory_gate_command_missing')
   }
@@ -118,20 +118,24 @@ function verifyZeroEffect(
 }
 
 function selectionUrlMatches(
-  selection: ConsumerComparisonEvidence['data']['selections'][number],
+  selections: ConsumerComparisonEvidence['data']['selections'],
   baseUrl: string | undefined,
 ): boolean {
   try {
-    const url = new URL(selection.canonicalUrl)
+    const [first] = selections
+    if (first === undefined || selections.some((selection) => selection.canonicalUrl !== first.canonicalUrl)) return false
+    const url = new URL(first.canonicalUrl)
     if (baseUrl === undefined || url.origin !== new URL(baseUrl).origin || url.pathname !== '/compare') return false
     const encoded = url.searchParams.getAll('selection')
-    if (encoded.length !== 1) return false
-    const parsed: unknown = JSON.parse(encoded[0]!)
-    return isRecord(parsed)
-      && parsed.businessId === selection.businessId
-      && parsed.offeringRef === selection.offeringRef
-      && parsed.offeringRevision === selection.revision
-      && parsed.projectionObservedAt === selection.projectionObservedAt
+    if (encoded.length !== selections.length) return false
+    return selections.every((selection, index) => {
+      const parsed: unknown = JSON.parse(encoded[index]!)
+      return isRecord(parsed)
+        && parsed.businessId === selection.businessId
+        && parsed.offeringRef === selection.offeringRef
+        && parsed.offeringRevision === selection.revision
+        && parsed.projectionObservedAt === selection.projectionObservedAt
+    })
   } catch {
     return false
   }
