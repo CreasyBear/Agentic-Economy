@@ -146,6 +146,29 @@ describe('historical public Offering resolution', () => {
     )
   })
 
+  it('uses a bounded three-field history prefix for comparison reads without public source hashes', () => {
+    const source = readFileSync(
+      new URL('../../../convex/catalog.ts', import.meta.url),
+      'utf8',
+    )
+    const queryStart = source.indexOf('export const readPublicComparisonOfferingReference')
+    const queryEnd = source.indexOf('export const readHistoricalPublicOfferingRevision', queryStart)
+    const query = source.slice(queryStart, queryEnd)
+
+    expect(queryStart).toBeGreaterThan(-1)
+    expect(query).toContain('businessId: v.string()')
+    expect(query).toContain('.eq(\'businessId\', businessId)')
+    expect(query).toContain('.eq(\'offeringRef\', args.offeringRef)')
+    expect(query).toContain('.eq(\'revision\', args.revision)')
+    expect(query).toContain('.take(2)')
+    expect(query).not.toContain('.collect()')
+    expect(query).not.toContain('.filter(')
+    expect(query).not.toContain('offeringSourceHash: v.string()')
+    expect(query.indexOf('hasActiveBusinessSuppression')).toBeLessThan(
+      query.indexOf("db.query('offeringPublicRevisionHistory')"),
+    )
+  })
+
   it.each(['hidden_privacy', 'hidden_safety'] as const)(
     'keeps %s monotonic across a later ordinary withdrawal',
     async (safeDisplayDisposition) => {
