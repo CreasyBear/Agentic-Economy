@@ -7,7 +7,15 @@ import { AeShortlistBar } from '@/components/ae/comparison/AeShortlistBar'
 import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
-import type { ResolvedComparisonSelection } from '@/modules/comparison/public'
+import type {
+  ComparisonOfferingReadPort,
+  ResolvedComparisonSelection,
+} from '@/modules/comparison/public'
+import {
+  buildComparisonRouteReadback,
+  comparisonRouteMetadata,
+  normalizeComparisonRouteSearch,
+} from '@/routes/compare'
 
 afterEach(cleanup)
 
@@ -139,6 +147,65 @@ describe('render-only Offering decision surfaces', () => {
   })
 })
 
+describe('public comparison route contract', () => {
+  it('re-resolves exact URL references and keeps a newer revision separate', async () => {
+    const reads: string[] = []
+    const selected = selection('route')
+    const search = normalizeComparisonRouteSearch({
+      selection: JSON.stringify(selected.selection),
+    })
+    const result = await buildComparisonRouteReadback(search, exactReadPort(selected, reads))
+
+    expect(reads).toEqual(['live:1', 'history:1'])
+    expect(result).toMatchObject({
+      kind: 'ready',
+      state: { selections: [selected.selection] },
+      resolution: {
+        selections: [{
+          offering: { revision: 1 },
+          newerCurrentReference: { offeringRevision: 2 },
+        }],
+      },
+    })
+  })
+
+  it.each([
+    ['malformed', { selection: '{' }, 'malformed_state'],
+    ['duplicate', {
+      selection: [
+        JSON.stringify(selection('duplicate').selection),
+        JSON.stringify(selection('duplicate').selection),
+      ],
+    }, 'duplicate_selection'],
+    ['fifth', {
+      selection: ['1', '2', '3', '4', '5'].map((suffix) => (
+        JSON.stringify(selection(suffix).selection)
+      )),
+    }, 'selection_limit_exceeded'],
+  ] as const)('keeps %s URL input in a bounded ordinary refusal', async (_label, raw, reason) => {
+    const port: ComparisonOfferingReadPort = {
+      readLiveAvailability: vi.fn(),
+      readExactPublicOffering: vi.fn(),
+    }
+    const result = await buildComparisonRouteReadback(
+      normalizeComparisonRouteSearch(raw),
+      port,
+    )
+
+    expect(result).toEqual({ kind: 'refused', reason })
+    expect(port.readLiveAvailability).not.toHaveBeenCalled()
+    expect(port.readExactPublicOffering).not.toHaveBeenCalled()
+  })
+
+  it('declares transient comparison metadata without authenticating or indexing it', () => {
+    expect(comparisonRouteMetadata).toEqual({
+      canonicalPath: '/compare',
+      robots: 'noindex,follow',
+      cacheControl: 'no-store',
+    })
+  })
+})
+
 const source = { kind: 'business_supplied' as const }
 
 function known(value: string) {
@@ -187,6 +254,35 @@ function selection(suffix: string): ResolvedComparisonSelection {
     publication: { publishedAt: 100, safeDisplayDisposition: 'retain_safe_history' },
     projectionDisposition: 'current',
     resolvedAt: 150,
+  }
+}
+
+function exactReadPort(
+  selected: ResolvedComparisonSelection,
+  reads: string[],
+): ComparisonOfferingReadPort {
+  return {
+    readLiveAvailability: async () => {
+      reads.push(`live:${selected.offering.revision}`)
+      return {
+        kind: 'available',
+        currentReference: {
+          businessId: selected.business.businessId,
+          offeringRef: selected.offering.offeringRef,
+          offeringRevision: 2,
+        },
+      }
+    },
+    readExactPublicOffering: async () => {
+      reads.push(`history:${selected.offering.revision}`)
+      return {
+        kind: 'resolved',
+        business: selected.business,
+        offering: selected.offering,
+        publication: selected.publication,
+        projectionDisposition: selected.projectionDisposition,
+      }
+    },
   }
 }
 
