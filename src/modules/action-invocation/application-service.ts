@@ -349,7 +349,8 @@ function bindHost(
       if (paymentValidation.kind === 'refused') {
         return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }
       }
-      const attempt = view.attempts.find(({ attemptRef }) => attemptRef === view.control.attemptRef)
+      const reconciliationAttemptRef = view.control.attemptRef
+      const attempt = view.attempts.find(({ attemptRef }) => attemptRef === reconciliationAttemptRef)
       if (attempt === undefined) {
         return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }
       }

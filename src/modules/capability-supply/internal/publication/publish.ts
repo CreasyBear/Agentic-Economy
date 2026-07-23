@@ -104,9 +104,17 @@ export async function publishCapabilityCommand(
     input,
     {
       businessId: input.businessId,
-      source: draft.source,
-      offering: draft.offering,
-      binding: draft.binding,
+      sourceKind: draft.source.kind,
+      sourceDigest: draft.source.descriptorDigest,
+      contractRef: {
+        capabilityId: encoded.contract.ref.capabilityId,
+        version: encoded.contract.ref.version,
+        contractDigest: encoded.contract.ref.contractDigest,
+      },
+      offeringId: draft.offering.offeringId,
+      offeringRegistrationHash: offeringHash,
+      bindingId: draft.binding.bindingId,
+      bindingRegistrationHash: bindingHash,
     },
     input.now,
   )

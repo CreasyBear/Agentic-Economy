@@ -359,7 +359,7 @@ function money(value: Readonly<{ currency: string; amountMinor: number }>): stri
     })
     moneyFormatters.set(value.currency, formatter)
   }
-  const minorUnitExponent = formatter.resolvedOptions().maximumFractionDigits
+  const minorUnitExponent = formatter.resolvedOptions().maximumFractionDigits ?? 0
   return formatter.format(value.amountMinor / (10 ** minorUnitExponent))
 }
 

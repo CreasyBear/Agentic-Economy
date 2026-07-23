@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
+  capabilityBindingRegistrationHash,
+  capabilityOfferingRegistrationHash,
+} from '@/modules/capability-supply/public'
+import {
   admitPublicationDraft,
   publishCapabilityCommand,
   refreshCapabilityCommand,
@@ -253,9 +257,20 @@ describe('capability-supply publication commands', () => {
     const requestHash = canonicalDigest({
       requestMaterial: {
         businessId: 'business-1',
-        source: admitted.draft.source,
-        offering: admitted.draft.offering,
-        binding: admitted.draft.binding,
+        sourceKind: admitted.draft.source.kind,
+        sourceDigest: admitted.draft.source.descriptorDigest,
+        contractRef: {
+          capabilityId: admitted.encoded.contract.ref.capabilityId,
+          version: admitted.encoded.contract.ref.version,
+          contractDigest: admitted.encoded.contract.ref.contractDigest,
+        },
+        offeringId: admitted.draft.offering.offeringId,
+        offeringRegistrationHash: capabilityOfferingRegistrationHash(admitted.offering),
+        bindingId: admitted.draft.binding.bindingId,
+        bindingRegistrationHash: capabilityBindingRegistrationHash(
+          admitted.binding,
+          admitted.admittedTransport.transport,
+        ),
       },
       correlationId: context.correlationId,
       reasonCode: context.reasonCode,
