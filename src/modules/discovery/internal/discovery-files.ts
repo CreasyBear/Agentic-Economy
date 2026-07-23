@@ -12,6 +12,12 @@ import { readDiscoveryHealth } from './manifest-attempts'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { safePublicText } from './ucp-manifest'
 
+/**
+ * @offering-consumer-disposition offering_v2_projection
+ *
+ * Offering discovery files accept the strict safe v2 DTO directly and emit
+ * only real public HTTP routes. Action exposure metadata is not reachability.
+ */
 const staticSitemapPaths = ['/', '/claim', '/registry', '/for-agents', '/privacy/remove-business'] as const
 const publicSurfacePaths = [
   '/',
@@ -23,6 +29,11 @@ const publicSurfacePaths = [
   '/api/businesses/search?q=',
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path,
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath,
+] as const
+const structuredRegistryReadAdapters = [
+  'GET /api/businesses -> registry.list',
+  'GET /api/businesses/search -> registry.search',
+  'GET /api/businesses/{slug} -> registry.detail',
 ] as const
 const robotDisallowPaths = [
   '/admin/',
@@ -68,6 +79,10 @@ export function buildLlmsTxt(
     '',
     'Public surfaces:',
     ...publicSurfacePaths.map((path) => `- ${canonicalBaseUrl}${path}`),
+    '',
+    'Structured registry read adapters:',
+    ...structuredRegistryReadAdapters.map((adapter) => `- ${adapter}`),
+    '- Comparison adapter=deferred; POST /api/compare is owned by Phase 05 Plan 07 and is not yet advertised as reachable.',
     '',
     'Assistant setup:',
     `- ${canonicalBaseUrl}/SKILL.md`,
@@ -134,6 +149,10 @@ export function buildOfferingLlmsTxt(
     '',
     'Public surfaces:',
     ...publicSurfacePaths.map((path) => `- ${canonicalBaseUrl}${path}`),
+    '',
+    'Structured registry read adapters:',
+    ...structuredRegistryReadAdapters.map((adapter) => `- ${adapter}`),
+    '- Comparison adapter=deferred; POST /api/compare is owned by Phase 05 Plan 07 and is not yet advertised as reachable.',
     '',
     'Assistant setup:',
     `- ${canonicalBaseUrl}/SKILL.md`,

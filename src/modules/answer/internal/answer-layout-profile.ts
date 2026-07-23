@@ -63,8 +63,10 @@ export function inferLayoutProfileFromArtifacts(input: {
   }
 
   const providerCards = input.artifacts.find((artifact) => artifact.kind === 'provider-cards')
+  const offeringCards = input.artifacts.find((artifact) => artifact.kind === 'offering-cards')
   const providerCount =
-    providerCards?.kind === 'provider-cards' ? providerCards.providers.length : 0
+    (providerCards?.kind === 'provider-cards' ? providerCards.providers.length : 0)
+    + (offeringCards?.kind === 'offering-cards' ? offeringCards.sources.length : 0)
 
   if (input.busy) {
     return 'discovery_full'

@@ -1,4 +1,4 @@
-import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 import type { AnswerArtifact } from './answer-schema'
 import type { AnswerLayoutProfile } from './internal/answer-layout-profile'
@@ -11,8 +11,10 @@ import type { AnswerLayoutProfile } from './internal/answer-layout-profile'
  * (Nemotron / Exa / Perplexity Sonar) can drop in by implementing the same
  * `synthesize` method with real token streaming — no route or client rewrite.
  *
+ * @offering-consumer-disposition split_legacy_v1_and_offering_v2
+ *
  * Contract: every field on {@link AnswerSource} must be derivable from a live
- * {@link PublicBusinessCatalogApiDto}. No hardcoded answer text, no invented
+ * {@link PublicBusinessCatalogApiV2Dto}. No hardcoded answer text, no invented
  * availability, no booking/payment/dispatch/callable claims, no "verified" claim
  * unless a real trust standard was met. Read-only synthesis over the public,
  * non-suppressed catalog.
@@ -90,6 +92,7 @@ export type AnswerWorkStep = {
  * derived from real catalog fields via the plain label mappers in
  * `src/lib/ui/status-presentation.ts`.
  */
+/** Legacy catalogue-v1 projection retained for existing Answer artifacts only. */
 export type AnswerSource = {
   citationIndex: number
   slug: string
@@ -116,11 +119,33 @@ export type AnswerSource = {
   }[]
 }
 
+/** Strict Offering-v2 source. It has no service/trust/contact/effect fields. */
+export type OfferingAnswerSource = Readonly<{
+  sourceKind: 'offering_v2'
+  citationIndex: number
+  business: Readonly<{
+    businessId: string
+    slug: string
+    name: string
+    category: string
+    suburb: string
+    stateTerritory: string
+    publicUrl: string
+    observedAt: number
+    disposition: PublicBusinessCatalogApiV2Dto['disposition']
+    accessSummary: PublicBusinessCatalogApiV2Dto['accessSummary']
+  }>
+  offerings: PublicBusinessCatalogApiV2Dto['offerings']
+  detailUrl: string
+}>
+
 /** The final, fully-assembled answer (carried by the `complete` event). */
 export type AnswerSnapshot = {
   query: string
   oneLine: string
   providers: readonly AnswerSource[]
+  /** Strict v2-native sources in registry-returned order. Never adapted into providers. */
+  offeringSources?: readonly OfferingAnswerSource[]
   /** Chosen provider for compact inquiry-path confirmations. */
   selectedProvider?: AnswerSource
   summary: string

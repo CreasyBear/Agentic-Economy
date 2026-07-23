@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import type { AnswerSource } from './answer-synthesizer'
+import { publicOfferingDtoSchema } from '@/modules/registry/public'
+import type { AnswerSource, OfferingAnswerSource } from './answer-synthesizer'
 
 export const AnswerSourceSchema = z.object({
   citationIndex: z.number().int().positive(),
@@ -29,12 +30,36 @@ export const AnswerSourceSchema = z.object({
   ),
 })
 
+export const OfferingAnswerSourceSchema = z.strictObject({
+  sourceKind: z.literal('offering_v2'),
+  citationIndex: z.number().int().positive(),
+  business: z.strictObject({
+    businessId: z.string().trim().min(1),
+    slug: z.string().trim().min(1),
+    name: z.string().trim().min(1),
+    category: z.string().trim().min(1),
+    suburb: z.string().trim().min(1),
+    stateTerritory: z.string().trim().min(1),
+    publicUrl: z.string().trim().min(1),
+    observedAt: z.number().finite().nonnegative(),
+    disposition: z.enum(['current', 'partial', 'stale']),
+    accessSummary: z.strictObject({
+      humanRequest: z.boolean(),
+      externalOperation: z.boolean(),
+      aeSupportedAction: z.boolean(),
+    }),
+  }),
+  offerings: z.array(publicOfferingDtoSchema).max(50),
+  detailUrl: z.string().trim().min(1),
+})
+
 export const AnswerCompareFieldSchema = z.enum(['area', 'response', 'availability', 'hours', 'trust', 'freshness', 'nextStep'])
 
 export const AnswerArtifactSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('one-line'), text: z.string() }),
   z.object({ kind: z.literal('selected-provider'), provider: AnswerSourceSchema }),
   z.object({ kind: z.literal('provider-cards'), providers: z.array(AnswerSourceSchema) }),
+  z.object({ kind: z.literal('offering-cards'), sources: z.array(OfferingAnswerSourceSchema).max(3) }),
   z.object({
     kind: z.literal('provider-compare-table'),
     providers: z.array(AnswerSourceSchema),
@@ -80,6 +105,7 @@ export type AnswerArtifact =
   | { kind: 'one-line'; text: string }
   | { kind: 'selected-provider'; provider: AnswerSource }
   | { kind: 'provider-cards'; providers: readonly AnswerSource[] }
+  | { kind: 'offering-cards'; sources: readonly OfferingAnswerSource[] }
   | {
       kind: 'provider-compare-table'
       providers: readonly AnswerSource[]

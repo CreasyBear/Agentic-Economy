@@ -1,40 +1,84 @@
 import {
+  formatProviderTrustCue,
   plainAvailabilityLabel,
+  plainFreshnessLabel,
   plainHoursLabel,
   plainNextStepLabel,
-  plainTrustLabel,
   plainResponseTimeLabel,
-  plainFreshnessLabel,
-  formatProviderTrustCue,
+  plainTrustLabel,
 } from '@/lib/ui/status-presentation'
-import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
 import type { DiscoveryStatus } from '@/modules/discovery/public'
 import type { FirstRequestMode } from '@/modules/catalog/public'
 import type { TrustTier } from '@/modules/business/public'
+import type {
+  PublicBusinessCatalogApiDto,
+  PublicBusinessCatalogApiV2Dto,
+} from '@/modules/registry/public'
 
-import { buildDetailUrl } from '../answer-synthesizer'
+import {
+  buildDetailUrl,
+  type AnswerSource,
+  type OfferingAnswerSource,
+} from '../answer-synthesizer'
 
 /**
- * Single owner of the public catalog DTO → AnswerSource mapping.
+ * @offering-consumer-disposition split_legacy_v1_and_offering_v2
  *
- * The registry AE action returns the raw `PublicBusinessCatalogApiPage` /
- * detail DTO subset. Answer-side callers (the TanStack answer tool and the
- * evidence assembler) map those DTOs into citation-bearing `AnswerSource`
- * records through this one function, so the mapping is not duplicated.
- *
- * The return shape is inferred (mutable `services`) so it satisfies both the
- * TanStack tool output schema and the evidence assembler's `readonly AnswerSource[]`.
+ * The two branches are deliberately different contracts. Offering-v2 stays a
+ * native, exact-revision source. Only an explicit catalogue-v1 input may enter
+ * the legacy service/trust/contact projection still consumed by older Answer
+ * artifacts.
  */
+export function toAnswerSource(
+  dto: PublicBusinessCatalogApiV2Dto,
+  citationIndex: number,
+): OfferingAnswerSource
 export function toAnswerSource(
   dto: PublicBusinessCatalogApiDto,
   citationIndex: number,
-) {
+): AnswerSource
+export function toAnswerSource(
+  dto: PublicBusinessCatalogApiDto | PublicBusinessCatalogApiV2Dto,
+  citationIndex: number,
+): AnswerSource | OfferingAnswerSource {
+  return dto.schemaVersion === 'public-business-catalog-api:v2'
+    ? toOfferingAnswerSource(dto, citationIndex)
+    : toLegacyAnswerSource(dto, citationIndex)
+}
+
+function toOfferingAnswerSource(
+  dto: PublicBusinessCatalogApiV2Dto,
+  citationIndex: number,
+): OfferingAnswerSource {
+  return {
+    sourceKind: 'offering_v2',
+    citationIndex,
+    business: {
+      businessId: dto.businessId,
+      slug: dto.slug,
+      name: dto.name,
+      category: dto.category,
+      suburb: dto.suburb,
+      stateTerritory: dto.stateTerritory,
+      publicUrl: dto.publicUrl,
+      observedAt: dto.observedAt,
+      disposition: dto.disposition,
+      accessSummary: dto.accessSummary,
+    },
+    offerings: dto.offerings,
+    detailUrl: buildDetailUrl(dto.slug),
+  }
+}
+
+function toLegacyAnswerSource(
+  dto: PublicBusinessCatalogApiDto,
+  citationIndex: number,
+): AnswerSource {
   const primaryService = dto.services[0]
   const discoveryStatus = dto.discoveryStatus as DiscoveryStatus
   const firstRequestMode = (primaryService?.firstRequest.mode ??
     'not_available_yet') as FirstRequestMode
   const trustTier = dto.trustTier as TrustTier
-
   const trustLabel = plainTrustLabel(trustTier)
   const responseTimeLabel = plainResponseTimeLabel(dto.responseTimeMinutes)
   const primaryPhoto = dto.photos?.[0]
@@ -51,10 +95,7 @@ export function toAnswerSource(
       dto.services.flatMap((service) => (service.serviceArea ? [service.serviceArea] : []))[0] ??
       '',
     hoursLabel: plainHoursLabel(primaryService?.hoursOrUnknown),
-    availabilityLabel: plainAvailabilityLabel({
-      discoveryStatus,
-      firstRequestMode,
-    }),
+    availabilityLabel: plainAvailabilityLabel({ discoveryStatus, firstRequestMode }),
     trustLabel,
     responseTimeLabel,
     trustCue: formatProviderTrustCue({

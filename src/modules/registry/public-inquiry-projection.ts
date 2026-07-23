@@ -11,6 +11,17 @@ import type {
   PublicBusinessCatalogDetailResult,
 } from '@/modules/registry/public'
 
+/**
+ * @offering-consumer-disposition legacy_catalog_v1_only
+ *
+ * Qualified-inquiry availability is a legacy service-v1 projection. It does
+ * not accept Offering-v2 registry action output; Phase 5 inspect-only reads
+ * retain access-path facts without passing through this effect-adjacent seam.
+ */
+type LegacyInquiryCatalogV1 = PublicBusinessCatalogApiDto
+type LegacyInquiryCatalogV1Page = PublicBusinessCatalogApiPage
+type LegacyInquiryCatalogV1Detail = PublicBusinessCatalogDetailResult
+
 type InquiryCapabilityKind = 'phone_inquiry' | 'quote_request'
 
 type InquiryAvailabilityTarget = {
@@ -41,9 +52,9 @@ const defaultDependencies: ProjectionDependencies = {
 }
 
 export async function projectCurrentPublicInquiryAvailability(
-  business: PublicBusinessCatalogApiDto,
+  business: LegacyInquiryCatalogV1,
   dependencies: ProjectionDependencies = defaultDependencies,
-): Promise<PublicBusinessCatalogApiDto> {
+): Promise<LegacyInquiryCatalogV1> {
   const targets = business.services.flatMap((service): InquiryAvailabilityTarget[] => {
     const capabilityKind = inquiryCapabilityKind(service.firstRequest.mode)
     return capabilityKind === undefined ? [] : [{
@@ -73,9 +84,9 @@ export async function projectCurrentPublicInquiryAvailability(
 }
 
 export async function projectCurrentPublicInquiryPage(
-  page: PublicBusinessCatalogApiPage,
+  page: LegacyInquiryCatalogV1Page,
   dependencies: ProjectionDependencies = defaultDependencies,
-): Promise<PublicBusinessCatalogApiPage> {
+): Promise<LegacyInquiryCatalogV1Page> {
   const targets = page.items.flatMap((business) => business.services.flatMap((service): InquiryAvailabilityTarget[] => {
     const capabilityKind = inquiryCapabilityKind(service.firstRequest.mode)
     return capabilityKind === undefined ? [] : [{
@@ -157,9 +168,9 @@ function admittedAvailabilityKeys(availability: readonly InquiryAvailability[]):
 }
 
 export async function projectCurrentPublicInquiryDetail(
-  detail: PublicBusinessCatalogDetailResult,
+  detail: LegacyInquiryCatalogV1Detail,
   dependencies: ProjectionDependencies = defaultDependencies,
-): Promise<PublicBusinessCatalogDetailResult> {
+): Promise<LegacyInquiryCatalogV1Detail> {
   return detail.kind === 'not_found'
     ? detail
     : {
@@ -169,7 +180,7 @@ export async function projectCurrentPublicInquiryDetail(
 }
 
 function inquiryCapabilityKind(
-  mode: PublicBusinessCatalogApiDto['services'][number]['firstRequest']['mode'],
+  mode: LegacyInquiryCatalogV1['services'][number]['firstRequest']['mode'],
 ): InquiryCapabilityKind | undefined {
   if (mode === 'inquiry_available') return 'phone_inquiry'
   if (mode === 'quote_request_available') return 'quote_request'
@@ -177,9 +188,9 @@ function inquiryCapabilityKind(
 }
 
 function unavailableService(
-  service: PublicBusinessCatalogApiDto['services'][number],
+  service: LegacyInquiryCatalogV1['services'][number],
   capabilityKind: InquiryCapabilityKind,
-): PublicBusinessCatalogApiDto['services'][number] {
+): LegacyInquiryCatalogV1['services'][number] {
   return {
     ...service,
     firstRequest: {

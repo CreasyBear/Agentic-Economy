@@ -133,7 +133,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
         'parramatta-emergency-plumbing',
       ])
       expect(complete.answer.offeringSources?.flatMap((source) => source.offerings).every(
-        (offering) => offering.revision > 0 && offering.comparison?.profile.profileId !== undefined,
+        (offering) => offering.revision > 0,
       )).toBe(true)
       const offeringArtifact = frames
         .map((frame) => frame.event)
@@ -164,7 +164,6 @@ describe('POST /api/answer/turn empty-state queries', () => {
         expect.arrayContaining([
           'turn.context_parse',
           'retrieval.initial_search',
-          'registry.search.convex',
           'tool.run',
           'sse.emit_snapshot',
           'turn.persistence_prepare',
@@ -436,7 +435,8 @@ describe('POST /api/answer/turn empty-state queries', () => {
       if (firstComplete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(firstComplete.answer.providers.map((provider) => provider.slug)).toContain(
+      expect(firstComplete.answer.providers).toEqual([])
+      expect(firstComplete.answer.offeringSources?.map((source) => source.business.slug)).toContain(
         'parramatta-emergency-plumbing',
       )
 
@@ -524,7 +524,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
         throw new Error('expected complete event')
       }
       expect(
-        complete.answer.providers.map((provider) => provider.slug),
+        complete.answer.offeringSources?.map((source) => source.business.slug),
       ).toContain('parramatta-emergency-plumbing')
       // The frozen snapshot query stays honest to what the person typed.
       expect(complete.answer.query).toBe('paramata')

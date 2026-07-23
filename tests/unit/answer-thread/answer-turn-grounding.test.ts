@@ -6,6 +6,8 @@ import {
   type AnswerTurnRecord,
 } from '@/modules/answer-thread/public'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
+import { finalizeAnswerTurnSnapshot } from '@/modules/answer-thread/internal/answer-turn-safety'
+import { buildOfferingRetrievalSnapshot } from '@/modules/answer-thread/internal/turns/retrieval-first'
 
 const provider: AnswerSource = {
   citationIndex: 1,
@@ -91,7 +93,64 @@ describe('answer turn catalog grounding', () => {
     expect(evidence.providers).toEqual([])
     expect(evidence.allowedSlugs).toEqual([])
   })
+
+  it('grounds v2 business slugs and still requires boundary copy', () => {
+    const snapshot = {
+      query: 'data feed',
+      oneLine: 'One listed business publishes an offering.',
+      providers: [],
+      offeringSources: [offeringSource('profile-pair')],
+      summary: 'Published details are shown.',
+      nextStep: 'Review the business page.',
+      agentJsonUrl: '/api/businesses/search?q=data',
+    }
+
+    expect(finalizeAnswerTurnSnapshot({
+      snapshot,
+      allowedSlugs: new Set(['different-business']),
+    })).toMatchObject({ ok: false, code: 'grounding_failed' })
+    expect(finalizeAnswerTurnSnapshot({
+      snapshot,
+      allowedSlugs: new Set(['profile-pair']),
+    })).toMatchObject({ ok: false, code: 'boundary_missing' })
+  })
+
+  it('does not turn unknown, stale, or absent Offering facts into business confirmation', () => {
+    const snapshot = buildOfferingRetrievalSnapshot({
+      query: 'current data feed',
+      sources: [offeringSource('profile-pair')],
+      searchInput: { query: 'current data feed', limit: 3 },
+      searchContext: undefined,
+    })
+
+    expect(snapshot.summary).toContain('missing, unknown, or stale')
+    expect(snapshot.nextStep).toContain('Inspect each offering and business page')
+    expect(`${snapshot.summary} ${snapshot.nextStep}`).not.toMatch(
+      /confirms? (?:current )?fit|confirms? timing|confirms? price|confirms? access|confirms? availability/i,
+    )
+  })
 })
+
+function offeringSource(slug: string) {
+  return {
+    sourceKind: 'offering_v2' as const,
+    citationIndex: 1,
+    business: {
+      businessId: `business:${slug}`,
+      slug,
+      name: 'Profile Pair',
+      category: 'Data',
+      suburb: 'Perth',
+      stateTerritory: 'WA',
+      publicUrl: `/${slug}`,
+      observedAt: 1,
+      disposition: 'stale' as const,
+      accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false },
+    },
+    offerings: [],
+    detailUrl: `/${slug}`,
+  }
+}
 
 function buildUngroundedPriorTurn(): AnswerTurnRecord {
   return {

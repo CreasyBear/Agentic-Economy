@@ -8,7 +8,10 @@ import {
   readDeveloperDiscoveryRoute,
   type DeveloperDiscoveryRouteSnapshot,
 } from '@/modules/discovery/developer-discovery'
-import type { DiscoverySourceState } from '@/modules/discovery/public'
+import {
+  createDefaultDiscoverySourceState,
+  type DiscoverySourceState,
+} from '@/modules/discovery/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 import { api } from '../../convex/_generated/api'
@@ -153,6 +156,9 @@ describe('Offering-v2 discovery consumers', () => {
         comparison: offering.comparison,
       })),
     )
+    expect(readback.publicFacts[0]).not.toHaveProperty('serviceCount')
+    expect(readback.publicFacts[0]).not.toHaveProperty('capabilityStatuses')
+    expect(readback.publicFacts[0]).not.toHaveProperty('firstRequestModes')
     expect(readback.structuredRegistryAdapters).toEqual([
       { actionId: 'registry.list', method: 'GET', path: '/api/businesses' },
       { actionId: 'registry.search', method: 'GET', path: '/api/businesses/search' },
@@ -171,8 +177,8 @@ describe('Offering-v2 discovery consumers', () => {
     const reviewed = [
       ['src/modules/registry/public-inquiry-projection.ts', 'legacy_catalog_v1_only'],
       ['src/modules/registry/internal/search-documents.ts', 'split_legacy_v1_and_offering_v2'],
-      ['src/modules/answer/internal/dto-to-answer-source.ts', 'registry_action_offering_v2'],
-      ['src/modules/answer/answer-synthesizer.ts', 'answer_offering_v2'],
+      ['src/modules/answer/internal/dto-to-answer-source.ts', 'split_legacy_v1_and_offering_v2'],
+      ['src/modules/answer/answer-synthesizer.ts', 'split_legacy_v1_and_offering_v2'],
       ['src/modules/answer-thread/internal/tool-runner.ts', 'registry_action_offering_v2'],
       ['src/modules/discovery/internal/ucp-manifest.ts', 'legacy_catalog_v1_only'],
       ['src/modules/discovery/developer-discovery.ts', 'split_legacy_v1_and_offering_v2'],
@@ -277,18 +283,7 @@ function successfulRoute<Body>(route: string, body: Body) {
 }
 
 function emptyDiscoveryState(): DiscoverySourceState {
-  return {
-    businesses: [],
-    businessServices: [],
-    serviceCapabilities: [],
-    operationKeys: [],
-    registryProjectionItems: [],
-    registryProjectionAttempts: [],
-    registrySearchSyncAttempts: [],
-    discoveryManifestAttempts: [],
-    indexStatus: [],
-    auditEvents: [],
-  }
+  return createDefaultDiscoverySourceState()
 }
 
 function productionTypeScriptFiles(): string[] {

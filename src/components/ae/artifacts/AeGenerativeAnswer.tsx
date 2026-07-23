@@ -13,7 +13,7 @@ import {
   type AnswerLayoutProfile,
   type AnswerMessagePart,
 } from '@/modules/answer/public'
-import type { AnswerArtifact, AnswerCompareField, AnswerSource } from '@/modules/answer/public'
+import type { AnswerArtifact, AnswerCompareField, AnswerSource, OfferingAnswerSource } from '@/modules/answer/public'
 import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
 import { AeKicker } from '@/components/ae/primitives/AeKicker'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
@@ -193,6 +193,7 @@ function isProviderEvidencePart(part: AnswerMessagePart): boolean {
   switch (part.kind) {
     case 'selected-provider':
     case 'provider-cards':
+    case 'offering-cards':
     case 'provider-compare-table':
       return true
     default:
@@ -428,6 +429,8 @@ function AnswerPartView({
       return <SelectedProviderConfirmation provider={part.provider} threadId={threadId} />
     case 'provider-cards':
       return <ProviderCardsRail providers={part.providers} scroll={part.scroll === true} threadId={threadId} />
+    case 'offering-cards':
+      return <OfferingCards sources={part.sources} threadId={threadId} />
     case 'provider-compare-table':
       return hasAnswerFirstSummary ? (
         <details className={`${REVEAL_ENTER} group rounded-lg border border-border bg-surface`}>
@@ -489,6 +492,59 @@ function AnswerPartView({
       return null
     }
   }
+}
+
+function OfferingCards({
+  sources,
+  threadId,
+}: {
+  sources: readonly OfferingAnswerSource[]
+  threadId: string | undefined
+}) {
+  if (sources.length === 0) {
+    return null
+  }
+
+  return (
+    <section className={`${REVEAL_ENTER} grid gap-3`} aria-label="Published offerings">
+      <header className="grid gap-1 rounded-md border border-border bg-surface px-3 py-2">
+        <AeKicker marker>Published offerings</AeKicker>
+        <p className="text-sm text-secondary">
+          These are the businesses and offerings returned for this request, in source order.
+        </p>
+      </header>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {sources.map((source) => (
+          <li key={source.business.slug}>
+            <Card padding={4} className="grid h-full gap-3 border border-border bg-surface">
+              <div className="grid gap-1">
+                <Text type="large" weight="semibold" color="primary" display="block">
+                  {source.business.name}
+                </Text>
+                <Text type="supporting" color="secondary" display="block">
+                  {source.business.category} · {source.business.suburb}, {source.business.stateTerritory}
+                </Text>
+              </div>
+              <ul className="grid gap-2" aria-label={`${source.business.name} offerings`}>
+                {source.offerings.map((offering) => (
+                  <li key={`${offering.offeringRef}:${offering.revision}`} className="rounded-md border border-border bg-card px-3 py-2">
+                    <p className="text-sm font-medium text-primary">{offering.name}</p>
+                    <p className="text-xs text-secondary">{offering.category}</p>
+                  </li>
+                ))}
+              </ul>
+              <Button
+                label="Review business"
+                variant="secondary"
+                size="sm"
+                href={appendThreadOrigin(source.detailUrl, threadId)}
+              />
+            </Card>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
 }
 
 function SelectedProviderConfirmation({ provider, threadId }: { provider: AnswerSource; threadId: string | undefined }) {

@@ -32,8 +32,10 @@ export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
     return { ok: false, code: 'empty_prose', copyId }
   }
 
-  if (snapshot.providers.length > 0) {
+  const hasCatalogSources = snapshot.providers.length > 0 || (snapshot.offeringSources?.length ?? 0) > 0
+  if (hasCatalogSources) {
     const grounded = snapshot.providers.every((provider) => allowedSlugs.has(provider.slug))
+      && (snapshot.offeringSources ?? []).every((source) => allowedSlugs.has(source.business.slug))
     if (!grounded) {
       return { ok: false, code: 'grounding_failed', copyId }
     }
@@ -53,7 +55,7 @@ export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
     return { ok: false, code: 'overclaim', copyId }
   }
 
-  if (snapshot.providers.length > 0 && !hasBoundaryCopy(humanText)) {
+  if (hasCatalogSources && !hasBoundaryCopy(humanText)) {
     return { ok: false, code: 'boundary_missing', copyId }
   }
 

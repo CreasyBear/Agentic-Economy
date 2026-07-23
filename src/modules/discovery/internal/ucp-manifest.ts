@@ -8,8 +8,17 @@ import type {
   DiscoveryManifestServiceContract,
 } from '@/modules/discovery/public'
 
+/**
+ * @offering-consumer-disposition legacy_catalog_v1_only
+ *
+ * This AE-hosted UCP-shaped fallback consumes the legacy catalogue contract
+ * directly. It is not a registry-action adapter and cannot accept the strict
+ * Offering-v2 result shape.
+ */
+type LegacyUcpCatalogV1Input = BuildCatalogDiscoveryManifestInput
+
 export function buildCatalogDiscoveryManifest(
-  input: BuildCatalogDiscoveryManifestInput
+  input: LegacyUcpCatalogV1Input
 ): BuildCatalogDiscoveryManifestResult {
   if (input.catalog === undefined) {
     return { kind: 'hidden', reason: 'no_public_catalog' }

@@ -20,6 +20,7 @@ import {
   buildAgentJsonUrl,
   type AnswerSource,
   type AnswerSnapshot,
+  type OfferingAnswerSource,
 } from '../answer-synthesizer'
 import {
   ANSWER_READ_TOOL_IDS,
@@ -111,6 +112,7 @@ export type AnswerToolUseAgentInput = {
 export type AnswerToolUseAgentResult = {
   prose: AnswerProse
   providers: readonly AnswerSource[]
+  offeringSources: readonly OfferingAnswerSource[]
   allowedSlugs: ReadonlySet<string>
   toolCalls: AnswerToolCallRecord[]
   modelRequests: readonly HarnessModelRequestRecord[]
@@ -135,6 +137,7 @@ function buildAgentResult(
   prose: AnswerProse,
   toolCalls: readonly AnswerToolCallRecord[],
   providers: readonly AnswerSource[],
+  offeringSources: readonly OfferingAnswerSource[],
   timings: readonly AnswerTurnTimingEntry[] = [],
   modelRequests: readonly HarnessModelRequestRecord[] = [],
 ): AnswerToolUseAgentResult {
@@ -158,7 +161,8 @@ function buildAgentResult(
 
   const mapped = snapshotProseFromAnswer(prose)
   const snapshotProse =
-    locationFiltered.filtered === true || (locationFiltered.location !== undefined && finalProviders.length === 0)
+    offeringSources.length === 0
+      && (locationFiltered.filtered === true || (locationFiltered.location !== undefined && finalProviders.length === 0))
       ? buildLocationScopedProse({
           query: input.query,
           location: locationFiltered.location,
@@ -179,6 +183,7 @@ function buildAgentResult(
     query: input.query,
     oneLine: snapshotProse.oneLine,
     providers: finalProviders,
+    ...(offeringSources.length === 0 ? {} : { offeringSources }),
     summary: snapshotProse.summary,
     nextStep: snapshotProse.nextStep,
     agentJsonUrl: buildAgentJsonUrl(
@@ -200,6 +205,7 @@ function buildAgentResult(
   return {
     prose: effectiveProse,
     providers: finalProviders,
+    offeringSources,
     allowedSlugs,
     toolCalls: [...toolCalls],
     modelRequests: [...modelRequests],
@@ -234,6 +240,8 @@ async function runRealToolUseAgent(
   const modelRequests: HarnessModelRequestRecord[] = []
   const providers: AnswerSource[] = []
   const slugSeen = new Set<string>()
+  const offeringSources: OfferingAnswerSource[] = []
+  const offeringSlugSeen = new Set<string>()
   const maxToolCalls = normalizeMaxToolCalls(input.maxToolCalls)
   let toolCallAttempts = 0
   let seq = 0
@@ -271,7 +279,7 @@ async function runRealToolUseAgent(
       if (prose === undefined) {
         throw new AnswerToolUseAgentError('prose_failed')
       }
-      return buildAgentResult(input, prose, toolCalls, providers, timings, modelRequests)
+      return buildAgentResult(input, prose, toolCalls, providers, offeringSources, timings, modelRequests)
     }
 
     messages.push({ role: 'assistant', content: assistantMessage.content ?? '', tool_calls: assistantToolCalls })
@@ -301,6 +309,7 @@ async function runRealToolUseAgent(
         toolSeq: result.record.seq,
       })
       appendProvidersFromToolResult(providers, slugSeen, result.providers)
+      appendOfferingSourcesFromToolResult(offeringSources, offeringSlugSeen, result.offeringSources)
       seq += 1
       messages.push({
         role: 'tool',
@@ -339,7 +348,7 @@ async function runRealToolUseAgent(
   if (prose === undefined) {
     throw new AnswerToolUseAgentError('prose_failed')
   }
-  return buildAgentResult(input, prose, toolCalls, providers, timings, modelRequests)
+  return buildAgentResult(input, prose, toolCalls, providers, offeringSources, timings, modelRequests)
 }
 
 async function runOpenRouterModelRequest(input: {
@@ -535,6 +544,20 @@ function appendProvidersFromToolResult(
       slugSeen.add(provider.slug)
       providers.push({ ...provider, citationIndex: providers.length + 1 })
     }
+  }
+}
+
+function appendOfferingSourcesFromToolResult(
+  sources: OfferingAnswerSource[],
+  slugSeen: Set<string>,
+  toolSources: readonly OfferingAnswerSource[],
+): void {
+  for (const source of toolSources) {
+    if (slugSeen.has(source.business.slug)) {
+      continue
+    }
+    slugSeen.add(source.business.slug)
+    sources.push({ ...source, citationIndex: sources.length + 1 })
   }
 }
 

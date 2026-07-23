@@ -151,6 +151,14 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
     intent: input.intent,
     ...(input.searchContext === undefined ? {} : { searchContext: stableAeSearchContextKey(input.searchContext) }),
     providers: baseEvidence.providers.map((provider) => provider.slug),
+    offeringSources: (baseEvidence.offeringSources ?? []).map((source) => ({
+      slug: source.business.slug,
+      offerings: source.offerings.map((offering) => ({
+        offeringRef: offering.offeringRef,
+        revision: offering.revision,
+        profileId: offering.comparison?.profile.profileId ?? null,
+      })),
+    })),
     prose,
     ...(input.toolCalls.length === 0 ? {} : { toolCalls: input.toolCalls.map((call) => call.resultHash) }),
   }).toString()
@@ -382,6 +390,7 @@ function buildFrozenEvidence(
 ): FrozenTurnEvidence {
   return {
     providers: snapshot.providers,
+    ...(snapshot.offeringSources === undefined ? {} : { offeringSources: snapshot.offeringSources }),
     allowedSlugs: [...allowedSlugs],
     agentJsonUrl: snapshot.agentJsonUrl,
     ...(searchContext === undefined ? {} : { searchContext }),

@@ -16,6 +16,7 @@ const COMPARE_PROVIDER_LIMIT = 2
 const TEXT_ONLY_ARTIFACTS = ['one-line', 'prose', 'what-to-do-now'] as const
 const ANSWER_ARTIFACTS = [
   'one-line',
+  'offering-cards',
   'provider-cards',
   'location-map',
   'prose',
@@ -34,13 +35,17 @@ export function buildArtifactsFromSnapshot(
   const profile = budgetOverride?.layoutProfile ?? resolveLayoutProfile({
     ...(snapshot.layoutProfile === undefined ? {} : { layoutProfile: snapshot.layoutProfile }),
     ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),
-    providerCount: snapshot.providers.length,
+    providerCount: snapshot.providers.length + (snapshot.offeringSources?.length ?? 0),
   })
   const selectedProvider = snapshot.selectedProvider
   const budget = getArtifactBudgetForSnapshot({ ...snapshot, layoutProfile: profile }, budgetOverride)
 
   const compact = isCompactLayoutProfile(profile)
   const visibleProviderCards = snapshot.providers.slice(0, Math.max(0, budget.maxProviderCards))
+  const visibleOfferingCards = (snapshot.offeringSources ?? []).slice(
+    0,
+    Math.max(0, budget.maxProviderCards),
+  )
   const compareProviders = snapshot.providers.slice(0, COMPARE_PROVIDER_LIMIT)
   const location = parseLocationIntent(snapshot.query)
   const artifacts: AnswerArtifact[] = [
@@ -49,6 +54,10 @@ export function buildArtifactsFromSnapshot(
 
   if (selectedProvider !== undefined) {
     artifacts.push({ kind: 'selected-provider', provider: selectedProvider })
+  }
+
+  if (selectedProvider === undefined && visibleOfferingCards.length > 0) {
+    artifacts.push({ kind: 'offering-cards', sources: [...visibleOfferingCards] })
   }
 
   if (profile === 'compare_pair' && compareProviders.length >= 2) {
@@ -111,7 +120,7 @@ export function getArtifactBudgetForSnapshot(
   const profile = budgetOverride?.layoutProfile ?? resolveLayoutProfile({
     ...(snapshot.layoutProfile === undefined ? {} : { layoutProfile: snapshot.layoutProfile }),
     ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),
-    providerCount: snapshot.providers.length,
+    providerCount: snapshot.providers.length + (snapshot.offeringSources?.length ?? 0),
   })
   return withSelectedProviderBudget(
     budgetOverride ?? getDefaultArtifactBudgetForLayoutProfile(profile),
@@ -217,6 +226,8 @@ export function filterArtifactsForBudget(
 
     if (capped.kind === 'provider-cards') {
       remainingProviderCards -= capped.providers.length
+    } else if (capped.kind === 'offering-cards') {
+      remainingProviderCards -= capped.sources.length
     }
 
     budgeted.push(capped)
@@ -234,6 +245,10 @@ function capArtifactForBudget(
     case 'provider-cards': {
       const providers = artifact.providers.slice(0, remainingProviderCards)
       return providers.length === 0 ? undefined : { kind: 'provider-cards', providers }
+    }
+    case 'offering-cards': {
+      const sources = artifact.sources.slice(0, remainingProviderCards)
+      return sources.length === 0 ? undefined : { kind: 'offering-cards', sources }
     }
     case 'provider-compare-table': {
       const providers = artifact.providers.slice(0, COMPARE_PROVIDER_LIMIT)

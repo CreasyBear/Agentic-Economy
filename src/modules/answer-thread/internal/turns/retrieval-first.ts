@@ -1,6 +1,7 @@
 import {
   type AnswerSnapshot,
   type AnswerSource,
+  type OfferingAnswerSource,
   type AnswerWorkStep,
   buildAgentJsonUrl,
   extractRequestedLocation,
@@ -77,7 +78,7 @@ async function streamRetrievalFirstTurn(
   })
   stopSearchTiming({
     status: result.record.status,
-    providerCount: result.providers.length,
+    providerCount: result.providers.length + result.offeringSources.length,
   })
   ctx.workLog.emit({
     id: 'search.registry.initial',
@@ -85,13 +86,16 @@ async function streamRetrievalFirstTurn(
     status: result.record.status === 'complete' ? 'complete' : 'error',
     title: 'Searching listed businesses',
     summary: result.record.status === 'complete'
-      ? describeProviderCount(result.providers.length, 'listed business')
+      ? describeProviderCount(result.providers.length + result.offeringSources.length, 'listed business')
       : 'The listed-business search did not complete.',
     detailRows: [
       ...buildSearchWorkStepDetailRows(searchInput),
-      { label: 'Results', value: String(result.providers.length) },
+      { label: 'Results', value: String(result.providers.length + result.offeringSources.length) },
     ],
-    relatedProviderSlugs: result.providers.map((provider) => provider.slug),
+    relatedProviderSlugs: [
+      ...result.providers.map((provider) => provider.slug),
+      ...result.offeringSources.map((source) => source.business.slug),
+    ],
     startedAtMs: searchStartedAt,
     completedAtMs: Date.now(),
   })
@@ -109,9 +113,9 @@ async function streamRetrievalFirstTurn(
     return { snapshot: undefined, toolCalls: [result.record], allowedSlugs: result.allowedSlugs, errorCopyId: undefined, gate: undefined }
   }
 
-  emitReadAndCompareSteps(ctx.workLog, result.providers)
+  emitReadAndCompareSteps(ctx.workLog, result.providers, result.offeringSources)
 
-  if (result.providers.length === 0) {
+  if (result.providers.length === 0 && result.offeringSources.length === 0) {
     if (!shouldReturnDeterministicEmptyState(ctx.query, searchInput)) {
       return { snapshot: undefined, toolCalls: [result.record], allowedSlugs: result.allowedSlugs, errorCopyId: undefined, gate: undefined }
     }
@@ -142,13 +146,20 @@ async function streamRetrievalFirstTurn(
   }
 
   const snapshot = withFollowUpLayout(
-    buildRetrievalFirstSnapshot({
-      query: ctx.query,
-      providers: result.providers,
-      visibleLimit: plan.providerBudget.visibleLimit,
-      searchInput,
-      searchContext: ctx.searchContext,
-    }),
+    result.offeringSources.length > 0
+      ? buildOfferingRetrievalSnapshot({
+          query: ctx.query,
+          sources: result.offeringSources,
+          searchInput,
+          searchContext: ctx.searchContext,
+        })
+      : buildRetrievalFirstSnapshot({
+          query: ctx.query,
+          providers: result.providers,
+          visibleLimit: plan.providerBudget.visibleLimit,
+          searchInput,
+          searchContext: ctx.searchContext,
+        }),
     ctx.priorTurnsCount,
     ctx.intent,
   )
@@ -166,6 +177,34 @@ async function streamRetrievalFirstTurn(
     errorCopyId: undefined,
     gate: finalized.gate,
     ...(assembly === undefined ? {} : { assembly }),
+  }
+}
+
+export function buildOfferingRetrievalSnapshot(input: {
+  query: string
+  sources: readonly OfferingAnswerSource[]
+  searchInput: AnswerRegistrySearchInput
+  searchContext: AeSearchContext | undefined
+}): AnswerSnapshot {
+  const count = input.sources.length
+  const place = input.searchInput.location ?? extractRequestedLocation(input.query)
+  const placeSuffix = place === undefined ? '' : ` for ${place}`
+  return {
+    query: input.query,
+    oneLine: count === 1
+      ? `1 listed business publishes an offering${placeSuffix}.`
+      : `${count} listed businesses publish offerings${placeSuffix}.`,
+    providers: [],
+    offeringSources: [...input.sources],
+    summary: count === 1
+      ? 'This shows the published offering details returned by the registry. Some facts may be missing, unknown, or stale. Agentic Economy does not book or take payment on this page.'
+      : 'These are the published offering details returned in registry source order. Some facts may be missing, unknown, or stale. Agentic Economy does not book or take payment on this page.',
+    nextStep: 'Inspect each offering and business page before relying on its details or deciding what to do next. Agentic Economy does not book or take payment on this page.',
+    agentJsonUrl: buildAgentJsonUrl(
+      input.searchInput.query,
+      input.searchInput.limit,
+      buildAgentJsonScope(input.searchInput, input.searchContext),
+    ),
   }
 }
 

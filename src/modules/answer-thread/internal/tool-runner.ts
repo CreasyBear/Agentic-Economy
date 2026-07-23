@@ -1,9 +1,12 @@
 import { findAction } from '@/modules/actions'
-import type { ActionTimingSink } from '@/modules/common/action'
+import type { ActionContext, ActionTimingSink } from '@/modules/common/action'
 import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
 import { stableHash } from '@/modules/common/stable-hash'
 import { toAnswerSource } from '@/modules/answer/public'
-import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
+import type {
+  AnswerSource,
+  OfferingAnswerSource,
+} from '@/modules/answer/answer-synthesizer'
 import {
   actionToHarnessTool,
   runHarnessTool,
@@ -11,8 +14,8 @@ import {
   type HarnessToolStatus,
 } from '@/modules/harness/public'
 import type {
-  PublicBusinessCatalogApiPage,
-  PublicBusinessCatalogDetailResult,
+  PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogV2DetailResult,
 } from '@/modules/registry/public'
 import { isAnswerReadToolId } from './answer-tool-registry'
 
@@ -25,6 +28,8 @@ import type {
 } from '../answer-thread.schema'
 
 /**
+ * @offering-consumer-disposition registry_action_offering_v2
+ *
  * Runs a single AE read tool call for an answer turn and produces the
  * evidence record the orchestrator buffers and later persists.
  *
@@ -42,11 +47,15 @@ export type RunAnswerToolCallInput = {
   turnId: string
   seq: number
   harnessLoop?: HarnessRunLoop
+  actionContext?: ActionContext
 }
 
 export type RunAnswerToolCallResult = {
   record: AnswerToolCallRecord
+  /** Explicit catalogue-v1 lane retained for legacy callers only. */
   providers: AnswerSource[]
+  /** Strict Offering-v2 lane; no service/trust/contact/effect projection. */
+  offeringSources: OfferingAnswerSource[]
   allowedSlugs: ReadonlySet<string>
   timings: readonly AnswerTurnTimingEntry[]
   /** Public action result JSON fed back to the model as tool-role content. */
@@ -80,6 +89,7 @@ export async function runAnswerToolCall(
       summary: { slugs: [], count: 0, errorCode },
       inputJson: safeStringify(input.input),
       providers: [],
+      offeringSources: [],
       resultJson: safeStringify({ kind: 'error', code: errorCode }),
       timings: timings.entries(),
     })
@@ -89,16 +99,14 @@ export async function runAnswerToolCall(
     ? await runHarnessTool({
         tool,
         input: input.input,
-        context: { timing: timings.sink },
-        surface: 'answerThread',
+        context: { ...input.actionContext, timing: timings.sink },
         allowWrites: false,
         toolCallId,
       })
     : await input.harnessLoop.runTool({
         tool,
         input: input.input,
-        context: { timing: timings.sink },
-        surface: 'answerThread',
+        context: { ...input.actionContext, timing: timings.sink },
         allowWrites: false,
         toolCallId,
       })
@@ -115,6 +123,7 @@ export async function runAnswerToolCall(
       summary: { slugs: [], count: 0, errorCode },
       inputJson: outcome.result.inputJson,
       providers: [],
+      offeringSources: [],
       resultJson: safeStringify({
         kind: outcome.result.status === 'blocked' || outcome.result.status === 'refused' ? 'refused' : 'error',
         code: errorCode,
@@ -124,16 +133,17 @@ export async function runAnswerToolCall(
     })
   }
 
-  const extracted = extractProviders(input.toolId as AnswerToolId, outcome.result.output)
+  const extracted = extractOfferingSources(input.toolId as AnswerToolId, outcome.result.output)
   const summary: AnswerToolCallResultSummary = {
-    slugs: extracted.providers.map((provider) => provider.slug),
+    slugs: extracted.offeringSources.map((source) => source.business.slug),
     count: extracted.count,
   }
   return recordResult(input, toolCallId, {
     status: 'complete',
     summary,
     inputJson: outcome.result.inputJson,
-    providers: extracted.providers,
+    providers: [],
+    offeringSources: extracted.offeringSources,
     resultJson: outcome.result.outputJson ?? safeStringify(outcome.result.output),
     timings: timings.entries(),
     resultHash: outcome.result.resultHash,
@@ -162,6 +172,7 @@ function refuse(
     summary: { slugs: [], count: 0, errorCode },
     inputJson: safeStringify(input.input),
     providers: [],
+    offeringSources: [],
     resultJson: safeStringify({ kind: 'refused', code: errorCode }),
     timings: [],
   })
@@ -175,6 +186,7 @@ function recordResult(
     summary: AnswerToolCallResultSummary
     inputJson: string
     providers: AnswerSource[]
+    offeringSources: OfferingAnswerSource[]
     resultJson: string
     timings: readonly AnswerTurnTimingEntry[]
     resultHash?: string
@@ -205,33 +217,37 @@ function recordResult(
   return {
     record,
     providers: outcome.providers,
-    allowedSlugs: new Set(outcome.providers.map((provider) => provider.slug)),
+    offeringSources: outcome.offeringSources,
+    allowedSlugs: new Set([
+      ...outcome.providers.map((provider) => provider.slug),
+      ...outcome.offeringSources.map((source) => source.business.slug),
+    ]),
     timings: outcome.timings,
     resultJson: outcome.resultJson,
   }
 }
 
-function extractProviders(
+function extractOfferingSources(
   toolId: AnswerToolId,
   result: unknown,
-): { providers: AnswerSource[]; count: number } {
+): { offeringSources: OfferingAnswerSource[]; count: number } {
   if (toolId === 'registry.search') {
-    const page = result as PublicBusinessCatalogApiPage
+    const page = result as PublicBusinessCatalogApiV2Page
     return {
-      providers: page.items.map((dto, index) => toAnswerSource(dto, index + 1)),
+      offeringSources: page.items.map((dto, index) => toAnswerSource(dto, index + 1)),
       count: page.pagination.total,
     }
   }
 
-  const detail = result as PublicBusinessCatalogDetailResult
+  const detail = result as PublicBusinessCatalogV2DetailResult
   if (detail.kind === 'found') {
     return {
-      providers: [toAnswerSource(detail.business, 1)],
+      offeringSources: [toAnswerSource(detail.business, 1)],
       count: 1,
     }
   }
 
-  return { providers: [], count: 0 }
+  return { offeringSources: [], count: 0 }
 }
 
 function safeStringify(value: unknown): string {

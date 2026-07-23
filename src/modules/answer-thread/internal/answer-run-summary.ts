@@ -39,7 +39,7 @@ export function buildAnswerRunReport(input: {
     },
     tools: summarizeTools(toolCalls, timings),
     evidence: {
-      providerCount: input.evidence.providers.length,
+      providerCount: input.evidence.providers.length + (input.evidence.offeringSources?.length ?? 0),
       allowedSlugCount: input.evidence.allowedSlugs.length,
       resultHashes: stableUnique(toolCalls.map((call) => call.resultHash)),
       snapshotHash: input.snapshotHash,

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import type { AnswerArtifact } from '@/modules/answer/answer-schema'
-import type { AnswerSource, AnswerWorkStep } from '@/modules/answer/answer-synthesizer'
+import type { AnswerSource, AnswerWorkStep, OfferingAnswerSource } from '@/modules/answer/answer-synthesizer'
 import type { AnswerLayoutProfile } from '@/modules/answer/layout-profile'
 import type { HarnessRunReport } from '@/modules/harness/public'
 import {
@@ -203,6 +203,7 @@ export const answerTurnRequestSchema = z.object({
 
 export type FrozenTurnEvidence = {
   providers: readonly AnswerSource[]
+  offeringSources?: readonly OfferingAnswerSource[]
   allowedSlugs: readonly string[]
   agentJsonUrl: string
   searchContext?: AeSearchContext

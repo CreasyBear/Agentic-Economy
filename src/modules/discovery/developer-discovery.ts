@@ -15,6 +15,13 @@ import type { DiscoverySourceState, DiscoveryStatus } from '@/modules/discovery/
 import { readDiscoveryHealth as readDiscoveryHealthImpl } from './internal/manifest-attempts'
 import { createFixtureDiscoverySourceState as createDefaultDiscoverySourceStateImpl } from './internal/source-state'
 
+/**
+ * @offering-consumer-disposition split_legacy_v1_and_offering_v2
+ *
+ * Route snapshots preserve strict Offering-v2 identity/profile truth. The
+ * source-state fallback remains explicitly legacy catalogue v1 and never
+ * receives registry action output.
+ */
 export const DeveloperDiscoverySchemaVersion = 'developer-discovery:v1' as const
 export type DeveloperDiscoverySchemaVersion = typeof DeveloperDiscoverySchemaVersion
 
@@ -144,10 +151,29 @@ export type DeveloperDiscoveryPublicCatalogFact = {
   indexStatus: PublicCatalogContract['indexStatus']
   discoveryStatus: PublicCatalogContract['discoveryStatus']
   updatedAt: number
-  serviceCount: number
-  capabilityStatuses: readonly PublicCatalogContract['services'][number]['capabilities'][number]['status'][]
-  firstRequestModes: readonly PublicCatalogContract['services'][number]['firstRequest']['mode'][]
+  serviceCount?: number
+  capabilityStatuses?: readonly PublicCatalogContract['services'][number]['capabilities'][number]['status'][]
+  firstRequestModes?: readonly PublicCatalogContract['services'][number]['firstRequest']['mode'][]
+  offeringCount?: number
+  offerings?: readonly Readonly<{
+    offeringRef: string
+    revision: number
+    comparison?: PublicBusinessCatalogApiV2Dto['offerings'][number]['comparison']
+  }>[]
 }
+
+export type DeveloperDiscoveryStructuredRegistryAdapter = Readonly<{
+  actionId: 'registry.list' | 'registry.search' | 'registry.detail'
+  method: 'GET'
+  path: '/api/businesses' | '/api/businesses/search' | '/api/businesses/{slug}'
+}>
+
+export type DeveloperDiscoveryComparisonAdapter = Readonly<{
+  state: 'deferred'
+  method: 'POST'
+  path: '/api/compare'
+  ownerPlan: '05-07'
+}>
 
 export const DeveloperDiscoveryRouteHealthErrorCodeValues = [
   'not_found',
@@ -403,6 +429,8 @@ export type DeveloperDiscoveryRouteReadback = {
   routeHealth: readonly DeveloperDiscoveryRouteHealth[]
   artifacts: readonly DeveloperDiscoveryArtifactMetadata[]
   unsupportedCapabilities: readonly DeveloperDiscoveryUnsupportedCapability[]
+  structuredRegistryAdapters: readonly DeveloperDiscoveryStructuredRegistryAdapter[]
+  comparisonAdapter: DeveloperDiscoveryComparisonAdapter
   copy: {
     eyebrow: string
     title: string
@@ -438,7 +466,32 @@ const developerDiscoverySchemaFields = [
   'services.status',
   'services.capabilities.kind',
   'services.capabilities.status',
+  'businessId',
+  'observedAt',
+  'disposition',
+  'offerings[].offeringRef',
+  'offerings[].revision',
+  'offerings[].name',
+  'offerings[].category',
+  'offerings[].summary',
+  'offerings[].comparison.schemaVersion',
+  'offerings[].comparison.profile.profileId',
+  'offerings[].accessPaths',
+  'offerings[].support',
 ] as const
+
+const structuredRegistryAdapters = [
+  { actionId: 'registry.list', method: 'GET', path: '/api/businesses' },
+  { actionId: 'registry.search', method: 'GET', path: '/api/businesses/search' },
+  { actionId: 'registry.detail', method: 'GET', path: '/api/businesses/{slug}' },
+] as const satisfies readonly DeveloperDiscoveryStructuredRegistryAdapter[]
+
+const comparisonAdapter = {
+  state: 'deferred',
+  method: 'POST',
+  path: '/api/compare',
+  ownerPlan: '05-07',
+} as const satisfies DeveloperDiscoveryComparisonAdapter
 
 const developerDiscoveryRoutes = [
   { path: '/api/businesses', label: 'Public catalog list JSON' },
@@ -535,6 +588,23 @@ const developerDiscoverySchemaFieldDefinitions: readonly DeveloperDiscoverySchem
   { path: 'services[].status', required: true, nullable: false, values: ['published'] },
   { path: 'services[].capabilities[].kind', required: true, nullable: false, values: ['phone_inquiry', 'quote_request', 'emergency_callout_interest', 'ae_hosted_discovery'] },
   { path: 'services[].capabilities[].status', required: true, nullable: false, values: developerDiscoveryStatusValues },
+  { path: 'businessId', required: true, nullable: false },
+  { path: 'observedAt', required: true, nullable: false },
+  { path: 'disposition', required: true, nullable: false, values: ['current', 'partial', 'stale'] },
+  { path: 'offerings[].offeringRef', required: true, nullable: false },
+  { path: 'offerings[].revision', required: true, nullable: false },
+  { path: 'offerings[].name', required: true, nullable: false },
+  { path: 'offerings[].category', required: true, nullable: false },
+  { path: 'offerings[].summary', required: true, nullable: false },
+  { path: 'offerings[].comparison.schemaVersion', required: false, nullable: false, values: ['offering-comparison:v1'] },
+  {
+    path: 'offerings[].comparison.profile.profileId',
+    required: false,
+    nullable: false,
+    values: ['professional_service:v1', 'machine_data:v1'],
+  },
+  { path: 'offerings[].accessPaths', required: true, nullable: false },
+  { path: 'offerings[].support', required: true, nullable: false },
 ]
 
 export function readP2InquiryAvailabilityPublicStatus(
@@ -819,6 +889,8 @@ export function readDeveloperDiscoveryRoute(
       schemaFields: developerDiscoverySchemaFields,
     })),
     unsupportedCapabilities: developerDiscoveryUnsupportedCapabilities,
+    structuredRegistryAdapters,
+    comparisonAdapter,
     copy: {
       eyebrow: 'Builder readbacks',
       title: 'Read-only public catalog files',
@@ -1037,7 +1109,9 @@ export function renderDeveloperDiscoveryRouteCopy(readback: DeveloperDiscoveryRo
     ),
     ...readback.publicFacts.map(
       (fact) =>
-        `${fact.name} (${fact.slug}) — ${fact.category} in ${fact.suburb}, ${fact.stateTerritory}; discovery=${fact.discoveryStatus}; services=${fact.serviceCount}`
+        fact.schemaVersion === 'public-business-catalog-api:v2'
+          ? `${fact.name} (${fact.slug}) — ${fact.category} in ${fact.suburb}, ${fact.stateTerritory}; discovery=${fact.discoveryStatus}; offerings=${fact.offeringCount ?? 0}`
+          : `${fact.name} (${fact.slug}) — ${fact.category} in ${fact.suburb}, ${fact.stateTerritory}; discovery=${fact.discoveryStatus}; services=${fact.serviceCount ?? 0}`
     ),
     ...readback.artifacts.map(
       (artifact) =>
@@ -1320,15 +1394,12 @@ function toDeveloperDiscoveryFactFromApi(catalog: DeveloperDiscoveryRouteCatalog
       indexStatus: catalog.disposition === 'current' ? 'indexed' : 'stale',
       discoveryStatus: catalog.disposition === 'current' ? 'available' : 'stale',
       updatedAt: catalog.observedAt,
-      serviceCount: catalog.offerings.length,
-      capabilityStatuses: uniqueSorted(catalog.offerings.map((offering) =>
-        offering.support.aeSupportedAction ? 'available' as const : 'unavailable' as const,
-      )),
-      firstRequestModes: uniqueSorted(catalog.offerings.flatMap((offering) =>
-        offering.accessPaths
-          .filter((path) => path.kind === 'human_request')
-          .map((path) => path.channel === 'ae_inquiry' ? 'inquiry_available' as const : 'quote_request_available' as const),
-      )),
+      offeringCount: catalog.offerings.length,
+      offerings: catalog.offerings.map((offering) => ({
+        offeringRef: offering.offeringRef,
+        revision: offering.revision,
+        ...(offering.comparison === undefined ? {} : { comparison: offering.comparison }),
+      })),
     }
   }
   return {

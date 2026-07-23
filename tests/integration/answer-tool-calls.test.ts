@@ -269,9 +269,19 @@ describe('Offering-v2 answer consumption', () => {
   it('preserves exact revisions and both closed profiles in the Answer source without rebuilding services', () => {
     const source = toAnswerSource(offeringV2Business, 1)
 
-    expect(source.businessId).toBe(offeringV2Business.businessId)
-    expect(source.observedAt).toBe(offeringV2Business.observedAt)
-    expect(source.disposition).toBe('current')
+    expect(source.sourceKind).toBe('offering_v2')
+    expect(source.business).toEqual({
+      businessId: offeringV2Business.businessId,
+      slug: offeringV2Business.slug,
+      name: offeringV2Business.name,
+      category: offeringV2Business.category,
+      suburb: offeringV2Business.suburb,
+      stateTerritory: offeringV2Business.stateTerritory,
+      publicUrl: offeringV2Business.publicUrl,
+      observedAt: offeringV2Business.observedAt,
+      disposition: 'current',
+      accessSummary: offeringV2Business.accessSummary,
+    })
     expect(source.offerings).toEqual(offeringV2Business.offerings)
     expect(source.offerings.map((offering) => [
       offering.offeringRef,
@@ -281,14 +291,27 @@ describe('Offering-v2 answer consumption', () => {
       ['offering:professional', 7, 'professional_service:v1'],
       ['offering:machine', 11, 'machine_data:v1'],
     ])
-    expect(source.services).toEqual([])
+    expect(source).not.toHaveProperty('services')
+    expect(source).not.toHaveProperty('serviceArea')
+    expect(source).not.toHaveProperty('hoursLabel')
+    expect(source).not.toHaveProperty('availabilityLabel')
+    expect(source).not.toHaveProperty('trustLabel')
+    expect(source).not.toHaveProperty('responseTimeLabel')
+    expect(source).not.toHaveProperty('nextStepLabel')
     expect(source).not.toHaveProperty('inquiryUrl')
     expect(source).not.toHaveProperty('publishedPhone')
   })
 
   it('carries the strict Offering result through the Answer Thread tool runner unchanged', async () => {
-    const harnessLoop = new HarnessRunLoop({
-      toolContext: {
+    const harnessLoop = new HarnessRunLoop()
+
+    const result = await runAnswerToolCall({
+      toolId: 'registry.detail',
+      input: { slug: offeringV2Business.slug },
+      turnId: 'turn-offering-v2',
+      seq: 1,
+      harnessLoop,
+      actionContext: {
         developmentOnlyRegistryDetailAdapter: async () => ({
           kind: 'found',
           schemaVersion: 'public-business-catalog-api:v2',
@@ -297,16 +320,9 @@ describe('Offering-v2 answer consumption', () => {
       },
     })
 
-    const result = await runAnswerToolCall({
-      toolId: 'registry.detail',
-      input: { slug: offeringV2Business.slug },
-      turnId: 'turn-offering-v2',
-      seq: 1,
-      harnessLoop,
-    })
-
-    expect(result.record.status).toBe('complete')
-    expect(result.providers[0]?.offerings).toEqual(offeringV2Business.offerings)
+    expect(result.record.status, result.record.resultSummaryJson).toBe('complete')
+    expect(result.providers).toEqual([])
+    expect(result.offeringSources[0]?.offerings).toEqual(offeringV2Business.offerings)
     expect(JSON.parse(result.record.resultJson)).toEqual({
       kind: 'found',
       schemaVersion: 'public-business-catalog-api:v2',

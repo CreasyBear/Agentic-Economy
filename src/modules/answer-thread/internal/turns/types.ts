@@ -2,6 +2,7 @@ import {
   type AnswerEvent,
   type AnswerSnapshot,
   type AnswerSource,
+  type OfferingAnswerSource,
   type AnswerWorkStep,
   computeLayoutProfile,
 } from '@/modules/answer/public'
@@ -107,7 +108,7 @@ export function withFollowUpLayout(
 ): AnswerSnapshot {
   const compactLayout = priorTurnsCount > 0
   const layoutProfile = computeLayoutProfile({
-    providerCount: snapshot.providers.length,
+    providerCount: snapshot.providers.length + (snapshot.offeringSources?.length ?? 0),
     ...(compactLayout ? { compactLayout: true } : {}),
     followUpIntent: intent,
   })
@@ -166,18 +167,24 @@ export function describeProviderCount(count: number, noun: string): string {
 export function emitReadAndCompareSteps(
   workLog: WorkStepEmitter,
   providers: readonly AnswerSource[],
+  offeringSources: readonly OfferingAnswerSource[] = [],
 ): void {
+  const sourceCount = providers.length + offeringSources.length
+  const sourceSlugs = [
+    ...providers.map((provider) => provider.slug),
+    ...offeringSources.map((source) => source.business.slug),
+  ]
   const completedAt = Date.now()
   workLog.emit({
     id: 'read.providers',
     phase: 'read',
     status: 'complete',
     title: 'Reading listed businesses',
-    summary: providers.length === 0
+    summary: sourceCount === 0
       ? 'No listed businesses were returned for this search.'
-      : describeProviderCount(providers.length, 'listed business'),
-    detailRows: [{ label: 'Listed businesses', value: String(providers.length) }],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
+      : describeProviderCount(sourceCount, 'listed business'),
+    detailRows: [{ label: 'Listed businesses', value: String(sourceCount) }],
+    relatedProviderSlugs: sourceSlugs,
     completedAtMs: completedAt,
   })
 
@@ -186,11 +193,11 @@ export function emitReadAndCompareSteps(
     phase: 'compare',
     status: 'complete',
     title: 'Checking fit',
-    summary: providers.length === 0
+    summary: sourceCount === 0
       ? 'No listed businesses fit this request yet.'
-      : 'Keeping listed businesses whose published details fit this request.',
-    detailRows: [{ label: 'Kept for answer', value: String(providers.length) }],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
+      : 'Keeping the returned businesses and their published facts in source order.',
+    detailRows: [{ label: 'Kept for answer', value: String(sourceCount) }],
+    relatedProviderSlugs: sourceSlugs,
     completedAtMs: completedAt,
   })
 }

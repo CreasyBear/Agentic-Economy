@@ -6,6 +6,15 @@ import type {
   PublicBusinessCatalogSearchInput,
 } from './search'
 
+/**
+ * @offering-consumer-disposition split_legacy_v1_and_offering_v2
+ *
+ * The v1 document builder is an explicit migration-only source projection.
+ * Native Offering-v2 search uses `buildOfferingV2RegistrySearchDocument` and
+ * never converts an Offering action result into service identity or trust.
+ */
+type LegacyRegistryCatalogV1 = PublicBusinessCatalogApiDto
+
 const RegistrySearchDocumentSchemaVersion = 'registry-search-document:v1' as const
 export const OfferingV2RegistrySearchDocumentSchemaVersion = 'registry-search-document:v2' as const
 
@@ -22,8 +31,8 @@ export type RegistrySearchDocument = {
   stateTerritory: string
   postcode?: string
   publicStatus: 'published'
-  trustTier: PublicBusinessCatalogApiDto['trustTier']
-  firstRequestMode: PublicBusinessCatalogApiDto['services'][number]['firstRequest']['mode']
+  trustTier: LegacyRegistryCatalogV1['trustTier']
+  firstRequestMode: LegacyRegistryCatalogV1['services'][number]['firstRequest']['mode']
   placeKeys: readonly string[]
   serviceKeywords: readonly string[]
   searchText: string
@@ -134,13 +143,13 @@ const STATE_WORDS = new Set(['act', 'nsw', 'nt', 'qld', 'sa', 'tas', 'vic', 'wa'
 const LOCATION_PREPOSITION = /\b(?:in|near|around|at)\s+([a-z][a-z\s'-]{1,80})(?:\?|$)/i
 
 export function buildRegistrySearchDocumentsFromCatalogs(
-  catalogs: readonly PublicBusinessCatalogApiDto[],
+  catalogs: readonly LegacyRegistryCatalogV1[],
 ): RegistrySearchDocument[] {
   return catalogs.flatMap((catalog) => buildRegistrySearchDocumentsForCatalog(catalog))
 }
 
 export function buildRegistrySearchDocumentsForCatalog(
-  catalog: PublicBusinessCatalogApiDto,
+  catalog: LegacyRegistryCatalogV1,
 ): RegistrySearchDocument[] {
   return catalog.services.map((service) => {
     const serviceKeywords = serviceKeywordsFor(service.name, service.category, service.summary)

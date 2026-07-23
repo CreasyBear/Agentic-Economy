@@ -72,7 +72,7 @@ async function streamAgentTurn(
       harnessLoop: ctx.harness.loop,
     })
     stopModelTiming({
-      providerCount: result.providers.length,
+      providerCount: result.providers.length + result.offeringSources.length,
       toolCalls: result.toolCalls.length,
       gateOk: result.gate.ok,
     })
@@ -87,9 +87,15 @@ async function streamAgentTurn(
           : 'Trying another listed-business search',
         summary: result.toolCalls.length === 0
           ? 'No extra listed-business search was needed.'
-          : describeProviderCount(result.providers.length, 'listed business'),
-        detailRows: buildRecoveryWorkStepDetailRows(result.toolCalls, result.providers.length),
-        relatedProviderSlugs: result.providers.map((provider) => provider.slug),
+          : describeProviderCount(result.providers.length + result.offeringSources.length, 'listed business'),
+        detailRows: buildRecoveryWorkStepDetailRows(
+          result.toolCalls,
+          result.providers.length + result.offeringSources.length,
+        ),
+        relatedProviderSlugs: [
+          ...result.providers.map((provider) => provider.slug),
+          ...result.offeringSources.map((source) => source.business.slug),
+        ],
         startedAtMs: recoveryStartedAt,
         completedAtMs: Date.now(),
       })
@@ -112,7 +118,7 @@ async function streamAgentTurn(
       }
     }
 
-    emitReadAndCompareSteps(ctx.workLog, result.providers)
+    emitReadAndCompareSteps(ctx.workLog, result.providers, result.offeringSources)
     const snapshot = withFollowUpLayout(result.snapshot, ctx.priorTurnsCount, ctx.intent)
     const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs: result.allowedSlugs })
     if (!finalized.ok) {

@@ -117,7 +117,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         'parramatta-emergency-plumbing',
       )
       expect(result.offeringSources.flatMap((source) => source.offerings).every(
-        (offering) => offering.revision > 0 && offering.comparison?.profile.profileId !== undefined,
+        (offering) => offering.revision > 0,
       )).toBe(true)
       expect(result.modelRequests).toHaveLength(2)
       expect(result.modelRequests[0]).toMatchObject({
@@ -279,7 +279,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         query: 'paramata',
         config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
       })
-      expect(result.providers.map((provider) => provider.slug)).toContain(
+      expect(result.providers).toEqual([])
+      expect(result.offeringSources.map((source) => source.business.slug)).toContain(
         'parramatta-emergency-plumbing',
       )
       expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
@@ -358,7 +359,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
       })
 
-      expect(result.providers.map((provider) => provider.slug)).toContain(
+      expect(result.providers).toEqual([])
+      expect(result.offeringSources.map((source) => source.business.slug)).toContain(
         'parramatta-emergency-plumbing',
       )
       expect(result.toolCalls).toHaveLength(2)

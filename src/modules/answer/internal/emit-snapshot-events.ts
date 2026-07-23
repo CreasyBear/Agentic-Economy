@@ -33,7 +33,7 @@ export async function* emitSnapshotEvents(
   const emitThinking = options.emitThinking !== false
   const emitComplete = options.emitComplete !== false
   const pauseMs = options.pauseMs ?? 140
-  const providerCount = snapshot.providers.length
+  const providerCount = snapshot.providers.length + (snapshot.offeringSources?.length ?? 0)
   const layoutProfile = resolveLayoutProfile({
     ...(snapshot.layoutProfile === undefined ? {} : { layoutProfile: snapshot.layoutProfile }),
     ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),

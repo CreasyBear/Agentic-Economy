@@ -4,18 +4,18 @@ export type CatalogGroundedProvider = {
 
 export type CatalogGroundedAnswer = {
   providers: readonly CatalogGroundedProvider[]
+  offeringSources?: readonly { business: CatalogGroundedProvider }[]
 }
 
 export type CatalogGroundingInput = {
   providers: readonly CatalogGroundedProvider[]
+  offeringSources?: readonly { business: CatalogGroundedProvider }[]
   allowedSlugs: ReadonlySet<string>
 }
 
 export function validateCatalogGrounding(input: CatalogGroundingInput): boolean {
-  if (input.providers.length === 0) {
-    return true
-  }
   return input.providers.every((provider) => input.allowedSlugs.has(provider.slug))
+    && (input.offeringSources ?? []).every((source) => input.allowedSlugs.has(source.business.slug))
 }
 
 export function collectAllowedSlugsFromToolResults(toolResults: readonly { slug: string }[][]): ReadonlySet<string> {
@@ -32,7 +32,11 @@ export function sanitizeStructuredAnswer<TAnswer extends CatalogGroundedAnswer>(
   answer: TAnswer,
   allowedSlugs: ReadonlySet<string>,
 ): TAnswer | undefined {
-  if (!validateCatalogGrounding({ providers: answer.providers, allowedSlugs })) {
+  if (!validateCatalogGrounding({
+    providers: answer.providers,
+    ...(answer.offeringSources === undefined ? {} : { offeringSources: answer.offeringSources }),
+    allowedSlugs,
+  })) {
     return undefined
   }
   return answer

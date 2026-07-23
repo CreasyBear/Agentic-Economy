@@ -161,7 +161,9 @@ function artifactForPlan(
 ): AnswerArtifact | undefined {
   const budget = state.plan?.artifactBudget
   if (budget === undefined) {
-    return artifact
+    return artifact.kind === 'offering-cards'
+      ? capOfferingCards(artifact, 3)
+      : artifact
   }
   if (!budget.allowedKinds.includes(artifact.kind)) {
     return undefined
@@ -170,11 +172,22 @@ function artifactForPlan(
   if (!alreadyHasKind && state.artifacts.length >= budget.maxArtifactCount) {
     return undefined
   }
+  if (artifact.kind === 'offering-cards') {
+    return capOfferingCards(artifact, budget.maxProviderCards)
+  }
   if (artifact.kind !== 'provider-cards') {
     return artifact
   }
   const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
   return providers.length === 0 ? undefined : { kind: 'provider-cards', providers }
+}
+
+function capOfferingCards(
+  artifact: Extract<AnswerArtifact, { kind: 'offering-cards' }>,
+  maximum: number,
+): AnswerArtifact | undefined {
+  const sources = artifact.sources.slice(0, Math.max(0, maximum))
+  return sources.length === 0 ? undefined : { kind: 'offering-cards', sources }
 }
 
 export function stopRunningWorkSteps(state: AnswerTurnUiState): AnswerTurnUiState {
