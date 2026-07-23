@@ -98,18 +98,25 @@ safety.
 
 - `P4-ACCOUNT`: account identity, membership, additive responsibility and
   protected Ownership are durable and server-authorized.
+
 - `P4-SUPPLY`: offering, binding, readiness, publication and one reachable
   registered operation form one source-owned routeable-supply chain.
+
 - `P4-COMMERCIAL`: AE account billing, operation payment, Usage, telemetry and
   future payouts remain separate; Commercial and Usage follow ADR-025.
+
 - `P4-OPERATE`: Work, Inbox and safe continuations survive reload, uncertainty
   and reconciliation without transport-derived truth.
+
 - `P4-LIFECYCLE`: pause, withdrawal, offboarding and closure are resumable,
   bounded and history-preserving.
+
 - `P4-SURFACES`: direct human and scoped-agent routes share one semantic account
   projection and re-evaluate membership and command authority server-side.
+
 - `P4-BOUNDS`: growing reads are indexed, paginated or cap-plus-one bounded;
   projections remain removable and rebuildable.
+
 - `P4-EVIDENCE`: exact-candidate source, focused fixtures and labelled-local
   acceptance evidence state their claim ceiling.
 
@@ -131,24 +138,32 @@ invoke an endpoint, authorize, book, pay, dispatch or claim fulfilment.
 
 - `P5-CUSTODY`: one exact committed/integrated Offering predecessor revision and
   tree owns schema, generated edges, native/cutover identity and fail-closed flags.
+
 - `P5-CATALOG`: catalog owns exact historical public-revision eligibility and
   strict `professional_service:v1` / `machine_data:v1` facts.
+
 - `P5-REGISTRY`: public HTTP and registered registry actions expose the same safe
   Offering-v2 semantics and reject hostile/private/legacy projection residue.
+
 - `P5-COMPARE`: comparison resolves at most four exact Offering revisions,
   defaults unranked and orders only by inspectable stated-priority lexicography.
+
 - `P5-HUMAN`: public Astryx routes cover browse, Offering detail, URL shortlist
   and accessible comparison states without inquiry or effect controls.
+
 - `P5-AGENT`: fixed public anonymous `POST /api/compare` executes only the
   registered inspect-only comparison action, consumes the same semantic object
   as the actual human loader and passes zero-effect vertical/horizontal evals.
+
 - `P5-EVIDENCE`: one authenticated exact-revision hosted readback over labelled
   demonstration data produces a frozen independently verified evidence packet.
 
-**Plans:** 8 plans
+**Plans:** 1/9 plans executed
 
 Plans:
-- [ ] 05-01-PLAN.md — freeze and integrate the exact Offering predecessor lane
+
+- [ ] 05-PLAN.md
+- [x] 05-01-PLAN.md — freeze and integrate the exact Offering predecessor lane
 - [ ] 05-02-PLAN.md — historical public revisions and closed fact profiles
 - [ ] 05-03-PLAN.md — strict registry codecs, registered actions and three public HTTP adapters
 - [ ] 05-04-PLAN.md — Answer, Answer Thread and discovery Offering-v2 consumer migration with literal inventory enforcement
