@@ -212,7 +212,13 @@ export async function streamAnswerTurn(
 
   if (finalState.captured !== undefined) {
     if (persistResult?.ok !== true) {
-      send({ type: 'error', code: 'answer_turn_persist_failed', copyId: makeCopyId() })
+      send({
+        type: 'error',
+        code: persistResult?.failureReason === undefined
+          ? 'answer_turn_persist_failed'
+          : `answer_turn_persist_failed_${persistResult.failureReason}`,
+        copyId: makeCopyId(),
+      })
       return { threadId, turnId, turnSeq }
     }
     if (persistInput?.sourceWriteRequest !== undefined && !answerHarnessFinalizationSucceeded(finalizationResult)) {

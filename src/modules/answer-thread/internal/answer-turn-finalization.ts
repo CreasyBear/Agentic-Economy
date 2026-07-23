@@ -138,6 +138,7 @@ export type PersistAnswerTurnResult = {
   snapshotHash: string
   harnessRun: HarnessRunReport
   evidenceJson: string
+  failureReason?: 'source_write_admission' | 'source_mutation' | 'unknown'
 }
 
 
@@ -253,9 +254,31 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
       })
     }
     return { ok: true, status, snapshotHash, harnessRun, evidenceJson: turnRow.evidenceJson }
-  } catch {
-    return { ok: false, status, snapshotHash, harnessRun, evidenceJson: turnRow.evidenceJson }
+  } catch (error) {
+    return {
+      ok: false,
+      status,
+      snapshotHash,
+      harnessRun,
+      evidenceJson: turnRow.evidenceJson,
+      failureReason: classifyPersistFailure(error),
+    }
   }
+}
+
+function classifyPersistFailure(
+  error: unknown,
+): NonNullable<PersistAnswerTurnResult['failureReason']> {
+  const text = error instanceof Error
+    ? `${error.name}:${error.message}:${String(error.cause ?? '')}`
+    : String(error)
+  if (/source.write|signing.key|source_write|admission/iu.test(text)) {
+    return 'source_write_admission'
+  }
+  if (/convex|mutation|thread_|tool.call|fetch/iu.test(text)) {
+    return 'source_mutation'
+  }
+  return 'unknown'
 }
 
 export async function finalizePersistedAnswerTurnHarnessRun(args: {
