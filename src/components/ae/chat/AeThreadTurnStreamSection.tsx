@@ -37,6 +37,7 @@ export type AeThreadTurnStreamSectionProps = {
   onThreadCreated?: (threadId: string, turnMeta?: { turnId: string; turnSeq: number }) => void
   onSettledTurn?: (turn: PublicThreadTurn, generation: number) => void
   onStreamEnd?: (outcome: TurnStreamOutcome) => void
+  onFollowUp?: (query: string) => void
   onRetry?: () => void
 }
 
@@ -50,6 +51,7 @@ export function AeThreadTurnStreamSection({
   onThreadCreated,
   onStreamEnd,
   onSettledTurn,
+  onFollowUp,
   onRetry,
 }: AeThreadTurnStreamSectionProps) {
   const [state, sendTurnUpdate] = useReducer(turnReducer, initialAnswerTurnUiState)
@@ -205,6 +207,7 @@ export function AeThreadTurnStreamSection({
             onStop={stop}
             phase={state.phase}
             {...(threadId === undefined ? {} : { threadId })}
+            {...(onFollowUp === undefined ? {} : { onFollowUp })}
             errorMessage={
               state.phase === 'error' || state.phase === 'stopped' ? (
                 <>

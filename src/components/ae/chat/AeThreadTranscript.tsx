@@ -118,6 +118,7 @@ export function AeThreadTranscript({
               {...(onThreadCreated === undefined ? {} : { onThreadCreated })}
               {...(onStreamEnd === undefined ? {} : { onStreamEnd })}
               {...(onSettledTurn === undefined ? {} : { onSettledTurn })}
+              {...(onFollowUp === undefined ? {} : { onFollowUp })}
               {...(onRetry === undefined ? {} : { onRetry: () => onRetry(liveTurn.query) })}
             />
           </div>

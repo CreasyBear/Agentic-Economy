@@ -150,6 +150,9 @@ jobs:
               convex/observability.ts|\
               convex/security.ts|\
               package.json|\
+              src/components/ae/chat/AeChat.tsx|\
+              src/components/ae/chat/AeThreadTranscript.tsx|\
+              src/components/ae/chat/AeThreadTurnStreamSection.tsx|\
               src/modules/dev/internal/dev-seed-fixture.ts|\
               src/modules/observability/internal/literals.ts|\
               src/modules/observability/internal/operator-controls.ts|\
@@ -158,6 +161,8 @@ jobs:
               tests/imports/customer-request-source-completeness.test.ts|\
               tests/integration/consumer-comparison-demo-seed.test.ts|\
               tests/integration/admin-runtime.test.ts|\
+              tests/unit/chat/ae-chat-route-promotion.test.tsx|\
+              tests/unit/chat/ae-thread-turn-stream-section.test.tsx|\
               tests/unit/dev/dev-seed-fixture.test.ts|\
               tests/unit/release/consumer-comparison-evidence.test.ts|\
               tools/release/consumer-comparison-evidence.ts|\

@@ -11,13 +11,21 @@ const streamSession = vi.hoisted(() => ({
   abort: vi.fn(),
   attach: vi.fn<(input: AttachStreamInput) => () => void>(() => vi.fn()),
 }))
+const answerView = vi.hoisted(() => ({
+  props: undefined as { onFollowUp?: (query: string) => void } | undefined,
+}))
 
 vi.mock('@/components/ae/chat/turn-stream-session', () => ({
   abortAnswerTurnStream: streamSession.abort,
   attachAnswerTurnStream: streamSession.attach,
 }))
 vi.mock('@tanstack/react-router', () => ({ Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }))
-vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({ AeGenerativeAnswer: () => <div /> }))
+vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({
+  AeGenerativeAnswer: (props: { onFollowUp?: (query: string) => void }) => {
+    answerView.props = props
+    return <div />
+  },
+}))
 vi.mock('@/components/ai-elements/message', () => ({
   Message: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   MessageContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -33,14 +41,17 @@ describe('thread turn stream lifecycle', () => {
     const firstThreadCreated = vi.fn()
     const freshThreadCreated = vi.fn()
     const freshStreamEnd = vi.fn()
+    const followUp = vi.fn()
     const view = render(
       <AeThreadTurnStreamSection
         query="Find a plumber"
         generation={1}
         intent="refine_search"
         onThreadCreated={firstThreadCreated}
+        onFollowUp={followUp}
       />,
     )
+    expect(answerView.props?.onFollowUp).toBe(followUp)
     expect(streamSession.attach).toHaveBeenCalledTimes(1)
     const firstAttachment = streamSession.attach.mock.calls[0]?.[0]
     if (firstAttachment === undefined) throw new Error('missing first stream attachment')
