@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { findAction, resolveActionContract } from '@/modules/actions'
+import * as convexSource from '@/lib/server/convex-source'
 import { buildComparisonRouteReadback } from '@/routes/compare'
 import { handleCompareRequest } from '@/routes/api.compare'
 import { createComparisonOfferingReadPort } from '@/modules/comparison/comparison.functions'
@@ -143,6 +144,19 @@ describe('fixed public comparison agent route', () => {
       refusedSelectionCount: 1,
       ordering: { kind: 'unranked', reason: 'no_priority' },
     })
+  })
+
+  it('observes zero mutation or external transport during comparison', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const publicMutationSpy = vi.spyOn(convexSource, 'callPublicSourceMutation')
+    const mutationSpy = vi.spyOn(convexSource, 'callSourceMutation')
+
+    const response = await handleCompareRequest(request(validBody))
+
+    expect(response.status).toBe(200)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(publicMutationSpy).not.toHaveBeenCalled()
+    expect(mutationSpy).not.toHaveBeenCalled()
   })
 })
 

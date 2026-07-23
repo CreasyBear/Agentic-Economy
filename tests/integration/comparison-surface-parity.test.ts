@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { actionToHarnessTool, runHarnessTool } from '@/modules/harness/public'
+import * as convexSource from '@/lib/server/convex-source'
 import { comparisonCompareAction } from '@/modules/comparison/comparison.actions'
 import { buildComparisonRouteReadback } from '@/routes/compare'
 import { createComparisonOfferingReadPort } from '@/modules/comparison/comparison.functions'
@@ -34,6 +35,9 @@ describe('human and structured comparison parity', () => {
   })
 
   it('runs through the validated read-only harness and deep-equals the human result', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const publicMutationSpy = vi.spyOn(convexSource, 'callPublicSourceMutation')
+    const mutationSpy = vi.spyOn(convexSource, 'callSourceMutation')
     const priorities = ['professional_service:v1:lowest_total_price'] as const
     const outcome = await runHarnessTool({
       tool: actionToHarnessTool(comparisonCompareAction),
@@ -61,5 +65,8 @@ describe('human and structured comparison parity', () => {
     expect(JSON.stringify(outcome.result.output)).not.toMatch(
       /sourceHash|credential|adapterConfig|privateReason|retry|inquiry|booking|payment/i,
     )
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(publicMutationSpy).not.toHaveBeenCalled()
+    expect(mutationSpy).not.toHaveBeenCalled()
   })
 })
