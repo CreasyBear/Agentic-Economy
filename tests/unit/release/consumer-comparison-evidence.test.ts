@@ -54,9 +54,15 @@ function fixtureFiles(): Readonly<{
   writeFileSync(human, JSON.stringify(result))
   writeFileSync(structured, JSON.stringify(result))
   writeFileSync(zeroEffect, JSON.stringify({
-    schemaVersion: 'ae.consumer-comparison-zero-effect:v1',
+    schemaVersion: 'ae.consumer-comparison-zero-effect:v2',
     observer: 'playwright:consumer-comparison-network-observation:v1',
-    allowedRequests: ['GET /registry', 'GET /compare', 'POST /api/compare'],
+    allowedRequests: [
+      'GET /registry',
+      'GET /compare',
+      'POST /api/observability/funnel',
+      'POST /api/compare',
+    ],
+    internalObservationRequests: ['POST /api/observability/funnel'],
     effectfulRequests: [],
     observedAt: '2026-07-23T12:00:00.000Z',
   }))
@@ -212,6 +218,37 @@ describe('consumer comparison release evidence', () => {
     expect(serialized).not.toContain(input.deployment.smokeAuth)
     expect(serialized).not.toContain('"posture":"unranked"')
     expect(serialized).not.toMatch(/authorization|credential|customerText|sourceHash|privateProjection|providerEffect/iu)
+  })
+
+  it('recomputes internal observation and consequential request classifications', async () => {
+    const hiddenEffect = validInput()
+    const hiddenEffectObservation = JSON.parse(
+      readFileSync(hiddenEffect.artifacts.zeroEffectObservation, 'utf8'),
+    ) as {
+      allowedRequests: string[]
+      effectfulRequests: string[]
+    }
+    hiddenEffectObservation.allowedRequests.push('POST /api/book')
+    writeFileSync(
+      hiddenEffect.artifacts.zeroEffectObservation,
+      JSON.stringify(hiddenEffectObservation),
+    )
+    await expect(createConsumerComparisonEvidence(hiddenEffect, dependencies))
+      .rejects.toThrow('authoritative_zero_effect_observation_invalid')
+
+    const hiddenObservation = validInput()
+    const hiddenObservationEvidence = JSON.parse(
+      readFileSync(hiddenObservation.artifacts.zeroEffectObservation, 'utf8'),
+    ) as {
+      internalObservationRequests: string[]
+    }
+    hiddenObservationEvidence.internalObservationRequests = []
+    writeFileSync(
+      hiddenObservation.artifacts.zeroEffectObservation,
+      JSON.stringify(hiddenObservationEvidence),
+    )
+    await expect(createConsumerComparisonEvidence(hiddenObservation, dependencies))
+      .rejects.toThrow('authoritative_zero_effect_observation_invalid')
   })
 
   it('independently detects artifact, tuple, profile, zero-effect and semantic tampering', async () => {

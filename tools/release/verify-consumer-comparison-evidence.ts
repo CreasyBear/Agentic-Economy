@@ -113,16 +113,56 @@ function verifyZeroEffect(
   try {
     const value: unknown = JSON.parse(readFileSync(artifact.path, 'utf8'))
     if (!isRecord(value)
-      || value.schemaVersion !== 'ae.consumer-comparison-zero-effect:v1'
+      || value.schemaVersion !== 'ae.consumer-comparison-zero-effect:v2'
       || value.observer !== 'playwright:consumer-comparison-network-observation:v1'
       || artifact.observer !== value.observer
-      || !Array.isArray(value.effectfulRequests)
+      || !isStringArray(value.allowedRequests)
+      || !isStringArray(value.internalObservationRequests)
+      || !isStringArray(value.effectfulRequests)
+      || !sameStrings(
+        value.internalObservationRequests,
+        classifyRequests(value.allowedRequests).internalObservationRequests,
+      )
+      || !sameStrings(value.effectfulRequests, classifyRequests(value.allowedRequests).effectfulRequests)
       || value.effectfulRequests.length !== 0) {
       errors.push('authoritative_zero_effect_observation_invalid')
     }
   } catch {
     errors.push('zero_effect_observation_unreadable')
   }
+}
+
+function classifyRequests(requests: readonly string[]): Readonly<{
+  internalObservationRequests: string[]
+  effectfulRequests: string[]
+}> {
+  const inspectOnlyPosts = new Set(['/api/answer/turn', '/api/compare'])
+  const internalObservationPosts = new Set(['/api/observability/funnel'])
+  const internalObservationRequests: string[] = []
+  const effectfulRequests: string[] = []
+  for (const request of requests) {
+    const [method, pathname, extra] = request.split(' ')
+    if (extra !== undefined || method === undefined || pathname === undefined) {
+      effectfulRequests.push(request)
+      continue
+    }
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') continue
+    if (method === 'POST' && inspectOnlyPosts.has(pathname)) continue
+    if (method === 'POST' && internalObservationPosts.has(pathname)) {
+      internalObservationRequests.push(request)
+      continue
+    }
+    effectfulRequests.push(request)
+  }
+  return { internalObservationRequests, effectfulRequests }
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+}
+
+function sameStrings(left: readonly unknown[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((entry, index) => entry === right[index])
 }
 
 function selectionUrlMatches(

@@ -117,16 +117,25 @@ test('authenticated exact-revision deployment serves the public zero-effect comp
 
   const allowedRequests = [...new Set([...observedRequests, 'POST /api/compare'])]
   const inspectOnlyPosts = new Set(['/api/answer/turn', '/api/compare'])
+  const internalObservationPosts = new Set(['/api/observability/funnel'])
+  const internalObservationRequests = allowedRequests.filter((entry) => {
+    const [method, pathname] = entry.split(' ', 2)
+    return method === 'POST' && internalObservationPosts.has(pathname ?? '')
+  })
   const effectfulRequests = allowedRequests.filter((entry) => {
     const [method, pathname] = entry.split(' ', 2)
     if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return false
-    return !(method === 'POST' && inspectOnlyPosts.has(pathname ?? ''))
+    return !(method === 'POST' && (
+      inspectOnlyPosts.has(pathname ?? '')
+      || internalObservationPosts.has(pathname ?? '')
+    ))
   })
   expect(effectfulRequests).toEqual([])
   writeOnce(zeroEffectPath, JSON.stringify({
-    schemaVersion: 'ae.consumer-comparison-zero-effect:v1',
+    schemaVersion: 'ae.consumer-comparison-zero-effect:v2',
     observer: 'playwright:consumer-comparison-network-observation:v1',
     allowedRequests,
+    internalObservationRequests,
     effectfulRequests,
     observedAt: new Date().toISOString(),
   }))
