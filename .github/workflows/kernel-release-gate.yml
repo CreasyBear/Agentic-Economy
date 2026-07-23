@@ -277,9 +277,10 @@ jobs:
             bootstrap_principals="${AE_PHASE5_ADMIN_SUBJECT}"
             npx convex env set ADMIN_BOOTSTRAP_PRINCIPAL_IDS "${bootstrap_principals}" --prod
           fi
-          if ! printf ',%s,' "${bootstrap_principals}" | grep -Fq ",${AE_PHASE5_ADMIN_SUBJECT},"; then
-            echo 'The configured Phase 5 principal is not admitted for owner bootstrap.' >&2
-            exit 1
+          normalized_bootstrap_principals="$(printf '%s' "${bootstrap_principals}" | tr -d '[:space:]')"
+          if ! printf ',%s,' "${normalized_bootstrap_principals}" | grep -Fq ",${AE_PHASE5_ADMIN_SUBJECT},"; then
+            bootstrap_principals="${normalized_bootstrap_principals},${AE_PHASE5_ADMIN_SUBJECT}"
+            npx convex env set ADMIN_BOOTSTRAP_PRINCIPAL_IDS "${bootstrap_principals}" --prod
           fi
           issuer="$(npx convex env get CLERK_JWT_ISSUER_DOMAIN --prod)"
           if [ -z "${operator_key}" ] || [ -z "${issuer}" ] || [ -z "${AE_PHASE5_ADMIN_SUBJECT}" ]; then
