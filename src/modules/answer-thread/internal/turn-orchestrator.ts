@@ -3,6 +3,7 @@ import {
   type AnswerSnapshot,
   type AnswerSource,
   type AnswerWorkStep,
+  type ColdStartDecisionClarificationSupport,
   collectAllowedSlugsFromToolResults,
   emitSnapshotEvents,
 } from '@/modules/answer/public'
@@ -36,6 +37,7 @@ import { classifyFollowUpIntent, buildThreadTitle } from './follow-up-intent'
 import { filterProvidersBySuburb, parseNarrowToSuburb } from './follow-up-query'
 import {
   answerHarnessFinalizationSucceeded,
+  collectLatestColdStartClarification,
   collectLatestFrozenAllowedSlugs,
   collectLatestFrozenProviders,
   finalizePersistedAnswerTurnHarnessRun,
@@ -84,6 +86,7 @@ type StreamAnswerTurnRuntimeState = {
   priorTurnCount: number
   priorProviders: AnswerSource[]
   priorAllowedSlugs: readonly string[]
+  priorDecisionSupport?: ColdStartDecisionClarificationSupport | undefined
   intent: FollowUpIntent
   route?: StreamAnswerRoute | undefined
   responsePlan?: AnswerResponsePlan | undefined
@@ -185,6 +188,7 @@ export async function streamAnswerTurn(
       priorTurnCount: 0,
       priorProviders: [],
       priorAllowedSlugs: [],
+      priorDecisionSupport: undefined,
       intent: 'refine_search',
       toolCalls: [],
       allowedSlugs: new Set(),
@@ -271,6 +275,7 @@ function buildStreamAnswerTurnPhases(input: {
         intent,
         priorProviders: collectLatestFrozenProviders(state.priorTurns),
         priorAllowedSlugs: collectLatestFrozenAllowedSlugs(state.priorTurns),
+        priorDecisionSupport: collectLatestColdStartClarification(state.priorTurns),
       }
     },
     route: ({ state }) => ({
@@ -291,6 +296,9 @@ function buildStreamAnswerTurnPhases(input: {
         query: state.query,
         priorTurnsCount: state.priorTurnCount,
         searchContext: state.searchContext,
+        ...(state.priorDecisionSupport === undefined
+          ? {}
+          : { priorDecisionSupport: state.priorDecisionSupport }),
       })
       if (responsePlan.mode === 'clarify') {
         return { ...state, responsePlan }

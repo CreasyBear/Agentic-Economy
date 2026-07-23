@@ -1,6 +1,15 @@
 import { z } from 'zod'
 import { publicOfferingDtoSchema } from '@/modules/registry/public'
-import type { AnswerSource, OfferingAnswerSource } from './answer-synthesizer'
+import {
+  COLD_START_WEBSITE_CLARIFICATION,
+  COLD_START_WEBSITE_REFLECTION,
+  ColdStartDecisionOutcomeValues,
+  WebsiteDecisionConstraintIds,
+  WebsiteFunctionChoiceValues,
+  type AnswerSource,
+  type ColdStartDecisionSupport,
+  type OfferingAnswerSource,
+} from './answer-synthesizer'
 
 export const AnswerSourceSchema = z.object({
   citationIndex: z.number().int().positive(),
@@ -55,11 +64,58 @@ export const OfferingAnswerSourceSchema = z.strictObject({
 
 export const AnswerCompareFieldSchema = z.enum(['area', 'response', 'availability', 'hours', 'trust', 'freshness', 'nextStep'])
 
+const WebsiteDecisionConstraintIdSchema = z.enum(WebsiteDecisionConstraintIds)
+const ColdStartDecisionSupportSchema: z.ZodType<ColdStartDecisionSupport> = z.discriminatedUnion('stage', [
+  z.strictObject({
+    kind: z.literal('cold_start_decision_support'),
+    stage: z.literal('clarification'),
+    reflection: z.literal(COLD_START_WEBSITE_REFLECTION),
+    confirmedConstraintIds: z.array(WebsiteDecisionConstraintIdSchema),
+    clarification: z.strictObject({
+      id: z.literal('website:v1:function'),
+      question: z.literal(COLD_START_WEBSITE_CLARIFICATION),
+      choices: z.array(z.strictObject({
+        id: z.enum(WebsiteFunctionChoiceValues),
+        label: z.string(),
+      })).length(3),
+    }),
+  }),
+  z.strictObject({
+    kind: z.literal('cold_start_decision_support'),
+    stage: z.literal('result'),
+    outcome: z.enum(ColdStartDecisionOutcomeValues),
+    confirmedChoiceId: z.enum(WebsiteFunctionChoiceValues),
+    reflection: z.literal(COLD_START_WEBSITE_REFLECTION),
+    posture: z.string(),
+    confirmedConstraintIds: z.array(WebsiteDecisionConstraintIdSchema),
+    searchedSupplyStatement: z.string(),
+    prices: z.array(z.strictObject({
+      label: z.string(),
+      value: z.string(),
+    })),
+    safeContinuations: z.array(z.union([
+      z.strictObject({
+        kind: z.literal('browse_registered_supply'),
+        label: z.literal('Browse registered supply'),
+      }),
+      z.strictObject({
+        kind: z.literal('relax_named_preference'),
+        constraintId: z.enum([
+          'website:v1:perth_local_preference',
+          'website:v1:affordability_preference',
+        ]),
+        label: z.literal('I’m flexible'),
+      }),
+    ])).max(2),
+  }),
+])
+
 export const AnswerArtifactSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('one-line'), text: z.string() }),
   z.object({ kind: z.literal('selected-provider'), provider: AnswerSourceSchema }),
   z.object({ kind: z.literal('provider-cards'), providers: z.array(AnswerSourceSchema) }),
   z.object({ kind: z.literal('offering-cards'), sources: z.array(OfferingAnswerSourceSchema).max(3) }),
+  z.strictObject({ kind: z.literal('decision-support'), support: ColdStartDecisionSupportSchema }),
   z.object({
     kind: z.literal('provider-compare-table'),
     providers: z.array(AnswerSourceSchema),
@@ -106,6 +162,7 @@ export type AnswerArtifact =
   | { kind: 'selected-provider'; provider: AnswerSource }
   | { kind: 'provider-cards'; providers: readonly AnswerSource[] }
   | { kind: 'offering-cards'; sources: readonly OfferingAnswerSource[] }
+  | { kind: 'decision-support'; support: ColdStartDecisionSupport }
   | {
       kind: 'provider-compare-table'
       providers: readonly AnswerSource[]

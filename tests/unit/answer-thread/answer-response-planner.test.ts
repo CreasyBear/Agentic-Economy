@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { planAnswerTurn } from '@/modules/answer-thread/internal/answer-response-planner'
+import { collectLatestColdStartClarification } from '@/modules/answer-thread/internal/answer-turn-finalization'
 import { buildColdStartRetrievalSnapshot } from '@/modules/answer-thread/internal/turns/retrieval-first'
 
 const goldenQuery =
@@ -49,7 +50,7 @@ describe('answer response planner', () => {
           clarification: {
             id: 'website:v1:function',
             choices: [
-              { id: 'information_and_enquiries', label: 'Information and enquiries' },
+              { id: 'brochure_enquiries', label: 'Information and enquiries' },
               { id: 'transactional', label: 'Customers need to buy, book or log in' },
               { id: 'im_not_sure', label: 'I’m not sure' },
             ],
@@ -61,14 +62,23 @@ describe('answer response planner', () => {
   })
 
   it.each([
-    ['information and enquiries', 'information_and_enquiries'],
+    ['information and enquiries', 'brochure_enquiries'],
     ['customers need to buy, book or log in', 'transactional'],
     ["I'm not sure", 'im_not_sure'],
   ] as const)('accepts only the closed website function choice %s', (choice, choiceId) => {
+    const first = planAnswerTurn({
+      query: goldenQuery,
+      priorTurnsCount: 0,
+      searchContext: undefined,
+    })
+    if (first.mode !== 'clarify' || first.snapshot.decisionSupport?.stage !== 'clarification') {
+      throw new Error('expected website clarification')
+    }
     const plan = planAnswerTurn({
-      query: `${goldenQuery} ${choice}.`,
+      query: choice,
       priorTurnsCount: 1,
       searchContext: undefined,
+      priorDecisionSupport: first.snapshot.decisionSupport,
     })
 
     expect(plan).toMatchObject({
@@ -83,10 +93,45 @@ describe('answer response planner', () => {
     })
   })
 
+  it('recovers the prior clarification from durable evidence before accepting a choice-only turn', () => {
+    const first = planAnswerTurn({
+      query: goldenQuery,
+      priorTurnsCount: 0,
+      searchContext: undefined,
+    })
+    if (first.mode !== 'clarify' || first.snapshot.decisionSupport?.stage !== 'clarification') {
+      throw new Error('expected website clarification')
+    }
+    const priorDecisionSupport = collectLatestColdStartClarification([{
+      query: goldenQuery,
+      seq: 1,
+      status: 'complete',
+      evidenceJson: JSON.stringify({
+        providers: [],
+        allowedSlugs: [],
+        agentJsonUrl: '',
+        decisionSupport: first.snapshot.decisionSupport,
+      }),
+    }])
+
+    expect(planAnswerTurn({
+      query: 'Information and enquiries',
+      priorTurnsCount: 1,
+      searchContext: undefined,
+      priorDecisionSupport,
+    })).toMatchObject({
+      mode: 'answer',
+      coldStart: {
+        confirmedChoiceId: 'brochure_enquiries',
+        registeredSearchQuery: 'website Perth',
+      },
+    })
+  })
+
   it('does not silently relax stated preferences when retrieval returns no exact match', () => {
     const snapshot = buildColdStartRetrievalSnapshot({
       query: `${goldenQuery} Information and enquiries.`,
-      confirmedChoiceId: 'information_and_enquiries',
+      confirmedChoiceId: 'brochure_enquiries',
       confirmedConstraintIds: [
         'website:v1:simple',
         'website:v1:small_startup',
@@ -114,6 +159,10 @@ describe('answer response planner', () => {
         label: 'I’m flexible',
       }],
     })
-    expect(snapshot.decisionSupport?.posture).toContain('local preference')
+    expect(snapshot.decisionSupport?.stage).toBe('result')
+    if (snapshot.decisionSupport?.stage !== 'result') {
+      throw new Error('expected result decision support')
+    }
+    expect(snapshot.decisionSupport.posture).toContain('local preference')
   })
 })

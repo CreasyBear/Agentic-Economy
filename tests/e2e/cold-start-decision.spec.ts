@@ -42,6 +42,16 @@ test.describe('zero-instruction public decision support', () => {
     await expect(page.getByRole('button', { name: 'Customers need to buy, book or log in' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'I’m not sure' })).toBeVisible()
     await expect(page.getByText(/\bOffering\b|revision|shortlist|priorit/i)).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Information and enquiries' }).click()
+    await expect(page.getByRole('region', { name: 'Decision support' })).toBeVisible()
+    await expect(page.getByText(CLARIFICATION, { exact: true })).toHaveCount(1)
+    await expect(page.getByText(/AE searched \d+ items? of registered supply/)).toBeVisible()
+    await expect(page.getByText('Price unavailable', { exact: true })).toBeVisible()
+    await expect(page.getByText('Not supplied', { exact: true })).toBeVisible()
+    await expect(page.getByText(
+      /does not yet have a registered|not enough current comparable information/i,
+    )).toBeVisible()
     expect(effectRequests).toEqual([])
   })
 
@@ -95,6 +105,7 @@ test.describe('zero-instruction public decision support', () => {
 function decision(outcome: ColdStartDecisionOutcome) {
   return {
     outcome,
+    confirmedChoiceId: 'im_not_sure' as const,
     confirmedConstraintIds: [
       'website:v1:simple',
       'website:v1:small_startup',

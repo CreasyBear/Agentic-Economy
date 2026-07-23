@@ -2,10 +2,22 @@ import {
   type AnswerSnapshot,
   type AnswerSource,
   type OfferingAnswerSource,
+  type WebsiteDecisionConstraintId,
+  type WebsiteFunctionChoice,
   type AnswerWorkStep,
   buildAgentJsonUrl,
   extractRequestedLocation,
+  projectColdStartDecisionSupport,
 } from '@/modules/answer/public'
+import {
+  buildComparisonBrief,
+  compareOfferings,
+  deriveRegisteredConstraintEligibility,
+  projectPublicDecisionSourceResult,
+  type PublicDecisionSourceResult,
+  type ResolveComparisonSelectionsResult,
+  type ResolvedComparisonSelection,
+} from '@/modules/comparison/public'
 import {
   aeSearchContextLocationQuery,
   type AeSearchContext,
@@ -54,7 +66,11 @@ async function streamRetrievalFirstTurn(
     return undefined
   }
 
-  const searchInput = buildInitialRegistrySearchInput(ctx.query, ctx.searchContext, plan.providerBudget.searchLimit)
+  const searchInput = buildInitialRegistrySearchInput(
+    plan.coldStart?.registeredSearchQuery ?? ctx.query,
+    ctx.searchContext,
+    plan.providerBudget.searchLimit,
+  )
   const searchStartedAt = Date.now()
   ctx.workLog.emit({
     id: 'search.registry.initial',
@@ -116,6 +132,31 @@ async function streamRetrievalFirstTurn(
   emitReadAndCompareSteps(ctx.workLog, result.providers, result.offeringSources)
 
   if (result.providers.length === 0 && result.offeringSources.length === 0) {
+    if (plan.coldStart !== undefined) {
+      const snapshot = buildColdStartRetrievalSnapshot({
+        query: ctx.query,
+        confirmedChoiceId: plan.coldStart.confirmedChoiceId,
+        confirmedConstraintIds: plan.coldStart.confirmedConstraintIds,
+        sourceDecision: resolveColdStartSourceDecision({
+          sources: [],
+          confirmedChoiceId: plan.coldStart.confirmedChoiceId,
+          confirmedConstraintIds: plan.coldStart.confirmedConstraintIds,
+        }),
+      })
+      const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs: result.allowedSlugs })
+      if (!finalized.ok) {
+        return rejectBlockedSnapshot(ctx, [result.record], result.allowedSlugs, finalized)
+      }
+      const assembly = await ctx.emitOrDeferSnapshot(finalized.snapshot, 'retrieval_empty', { planMode: 'answer' })
+      return {
+        snapshot: finalized.snapshot,
+        toolCalls: [result.record],
+        allowedSlugs: result.allowedSlugs,
+        errorCopyId: undefined,
+        gate: finalized.gate,
+        ...(assembly === undefined ? {} : { assembly }),
+      }
+    }
     if (!shouldReturnDeterministicEmptyState(ctx.query, searchInput)) {
       return { snapshot: undefined, toolCalls: [result.record], allowedSlugs: result.allowedSlugs, errorCopyId: undefined, gate: undefined }
     }
@@ -146,7 +187,19 @@ async function streamRetrievalFirstTurn(
   }
 
   const snapshot = withFollowUpLayout(
-    result.offeringSources.length > 0
+    plan.coldStart !== undefined
+      ? buildColdStartRetrievalSnapshot({
+          query: ctx.query,
+          confirmedChoiceId: plan.coldStart.confirmedChoiceId,
+          confirmedConstraintIds: plan.coldStart.confirmedConstraintIds,
+          sourceDecision: resolveColdStartSourceDecision({
+            sources: result.offeringSources,
+            confirmedChoiceId: plan.coldStart.confirmedChoiceId,
+            confirmedConstraintIds: plan.coldStart.confirmedConstraintIds,
+          }),
+          offeringSources: result.offeringSources,
+        })
+      : result.offeringSources.length > 0
       ? buildOfferingRetrievalSnapshot({
           query: ctx.query,
           sources: result.offeringSources,
@@ -178,6 +231,105 @@ async function streamRetrievalFirstTurn(
     gate: finalized.gate,
     ...(assembly === undefined ? {} : { assembly }),
   }
+}
+
+export function buildColdStartRetrievalSnapshot(input: {
+  query: string
+  confirmedChoiceId: WebsiteFunctionChoice
+  confirmedConstraintIds: readonly WebsiteDecisionConstraintId[]
+  sourceDecision: PublicDecisionSourceResult
+  offeringSources?: readonly OfferingAnswerSource[]
+}): AnswerSnapshot {
+  const decisionSupport = projectColdStartDecisionSupport({
+    ...input.sourceDecision,
+    outcome: input.sourceDecision.outcome === 'insufficient_evidence'
+      ? 'insufficient_comparable_evidence'
+      : input.sourceDecision.outcome,
+    confirmedChoiceId: input.confirmedChoiceId,
+    confirmedConstraintIds: input.confirmedConstraintIds,
+  })
+  return {
+    query: input.query,
+    oneLine: decisionSupport.posture,
+    providers: [],
+    ...(input.offeringSources === undefined || input.offeringSources.length === 0
+      ? {}
+      : { offeringSources: [...input.offeringSources] }),
+    decisionSupport,
+    summary: `${decisionSupport.searchedSupplyStatement} Agentic Economy does not book or take payment on this page.`,
+    nextStep: '',
+    agentJsonUrl: buildAgentJsonUrl('website Perth', 3),
+    layoutProfile: 'discovery_full',
+  }
+}
+
+function resolveColdStartSourceDecision(input: {
+  sources: readonly OfferingAnswerSource[]
+  confirmedChoiceId: WebsiteFunctionChoice
+  confirmedConstraintIds: readonly WebsiteDecisionConstraintId[]
+}): PublicDecisionSourceResult {
+  const selections = input.sources.flatMap((source) => (
+    source.offerings.map((offering): ResolvedComparisonSelection => ({
+      selection: {
+        businessId: source.business.businessId,
+        offeringRef: offering.offeringRef,
+        offeringRevision: offering.revision,
+        projectionObservedAt: source.business.observedAt,
+      },
+      business: {
+        businessId: source.business.businessId,
+        slug: source.business.slug,
+        name: source.business.name,
+      },
+      offering: {
+        offeringRef: offering.offeringRef,
+        revision: offering.revision,
+        name: offering.name,
+        category: offering.category,
+        summary: offering.summary,
+        ...(offering.comparison === undefined
+          ? {}
+          : { comparison: offering.comparison }),
+      },
+      publication: {
+        publishedAt: source.business.observedAt,
+        safeDisplayDisposition: 'retain_safe_history',
+      },
+      projectionDisposition: source.business.disposition,
+      resolvedAt: source.business.observedAt,
+    }))
+  ))
+  const resolution: ResolveComparisonSelectionsResult = {
+    kind: 'resolved',
+    disposition: selections.some(
+      ({ projectionDisposition }) => projectionDisposition !== 'current',
+    )
+      ? 'partial'
+      : 'current',
+    selections,
+    refusals: [],
+  }
+  const comparison = compareOfferings({
+    selections,
+    priorities: ['professional_service:v1:lowest_total_price'],
+  })
+  const eligibility = deriveRegisteredConstraintEligibility({
+    categoryId: 'website:v1',
+    registeredSupplyCount: selections.length,
+    resolution,
+    comparison,
+    confirmedChoiceId: input.confirmedChoiceId,
+    confirmedConstraintIds: input.confirmedConstraintIds,
+  })
+  return projectPublicDecisionSourceResult({
+    requestedCategoryId: 'website:v1',
+    confirmedChoiceId: input.confirmedChoiceId,
+    confirmedConstraintIds: input.confirmedConstraintIds,
+    resolution,
+    comparison,
+    brief: buildComparisonBrief(comparison),
+    eligibility,
+  })
 }
 
 export function buildOfferingRetrievalSnapshot(input: {

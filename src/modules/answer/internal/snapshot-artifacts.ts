@@ -13,9 +13,10 @@ export type AnswerArtifactBudget = {
 const ANSWER_PROVIDER_CARD_LIMIT = 3
 const COMPARE_PROVIDER_LIMIT = 2
 
-const TEXT_ONLY_ARTIFACTS = ['one-line', 'prose', 'what-to-do-now'] as const
+const TEXT_ONLY_ARTIFACTS = ['one-line', 'decision-support', 'prose', 'what-to-do-now'] as const
 const ANSWER_ARTIFACTS = [
   'one-line',
+  'decision-support',
   'offering-cards',
   'provider-cards',
   'location-map',
@@ -51,6 +52,10 @@ export function buildArtifactsFromSnapshot(
   const artifacts: AnswerArtifact[] = [
     { kind: 'one-line', text: snapshot.oneLine },
   ]
+
+  if (snapshot.decisionSupport !== undefined) {
+    artifacts.push({ kind: 'decision-support', support: snapshot.decisionSupport })
+  }
 
   if (selectedProvider !== undefined) {
     artifacts.push({ kind: 'selected-provider', provider: selectedProvider })
@@ -145,7 +150,7 @@ export function getDefaultArtifactBudgetForLayoutProfile(profile: AnswerLayoutPr
       return {
         layoutProfile: profile,
         allowedKinds: TEXT_ONLY_ARTIFACTS,
-        maxArtifactCount: 3,
+        maxArtifactCount: 4,
         maxProviderCards: 0,
       }
     case 'boundary_explain':

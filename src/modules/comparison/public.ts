@@ -52,3 +52,21 @@ export {
   projectComparisonProfile,
   projectComparisonRows,
 } from './internal/projection'
+export {
+  PublicDecisionCategoryIds,
+  PublicDecisionOutcomeValues,
+  WebsiteDecisionConstraintIds,
+  WebsiteFunctionChoiceValues,
+  deriveRegisteredConstraintEligibility,
+  projectPublicDecisionSourceResult,
+} from './internal/decision-support'
+export type {
+  PublicDecisionCategoryId,
+  PublicDecisionOutcome,
+  PublicDecisionPriceEvidence,
+  PublicDecisionSourceResult,
+  RegisteredConstraintDisposition,
+  RegisteredConstraintEligibilityEvidence,
+  WebsiteDecisionConstraintId,
+  WebsiteFunctionChoice,
+} from './internal/decision-support'

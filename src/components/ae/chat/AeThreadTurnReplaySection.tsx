@@ -8,9 +8,15 @@ import { ANSWER_SECTION_CLASS, type ThreadTurnViewModel } from './thread-turn-vi
 export type AeThreadTurnReplaySectionProps = ThreadTurnViewModel & {
   scrollTargetId?: string
   threadId?: string
+  onFollowUp?: (query: string) => void
 }
 
-export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }: AeThreadTurnReplaySectionProps) {
+export function AeThreadTurnReplaySection({
+  scrollTargetId,
+  threadId,
+  onFollowUp,
+  ...turn
+}: AeThreadTurnReplaySectionProps) {
   return (
     <div className="flex flex-col gap-2">
       <AeThreadTurnQueryHeader query={turn.query} intent={turn.intent} seq={turn.seq} />
@@ -36,6 +42,7 @@ export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }:
             phase="complete"
             {...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile })}
             {...(threadId === undefined ? {} : { threadId })}
+            {...(onFollowUp === undefined ? {} : { onFollowUp })}
           />
         </MessageContent>
       </Message>

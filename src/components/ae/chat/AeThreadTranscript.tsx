@@ -81,6 +81,7 @@ export function AeThreadTranscript({
                   {...viewModel}
                   scrollTargetId={turn.turnId}
                   {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })}
+                  {...(anchorThisTurn && onFollowUp !== undefined ? { onFollowUp } : {})}
                 />
               ) : (
                 <AeThreadTurnCollapsed {...viewModel} {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })} />
