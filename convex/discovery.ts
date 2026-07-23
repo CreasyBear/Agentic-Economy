@@ -10,7 +10,7 @@ import {
   projectBusinessSupplyToPublicApi,
 } from '../src/modules/registry/public'
 import type { PublicBusinessCatalogApiV2Dto } from '../src/modules/registry/public'
-import { buildOfferingLlmsTxt } from '../src/modules/discovery/internal/discovery-files'
+import { buildOfferingLlmsTxt } from '../src/modules/discovery/public'
 import { resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeMutationCtx, runtimeReader } from './source_state'

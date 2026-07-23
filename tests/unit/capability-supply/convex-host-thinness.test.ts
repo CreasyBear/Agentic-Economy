@@ -45,15 +45,9 @@ describe('capability-supply convex host thinness', () => {
     }
   })
 
-  it('imports moved behaviors from capability-supply internals', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/offering'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/binding'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/eligibility'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/quarantine'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/publication'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/shared'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/operation-ledger'")
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/graph'")
+  it('imports moved behaviors through the capability-supply public seam', () => {
+    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).not.toContain("from '@/modules/capability-supply/internal/")
     for (const symbol of [
       'publicationLifecycle',
       'bindingObservedRowDigest',

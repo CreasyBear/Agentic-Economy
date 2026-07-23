@@ -1,10 +1,10 @@
 import type {
+  CapabilityBindingRow,
+  CapabilityOfferingRow,
   EligiblePublicationRow,
   EligiblePublishedBusiness,
   EligibleSupplyPorts,
-} from '@/modules/capability-supply/internal/eligibility'
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
+} from '@/modules/capability-supply/public'
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'

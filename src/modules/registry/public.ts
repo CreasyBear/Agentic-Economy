@@ -50,6 +50,9 @@ export type {
   PublicOfferingAccessPathDto,
   PublicOfferingDto,
 } from './internal/offering-api-projection'
+export {
+  buildOfferingV2RegistrySearchDocument,
+} from './internal/search-documents'
 
 export const IndexStatusValues = ['not_queued', 'queued', 'indexed', 'failed', 'stale'] as const
 export type IndexStatus = (typeof IndexStatusValues)[number]

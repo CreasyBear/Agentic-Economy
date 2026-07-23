@@ -2,46 +2,32 @@ import type { Infer } from 'convex/values'
 import { v } from 'convex/values'
 
 import {
-  registerCapabilityTransportBinding as registerCapabilityTransportBindingWrite,
-} from '@/modules/capability-supply/internal/binding'
-import {
+  bindingObservedRowDigest,
+  contractRefFromRow,
   getEligibleExactCapabilitySupply as getEligibleExactCapabilitySupplyFromModule,
   listEligibleCapabilitySupply as listEligibleCapabilitySupplyFromModule,
   listRouteableCapabilitySupply as listRouteableCapabilitySupplyFromModule,
-  setCapabilitySupplyEligibility as setCapabilitySupplyEligibilityWrite,
-  type EligibilityInput,
-} from '@/modules/capability-supply/internal/eligibility'
-import {
-  queryCapabilityGraph as queryCapabilityGraphFromModule,
-  readCapabilityProbeTarget as readCapabilityProbeTargetFromModule,
-  recordCapabilityProbeResult as recordCapabilityProbeResultFromModule,
-} from '@/modules/capability-supply/internal/graph'
-import {
-  contractRefFromRow,
-  registerCapabilityOffering as registerCapabilityOfferingWrite,
-} from '@/modules/capability-supply/internal/offering'
-import {
-  registerCapabilityBindingCommand as runRegisterBindingCommand,
-  registerCapabilityOfferingCommand as runRegisterOfferingCommand,
-  quarantineCapabilityBindingCommand as runQuarantineCommand,
-  setCapabilitySupplyEligibilityCommand as runSetEligibilityCommand,
-  type OperationLedgerPorts,
-} from '@/modules/capability-supply/internal/operation-ledger'
-import {
   publicationLifecycle,
   publicationProjection,
   publishCapabilityCommand,
+  quarantineCapabilityBindingCommand as runQuarantineCommand,
+  queryCapabilityGraph as queryCapabilityGraphFromModule,
+  readCapabilityProbeTarget as readCapabilityProbeTargetFromModule,
+  recordCapabilityProbeResult as recordCapabilityProbeResultFromModule,
   refreshCapabilityCommand,
-  withdrawCapabilityCommand,
-} from '@/modules/capability-supply/internal/publication'
-import {
-  bindingObservedRowDigest,
-} from '@/modules/capability-supply/internal/quarantine'
-import {
+  registerCapabilityBindingCommand as runRegisterBindingCommand,
+  registerCapabilityOffering as registerCapabilityOfferingWrite,
+  registerCapabilityOfferingCommand as runRegisterOfferingCommand,
+  registerCapabilityTransportBinding as registerCapabilityTransportBindingWrite,
+  setCapabilitySupplyEligibility as setCapabilitySupplyEligibilityWrite,
+  setCapabilitySupplyEligibilityCommand as runSetEligibilityCommand,
   validRegistrationContext,
+  withdrawCapabilityCommand,
+  type EligibilityInput,
+  type OperationLedgerPorts,
   type RegistrationContext,
   type SupplyCommandActor,
-} from '@/modules/capability-supply/internal/shared'
+} from '@/modules/capability-supply/public'
 
 import type { Id } from './_generated/dataModel'
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
@@ -52,10 +38,9 @@ import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts
 import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
 import {
-  deriveBusinessOfferingSupportFromCapabilitySupply,
-  rebuildBusinessSupplyProjectionSnapshotCommand,
-} from './catalogSupplyProjection'
-import { runtimeDb } from './source_state'
+  rebuildCapabilityOfferingOriginSupplyProjection,
+  rebuildCapabilityOriginSupplyProjection,
+} from './capabilitySupplyProjectionRefresh'
 
 const contractRefValue = v.object({
   capabilityId: v.string(),
@@ -866,32 +851,6 @@ function portsFor(db: MutationCtx['db']): OperationLedgerPorts {
     registerBinding: (registration, now) => registerCapabilityTransportBinding(db, registration, now),
     setEligibility: (eligibility, now) => setCapabilitySupplyEligibility(db, eligibility, now),
   })
-}
-
-async function rebuildCapabilityOriginSupplyProjection(
-  ctx: MutationCtx,
-  businessId: Id<'businesses'>,
-  now: number,
-): Promise<void> {
-  const db = runtimeDb(ctx.db)
-  const supportByOfferingRef = await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now)
-  await rebuildBusinessSupplyProjectionSnapshotCommand(
-    db,
-    businessId,
-    supportByOfferingRef,
-    now,
-  )
-}
-
-async function rebuildCapabilityOfferingOriginSupplyProjection(
-  ctx: MutationCtx,
-  offeringId: string,
-  now: number,
-): Promise<void> {
-  const offering = await ctx.db.query('capabilityOfferings')
-    .withIndex('by_offeringId', (index) => index.eq('offeringId', offeringId)).unique()
-  if (offering?.origin?.kind !== 'catalog_offering') return
-  await rebuildCapabilityOriginSupplyProjection(ctx, offering.businessId as Id<'businesses'>, now)
 }
 
 function publicationPorts(ctx: MutationCtx) {

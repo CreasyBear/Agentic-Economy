@@ -29,7 +29,8 @@ describe('capability-supply operation-ledger thinness', () => {
   })
 
   it('keeps thin (db, command, now) command re-exports via portsFor', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/operation-ledger'")
+    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).not.toContain("from '@/modules/capability-supply/internal/")
     expect(convexHost).toContain('capabilitySupplyOperationPorts')
     expect(convexHost).toContain('function portsFor')
     expect(convexHost).toMatch(/export async function registerCapabilityOfferingCommand\s*\(/)

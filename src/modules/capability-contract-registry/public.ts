@@ -1,7 +1,10 @@
 import {
   defineCapabilityContract,
+  openCapabilityDecisionModel,
+  projectCapabilityInputValueSchemas,
   sameCapabilityContractRef,
   type CapabilityContract,
+  type CapabilityDecisionModel,
   type CapabilityContractDocument,
   type CapabilityContractRef,
 } from '@/modules/capability-contract/public'
@@ -28,6 +31,16 @@ export type ExactCapabilityContractResult =
   | Readonly<{ kind: 'found'; contract: CapabilityContract; registeredAt: number }>
   | Readonly<{ kind: 'unavailable'; reason: 'not_found' | 'not_active' | 'integrity_failure' }>
 
+export type DurableCapabilityDecisionProjectionResult =
+  | Readonly<{
+      kind: 'found'
+      model: CapabilityDecisionModel
+      name: string
+      description: string
+      valueSchemas: ReturnType<typeof projectCapabilityInputValueSchemas>
+    }>
+  | Readonly<{ kind: 'unavailable'; reason: 'integrity_failure' }>
+
 export function encodeCapabilityContractDocument(input: unknown): EncodedCapabilityContractDocument {
   const contract = defineCapabilityContract(input)
   const { ref: _ref, ...document } = contract
@@ -49,6 +62,33 @@ export function encodeCapabilityContractDocumentJson(input: string): EncodedCapa
     throw new Error('capability_contract_invalid')
   }
   return encodeCapabilityContractDocument(parsed)
+}
+
+export function openDurableCapabilityDecisionProjection(input: Readonly<{
+  ref: CapabilityContractRef
+  documentJson: string
+  maximumProjectedInputSchemaBytes: number
+}>): DurableCapabilityDecisionProjectionResult {
+  try {
+    const encoded = encodeCapabilityContractDocumentJson(input.documentJson)
+    if (!sameCapabilityContractRef(encoded.contract.ref, input.ref)) {
+      return { kind: 'unavailable', reason: 'integrity_failure' }
+    }
+    const model = openCapabilityDecisionModel(encoded.contract)
+    return {
+      kind: 'found',
+      model,
+      name: encoded.contract.name,
+      description: encoded.contract.description,
+      valueSchemas: projectCapabilityInputValueSchemas(
+        encoded.contract.inputSchema,
+        model.inputs,
+        input.maximumProjectedInputSchemaBytes,
+      ),
+    }
+  } catch {
+    return { kind: 'unavailable', reason: 'integrity_failure' }
+  }
 }
 
 export function decodeDurableCapabilityContract(record: DurableCapabilityContract): ExactCapabilityContractResult {

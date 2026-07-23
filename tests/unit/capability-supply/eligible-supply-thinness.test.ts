@@ -17,7 +17,8 @@ describe('capability-supply eligible-supply thinness', () => {
   })
 
   it('keeps thin (db, input) wrappers via eligibleSupplyPorts', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/eligibility'")
+    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).not.toContain("from '@/modules/capability-supply/internal/")
     expect(convexHost).toContain('eligibleSupplyPorts')
     expect(convexHost).toContain('listEligibleCapabilitySupplyFromModule')
     expect(convexHost).toContain('getEligibleExactCapabilitySupplyFromModule')

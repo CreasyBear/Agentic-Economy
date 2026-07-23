@@ -1,11 +1,10 @@
 import {
-  openCapabilityDecisionModel,
-  projectCapabilityInputValueSchemas,
-  sameCapabilityContractRef,
   type CapabilityContractRef,
   type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
-import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
+import {
+  openDurableCapabilityDecisionProjection,
+} from '@/modules/capability-contract-registry/public'
 import { requestRegistrySnapshotDigest } from '@/modules/customer-request/evaluation'
 import { bindCustomerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
 
@@ -60,23 +59,23 @@ export async function assembleRequestGraph(
     if (model === undefined) {
       const stored = await getActiveExact(contractRef)
       if (stored.kind !== 'found') return { kind: 'unavailable' }
-      const decoded = encodeCapabilityContractDocumentJson(stored.documentJson)
-      if (!sameCapabilityContractRef(decoded.contract.ref, contractRef)) return { kind: 'unavailable' }
-      model = openCapabilityDecisionModel(decoded.contract)
+      const opened = openDurableCapabilityDecisionProjection({
+        ref: contractRef,
+        documentJson: stored.documentJson,
+        maximumProjectedInputSchemaBytes: limits.maximumContractProjectedInputSchemaBytes,
+      })
+      if (opened.kind !== 'found') return { kind: 'unavailable' }
+      model = opened.model
       modelsByRef.set(key, model)
       let descriptor: ReturnType<typeof bindCustomerCapabilityDescriptor>
       try {
         descriptor = bindCustomerCapabilityDescriptor({
           contractRef: model.contractRef,
           selectionKey: model.selectionKey,
-          name: decoded.contract.name,
-          description: decoded.contract.description,
+          name: opened.name,
+          description: opened.description,
           inputs: model.inputs,
-          valueSchemas: projectCapabilityInputValueSchemas(
-            decoded.contract.inputSchema,
-            model.inputs,
-            limits.maximumContractProjectedInputSchemaBytes,
-          ),
+          valueSchemas: opened.valueSchemas,
           evidence: model.evidence.map(({ label, purpose, schemaIdentity, semanticIdentity, guaranteed }) => ({
             label, purpose, schemaIdentity, guaranteed,
             ...(semanticIdentity === undefined ? {} : { semanticIdentity }),

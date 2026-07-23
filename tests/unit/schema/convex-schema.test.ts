@@ -221,7 +221,7 @@ const requiredIndexes = {
   businesses: ['by_slug', 'by_owner_updatedAt', 'by_publicStatus_slug'],
   businessServices: ['by_business_status', 'by_slug_serviceSlug'],
   offeringPublicRevisionHistory: [
-    'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+    'by_businessId_offeringRef_revision_offeringSourceHash',
   ],
   customerRequestHeads: ['by_requestId'],
   customerRequestRouteMandateIssues: ['by_mandateRef', 'by_requestId_and_recordedAt'],

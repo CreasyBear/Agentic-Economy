@@ -120,7 +120,7 @@ export const catalogTables = {
     withdrawnAt: v.optional(v.number()),
     safeDisplayDisposition: literalUnion(OfferingHistorySafeDisplayDispositionValues),
   }).index(
-    'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+    'by_businessId_offeringRef_revision_offeringSourceHash',
     ['businessId', 'offeringRef', 'revision', 'offeringSourceHash'],
   ),
 

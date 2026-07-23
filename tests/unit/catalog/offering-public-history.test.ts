@@ -146,7 +146,7 @@ describe('historical public Offering resolution', () => {
     const query = source.slice(queryStart, queryEnd)
 
     expect(query).toContain(
-      'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+      'by_businessId_offeringRef_revision_offeringSourceHash',
     )
     expect(query).toContain('.unique()')
     expect(query).not.toContain('.collect()')
