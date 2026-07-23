@@ -1,5 +1,5 @@
 import { queryGeneric } from 'convex/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import type { GenericValidator } from 'convex/values'
 
 import {
@@ -508,16 +508,55 @@ export const searchPublicBusinessOfferingSupply = queryGeneric({
     }
     const tokens = needle.split(' ').filter((token) => !SEARCH_STOP_WORDS.has(token)).map(normalizeSearchToken)
     const locationKey = resolveSearchLocationKey(args)
-    const rows = await readOfferingSearchCandidateBusinesses(
+    let searchPage
+    try {
+      searchPage = await ctx.db.query('registrySearchDocuments')
+        .withSearchIndex(
+          'search_v2_searchText_by_schemaVersion_and_publicStatus',
+          (search) =>
+            search
+              .search('searchText', tokens.length === 0 ? needle : tokens.join(' '))
+              .eq('schemaVersion', 'registry-search-document:v2')
+              .eq('publicStatus', 'published'),
+        )
+        .paginate({
+          cursor: input.cursor ?? null,
+          numItems: normalizeLimit(input.limit),
+        })
+    } catch (error) {
+      if (
+        input.cursor === undefined
+        || !(error instanceof Error)
+        || !/cursor/iu.test(error.message)
+      ) {
+        throw error
+      }
+      throw new ConvexError({
+        code: 'invalid_cursor',
+        reason: 'The registry search cursor is invalid or no longer current.',
+      })
+    }
+    const businesses = await hydrateOfferingSearchCandidateBusinesses(
       db,
-      needle,
+      searchPage.page,
       tokens,
       locationKey,
-      normalizeLimit(input.limit) + 1,
     )
-    const items = (await Promise.all(rows.map((business) => readOfferingSupplyForBusiness(db, business))))
+    const items = (await Promise.all(businesses.map((business) => readOfferingSupplyForBusiness(db, business))))
       .filter((item): item is NonNullable<typeof item> => item !== undefined)
-    return toConvexOfferingPage(paginateOfferingSupply(items, input, needle))
+    return toConvexOfferingPage({
+      kind: 'ok',
+      schemaVersion: 'public-business-catalog-api:v2',
+      query: needle,
+      items,
+      pagination: {
+        ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+        ...(searchPage.isDone ? {} : { nextCursor: searchPage.continueCursor }),
+        limit: normalizeLimit(input.limit),
+        total: items.length + (searchPage.isDone ? 0 : 1),
+        hasMore: !searchPage.isDone,
+      },
+    })
   },
 })
 
@@ -777,25 +816,15 @@ async function readPublishedBusinessRows(
   )
 }
 
-async function readOfferingSearchCandidateBusinesses(
+async function hydrateOfferingSearchCandidateBusinesses(
   db: RuntimeDb,
-  query: string,
+  documents: readonly RuntimeDocument[],
   tokens: readonly string[],
   locationKey: string | undefined,
-  limit: number,
 ): Promise<RuntimeDocument[]> {
-  const searchText = tokens.length === 0 ? query : tokens.join(' ')
-  const documents = await takeDocuments(
-    boundedQuery(db.query('registrySearchDocuments')).withSearchIndex(
-      'search_searchText_by_publicStatus',
-      (search) =>
-        search.search('searchText', searchText).eq('publicStatus', 'published'),
-    ),
-    Math.min(SEARCH_DOCUMENT_CANDIDATE_LIMIT, Math.max(limit * 4, limit)),
-  )
   const slugs = uniqueBusinessSlugs(
     documents.filter((document) => matchesSearchDocument(document, tokens, locationKey)),
-  ).slice(0, limit)
+  )
   const businesses = await Promise.all(slugs.map(async (slug) => {
     const business = await db.query('businesses')
       .withIndex('by_slug', (index) => index.eq('slug', slug))

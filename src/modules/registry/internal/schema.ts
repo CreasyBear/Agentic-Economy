@@ -1,5 +1,6 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import type { GenericValidator } from 'convex/values'
 
 import { literalUnion } from '@/modules/common/convex-literals'
 import {
@@ -16,6 +17,148 @@ import {
 } from '@/modules/registry/public'
 import { PublicStatusValues, TrustTierValues } from '@/modules/business/public'
 import { FirstRequestModeValues } from '@/modules/catalog/public'
+
+const OfferingV2RegistrySearchDocumentSchemaVersion = 'registry-search-document:v2' as const
+
+const offeringSearchFactSource = v.union(
+  v.object({ kind: v.literal('business_supplied') }),
+  v.object({
+    kind: v.literal('publicly_observed'),
+    referenceUrl: v.optional(v.string()),
+  }),
+  v.object({
+    kind: v.literal('ae_support'),
+    actionId: v.string(),
+    actionVersion: v.string(),
+  }),
+)
+
+function offeringSearchFact<Value extends GenericValidator>(value: Value) {
+  return v.union(
+    v.object({
+      kind: v.literal('known'),
+      value,
+      source: offeringSearchFactSource,
+      observedAt: v.number(),
+      validUntil: v.optional(v.number()),
+    }),
+    v.object({
+      kind: v.literal('unknown'),
+      explanation: v.string(),
+      source: offeringSearchFactSource,
+      observedAt: v.number(),
+    }),
+    v.object({
+      kind: v.literal('not_supplied'),
+      source: offeringSearchFactSource,
+      observedAt: v.number(),
+    }),
+    v.object({
+      kind: v.literal('stale'),
+      lastKnown: v.optional(value),
+      source: offeringSearchFactSource,
+      observedAt: v.number(),
+      validUntil: v.number(),
+    }),
+  )
+}
+
+const offeringSearchPriceBasis = v.object({
+  description: v.string(),
+  currency: v.optional(v.string()),
+  amountMinor: v.optional(v.number()),
+  unit: v.union(
+    v.literal('total'),
+    v.literal('hour'),
+    v.literal('day'),
+    v.literal('month'),
+    v.literal('request'),
+    v.literal('unit'),
+  ),
+})
+
+const offeringSearchComparison = v.object({
+  schemaVersion: v.literal('offering-comparison:v1'),
+  profile: v.union(
+    v.object({
+      profileId: v.literal('professional_service:v1'),
+      scopeBasis: offeringSearchFact(v.string()),
+      priceBasis: offeringSearchFact(offeringSearchPriceBasis),
+      timingBasis: offeringSearchFact(v.string()),
+      serviceArea: offeringSearchFact(v.string()),
+    }),
+    v.object({
+      profileId: v.literal('machine_data:v1'),
+      interfaceFormat: offeringSearchFact(v.union(
+        v.literal('graphql'),
+        v.literal('rest_json'),
+        v.literal('csv'),
+        v.literal('other'),
+      )),
+      requestMethod: offeringSearchFact(v.union(v.literal('GET'), v.literal('POST'))),
+      authentication: offeringSearchFact(v.union(
+        v.literal('none'),
+        v.literal('api_key'),
+        v.literal('oauth2'),
+        v.literal('other'),
+      )),
+      priceBasis: offeringSearchFact(offeringSearchPriceBasis),
+      freshnessOrUpdateCadence: offeringSearchFact(v.string()),
+    }),
+  ),
+})
+
+const legacyRegistrySearchDocument = v.object({
+  documentId: v.string(),
+  schemaVersion: v.literal(RegistrySearchDocumentSourceVersion),
+  businessSlug: v.string(),
+  serviceSlug: v.string(),
+  businessName: v.string(),
+  serviceName: v.string(),
+  serviceCategory: v.string(),
+  serviceCategoryKey: v.string(),
+  suburb: v.string(),
+  stateTerritory: v.string(),
+  postcode: v.optional(v.string()),
+  publicStatus: v.literal('published'),
+  trustTier: literalUnion(TrustTierValues),
+  firstRequestMode: literalUnion(FirstRequestModeValues),
+  placeKeys: v.array(v.string()),
+  serviceKeywords: v.array(v.string()),
+  searchText: v.string(),
+  serviceArea: v.string(),
+  sourceHash: v.optional(v.string()),
+  generatedHash: v.string(),
+  updatedAt: v.number(),
+})
+
+const offeringV2RegistrySearchDocument = v.object({
+  documentId: v.string(),
+  schemaVersion: v.literal(OfferingV2RegistrySearchDocumentSchemaVersion),
+  businessId: v.string(),
+  businessSlug: v.string(),
+  businessName: v.string(),
+  businessCategory: v.string(),
+  suburb: v.string(),
+  stateTerritory: v.string(),
+  postcode: v.optional(v.string()),
+  publicStatus: v.literal('published'),
+  placeKeys: v.array(v.string()),
+  searchText: v.string(),
+  offerings: v.array(v.object({
+    offeringRef: v.string(),
+    revision: v.number(),
+    name: v.string(),
+    category: v.string(),
+    summary: v.string(),
+    comparison: v.optional(offeringSearchComparison),
+  })),
+  sourceRevision: v.number(),
+  sourceDigest: v.string(),
+  observedAt: v.number(),
+  generatedHash: v.string(),
+  updatedAt: v.number(),
+})
 
 const registryPublicSurface = v.union(
   v.literal('/registry'),
@@ -77,36 +220,22 @@ export const registryTables = {
     .index('by_business_startedAt', ['businessId', 'startedAt'])
     .index('by_logicalKey', ['logicalKey']),
 
-  registrySearchDocuments: defineTable({
-    documentId: v.string(),
-    schemaVersion: v.literal(RegistrySearchDocumentSourceVersion),
-    businessSlug: v.string(),
-    serviceSlug: v.string(),
-    businessName: v.string(),
-    serviceName: v.string(),
-    serviceCategory: v.string(),
-    serviceCategoryKey: v.string(),
-    suburb: v.string(),
-    stateTerritory: v.string(),
-    postcode: v.optional(v.string()),
-    publicStatus: v.literal('published'),
-    trustTier: literalUnion(TrustTierValues),
-    firstRequestMode: literalUnion(FirstRequestModeValues),
-    placeKeys: v.array(v.string()),
-    serviceKeywords: v.array(v.string()),
-    searchText: v.string(),
-    serviceArea: v.string(),
-    sourceHash: v.optional(v.string()),
-    generatedHash: v.string(),
-    updatedAt: v.number(),
-  })
+  registrySearchDocuments: defineTable(v.union(
+    legacyRegistrySearchDocument,
+    offeringV2RegistrySearchDocument,
+  ))
     .index('by_documentId', ['documentId'])
     .index('by_business', ['businessSlug'])
+    .index('by_businessId', ['businessId'])
     .index('by_service', ['businessSlug', 'serviceSlug'])
     .index('by_publicStatus_updatedAt', ['publicStatus', 'updatedAt'])
     .searchIndex('search_searchText_by_publicStatus', {
       searchField: 'searchText',
       filterFields: ['publicStatus'],
+    })
+    .searchIndex('search_v2_searchText_by_schemaVersion_and_publicStatus', {
+      searchField: 'searchText',
+      filterFields: ['schemaVersion', 'publicStatus'],
     }),
 
   registrySearchSyncAttempts: defineTable({

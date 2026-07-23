@@ -1,11 +1,13 @@
 import { stableHash } from '@/modules/common/stable-hash'
 import type { SourceHash } from '@/modules/common/ids'
+import type { BusinessSupplyProjection } from '@/modules/catalog/public'
 import type {
   PublicBusinessCatalogApiDto,
   PublicBusinessCatalogSearchInput,
 } from './search'
 
 const RegistrySearchDocumentSchemaVersion = 'registry-search-document:v1' as const
+export const OfferingV2RegistrySearchDocumentSchemaVersion = 'registry-search-document:v2' as const
 
 export type RegistrySearchDocument = {
   documentId: string
@@ -28,6 +30,36 @@ export type RegistrySearchDocument = {
   serviceArea: string
   updatedAt: number
   generatedHash: SourceHash
+}
+
+export type OfferingV2RegistrySearchDocument = {
+  documentId: string
+  schemaVersion: typeof OfferingV2RegistrySearchDocumentSchemaVersion
+  businessId: string
+  businessSlug: string
+  businessName: string
+  businessCategory: string
+  suburb: string
+  stateTerritory: string
+  postcode?: string
+  publicStatus: 'published'
+  placeKeys: readonly string[]
+  searchText: string
+  offerings: readonly {
+    offeringRef: string
+    revision: number
+    name: string
+    category: string
+    summary: string
+    comparison?: NonNullable<
+      BusinessSupplyProjection['offerings'][number]['offering']['comparison']
+    >
+  }[]
+  sourceRevision: number
+  sourceDigest: SourceHash
+  observedAt: number
+  generatedHash: SourceHash
+  updatedAt: number
 }
 
 export type RegistrySearchLocation = {
@@ -159,6 +191,117 @@ export function buildRegistrySearchDocumentsForCatalog(
       generatedHash: stableHash(documentCore),
     }
   })
+}
+
+export function buildOfferingV2RegistrySearchDocument(
+  projection: BusinessSupplyProjection,
+): OfferingV2RegistrySearchDocument {
+  const offerings = projection.offerings.map(({ offering }) => ({
+    offeringRef: offering.offeringRef,
+    revision: offering.revision,
+    name: offering.name,
+    category: offering.category,
+    summary: offering.summary,
+    ...(offering.comparison === undefined ? {} : { comparison: offering.comparison }),
+  }))
+  const placeKeys = placeKeysFor({
+    suburb: projection.business.suburb,
+    stateTerritory: projection.business.stateTerritory,
+    ...(projection.business.postcode === undefined
+      ? {}
+      : { postcode: projection.business.postcode }),
+    serviceArea: projection.offerings
+      .map(({ offering }) => offering.serviceAreaSummary ?? '')
+      .join(' '),
+  })
+  const searchText = normalizeRegistrySearchText([
+    projection.business.name,
+    projection.business.category,
+    projection.business.suburb,
+    projection.business.stateTerritory,
+    projection.business.postcode ?? '',
+    ...projection.offerings.flatMap(({ offering }) => [
+      offering.name,
+      offering.category,
+      offering.summary,
+      offering.serviceAreaSummary ?? '',
+      offering.availabilitySummary ?? '',
+      offering.pricingSummary ?? '',
+      ...comparisonSearchValues(offering.comparison),
+    ]),
+  ].join(' '))
+  const documentCore = {
+    businessId: projection.business.businessId,
+    businessSlug: projection.business.slug,
+    businessName: projection.business.name,
+    businessCategory: projection.business.category,
+    suburb: projection.business.suburb,
+    stateTerritory: projection.business.stateTerritory,
+    publicStatus: 'published' as const,
+    placeKeys,
+    searchText,
+    offerings,
+    sourceRevision: projection.sourceRevision,
+    sourceDigest: projection.sourceDigest,
+    observedAt: projection.observedAt,
+    updatedAt: projection.observedAt,
+  }
+  return {
+    documentId: `offering-v2__${projection.business.businessId.replace(/[^A-Za-z0-9_-]/gu, '_')}`,
+    schemaVersion: OfferingV2RegistrySearchDocumentSchemaVersion,
+    ...documentCore,
+    ...(projection.business.postcode === undefined
+      ? {}
+      : { postcode: projection.business.postcode }),
+    generatedHash: stableHash(documentCore),
+  }
+}
+
+function comparisonSearchValues(
+  comparison: BusinessSupplyProjection['offerings'][number]['offering']['comparison'],
+): string[] {
+  if (comparison === undefined) return []
+  const facts = comparison.profile.profileId === 'professional_service:v1'
+    ? [
+        comparison.profile.scopeBasis,
+        comparison.profile.priceBasis,
+        comparison.profile.timingBasis,
+        comparison.profile.serviceArea,
+      ]
+    : [
+        comparison.profile.interfaceFormat,
+        comparison.profile.requestMethod,
+        comparison.profile.authentication,
+        comparison.profile.priceBasis,
+        comparison.profile.freshnessOrUpdateCadence,
+      ]
+  return [
+    comparison.profile.profileId,
+    ...facts.flatMap(searchValuesForFact),
+  ]
+}
+
+function searchValuesForFact(
+  fact: NonNullable<
+    BusinessSupplyProjection['offerings'][number]['offering']['comparison']
+  >['profile'] extends infer Profile
+    ? Profile extends { profileId: string }
+      ? Profile[Exclude<keyof Profile, 'profileId'>]
+      : never
+    : never,
+): string[] {
+  if (typeof fact !== 'object' || fact === null || !('kind' in fact)) return []
+  if (fact.kind === 'unknown') return [fact.explanation]
+  if (fact.kind === 'not_supplied') return []
+  const value = fact.kind === 'known' ? fact.value : fact.lastKnown
+  if (value === undefined) return []
+  if (typeof value === 'string') return [value]
+  return [
+    value.description,
+    value.currency ?? '',
+    value.amountMinor === undefined ? '' : String(value.amountMinor),
+    value.unit,
+  ]
 }
 
 function buildRegistrySearchDocumentId(businessSlug: string, serviceSlug: string): string {

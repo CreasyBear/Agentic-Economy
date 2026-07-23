@@ -8,6 +8,9 @@ import {
   validateOfferingComparisonEnvelope,
 } from '../src/modules/catalog/internal/offering-supply'
 import type { AccessPathRef, BusinessId, OfferingRef } from '../src/modules/common/ids'
+import {
+  buildOfferingV2RegistrySearchDocument,
+} from '../src/modules/registry/internal/search-documents'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 
 export async function rebuildBusinessSupplyProjectionSnapshotCommand(db: RuntimeDb, businessId: string, supportByOfferingRef: Readonly<Record<string, OfferingSupportProjection>>, now: number): Promise<{ kind: 'ok'; sourceDigest: string } | { kind: 'error'; code: string }> {
@@ -53,6 +56,13 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(db: Runtime
   const existing = await db.query('businessSupplyProjectionSnapshots').withIndex('by_businessId', (q) => q.eq('businessId', businessId)).unique()
   const row = { businessId, sourceRevision: projection.projection.sourceRevision, sourceDigest: projection.projection.sourceDigest, observedAt: now, disposition: projection.projection.disposition, projectionJson: JSON.stringify(projection.projection), status: 'current', updatedAt: now }
   if (existing === null) await db.insert('businessSupplyProjectionSnapshots', row); else await db.patch(existing._id, row)
+  await replaceOfferingV2RegistrySearchDocument(
+    db,
+    projection.projection.offerings.length === 0
+      ? undefined
+      : buildOfferingV2RegistrySearchDocument(projection.projection),
+    businessId,
+  )
   return { kind: 'ok', sourceDigest: projection.projection.sourceDigest }
 }
 
@@ -81,7 +91,45 @@ export async function deriveBusinessOfferingSupportFromCapabilitySupply(db: Runt
 async function originCurrent(db: RuntimeDb, origin: { declaredAccessPathRef?: string; accessPathSourceHash?: string }) { if (!origin.declaredAccessPathRef && !origin.accessPathSourceHash) return true; if (!origin.declaredAccessPathRef || !origin.accessPathSourceHash) return false; const path = await db.query('offeringAccessPaths').withIndex('by_accessPathRef', (q) => q.eq('accessPathRef', origin.declaredAccessPathRef)).unique(); return path !== null && field(path, 'status') === 'published' && field(path, 'sourceHash') === origin.accessPathSourceHash }
 async function controlEnabled(db: RuntimeDb, key: string, now: number) { const row = await db.query('operatorControls').withIndex('by_key', (q) => q.eq('key', key)).unique(); return row !== null && row.enabled === true && (typeof row.expiresAt !== 'number' || row.expiresAt > now) }
 async function suppressed(db: RuntimeDb, businessId: string) { return await db.query('suppressionRules').withIndex('by_target_status', (q) => q.eq('targetType', 'business').eq('targetRef', businessId).eq('status', 'active')).unique() !== null }
-async function markPending(db: RuntimeDb, businessId: string, code: string, now: number): Promise<{ kind: 'error'; code: string }> { const row = await db.query('businessSupplyProjectionSnapshots').withIndex('by_businessId', (q) => q.eq('businessId', businessId)).unique(); if (row) await db.patch(row._id, { status: 'projection_pending', disposition: 'stale', lastErrorCode: code, updatedAt: now }); return { kind: 'error', code } }
+async function markPending(
+  db: RuntimeDb,
+  businessId: string,
+  code: string,
+  now: number,
+): Promise<{ kind: 'error'; code: string }> {
+  const row = await db.query('businessSupplyProjectionSnapshots')
+    .withIndex('by_businessId', (q) => q.eq('businessId', businessId))
+    .unique()
+  if (row !== null) {
+    await db.patch(row._id, {
+      status: 'projection_pending',
+      disposition: 'stale',
+      lastErrorCode: code,
+      updatedAt: now,
+    })
+  }
+  await replaceOfferingV2RegistrySearchDocument(db, undefined, businessId)
+  return { kind: 'error', code }
+}
+
+async function replaceOfferingV2RegistrySearchDocument(
+  db: RuntimeDb,
+  document: ReturnType<typeof buildOfferingV2RegistrySearchDocument> | undefined,
+  businessId: string,
+): Promise<void> {
+  const existing = await db.query('registrySearchDocuments')
+    .withIndex('by_businessId', (query) => query.eq('businessId', businessId))
+    .unique()
+  if (existing !== null) {
+    if (db.delete === undefined) {
+      throw new Error('Registry search document removal is unavailable.')
+    }
+    await db.delete(existing._id)
+  }
+  if (document !== undefined) {
+    await db.insert('registrySearchDocuments', document)
+  }
+}
 function sanitizeSupport(value: OfferingSupportProjection | undefined, now: number): OfferingSupportProjection { if (!value) return { integrated: false, routeable: false, reasons: ['not_integrated'], observedAt: now }; if (value.validUntil !== undefined && value.validUntil <= now) return { integrated: value.integrated, routeable: false, reasons: ['readiness_stale'], observedAt: now, validUntil: value.validUntil }; return value.routeable && !value.integrated ? { integrated: false, routeable: false, reasons: ['not_integrated'], observedAt: now } : value }
 function field(row: RuntimeDocument, key: string) { return typeof row[key] === 'string' ? row[key] as string : '' }
 function optional(row: RuntimeDocument, key: string) { return typeof row[key] === 'string' ? row[key] as string : undefined }

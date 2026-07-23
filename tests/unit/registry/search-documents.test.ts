@@ -102,8 +102,9 @@ describe('registry search documents', () => {
     const document = buildOfferingV2RegistrySearchDocument(projection)
 
     expect(document).toMatchObject({
-      documentId: 'offering-v2__native-supply',
+      documentId: 'offering-v2__business_1',
       schemaVersion: 'registry-search-document:v2',
+      businessId: 'business:1',
       businessSlug: 'native-supply',
       offerings: [
         {
@@ -142,7 +143,22 @@ describe('registry search documents', () => {
     expect(db.tables.registrySearchDocuments?.[0]).toMatchObject({
       schemaVersion: 'registry-search-document:v2',
       businessSlug: 'native-supply',
-      offerings: [{ offeringRef: 'offering:professional', revision: 2 }],
+      offerings: expect.arrayContaining([
+        expect.objectContaining({ offeringRef: 'offering:professional', revision: 2 }),
+      ]),
+    })
+
+    db.tables.businesses![0]!.slug = 'native-supply-renamed'
+    await rebuildBusinessSupplyProjectionSnapshotCommand(
+      db as unknown as RuntimeDb,
+      'business:1',
+      {},
+      101,
+    )
+    expect(db.tables.registrySearchDocuments).toHaveLength(1)
+    expect(db.tables.registrySearchDocuments?.[0]).toMatchObject({
+      businessId: 'business:1',
+      businessSlug: 'native-supply-renamed',
     })
 
     db.tables.businessOfferings![0]!.status = 'retired'
@@ -152,7 +168,7 @@ describe('registry search documents', () => {
         db as unknown as RuntimeDb,
         'business:1',
         {},
-        101,
+        102,
       ),
     ).toMatchObject({ kind: 'ok' })
     expect(db.tables.registrySearchDocuments).toEqual([])
@@ -163,7 +179,7 @@ describe('registry search documents', () => {
       db as unknown as RuntimeDb,
       'business:1',
       {},
-      102,
+      103,
     )
     db.tables.suppressionRules!.push({
       _id: 'suppression:1',
@@ -176,7 +192,7 @@ describe('registry search documents', () => {
         db as unknown as RuntimeDb,
         'business:1',
         {},
-        103,
+        104,
       ),
     ).toMatchObject({ kind: 'error' })
     expect(db.tables.registrySearchDocuments).toEqual([])
@@ -283,8 +299,9 @@ function offeringProjectionSeed(): Record<string, RuntimeDocument[]> {
     offeringPublicRevisionHistory: [],
     registrySearchDocuments: [{
       _id: 'registry-search-document:stale',
-      documentId: 'offering-v2__native-supply',
+      documentId: 'offering-v2__business_1',
       schemaVersion: 'registry-search-document:v2',
+      businessId: 'business:1',
       businessSlug: 'native-supply',
       searchText: 'stale removed term',
     }],

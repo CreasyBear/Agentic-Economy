@@ -193,11 +193,19 @@ describe('Convex registry public read paths', () => {
 
     const first = await offeringSearchHandler(
       { db },
-      { query: 'graphquasar', limit: 1 },
+      { query: 'graphquasar', mode: 'whole_catalogue', limit: 1 },
     )
+    if (first.pagination.nextCursor === undefined) {
+      throw new Error('expected an opaque continuation cursor')
+    }
     const second = await offeringSearchHandler(
       { db },
-      { query: 'graphquasar', limit: 1, cursor: first.pagination.nextCursor },
+      {
+        query: 'graphquasar',
+        mode: 'whole_catalogue',
+        limit: 1,
+        cursor: first.pagination.nextCursor,
+      },
     )
 
     expect(first.items.map((item: { slug: string }) => item.slug)).toEqual(['native-business-001'])
@@ -216,6 +224,28 @@ describe('Convex registry public read paths', () => {
         )
       ),
     ).toHaveLength(2)
+  })
+
+  it('refuses an invalid native Offering search cursor with typed error data', async () => {
+    const db = new FakeDb()
+    seedOfferingSearchBusiness(db, 1)
+
+    await expect(
+      offeringSearchHandler(
+        { db },
+        {
+          query: 'graphquasar',
+          mode: 'whole_catalogue',
+          limit: 1,
+          cursor: 'not-a-convex-cursor',
+        },
+      ),
+    ).rejects.toMatchObject({
+      data: {
+        code: 'invalid_cursor',
+        reason: 'The registry search cursor is invalid or no longer current.',
+      },
+    })
   })
 })
 
@@ -478,6 +508,7 @@ function seedOfferingSearchBusiness(db: FakeDb, index: number): void {
     _creationTime: index,
     documentId: `offering-v2__${slug}`,
     schemaVersion: 'registry-search-document:v2',
+    businessId,
     businessSlug: slug,
     businessName: `Native Business ${suffix}`,
     businessCategory: 'Machine data',

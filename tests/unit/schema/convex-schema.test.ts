@@ -337,7 +337,7 @@ const requiredIndexes = {
   operationKeys: ['by_actor_operation_key', 'by_scope_key'],
   registryProjectionItems: ['by_business', 'by_service'],
   registryProjectionAttempts: ['by_business_status', 'by_business_startedAt', 'by_logicalKey'],
-  registrySearchDocuments: ['by_documentId', 'by_business', 'by_service', 'by_publicStatus_updatedAt'],
+  registrySearchDocuments: ['by_documentId', 'by_business', 'by_businessId', 'by_service', 'by_publicStatus_updatedAt'],
   demandSignals: ['by_sourceSurface_createdAt', 'by_service_suburb_createdAt'],
   registrySearchSyncAttempts: [
     'by_attemptId',
