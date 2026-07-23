@@ -15,7 +15,6 @@ const supportedTerminals = new Set([
   absolute('src/lib/server/convex-source.ts'),
   absolute('src/modules/catalog/public.ts'),
   absolute('src/modules/common/action.ts'),
-  absolute('src/modules/harness/action-tool.ts'),
 ])
 
 const forbiddenFamilies = [
@@ -58,6 +57,31 @@ describe('comparison public entry graph', () => {
       'fixture.ts',
       "export { run } from '@/modules/action-invocation/public'",
     )).toContain('fixture.ts:forbidden:@/modules/action-invocation/public')
+
+    expect(sourceViolations(
+      'fixture.ts',
+      "import '@/modules/payment/payment.functions'",
+    )).toContain('fixture.ts:forbidden:@/modules/payment/payment.functions')
+  })
+
+  it('rejects cross-owner private imports while permitting an owner to traverse itself', () => {
+    expect(sourceViolations(
+      'src/modules/comparison/comparison.functions.ts',
+      "import { privateCatalogRead } from '@/modules/catalog/internal/private-read'",
+    )).toContain(
+      'src/modules/comparison/comparison.functions.ts:private:@/modules/catalog/internal/private-read',
+    )
+    expect(sourceViolations(
+      'src/modules/comparison/comparison.functions.ts',
+      "import { privateCatalogRead } from '../catalog/internal/private-read'",
+    )).toContain(
+      'src/modules/comparison/comparison.functions.ts:private:../catalog/internal/private-read',
+    )
+
+    expect(sourceViolations(
+      'src/modules/comparison/public.ts',
+      "export { compareInternal } from '@/modules/comparison/internal/compare'",
+    )).toEqual([])
   })
 
   it('keeps the registered structured output strict and effect-continuation free', async () => {
@@ -101,13 +125,21 @@ function graphViolations(start: readonly string[]): readonly string[] {
 }
 
 function sourceViolations(path: string, source: string): readonly string[] {
-  return importedSpecifiers(source)
-    .filter((specifier) => forbiddenFamilies.some((family) => family.test(
-      specifier.startsWith('@/')
-        ? absolute(specifier.replace('@/', 'src/'))
-        : normalize(specifier),
-    )))
-    .map((specifier) => `${path}:forbidden:${specifier}`)
+  const importerOwner = moduleOwner(absolute(path))
+  return importedSpecifiers(source).flatMap((specifier) => {
+    const importedPath = specifier.startsWith('@/')
+      ? absolute(specifier.replace('@/', 'src/'))
+      : specifier.startsWith('.')
+        ? absolute(resolve(dirname(path), specifier))
+        : normalize(specifier)
+    if (forbiddenFamilies.some((family) => family.test(importedPath))) {
+      return [`${path}:forbidden:${specifier}`]
+    }
+    const privateOwner = importedPath.match(/\/src\/modules\/([^/]+)\/internal\//u)?.[1]
+    return privateOwner !== undefined && privateOwner !== importerOwner
+      ? [`${path}:private:${specifier}`]
+      : []
+  })
 }
 
 function localImports(path: string, source: string): readonly string[] {
@@ -117,11 +149,14 @@ function localImports(path: string, source: string): readonly string[] {
 }
 
 function importedSpecifiers(source: string): readonly string[] {
-  return [
+  return [...new Set([
     ...source.matchAll(
       /(?:from\s+|import\s*\(\s*)['"]([^'"]+)['"]/gu,
     ),
-  ].map((match) => match[1]!)
+    ...source.matchAll(
+      /(?:^|[;\n])\s*import\s*['"]([^'"]+)['"]/gu,
+    ),
+  ].map((match) => match[1]!))]
 }
 
 function resolveSpecifier(importer: string, specifier: string): string | undefined {
@@ -140,4 +175,8 @@ function resolveSpecifier(importer: string, specifier: string): string | undefin
 
 function absolute(path: string): string {
   return normalize(resolve(path))
+}
+
+function moduleOwner(path: string): string | undefined {
+  return path.match(/\/src\/modules\/([^/]+)\//u)?.[1]
 }

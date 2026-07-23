@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { comparisonCompareAction } from '@/modules/comparison/comparison.actions'
-import { actionToHarnessTool, runHarnessTool } from '@/modules/harness/public'
+import { actionToHarnessTool, runHarnessTool } from '@/modules/harness/action-tool'
 
 const MAX_COMPARE_BODY_BYTES = 16 * 1024
 
