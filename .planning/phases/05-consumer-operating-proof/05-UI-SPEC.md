@@ -9,7 +9,7 @@ created: 2026-07-23
 
 # Phase 05 — Consumer Decision Support UI Design Contract
 
-> Visual and interaction contract for the public **Browse businesses → inspect an Offering → shortlist exact Offering revisions → compare facts → explain trade-offs against stated priorities** loop. Generated for planner and executor verification; the checker upgrades `status` only after implementation-grade review.
+> Visual and interaction contract for the public **state a need → clarify one material ambiguity when necessary → receive a grounded answer or exact insufficiency → inspect the underlying Offering evidence** loop. Generated for planner and executor verification; the checker upgrades `status` only after implementation-grade review.
 
 ---
 
@@ -97,17 +97,58 @@ Selection, stale, partial, changed, unavailable, and ordered/unranked states mus
 ## Public Information Architecture
 
 ```text
-Businesses (/registry)
+Ask (/)
+  └─ Reflect the understood need
+       ├─ Ask one decisive clarification when required
+       └─ Answer or explain the exact insufficiency
+            ├─ Inspect supporting comparison
+            ├─ Inspect an exact Offering revision
+            └─ Browse the searched catalogue
+
+Browse fallback (/registry)
   └─ Business detail (/$slug)
        └─ Offering detail (/$slug/offerings/$offeringRef)
             ├─ Add/remove exact revision
             └─ Compare (/compare?... public reference state)
-                 ├─ Change or clear priorities
-                 ├─ Inspect facts/provenance/currentness
-                 └─ Copy/share URL
 ```
 
-`Businesses` remains the public navigation label. Do not add a new global `Compare` destination: comparison is transient task state entered from Offering selection. Chat/search may link to business or Offering detail with filters, but the route hierarchy and semantic facts remain the same.
+`Ask` is the primary cold-start surface. `Businesses` remains the transparent public browse label and fallback. Do not add a new global `Compare` destination: comparison is transient evidence state reached from an answer or deliberate Offering selection. Ask, browse, Offering detail and comparison must resolve the same source-owned facts.
+
+## Cold-start GenUI Contract
+
+A blank public session begins with **What do you need done?** It must not require the visitor to understand providers, Offerings, revisions, shortlists, comparison dimensions or priorities.
+
+The primary golden request is:
+
+> I run a small startup in Perth and need a simple website. I would prefer someone local or an affordable freelancer. Who should I consider, and roughly what should I expect to pay?
+
+Before retrieval, the surface reflects only what the visitor actually stated: small startup, Perth/local preference, a simple website, an affordability/freelancer preference and a request for indicative price. If the distinction materially changes viable supply or price evidence, it asks exactly one question:
+
+> Does the website only need to explain your business and collect enquiries, or must customers buy, book or log in?
+
+The persistent choices are:
+
+- **Information and enquiries**
+- **Customers need to buy, book or log in**
+- **I’m not sure**
+
+The visitor may also continue with **I’m flexible** when a preference is not a hard constraint. The system does not ask the visitor to construct a shortlist or configure priority controls before answering.
+
+Reuse the existing Answer/Answer Thread surface and its registered read-only tools. Do not build a generic intake framework, universal property bag or separate conversational control plane. Model interpretation is untrusted: it may propose only registered constraint and comparison-dimension IDs. Customer-stated or explicitly confirmed values pass strict validation before retrieval. The deterministic source result owns eligible Offerings, facts, unknowns, freshness, comparability, ordering and safe continuations.
+
+The first answer must distinguish these ordinary outcomes:
+
+- `no_registered_supply`: AE has no registered Offering in the requested category.
+- `no_current_match`: registered supply exists, but none currently satisfies the confirmed constraints.
+- `one_plausible_option`: one current Offering appears relevant; it is shown as one option, never “best” or a market comparison.
+- `insufficient_comparable_evidence`: options exist, but AE lacks enough current comparable evidence to distinguish them responsibly.
+- `constraints_too_narrow`: relaxing a named preference could expose options; AE never relaxes it silently.
+- `usable_comparison`: two or more current options support the relevant grounded comparison.
+- `unsupported_category`: AE cannot yet interpret or search the requested category safely.
+
+Every result states the registered supply and confirmed constraints AE searched. It never implies whole-market coverage. Approximate prices retain their evidence class: **Provider-published price**, **Observed market range**, **Community anecdote**, **AE estimate**, or **Price unavailable**. These labels never collapse into one authoritative price.
+
+The answer leads with the useful conclusion and material caveat. Full comparison evidence is one disclosure or linked route away. Browse remains a visible continuation for a visitor who wants to inspect or correct the result.
 
 ## Route Contracts
 
@@ -118,6 +159,8 @@ The page header is **Find businesses and Offerings** with body **Browse publishe
 Required actions are **View business** and, where a concrete Offering is displayed, **View Offering**. Do not add `Add to compare` at business level because comparison identity is the Offering. Remove or isolate call buttons, inquiry controls, and the mutating demand-capture empty form from the Phase 5 journey. The inspect-only empty state is specified below.
 
 Do not sort by “Newest” unless the label and implementation mean business/Offering observation date exactly. There is no “Recommended,” “Best match,” or hidden contact-availability order. Default business order must be explicit and neutral, such as **A–Z**, or source-owned search relevance when a query is present.
+
+Browse must not be the only way to start the golden query. When reached from an answer it carries the same validated public filters and clearly states that it shows AE's registered supply, not the whole market.
 
 ### Business detail — `/$slug`
 
@@ -296,6 +339,17 @@ Never render empty strings, em dashes, zero, “free,” “instant,” “N/A,�
 | Share CTA | **Copy comparison link** (use **Share comparison** only when the native share sheet is actually available) |
 | Share success | **Comparison link copied.** |
 | Share error | **The comparison link could not be copied. Copy it from the address bar.** |
+| Blank Ask heading | **What do you need done?** |
+| Golden-query reflection | **You need a simple website for a small startup in Perth. You would prefer someone local or an affordable freelancer, and you want to understand the likely price.** |
+| Decisive clarification | **Does the website only need to explain your business and collect enquiries, or must customers buy, book or log in?** |
+| Clarification uncertainty | **I’m not sure** |
+| Flexible preference | **I’m flexible** |
+| No registered supply | **AE does not yet have a registered Offering for this kind of work.** |
+| No current match | **AE found registered Offerings in this category, but none currently match the constraints you confirmed.** |
+| One plausible option | **AE found one current option that appears relevant. That is not enough to compare the market or call it the best choice.** |
+| Insufficient evidence | **AE found possible options, but there is not enough current comparable information to distinguish them responsibly.** |
+| Constraints too narrow | **AE found no current match with all of these preferences. You can choose whether to relax [named preference].** |
+| Unsupported category | **AE cannot yet interpret and search this kind of request reliably.** |
 | Registry empty heading | **No published Offerings match this search** |
 | Registry empty body | **Try a broader service, business, or place.** |
 | Registry empty action | **Clear search** |
@@ -375,7 +429,7 @@ Status announcements use one bounded `aria-live="polite"` region for selection, 
 
 Label demo data at both page and Offering level. **Demonstration Offering** is a neutral Badge; the page note is visible near the heading. Do not use fictional review counts, ratings, availability, customer activity, or “verified” marks.
 
-The interface may claim only that the exact hosted revision can publicly display and compare labelled professional-service and machine/data Offerings, including missing/stale/changed states, without causing an external effect. It does not claim supplier quality, useful real-world recommendations, demand, fulfilment, endpoint correctness, willingness to pay, retention, revenue, production safety, screen-reader usability in practice, or human comprehension.
+The interface may claim only that the exact hosted revision can take the labelled golden request to a grounded answer or exact insufficiency, then publicly display and compare labelled professional-service and machine/data Offerings, including missing/stale/changed states, without causing an external effect. A separately recorded fresh-evaluator check may establish bounded comprehension of that named flow only. It does not claim supplier quality, useful real-world recommendations, demand, fulfilment, endpoint correctness, willingness to pay, conversion, retention, revenue, production safety, broad screen-reader usability, or broad human comprehension.
 
 ## Evaluation Contract
 
@@ -386,6 +440,8 @@ The implementation is not visually complete until both loops pass from the same 
 **Horizontal loop:** the same route, shortlist, priority editor, result posture, table/list, and state vocabulary compare two machine/data Offerings. Only profile rows/labels differ. A cross-category pair shows common rows and explicit **Not comparable** profile rows without a new workflow or host branch.
 
 Browser checks cover desktop, 320px, declared 400% zoom, keyboard-only operation, focus visibility/recovery, accessibility tree/table/list relationships, reduced motion, loading, empty, refused, partial, stale, unknown, not supplied, not comparable, tie, ordered, changed-revision, share success/failure, and zero external effect. Automated checks are local/hosted evidence as labelled; they are not a real screen-reader or comprehension study.
+
+The first-session eval starts from a blank public session with only the normalized Perth request. A fresh evaluator must be able to say what AE understood, use **I’m not sure** or answer the single material clarification, distinguish a grounded answer from each insufficiency posture, identify the basis of an indicative price and reach supporting evidence without being taught AE terminology. Record the first point of confusion. This is bounded comprehension evidence for the named demonstration, not proof of demand, usefulness, conversion or retention.
 
 ## Registry Safety
 

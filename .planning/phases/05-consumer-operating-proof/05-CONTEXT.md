@@ -22,10 +22,11 @@ quote-to-close material is research provenance, not current acceptance.
 ## Implementation Decisions
 
 ### Product loop and entry
-- **D-01:** The canonical loop is **Browse businesses → inspect one Offering → shortlist exact Offering revisions → compare relevant facts → explain trade-offs against stated priorities**.
-- **D-02:** The public catalogue is the primary product surface. Chat or agent search may find and filter Offerings, but it is not the product container and must converge on the same source-owned facts.
+- **D-01:** The canonical first-session loop is **Tell AE what you need → reflect the understood outcome and stated constraints → ask at most one decisive clarification with “I’m flexible” → retrieve registered supply → answer or name the exact insufficiency → inspect evidence or refine**. **Browse businesses → inspect an option → shortlist exact Offering revisions → compare** remains the transparent fallback and power-user path.
+- **D-02:** Ask is the primary cold-start product surface. The public catalogue remains a first-class browse and evidence surface, but a fresh visitor must not need to understand AE vocabulary, identify providers, build a shortlist, or configure comparison controls before receiving value. Ask and browse converge on the same source-owned Offering and comparison facts.
 - **D-03:** Browsing, detail, shortlisting and comparison require no account. Authentication must not sit between discovery and comparison.
 - **D-04:** Public transient comparison is required for closure. Signed-in saving is secondary and must not block Phase 5. If saving is included, it preserves a historical selection and reports newer revisions rather than silently rewriting history.
+- **D-18:** The primary cold-start golden query is the founder-normalized form of the [Perth website-developer request](https://www.reddit.com/r/perth/comments/1v413sm/website_developers_in_perth/): **“I run a small startup in Perth and need a simple website. I would prefer someone local or an affordable freelancer. Who should I consider, and roughly what should I expect to pay?”** AE must identify the decisive brochure/inquiry-only versus transactional/ecommerce distinction, offer **I’m not sure**, preserve the stated local and affordability preferences, and distinguish provider-published prices from observed ranges, community anecdotes, AE estimates, and unavailable price evidence.
 
 ### Comparison identity and meaning
 - **D-05:** Compare Offerings, not businesses. Business identity and concrete provenance/currentness facts remain visible as context.
@@ -45,6 +46,7 @@ quote-to-close material is research provenance, not current acceptance.
 - **D-14:** Acceptance spans two materially unlike categories: one professional-service Offering with potentially unknown price/timing/scope, and one machine/data Offering with technical interface facts.
 - **D-15:** Evidence covers current, partial, stale, unknown and changed-revision material; an unranked result; a defensible priority-based ordering; refresh/share behavior; and proof that no comparison path causes an external effect.
 - **D-16:** This evidence proves a hosted comparison capability over labelled data. It does not prove real demand, customer value, supplier quality, independent fulfilment, willingness to pay, retention, revenue or production safety.
+- **D-19:** A zero-instruction first-session eval begins from a blank public session and covers the golden query plus no registered supply, no current match, one plausible option, insufficient comparable evidence, constraints too narrow, usable comparison and unsupported category. Passing means the evaluator reaches an honest grounded posture without learning **Offering**, revision, shortlist or priority terminology. This is bounded comprehension evidence, not market demand or customer-value proof.
 
 ### Agent discretion
 - Exact shortlist capacity, URL encoding, responsive comparison layout and the initial two category-profile field sets may be chosen during planning, provided they remain bounded, accessible and faithful to the decisions above.

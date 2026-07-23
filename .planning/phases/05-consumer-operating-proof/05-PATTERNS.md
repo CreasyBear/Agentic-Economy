@@ -245,7 +245,7 @@ Maximum four selections and three priorities. Exact tuple reads use indexes; no 
 
 ### Evidence ceiling
 
-Source/unit/integration/browser/hosted evidence remain distinct. The maximum Phase 05 claim is that one exact hosted revision publicly browsed and compared exact revisions of labelled professional-service and machine/data demonstration Offerings through equivalent human and structured semantics, including honest missing/stale/changed states, without an external effect. It does not prove real demand, supplier quality, useful real-world recommendations, endpoint correctness, fulfilment, willingness to pay, retention, revenue, production safety, real screen-reader use, or human comprehension.
+Source/unit/integration/browser/hosted evidence remain distinct. The maximum Phase 05 claim is that one exact hosted revision took the labelled Perth request from a blank session to a grounded answer or exact insufficiency, then publicly exposed and compared exact revisions of labelled professional-service and machine/data demonstration Offerings through equivalent human and structured semantics, including honest missing/stale/changed states, without an external effect. A fresh-evaluator record may establish bounded comprehension of that named flow only. It does not prove real demand, supplier quality, useful real-world recommendations, endpoint correctness, fulfilment, willingness to pay, conversion, retention, revenue, production safety, broad screen-reader usability, or broad human comprehension.
 
 ## Integration Risks and Planner Stop Conditions
 

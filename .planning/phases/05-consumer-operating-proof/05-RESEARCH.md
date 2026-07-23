@@ -8,8 +8,8 @@
 ## User Constraints (from CONTEXT.md)
 
 ### Locked Decisions
-- **D-01:** The canonical loop is **Browse businesses → inspect one Offering → shortlist exact Offering revisions → compare relevant facts → explain trade-offs against stated priorities**.
-- **D-02:** The public catalogue is the primary product surface. Chat or agent search may find and filter Offerings, but it is not the product container and must converge on the same source-owned facts.
+- **D-01:** The canonical loop is **state an ordinary-language need → reflect the understood constraints → ask at most one decisive clarification when required → retrieve → answer or explain the exact insufficiency → inspect or refine**. Browse → Offering → shortlist → compare remains the transparent fallback and evidence path.
+- **D-02:** Ask is the primary cold-start product surface. The public catalogue remains a first-class browse and evidence surface, but a fresh visitor must not need AE vocabulary or manual comparison setup before receiving value. Both surfaces converge on the same source-owned facts.
 - **D-03:** Browsing, detail, shortlisting and comparison require no account. Authentication must not sit between discovery and comparison.
 - **D-04:** Public transient comparison is required for closure. Signed-in saving is secondary and must not block Phase 5. If saving is included, it preserves a historical selection and reports newer revisions rather than silently rewriting history.
 - **D-05:** Compare Offerings, not businesses. Business identity and concrete provenance/currentness facts remain visible as context.
@@ -24,6 +24,9 @@
 - **D-14:** Acceptance spans two materially unlike categories: one professional-service Offering with potentially unknown price/timing/scope, and one machine/data Offering with technical interface facts.
 - **D-15:** Evidence covers current, partial, stale, unknown and changed-revision material; an unranked result; a defensible priority-based ordering; refresh/share behavior; and proof that no comparison path causes an external effect.
 - **D-16:** This evidence proves a hosted comparison capability over labelled data. It does not prove real demand, customer value, supplier quality, independent fulfilment, willingness to pay, retention, revenue or production safety.
+- **D-17:** GenUI is the primary presentation, bounded by a complete deterministic answer and source-owned facts, ordering, caveats and continuations.
+- **D-18:** The normalized Perth website-developer request is the primary cold-start golden query; website-function is the one decisive clarification and price evidence classes remain explicit.
+- **D-19:** A blank-session eval must reach an honest result or insufficiency without teaching the evaluator Offering, revision, shortlist or priority terminology.
 
 ### the agent's Discretion
 - Exact shortlist capacity, URL encoding, responsive comparison layout and the initial two category-profile field sets may be chosen during planning, provided they remain bounded, accessible and faithful to the decisions above.
@@ -80,7 +83,7 @@ The smallest correct comparison design is a pure semantic contract that resolves
 | D-01–D-06 | Build a public URL-owned shortlist of exact Offering references, then server-resolve every item; do not store anonymous comparison records. | TanStack validated search state; immutable Offering revisions; new public-history eligibility seam. |
 | D-07–D-09 | Use explicit provenance and availability states; no score; default unranked; lexicographic stated-priority order only when every material value is current and comparable. | Existing Customer Request refusal patterns are reference evidence, not a dependency. |
 | D-10–D-12 | Cut `registry.*` actions from v1 `services[]` to the same v2 `offerings[]` application owner before claiming parity; make category profiles plug into one comparator. | Exact source mismatch and consumer inventory below. |
-| D-13–D-16 | Produce focused source/fixture/browser checks and one exact hosted readback packet over labelled demo data; state the claim ceiling. | Validation architecture and evidence ladder below. |
+| D-13–D-19 | Produce focused source/fixture/browser checks, one zero-instruction first-session observation and one exact hosted readback packet over labelled demo data; state the claim ceiling. | Validation architecture and evidence ladder below. |
 
 `.planning/REQUIREMENTS.md` contains no Phase 5 requirement IDs, so D-01–D-16 are the executable acceptance contract until requirements are reconciled. [VERIFIED: `.planning/REQUIREMENTS.md`; `05-CONTEXT.md`]
 
@@ -580,9 +583,9 @@ Observed 2026-07-23: 6 files and 41 tests passed; jsdom emitted non-fatal `HTMLC
 
 The final packet should record exact git revision/tree, deployment identity, canonical base URL, labelled demo seed/profile versions, selection tuples, public response digests, human screenshots/accessibility observations, agent action results, zero-effect ledger/query evidence, commands and first failures. Generate once from the frozen hosted revision and verify independently; do not regenerate until green. [VERIFIED: D-13/D-16; repository evidence pattern]
 
-The maximum closure claim is: “At exact hosted revision X, AE publicly browsed and compared exact revisions of labelled professional-service and machine/data demo Offerings through equivalent human and structured agent semantics, including honest missing/stale/changed states, with no external effect.” [VERIFIED: D-13–D-16]
+The maximum closure claim is: “At exact hosted revision X, AE took the labelled Perth request from a blank session to a grounded answer or exact insufficiency, then publicly exposed and compared exact revisions of labelled professional-service and machine/data demo Offerings through equivalent human and structured agent semantics, including honest missing/stale/changed states, with no external effect. A fresh evaluator understood that named flow without coaching.” [VERIFIED: D-13–D-19]
 
-Do not claim independent businesses, demand, useful recommendations in real use, supplier quality, fulfilment, willingness to pay, retention, revenue, production safety, endpoint correctness or screen-reader/human comprehension unless separately evidenced. [VERIFIED: D-16; `PRODUCT.md`; Phase 4 closure]
+Do not claim independent businesses, demand, useful recommendations in real use, supplier quality, fulfilment, willingness to pay, conversion, retention, revenue, production safety, endpoint correctness, broad screen-reader usability or broad human comprehension unless separately evidenced. [VERIFIED: D-16, D-19; `PRODUCT.md`; Phase 4 closure]
 
 ## State of the Art
 

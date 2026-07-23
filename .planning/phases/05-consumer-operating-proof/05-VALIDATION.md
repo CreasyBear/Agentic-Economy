@@ -48,7 +48,7 @@ created: 2026-07-23
 | Wave 3 / 05-03 | Both profiles round-trip catalog → strict registry codecs/Convex returns → registered actions → three public HTTP adapters | T-05-03 | unit/integration/action | `npm exec -- vitest run tests/unit/actions/registry.test.ts tests/unit/registry/offering-api-projection.test.ts tests/unit/registry/offering-runtime-guards.test.ts tests/integration/registry-api.test.ts tests/integration/registry-offering-parity.test.ts` | ❌ |
 | Wave 4 / 05-04 | Answer, Answer Thread and discovery consumers preserve Offering-v2 and literal inventory rejects undeclared consumers | T-05-04 | integration/import/copy | `npm exec -- vitest run tests/integration/answer-tool-calls.test.ts tests/integration/discovery-llms-offering-parity.test.ts tests/integration/registry-offering-parity.test.ts tests/unit/answer/answer-tool-use-agent.test.ts && npm run test:copy && npm run test:imports` | ❌ |
 | Wave 5 / 05-05 | Pure comparison plus complete deterministic brief across current/partial/stale/unknown/not-comparable, ties and priorities | T-05-05 | unit | `npm exec -- vitest run tests/unit/comparison/contract.test.ts tests/unit/comparison/profiles.test.ts tests/unit/comparison/resolve.test.ts tests/unit/comparison/compare.test.ts tests/unit/comparison/brief.test.ts` | ❌ |
-| Wave 6 / 05-06 | Answer-first public loader/detail/shortlist/compare, bounded presentation fallback, refresh/share and automated accessibility | T-05-06 | unit/UI/e2e/a11y | `npm exec -- vitest run tests/unit/comparison/presentation.test.ts tests/unit/ui/offering-comparison.test.tsx && npm exec -- playwright test tests/e2e/comparison-surface.spec.ts tests/e2e/a11y/comparison.spec.ts` | ❌ |
+| Wave 6 / 05-06 | Zero-instruction Ask cold start, exact insufficiency, answer-first loader/detail/compare, bounded presentation fallback, refresh/share and automated accessibility | T-05-06 | unit/UI/e2e/a11y | `npm exec -- vitest run tests/unit/comparison/presentation.test.ts tests/unit/ui/offering-comparison.test.tsx tests/integration/answer-tool-calls.test.ts tests/unit/answer/answer-tool-use-agent.test.ts && npm exec -- playwright test tests/e2e/cold-start-decision.spec.ts tests/e2e/comparison-surface.spec.ts tests/e2e/a11y/comparison.spec.ts` | ❌ |
 | Wave 7 / 05-07 | Fixed anonymous POST, actual loader/action parity, inspect-only fence and transfer eval | T-05-07 | integration/import/eval | `npm exec -- vitest run tests/integration/comparison-public-agent-route.test.ts tests/integration/comparison-surface-parity.test.ts tests/imports/comparison-boundaries.test.ts tests/eval/offering-comparison-transfer.test.ts` | ❌ |
 | Wave 8 / 05-08 source gate | Clean integrated codegen/typecheck/build and all named focused matrices | T-05-08 | source/build | Full 05-01..07 matrix plus `npm run test:copy`, `npm run test:seo`, `npm run test:imports`, `npm run check:convex-codegen`, `npm run typecheck`, `npm run build`, clean-tree check | ❌ |
 | Wave 8 / 05-08 human gate | 320px, 400% zoom, VoiceOver reading order/table headers and focus recovery | T-05-08 | bounded human verification | automated browser specs plus exact-revision manual record | ❌ |
@@ -74,17 +74,29 @@ created: 2026-07-23
 16. Direct posture, decisive differences and all mandatory caveats render before the full comparison; the complete evidence remains keyboard reachable in one disclosure.
 17. Missing, invalid, slow, unsafe, disabled or switched-model presentation output cannot delay, reorder, weaken or remove the deterministic answer.
 18. Presentation proposals containing free text, component names, URLs, actions, ARIA, unknown/duplicate IDs or the wrong semantic digest fall back without partial application.
+19. A blank-session visitor can submit the Perth website golden request without knowing browse, Offering, revision, shortlist or priority terminology.
+20. The loop asks at most the one material brochure/enquiries versus buy/book/login clarification and always offers **I’m not sure**; preferences may be marked **I’m flexible**.
+21. No registered supply, no current match, one plausible option, insufficient comparable evidence, constraints too narrow, usable comparison and unsupported category remain distinguishable in human and semantic output.
+22. One plausible option is never labelled best, ranked, compared or representative of the whole market.
+23. No stated or confirmed location, affordability, freelancer or website-function constraint is relaxed without naming the proposed relaxation and obtaining the visitor's choice.
+24. Provider-published price, observed market range, community anecdote, AE estimate and unavailable price evidence never collapse into one evidence class.
+25. Unsupported-category and absent-supply states never fabricate Offerings, prices, comparisons or a successful search.
+26. Model disablement, timeout, invalid output or switching cannot change confirmed inputs, source eligibility, semantic outcome, ordering, caveats or safe continuations.
 
 ## Vertical and Horizontal Evals
 
-**Vertical:** A visitor browses a professional-service Offering, selects two
-exact revisions, receives an answer-first unranked posture with decisive
-differences and caveats, supplies a current comparable priority, sees an
-inspectable order, discloses the full comparison, shares and refreshes the URL,
-then sees a changed revision disclosed without historical substitution.
+**Vertical:** From a blank no-login session, a visitor asks the founder-normalized
+Perth website question in ordinary language. AE reflects the stated constraints,
+asks at most the single material website-function clarification, then returns an
+honest insufficiency or grounded answer. Where two exact professional-service
+revisions are viable, the visitor receives an answer-first unranked posture with
+decisive differences and caveats, may state a current comparable priority, sees
+an inspectable order, discloses the full comparison, shares and refreshes the
+URL, then sees a changed revision disclosed without historical substitution.
+Browse is available as a transparent fallback but is not a prerequisite.
 Unknown/stale material keeps the result unranked and the effect ledger remains
-empty. The same loop remains complete with presentation composition disabled or
-failed.
+empty. The same loop remains complete with interpretation/presentation models
+disabled or failed.
 
 **Horizontal:** The same resolver, comparator, human route and agent action
 compare two machine/data Offerings. Only the closed profile projector changes.
@@ -103,6 +115,7 @@ coverage, not a supply or demand claim.
 - [ ] Add registry/comparison human-agent parity and forbidden-import tests.
 - [ ] Add `tests/integration/comparison-public-agent-route.test.ts` for the fixed POST status/auth/schema/no-store/actual-loader contract.
 - [ ] Add comparison UI, browser, accessibility and two-category transfer evals.
+- [ ] Add `tests/e2e/cold-start-decision.spec.ts` covering D-18/D-19 and all seven insufficiency/result postures.
 - [ ] Add hosted smoke and exact-revision evidence generator/verifier.
 
 ## Manual-Only Verifications
@@ -111,6 +124,7 @@ coverage, not a supply or demand claim.
 |---|---|---|
 | 400% zoom and narrow responsive integrity | Visual relationships need observation beyond DOM assertions | Against the exact clean candidate, inspect all canonical states at 320px and 400% zoom; confirm no hidden facts/actions, overlap, clipping or page-level overflow. |
 | VoiceOver answer/disclosure reading order, table headers and focus recovery | Automated checks cannot establish the named interaction behavior in the actual assistive technology | Record browser/OS/VoiceOver versions; verify answer/caveat order and **See full comparison** announcement, then navigate table row/column headers and mobile fact relationships; exercise remove/apply/replace focus recovery. This is bounded observation, not comprehension proof. |
+| Zero-instruction first-session comprehension | DOM assertions cannot establish whether a fresh person understands the next step without AE vocabulary | Give a fresh evaluator the blank public session and the normalized Perth request only. Record whether they can state what AE understood, answer or defer the one clarification, distinguish result/insufficiency, identify the price evidence class and reach supporting evidence without coaching. This is bounded comprehension observation, not demand or customer-value proof. |
 | Exact hosted share/readback | Requires one configured hosted revision | Open the frozen comparison URL from a fresh browser, compare human and agent results, and record served revision plus packet digests. |
 
 ## Validation Sign-Off
@@ -125,10 +139,14 @@ coverage, not a supply or demand claim.
 
 ## Claim Ceiling
 
-Maximum closure claim: at one exact hosted revision, AE publicly browsed and
-compared exact revisions of labelled professional-service and machine/data demo
-Offerings through equivalent human and structured agent semantics, including
-honest missing, stale and changed states, with no external effect.
+Maximum closure claim: at one exact hosted revision, a blank-session visitor
+used an ordinary-language labelled demonstration query to reach a grounded
+answer or exact insufficiency, and AE publicly exposed and compared exact
+revisions of labelled professional-service and machine/data demo Offerings
+through equivalent human and structured agent semantics, including honest
+missing, stale and changed states, with no external effect. A bounded fresh-
+evaluator record may support first-session comprehension of the named states
+only.
 
 No demand, customer value, supplier quality, independent fulfilment,
 willingness to pay, retention, revenue or production-safety claim follows.
