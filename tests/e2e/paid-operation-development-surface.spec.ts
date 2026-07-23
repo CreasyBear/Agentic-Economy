@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 const canonicalStates = [
-  ['prepared', 'Prepared'],
+  ['prepared', 'Payment prepared'],
   ['refused_before_release', 'Not sent'],
   ['possibly_submitted', 'Needs checking'],
   ['reconciled_not_settled', 'Checked — not paid'],
@@ -17,7 +17,7 @@ test('renders all six canonical paid-operation states with non-colour truth labe
     await expect(page.getByRole('main')).toHaveAttribute('data-development-only', 'true')
     await expect(page.getByText(label, { exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Translate the supplied document' })).toBeVisible()
-    await expect(page.getByText('Labelled local mock', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Labelled mock provider', { exact: true }).first()).toBeVisible()
   }
 })
 
@@ -129,33 +129,30 @@ test('computes reduced-motion behavior without animation or transition', async (
   expect(durationInMilliseconds(actionMotion.animationDuration)).toBeLessThanOrEqual(0.01)
 })
 
-test('exposes one shared digest and requires both reconciliation evidence envelopes', async ({
+test('exposes one shared digest and keeps public reconciliation intent-only', async ({
   page,
 }) => {
   await page.goto('/?state=possibly_submitted')
   const contract = await page.evaluate(() =>
     (window as typeof window & {
       __PAID_OPERATION_DEVELOPMENT_PROOF__: {
-        structured: {
-          kind: string
-          semanticDigest: string
-          commands: unknown[]
+        snapshot: () => {
+          structured: {
+            kind: string
+            semanticDigest: string
+            commands: unknown[]
+          }
+          humanDigest: string | null
+          agentDigest: string | null
         }
-        humanDigest: string | null
-        agentDigest: string | null
       }
-    }).__PAID_OPERATION_DEVELOPMENT_PROOF__)
+    }).__PAID_OPERATION_DEVELOPMENT_PROOF__.snapshot())
   expect(contract.structured.kind).toBe('accepted')
   expect(contract.humanDigest).toBe(contract.agentDigest)
   expect(contract.structured.semanticDigest).toBe(contract.humanDigest)
   expect(contract.structured.commands).toEqual([{
     command: 'reconcile',
-    requiredInput: ['reconciliationEvidence', 'paymentReconciliationEvidence'],
-    inputTemplate: {
-      kind: 'reconcile',
-      reconciliationEvidence: null,
-      paymentReconciliationEvidence: null,
-    },
+    requiredInput: [],
     expectedInvocationVersion: 3,
   }])
 })

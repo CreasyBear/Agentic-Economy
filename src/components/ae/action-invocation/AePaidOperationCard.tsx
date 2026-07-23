@@ -10,27 +10,35 @@ import {
   XCircleIcon,
 } from 'lucide-react'
 
-import { Badge, type BadgeVariant } from '@astryxdesign/core/Badge'
+import { Badge } from '@astryxdesign/core/Badge'
 import { Card } from '@astryxdesign/core/Card'
 import { Text } from '@astryxdesign/core/Text'
 
+import {
+  formatHostedPaidOperationAccessibleMoney,
+  formatHostedPaidOperationMaterialFields,
+  formatHostedPaidOperationMoney,
+  formatHostedPaidOperationPaymentSubmission,
+  formatHostedPaidOperationQueryRelease,
+  formatHostedPaidOperationResultDelivery,
+  formatHostedPaidOperationSettlement,
+  hostedPaidOperationCommandDescriptorIsSafe,
+  hostedPaidOperationCommandLabel,
+  projectHostedPaidOperationCardPresentation,
+  type HostedPaidOperationCardInput,
+  type HostedPaidOperationCardPresentation,
+  type HostedPaidOperationCommandDescriptor,
+} from '@/modules/action-invocation/paid-operation-card-contract'
 import type {
-  PaidOperationContinuation,
   PaidOperationPresentationBlock,
   PaidOperationSemantics,
 } from '@/modules/action-invocation/paid-operation-semantics'
 
 export type AePaidOperationCardProps = Readonly<{
   semantics: PaidOperationSemantics
-  onContinue?: (continuation: PaidOperationContinuation) => void
-}>
-
-type Presentation = Readonly<{
-  label: string
-  badgeVariant: BadgeVariant
-  icon: typeof InfoIcon
-  truth: string
-  nextAction: string
+  card: HostedPaidOperationCardInput
+  onCommand?: (descriptor: HostedPaidOperationCommandDescriptor) => void
+  onReadOnlyInspect?: (relation: string) => void
 }>
 
 /**
@@ -39,22 +47,36 @@ type Presentation = Readonly<{
  */
 export function AePaidOperationCard({
   semantics,
-  onContinue,
+  card,
+  onCommand,
+  onReadOnlyInspect,
 }: AePaidOperationCardProps) {
-  const presentation = present(semantics)
-  const Icon = presentation.icon
-  const continuation = preferredContinuation(semantics.continuations)
+  const presentation = projectHostedPaidOperationCardPresentation(semantics, card)
+  const Icon = presentationIcon(presentation.icon)
+  const pending = card.pendingCommand !== null
+  const authorityControls = card.authorize !== null && card.refuse !== null
+  const continuation = authorityControls ? null : card.safeContinuation
+  const technical = card.technicalDetails
 
   return (
     <Card
       padding={5}
       className="grid w-full max-w-2xl gap-5"
       aria-labelledby={`paid-operation-${semantics.identity.invocationRef}`}
+      aria-busy={pending || undefined}
       data-paid-operation-state={presentation.label.toLowerCase().replaceAll(' ', '_')}
+      data-semantic-digest={technical.semanticDigest}
+      data-invocation-version={technical.expectedInvocationVersion}
+      data-evidence-class={card.runtimeEvidence.evidenceClass}
     >
       <header className="grid gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Badge variant="neutral" label={semantics.environment.name} />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="grid gap-1">
+            <Badge variant="neutral" label={card.runtimeEvidence.environment} />
+            <Text type="supporting" color="secondary" display="block">
+              {card.runtimeEvidence.provenance}
+            </Text>
+          </div>
           <Badge
             variant={presentation.badgeVariant}
             icon={<Icon aria-hidden="true" />}
@@ -78,13 +100,28 @@ export function AePaidOperationCard({
         </div>
       </header>
 
-      <dl className="grid gap-3 sm:grid-cols-3">
-        <Fact label="Maximum charge" value={money(semantics.maximumAuthorizedCharge)} />
-        <Fact label="Data sharing" value={queryReleaseLabel(semantics)} />
-        <Fact label="Provider" value={semantics.operation.providerName} />
-      </dl>
-
-      <BlockList label="Operation details" blocks={semantics.presentation.blocks} />
+      <section
+        className="grid gap-3 rounded-md border border-border bg-surface p-4"
+        aria-labelledby={`consequence-${semantics.identity.invocationRef}`}
+      >
+        <SectionHeading id={`consequence-${semantics.identity.invocationRef}`}>
+          Consequence
+        </SectionHeading>
+        <dl className="grid gap-3 sm:grid-cols-3">
+          <Fact label="Provider" value={card.disclosure.providerDisplayName} />
+          <Fact
+            label="Maximum charge"
+            value={formatHostedPaidOperationMoney(card.disclosure.maximumCharge)}
+            accessibleValue={formatHostedPaidOperationAccessibleMoney(
+              card.disclosure.maximumCharge,
+            )}
+          />
+          <Fact
+            label="Data shared"
+            value={formatHostedPaidOperationMaterialFields(card.disclosure.materialFields)}
+          />
+        </dl>
+      </section>
 
       <section
         className="grid gap-2 rounded-md border border-border bg-surface p-4"
@@ -93,48 +130,124 @@ export function AePaidOperationCard({
         <div className="flex items-start gap-3">
           <Icon className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
           <div className="grid min-w-0 gap-1">
-            <Text
-              as="h3"
-              id={`current-truth-${semantics.identity.invocationRef}`}
-              weight="semibold"
-              color="primary"
-              display="block"
-            >
+            <SectionHeading id={`current-truth-${semantics.identity.invocationRef}`}>
               Current truth
-            </Text>
+            </SectionHeading>
             <p className="text-sm text-primary">
               {presentation.truth}
             </p>
+            <dl className="mt-1">
+              <Fact
+                label="Data sharing"
+                value={formatHostedPaidOperationQueryRelease(semantics.queryRelease)}
+              />
+            </dl>
           </div>
         </div>
       </section>
 
-      {semantics.resultDelivery.state === 'valid'
-        ? <BlockList label="Result" blocks={semantics.resultDelivery.blocks} />
-        : null}
+      <section
+        className="grid gap-3"
+        aria-labelledby={`payment-result-${semantics.identity.invocationRef}`}
+      >
+        <SectionHeading id={`payment-result-${semantics.identity.invocationRef}`}>
+          Payment and result truth
+        </SectionHeading>
+        <dl className="grid gap-3 sm:grid-cols-3">
+          <Fact
+            label="Payment request"
+            value={formatHostedPaidOperationPaymentSubmission(card.paymentTruth)}
+          />
+          <Fact
+            label="Payment outcome"
+            value={formatHostedPaidOperationSettlement(card.settlementTruth)}
+          />
+          <Fact
+            label="Result"
+            value={formatHostedPaidOperationResultDelivery(card.resultTruth)}
+          />
+        </dl>
+      </section>
 
-      <section className="grid gap-3 border-t border-border pt-4" aria-label="Safe next action">
+      <section
+        className="grid gap-3 border-t border-border pt-4"
+        aria-labelledby={`safe-action-${semantics.identity.invocationRef}`}
+      >
         <div className="grid gap-1">
-          <Text weight="semibold" color="primary" display="block">Safe next action</Text>
+          <SectionHeading id={`safe-action-${semantics.identity.invocationRef}`}>
+            Safe next action
+          </SectionHeading>
           <Text color="secondary" display="block">{presentation.nextAction}</Text>
         </div>
-        {continuation !== null && onContinue !== undefined ? (
-          <button
-            type="button"
-            className={[
-              'inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border px-4 py-2',
-              'text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2',
-              continuation.kind === 'reconcile'
-                ? 'border-accent bg-accent text-on-accent'
-                : 'border-border bg-surface text-primary',
-              'sm:w-fit',
-            ].join(' ')}
-            onClick={() => onContinue(continuation)}
-          >
-            {continuationIcon(continuation)}
-            <span>{continuationLabel(continuation)}</span>
-          </button>
-        ) : null}
+        {card.transportRescue === null
+          ? (
+              <CommandControls
+                card={card}
+                authorityControls={authorityControls}
+                continuation={continuation}
+                pending={pending}
+                onCommand={onCommand}
+              />
+            )
+          : (
+              <div className="grid gap-3">
+                <p className="flex items-start gap-2 text-sm text-primary">
+                  <AlertTriangleIcon className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+                  <span>
+                    Update not confirmed. Reload this operation before doing anything else.
+                  </span>
+                </p>
+                {onReadOnlyInspect === undefined
+                  ? null
+                  : (
+                      <button
+                        type="button"
+                        className={[
+                          'inline-flex min-h-11 min-w-11 items-center justify-center gap-2',
+                          'rounded-md border border-border bg-surface px-4 py-2 text-sm',
+                          'font-semibold text-primary focus-visible:outline-2',
+                          'focus-visible:outline-offset-2 sm:w-fit',
+                        ].join(' ')}
+                        onClick={() =>
+                          onReadOnlyInspect(card.transportRescue?.inspectRelation ?? '')}
+                      >
+                        <RefreshCwIcon className="size-5" aria-hidden="true" />
+                        <span>Reload operation</span>
+                      </button>
+                    )}
+              </div>
+            )}
+      </section>
+
+      <BlockList
+        headingId={`operation-details-${semantics.identity.invocationRef}`}
+        label="Operation details"
+        blocks={card.operationBlocks}
+      />
+
+      {card.resultTruth.state === 'valid'
+        ? (
+            <BlockList
+              headingId={`result-${semantics.identity.invocationRef}`}
+              label="Result"
+              blocks={card.resultTruth.blocks}
+            />
+          )
+        : null}
+
+      <section
+        className="grid gap-3 border-t border-border pt-4"
+        aria-labelledby={`evidence-${semantics.identity.invocationRef}`}
+      >
+        <SectionHeading id={`evidence-${semantics.identity.invocationRef}`}>
+          Evidence
+        </SectionHeading>
+        <dl className="grid gap-3 sm:grid-cols-2">
+          <Fact label="Environment" value={card.runtimeEvidence.environment} />
+          <Fact label="Provenance" value={card.runtimeEvidence.provenance} />
+          <Fact label="Evidence class" value={card.runtimeEvidence.evidenceClass} />
+          <Fact label="Claim ceiling" value={card.runtimeEvidence.claimCeiling} />
+        </dl>
       </section>
 
       <details className="group rounded-md border border-border bg-surface">
@@ -142,46 +255,85 @@ export function AePaidOperationCard({
           Technical details
         </summary>
         <dl className="grid gap-3 border-t border-border p-4 text-sm sm:grid-cols-2">
-          <Fact label="Environment" value={semantics.environment.name} />
-          <Fact label="Evidence" value={semantics.environment.evidenceClass} />
-          <Fact label="Claim limit" value={semantics.environment.claimCeiling} />
-          <Fact label="Operation version" value={semantics.operation.operationRevision} />
-          <Fact label="Request reference" value={semantics.identity.invocationRef} />
-          <Fact label="Request sharing" value={queryReleaseLabel(semantics)} />
-          <Fact label="Payment request" value={paymentSubmissionLabel(semantics)} />
-          <Fact label="Payment evidence" value={settlementLabel(semantics)} />
-          <Fact label="Result evidence" value={resultDeliveryLabel(semantics)} />
+          <Fact label="Invocation reference" value={technical.invocationRef} />
+          <Fact
+            label="Expected invocation version"
+            value={String(technical.expectedInvocationVersion)}
+          />
+          <Fact label="Operation revision" value={technical.operationRevision} />
+          <Fact label="Provider ID" value={technical.providerId} />
+          <Fact label="Semantic digest" value={technical.semanticDigest} />
+          <Fact label="Digest use" value={technical.semanticDigestUse} />
+          <Fact
+            label="Request sharing"
+            value={formatHostedPaidOperationQueryRelease(semantics.queryRelease)}
+          />
+          <Fact
+            label="Evidence references"
+            value={technical.evidenceReferences.length === 0
+              ? 'No evidence references recorded'
+              : technical.evidenceReferences.join(', ')}
+          />
         </dl>
       </details>
     </Card>
   )
 }
 
-function Fact({ label, value }: Readonly<{ label: string; value: string }>) {
+function SectionHeading({
+  children,
+  id,
+}: Readonly<{ children: string; id: string }>) {
+  return (
+    <Text
+      as="h3"
+      id={id}
+      type="large"
+      weight="semibold"
+      color="primary"
+      display="block"
+    >
+      {children}
+    </Text>
+  )
+}
+
+function Fact({
+  accessibleValue,
+  label,
+  value,
+}: Readonly<{ accessibleValue?: string; label: string; value: string }>) {
   return (
     <div className="grid min-w-0 gap-1">
       <dt className="text-xs font-medium text-secondary">{label}</dt>
-      <dd className="break-words text-sm text-primary">{value}</dd>
+      <dd
+        className="break-words text-sm text-primary"
+        {...(accessibleValue === undefined ? {} : { 'aria-label': accessibleValue })}
+      >
+        {value}
+      </dd>
     </div>
   )
 }
 
 function BlockList({
+  headingId,
   label,
   blocks,
 }: Readonly<{
+  headingId: string
   label: string
   blocks: readonly PaidOperationPresentationBlock[]
 }>) {
+  const safeBlocks = blocks.filter(isClosedPresentationBlock)
   return (
-    <section className="grid gap-2" aria-label={label}>
-      <Text type="supporting" color="secondary" display="block">{label}</Text>
+    <section className="grid gap-3" aria-labelledby={headingId}>
+      <SectionHeading id={headingId}>{label}</SectionHeading>
       <dl className="grid gap-3 sm:grid-cols-2">
-        {blocks.map((block) => (
-          <Fact
+        {safeBlocks.map((block) => (
+          <PresentationBlockFact
             key={`${block.kind}:${block.label}`}
-            label={block.label}
-            value={presentationBlockValue(block)}
+            block={block}
           />
         ))}
       </dl>
@@ -189,178 +341,214 @@ function BlockList({
   )
 }
 
-function presentationBlockValue(block: PaidOperationPresentationBlock): string {
+function PresentationBlockFact({
+  block,
+}: Readonly<{ block: PaidOperationPresentationBlock }>) {
   switch (block.kind) {
     case 'text':
     case 'reference':
-      return block.value
+      return <Fact label={block.label} value={block.value} />
     case 'measurement':
-      return `${formatNumber(block.value)} ${block.unit}`
+      return <Fact label={block.label} value={`${formatNumber(block.value)} ${block.unit}`} />
     case 'money':
-      return money(block)
+      return (
+        <Fact
+          label={block.label}
+          value={formatHostedPaidOperationMoney(block)}
+          accessibleValue={formatHostedPaidOperationAccessibleMoney(block)}
+        />
+      )
     case 'timestamp':
-      return formatTime(block.value)
+      return (
+        <div className="grid min-w-0 gap-1">
+          <dt className="text-xs font-medium text-secondary">{block.label}</dt>
+          <dd className="break-words text-sm text-primary">
+            <time dateTime={block.value}>
+              {formatTime(block.value)}
+              <span className="sr-only"> ({block.value})</span>
+            </time>
+          </dd>
+        </div>
+      )
     case 'source':
-      return `${block.providerName} · ${block.operationRevision}`
+      return (
+        <Fact
+          label={block.label}
+          value={`${block.providerName} · ${block.operationRevision}`}
+        />
+      )
     case 'status':
-      return block.value
+      return (
+        <div className="grid min-w-0 gap-1">
+          <dt className="text-xs font-medium text-secondary">{block.label}</dt>
+          <dd className="flex items-start gap-2 break-words text-sm text-primary">
+            {presentationBlockStatusIcon(block.tone)}
+            <span>{block.value}</span>
+          </dd>
+        </div>
+      )
   }
 }
 
-function present(semantics: PaidOperationSemantics): Presentation {
-  const uncertain = semantics.paymentSubmission.state === 'possibly_submitted'
-    || semantics.settlement.state === 'unknown'
-
-  if (uncertain) {
-    return {
-      label: 'Needs checking',
-      badgeVariant: 'warning',
-      icon: AlertTriangleIcon,
-      truth: 'The provider may have received the payment request. AE will not try again until the exact payment is checked.',
-      nextAction: 'Check the existing payment and request. Do not start this purchase again.',
-    }
+function CommandControls({
+  authorityControls,
+  card,
+  continuation,
+  onCommand,
+  pending,
+}: Readonly<{
+  authorityControls: boolean
+  card: HostedPaidOperationCardInput
+  continuation: HostedPaidOperationCommandDescriptor | null
+  onCommand: AePaidOperationCardProps['onCommand']
+  pending: boolean
+}>) {
+  if (onCommand === undefined) {
+    return card.noActionReason === null
+      ? null
+      : <Text color="secondary" display="block">{card.noActionReason}</Text>
   }
 
-  if (semantics.settlement.state === 'not_settled') {
-    return {
-      label: 'Checked — not paid',
-      badgeVariant: 'info',
-      icon: SearchIcon,
-      truth: 'The earlier payment was checked and was not settled.',
-      nextAction: semantics.continuations.some(({ kind }) => kind === 'retry')
-        ? 'Try the operation again with fresh permission.'
-        : 'Review the recorded details. A new result requires a new, explicitly authorized operation.',
-    }
+  if (authorityControls && card.authorize !== null && card.refuse !== null) {
+    return (
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <CommandButton
+          descriptor={card.authorize}
+          pending={pending}
+          onCommand={onCommand}
+          variant="primary"
+          maximumCharge={card.disclosure.maximumCharge}
+        />
+        <CommandButton
+          descriptor={card.refuse}
+          pending={pending}
+          onCommand={onCommand}
+          variant="secondary"
+          maximumCharge={card.disclosure.maximumCharge}
+        />
+      </div>
+    )
   }
 
-  if (semantics.resultDelivery.state === 'valid') {
-    const paymentTruth = semantics.settlement.state === 'settled'
-      ? `Payment of ${money(semantics.settlement.amount)} is supported by the recorded evidence.`
-      : 'No independent payment settlement is recorded.'
-    return {
-      label: 'Result received',
-      badgeVariant: 'success',
-      icon: CheckCircle2Icon,
-      truth: `The result was received and validated. ${paymentTruth}`,
-      nextAction: 'Review the result and its recorded source.',
-    }
+  if (continuation !== null) {
+    return (
+      <CommandButton
+        descriptor={continuation}
+        pending={pending}
+        onCommand={onCommand}
+        variant={continuation.command === 'reconcile' ? 'primary' : 'secondary'}
+        maximumCharge={card.disclosure.maximumCharge}
+      />
+    )
   }
 
-  if (
-    semantics.settlement.state === 'settled'
-    && semantics.resultDelivery.state === 'invalid'
-  ) {
-    return {
-      label: 'Paid — result unusable',
-      badgeVariant: 'warning',
-      icon: AlertTriangleIcon,
-      truth: `Payment of ${money(semantics.settlement.amount)} is supported by the recorded evidence, but the returned result could not be validated.`,
-      nextAction: semantics.continuations.some(({ kind }) => kind === 'reconcile')
-        ? 'Check the recorded payment and unusable result before deciding what to do next.'
-        : 'Review the payment and result evidence. Do not assume another result is free.',
-    }
-  }
+  return card.noActionReason === null
+    ? null
+    : <Text color="secondary" display="block">{card.noActionReason}</Text>
+}
 
-  if (
-    semantics.error !== null
-    && semantics.queryRelease.state === 'not_released'
-    && semantics.paymentSubmission.state === 'not_submitted'
-  ) {
-    return {
-      label: 'Not sent',
-      badgeVariant: 'error',
-      icon: XCircleIcon,
-      truth: `The request stopped before anything was sent to the provider and before any payment request was submitted. Reason: ${semantics.error.code.replaceAll('_', ' ')}.`,
-      nextAction: semantics.continuations.some(({ kind }) => kind === 'retry')
-        ? 'Try again when you are ready.'
-        : 'Review why the request stopped.',
-    }
-  }
+function CommandButton({
+  descriptor,
+  maximumCharge,
+  onCommand,
+  pending,
+  variant,
+}: Readonly<{
+  descriptor: HostedPaidOperationCommandDescriptor
+  maximumCharge: Readonly<{ currency: string; amountMinor: number }>
+  onCommand: NonNullable<AePaidOperationCardProps['onCommand']>
+  pending: boolean
+  variant: 'primary' | 'secondary'
+}>) {
+  if (!hostedPaidOperationCommandDescriptorIsSafe(descriptor)) return null
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      aria-busy={pending || undefined}
+      className={[
+        'inline-flex min-h-11 min-w-11 items-center justify-center gap-2',
+        'rounded-md border px-4 py-2 text-sm font-semibold',
+        'focus-visible:outline-2 focus-visible:outline-offset-2',
+        'disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit',
+        variant === 'primary'
+          ? 'border-accent bg-accent text-on-accent'
+          : 'border-border bg-surface text-primary',
+      ].join(' ')}
+      data-command={descriptor.command}
+      onClick={() => onCommand(descriptor)}
+    >
+      {pending
+        ? <Clock3Icon className="size-5" aria-hidden="true" />
+        : commandIcon(descriptor)}
+      <span>{hostedPaidOperationCommandLabel(descriptor, maximumCharge)}</span>
+    </button>
+  )
+}
 
-  if (
-    semantics.paymentAuthorization.state === 'created'
-    && semantics.paymentSubmission.state === 'not_submitted'
-  ) {
-    return {
-      label: 'Prepared',
-      badgeVariant: 'info',
-      icon: Clock3Icon,
-      truth: 'Payment permission is prepared, but no payment request has been submitted.',
-      nextAction: 'Wait for the prepared request to continue, or inspect its details.',
-    }
-  }
-
-  if (semantics.paymentSubmission.state === 'observed') {
-    return {
-      label: 'Waiting for result',
-      badgeVariant: 'info',
-      icon: Clock3Icon,
-      truth: 'The provider received the payment request. AE is waiting for attributable payment and result evidence.',
-      nextAction: 'Wait for the recorded request to resolve. Do not send another.',
-    }
-  }
-
-  return {
-    label: 'Ready to inspect',
-    badgeVariant: 'neutral',
-    icon: InfoIcon,
-    truth: 'Nothing has been sent to the provider and no payment request has been submitted.',
-    nextAction: 'Review the provider, shared data and maximum charge.',
+function presentationIcon(icon: HostedPaidOperationCardPresentation['icon']) {
+  switch (icon) {
+    case 'info':
+      return InfoIcon
+    case 'clock':
+      return Clock3Icon
+    case 'search':
+      return SearchIcon
+    case 'success':
+      return CheckCircle2Icon
+    case 'warning':
+      return AlertTriangleIcon
+    case 'error':
+      return XCircleIcon
   }
 }
 
-function preferredContinuation(
-  continuations: readonly PaidOperationContinuation[],
-): PaidOperationContinuation | null {
-  return continuations.find(({ kind }) => kind === 'reconcile')
-    ?? continuations.find(({ kind }) => kind === 'authorize')
-    ?? continuations.find(({ kind }) => kind === 'execute')
-    ?? continuations.find(({ kind }) => kind === 'retry')
-    ?? continuations.find(({ kind }) => kind === 'inspect')
-    ?? null
-}
-
-function continuationLabel(continuation: PaidOperationContinuation): string {
-  switch (continuation.kind) {
+function commandIcon(descriptor: HostedPaidOperationCommandDescriptor) {
+  switch (descriptor.command) {
     case 'authorize':
-      return 'Authorize payment'
-    case 'execute':
-      return 'Continue operation'
-    case 'reconcile':
-      return 'Check existing payment'
-    case 'retry':
-      return 'Try again'
-    case 'inspect':
-      return 'Review details'
-  }
-}
-
-function continuationIcon(continuation: PaidOperationContinuation) {
-  switch (continuation.kind) {
-    case 'authorize':
-      return <CheckCircle2Icon aria-hidden="true" />
+      return descriptor.accept === false
+        ? <XCircleIcon aria-hidden="true" />
+        : <CheckCircle2Icon aria-hidden="true" />
     case 'execute':
       return <RefreshCwIcon aria-hidden="true" />
     case 'reconcile':
       return <SearchIcon aria-hidden="true" />
-    case 'retry':
-      return <RefreshCwIcon aria-hidden="true" />
     case 'inspect':
       return <InfoIcon aria-hidden="true" />
   }
 }
 
-function money(value: Readonly<{ currency: string; amountMinor: number }>): string {
-  let formatter = moneyFormatters.get(value.currency)
-  if (formatter === undefined) {
-    formatter = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: value.currency,
-    })
-    moneyFormatters.set(value.currency, formatter)
+function isClosedPresentationBlock(
+  value: PaidOperationPresentationBlock,
+): value is PaidOperationPresentationBlock {
+  if (
+    value === null
+    || typeof value !== 'object'
+    || typeof value.label !== 'string'
+    || value.label.trim().length === 0
+  ) return false
+  return value.kind === 'text'
+    || value.kind === 'measurement'
+    || value.kind === 'money'
+    || value.kind === 'timestamp'
+    || value.kind === 'source'
+    || value.kind === 'reference'
+    || value.kind === 'status'
+}
+
+function presentationBlockStatusIcon(
+  tone: Extract<PaidOperationPresentationBlock, { kind: 'status' }>['tone'],
+) {
+  switch (tone) {
+    case 'positive':
+      return <CheckCircle2Icon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+    case 'caution':
+      return <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+    case 'critical':
+      return <XCircleIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+    case 'neutral':
+      return <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
   }
-  const minorUnitExponent = formatter.resolvedOptions().maximumFractionDigits ?? 0
-  return formatter.format(value.amountMinor / (10 ** minorUnitExponent))
 }
 
 function formatNumber(value: number): string {
@@ -371,56 +559,9 @@ function formatTime(value: string): string {
   return timeFormatter.format(new Date(value))
 }
 
-const moneyFormatters = new Map<string, Intl.NumberFormat>()
 const numberFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 8 })
 const timeFormatter = new Intl.DateTimeFormat('en-US', {
   dateStyle: 'medium',
   timeStyle: 'short',
   timeZone: 'UTC',
 })
-
-function queryReleaseLabel(semantics: PaidOperationSemantics): string {
-  switch (semantics.queryRelease.state) {
-    case 'not_released':
-      return 'Not shared'
-    case 'released':
-      return `Shared with ${semantics.queryRelease.recipient}`
-    case 'unknown':
-      return 'Sharing status unknown'
-  }
-}
-
-function paymentSubmissionLabel(semantics: PaidOperationSemantics): string {
-  switch (semantics.paymentSubmission.state) {
-    case 'not_submitted':
-      return 'Not submitted'
-    case 'possibly_submitted':
-      return 'Possibly submitted'
-    case 'observed':
-      return 'Received by provider'
-  }
-}
-
-function settlementLabel(semantics: PaidOperationSemantics): string {
-  switch (semantics.settlement.state) {
-    case 'no_evidence':
-      return 'No settlement evidence'
-    case 'not_settled':
-      return 'Checked — not settled'
-    case 'settled':
-      return `${money(semantics.settlement.amount)} settled`
-    case 'unknown':
-      return 'Settlement unknown'
-  }
-}
-
-function resultDeliveryLabel(semantics: PaidOperationSemantics): string {
-  switch (semantics.resultDelivery.state) {
-    case 'not_delivered':
-      return 'No result received'
-    case 'invalid':
-      return 'Result could not be validated'
-    case 'valid':
-      return 'Result validated'
-  }
-}

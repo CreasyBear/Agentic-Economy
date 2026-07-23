@@ -14,6 +14,8 @@ import {
   projectStructuredPaidOperation,
   type PaidOperationApplicationService,
   type PaidOperationProjection,
+  type ReconciliationEvidence,
+  type X402PaymentReconciliationEvidence,
 } from '@/modules/action-invocation'
 
 afterEach(cleanup)
@@ -31,7 +33,7 @@ describe('paid operation development surfaces', () => {
     expect(screen.getByText(/No provider fulfilment, deployment, or customer-value claim/)).toBeTruthy()
     expect(screen.getByText(/automated accessibility checks do not prove/i)).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Authorize payment' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize up to A$2.50' }))
 
     await waitFor(() => expect(command).toHaveBeenCalledWith({
       invocationRef: 'invocation:development',
@@ -54,12 +56,12 @@ describe('paid operation development surfaces', () => {
       semanticDigest: projection.agent.semanticDigest,
       commands: [{
         command: 'authorize',
-        requiredInput: ['authorityDecision'],
+        requiredInput: ['accept'],
         expectedInvocationVersion: 4,
       }],
       claimBoundary: expect.objectContaining({
-        evidenceClass: 'labelled_local_development',
-        claimCeiling: 'mechanism_and_projection_parity_only',
+        evidenceClass: 'local_labelled_sandbox_fixture',
+        claimCeiling: 'Local browser mechanics and projection parity only.',
       }),
     })
 
@@ -71,28 +73,73 @@ describe('paid operation development surfaces', () => {
     expect(command).toHaveBeenCalledTimes(1)
   })
 
-  it('advertises complete reconciliation input without inventing either evidence envelope', () => {
-    const { service } = serviceFixture([{
+  it('keeps public reconciliation intent-only and injects exact evidence inside the local host', async () => {
+    const { service, command } = serviceFixture([{
       kind: 'reconcile',
       command: 'reconcile_paid_operation',
       requiredInput: ['reconciliationEvidence', 'paymentReconciliationEvidence'],
       expectedInvocationVersion: 4,
       authorityRequired: false,
     }])
-    const read = createStructuredPaidOperationDevelopmentHost(service).inspect({
+    const evidence: Readonly<{
+      reconciliationEvidence: ReconciliationEvidence
+      paymentReconciliationEvidence: X402PaymentReconciliationEvidence
+    }> = {
+      reconciliationEvidence: {
+        kind: 'action_invocation_reconciliation',
+        version: 1,
+        evidenceRef: 'evidence:provider-observer',
+        invocationRef: 'invocation:development',
+        attemptRef: 'attempt:development',
+        effectGeneration: 1,
+        observedAt: '2026-07-20T00:00:00.000Z',
+        source: 'provider_api',
+        resolution: 'not_released',
+        digest: `sha256:${'2'.repeat(64)}`,
+      },
+      paymentReconciliationEvidence: {
+        kind: 'x402_payment_reconciliation',
+        version: 1,
+        evidenceRef: 'evidence:payment-observer',
+        evidenceRefs: ['evidence:payment-observer'],
+        invocationRef: 'invocation:development',
+        attemptRef: 'attempt:development',
+        effectGeneration: 1,
+        observedAt: '2026-07-20T00:00:00.000Z',
+        source: 'payment_facilitator',
+        paymentIdentifier: 'payment:development',
+        challengeDigest: `sha256:${'1'.repeat(64)}`,
+        providerEndpoint: 'https://fixture.invalid/pay',
+        scheme: 'exact',
+        network: 'local',
+        asset: 'fixture-credit',
+        payTo: 'fixture-recipient',
+        amount: '2.50',
+        resolution: 'not_settled',
+        digest: `sha256:${'3'.repeat(64)}`,
+      },
+    }
+    const resolveReconciliationEvidence = vi.fn(() => evidence)
+    const host = createStructuredPaidOperationDevelopmentHost(
+      service,
+      resolveReconciliationEvidence,
+    )
+    const ref = {
       invocationRef: 'invocation:development',
       expectedInvocationVersion: 4,
-    })
+    }
+    const read = host.inspect(ref)
     expect(read.kind === 'accepted' && read.commands).toEqual([{
       command: 'reconcile',
-      requiredInput: ['reconciliationEvidence', 'paymentReconciliationEvidence'],
-      inputTemplate: {
-        kind: 'reconcile',
-        reconciliationEvidence: null,
-        paymentReconciliationEvidence: null,
-      },
+      requiredInput: [],
       expectedInvocationVersion: 4,
     }])
+    await host.command({ ...ref, command: { kind: 'reconcile' } })
+    expect(resolveReconciliationEvidence).toHaveBeenCalledWith(expect.objectContaining(ref))
+    expect(command).toHaveBeenCalledWith({
+      ...ref,
+      command: { kind: 'reconcile', ...evidence },
+    })
   })
 
   it('keeps keyboard, focus, non-colour, touch-target, reflow, and motion semantics explicit', async () => {
@@ -102,13 +149,14 @@ describe('paid operation development surfaces', () => {
       initialRef={{ invocationRef: 'invocation:development', expectedInvocationVersion: 4 }}
     />)
 
-    const action = screen.getByRole('button', { name: 'Authorize payment' })
+    const action = screen.getByRole('button', { name: 'Authorize up to A$2.50' })
     action.focus()
     expect(document.activeElement).toBe(action)
     expect(action.className).toContain('min-h-11')
+    expect(container.querySelectorAll('[aria-live]')).toHaveLength(1)
     expect(container.querySelector('[role="status"]')?.textContent).toMatch(/projection ready/i)
-    expect(screen.getByText('Ready to inspect')).toBeTruthy()
-    expect(screen.getByText(/Nothing has been sent to the provider/i)).toBeTruthy()
+    expect(screen.getByText('Ready for permission')).toBeTruthy()
+    expect(screen.getByText(/Nothing has been sent or paid/i)).toBeTruthy()
     expect(container.querySelector('main')?.className).toContain('w-full')
     expect(container.innerHTML).not.toMatch(/animate-|transition-|motion-/)
 
@@ -154,9 +202,9 @@ function serviceFixture(
     settlement: { state: 'no_evidence' },
     resultDelivery: { state: 'not_delivered' },
     environment: {
-      name: 'Local development fixture',
-      evidenceClass: 'labelled_local_mock',
-      claimCeiling: 'mechanism_only_not_provider_fulfilment',
+      name: 'Local labelled sandbox',
+      evidenceClass: 'local_labelled_sandbox_fixture',
+      claimCeiling: 'Local browser mechanics and projection parity only.',
     },
     error: null,
     continuations,
@@ -173,8 +221,8 @@ function serviceFixture(
     value: projection,
   }))
   const service: PaidOperationApplicationService = {
-    inspect: (_input) => ({ kind: 'accepted', value: projection }),
-    command: (input) => command(input),
+    inspect: vi.fn(() => ({ kind: 'accepted', value: projection }) as const),
+    command,
   }
   return { service, projection, command }
 }

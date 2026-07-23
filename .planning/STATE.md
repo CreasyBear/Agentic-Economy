@@ -26,6 +26,17 @@ that a second operation-owned provider can use the same paid-operation host,
 semantics and query-agnostic renderer without fallback or a second product
 stack.
 
+Phase 3C added protected hosted-sandbox human and structured-agent surfaces plus
+durable paid-operation recovery. Its repaired source and local fixtures are
+retained, but its prior hosted packet admits only local packet integrity because
+the live collector refused before final admission and the packet was rebuilt
+later. A fresh exact-revision hosted v2 run remains required before making a
+Phase 3C hosted claim; it does not block the later inspect-only Phase 5 loop.
+The strongest admitted Phase 3C class remains
+`local_packet_integrity_only`; the retained sanitized packet digest is
+`sha256:18b5f80eeccdc6a102af3993f7145e2b1e5fb604eba64d4723a5db13fb7ded82`.
+Human comprehension remains `NOT_RUN`.
+
 Phase 05 is executing as a public, no-login, inspect-only decision-support loop:
 browse businesses, inspect one Offering, shortlist exact Offering revisions,
 compare source-owned facts and explain trade-offs against stated priorities.

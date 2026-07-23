@@ -1,0 +1,327 @@
+{
+  "schema": "ae-paid-operation-comprehension-results:v1",
+  "instrumentDigest": "sha256:526b009ddbf476758a06abf5768fe8459a1a5c29411c98ebfd5d131084452719",
+  "generatedAt": "2026-07-20T18:07:19Z",
+  "administration": {
+    "answerKeyExposedToParticipants": false,
+    "coachingOccurred": false,
+    "containsPii": false,
+    "participantSafePacketOnly": true
+  },
+  "humanCohort": {
+    "class": "declared_human_comprehension_session",
+    "status": "not_run",
+    "sessions": [],
+    "reported": {
+      "decision": "NOT_RUN",
+      "eligibleSessions": 0,
+      "totalAnswers": 0,
+      "correctAnswers": 0,
+      "accuracy": null,
+      "mandatoryGatePassed": false,
+      "goldenJourneyGatePassed": false,
+      "hardFailTriggered": false,
+      "claimStatus": "unproven"
+    }
+  },
+  "automatedModelCohort": {
+    "class": "automated_model_comprehension",
+    "status": "pass",
+    "sessions": [
+      {
+        "schema": "ae-paid-operation-comprehension-response:v1",
+        "participantId": "agent-00000001",
+        "class": "automated_model_comprehension",
+        "counterbalanceAssignment": "A",
+        "scenarioOrder": [
+          "GOLDEN",
+          "AUTHORITY_REFUSAL",
+          "POSSIBLY_SUBMITTED",
+          "INVALID_RESULT",
+          "RECONCILED_NOT_SETTLED",
+          "STALE_DUPLICATE",
+          "READ_OUTAGE",
+          "COMPLETED_RESTORE"
+        ],
+        "completedScenarioIds": [
+          "GOLDEN",
+          "AUTHORITY_REFUSAL",
+          "POSSIBLY_SUBMITTED",
+          "INVALID_RESULT",
+          "RECONCILED_NOT_SETTLED",
+          "STALE_DUPLICATE",
+          "READ_OUTAGE",
+          "COMPLETED_RESTORE"
+        ],
+        "goldenJourneyCompleted": true,
+        "eligibility": {
+          "independent": true,
+          "humanParticipant": false,
+          "freshAgentContext": true,
+          "phase3cImplementer": false,
+          "phase3cReviewer": false,
+          "answerKeyExposed": false,
+          "coachingReceived": false,
+          "participantSafePacketOnly": true,
+          "repoInspection": false,
+          "fileInspection": false,
+          "toolInspection": false
+        },
+        "answers": [
+          {
+            "questionId": "Q1",
+            "selectedOptionId": "Q1-B"
+          },
+          {
+            "questionId": "Q2",
+            "selectedOptionId": "Q2-C"
+          },
+          {
+            "questionId": "Q3",
+            "selectedOptionId": "Q3-A"
+          },
+          {
+            "questionId": "Q4",
+            "selectedOptionId": "Q4-B"
+          },
+          {
+            "questionId": "Q5",
+            "selectedOptionId": "Q5-C"
+          },
+          {
+            "questionId": "Q6",
+            "selectedOptionId": "Q6-A"
+          },
+          {
+            "questionId": "Q7",
+            "selectedOptionId": "Q7-B"
+          },
+          {
+            "questionId": "Q8",
+            "selectedOptionId": "Q8-C"
+          },
+          {
+            "questionId": "Q9",
+            "selectedOptionId": "Q9-A"
+          },
+          {
+            "questionId": "Q10",
+            "selectedOptionId": "Q10-B"
+          }
+        ],
+        "friction": {
+          "durationMinutes": 0,
+          "backtracks": 0,
+          "helpRequests": 0,
+          "confusingScenarioIds": [],
+          "notes": "",
+          "containsPii": false
+        }
+      },
+      {
+        "schema": "ae-paid-operation-comprehension-response:v1",
+        "participantId": "agent-00000002",
+        "class": "automated_model_comprehension",
+        "counterbalanceAssignment": "B",
+        "scenarioOrder": [
+          "GOLDEN",
+          "STALE_DUPLICATE",
+          "READ_OUTAGE",
+          "COMPLETED_RESTORE",
+          "AUTHORITY_REFUSAL",
+          "POSSIBLY_SUBMITTED",
+          "INVALID_RESULT",
+          "RECONCILED_NOT_SETTLED"
+        ],
+        "completedScenarioIds": [
+          "GOLDEN",
+          "STALE_DUPLICATE",
+          "READ_OUTAGE",
+          "COMPLETED_RESTORE",
+          "AUTHORITY_REFUSAL",
+          "POSSIBLY_SUBMITTED",
+          "INVALID_RESULT",
+          "RECONCILED_NOT_SETTLED"
+        ],
+        "goldenJourneyCompleted": true,
+        "eligibility": {
+          "independent": true,
+          "humanParticipant": false,
+          "freshAgentContext": true,
+          "phase3cImplementer": false,
+          "phase3cReviewer": false,
+          "answerKeyExposed": false,
+          "coachingReceived": false,
+          "participantSafePacketOnly": true,
+          "repoInspection": false,
+          "fileInspection": false,
+          "toolInspection": false
+        },
+        "answers": [
+          {
+            "questionId": "Q1",
+            "selectedOptionId": "Q1-B"
+          },
+          {
+            "questionId": "Q2",
+            "selectedOptionId": "Q2-C"
+          },
+          {
+            "questionId": "Q3",
+            "selectedOptionId": "Q3-A"
+          },
+          {
+            "questionId": "Q4",
+            "selectedOptionId": "Q4-B"
+          },
+          {
+            "questionId": "Q5",
+            "selectedOptionId": "Q5-C"
+          },
+          {
+            "questionId": "Q6",
+            "selectedOptionId": "Q6-A"
+          },
+          {
+            "questionId": "Q7",
+            "selectedOptionId": "Q7-B"
+          },
+          {
+            "questionId": "Q8",
+            "selectedOptionId": "Q8-C"
+          },
+          {
+            "questionId": "Q9",
+            "selectedOptionId": "Q9-A"
+          },
+          {
+            "questionId": "Q10",
+            "selectedOptionId": "Q10-B"
+          }
+        ],
+        "friction": {
+          "durationMinutes": 1,
+          "backtracks": 0,
+          "helpRequests": 0,
+          "confusingScenarioIds": [],
+          "notes": "The packet clearly distinguished permission, submission, settlement evidence, result validation, durable restore, and reconciliation boundaries.",
+          "containsPii": false
+        }
+      },
+      {
+        "schema": "ae-paid-operation-comprehension-response:v1",
+        "participantId": "agent-00000003",
+        "class": "automated_model_comprehension",
+        "counterbalanceAssignment": "C",
+        "scenarioOrder": [
+          "GOLDEN",
+          "INVALID_RESULT",
+          "RECONCILED_NOT_SETTLED",
+          "STALE_DUPLICATE",
+          "READ_OUTAGE",
+          "COMPLETED_RESTORE",
+          "AUTHORITY_REFUSAL",
+          "POSSIBLY_SUBMITTED"
+        ],
+        "completedScenarioIds": [
+          "GOLDEN",
+          "INVALID_RESULT",
+          "RECONCILED_NOT_SETTLED",
+          "STALE_DUPLICATE",
+          "READ_OUTAGE",
+          "COMPLETED_RESTORE",
+          "AUTHORITY_REFUSAL",
+          "POSSIBLY_SUBMITTED"
+        ],
+        "goldenJourneyCompleted": true,
+        "eligibility": {
+          "independent": true,
+          "humanParticipant": false,
+          "freshAgentContext": true,
+          "phase3cImplementer": false,
+          "phase3cReviewer": false,
+          "answerKeyExposed": false,
+          "coachingReceived": false,
+          "participantSafePacketOnly": true,
+          "repoInspection": false,
+          "fileInspection": false,
+          "toolInspection": false
+        },
+        "answers": [
+          {
+            "questionId": "Q1",
+            "selectedOptionId": "Q1-B"
+          },
+          {
+            "questionId": "Q2",
+            "selectedOptionId": "Q2-C"
+          },
+          {
+            "questionId": "Q3",
+            "selectedOptionId": "Q3-A"
+          },
+          {
+            "questionId": "Q4",
+            "selectedOptionId": "Q4-B"
+          },
+          {
+            "questionId": "Q5",
+            "selectedOptionId": "Q5-C"
+          },
+          {
+            "questionId": "Q6",
+            "selectedOptionId": "Q6-A"
+          },
+          {
+            "questionId": "Q7",
+            "selectedOptionId": "Q7-B"
+          },
+          {
+            "questionId": "Q8",
+            "selectedOptionId": "Q8-C"
+          },
+          {
+            "questionId": "Q9",
+            "selectedOptionId": "Q9-A"
+          },
+          {
+            "questionId": "Q10",
+            "selectedOptionId": "Q10-B"
+          }
+        ],
+        "friction": {
+          "durationMinutes": 2,
+          "backtracks": 0,
+          "helpRequests": 0,
+          "confusingScenarioIds": [],
+          "notes": "The distinctions among permission, submission, settlement evidence, validation, reconciliation, and durable restore were clear from the packet.",
+          "containsPii": false
+        }
+      }
+    ],
+    "reported": {
+      "decision": "PASS",
+      "eligibleSessions": 3,
+      "totalAnswers": 30,
+      "correctAnswers": 30,
+      "accuracy": 1,
+      "mandatoryGatePassed": true,
+      "goldenJourneyGatePassed": true,
+      "hardFailTriggered": false,
+      "claimStatus": "proven_for_automated_model_comprehension_only"
+    }
+  },
+  "overall": {
+    "status": "automated_adjunct_only",
+    "p3cR8HumanComprehensionSatisfied": false,
+    "humanEvidenceClaim": "unproven",
+    "automatedAdjunctClaim": "proven_for_automated_model_comprehension_only",
+    "claimCeiling": "Automated-model comprehension for exactly three eligible fresh-agent sessions only. It is adjunct model evidence and cannot satisfy or overwrite declared human comprehension or P3C-R8."
+  },
+  "founderOverride": {
+    "statement": "Real-human comprehension may remain unproven without blocking the already-authorized Plan07 source/deploy work, but that does not satisfy P3C-R8’s human-comprehension evidence or upgrade the claim.",
+    "plan07MayProceedWithoutHumanPass": true,
+    "satisfiesP3CR8HumanComprehension": false,
+    "upgradesClaim": false
+  }
+}

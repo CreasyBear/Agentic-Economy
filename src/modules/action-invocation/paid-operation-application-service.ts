@@ -23,6 +23,9 @@ import type { X402PaymentReconciliationEvidence } from './x402-payment-reconcili
 
 export type PaidOperationReadPort<Result extends ActionResult> = Readonly<{
   loadInvocation(invocationRef: string): ActionInvocationView<Result> | undefined
+  loadPreparedPaymentAttempt?(input: Readonly<{
+    invocationRef: string
+  }>): PaidOperationPaymentAttemptSnapshot | undefined
   loadPaymentAttempt(input: Readonly<{
     invocationRef: string
     attemptRef: string
@@ -119,13 +122,22 @@ export function createPaidOperationApplicationService<Result extends ActionResul
       return { kind: 'refused', code: 'stale_invocation_version' }
     }
     const attempt = view.attempts.at(-1)
-    const paymentAttempt = attempt === undefined
-      ? undefined
-      : input.reads.loadPaymentAttempt({
+    const preparedPaymentRead = view.attempts.length === 0
+      && view.control.state === 'authorized'
+      && currentAuthorityAccepted(view)
+      && input.reads.loadPreparedPaymentAttempt !== undefined
+    const paymentAttempt = attempt !== undefined
+      ? input.reads.loadPaymentAttempt({
           invocationRef,
           attemptRef: attempt.attemptRef,
           effectGeneration: attempt.effectGeneration,
         })
+      : preparedPaymentRead
+        ? input.reads.loadPreparedPaymentAttempt?.({ invocationRef })
+        : undefined
+    if (preparedPaymentRead && paymentAttempt?.state !== 'prepared') {
+      throw new Error('paid_operation_pre_attempt_payment_invariant')
+    }
     const semantics = derivePaidOperationSemantics({
       view,
       ...(paymentAttempt === undefined ? {} : { paymentAttempt }),
@@ -169,6 +181,16 @@ export function createPaidOperationApplicationService<Result extends ActionResul
       return reconstruct(invocationRef, updated.invocationVersion)
     },
   })
+}
+
+function currentAuthorityAccepted<Result extends ActionResult>(
+  view: ActionInvocationView<Result>,
+): boolean {
+  const accepted = view.acceptedAuthority
+  if (accepted === undefined || view.authority === undefined) return false
+  return accepted.kind === 'approve_each'
+    ? accepted.authorityRef === view.authority.reference
+    : true
 }
 
 export function createDevelopmentPaidOperationApplicationService(input: Readonly<{

@@ -8,7 +8,14 @@ import {
   runCustomerRequestProductionSmoke,
 } from './customer-request-production-smoke'
 
-const REQUIRED_SCOPE = 'customer_requests:create'
+const DEFAULT_REQUIRED_SCOPE = 'customer_requests:create'
+const ALLOWED_TEMPORARY_KEY_SCOPES = {
+  'customer_requests:create': [
+    'customer_requests:create',
+    'customer_requests:standing_authority',
+  ],
+  'paid_operation:invoke': ['paid_operation:invoke'],
+} as const
 const ACCEPTANCE_PRIMARY_EMAIL = 'joel@agentic-economy.ai'
 const CLERK_API = 'https://api.clerk.com/v1'
 const instanceSchema = z.looseObject({ id: z.string().min(1), environment_type: z.string().min(1) })
@@ -25,6 +32,30 @@ const createdKeySchema = z.looseObject({ id: z.string().min(1), secret: z.string
 const createdSessionSchema = z.looseObject({ id: z.string().min(1), status: z.string().min(1) })
 const createdSessionIdentitySchema = z.looseObject({ id: z.string().min(1) })
 const sessionTokenSchema = z.looseObject({ jwt: z.string().min(1) })
+const revokedKeyReadbackSchema = z.looseObject({
+  id: z.string().min(1),
+  subject: z.string().min(1),
+  scopes: z.array(z.string().min(1)),
+  revoked: z.literal(true),
+})
+const revokedSessionReadbackSchema = z.looseObject({
+  id: z.string().min(1),
+  user_id: z.string().min(1),
+  status: z.literal('revoked'),
+})
+
+export type TemporaryClerkApiKeyRevocationEvidence = Readonly<{
+  credentialId: string
+  subject: string
+  scopes: readonly string[]
+  status: 'revoked'
+  secondsUntilExpiration: 3_600
+}>
+export type TemporaryClerkSessionRevocationEvidence = Readonly<{
+  sessionId: string
+  subject: string
+  status: 'revoked'
+}>
 
 export async function withTemporaryClerkAcceptanceCredentials(input: Readonly<{
   clerkSecretKey: string
@@ -73,31 +104,80 @@ export async function withTemporaryClerkAcceptanceCredentials(input: Readonly<{
     if (revocationFailure !== undefined) throw revocationFailure
   } })
 }
-
-export async function withTemporaryClerkApiKey(input: Readonly<{
+type TemporaryClerkApiKeyInput<T> = Readonly<{
   clerkSecretKey: string
   expectedInstanceId: string
   subject: string
+  expectedPrimaryEmail?: string
+  requiredScope?: string
   scopes?: readonly string[]
   fetch: typeof globalThis.fetch
-  run: (apiKey: string, identity: Readonly<{ credentialId: string }>) => Promise<void>
+  run: (apiKey: string, identity: Readonly<{ credentialId: string }>) => Promise<T>
   keyNamePrefix?: string
   revocationReason?: string
-}>): Promise<void> {
-  const headers = await clerkAcceptanceHeaders({ ...input, expectedPrimaryEmail: ACCEPTANCE_PRIMARY_EMAIL })
-  await withTemporaryAgentKey({ ...input, headers, run: input.run })
-}
+  requireRevocationReadback?: boolean
+  returnEvidence?: boolean
+}>
 
-export async function withTemporaryClerkUserSession(input: Readonly<{
+export function withTemporaryClerkApiKey<T>(
+  input: TemporaryClerkApiKeyInput<T> & Readonly<{
+    requiredScope: 'paid_operation:invoke'
+    scopes: readonly ['paid_operation:invoke']
+    requireRevocationReadback: true
+    returnEvidence: true
+  }>,
+): Promise<Readonly<{
+  value: T
+  revocation: TemporaryClerkApiKeyRevocationEvidence
+}>>
+export function withTemporaryClerkApiKey(
+  input: TemporaryClerkApiKeyInput<void> & Readonly<{ returnEvidence?: false }>,
+): Promise<void>
+export async function withTemporaryClerkApiKey<T>(
+  input: TemporaryClerkApiKeyInput<T>,
+): Promise<void | Readonly<{
+  value: T
+  revocation: TemporaryClerkApiKeyRevocationEvidence
+}>> {
+  const headers = await clerkAcceptanceHeaders({
+    ...input,
+    expectedPrimaryEmail:
+      input.expectedPrimaryEmail ?? ACCEPTANCE_PRIMARY_EMAIL,
+  })
+  return await withTemporaryAgentKey({ ...input, headers, run: input.run })
+}
+type TemporaryClerkUserSessionInput<T> = Readonly<{
   clerkSecretKey: string
   expectedInstanceId: string
   subject: string
   expectedPrimaryEmail: string
   fetch: typeof globalThis.fetch
-  run: (sessionToken: string) => Promise<void>
-}>): Promise<void> {
+  run: (sessionToken: string) => Promise<T>
+  requireRevocationReadback?: boolean
+  returnEvidence?: boolean
+}>
+
+export function withTemporaryClerkUserSession<T>(
+  input: TemporaryClerkUserSessionInput<T> & Readonly<{
+    requireRevocationReadback: true
+    returnEvidence: true
+  }>,
+): Promise<Readonly<{
+  value: T
+  revocation: TemporaryClerkSessionRevocationEvidence
+}>>
+export function withTemporaryClerkUserSession(
+  input: TemporaryClerkUserSessionInput<void> & Readonly<{ returnEvidence?: false }>,
+): Promise<void>
+export async function withTemporaryClerkUserSession<T>(
+  input: TemporaryClerkUserSessionInput<T>,
+): Promise<void | Readonly<{
+  value: T
+  revocation: TemporaryClerkSessionRevocationEvidence
+}>> {
   const headers = await clerkAcceptanceHeaders(input)
   let sessionId: string | undefined
+  let runResult: T | undefined
   let runError: unknown
   try {
     const sessionValue = await readClerkJson(input.fetch, `${CLERK_API}/sessions`, {
@@ -109,20 +189,53 @@ export async function withTemporaryClerkUserSession(input: Readonly<{
       input.fetch, `${CLERK_API}/sessions/${encodeURIComponent(session.id)}/tokens`,
       { method: 'POST', headers }, 'clerk_temporary_session_token_failed',
     )).jwt
-    await input.run(sessionToken)
+    runResult = await input.run(sessionToken)
   } catch (error) {
     runError = error
   }
+
   const revocationFailure = sessionId === undefined
     ? undefined
     : await revokeTemporarySession(input.fetch, headers, sessionId)
-  if (runError !== undefined && revocationFailure !== undefined) {
-    throw new AggregateError([runError, revocationFailure], 'session journey and revocation both failed')
+  let revocationEvidence: TemporaryClerkSessionRevocationEvidence | undefined
+  let readbackFailure: Error | undefined
+  if (sessionId !== undefined
+    && revocationFailure === undefined
+    && input.requireRevocationReadback === true) {
+    try {
+      const readback = revokedSessionReadbackSchema.parse(await readClerkJson(
+        input.fetch,
+        `${CLERK_API}/sessions/${encodeURIComponent(sessionId)}`,
+        { headers },
+        'clerk_temporary_session_revocation_readback_failed',
+      ))
+      if (readback.id !== sessionId || readback.user_id !== input.subject) {
+        throw new Error('clerk_temporary_session_revocation_readback_mismatch')
+      }
+      revocationEvidence = {
+        sessionId: readback.id,
+        subject: readback.user_id,
+        status: 'revoked',
+      }
+    } catch (error) {
+      readbackFailure = error instanceof Error
+        ? error
+        : new Error('clerk_temporary_session_revocation_readback_failed')
+    }
+  }
+  const cleanupFailure = revocationFailure ?? readbackFailure
+  if (runError !== undefined && cleanupFailure !== undefined) {
+    throw new AggregateError([runError, cleanupFailure], 'session journey and revocation both failed')
   }
   if (runError !== undefined) throw runError
-  if (revocationFailure !== undefined) throw revocationFailure
+  if (cleanupFailure !== undefined) throw cleanupFailure
+  if (input.returnEvidence === true) {
+    if (runResult === undefined || revocationEvidence === undefined) {
+      throw new Error('clerk_temporary_session_revocation_evidence_missing')
+    }
+    return { value: runResult, revocation: revocationEvidence }
+  }
 }
-
 async function clerkAcceptanceHeaders(input: Readonly<{
   clerkSecretKey: string
   expectedInstanceId: string
@@ -145,13 +258,28 @@ async function clerkAcceptanceHeaders(input: Readonly<{
   return headers
 }
 
-async function withTemporaryAgentKey(input: Readonly<{
-  subject: string; fetch: typeof globalThis.fetch; headers: Record<string, string>
+async function withTemporaryAgentKey<T>(input: Readonly<{
+  subject: string
+  fetch: typeof globalThis.fetch
+  headers: Record<string, string>
+  requiredScope?: string
   scopes?: readonly string[]
-  keyNamePrefix?: string; revocationReason?: string
-  run: (apiKey: string, identity: Readonly<{ credentialId: string }>) => Promise<void>
-}>): Promise<void> {
-  const scopes = temporaryKeyScopes(input.scopes)
+  keyNamePrefix?: string
+  revocationReason?: string
+  run: (apiKey: string, identity: Readonly<{ credentialId: string }>) => Promise<T>
+  requireRevocationReadback?: boolean
+  returnEvidence?: boolean
+}>): Promise<void | Readonly<{
+  value: T
+  revocation: TemporaryClerkApiKeyRevocationEvidence
+}>> {
+  const scopes = temporaryKeyScopes(input.scopes, input.requiredScope)
+  if ((input.requireRevocationReadback === true || input.returnEvidence === true)
+    && (input.requiredScope !== 'paid_operation:invoke'
+      || scopes.length !== 1
+      || scopes[0] !== 'paid_operation:invoke')) {
+    throw new Error('temporary_paid_operation_key_contract_invalid')
+  }
   const createdValue = await readClerkJson(input.fetch, `${CLERK_API}/api_keys`, {
     method: 'POST', headers: input.headers,
     body: JSON.stringify({
@@ -163,37 +291,95 @@ async function withTemporaryAgentKey(input: Readonly<{
   }, 'clerk_temporary_api_key_creation_failed')
   const createdIdentity = createdKeyIdentitySchema.parse(createdValue)
 
+  let journeyResult: T | undefined
   let journeyError: unknown
   try {
     const created = createdKeySchema.parse(createdValue)
-    await input.run(created.secret, { credentialId: created.id })
+    journeyResult = await input.run(created.secret, { credentialId: created.id })
   } catch (error) {
     journeyError = error
   }
   let revocationFailure: Error | undefined
   try {
-    const response = await input.fetch(`${CLERK_API}/api_keys/${encodeURIComponent(createdIdentity.id)}/revoke`, {
-      method: 'POST', headers: input.headers,
-      body: JSON.stringify({
-        revocation_reason: input.revocationReason ?? 'Temporary production acceptance completed',
-      }),
-    })
-    if (!response.ok) revocationFailure = new Error(`clerk_temporary_api_key_revocation_failed:${response.status}`)
+    const response = await input.fetch(
+      `${CLERK_API}/api_keys/${encodeURIComponent(createdIdentity.id)}/revoke`,
+      {
+        method: 'POST', headers: input.headers,
+        body: JSON.stringify({
+          revocation_reason:
+            input.revocationReason ?? 'Temporary production acceptance completed',
+        }),
+      },
+    )
+    if (!response.ok) {
+      revocationFailure = new Error(
+        `clerk_temporary_api_key_revocation_failed:${response.status}`,
+      )
+    }
   } catch (error) {
     revocationFailure = new Error('clerk_temporary_api_key_revocation_failed', { cause: error })
   }
-  if (journeyError !== undefined && revocationFailure !== undefined) {
-    throw new AggregateError([journeyError, revocationFailure], 'cold journey and temporary key revocation both failed')
+
+  let revocationEvidence: TemporaryClerkApiKeyRevocationEvidence | undefined
+  let readbackFailure: Error | undefined
+  if (revocationFailure === undefined && input.requireRevocationReadback === true) {
+    try {
+      const readback = revokedKeyReadbackSchema.parse(await readClerkJson(
+        input.fetch,
+        `${CLERK_API}/api_keys/${encodeURIComponent(createdIdentity.id)}`,
+        { headers: input.headers },
+        'clerk_temporary_api_key_revocation_readback_failed',
+      ))
+      if (readback.id !== createdIdentity.id
+        || readback.subject !== input.subject
+        || readback.scopes.length !== 1
+        || readback.scopes[0] !== 'paid_operation:invoke') {
+        throw new Error('clerk_temporary_api_key_revocation_readback_mismatch')
+      }
+      revocationEvidence = {
+        credentialId: readback.id,
+        subject: readback.subject,
+        scopes: [...readback.scopes],
+        status: 'revoked',
+        secondsUntilExpiration: 3_600,
+      }
+    } catch (error) {
+      readbackFailure = error instanceof Error
+        ? error
+        : new Error('clerk_temporary_api_key_revocation_readback_failed')
+    }
+  }
+  const cleanupFailure = revocationFailure ?? readbackFailure
+  if (journeyError !== undefined && cleanupFailure !== undefined) {
+    throw new AggregateError(
+      [journeyError, cleanupFailure],
+      'cold journey and temporary key revocation both failed',
+    )
   }
   if (journeyError !== undefined) throw journeyError
-  if (revocationFailure !== undefined) throw revocationFailure
+  if (cleanupFailure !== undefined) throw cleanupFailure
+  if (input.returnEvidence === true) {
+    if (journeyResult === undefined || revocationEvidence === undefined) {
+      throw new Error('clerk_temporary_api_key_revocation_evidence_missing')
+    }
+    return { value: journeyResult, revocation: revocationEvidence }
+  }
 }
-
-function temporaryKeyScopes(scopes: readonly string[] | undefined): readonly string[] {
-  const selected = scopes ?? [REQUIRED_SCOPE]
+function temporaryKeyScopes(
+  scopes: readonly string[] | undefined,
+  requiredScope = DEFAULT_REQUIRED_SCOPE,
+): readonly string[] {
+  const selected = scopes ?? [requiredScope]
+  const allowed = Object.hasOwn(ALLOWED_TEMPORARY_KEY_SCOPES, requiredScope)
+    ? ALLOWED_TEMPORARY_KEY_SCOPES[
+      requiredScope as keyof typeof ALLOWED_TEMPORARY_KEY_SCOPES
+    ]
+    : undefined
   if (selected.length === 0 || selected.length > 32
     || selected.some((scope) => !/^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$/u.test(scope))
-    || !selected.includes(REQUIRED_SCOPE)) {
+    || allowed === undefined
+    || !selected.includes(requiredScope)
+    || selected.some((scope) => !(allowed as readonly string[]).includes(scope))) {
     throw new Error('temporary_agent_key_scopes_invalid')
   }
   return [...new Set(selected)].sort()

@@ -42,6 +42,7 @@ import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
 import { Route as ApiV1RequestsRouteImport } from './routes/api.v1.requests'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
+import { Route as ApiV1PaidOperationsRouteImport } from './routes/api.v1.paid-operations'
 import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
 import { Route as ApiSandboxCapabilityRouteImport } from './routes/api.sandbox.capability'
 import { Route as ApiRequestsRequestRefRouteImport } from './routes/api.requests.$requestRef'
@@ -58,6 +59,8 @@ import { Route as ApiAnswerTurnRouteImport } from './routes/api.answer.turn'
 import { Route as ApiAnswerThreadsRouteImport } from './routes/api.answer.threads'
 import { Route as ApiAnswerFollowUpChipsRouteImport } from './routes/api.answer.follow-up-chips'
 import { Route as ApiAnswerEvalStatusRouteImport } from './routes/api.answer.eval-status'
+import { Route as ActionsPaidNewRouteImport } from './routes/actions.paid.new'
+import { Route as ActionsPaidInvocationRefRouteImport } from './routes/actions.paid.$invocationRef'
 import { Route as OperatorOwnerStatusRouteImport } from './routes/_operator/owner.status'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOfferingsRouteImport } from './routes/_operator/owner.offerings'
@@ -72,6 +75,7 @@ import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator
 import { Route as SlugOfferingsOfferingRefRouteImport } from './routes/$slug.offerings.$offeringRef'
 import { Route as ApiV1RequestsSchemaRouteImport } from './routes/api.v1.requests.schema'
 import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.requests.$requestRef'
+import { Route as ApiV1PaidOperationsInvocationRefRouteImport } from './routes/api.v1.paid-operations.$invocationRef'
 import { Route as ApiSandboxProvidersWorkflowRouteImport } from './routes/api.sandbox.providers.workflow'
 import { Route as ApiSandboxProvidersRouteResolverRouteImport } from './routes/api.sandbox.providers.route-resolver'
 import { Route as ApiSandboxProvidersRouteQuoterRouteImport } from './routes/api.sandbox.providers.route-quoter'
@@ -100,6 +104,7 @@ import { Route as ApiV1RequestsRequestRefFactsRouteImport } from './routes/api.v
 import { Route as ApiV1RequestsRequestRefEvidenceRouteImport } from './routes/api.v1.requests.$requestRef.evidence'
 import { Route as ApiV1RequestsRequestRefConfirmationRouteImport } from './routes/api.v1.requests.$requestRef.confirmation'
 import { Route as ApiV1RequestsRequestRefCancellationRouteImport } from './routes/api.v1.requests.$requestRef.cancellation'
+import { Route as ApiV1PaidOperationsInvocationRefCommandsRouteImport } from './routes/api.v1.paid-operations.$invocationRef.commands'
 import { Route as ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteImport } from './routes/api.requests.$requestRef.repeat-permissions.$permissionRef'
 import { Route as ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteImport } from './routes/api.v1.requests.$requestRef.repeat-permissions.$permissionRef'
 import { Route as ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport } from './routes/api.requests.$requestRef.repeat-permissions.$permissionRef.withdrawal'
@@ -274,6 +279,11 @@ const ApiV1ReleaseRoute = ApiV1ReleaseRouteImport.update({
   path: '/api/v1/release',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1PaidOperationsRoute = ApiV1PaidOperationsRouteImport.update({
+  id: '/api/v1/paid-operations',
+  path: '/api/v1/paid-operations',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiStorefrontImportDraftRoute =
   ApiStorefrontImportDraftRouteImport.update({
     id: '/api/storefront/import-draft',
@@ -358,6 +368,17 @@ const ApiAnswerEvalStatusRoute = ApiAnswerEvalStatusRouteImport.update({
   path: '/api/answer/eval-status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ActionsPaidNewRoute = ActionsPaidNewRouteImport.update({
+  id: '/actions/paid/new',
+  path: '/actions/paid/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ActionsPaidInvocationRefRoute =
+  ActionsPaidInvocationRefRouteImport.update({
+    id: '/actions/paid/$invocationRef',
+    path: '/actions/paid/$invocationRef',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const OperatorOwnerStatusRoute = OperatorOwnerStatusRouteImport.update({
   id: '/owner/status',
   path: '/owner/status',
@@ -433,6 +454,12 @@ const ApiV1RequestsRequestRefRoute = ApiV1RequestsRequestRefRouteImport.update({
   path: '/$requestRef',
   getParentRoute: () => ApiV1RequestsRoute,
 } as any)
+const ApiV1PaidOperationsInvocationRefRoute =
+  ApiV1PaidOperationsInvocationRefRouteImport.update({
+    id: '/$invocationRef',
+    path: '/$invocationRef',
+    getParentRoute: () => ApiV1PaidOperationsRoute,
+  } as any)
 const ApiSandboxProvidersWorkflowRoute =
   ApiSandboxProvidersWorkflowRouteImport.update({
     id: '/api/sandbox/providers/workflow',
@@ -600,6 +627,12 @@ const ApiV1RequestsRequestRefCancellationRoute =
     path: '/cancellation',
     getParentRoute: () => ApiV1RequestsRequestRefRoute,
   } as any)
+const ApiV1PaidOperationsInvocationRefCommandsRoute =
+  ApiV1PaidOperationsInvocationRefCommandsRouteImport.update({
+    id: '/commands',
+    path: '/commands',
+    getParentRoute: () => ApiV1PaidOperationsInvocationRefRoute,
+  } as any)
 const ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute =
   ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteImport.update({
     id: '/$permissionRef',
@@ -700,6 +733,8 @@ export interface FileRoutesByFullPath {
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
+  '/actions/paid/$invocationRef': typeof ActionsPaidInvocationRefRoute
+  '/actions/paid/new': typeof ActionsPaidNewRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
   '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
@@ -716,6 +751,7 @@ export interface FileRoutesByFullPath {
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
+  '/api/v1/paid-operations': typeof ApiV1PaidOperationsRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
@@ -737,9 +773,11 @@ export interface FileRoutesByFullPath {
   '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
+  '/api/v1/paid-operations/$invocationRef': typeof ApiV1PaidOperationsInvocationRefRouteWithChildren
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
+  '/api/v1/paid-operations/$invocationRef/commands': typeof ApiV1PaidOperationsInvocationRefCommandsRoute
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
@@ -800,6 +838,8 @@ export interface FileRoutesByTo {
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
+  '/actions/paid/$invocationRef': typeof ActionsPaidInvocationRefRoute
+  '/actions/paid/new': typeof ActionsPaidNewRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
   '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
@@ -816,6 +856,7 @@ export interface FileRoutesByTo {
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
+  '/api/v1/paid-operations': typeof ApiV1PaidOperationsRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
@@ -837,9 +878,11 @@ export interface FileRoutesByTo {
   '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
+  '/api/v1/paid-operations/$invocationRef': typeof ApiV1PaidOperationsInvocationRefRouteWithChildren
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
+  '/api/v1/paid-operations/$invocationRef/commands': typeof ApiV1PaidOperationsInvocationRefCommandsRoute
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
@@ -902,6 +945,8 @@ export interface FileRoutesById {
   '/_operator/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
   '/_operator/owner/status': typeof OperatorOwnerStatusRoute
+  '/actions/paid/$invocationRef': typeof ActionsPaidInvocationRefRoute
+  '/actions/paid/new': typeof ActionsPaidNewRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
   '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
@@ -918,6 +963,7 @@ export interface FileRoutesById {
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
+  '/api/v1/paid-operations': typeof ApiV1PaidOperationsRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
@@ -939,9 +985,11 @@ export interface FileRoutesById {
   '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
+  '/api/v1/paid-operations/$invocationRef': typeof ApiV1PaidOperationsInvocationRefRouteWithChildren
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
+  '/api/v1/paid-operations/$invocationRef/commands': typeof ApiV1PaidOperationsInvocationRefCommandsRoute
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
@@ -1004,6 +1052,8 @@ export interface FileRouteTypes {
     | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
+    | '/actions/paid/$invocationRef'
+    | '/actions/paid/new'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
     | '/api/answer/threads'
@@ -1020,6 +1070,7 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
+    | '/api/v1/paid-operations'
     | '/api/v1/release'
     | '/api/v1/requests'
     | '/admin/runs/$turnId'
@@ -1041,9 +1092,11 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/route-quoter'
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
+    | '/api/v1/paid-operations/$invocationRef'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
+    | '/api/v1/paid-operations/$invocationRef/commands'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/evidence'
@@ -1104,6 +1157,8 @@ export interface FileRouteTypes {
     | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
+    | '/actions/paid/$invocationRef'
+    | '/actions/paid/new'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
     | '/api/answer/threads'
@@ -1120,6 +1175,7 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
+    | '/api/v1/paid-operations'
     | '/api/v1/release'
     | '/api/v1/requests'
     | '/admin/runs/$turnId'
@@ -1141,9 +1197,11 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/route-quoter'
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
+    | '/api/v1/paid-operations/$invocationRef'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
+    | '/api/v1/paid-operations/$invocationRef/commands'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/evidence'
@@ -1205,6 +1263,8 @@ export interface FileRouteTypes {
     | '/_operator/owner/offerings'
     | '/_operator/owner/settings'
     | '/_operator/owner/status'
+    | '/actions/paid/$invocationRef'
+    | '/actions/paid/new'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
     | '/api/answer/threads'
@@ -1221,6 +1281,7 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
+    | '/api/v1/paid-operations'
     | '/api/v1/release'
     | '/api/v1/requests'
     | '/_operator/admin/runs/$turnId'
@@ -1242,9 +1303,11 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/route-quoter'
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
+    | '/api/v1/paid-operations/$invocationRef'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
+    | '/api/v1/paid-operations/$invocationRef/commands'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/evidence'
@@ -1289,6 +1352,8 @@ export interface RootRouteChildren {
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
   TThreadIdRoute: typeof TThreadIdRoute
+  ActionsPaidInvocationRefRoute: typeof ActionsPaidInvocationRefRoute
+  ActionsPaidNewRoute: typeof ActionsPaidNewRoute
   ApiAnswerEvalStatusRoute: typeof ApiAnswerEvalStatusRoute
   ApiAnswerFollowUpChipsRoute: typeof ApiAnswerFollowUpChipsRoute
   ApiAnswerThreadsRoute: typeof ApiAnswerThreadsRouteWithChildren
@@ -1302,6 +1367,7 @@ export interface RootRouteChildren {
   ApiObservabilityFunnelRoute: typeof ApiObservabilityFunnelRoute
   ApiSandboxCapabilityRoute: typeof ApiSandboxCapabilityRoute
   ApiStorefrontImportDraftRoute: typeof ApiStorefrontImportDraftRoute
+  ApiV1PaidOperationsRoute: typeof ApiV1PaidOperationsRouteWithChildren
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1RequestsRoute: typeof ApiV1RequestsRouteWithChildren
   ApiSandboxProvidersRouteQuoterRoute: typeof ApiSandboxProvidersRouteQuoterRoute
@@ -1542,6 +1608,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1ReleaseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/paid-operations': {
+      id: '/api/v1/paid-operations'
+      path: '/api/v1/paid-operations'
+      fullPath: '/api/v1/paid-operations'
+      preLoaderRoute: typeof ApiV1PaidOperationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/storefront/import-draft': {
       id: '/api/storefront/import-draft'
       path: '/api/storefront/import-draft'
@@ -1654,6 +1727,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAnswerEvalStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/actions/paid/new': {
+      id: '/actions/paid/new'
+      path: '/actions/paid/new'
+      fullPath: '/actions/paid/new'
+      preLoaderRoute: typeof ActionsPaidNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/actions/paid/$invocationRef': {
+      id: '/actions/paid/$invocationRef'
+      path: '/actions/paid/$invocationRef'
+      fullPath: '/actions/paid/$invocationRef'
+      preLoaderRoute: typeof ActionsPaidInvocationRefRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_operator/owner/status': {
       id: '/_operator/owner/status'
       path: '/owner/status'
@@ -1751,6 +1838,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/requests/$requestRef'
       preLoaderRoute: typeof ApiV1RequestsRequestRefRouteImport
       parentRoute: typeof ApiV1RequestsRoute
+    }
+    '/api/v1/paid-operations/$invocationRef': {
+      id: '/api/v1/paid-operations/$invocationRef'
+      path: '/$invocationRef'
+      fullPath: '/api/v1/paid-operations/$invocationRef'
+      preLoaderRoute: typeof ApiV1PaidOperationsInvocationRefRouteImport
+      parentRoute: typeof ApiV1PaidOperationsRoute
     }
     '/api/sandbox/providers/workflow': {
       id: '/api/sandbox/providers/workflow'
@@ -1947,6 +2041,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/requests/$requestRef/cancellation'
       preLoaderRoute: typeof ApiV1RequestsRequestRefCancellationRouteImport
       parentRoute: typeof ApiV1RequestsRequestRefRoute
+    }
+    '/api/v1/paid-operations/$invocationRef/commands': {
+      id: '/api/v1/paid-operations/$invocationRef/commands'
+      path: '/commands'
+      fullPath: '/api/v1/paid-operations/$invocationRef/commands'
+      preLoaderRoute: typeof ApiV1PaidOperationsInvocationRefCommandsRouteImport
+      parentRoute: typeof ApiV1PaidOperationsInvocationRefRoute
     }
     '/api/requests/$requestRef/repeat-permissions/$permissionRef': {
       id: '/api/requests/$requestRef/repeat-permissions/$permissionRef'
@@ -2244,6 +2345,33 @@ const ApiAnswerThreadsRouteChildren: ApiAnswerThreadsRouteChildren = {
 const ApiAnswerThreadsRouteWithChildren =
   ApiAnswerThreadsRoute._addFileChildren(ApiAnswerThreadsRouteChildren)
 
+interface ApiV1PaidOperationsInvocationRefRouteChildren {
+  ApiV1PaidOperationsInvocationRefCommandsRoute: typeof ApiV1PaidOperationsInvocationRefCommandsRoute
+}
+
+const ApiV1PaidOperationsInvocationRefRouteChildren: ApiV1PaidOperationsInvocationRefRouteChildren =
+  {
+    ApiV1PaidOperationsInvocationRefCommandsRoute:
+      ApiV1PaidOperationsInvocationRefCommandsRoute,
+  }
+
+const ApiV1PaidOperationsInvocationRefRouteWithChildren =
+  ApiV1PaidOperationsInvocationRefRoute._addFileChildren(
+    ApiV1PaidOperationsInvocationRefRouteChildren,
+  )
+
+interface ApiV1PaidOperationsRouteChildren {
+  ApiV1PaidOperationsInvocationRefRoute: typeof ApiV1PaidOperationsInvocationRefRouteWithChildren
+}
+
+const ApiV1PaidOperationsRouteChildren: ApiV1PaidOperationsRouteChildren = {
+  ApiV1PaidOperationsInvocationRefRoute:
+    ApiV1PaidOperationsInvocationRefRouteWithChildren,
+}
+
+const ApiV1PaidOperationsRouteWithChildren =
+  ApiV1PaidOperationsRoute._addFileChildren(ApiV1PaidOperationsRouteChildren)
+
 interface ApiV1RequestsRequestRefProblemsRouteChildren {
   ApiV1RequestsRequestRefProblemsReportRefRepliesRoute: typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
 }
@@ -2367,6 +2495,8 @@ const rootRouteChildren: RootRouteChildren = {
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
   TThreadIdRoute: TThreadIdRoute,
+  ActionsPaidInvocationRefRoute: ActionsPaidInvocationRefRoute,
+  ActionsPaidNewRoute: ActionsPaidNewRoute,
   ApiAnswerEvalStatusRoute: ApiAnswerEvalStatusRoute,
   ApiAnswerFollowUpChipsRoute: ApiAnswerFollowUpChipsRoute,
   ApiAnswerThreadsRoute: ApiAnswerThreadsRouteWithChildren,
@@ -2380,6 +2510,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiObservabilityFunnelRoute: ApiObservabilityFunnelRoute,
   ApiSandboxCapabilityRoute: ApiSandboxCapabilityRoute,
   ApiStorefrontImportDraftRoute: ApiStorefrontImportDraftRoute,
+  ApiV1PaidOperationsRoute: ApiV1PaidOperationsRouteWithChildren,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1RequestsRoute: ApiV1RequestsRouteWithChildren,
   ApiSandboxProvidersRouteQuoterRoute: ApiSandboxProvidersRouteQuoterRoute,
@@ -2389,13 +2520,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

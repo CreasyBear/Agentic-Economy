@@ -1,12 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   createDevelopmentInvocationApplication,
   createDevelopmentPaidOperationApplicationService,
   createPaidOperationApplicationService,
   createDynamicPublishedActionInvocationAdapter,
+  type ActionInvocationView,
+  type PaidOperationPaymentAttemptSnapshot,
   type PaidOperationInterpreter,
 } from '@/modules/action-invocation'
+import type { ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
 import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
@@ -52,10 +55,109 @@ describe('paid operation application service', () => {
     })
     expect(authorized.kind).toBe('accepted')
     if (authorized.kind !== 'accepted') return
+    expect(authorized.value.semantics.paymentAuthorization).toEqual({ state: 'not_created' })
     expect(authorized.value.semantics.continuations).toEqual([
       expect.objectContaining({ kind: 'execute' }),
     ])
   })
+
+  it('reconstructs an authorized zero-attempt prepared payment through declared support', () => {
+    const view = authorizedZeroAttemptView()
+    const payment = preparedPayment()
+    const loadPreparedPaymentAttempt = vi.fn(() => payment)
+    const loadPaymentAttempt = vi.fn(() => undefined)
+    const service = createPaidOperationApplicationService({
+      actor: view.owner,
+      interpreter: paidOperationInterpreter(),
+      reads: {
+        loadInvocation: () => view,
+        loadPreparedPaymentAttempt,
+        loadPaymentAttempt,
+      },
+      commands: inertCommands(),
+    })
+
+    const reconstructed = service.inspect({
+      invocationRef: view.invocationRef,
+      expectedInvocationVersion: 2,
+    })
+
+    expect(reconstructed.kind).toBe('accepted')
+    if (reconstructed.kind !== 'accepted') return
+    expect(reconstructed.value.semantics).toMatchObject({
+      paymentAuthorization: {
+        state: 'created',
+        paymentIdentifier: payment.paymentIdentifier,
+      },
+      paymentSubmission: { state: 'not_submitted' },
+      settlement: { state: 'no_evidence' },
+      resultDelivery: { state: 'not_delivered' },
+    })
+    expect(reconstructed.value.semantics.continuations.map(({ kind }) => kind))
+      .toEqual(['execute'])
+    expect(loadPreparedPaymentAttempt).toHaveBeenCalledOnce()
+    expect(loadPreparedPaymentAttempt).toHaveBeenCalledWith({
+      invocationRef: view.invocationRef,
+    })
+    expect(loadPaymentAttempt).not.toHaveBeenCalled()
+  })
+
+  it('does not read a prepared payment while version one is awaiting authority', () => {
+    const view = awaitingAuthorityView()
+    const loadPreparedPaymentAttempt = vi.fn(() => preparedPayment())
+    const loadPaymentAttempt = vi.fn(() => undefined)
+    const service = createPaidOperationApplicationService({
+      actor: view.owner,
+      interpreter: paidOperationInterpreter(),
+      reads: {
+        loadInvocation: () => view,
+        loadPreparedPaymentAttempt,
+        loadPaymentAttempt,
+      },
+      commands: inertCommands(),
+    })
+
+    const reconstructed = service.inspect({
+      invocationRef: view.invocationRef,
+      expectedInvocationVersion: 1,
+    })
+
+    expect(reconstructed.kind).toBe('accepted')
+    if (reconstructed.kind !== 'accepted') return
+    expect(reconstructed.value.semantics.paymentAuthorization).toEqual({ state: 'not_created' })
+    expect(reconstructed.value.semantics.continuations.map(({ kind }) => kind))
+      .toEqual(['authorize'])
+    expect(loadPreparedPaymentAttempt).not.toHaveBeenCalled()
+    expect(loadPaymentAttempt).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['non-prepared', {
+      ...preparedPayment(),
+      state: 'possibly_submitted' as const,
+    }],
+  ] satisfies readonly (readonly [string, PaidOperationPaymentAttemptSnapshot | undefined])[])(
+    'fails closed when declared pre-attempt payment support returns %s state',
+    (_case, payment) => {
+      const view = authorizedZeroAttemptView()
+      const service = createPaidOperationApplicationService({
+        actor: view.owner,
+        interpreter: paidOperationInterpreter(),
+        reads: {
+          loadInvocation: () => view,
+          loadPreparedPaymentAttempt: () => payment,
+          loadPaymentAttempt: () => undefined,
+        },
+        commands: inertCommands(),
+      })
+
+      expect(() => service.inspect({
+        invocationRef: view.invocationRef,
+        expectedInvocationVersion: 2,
+      })).toThrow('paid_operation_pre_attempt_payment_invariant')
+    },
+  )
 
   it('refuses a different principal and keeps operation interpretation injected', () => {
     const { host, interpreter, application } = fixture()
@@ -131,17 +233,18 @@ describe('paid operation application service', () => {
       observedResolution: { state: 'threw', message: 'provider_outcome_unknown' },
     } as any
     let received: unknown
+    const loadPaymentAttempt = vi.fn(() => ({
+      paymentIdentifier: 'payment:reconcile',
+      custodyRef: `sha256:${'b'.repeat(64)}`,
+      state: 'reconciliation_required' as const,
+      evidenceRefs: [],
+    }))
     const service = createPaidOperationApplicationService({
       actor: view.owner,
       interpreter,
       reads: {
         loadInvocation: () => view,
-        loadPaymentAttempt: () => ({
-          paymentIdentifier: 'payment:reconcile',
-          custodyRef: `sha256:${'b'.repeat(64)}`,
-          state: 'reconciliation_required',
-          evidenceRefs: [],
-        }),
+        loadPaymentAttempt,
       },
       commands: {
         authorize: () => undefined,
@@ -158,7 +261,12 @@ describe('paid operation application service', () => {
     })
     expect(current.kind === 'accepted'
       && current.value.semantics.continuations[0]?.requiredInput)
-      .toEqual(['reconciliationEvidence', 'paymentReconciliationEvidence'])
+      .toEqual([])
+    expect(loadPaymentAttempt).toHaveBeenCalledWith({
+      invocationRef: view.invocationRef,
+      attemptRef: evidenceMaterial.attemptRef,
+      effectGeneration: 1,
+    })
     await service.command({
       invocationRef: view.invocationRef,
       expectedInvocationVersion: 3,
@@ -176,6 +284,104 @@ describe('paid operation application service', () => {
     })
   })
 })
+
+function authorizedZeroAttemptView(): ActionInvocationView<ActionResult> {
+  return {
+    invocationRef: 'invocation:prepared-payment',
+    invocationVersion: 2,
+    environment: 'MOCK/DEVELOPMENT ONLY',
+    persistence: 'durable_control',
+    origin: {
+      kind: 'standalone',
+      callerRef: 'agent:prepared-payment',
+      principalRef: 'principal:prepared-payment',
+    },
+    owner: {
+      callerRef: 'agent:prepared-payment',
+      principalRef: 'principal:prepared-payment',
+    },
+    action: { id: 'paid-operation', contractVersion: '1' },
+    desired: { state: 'invoke' },
+    prepared: {
+      materialInputDigest: `sha256:${'a'.repeat(64)}`,
+      target: {
+        providerId: 'provider:prepared-payment',
+        sourceRef: 'source:prepared-payment',
+        operationRevision: 'revision:1',
+      },
+      consequence: 'Release one paid query.',
+      dataUse: { fields: ['symbol'], limits: {} },
+      preparedAt: '2026-07-20T00:00:00.000Z',
+      freshUntil: '2026-07-20T01:00:00.000Z',
+    },
+    authority: {
+      reference: 'authority:prepared-payment',
+      expiresAt: '2026-07-20T01:00:00.000Z',
+    },
+    acceptedAuthority: {
+      kind: 'approve_each',
+      authorityRef: 'authority:prepared-payment',
+    },
+    attempts: [],
+    observedResolution: { state: 'pending' },
+    freshness: { state: 'current', observedAt: '2026-07-20T00:00:00.000Z' },
+    control: { state: 'authorized', decidedAt: '2026-07-20T00:01:00.000Z' },
+  }
+}
+
+function awaitingAuthorityView(): ActionInvocationView<ActionResult> {
+  const current = authorizedZeroAttemptView()
+  const { acceptedAuthority: _acceptedAuthority, ...awaiting } = current
+  return {
+    ...awaiting,
+    invocationVersion: 1,
+    control: { state: 'awaiting_authority' },
+  }
+}
+
+function preparedPayment(): PaidOperationPaymentAttemptSnapshot {
+  return {
+    paymentIdentifier: 'payment:prepared',
+    custodyRef: `sha256:${'b'.repeat(64)}`,
+    state: 'prepared',
+    evidenceRefs: [],
+  }
+}
+
+function paidOperationInterpreter(): PaidOperationInterpreter<ActionResult> {
+  return {
+    interpret: () => ({
+      operation: {
+        operationKey: 'prepared-payment',
+        providerId: 'provider:prepared-payment',
+        providerName: 'Prepared payment provider',
+        operationRevision: 'revision:1',
+        materialInputs: { symbol: 'BTC', convert: 'USD' },
+      },
+      presentation: {
+        title: 'Run prepared paid operation',
+        summary: 'One labelled local prepared payment fixture.',
+        blocks: [],
+      },
+      maximumAuthorizedCharge: { currency: 'USD', amountMinor: 1 },
+      queryRecipient: 'provider:prepared-payment',
+      resultDelivery: { state: 'not_delivered' },
+      environment: {
+        name: 'local-labelled-fixture',
+        evidenceClass: 'local_unit_fixture',
+        claimCeiling: 'contract_mechanics_only',
+      },
+    }),
+  }
+}
+
+function inertCommands() {
+  return {
+    authorize: () => undefined,
+    execute: () => undefined,
+    reconcile: () => undefined,
+  }
+}
 
 function fixture() {
   const adapter = adapterFixture()

@@ -17,7 +17,7 @@ Phase 1 — Action Invocation foundation (complete)
                          ↓
 Phase 2 — One action plane (accepted_narrowed)
                          ↓
-Phase 3 — Protocol/kernel → product conversion (complete)
+Phase 3 — Protocol/kernel → product conversion (verification repair)
                          ↓
 Phase 4 — Business Account and routeable-supply maturity (planning accepted)
                          ↓
@@ -79,6 +79,22 @@ payment recipient and raw-result adapter. Explicit selection uses the unchanged
 paid-operation host and `agentic-paid-operation:v1`; uncertainty never falls
 back, and switching providers creates a new invocation, authority, payment and
 effect lineage. Evidence remains local/mock only.
+
+## Phase 3C — Hosted paid-operation product trial
+
+**Status:** verification required; local repair complete, fresh hosted v2 run deferred
+**Depends on:** Phase 3A and Phase 3B
+**Goal:** let an authenticated evaluator run, understand and safely recover one
+hosted-sandbox BTC/USD paid operation through equivalent human and
+structured-agent surfaces.
+
+Phase 3C established production-shaped durable read and command ports, protected
+human and structured-agent adapters, and query-agnostic paid-operation
+semantics. Its retained packet proves local integrity only: the live collector
+refused before final admission and the packet was rebuilt later. A fresh
+exact-revision hosted run is required before making a hosted claim.
+
+**Plan authority:** `.planning/phases/03c-hosted-paid-operation-product-trial/`
 
 ## Phase 4 — Business Account and routeable-supply maturity
 
