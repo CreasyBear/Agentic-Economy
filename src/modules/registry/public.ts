@@ -29,6 +29,7 @@ import type {
 export {
   decodeStoredBusinessSupplyProjection,
   offeringComparisonEnvelopeSchema,
+  opaquePaginationCursorSchema,
   publicBusinessCatalogApiV2DtoSchema,
   publicBusinessCatalogApiV2PageSchema,
   publicBusinessCatalogV2DetailResultSchema,

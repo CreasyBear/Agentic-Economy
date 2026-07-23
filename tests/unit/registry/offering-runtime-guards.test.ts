@@ -4,9 +4,28 @@ import type { RuntimeDocument, RuntimeReader } from '../../../convex/source_stat
 import {
   decodeStoredBusinessSupplyProjection,
   publicBusinessCatalogApiV2DtoSchema,
+  publicBusinessCatalogApiV2PageSchema,
 } from '@/modules/registry/public'
 
 describe('Offering registry runtime guards', () => {
+  it('preserves bounded opaque platform cursors longer than human-text identifiers', () => {
+    const cursor = `opaque:${'x'.repeat(512)}`
+    const page = publicBusinessCatalogApiV2PageSchema.parse({
+      kind: 'ok',
+      schemaVersion: 'public-business-catalog-api:v2',
+      items: [],
+      pagination: {
+        cursor,
+        nextCursor: cursor,
+        limit: 10,
+        total: 0,
+        hasMore: true,
+      },
+    })
+
+    expect(page.pagination).toMatchObject({ cursor, nextCursor: cursor })
+  })
+
   it('adapts a published legacy/compare profile with zero services to v2', () => {
     const business = { _id: 'business:1', slug: 'profile-only', name: 'Profile Only', sourceHash: 'hash:b', updatedAt: 1, trustTier: 'claimed' }
     const dto = catalogForBusinessFromLookup({

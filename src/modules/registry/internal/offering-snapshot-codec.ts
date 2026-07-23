@@ -154,14 +154,20 @@ export const publicBusinessCatalogApiV2DtoSchema = z.strictObject({
   }),
 })
 
+// Convex pagination cursors are opaque platform values rather than business
+// identifiers. Keep them bounded at the public boundary, but do not apply the
+// much smaller human-text limit: production search cursors routinely exceed
+// 200 characters.
+export const opaquePaginationCursorSchema = z.string().min(1).max(8_192)
+
 export const publicBusinessCatalogApiV2PageSchema = z.strictObject({
   kind: z.literal('ok'),
   schemaVersion: z.literal('public-business-catalog-api:v2'),
   query: z.string().max(200).optional(),
   items: z.array(publicBusinessCatalogApiV2DtoSchema).max(50),
   pagination: z.strictObject({
-    cursor: z.string().max(200).optional(),
-    nextCursor: z.string().max(200).optional(),
+    cursor: opaquePaginationCursorSchema.optional(),
+    nextCursor: opaquePaginationCursorSchema.optional(),
     limit: z.number().int().min(1).max(50),
     total: z.number().int().nonnegative(),
     hasMore: z.boolean(),
