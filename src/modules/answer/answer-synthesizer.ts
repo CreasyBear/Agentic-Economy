@@ -195,6 +195,7 @@ export type ColdStartDecisionSafeContinuation =
   | Readonly<{
       kind: 'browse_registered_supply'
       label: 'Browse registered supply'
+      query: string
     }>
   | Readonly<{
       kind: 'relax_named_preference'
@@ -287,8 +288,21 @@ export function projectColdStartDecisionSupport(
           constraintId: source.relaxableConstraintId,
           label: 'I’m flexible',
         }]
-      : [{ kind: 'browse_registered_supply', label: 'Browse registered supply' }],
+      : [{
+          kind: 'browse_registered_supply',
+          label: 'Browse registered supply',
+          query: coldStartBrowseQuery(source.confirmedChoiceId),
+        }],
   }
+}
+
+function coldStartBrowseQuery(choice: WebsiteFunctionChoice): string {
+  const functionNeed = choice === 'brochure_enquiries'
+    ? 'information and enquiries'
+    : choice === 'transactional'
+      ? 'customers need to buy, book or log in'
+      : 'website function not decided'
+  return `simple website for a small startup in Perth, local or affordable, likely price, ${functionNeed}`
 }
 
 function coldStartOutcomePosture(source: ColdStartDecisionSourceResult): string {

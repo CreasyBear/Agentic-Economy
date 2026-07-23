@@ -49,6 +49,10 @@ test.describe('zero-instruction public decision support', () => {
     await expect(page.getByText(/AE searched \d+ items? of registered supply/)).toBeVisible()
     await expect(page.getByText('Price unavailable', { exact: true })).toBeVisible()
     await expect(page.getByText('Not supplied', { exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Browse registered supply' })).toHaveAttribute(
+      'href',
+      /q=.*information.*enquiries/i,
+    )
     await expect(page.getByText(
       /does not yet have a registered|not enough current comparable information/i,
     )).toBeVisible()

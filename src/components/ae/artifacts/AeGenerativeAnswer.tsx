@@ -886,7 +886,7 @@ function ColdStartDecisionSupportView({
             <Button
               key={continuation.kind}
               label={continuation.label}
-              href={`/registry?q=${encodeURIComponent(support.reflection)}&limit=10`}
+              href={`/registry?q=${encodeURIComponent(continuation.query)}&limit=10`}
               variant="secondary"
             />
           ) : (

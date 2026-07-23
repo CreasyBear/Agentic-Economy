@@ -98,6 +98,7 @@ const ColdStartDecisionSupportSchema: z.ZodType<ColdStartDecisionSupport> = z.di
       z.strictObject({
         kind: z.literal('browse_registered_supply'),
         label: z.literal('Browse registered supply'),
+        query: z.string().trim().min(1).max(200),
       }),
       z.strictObject({
         kind: z.literal('relax_named_preference'),
