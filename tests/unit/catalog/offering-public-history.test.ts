@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
+import { markPublicOfferingRevisionWithdrawn } from '../../../convex/catalogSupplyProjection'
+import type { RuntimeDb } from '../../../convex/source_state'
 import {
   resolveHistoricalPublicOffering,
   type BusinessOfferingRecord,
@@ -143,4 +145,36 @@ describe('historical public Offering resolution', () => {
       query.indexOf("db.query('businessOfferingRevisions')"),
     )
   })
+
+  it.each(['hidden_privacy', 'hidden_safety'] as const)(
+    'keeps %s monotonic across a later ordinary withdrawal',
+    async (safeDisplayDisposition) => {
+      const patches: Array<Record<string, unknown>> = []
+      const row = { _id: 'history:1', safeDisplayDisposition }
+      const query = {
+        eq: () => query,
+        withIndex: (_name: string, select: (builder: typeof query) => typeof query) => select(query),
+        unique: async () => row,
+      }
+      const db = {
+        query: () => query,
+        patch: async (_id: string, value: Record<string, unknown>) => {
+          patches.push(value)
+        },
+      } as unknown as RuntimeDb
+
+      await markPublicOfferingRevisionWithdrawn(db, {
+        businessId,
+        offeringRef,
+        revision: 1,
+        offeringSourceHash: selectedHash,
+        withdrawnAt: 30,
+      })
+
+      expect(patches).toEqual([{
+        withdrawnAt: 30,
+        safeDisplayDisposition,
+      }])
+    },
+  )
 })

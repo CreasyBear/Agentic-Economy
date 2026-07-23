@@ -505,7 +505,9 @@ export const changeBusinessOfferingStatus = mutationGeneric({
               revision: changed.currentRevision,
               offeringSourceHash: stringField(revision, 'sourceHash'),
               withdrawnAt: now,
-              safeDisplayDisposition: args.historicalDisplayDisposition ?? 'retain_safe_history',
+              ...(args.historicalDisplayDisposition === undefined
+                ? {}
+                : { safeDisplayDisposition: args.historicalDisplayDisposition }),
             })
           },
     )

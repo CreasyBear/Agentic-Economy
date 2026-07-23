@@ -133,7 +133,7 @@ export async function markPublicOfferingRevisionWithdrawn(
     revision: number
     offeringSourceHash: string
     withdrawnAt: number
-    safeDisplayDisposition: 'retain_safe_history' | 'hidden_privacy' | 'hidden_safety'
+    safeDisplayDisposition?: 'retain_safe_history' | 'hidden_privacy' | 'hidden_safety'
   }>,
 ): Promise<'recorded' | 'never_public'> {
   const existing = await db.query('offeringPublicRevisionHistory')
@@ -147,9 +147,16 @@ export async function markPublicOfferingRevisionWithdrawn(
     )
     .unique()
   if (existing === null) return 'never_public'
+  const existingDisposition = field(existing, 'safeDisplayDisposition')
+  const safeDisplayDisposition = (
+    existingDisposition === 'hidden_privacy'
+    || existingDisposition === 'hidden_safety'
+  )
+    ? existingDisposition
+    : input.safeDisplayDisposition ?? 'retain_safe_history'
   await db.patch(existing._id, {
     withdrawnAt: input.withdrawnAt,
-    safeDisplayDisposition: input.safeDisplayDisposition,
+    safeDisplayDisposition,
   })
   return 'recorded'
 }

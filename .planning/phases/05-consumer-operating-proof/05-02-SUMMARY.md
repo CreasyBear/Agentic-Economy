@@ -83,12 +83,14 @@ status: complete
 
 - Recorded the accepted `retain-safe-history` policy in ADR-026 and implemented exact publication evidence keyed by business, Offering, revision and source hash.
 - Added a bounded indexed resolver that refuses never-public, mismatched, suppressed, privacy-hidden and safety-hidden selections before returning revision facts.
+- Made privacy and safety withdrawal dispositions monotonic: later ordinary pause, retirement or withdrawal cannot downgrade either hidden state.
 - Added one strict comparison envelope with exactly `professional_service:v1` and `machine_data:v1`; explicit known, unknown, not-supplied and stale facts are validated before participating in the revision hash.
 
 ## Task Commits
 
 1. **Tasks 2–3 RED: historical eligibility and closed profile contracts** — `faaec0f2`
 2. **Tasks 1–3 GREEN: ADR policy, source contracts, persistence and bounded read** — `ec553904`
+3. **Bounded P1 correction: monotonic privacy and safety hiding** — correction commit containing this summary update
 
 ## Files Created/Modified
 
@@ -131,7 +133,15 @@ status: complete
 - **Verification:** Marker scan of the shared checkout returned no inserted plan symbols; all owned work is committed only on the isolated branch.
 - **Committed in:** Not applicable; correction removed unintended writes.
 
-**Total deviations:** 2 auto-fixed blocking/tooling issues. **Impact:** No product scope expansion; source behavior remains the planned catalog-owned transition.
+**3. [Rule 1 - Bug] Preserved privacy and safety hiding across later lifecycle changes**
+- **Found during:** Parent integration audit
+- **Issue:** A later ordinary non-published transition defaulted to `retain_safe_history`, and the persistence helper overwrote an already hidden privacy or safety disposition.
+- **Fix:** Ordinary transitions now omit a disposition override, while the persistence helper treats either existing hidden disposition as monotonic. This plan defines no unhide transition.
+- **Files modified:** `convex/catalog.ts`, `convex/catalogSupplyProjection.ts`, `tests/unit/catalog/offering-public-history.test.ts`
+- **Verification:** Both `hidden_privacy` and `hidden_safety` remain unchanged after a later ordinary withdrawal; focused matrix passes.
+- **Committed in:** Bounded correction commit containing this summary update.
+
+**Total deviations:** 3 auto-fixed blocking/tooling/behavior issues. **Impact:** No product scope expansion; the correction closes a privacy and safety downgrade path inside the planned catalog-owned transition.
 
 ## Issues Encountered
 
@@ -144,7 +154,7 @@ None. Optional absence of a comparison profile is an explicit compatibility stat
 
 ## Verification
 
-- `npm exec -- vitest run tests/unit/catalog/offering-public-history.test.ts tests/unit/schema/convex-schema.test.ts tests/unit/comparison/contract.test.ts tests/unit/comparison/profiles.test.ts tests/unit/catalog/offering-source.test.ts tests/unit/catalog/offering-supply.test.ts` — PASS, 6 files / 31 tests.
+- `npm exec -- vitest run tests/unit/catalog/offering-public-history.test.ts tests/unit/schema/convex-schema.test.ts tests/unit/comparison/contract.test.ts tests/unit/comparison/profiles.test.ts tests/unit/catalog/offering-source.test.ts tests/unit/catalog/offering-supply.test.ts` — PASS, 6 files / 33 tests.
 - `rg -n "historically public|withdrawnAt|safe display|suppression|never-public|never substitutes|privacy|safety" .planning/adr/ADR-026-one-business-supply-graph.md` — PASS.
 - `git diff --check` — PASS.
 - `npm run typecheck` — DIAGNOSTIC, inherited repository failures remain; changed-path filter is empty.
@@ -161,7 +171,7 @@ Parent should audit and integrate the exact candidate revision before 05-03. Reg
 
 - All key created files exist.
 - RED commit `faaec0f2` and GREEN commit `ec553904` exist.
-- Focused plan matrix passes and no changed-path type errors remain.
+- Focused plan matrix, including monotonic privacy/safety regression coverage, passes and no changed-path type errors remain.
 
 ---
 *Phase: 05-consumer-operating-proof*
