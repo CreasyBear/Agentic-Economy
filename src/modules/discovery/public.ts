@@ -16,6 +16,7 @@ import {
   buildRobotsTxt as buildRobotsTxtImpl,
   buildSitemapXml as buildSitemapXmlImpl,
 } from './internal/discovery-files'
+export { buildOfferingLlmsTxt } from './internal/discovery-files'
 import { createFixtureDiscoverySourceState as createDefaultDiscoverySourceStateImpl } from './internal/source-state'
 import { buildCatalogDiscoveryManifest as buildCatalogDiscoveryManifestImpl, safePublicText } from './internal/ucp-manifest'
 export {

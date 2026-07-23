@@ -603,7 +603,7 @@ export const readPublicComparisonOfferingReference = queryGeneric({
 
     const historyQuery = db.query('offeringPublicRevisionHistory')
       .withIndex(
-        'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+        'by_businessId_offeringRef_revision_offeringSourceHash',
         (q) => q
           .eq('businessId', businessId)
           .eq('offeringRef', args.offeringRef)
@@ -747,7 +747,7 @@ export const readHistoricalPublicOfferingRevision = queryGeneric({
 
     const history = await db.query('offeringPublicRevisionHistory')
       .withIndex(
-        'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+        'by_businessId_offeringRef_revision_offeringSourceHash',
         (q) => q
           .eq('businessId', args.businessId)
           .eq('offeringRef', args.offeringRef)

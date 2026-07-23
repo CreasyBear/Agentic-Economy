@@ -12,7 +12,7 @@ import {
   invocationActorValue,
   invocationControlValue,
   invocationFreshnessValue,
-} from '../src/modules/action-invocation/internal/convex-schema'
+} from '../src/modules/action-invocation/public'
 
 const controlRow = v.object({
   invocationRef: v.string(), invocationVersion: v.number(), sourceRef: v.string(),

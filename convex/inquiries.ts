@@ -41,18 +41,14 @@ import {
   requestInquiryExport as requestInquiryExportModule,
   submitInquiry as submitInquiryModule,
   verifyInquiryCustomerAccess,
-} from '../src/modules/inquiries/public'
-import type {
-  InquiryOperatorReconstructionFilter,
-} from '../src/modules/inquiries/public'
-import {
   serializeCustomerRecord,
   serializeInquiryDeliveryReadback,
   serializeInquiryExport,
   serializeInquiryPrivacyTombstone,
   serializeOwnerInbox,
   serializeOwnerInquiryDetail,
-} from '../src/modules/inquiries/internal/projections/serialize'
+  type InquiryOperatorReconstructionFilter,
+} from '../src/modules/inquiries/public'
 import {
   NotificationAttemptStatusValues,
   NotificationProviderFamilyValues,

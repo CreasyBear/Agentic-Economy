@@ -1,10 +1,10 @@
 import type {
+  CapabilityBindingRow,
   CapabilityGraphPorts,
+  CapabilityOfferingRow,
   GraphPublicationRow,
   GraphPublishedBusiness,
-} from '@/modules/capability-supply/internal/graph'
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
+} from '@/modules/capability-supply/public'
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'

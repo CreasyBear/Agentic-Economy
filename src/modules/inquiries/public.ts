@@ -152,6 +152,14 @@ export {
   buildGovernedSendIntent,
   resolveGovernedSendIntegrityKeyring,
 } from './internal/governed-send'
+export {
+  serializeCustomerRecord,
+  serializeInquiryDeliveryReadback,
+  serializeInquiryExport,
+  serializeInquiryPrivacyTombstone,
+  serializeOwnerInbox,
+  serializeOwnerInquiryDetail,
+} from './internal/projections/serialize'
 export type {
   GovernedSendErasureLineageRecord,
   GovernedSendIntegrityCommitmentRecord,

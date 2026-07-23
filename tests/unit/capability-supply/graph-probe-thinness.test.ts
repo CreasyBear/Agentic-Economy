@@ -17,7 +17,8 @@ describe('capability-supply graph/probe thinness', () => {
   })
 
   it('delegates probe/graph via capabilitySupplyGraphPorts while keeping thin wrappers', () => {
-    expect(convexHost).toContain("from '@/modules/capability-supply/internal/graph'")
+    expect(convexHost).toContain("from '@/modules/capability-supply/public'")
+    expect(convexHost).not.toContain("from '@/modules/capability-supply/internal/")
     expect(convexHost).toContain('capabilitySupplyGraphPorts')
     expect(convexHost).toContain('readCapabilityProbeTargetFromModule')
     expect(convexHost).toContain('recordCapabilityProbeResultFromModule')

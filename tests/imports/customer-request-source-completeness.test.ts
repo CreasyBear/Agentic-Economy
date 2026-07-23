@@ -6,7 +6,8 @@ import { CUSTOMER_REQUEST_AGENT_ENTRYPOINT } from '@/modules/customer-request/ag
 
 const productionAuthority = {
   publicContract: 'src/modules/customer-request/agent-contract.ts',
-  hostedJourney: 'src/modules/customer-request/hosted-agent-journey.ts',
+  hostedJourney: 'src/modules/customer-request/hosted-agent-journey/run.ts',
+  hostedJourneyRuntime: 'src/modules/customer-request/hosted-agent-journey/runtime.ts',
   semantics: 'src/modules/customer-request/evaluation.ts',
   compilation: 'src/modules/customer-request/compiler.ts',
   preparation: 'src/modules/customer-request/action-preparation.ts',
@@ -16,10 +17,16 @@ const productionAuthority = {
   routing: 'src/modules/customer-request/kernel-router.ts',
   projection: 'src/modules/customer-request/customer-projection.ts',
   application: 'convex/customerRequestApplication.ts',
+  applicationCore: 'src/modules/customer-request/application/interpret-compile/interpret.ts',
+  applicationGraph: 'src/modules/customer-request/application/interpret-compile/graph.ts',
+  preparationPorts: 'convex/customerRequestAuthorizePreparationPorts.ts',
+  comparisonPorts: 'convex/customerRequestCompareResumePorts.ts',
   persistence: 'convex/customerRequestV2.ts',
   submitHttp: 'src/lib/server/customer-request-api.ts',
   inspectHttp: 'src/lib/server/customer-request-inspect-api.ts',
   factsHttp: 'src/lib/server/customer-request-facts-api.ts',
+  confirmationHttp: 'src/lib/server/customer-request-confirmation-api.ts',
+  routeActionHttp: 'src/lib/server/customer-request-route-action-api.ts',
   agentAuth: 'src/lib/server/customer-request-agent-auth.ts',
   agentHttp: 'src/lib/server/customer-request-agent-api.ts',
   releaseReadback: 'src/modules/customer-request/release-readback.ts',
@@ -34,13 +41,14 @@ describe('CustomerRequest source completeness', () => {
       expect(readFileSync(file, 'utf8'), `${responsibility} authority missing at ${file}`).not.toHaveLength(0)
     }
     const application = source('application')
-    expect(application).toContain('compileProposal')
+    expect(source('applicationCore')).toContain('compileProposal')
     expect(application).toContain('capabilitySupply.listEligible')
     expect(application).toContain('capabilityContractDocuments.getActiveExactInternal')
     expect(application).toContain('customerRequestV2.commitAggregate')
-    expect(application).toContain('customerRequestV2Preparation.prepare')
-    expect(application).toContain('customerRequestV2PreparationEgress.run')
-    expect(application).toContain('bindCustomerCapabilityDescriptor')
+    expect(source('preparationPorts')).toContain('customerRequestV2Preparation.prepare')
+    expect(source('comparisonPorts')).toContain('customerRequestV2Preparation.prepare')
+    expect(source('comparisonPorts')).toContain('customerRequestV2PreparationEgress.run')
+    expect(source('applicationGraph')).toContain('bindCustomerCapabilityDescriptor')
   })
 
   it('keeps the current Request path exact-V2-only and quarantines V1 authority', () => {
@@ -209,7 +217,8 @@ describe('CustomerRequest source completeness', () => {
     expect(agentHttp).not.toMatch(/authorizePreparation|approvePreparedAction|admitApprovedAction|operation:\s*['"]approve/)
     const ui = source('humanUi')
     expect(ui).toContain("from '@/modules/customer-request/customer-projection'")
-    expect(ui).toContain('fetch(replacing')
+    expect(ui).toContain('const endpoint = replacing')
+    expect(ui).toContain('fetchBrowserRequestWithInterpreterRecovery(endpoint')
     expect(ui).toContain(": '/api/requests'")
     expect(ui).toContain('/messages`')
     expect(ui).toContain("mode: 'replace'")
@@ -286,24 +295,29 @@ describe('CustomerRequest source completeness', () => {
     const endpointDeploy = workflow.indexOf('Deploy the dual-compatible exact clean source revision')
     const convexDeploy = workflow.indexOf('Deploy the exact-revision Convex schema and functions')
     const supplyMigration = workflow.indexOf('Register labelled sandbox acceptance supply')
-    const hostedReadback = workflow.indexOf('Verify authenticated deployment readback')
+    const hostedReadback = workflow.indexOf('Verify exact deployed human and agent Request lifecycle')
     expect(sourceGate).toBeLessThan(endpointDeploy)
     expect(checkoutGuard).toBeLessThan(endpointDeploy)
     expect(endpointDeploy).toBeLessThan(convexDeploy)
     expect(convexDeploy).toBeLessThan(supplyMigration)
     expect(supplyMigration).toBeLessThan(hostedReadback)
-    expect(workflow.indexOf('Verify authenticated deployment readback'))
-      .toBeLessThan(workflow.indexOf('Run cold external-agent Request journey against the exact deployment'))
+    expect(workflow.slice(hostedReadback)).toContain('npm run test:release:hosted')
     expect(workflow.indexOf('Frozen dependency install for independent readback')).toBeLessThan(endpointDeploy)
 
     const packageJson = readFileSync('package.json', 'utf8')
-    expect(packageJson).toContain('"test:release:hosted": "tsx tools/release/verify-customer-request-release-credential.ts"')
+    expect(packageJson).toContain(
+      '"test:release:hosted": "npm run test:release:hosted:readback && npm run smoke:customer-request:production:temporary-key && npm run smoke:customer-request:production:human"',
+    )
+    expect(packageJson).toContain(
+      '"test:release:hosted:readback": "tsx tools/release/verify-customer-request-release-credential.ts"',
+    )
     expect(packageJson).not.toContain('AE_KERNEL_PROOF_MANIFEST_JSON')
   })
 
   it('makes handlers and hosted proof consume one canonical Request wire contract', () => {
     const contract = source('publicContract')
     const journey = source('hostedJourney')
+    const journeyRuntime = source('hostedJourneyRuntime')
     for (const schema of [
       'customerRequestSubmitInputSchema', 'customerRequestMessageInputSchema',
       'customerRequestFactInputSchema', 'customerRequestOptionsInputSchema',
@@ -315,12 +329,15 @@ describe('CustomerRequest source completeness', () => {
       ['submitHttp', 'customerRequestSubmitInputSchema'],
       ['factsHttp', 'customerRequestFactInputSchema'],
       ['optionsHttp', 'customerRequestOptionsInputSchema'],
+      ['confirmationHttp', 'customerRequestRouteConfirmationInputSchema'],
+      ['routeActionHttp', 'customerRequestRouteActionInputSchema'],
     ] as const
     for (const [handler, schema] of handlerContracts) expect(source(handler)).toContain(schema)
-    expect(journey).toMatch(/customerRequestFactInputSchema\.parse/)
-    expect(journey).toMatch(/customerRequestAgentResultSchema\.parse/)
-    expect(journey).toMatch(/customerRequestRouteConfirmationInputSchema\.parse/)
-    expect(journey).toMatch(/customerRequestRouteActionInputSchema\.parse/)
+    expect(journey).toMatch(/customerRequestSubmitInputSchema\.parse/)
+    expect(journeyRuntime).toMatch(/customerRequestAgentResultSchema\.parse/)
+    expect(journeyRuntime).toMatch(/customerRequestJsonValueSchema\.parse/)
+    expect(journeyRuntime).toContain('observedNavigationAction')
+    expect(journeyRuntime).toContain('materializeObservedInput')
     expect(journey).toContain("'route_confirmation'")
     expect(journey).not.toMatch(/prepared_action_approval|\/approval/)
     expect(journey).not.toMatch(/providerId|bindingId|offeringId|Convex|customerRequestApplication:/)

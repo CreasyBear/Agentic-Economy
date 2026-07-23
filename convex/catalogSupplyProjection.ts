@@ -6,11 +6,11 @@ import {
   type OfferingAccessPathRecord,
   type OfferingSupportProjection,
   validateOfferingComparisonEnvelope,
-} from '../src/modules/catalog/internal/offering-supply'
+} from '../src/modules/catalog/public'
 import type { AccessPathRef, BusinessId, OfferingRef } from '../src/modules/common/ids'
 import {
   buildOfferingV2RegistrySearchDocument,
-} from '../src/modules/registry/internal/search-documents'
+} from '../src/modules/registry/public'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 
 export async function rebuildBusinessSupplyProjectionSnapshotCommand(db: RuntimeDb, businessId: string, supportByOfferingRef: Readonly<Record<string, OfferingSupportProjection>>, now: number): Promise<{ kind: 'ok'; sourceDigest: string } | { kind: 'error'; code: string }> {
@@ -151,7 +151,7 @@ async function recordPublicOfferingRevisionHistory(
 ) {
   const existing = await db.query('offeringPublicRevisionHistory')
     .withIndex(
-      'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+      'by_businessId_offeringRef_revision_offeringSourceHash',
       (q) => q
         .eq('businessId', revision.businessId)
         .eq('offeringRef', revision.offeringRef)
@@ -186,7 +186,7 @@ export async function markPublicOfferingRevisionWithdrawn(
 ): Promise<'recorded' | 'never_public'> {
   const existing = await db.query('offeringPublicRevisionHistory')
     .withIndex(
-      'by_businessId_and_offeringRef_and_revision_and_offeringSourceHash',
+      'by_businessId_offeringRef_revision_offeringSourceHash',
       (q) => q
         .eq('businessId', input.businessId)
         .eq('offeringRef', input.offeringRef)
