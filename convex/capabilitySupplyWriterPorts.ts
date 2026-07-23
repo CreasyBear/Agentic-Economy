@@ -67,6 +67,22 @@ export function capabilitySupplyWriterPorts(
         capabilityId: row.capabilityId,
         version: row.version,
         contractDigest: row.contractDigest,
+        ...(row.origin === undefined ? {} : {
+          origin: row.origin.kind === 'standalone'
+            ? { kind: 'standalone' as const }
+            : {
+                kind: 'catalog_offering' as const,
+                offeringRef: row.origin.offeringRef,
+                offeringRevision: row.origin.offeringRevision,
+                offeringSourceHash: row.origin.offeringSourceHash,
+                ...(row.origin.declaredAccessPathRef === undefined
+                  ? {}
+                  : { declaredAccessPathRef: row.origin.declaredAccessPathRef }),
+                ...(row.origin.accessPathSourceHash === undefined
+                  ? {}
+                  : { accessPathSourceHash: row.origin.accessPathSourceHash }),
+              },
+        }),
         presentation: row.presentation,
         searchTerms: [...row.searchTerms],
         registrationEvidenceRefs: [...row.registrationEvidenceRefs],
@@ -145,6 +161,7 @@ function toOfferingRow(doc: Doc<'capabilityOfferings'>): CapabilityOfferingRow {
     capabilityId: doc.capabilityId,
     version: doc.version,
     contractDigest: doc.contractDigest,
+    ...(doc.origin === undefined ? {} : { origin: doc.origin }),
     presentation: doc.presentation,
     searchTerms: doc.searchTerms,
     registrationEvidenceRefs: doc.registrationEvidenceRefs,

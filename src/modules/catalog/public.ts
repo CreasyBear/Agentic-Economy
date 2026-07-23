@@ -37,6 +37,72 @@ import type { R1TargetAdmission } from '@/modules/inquiries/public'
 export type { PublicBusinessPhoto } from '@/modules/business/public'
 
 export {
+  BusinessOfferingStatusValues,
+  ExternalOperationProvenanceValues,
+  HumanRequestChannelValues,
+  OfferingAccessPathStatusValues,
+  PublicSupportReasonValues,
+  buildBusinessSupplyProjection,
+  buildPublicOfferingSupplyProjection,
+  validateOfferingAccessPath,
+} from './internal/offering-supply'
+
+export type {
+  BuildPublicOfferingSupplyProjectionResult,
+  BuildBusinessSupplyProjectionResult,
+  BusinessSupplyProjection,
+  BusinessOfferingProjection,
+  BusinessOfferingRecord,
+  BusinessOfferingRevisionRecord,
+  BusinessOfferingStatus,
+  ExternalOperationAccessPathDescriptor,
+  ExternalOperationProvenance,
+  HumanRequestAccessPathDescriptor,
+  HumanRequestChannel,
+  OfferingAccessPathDescriptor,
+  OfferingAccessPathRecord,
+  OfferingAccessPathStatus,
+  OfferingSupportProjection,
+  PublicAccessPath,
+  PublicBusinessProfile,
+  PublicOfferingSupplyProjection,
+  PublicSupportReason,
+} from './internal/offering-supply'
+
+export {
+  MAX_LEGACY_MIGRATION_BATCH,
+  decideCatalogSupplyCutover,
+  legacyOfferingParityMatches,
+  migrateLegacyServiceToOffering,
+  planLegacyOfferingMigrationBatch,
+} from './internal/offering-migration'
+
+export {
+  MAX_ACCESS_PATHS_PER_OFFERING,
+  MAX_OFFERINGS_PER_BUSINESS,
+  changeOfferingStatusInState,
+  createOfferingInState,
+  reviseOfferingInState,
+  upsertAccessPathInState,
+  withdrawAccessPathInState,
+} from './internal/offering-source'
+
+export type {
+  OfferingFactsInput,
+  OfferingSourceErrorCode,
+  OfferingSourceOperation,
+  OfferingSourceResult,
+  OfferingSourceState,
+} from './internal/offering-source'
+
+export type {
+  CatalogSupplyCutoverDecision,
+  CatalogSupplyCutoverMode,
+  LegacyOfferingCrosswalk,
+  LegacyOfferingMigration,
+} from './internal/offering-migration'
+
+export {
   BusinessServiceStatusValues,
   CapabilityKindValues,
   FirstRequestModeValues,

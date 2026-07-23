@@ -5,6 +5,7 @@ import type { ActionTimingSink } from '@/modules/common/action'
 import {
   createDefaultRegistrySourceState,
   createLocalE2eRegistrySourceState,
+  adaptLegacyCatalogToOfferingApi,
   getPublicBusinessCatalogBySlug,
   listPublicBusinessCatalog,
   resolvePublishedInquiryTarget,
@@ -16,6 +17,8 @@ import type {
   PublicBusinessCatalogDetailResult,
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
+  PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogV2DetailResult,
   PublishedInquiryTargetResolution,
 } from '@/modules/registry/public'
 import {
@@ -49,6 +52,15 @@ const searchPublicBusinessCatalogQuery = sourceQuery<PublicBusinessCatalogSearch
 )
 const getPublicBusinessCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicBusinessCatalogDetailResult>(
   'registry:getPublicBusinessCatalogBySlug'
+)
+const listPublicBusinessOfferingSupplyQuery = sourceQuery<PublicBusinessCatalogQueryInput, PublicBusinessCatalogApiV2Page>(
+  'registry:listPublicBusinessOfferingSupply'
+)
+const searchPublicBusinessOfferingSupplyQuery = sourceQuery<PublicBusinessCatalogSearchInput, PublicBusinessCatalogApiV2Page>(
+  'registry:searchPublicBusinessOfferingSupply'
+)
+const getPublicBusinessOfferingSupplyBySlugQuery = sourceQuery<{ slug: string }, PublicBusinessCatalogV2DetailResult>(
+  'registry:getPublicBusinessOfferingSupplyBySlug'
 )
 const resolvePublishedInquiryTargetQuery = sourceQuery<
   { businessSlug: string; serviceSlug: string },
@@ -136,6 +148,58 @@ export async function readPublicRegistryBusinessDetail(input: {
   slug: string
 }): Promise<PublicBusinessCatalogDetailResult> {
   return filterPublicRegistryDetail(getPublicRegistrySourcePort().detail(input))
+}
+
+export async function readPublicOfferingRegistryPage(
+  input: PublicBusinessCatalogQueryInput,
+): Promise<PublicBusinessCatalogApiV2Page> {
+  if (isLocalE2EAuthBypassEnabled()) {
+    return adaptLegacyPage(await createLegacyRegistrySourcePort().list(input))
+  }
+  return queryRegistryWithLegacyFallback(
+    () => callPublicSourceQuery(listPublicBusinessOfferingSupplyQuery, input),
+    () => adaptLegacyPage(legacyPublicRegistryList(input)),
+  )
+}
+
+export async function readPublicOfferingRegistrySearchPage(
+  input: PublicBusinessCatalogSearchInput,
+): Promise<PublicBusinessCatalogApiV2Page> {
+  if (isLocalE2EAuthBypassEnabled()) {
+    return adaptLegacyPage(await createLegacyRegistrySourcePort().search(input))
+  }
+  return queryRegistryWithLegacyFallback(
+    () => callPublicSourceQuery(searchPublicBusinessOfferingSupplyQuery, input),
+    () => adaptLegacyPage(legacyPublicRegistrySearch(input)),
+  )
+}
+
+export async function readPublicOfferingRegistryBusinessDetail(
+  input: { slug: string },
+): Promise<PublicBusinessCatalogV2DetailResult> {
+  if (isLocalE2EAuthBypassEnabled()) {
+    const legacy = await createLegacyRegistrySourcePort().detail(input)
+    return legacy.kind === 'not_found'
+      ? legacy
+      : {
+          kind: 'found',
+          schemaVersion: 'public-business-catalog-api:v2',
+          business: adaptLegacyCatalogToOfferingApi(legacy.business),
+        }
+  }
+  return queryRegistryWithLegacyFallback(
+    () => callPublicSourceQuery(getPublicBusinessOfferingSupplyBySlugQuery, input),
+    () => {
+      const legacy = legacyPublicRegistryDetail(input)
+      return legacy.kind === 'not_found'
+        ? legacy
+        : {
+            kind: 'found' as const,
+            schemaVersion: 'public-business-catalog-api:v2' as const,
+            business: adaptLegacyCatalogToOfferingApi(legacy.business),
+          }
+    },
+  )
 }
 
 export async function resolvePublicRegistryInquiryTarget(input: {
@@ -270,6 +334,14 @@ function normalizePublicLimit(limit: number | undefined): number {
   }
 
   return Math.min(Math.max(Math.trunc(limit), 1), 50)
+}
+
+function adaptLegacyPage(page: PublicBusinessCatalogApiPage): PublicBusinessCatalogApiV2Page {
+  return {
+    ...page,
+    schemaVersion: 'public-business-catalog-api:v2',
+    items: page.items.map(adaptLegacyCatalogToOfferingApi),
+  }
 }
 
 export async function filterPublicRegistryPage(

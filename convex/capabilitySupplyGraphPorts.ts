@@ -107,6 +107,7 @@ function toOfferingRow(doc: Doc<'capabilityOfferings'>): CapabilityOfferingRow {
     capabilityId: doc.capabilityId,
     version: doc.version,
     contractDigest: doc.contractDigest,
+    ...(doc.origin === undefined ? {} : { origin: doc.origin }),
     presentation: doc.presentation,
     searchTerms: doc.searchTerms,
     registrationEvidenceRefs: doc.registrationEvidenceRefs,

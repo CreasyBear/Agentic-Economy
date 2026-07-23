@@ -33,6 +33,7 @@ import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
 import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
 import { handleDeveloperDiscoveryFixturesRequest } from '@/routes/api.discovery.fixtures'
+import { handleCustomerRequestContractSchemaGet } from '@/routes/api.v1.requests.schema'
 import { handleAgentCustomerRequestPost } from '@/lib/server/customer-request-agent-api'
 
 
@@ -237,7 +238,7 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
     return true
   }
 
-  if (path === '/claim' || path === '/registry' || path === '/privacy/remove-business') {
+  if (path === '/claim' || path === '/registry' || path === '/for-agents' || path === '/privacy/remove-business') {
     return true
   }
 
@@ -266,6 +267,10 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
       authenticate: async () => ({ isAuthenticated: false, tokenType: null, id: null, subject: null, scopes: null }),
     })
     return response.status === 401
+  }
+
+  if (path === '/api/v1/requests/schema') {
+    return handleCustomerRequestContractSchemaGet().status === 200
   }
 
   const detailMatch = /^\/api\/businesses\/([^/]+)$/u.exec(path)
@@ -361,7 +366,7 @@ function createDurablePublishedDiscoveryState(input: {
         firstRequest: {
           mode: 'not_available_yet',
           publicChannel: 'not_available',
-          publicDisclosure: 'First request is not available yet.',
+          publicDisclosure: 'This business has not published a request path.',
           noContactReason: 'Owner has not supplied public contact instructions.',
         },
       },

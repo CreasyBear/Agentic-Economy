@@ -18,6 +18,14 @@ import {
 } from './internal/discovery-files'
 import { createFixtureDiscoverySourceState as createDefaultDiscoverySourceStateImpl } from './internal/source-state'
 import { buildCatalogDiscoveryManifest as buildCatalogDiscoveryManifestImpl, safePublicText } from './internal/ucp-manifest'
+export {
+  OfferingDiscoveryManifestSchemaVersion,
+  buildOfferingDiscoveryManifest,
+} from './internal/offering-manifest'
+export type {
+  BuildOfferingDiscoveryManifestResult,
+  OfferingDiscoveryManifestContract,
+} from './internal/offering-manifest'
 
 export const DiscoveryStatusValues = ['unavailable', 'degraded', 'available', 'stale'] as const
 export type DiscoveryStatus = (typeof DiscoveryStatusValues)[number]

@@ -39,6 +39,25 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
         ? toPublishedBusiness(business)
         : null
     },
+    catalogOriginIsCurrent: async (origin, businessId) => {
+      const offering = await db.query('businessOfferings')
+        .withIndex('by_offeringRef', (query) => query.eq('offeringRef', origin.offeringRef)).unique()
+      if (offering === null || String(offering.businessId) !== String(businessId)
+        || offering.status !== 'published' || offering.currentRevision !== origin.offeringRevision) return false
+      const revision = await db.query('businessOfferingRevisions')
+        .withIndex('by_offeringRef_and_revision', (query) => (
+          query.eq('offeringRef', origin.offeringRef).eq('revision', origin.offeringRevision)
+        )).unique()
+      if (revision === null || revision.sourceHash !== origin.offeringSourceHash) return false
+      if (origin.declaredAccessPathRef === undefined) return true
+      const path = await db.query('offeringAccessPaths')
+        .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', origin.declaredAccessPathRef!)).unique()
+      return path !== null && path.status === 'published'
+        && path.offeringRef === origin.offeringRef
+        && path.offeringRevision === origin.offeringRevision
+        && path.offeringSourceHash === origin.offeringSourceHash
+        && path.sourceHash === origin.accessPathSourceHash
+    },
     getActiveExactCapabilityContract: (ref) => getActiveExactCapabilityContract(db, ref),
     loadCurrentPublicationByBindingId: async (bindingId) => {
       const publication = await db.query('capabilityPublications')
@@ -74,6 +93,7 @@ function toOfferingRow(doc: Doc<'capabilityOfferings'>): CapabilityOfferingRow {
     capabilityId: doc.capabilityId,
     version: doc.version,
     contractDigest: doc.contractDigest,
+    ...(doc.origin === undefined ? {} : { origin: doc.origin }),
     presentation: doc.presentation,
     searchTerms: doc.searchTerms,
     registrationEvidenceRefs: doc.registrationEvidenceRefs,

@@ -5,6 +5,11 @@ import {
   catalogFromRows,
   projectRegistryCatalogApiItem,
 } from '../src/modules/catalog/public'
+import type { BusinessSupplyProjection } from '../src/modules/catalog/public'
+import {
+  adaptLegacyCatalogToOfferingApi,
+  projectBusinessSupplyToPublicApi,
+} from '../src/modules/registry/public'
 
 import { runtimeReader } from './source_state'
 import type {
@@ -280,6 +285,71 @@ export const getPublicBusinessCatalogBySlug = queryGeneric({
       schemaVersion: 'public-business-catalog-api:v1' as const,
       business: catalog,
     }
+  },
+})
+
+/** Canonical v2 read. Legacy v1 queries remain only for explicit cutover fallback. */
+export const listPublicBusinessOfferingSupply = queryGeneric({
+  args: {
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const db = runtimeReader(ctx.db)
+    const input = queryInput(args)
+    const rows = await readPublishedBusinessRows(db, input.cursor, normalizeLimit(input.limit) + 1)
+    const items = (await Promise.all(rows.map((business) => readOfferingSupplyForBusiness(db, business))))
+      .filter((item): item is NonNullable<typeof item> => item !== undefined)
+    return paginateOfferingSupply(items, input)
+  },
+})
+
+export const searchPublicBusinessOfferingSupply = queryGeneric({
+  args: {
+    query: v.string(),
+    mode: v.optional(v.union(v.literal('near_me'), v.literal('whole_catalogue'))),
+    location: v.optional(v.string()),
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const db = runtimeReader(ctx.db)
+    const input = queryInput(args)
+    const needle = normalizeSearchText(args.query)
+    if (needle.length === 0) return paginateOfferingSupply([], input, '')
+    const tokens = needle.split(' ').filter((token) => !SEARCH_STOP_WORDS.has(token)).map(normalizeSearchToken)
+    const locationKey = resolveSearchLocationKey(args)
+    const rows = await readPublishedBusinessRows(db, undefined, CATALOG_TOTAL_COUNT_LIMIT + 1)
+    const items = (await Promise.all(rows.map((business) => readOfferingSupplyForBusiness(db, business))))
+      .filter((item): item is NonNullable<typeof item> => item !== undefined)
+      .filter((item) => {
+        const places = [item.suburb, `${item.suburb} ${item.stateTerritory}`, item.stateTerritory, item.postcode]
+          .filter((value): value is string => typeof value === 'string').map(normalizeSearchText)
+        if (locationKey !== undefined && !places.includes(locationKey)) return false
+        const haystack = normalizeSearchText([item.name, item.category, item.suburb, item.stateTerritory, ...item.offerings.flatMap((offering) => [offering.name, offering.category, offering.summary])].join(' '))
+        return (tokens.length === 0 ? [needle] : tokens).every((token) => haystack.includes(token))
+      })
+    return paginateOfferingSupply(items, input, needle)
+  },
+})
+
+export const getPublicBusinessOfferingSupplyBySlug = queryGeneric({
+  args: { slug: v.string() },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const db = runtimeReader(ctx.db)
+    const business = await db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', normalizeSlug(args.slug)))
+      .unique()
+    if (business === null || stringField(business, 'publicStatus') !== 'published') {
+      return { kind: 'not_found', code: 'business_not_found', reason: 'No public business catalog exists for this slug.' }
+    }
+    const item = await readOfferingSupplyForBusiness(db, business)
+    return item === undefined
+      ? { kind: 'not_found', code: 'business_not_found', reason: 'No current public Offering projection exists for this business.' }
+      : { kind: 'found', schemaVersion: 'public-business-catalog-api:v2', business: item }
   },
 })
 
@@ -559,6 +629,79 @@ async function readPublicCatalogBySlug(
 
   const lookup = await readPublicCatalogLookup(db, [business._id])
   return catalogForBusinessFromLookup(lookup, business)
+}
+
+type OfferingSupplyDto = ReturnType<typeof projectBusinessSupplyToPublicApi>
+
+export async function readOfferingSupplyForBusiness(
+  db: RuntimeReader,
+  business: RuntimeDocument,
+): Promise<OfferingSupplyDto | undefined> {
+  const suppression = await db.query('suppressionRules')
+    .withIndex('by_target_status', (query) => query.eq('targetType', 'business').eq('targetRef', business._id).eq('status', 'active'))
+    .unique()
+  if (suppression !== null) return undefined
+
+  const cutover = await db.query('catalogSupplyCutovers')
+    .withIndex('by_businessId', (query) => query.eq('businessId', business._id))
+    .unique()
+  const mode = cutover === null ? 'legacy' : stringField(cutover, 'mode')
+  if (mode === 'legacy' || mode === 'compare') {
+    const lookup = await readPublicCatalogLookup(db, [business._id])
+    const legacy = catalogForBusinessFromLookup(lookup, business)
+    return legacy === undefined ? undefined : adaptLegacyCatalogToOfferingApi(legacy)
+  }
+  if (mode !== 'offering') return undefined
+
+  const snapshot = await db.query('businessSupplyProjectionSnapshots')
+    .withIndex('by_businessId', (query) => query.eq('businessId', business._id))
+    .unique()
+  if (snapshot === null) return undefined
+  const json = stringField(snapshot, 'projectionJson')
+  if (json === undefined) return undefined
+  try {
+    const projection = JSON.parse(json) as BusinessSupplyProjection
+    if (
+      projection === null
+      || typeof projection !== 'object'
+      || !Array.isArray(projection.offerings)
+      || projection.business?.businessId !== business._id
+      || projection.business?.slug !== stringField(business, 'slug')
+    ) return undefined
+    // Mask expired readiness at read time so public support cannot outlive its evidence.
+    const projected = projectBusinessSupplyToPublicApi(projection, Date.now())
+    return stringField(snapshot, 'status') === 'projection_pending'
+      ? { ...projected, disposition: 'stale' }
+      : projected
+  } catch {
+    return undefined
+  }
+}
+
+function paginateOfferingSupply(
+  items: readonly OfferingSupplyDto[],
+  input: QueryInput,
+  query?: string,
+) {
+  const limit = normalizeLimit(input.limit)
+  const startIndex = input.cursor === undefined
+    ? 0
+    : Math.max(items.findIndex((item) => item.slug === input.cursor), 0)
+  const pageItems = items.slice(startIndex, startIndex + limit)
+  const next = items.at(startIndex + limit)
+  return {
+    kind: 'ok' as const,
+    schemaVersion: 'public-business-catalog-api:v2' as const,
+    ...(query === undefined ? {} : { query }),
+    items: pageItems,
+    pagination: {
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      ...(next === undefined ? {} : { nextCursor: next.slug }),
+      limit,
+      total: items.length,
+      hasMore: next !== undefined,
+    },
+  }
 }
 
 async function resolvePublishedInquiryTargetFromDb(
@@ -848,7 +991,7 @@ async function readPublicCatalogLookup(
   }
 }
 
-function catalogForBusinessFromLookup(
+export function catalogForBusinessFromLookup(
   lookup: PublicCatalogLookup,
   business: RuntimeDocument,
 ): CatalogDto | undefined {
@@ -858,9 +1001,6 @@ function catalogForBusinessFromLookup(
   }
 
   const services = lookup.servicesByBusinessId.get(business._id) ?? []
-  if (services.length === 0) {
-    return undefined
-  }
 
   const capabilities = lookup.capabilitiesByBusinessId.get(business._id) ?? []
   const catalog = catalogFromRows({
@@ -916,7 +1056,9 @@ function catalogForBusinessFromLookup(
       sourceHash: stringField(capability, 'sourceHash'),
     })),
   })
-  return catalog === undefined ? undefined : projectRegistryCatalogApiItem(catalog)
+  return catalog === undefined
+    ? undefined
+    : projectRegistryCatalogApiItem(catalog) as CatalogDto
 }
 
 function firstByStringField(

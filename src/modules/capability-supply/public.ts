@@ -86,11 +86,27 @@ const priceSchema = z.discriminatedUnion('kind', [
   }).refine((value) => value.minimumAmountMinor <= value.maximumAmountMinor),
   z.strictObject({ kind: z.literal('on_request') }),
 ])
+const offeringOriginSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('catalog_offering'),
+    offeringRef: identifier,
+    offeringRevision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    offeringSourceHash: identifier,
+    declaredAccessPathRef: identifier.optional(),
+    accessPathSourceHash: identifier.optional(),
+  }).superRefine((origin, context) => {
+    if ((origin.declaredAccessPathRef === undefined) !== (origin.accessPathSourceHash === undefined)) {
+      context.addIssue({ code: 'custom', message: 'capability_offering_origin_access_path_incomplete' })
+    }
+  }),
+  z.strictObject({ kind: z.literal('standalone') }),
+])
 const offeringSchema = z.strictObject({
   offeringId: identifier,
   businessId: identifier,
   networkId: identifier,
   contractRef: contractRefSchema,
+  origin: offeringOriginSchema.optional(),
   presentation: z.strictObject({
     label: z.string().trim().min(1).max(160),
     summary: z.string().trim().min(1).max(2_000),
@@ -127,6 +143,7 @@ const bindingSchema = z.strictObject({
 })
 
 export type CapabilityOfferingRegistration = Readonly<z.infer<typeof offeringSchema>>
+export type CapabilityOfferingOrigin = Readonly<z.infer<typeof offeringOriginSchema>>
 export type CapabilityTransportBindingRegistration = Readonly<z.infer<typeof bindingSchema>>
 export type CapabilityContinuation = Readonly<z.infer<typeof continuationSchema>>
 export type CapabilityCancellation = Readonly<z.infer<typeof cancellationSchema>>

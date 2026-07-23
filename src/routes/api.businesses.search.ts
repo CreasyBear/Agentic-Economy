@@ -2,6 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { registrySearchAction } from '@/modules/registry/registry.actions'
 import { legacyPublicRegistrySearch } from '@/modules/registry/registry.functions'
+import { readPublicOfferingRegistrySearchPage } from '@/modules/registry/registry.functions'
+import type { PublicBusinessCatalogSearchInput } from '@/modules/registry/public'
 import {
   jsonResponse,
   optionalCursor,
@@ -25,7 +27,7 @@ export async function handleDurableSearchBusinessesRequest(request: Request): Pr
     ...optionalCursor(url.searchParams.get('cursor')),
     ...optionalLimit(url.searchParams.get('limit')),
   })
-  const result = await registrySearchAction.run({ data, context: { request } })
+  const result = await readPublicOfferingRegistrySearchPage(data as PublicBusinessCatalogSearchInput)
 
   return jsonResponse(result)
 }

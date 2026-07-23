@@ -58,6 +58,7 @@ import { Route as ApiAnswerFollowUpChipsRouteImport } from './routes/api.answer.
 import { Route as ApiAnswerEvalStatusRouteImport } from './routes/api.answer.eval-status'
 import { Route as OperatorOwnerStatusRouteImport } from './routes/_operator/owner.status'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
+import { Route as OperatorOwnerOfferingsRouteImport } from './routes/_operator/owner.offerings'
 import { Route as OperatorOwnerInquiriesRouteImport } from './routes/_operator/owner.inquiries'
 import { Route as OperatorDevelopersDiscoveryRouteImport } from './routes/_operator/developers.discovery'
 import { Route as OperatorAdminRunsRouteImport } from './routes/_operator/admin.runs'
@@ -83,6 +84,8 @@ import { Route as ApiRequestsRequestRefCancellationRouteImport } from './routes/
 import { Route as ApiRequestsRequestRefAuthorizationRouteImport } from './routes/api.requests.$requestRef.authorization'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
 import { Route as OperatorOwnerRequestProblemsReportRefRouteImport } from './routes/_operator/owner.request-problems.$reportRef'
+import { Route as OperatorOwnerOfferingsNewRouteImport } from './routes/_operator/owner.offerings.new'
+import { Route as OperatorOwnerOfferingsOfferingRefRouteImport } from './routes/_operator/owner.offerings.$offeringRef'
 import { Route as OperatorOwnerInquiriesThreadIdRouteImport } from './routes/_operator/owner.inquiries.$threadId'
 import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/admin.runs.$turnId'
 import { Route as ApiV1RequestsRequestRefRunRouteImport } from './routes/api.v1.requests.$requestRef.run'
@@ -352,6 +355,11 @@ const OperatorOwnerSettingsRoute = OperatorOwnerSettingsRouteImport.update({
   path: '/owner/settings',
   getParentRoute: () => OperatorRoute,
 } as any)
+const OperatorOwnerOfferingsRoute = OperatorOwnerOfferingsRouteImport.update({
+  id: '/owner/offerings',
+  path: '/owner/offerings',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorOwnerInquiriesRoute = OperatorOwnerInquiriesRouteImport.update({
   id: '/owner/inquiries',
   path: '/owner/inquiries',
@@ -495,6 +503,18 @@ const OperatorOwnerRequestProblemsReportRefRoute =
     id: '/owner/request-problems/$reportRef',
     path: '/owner/request-problems/$reportRef',
     getParentRoute: () => OperatorRoute,
+  } as any)
+const OperatorOwnerOfferingsNewRoute =
+  OperatorOwnerOfferingsNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => OperatorOwnerOfferingsRoute,
+  } as any)
+const OperatorOwnerOfferingsOfferingRefRoute =
+  OperatorOwnerOfferingsOfferingRefRouteImport.update({
+    id: '/$offeringRef',
+    path: '/$offeringRef',
+    getParentRoute: () => OperatorOwnerOfferingsRoute,
   } as any)
 const OperatorOwnerInquiriesThreadIdRoute =
   OperatorOwnerInquiriesThreadIdRouteImport.update({
@@ -655,6 +675,7 @@ export interface FileRoutesByFullPath {
   '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
+  '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
@@ -677,6 +698,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
+  '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
+  '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
@@ -749,6 +772,7 @@ export interface FileRoutesByTo {
   '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
+  '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
@@ -771,6 +795,8 @@ export interface FileRoutesByTo {
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
+  '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
+  '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
@@ -845,6 +871,7 @@ export interface FileRoutesById {
   '/_operator/admin/runs': typeof OperatorAdminRunsRouteWithChildren
   '/_operator/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/_operator/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
+  '/_operator/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
   '/_operator/owner/status': typeof OperatorOwnerStatusRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
@@ -867,6 +894,8 @@ export interface FileRoutesById {
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
+  '/_operator/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
+  '/_operator/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/_operator/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
@@ -941,6 +970,7 @@ export interface FileRouteTypes {
     | '/admin/runs'
     | '/developers/discovery'
     | '/owner/inquiries'
+    | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
     | '/api/answer/eval-status'
@@ -963,6 +993,8 @@ export interface FileRouteTypes {
     | '/api/v1/requests'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
+    | '/owner/offerings/$offeringRef'
+    | '/owner/offerings/new'
     | '/owner/request-problems/$reportRef'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
@@ -1035,6 +1067,7 @@ export interface FileRouteTypes {
     | '/admin/runs'
     | '/developers/discovery'
     | '/owner/inquiries'
+    | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
     | '/api/answer/eval-status'
@@ -1057,6 +1090,8 @@ export interface FileRouteTypes {
     | '/api/v1/requests'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
+    | '/owner/offerings/$offeringRef'
+    | '/owner/offerings/new'
     | '/owner/request-problems/$reportRef'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
@@ -1130,6 +1165,7 @@ export interface FileRouteTypes {
     | '/_operator/admin/runs'
     | '/_operator/developers/discovery'
     | '/_operator/owner/inquiries'
+    | '/_operator/owner/offerings'
     | '/_operator/owner/settings'
     | '/_operator/owner/status'
     | '/api/answer/eval-status'
@@ -1152,6 +1188,8 @@ export interface FileRouteTypes {
     | '/api/v1/requests'
     | '/_operator/admin/runs/$turnId'
     | '/_operator/owner/inquiries/$threadId'
+    | '/_operator/owner/offerings/$offeringRef'
+    | '/_operator/owner/offerings/new'
     | '/_operator/owner/request-problems/$reportRef'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
@@ -1577,6 +1615,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerSettingsRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/owner/offerings': {
+      id: '/_operator/owner/offerings'
+      path: '/owner/offerings'
+      fullPath: '/owner/offerings'
+      preLoaderRoute: typeof OperatorOwnerOfferingsRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/_operator/owner/inquiries': {
       id: '/_operator/owner/inquiries'
       path: '/owner/inquiries'
@@ -1752,6 +1797,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerRequestProblemsReportRefRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/owner/offerings/new': {
+      id: '/_operator/owner/offerings/new'
+      path: '/new'
+      fullPath: '/owner/offerings/new'
+      preLoaderRoute: typeof OperatorOwnerOfferingsNewRouteImport
+      parentRoute: typeof OperatorOwnerOfferingsRoute
+    }
+    '/_operator/owner/offerings/$offeringRef': {
+      id: '/_operator/owner/offerings/$offeringRef'
+      path: '/$offeringRef'
+      fullPath: '/owner/offerings/$offeringRef'
+      preLoaderRoute: typeof OperatorOwnerOfferingsOfferingRefRouteImport
+      parentRoute: typeof OperatorOwnerOfferingsRoute
+    }
     '/_operator/owner/inquiries/$threadId': {
       id: '/_operator/owner/inquiries/$threadId'
       path: '/$threadId'
@@ -1925,6 +1984,23 @@ const OperatorOwnerInquiriesRouteWithChildren =
     OperatorOwnerInquiriesRouteChildren,
   )
 
+interface OperatorOwnerOfferingsRouteChildren {
+  OperatorOwnerOfferingsOfferingRefRoute: typeof OperatorOwnerOfferingsOfferingRefRoute
+  OperatorOwnerOfferingsNewRoute: typeof OperatorOwnerOfferingsNewRoute
+}
+
+const OperatorOwnerOfferingsRouteChildren: OperatorOwnerOfferingsRouteChildren =
+  {
+    OperatorOwnerOfferingsOfferingRefRoute:
+      OperatorOwnerOfferingsOfferingRefRoute,
+    OperatorOwnerOfferingsNewRoute: OperatorOwnerOfferingsNewRoute,
+  }
+
+const OperatorOwnerOfferingsRouteWithChildren =
+  OperatorOwnerOfferingsRoute._addFileChildren(
+    OperatorOwnerOfferingsRouteChildren,
+  )
+
 interface OperatorRouteChildren {
   OperatorAgentAccessRoute: typeof OperatorAgentAccessRoute
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
@@ -1935,6 +2011,7 @@ interface OperatorRouteChildren {
   OperatorAdminRunsRoute: typeof OperatorAdminRunsRouteWithChildren
   OperatorDevelopersDiscoveryRoute: typeof OperatorDevelopersDiscoveryRoute
   OperatorOwnerInquiriesRoute: typeof OperatorOwnerInquiriesRouteWithChildren
+  OperatorOwnerOfferingsRoute: typeof OperatorOwnerOfferingsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
   OperatorOwnerStatusRoute: typeof OperatorOwnerStatusRoute
   OperatorOwnerRequestProblemsReportRefRoute: typeof OperatorOwnerRequestProblemsReportRefRoute
@@ -1950,6 +2027,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAdminRunsRoute: OperatorAdminRunsRouteWithChildren,
   OperatorDevelopersDiscoveryRoute: OperatorDevelopersDiscoveryRoute,
   OperatorOwnerInquiriesRoute: OperatorOwnerInquiriesRouteWithChildren,
+  OperatorOwnerOfferingsRoute: OperatorOwnerOfferingsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
   OperatorOwnerStatusRoute: OperatorOwnerStatusRoute,
   OperatorOwnerRequestProblemsReportRefRoute:

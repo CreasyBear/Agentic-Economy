@@ -114,7 +114,7 @@ export const publicOwnerDefaultClaimInput = {
   photoUrl: '',
   responseTimeMinutes: '',
   firstRequestMode: 'not_available_yet',
-  publicDisclosure: 'First request instructions are not available yet.',
+  publicDisclosure: 'This business has not published a request path.',
   noContactReason: 'Owner has not supplied public contact instructions.',
 } satisfies PublicOwnerClaimFlowInput
 
@@ -175,7 +175,7 @@ export function validatePublicOwnerClaimFlowInput(
 
   if (normalized.firstRequestMode === 'not_available_yet') {
     if (normalized.noContactReason.length === 0) {
-      errors.push({ field: 'noContactReason', message: 'Explain why a first request is not available yet.' })
+      errors.push({ field: 'noContactReason', message: 'Explain why no request path is published.' })
     }
   } else if (normalized.publicDisclosure.length === 0) {
     errors.push({ field: 'publicDisclosure', message: 'Describe the public first-request instruction.' })
@@ -333,11 +333,11 @@ export function buildPublicOwnerStatusReadback(catalog: PublicCatalogContract): 
       },
       {
         label: 'Payments not live',
-        explanation: 'No payment collection or payment request is exposed from this service page.',
+        explanation: 'Payment remains between the customer and the business.',
       },
       {
         label: 'Automated actions not live',
-        explanation: 'The page does not trigger automated work or owner actions.',
+        explanation: 'The business reviews each request before acting.',
       },
     ],
     nextAction: ownerNextAction(catalog),

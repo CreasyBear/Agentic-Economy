@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   getEligibleExactCapabilitySupply,
+  listIntegratedCapabilitySupply,
   listEligibleCapabilitySupply,
+  listRouteableCapabilitySupply,
   MAX_ELIGIBLE_SUPPLY,
   type EligibleSupplyPorts,
 } from '@/modules/capability-supply/internal/eligibility'
@@ -142,6 +144,7 @@ function emptyPorts(overrides: Partial<EligibleSupplyPorts> = {}): EligibleSuppl
     loadOfferingByOfferingId: async () => null,
     loadBindingByBindingId: async () => null,
     loadPublishedBusiness: async () => null,
+    catalogOriginIsCurrent: async () => true,
     getActiveExactCapabilityContract: async () => ({ kind: 'unavailable', reason: 'not_found' }),
     loadCurrentPublicationByBindingId: async () => null,
     ...overrides,
@@ -270,6 +273,56 @@ describe('capability-supply eligible inventory', () => {
       publicationRef: 'pub-a', revision: 2, readinessValidUntil: 10_000,
     })
     expect(result.supplies[1]?.publication).toBeUndefined()
+
+    const routeable = await listRouteableCapabilitySupply(
+      emptyPorts({
+        listAdmittedConformantBindingsByNetwork: async () => [bindingB, bindingA],
+        loadOfferingByOfferingId: async (offeringId) => (
+          offeringId === 'offering-a' ? offeringA : offeringB
+        ),
+        loadPublishedBusiness: async () => ({ businessId: 'business-1' }),
+        getActiveExactCapabilityContract: async () => ({
+          kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
+        }),
+        loadCurrentPublicationByBindingId: async (bindingId) => (
+          bindingId === 'binding-a'
+            ? {
+                publicationRef: 'pub-a', revision: 2, disposition: 'current',
+                credentialState: 'ready', healthState: 'healthy',
+                readinessValidUntil: 10_000, readinessObservedAt: 1,
+              }
+            : null
+        ),
+      }),
+      { networkId: 'ae:public', limit: 8, now: 100 },
+    )
+    expect(routeable.kind === 'available'
+      ? routeable.supplies.map((supply) => supply.binding.bindingId)
+      : []).toEqual(['binding-a'])
+  })
+
+  it('separates integrated supply from supply that is currently routeable', async () => {
+    const binding = admittedBinding()
+    const ports = emptyPorts({
+      listAdmittedConformantBindingsByNetwork: async () => [binding],
+      loadOfferingByOfferingId: async () => activeOffering(),
+      loadPublishedBusiness: async () => ({ businessId: 'business-1' }),
+      getActiveExactCapabilityContract: async () => ({
+        kind: 'found', ref: contractRef, documentJson: '{}', registeredAt: 1,
+      }),
+      loadCurrentPublicationByBindingId: async () => null,
+    })
+
+    const integrated = await listIntegratedCapabilitySupply(
+      ports, { networkId: 'ae:public', limit: 8, now: 100 },
+    )
+    const routeable = await listRouteableCapabilitySupply(
+      ports, { networkId: 'ae:public', limit: 8, now: 100 },
+    )
+
+    expect(integrated.kind).toBe('available')
+    expect(integrated.kind === 'available' ? integrated.supplies : []).toHaveLength(1)
+    expect(routeable).toEqual({ kind: 'available', supplies: [] })
   })
 
   it('exact supply hits when hashes and published business match', async () => {

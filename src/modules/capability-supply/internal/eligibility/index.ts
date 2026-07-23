@@ -24,7 +24,12 @@ export type {
   EligibleSupplyPorts,
 } from './ports'
 
-export { MAX_ELIGIBLE_SUPPLY, listEligibleCapabilitySupply } from './list'
+export {
+  MAX_ELIGIBLE_SUPPLY,
+  listEligibleCapabilitySupply,
+  listIntegratedCapabilitySupply,
+  listRouteableCapabilitySupply,
+} from './list'
 
 export { getEligibleExactCapabilitySupply } from './exact'
 

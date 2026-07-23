@@ -12,7 +12,7 @@ import type {
 } from '@/modules/catalog/public'
 
 describe('publishBusinessCatalog', () => {
-  it('rejects anonymous, wrong-owner, and empty-service publish attempts', () => {
+  it('rejects anonymous and wrong-owner publish attempts', () => {
     const state = claimedState()
     const claim = firstClaimId(state)
 
@@ -40,17 +40,21 @@ describe('publishBusinessCatalog', () => {
       })
     ).toMatchObject({ kind: 'error', code: 'catalog_publish_wrong_owner' })
 
-    expect(
-      publishBusinessCatalog(state, {
-        actor: { kind: 'authenticated_owner', clerkUserId: 'user_sam' },
-        claimId: claim,
-        services: [],
-        security: validSecurity('empty'),
-        operationKey: brandNonEmpty('op:publish:empty', 'OperationKey'),
-        correlationId: brandNonEmpty('corr:publish:empty', 'CorrelationId'),
-        now: 20,
-      })
-    ).toMatchObject({ kind: 'error', code: 'catalog_publish_invalid_services' })
+  })
+
+  it('publishes a discoverable business profile before its first offering', () => {
+    const state = claimedState()
+    const result = publishBusinessCatalog(state, {
+      actor: { kind: 'authenticated_owner', clerkUserId: 'user_sam' },
+      claimId: firstClaimId(state),
+      services: [],
+      security: validSecurity('empty'),
+      operationKey: brandNonEmpty('op:publish:empty', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:publish:empty', 'CorrelationId'),
+      now: 20,
+    })
+
+    expect(result).toMatchObject({ kind: 'ok', catalog: { services: [] } })
   })
 
   it('publishes once and replays repeated publish without duplicate side effects', () => {

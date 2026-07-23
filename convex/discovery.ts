@@ -5,6 +5,12 @@ import {
   catalogFromRows,
   projectDiscoveryPublicCatalog,
 } from '../src/modules/catalog/public'
+import type { BusinessSupplyProjection } from '../src/modules/catalog/public'
+import {
+  projectBusinessSupplyToPublicApi,
+} from '../src/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from '../src/modules/registry/public'
+import { buildOfferingLlmsTxt } from '../src/modules/discovery/internal/discovery-files'
 import { resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeMutationCtx, runtimeReader } from './source_state'
@@ -377,10 +383,11 @@ export const readLlmsTxt = queryGeneric({
   returns: discoveryFileResult,
   handler: async (ctx, args) => {
     const db = runtimeReader(ctx.db)
-    return buildLlmsTxtFromCatalogs(await publicCatalogsForDiscovery(db), {
+    const result = buildOfferingLlmsTxt(await publicOfferingSupplyForDiscovery(db), {
       canonicalBaseUrl: canonicalBaseUrl(args.canonicalBaseUrl),
       routingBaseUrl: canonicalBaseUrl(args.routingBaseUrl),
     })
+    return { body: result.body, urls: [...result.urls] }
   },
 })
 
@@ -689,7 +696,7 @@ async function publicCatalogForBusiness(db: RuntimeReader, business: RuntimeDocu
       sourceHash: stringField(capability, 'sourceHash'),
     })),
   })
-  return catalog === undefined ? undefined : projectDiscoveryPublicCatalog(catalog)
+  return catalog === undefined ? undefined : projectDiscoveryPublicCatalog(catalog) as PublicCatalog
 }
 
 async function publicCatalogsForDiscovery(db: RuntimeReader): Promise<PublicCatalog[]> {
@@ -705,6 +712,65 @@ async function publicCatalogsForDiscovery(db: RuntimeReader): Promise<PublicCata
     }
   }
   return catalogs.sort((left, right) => left.slug.localeCompare(right.slug))
+}
+
+async function publicOfferingSupplyForDiscovery(
+  db: RuntimeReader,
+): Promise<PublicBusinessCatalogApiV2Dto[]> {
+  const businesses = await db.query('businesses')
+    .withIndex('by_publicStatus_slug', (query) => query.eq('publicStatus', 'published'))
+    .collect()
+  const results = await Promise.all(businesses.map(async (business) => {
+    if (await hasActiveBusinessSuppression(db, business._id)) return undefined
+    const cutover = await db.query('catalogSupplyCutovers')
+      .withIndex('by_businessId', (query) => query.eq('businessId', business._id))
+      .unique()
+    const mode = cutover === null ? 'legacy' : stringField(cutover, 'mode')
+    if (mode === 'legacy' || mode === 'compare') {
+      // Until persisted Offering truth is authoritative, publish profile routes
+      // without reproducing legacy service detail in the assistant index.
+      return {
+        schemaVersion: 'public-business-catalog-api:v2' as const,
+        businessId: business._id,
+        slug: stringField(business, 'slug'),
+        name: stringField(business, 'name'),
+        category: stringField(business, 'category'),
+        suburb: stringField(business, 'suburb'),
+        stateTerritory: stringField(business, 'stateTerritory'),
+        ...(optionalStringField(business, 'publishedPhone') === undefined ? {} : { publishedPhone: stringField(business, 'publishedPhone') }),
+        publicUrl: `/${stringField(business, 'slug')}`,
+        observedAt: numberField(business, 'updatedAt'),
+        disposition: 'partial' as const,
+        offerings: [],
+        accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false },
+      }
+    }
+    if (mode !== 'offering') return undefined
+
+    const snapshot = await db.query('businessSupplyProjectionSnapshots')
+      .withIndex('by_businessId', (query) => query.eq('businessId', business._id))
+      .unique()
+    if (snapshot === null) return undefined
+    try {
+      const projection = JSON.parse(stringField(snapshot, 'projectionJson')) as BusinessSupplyProjection
+      if (
+        projection === null
+        || typeof projection !== 'object'
+        || projection.business?.businessId !== business._id
+        || projection.business?.slug !== stringField(business, 'slug')
+        || !Array.isArray(projection.offerings)
+      ) return undefined
+      const projected = projectBusinessSupplyToPublicApi(projection, Date.now())
+      return stringField(snapshot, 'status') === 'projection_pending'
+        ? { ...projected, disposition: 'stale' as const }
+        : projected
+    } catch {
+      return undefined
+    }
+  }))
+  return results
+    .filter((result): result is PublicBusinessCatalogApiV2Dto => result !== undefined)
+    .sort((left, right) => left.slug.localeCompare(right.slug))
 }
 
 async function discoveryStatusForBusiness(

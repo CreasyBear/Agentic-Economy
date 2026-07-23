@@ -14,7 +14,7 @@ import type { EligibleSupplyPorts } from './ports'
 
 export const MAX_ELIGIBLE_SUPPLY = 256
 
-export async function listEligibleCapabilitySupply(
+export async function listIntegratedCapabilitySupply(
   ports: EligibleSupplyPorts,
   input: Readonly<{ networkId: string; limit: number; now?: number }>,
 ) {
@@ -47,6 +47,8 @@ export async function listEligibleCapabilitySupply(
       || !sameCapabilityContractRef(contractRefFromRow(offering), contractRefFromRow(binding))
     ) continue
     if (await ports.loadPublishedBusiness(offering.businessId) === null) continue
+    const catalogOriginCurrent = offering.origin?.kind !== 'catalog_offering'
+      || await ports.catalogOriginIsCurrent(offering.origin, offering.businessId)
     const contract = await ports.getActiveExactCapabilityContract(contractRefFromRow(binding))
     if (contract.kind === 'unavailable') {
       if (contract.reason === 'integrity_failure') {
@@ -55,7 +57,7 @@ export async function listEligibleCapabilitySupply(
       continue
     }
     const publication = await ports.loadCurrentPublicationByBindingId(binding.bindingId)
-    const activePublication = publication !== null
+    const activePublication = catalogOriginCurrent && publication !== null
       && publication.readinessValidUntil !== undefined
       && publicationLifecycle(publication, offering, binding, now).state === 'active'
       ? {
@@ -73,4 +75,31 @@ export async function listEligibleCapabilitySupply(
     || compareStableIdentifier(left.binding.bindingId, right.binding.bindingId)
   ))
   return { kind: 'available' as const, supplies }
+}
+
+/**
+ * Compatibility name for the pre-reconciliation integrated inventory.
+ * New execution callers must use listRouteableCapabilitySupply.
+ */
+export const listEligibleCapabilitySupply = listIntegratedCapabilitySupply
+
+export async function listRouteableCapabilitySupply(
+  ports: EligibleSupplyPorts,
+  input: Readonly<{ networkId: string; limit: number; now?: number }>,
+) {
+  if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > MAX_ELIGIBLE_SUPPLY) {
+    return { kind: 'unavailable' as const, reason: 'limit_invalid' as const }
+  }
+  const integrated = await listIntegratedCapabilitySupply(ports, {
+    ...input,
+    limit: MAX_ELIGIBLE_SUPPLY,
+  })
+  if (integrated.kind === 'unavailable') return integrated
+  return {
+    kind: 'available' as const,
+    supplies: integrated.supplies.filter((supply) => supply.publication !== undefined).slice(0, input.limit).map((supply) => ({
+      ...supply,
+      publication: supply.publication!,
+    })),
+  }
 }
