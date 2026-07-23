@@ -68,9 +68,12 @@ export async function applyStandingRoute(
       ? { kind: 'conflict', requestRef: input.requestRef, reason: 'idempotency_key_reused' }
       : { kind: 'conflict', requestRef: input.requestRef, reason: 'options_changed' }
   }
-  return projectNeedsAttention({
-    requestRef: input.requestRef,
-    revision: input.revision,
-    summary: repeatPermissionUseRecoverySummary(result.reason),
-  })
+  if (result.kind === 'refused') {
+    return projectNeedsAttention({
+      requestRef: input.requestRef,
+      revision: input.revision,
+      summary: repeatPermissionUseRecoverySummary(result.reason),
+    })
+  }
+  throw new Error('customer_request_standing_route_mandate_result_unreachable')
 }

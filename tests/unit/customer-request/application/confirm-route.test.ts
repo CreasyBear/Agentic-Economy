@@ -4,7 +4,12 @@ import {
   confirmCustomerRoute,
   type ConfirmRoutePorts,
 } from '@/modules/customer-request/application/public'
-import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
+import { projectRoutePlansReady } from '@/modules/customer-request/customer-projection'
+import {
+  capabilitySemanticsKey,
+  customerRouteRef,
+  projectCustomerRoutePlanDecision,
+} from '@/modules/customer-request/route-plan-customer-projection'
 
 const NOW = Date.now()
 const FUTURE = NOW + 60_000
@@ -47,13 +52,6 @@ const aggregate = {
   },
 }
 
-const displayedRoute = {
-  routeRef,
-  availability: 'current' as const,
-  maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 2_500 },
-  validUntil: FUTURE,
-}
-
 const mandate = {
   mandateRef: 'mandate:1',
   route: { generationRef, routePlanId },
@@ -62,22 +60,51 @@ const mandate = {
   expiresAt: FUTURE,
 }
 
-const routesReadyPreview = {
-  kind: 'request' as const,
+const projectionContractRef = {
+  capabilityId: 'cap.ride', version: 1, contractDigest: 'digest:1',
+}
+const routesReadyPreview = projectRoutePlansReady({
   requestRef: 'req:1',
   revision: 3,
-  state: 'routes_ready' as const,
   summary: 'Options ready',
-  nextAction: 'inspect_routes' as const,
-  missingFields: [],
   criteria: [],
-  options: [],
-  decision: {
-    generationRef,
-    outcome: { kind: 'routes_available' as const },
-    routes: [displayedRoute as never],
-  },
-}
+  decision: projectCustomerRoutePlanDecision({
+    current: {
+      generationRef,
+      requestRevision: 3,
+      routes: [{
+        routePlanId,
+        steps: [{
+          actionId: 'action:1',
+          businessId: 'biz:1',
+          offeringId: 'off:1',
+          bindingId: 'binding:1',
+          publicationRef: 'publication:1',
+          contractRef: projectionContractRef,
+          dataUse: [],
+          effects: [],
+          evidence: [{ label: 'Result', purpose: 'completion' }],
+          recovery: { recovery: 'retry_safe' },
+        }],
+        edges: [],
+        maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 2_500 },
+        expiresAt: FUTURE,
+        uncertainty: [],
+        fallbacks: { alternatives: [] },
+        comparison: { ordering: { kind: 'unranked' } },
+      }],
+    },
+    businessNames: { 'biz:1': 'Access Ride' },
+    capabilitySemantics: {
+      [capabilitySemanticsKey(projectionContractRef)]: {
+        name: 'Ride',
+        description: 'Arrange a ride.',
+        resultLabels: ['Ride confirmation'],
+      },
+    },
+    now: NOW,
+  }),
+})
 
 function basePorts(overrides: Partial<ConfirmRoutePorts> = {}): ConfirmRoutePorts {
   return {
@@ -150,7 +177,7 @@ describe('customer-request confirm-route', () => {
       revision: 3,
       state: 'needs_attention' as const,
       summary: 'No current options',
-      nextAction: 'review_request' as const,
+      nextAction: 'retry' as const,
       missingFields: [],
       criteria: [],
       options: [],

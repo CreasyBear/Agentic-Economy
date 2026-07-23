@@ -9,11 +9,18 @@ import {
   resolveSelectableCurrentRoute,
   revokeStandingRoute,
   applyStandingRoute,
-  type StandingRouteAggregate,
-  type StandingRouteGeneration,
   type StandingRoutePorts,
 } from '@/modules/customer-request/application/public'
-import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
+import type {
+  StandingRouteAggregate,
+  StandingRouteGeneration,
+} from '@/modules/customer-request/application/standing-route'
+import { projectRoutePlansReady } from '@/modules/customer-request/customer-projection'
+import {
+  capabilitySemanticsKey,
+  customerRouteRef,
+  projectCustomerRoutePlanDecision,
+} from '@/modules/customer-request/route-plan-customer-projection'
 
 const NOW = Date.now()
 const FUTURE = NOW + 60_000
@@ -64,12 +71,51 @@ const generation = {
   }],
 } satisfies StandingRouteGeneration
 
-const displayedRoute = {
-  routeRef,
-  availability: 'current' as const,
-  maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 2_500 },
-  validUntil: FUTURE,
+const projectionContractRef = {
+  capabilityId: 'cap.ride', version: 1, contractDigest: 'digest:1',
 }
+const routesReadyPreview = projectRoutePlansReady({
+  requestRef: 'req:1',
+  revision: 3,
+  summary: 'Options ready',
+  criteria: [],
+  decision: projectCustomerRoutePlanDecision({
+    current: {
+      generationRef,
+      requestRevision: 3,
+      routes: [{
+        routePlanId,
+        steps: [{
+          actionId: 'action:1',
+          businessId: 'biz:1',
+          offeringId: 'off:1',
+          bindingId: 'binding:1',
+          publicationRef: 'publication:1',
+          contractRef: projectionContractRef,
+          dataUse: [],
+          effects: [],
+          evidence: [{ label: 'Result', purpose: 'completion' }],
+          recovery: { recovery: 'retry_safe' },
+        }],
+        edges: [],
+        maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 2_500 },
+        expiresAt: FUTURE,
+        uncertainty: [],
+        fallbacks: { alternatives: [] },
+        comparison: { ordering: { kind: 'unranked' } },
+      }],
+    },
+    businessNames: { 'biz:1': 'Access Ride' },
+    capabilitySemantics: {
+      [capabilitySemanticsKey(projectionContractRef)]: {
+        name: 'Ride',
+        description: 'Arrange a ride.',
+        resultLabels: ['Ride confirmation'],
+      },
+    },
+    now: NOW,
+  }),
+})
 
 const policy = {
   policyRef: 'standing-route-policy:v1:digest',
@@ -96,22 +142,7 @@ function basePorts(overrides: Partial<StandingRoutePorts> = {}): StandingRoutePo
       routeGenerationNumber: 2,
       routeGenerationRef: generationRef,
     })),
-    projectCurrentRoutePlans: vi.fn(async () => ({
-      kind: 'request' as const,
-      requestRef: 'req:1',
-      revision: 3,
-      state: 'routes_ready' as const,
-      summary: 'Options ready',
-      nextAction: 'inspect_routes' as const,
-      missingFields: [],
-      criteria: [],
-      options: [],
-      decision: {
-        generationRef,
-        outcome: { kind: 'routes_available' as const },
-        routes: [displayedRoute as never],
-      },
-    })),
+    projectCurrentRoutePlans: vi.fn(async () => routesReadyPreview),
     getCurrentRoutePlanGeneration: vi.fn(async () => ({
       kind: 'found' as const,
       routeGeneration: generation,

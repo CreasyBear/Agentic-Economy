@@ -17,6 +17,7 @@ export function routesAreCurrent(
       binding.businessId === step.businessId
       && binding.offeringId === step.offeringId
       && binding.bindingId === step.bindingId
+      && hasExactContractRef(step.contractRef)
       && sameCapabilityContractRef(binding.contractRef, step.contractRef)
       && binding.offeringRegistrationHash === step.offeringRegistrationHash
       && binding.bindingRegistrationHash === step.bindingRegistrationHash
@@ -39,6 +40,7 @@ export function hasTransientBindingUnavailable(
       binding.businessId === step.businessId
       && binding.offeringId === step.offeringId
       && binding.bindingId === step.bindingId
+      && hasExactContractRef(step.contractRef)
       && sameCapabilityContractRef(binding.contractRef, step.contractRef)
       && (binding.publicationRef === undefined
         || binding.readinessValidUntil === undefined
@@ -63,4 +65,18 @@ export function routeRefreshCommand(
       idempotencyKey: args.idempotencyKey,
     }),
   }
+}
+
+function hasExactContractRef(
+  reference: Readonly<{
+    capabilityId: string
+    version: number
+    contractDigest?: string
+  }>,
+): reference is Readonly<{
+  capabilityId: string
+  version: number
+  contractDigest: string
+}> {
+  return reference.contractDigest !== undefined
 }

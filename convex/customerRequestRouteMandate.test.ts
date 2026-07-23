@@ -12,6 +12,7 @@ import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-suppl
 import { internal } from './_generated/api'
 import schema from './schema'
 import { setCapabilitySupplyEligibility } from './capabilitySupply'
+import { readCurrentRouteMandateStateForPrincipal } from './customerRequestRouteMandate'
 
 const modules = import.meta.glob('./**/*.ts')
 const identity = {
@@ -1296,7 +1297,7 @@ describe('durable RouteMandate lifecycle', () => {
       idempotencyKey: command.idempotencyKey,
     })
     const derived = deriveRouteStepAuthority({
-      mandate: fixture.issued.mandate,
+      mandate: fixture.mandate,
       expectedMandateDigest: command.expectedMandateDigest,
       expectedGenerationRef: command.expectedGenerationRef,
       expectedRoutePlanId: command.expectedRoutePlanId,
@@ -1390,7 +1391,19 @@ async function issuedAdmissionFixture(
   if (issued.kind !== 'issued') throw new Error(`mandate issuance failed: ${JSON.stringify(issued)}`)
   const step = issued.mandate.route.steps[0]
   if (step === undefined) throw new Error('issued route step missing')
-  return { current, route, customer, issued, step }
+  const mandateState = await backend.run(async (ctx) => (
+    await readCurrentRouteMandateStateForPrincipal(
+      ctx,
+      current.aggregate.snapshot.requestId,
+      identity.tokenIdentifier,
+      1_000,
+      { requireCurrentGraph: false },
+    )
+  ))
+  if (mandateState.kind !== 'active') {
+    throw new Error(`current mandate unavailable: ${mandateState.kind}`)
+  }
+  return { current, route, customer, issued, mandate: mandateState.mandate, step }
 }
 
 function admissionCommand(
@@ -1438,7 +1451,9 @@ async function committedRequest(
         admissionEvidenceRefs: ['test:business-reviewed'],
         conformanceEvidenceRefs: ['test:adapter-reviewed'],
       }, 2_000)
-      if (result.kind !== 'eligible') throw new Error(`sandbox admission failed: ${result.reason}`)
+      if (result.kind !== 'eligible') {
+        throw new Error(`sandbox admission failed: ${JSON.stringify(result)}`)
+      }
     }
   })
   await new Promise<void>((resolve) => setTimeout(resolve, 0))

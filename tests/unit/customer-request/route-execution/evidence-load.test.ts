@@ -29,9 +29,15 @@ describe('evidence-load problem-row integrity', () => {
   })
 
   it('loadProblemUpdates enforces integrity through ports', async () => {
-    const ports = {
+    const ports: Pick<EvidenceLoadPorts, 'listProblemUpdatesByReportRef'> = {
       listProblemUpdatesByReportRef: vi.fn(async () => [
-        { version: 1, state: 'received' as const, source: 'customer' as const, message: 'a', createdAt: 1 },
+        {
+          version: 1,
+          state: 'investigating' as const,
+          source: 'customer' as const,
+          message: 'a',
+          createdAt: 1,
+        },
       ]),
     }
     const updates = await loadProblemUpdates(ports, 'report:1')
@@ -40,7 +46,7 @@ describe('evidence-load problem-row integrity', () => {
   })
 
   it('loadProblemBusinessReports enforces integrity through ports', async () => {
-    const ports = {
+    const ports: Pick<EvidenceLoadPorts, 'listProblemBusinessReportsByReportRef'> = {
       listProblemBusinessReportsByReportRef: vi.fn(async () => [
         {
           statementRef: 'stmt:1',

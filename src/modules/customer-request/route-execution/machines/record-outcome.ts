@@ -38,7 +38,7 @@ export async function recordOutcome(
     || !observation.releaseStarted)) {
     return { kind: 'refused', reason: 'output_invalid' }
   }
-  const observationPatch = observation === undefined ? {} : {
+  const observationPatch = observation === undefined || args.observationJson === undefined ? {} : {
     transportObservationJson: args.observationJson,
     transportObservationDigest: canonicalDigest(observation),
   }

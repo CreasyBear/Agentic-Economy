@@ -45,10 +45,8 @@ export function compareResumePorts(ctx: ActionCtx): CompareResumePorts {
       internal.customerRequestV2.getCurrentAggregate, { requestId },
     ),
     getSubmissionShell: (input) => ctx.runQuery(internal.customerRequestV2.getSubmissionShell, input),
-    getCurrentRouteRun: (input) => ctx.runQuery(internal.customerRequestRouteExecution.getCurrent, input),
-    getCurrentMandate: (input) => ctx.runQuery(
-      internal.customerRequestRouteMandate.getCurrentForPrincipal, input,
-    ),
+    getCurrentRouteRun: (input) => loadCurrentRouteRun(ctx, input),
+    getCurrentMandate: (input) => loadCurrentMandate(ctx, input),
     getCurrentRoutePlanGeneration: (input) => ctx.runQuery(
       internal.customerRequestV2.getCurrentRoutePlanGeneration, input,
     ),
@@ -97,7 +95,16 @@ export function compareResumePorts(ctx: ActionCtx): CompareResumePorts {
     refreshRoutePlanGeneration: async (input) => await ctx.runMutation(
       internal.customerRequestV2.refreshRoutePlanGeneration,
       {
-        ...input,
+        commandKey: input.commandKey,
+        commandDigest: input.commandDigest,
+        principalId: input.principalId,
+        requestId: input.requestId,
+        expectedRequestRevision: input.expectedRequestRevision,
+        expectedGeneration: input.expectedGeneration,
+        expectedGenerationRef: input.expectedGenerationRef,
+        ...(input.expectedDecisionCommandKey === undefined ? {} : {
+          expectedDecisionCommandKey: input.expectedDecisionCommandKey,
+        }),
         candidateAggregate: writableCustomerRequestV2Aggregate(input.candidateAggregate),
         ...(input.candidateRouteGeneration === undefined ? {} : {
           candidateRouteGeneration: writableCustomerRequestRoutePlanGeneration(
@@ -115,5 +122,77 @@ export function compareResumePorts(ctx: ActionCtx): CompareResumePorts {
       ...(env.AE_CUSTOMER_REQUEST_MODEL === undefined ? {} : { modelName: env.AE_CUSTOMER_REQUEST_MODEL }),
       ...(env.AE_SITE_URL === undefined ? {} : { siteUrl: env.AE_SITE_URL }),
     }),
+  }
+}
+
+async function loadCurrentRouteRun(
+  ctx: ActionCtx,
+  input: Readonly<{ requestId: string }>,
+): ReturnType<CompareResumePorts['getCurrentRouteRun']> {
+  const result = await ctx.runQuery(
+    internal.customerRequestRouteExecution.getCurrent,
+    input,
+  )
+  if (result.kind === 'none') return { kind: 'not_found' }
+  const run = result.run
+  return {
+    kind: 'found',
+    run: {
+      requestId: run.requestId,
+      requestRevision: run.requestRevision,
+      generationRef: run.generationRef,
+      state: run.state,
+      totalSteps: run.totalSteps,
+      completedSteps: run.completedSteps,
+      currentPosition: run.currentPosition,
+      currentState: run.currentState,
+      ...(run.businesses === undefined
+        ? {}
+        : { businesses: run.businesses.map((business) => ({ ...business })) }),
+      ...(run.resultJson === undefined ? {} : { resultJson: run.resultJson }),
+      ...(run.cancellationReleaseMayStartAt === undefined
+        ? {}
+        : { cancellationReleaseMayStartAt: run.cancellationReleaseMayStartAt }),
+      ...(run.cancellationUnavailableSince === undefined
+        ? {}
+        : { cancellationUnavailableSince: run.cancellationUnavailableSince }),
+      ...(run.cancellationRequestedAt === undefined
+        ? {}
+        : { cancellationRequestedAt: run.cancellationRequestedAt }),
+      ...(run.cancellationAttempt === undefined
+        ? {}
+        : { cancellationAttempt: { ...run.cancellationAttempt } }),
+      updatedAt: run.updatedAt,
+    },
+  }
+}
+
+async function loadCurrentMandate(
+  ctx: ActionCtx,
+  input: Readonly<{ requestId: string; principalId: string }>,
+): ReturnType<CompareResumePorts['getCurrentMandate']> {
+  const result = await ctx.runQuery(
+    internal.customerRequestRouteMandate.getCurrentForPrincipal,
+    input,
+  )
+  if (result.kind === 'expired') return { kind: 'expired' }
+  if (result.kind === 'revoked' || result.kind === 'superseded') {
+    return { kind: 'consumed' }
+  }
+  if (result.kind !== 'active') return { kind: 'not_found' }
+  return {
+    kind: 'active',
+    mandate: {
+      mandateRef: result.mandate.mandateRef,
+      route: {
+        generationRef: result.mandate.route.generationRef,
+        routePlanId: result.mandate.route.routePlanId,
+      },
+      request: {
+        requestRevision: result.mandate.request.requestRevision,
+      },
+      issuedAt: result.mandate.issuedAt,
+      expiresAt: result.mandate.expiresAt,
+    },
   }
 }
