@@ -53,6 +53,9 @@ export function capabilitySupplyGraphPorts(
     getActiveExactCapabilityContract: (ref) => getActiveExactCapabilityContract(db, ref),
     getExactRegisteredCapabilityContract: (ref) => getExactRegisteredCapabilityContract(db, ref),
     patchProbeReadiness: async (publicationId, patch) => {
+      if (!('patch' in db)) {
+        throw new Error('capability_supply_graph_writer_required')
+      }
       await db.patch(publicationId as Id<'capabilityPublications'>, {
         credentialState: patch.credentialState,
         healthState: patch.healthState,

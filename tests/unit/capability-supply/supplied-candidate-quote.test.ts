@@ -10,7 +10,7 @@ const { directReadFixture } = vi.hoisted(() => ({
 
 vi.mock('@/modules/registry/registry.functions', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/modules/registry/registry.functions')>(),
-  readPublicRegistryBusinessDetail: vi.fn().mockResolvedValue(directReadFixture),
+  readPublicOfferingRegistryBusinessDetail: vi.fn().mockResolvedValue(directReadFixture),
 }))
 
 import { listActions } from '@/modules/actions'
@@ -372,7 +372,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     const directConsequentialInstrumentation = createHarnessToolBoundaryInstrumentation(
       (event) => directConsequentialEvents.push(event),
     )
-    const directResult = await actionToHarnessToolContract(
+    const directOutput = await actionToHarnessToolContract(
       collectSuppliedCandidateQuoteAction,
       directConsequentialInstrumentation,
     ).execute({
@@ -383,7 +383,11 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         developmentOnlySuppliedQuoteNow: () => nowMs,
       },
     })
+    const parsedDirectResult = collectSuppliedCandidateQuoteAction.outputSchema.safeParse(directOutput)
+    if (!parsedDirectResult.success) throw new Error('direct_quote_result_invalid')
+    const directResult = parsedDirectResult.data
     expect(directResult).toMatchObject({ kind: 'quote_returned' })
+    if (directResult.kind !== 'quote_returned') throw new Error('direct_quote_not_returned')
 
     const durableState = createDevelopmentDurableState<SuppliedCandidateQuoteResult>()
     const durablePort = createDevelopmentDurablePort(durableState)
@@ -391,10 +395,10 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     const controlledResult = {
       ...directResult,
       quote: {
-        ...(directResult.kind === 'quote_returned' ? directResult.quote : {}),
+        ...directResult.quote,
         quoteRef: 'dev:transfer:quote:controlled',
       },
-    }
+    } satisfies SuppliedCandidateQuoteResult
     const controlledEvents: TransferBoundaryEvent[] = []
     const controlledAdapter = vi.fn().mockImplementation(async () => {
       controlledEvents.push({
@@ -464,7 +468,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     if (accepted.kind !== 'accepted') throw new Error(accepted.code)
     controlledEvents.push({
       kind: 'approval_policy',
-      policy: 'ask',
+      policy: 'prompt',
       reason: 'exact invocation authority accepted before release',
     })
     controlledEvents.push({
@@ -533,7 +537,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
           }),
         ),
     })
-    if (attached.kind !== 'attached') throw new Error(attached.reason)
+    if (attached.kind === 'refused') throw new Error(attached.reason)
     const coldRequest = structuredClone(
       JSON.parse(JSON.stringify(attached.aggregate)) as CustomerRequestV2Aggregate,
     )

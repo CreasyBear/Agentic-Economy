@@ -194,6 +194,7 @@ describe('capability publication', () => {
         }),
       ]),
     })
+    if (graph.kind !== 'available') throw new Error(graph.reason)
     expect(graph.nodes).toHaveLength(2)
     expect(JSON.stringify(graph)).not.toContain('credentialRef')
     expect(JSON.stringify(graph)).not.toContain('_KEY')

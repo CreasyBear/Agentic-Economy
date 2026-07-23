@@ -10,7 +10,6 @@ import {
   type CapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
 import { isCanonicalDigest } from '@/modules/common/canonical-digest'
-import { type StableHashValue } from '@/modules/common/stable-hash'
 
 import {
   bindingRegistrationAudit,
@@ -91,7 +90,12 @@ export async function registerCapabilityOfferingCommand(
     createdAt: now,
   }
   const operation = await beginOperation(
-    ports, command.actor, 'registerCapabilityOffering', command.context, { registration }, now,
+    ports,
+    command.actor,
+    'registerCapabilityOffering',
+    command.context,
+    { registrationHash: expectedResult.registrationHash },
+    now,
   )
   if (operation.kind === 'conflict') return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
   if (operation.kind === 'replay') {
@@ -166,7 +170,21 @@ export async function setCapabilitySupplyEligibilityCommand(
   }
   const operation = await beginOperation(
     ports, command.actor, 'setCapabilitySupplyEligibility', command.context,
-    command.eligibility as StableHashValue, now,
+    {
+      offeringId: command.eligibility.offeringId,
+      bindingId: command.eligibility.bindingId,
+      contractRef: {
+        capabilityId: command.eligibility.contractRef.capabilityId,
+        version: command.eligibility.contractRef.version,
+        contractDigest: command.eligibility.contractRef.contractDigest,
+      },
+      decision: command.eligibility.decision,
+      expectedOfferingRegistrationHash: command.eligibility.expectedOfferingRegistrationHash,
+      expectedBindingRegistrationHash: command.eligibility.expectedBindingRegistrationHash,
+      admissionEvidenceRefs: command.eligibility.admissionEvidenceRefs,
+      conformanceEvidenceRefs: command.eligibility.conformanceEvidenceRefs,
+    },
+    now,
   )
   if (operation.kind === 'conflict') return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
   if (operation.kind === 'replay') {

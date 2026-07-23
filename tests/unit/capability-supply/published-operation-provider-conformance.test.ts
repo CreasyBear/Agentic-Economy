@@ -282,9 +282,13 @@ describe.each(providers)('$label published-operation provider conformance', (pro
     }))
   })
 
-  it.each(provider.invalidPayloads)('refuses $label', ({ payload }) => {
-    expect(provider.projector({ payload, receivedAt })).toMatchObject({ kind: 'refused' })
-  })
+  for (const invalid of provider.invalidPayloads) {
+    it(`refuses ${invalid.label}`, () => {
+      expect(provider.projector({ payload: invalid.payload, receivedAt })).toMatchObject({
+        kind: 'refused',
+      })
+    })
+  }
 
   it('refuses tampered provider identity, endpoint, payee, revision and raw evidence', () => {
     provider.assertPacketTamperingRefuses()
