@@ -2,6 +2,7 @@ import { internalMutation, type MutationCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { v } from 'convex/values'
+import schema from './schema'
 
 import {
   buildDevSeedCatalogState,
@@ -12,7 +13,8 @@ import {
 import { persistDevSeedCatalogState } from './devSeedStore'
 import { runtimeDb } from './source_state'
 import { claimBusinessCommand } from './business'
-import { publishBusinessCatalogCommand } from './catalog'
+import { publishBusinessCatalogCommand, seedBusinessOfferingSupplyCommand } from './catalog'
+import { seedDiscoveryManifestForBusinessCommand } from './discovery'
 import { registerCapabilityContractDocument } from './capabilityContractDocuments'
 import {
   registerCapabilityBindingCommand,
@@ -37,6 +39,24 @@ import {
   sandboxWorkflowCapabilityContractDocument,
   type SandboxWorkflowProviderKey,
 } from '@/modules/sandbox-supply/workflow-cohorts'
+
+export const resetDevData = internalMutation({
+  args: {},
+  returns: v.object({ cleared: v.number(), done: v.boolean() }),
+  handler: async (ctx) => {
+    let cleared = 0
+    const budget = 2000
+    for (const table of Object.keys(schema.tables)) {
+      if (cleared >= budget) return { cleared, done: false }
+      const docs = await ctx.db.query(table as never).take(budget - cleared)
+      for (const doc of docs as ReadonlyArray<{ _id: Id<never> }>) {
+        await ctx.db.delete(doc._id)
+        cleared += 1
+      }
+    }
+    return { cleared, done: cleared === 0 }
+  },
+})
 
 export const seedDevCatalog = internalMutation({
   args: {},
@@ -142,6 +162,8 @@ export const seedDevCatalog = internalMutation({
     }
     await retireSupersededSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 3_000)
     await retireSupersededSandboxRouteSupply(ctx.db, sandboxRouteRegistrations, seedStartedAt + 3_100)
+    await ctx.scheduler.runAfter(0, internal.devSeed.seedOfferingSupply, { cursor: null })
+    await ctx.scheduler.runAfter(0, internal.devSeed.seedDiscoveryManifests, { cursor: null })
     return {
       ...result,
       seededSlugs: [...result.seededSlugs, ...sandboxBusinesses.seededSlugs],
@@ -151,6 +173,78 @@ export const seedDevCatalog = internalMutation({
       sandboxRouteBindings,
       sandboxRoutePublicationRefs,
     }
+  },
+})
+
+export const seedOfferingSupply = internalMutation({
+  args: { cursor: v.union(v.string(), v.null()) },
+  returns: v.object({
+    processed: v.number(),
+    migrated: v.number(),
+    modes: v.object({ legacy: v.number(), compare: v.number(), offering: v.number() }),
+    errors: v.array(v.string()),
+    nextCursor: v.union(v.string(), v.null()),
+    done: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const db = runtimeDb(ctx.db)
+    const now = Date.now()
+    if (args.cursor === null) {
+      for (const key of ['offering_public_projection_enabled', 'offering_authoring_enabled'] as const) {
+        const existing = await ctx.db.query('operatorControls').withIndex('by_key', (query) => query.eq('key', key)).unique()
+        if (existing === null) {
+          await ctx.db.insert('operatorControls', { key, enabled: true, changedByAdminRef: 'system:dev-seed', reasonCode: 'dev_seed_enable', evidenceRefs: ['seed:operator-control'], correlationId: `seed:operator-control:${key}`, operationKey: `seed:operator-control:${key}`, updatedAt: now })
+        } else if (existing.enabled !== true) {
+          await ctx.db.patch(existing._id, { enabled: true, updatedAt: now })
+        }
+      }
+    }
+    const page = await ctx.db.query('businesses').paginate({ cursor: args.cursor, numItems: 10 })
+    const modes = { legacy: 0, compare: 0, offering: 0 }
+    const errors: string[] = []
+    let migrated = 0
+    for (const business of page.page) {
+      // Deterministic mode spread across businesses for full cutover-state variety.
+      const bucket = [...business.slug].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 10
+      const requestedMode = bucket < 7 ? 'offering' : bucket < 9 ? 'compare' : 'legacy'
+      const result = await seedBusinessOfferingSupplyCommand(db, business._id, requestedMode, now)
+      if (result.kind === 'error') {
+        errors.push(`${business.slug}:${result.code}`)
+        continue
+      }
+      migrated += result.migrated
+      modes[result.mode] += 1
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.devSeed.seedOfferingSupply, { cursor: page.continueCursor })
+    }
+    return { processed: page.page.length, migrated, modes, errors, nextCursor: page.isDone ? null : page.continueCursor, done: page.isDone }
+  },
+})
+
+export const seedDiscoveryManifests = internalMutation({
+  args: { cursor: v.union(v.string(), v.null()) },
+  returns: v.object({
+    processed: v.number(),
+    generated: v.number(),
+    skipped: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    done: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const now = Date.now()
+    const page = await ctx.db.query('businesses').paginate({ cursor: args.cursor, numItems: 10 })
+    let generated = 0
+    let skipped = 0
+    for (const business of page.page) {
+      const result = await seedDiscoveryManifestForBusinessCommand(ctx.db as never, business as never, now)
+      if (result === 'generated') generated += 1
+      else skipped += 1
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.devSeed.seedDiscoveryManifests, { cursor: page.continueCursor })
+    }
+    return { processed: page.page.length, generated, skipped, nextCursor: page.isDone ? null : page.continueCursor, done: page.isDone }
   },
 })
 

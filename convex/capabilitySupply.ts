@@ -496,6 +496,33 @@ export const observeCapabilityReadiness = internalMutation({
   },
 })
 
+/** Dev-only: force all current capability publications to ready/healthy so routeable supply
+ * exists without reachable sandbox provider endpoints (the readiness probe would mark them
+ * unhealthy in local dev). Rebuilds the origin supply projection for each affected business. */
+export const seedHealthyPublications = internalMutation({
+  args: {},
+  returns: v.object({ updated: v.number() }),
+  handler: async (ctx) => {
+    const now = Date.now()
+    const publications = await ctx.db.query('capabilityPublications').take(256)
+    let updated = 0
+    for (const publication of publications) {
+      if (publication.disposition !== 'current') continue
+      await ctx.db.patch(publication._id, {
+        credentialState: 'ready',
+        healthState: 'healthy',
+        readinessEvidenceRefs: ['seed:healthy-supply'],
+        readinessObservedAt: now,
+        readinessValidUntil: now + 3_600_000,
+        updatedAt: now,
+      })
+      await rebuildCapabilityOriginSupplyProjection(ctx, publication.businessId, now)
+      updated += 1
+    }
+    return { updated }
+  },
+})
+
 const probeOutcomeValue = v.union(
   v.literal('healthy'), v.literal('credential_unavailable'), v.literal('credential_rejected'),
   v.literal('target_not_public'), v.literal('transport_unreachable'), v.literal('http_redirect'),

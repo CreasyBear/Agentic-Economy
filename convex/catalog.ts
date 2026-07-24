@@ -659,6 +659,48 @@ async function computeCatalogMigrationParity(db: RuntimeDb, businessId: string):
   return { expectedDigest, observedDigest, matched: matched && expectedDigest === observedDigest }
 }
 
+/**
+ * System-callable (no admin gate) offering supply seeding for dev: migrates a
+ * business's retained v1 services into offerings, sets the requested cutover
+ * mode (honoring the compare->offering parity gate), and rebuilds the supply
+ * projection. Reuses the exact migration/cutover/parity helpers the
+ * admin-gated mutations use.
+ */
+export async function seedBusinessOfferingSupplyCommand(
+  db: RuntimeDb,
+  businessId: string,
+  requestedMode: 'legacy' | 'compare' | 'offering',
+  now: number,
+): Promise<{ kind: 'ok'; migrated: number; mode: 'legacy' | 'compare' | 'offering' } | { kind: 'error'; code: string }> {
+  const services = await db.query('businessServices').withIndex('by_business_status', (q) => q.eq('businessId', businessId)).collect()
+  if (services.length === 0) return { kind: 'ok', migrated: 0, mode: 'legacy' }
+  const capabilityRows = await Promise.all(services.map((service) => db.query('serviceCapabilities')
+    .withIndex('by_business_service_status', (q) => q.eq('businessId', businessId).eq('serviceId', service._id)).take(21)))
+  if (capabilityRows.some((rows) => rows.length > 20)) return { kind: 'error', code: 'migration_capability_limit_exceeded' }
+  const planned = planLegacyOfferingMigrationBatch({
+    services: services.map(toBusinessServiceRecord),
+    capabilities: capabilityRows.flat().map(toServiceCapabilityRecord),
+  })
+  if (!Array.isArray(planned)) return { kind: 'error', code: planned.kind === 'refused' ? planned.code : 'migration_refused' }
+  for (const migration of planned) {
+    const existing = await db.query('legacyOfferingCrosswalks').withIndex('by_serviceId', (q) => q.eq('serviceId', migration.crosswalk.serviceId)).unique()
+    if (existing !== null && stringField(existing, 'serviceSourceHash') !== migration.crosswalk.serviceSourceHash) {
+      return { kind: 'error', code: 'legacy_source_changed' }
+    }
+    await persistOfferingMigration(db, migration, existing, now)
+  }
+  const parity = await computeCatalogMigrationParity(db, businessId)
+  let mode: 'legacy' | 'compare' | 'offering' = requestedMode === 'legacy' ? 'legacy' : 'compare'
+  if (requestedMode === 'offering') {
+    const decision = decideCatalogSupplyCutover({ current: 'compare', requested: 'offering', ...(parity === undefined ? {} : { expectedDigest: parity.expectedDigest as never, observedDigest: parity.observedDigest as never }) })
+    mode = decision.kind === 'allowed' ? 'offering' : 'compare'
+  }
+  const matched = parity?.matched === true
+  await upsertCutover(db, businessId, { mode, ...(parity === undefined ? {} : { expectedProjectionDigest: parity.expectedDigest, latestProjectionDigest: parity.observedDigest }), lastCheckStatus: matched ? 'matched' : 'not_run', postCutoverNativeChanges: false }, now)
+  await rebuildBusinessSupplyProjectionSnapshotCommand(db, businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now), now)
+  return { kind: 'ok', migrated: planned.length, mode }
+}
+
 async function loadOfferingSourceState(db: RuntimeDb, businessId: string, actorRef: string): Promise<OfferingSourceState> {
   const [offerings, revisions, accessPaths, operations] = await Promise.all([
     db.query('businessOfferings').withIndex('by_businessId_and_status', (q) => q.eq('businessId', businessId)).collect(),

@@ -266,6 +266,22 @@ export const regenerateDiscoveryManifest = mutationGeneric({
   },
 })
 
+/** System-callable (no owner gate) discovery-manifest generation for dev seeding. */
+export async function seedDiscoveryManifestForBusinessCommand(
+  db: RuntimeMutationCtx['db'],
+  business: RuntimeDocument,
+  now: number,
+): Promise<'generated' | 'skipped'> {
+  const catalog = await publicCatalogForBusiness(db, business)
+  if (catalog === undefined) return 'skipped'
+  const manifest = buildManifest(catalog, canonicalBaseUrl(undefined), now, 'available')
+  const existingAttempt = await latestAttemptForBusiness(db, catalog.businessId)
+  await upsertManifest(db, manifest)
+  await upsertSucceededAttempt(db, manifest, existingAttempt, now)
+  await ensureDiscoveryAuditEvent(db, manifest, now)
+  return 'generated'
+}
+
 export const invalidateDiscoveryManifest = mutationGeneric({
   args: {
     businessId: v.string(),
