@@ -13,6 +13,9 @@ imports, `src/styles/globals.css`, and its UI-contract or browser coverage.
 
 1. Name the customer task, result, unknown, and next valid action the surface
    must make clearer.
+   For a broader objective, name the component tasks, their contribution to the
+   outcome, and the dependencies that affect choice, timing, cost, authority, or
+   recovery.
 2. Compose from `@astryxdesign/core` with
    `@astryxdesign/theme-neutral`. Use Tailwind 4 only for layout glue and the
    semantic bridge in `src/styles/globals.css` for shared visual values.
@@ -44,6 +47,15 @@ changed behavior.
 - Lead with ordinary customer tasks and decisions. Keep graphs, digests,
   bindings, protocol terms, and proof vocabulary in technical disclosure or
   protected diagnostic surfaces.
+- Keep the objective as the visual anchor. Show decomposition as recognizable
+  work, not a technical graph. Let one task stand alone or show how several
+  tasks combine into the requested outcome.
+- Give research, comparison, communication, booking, payment, monitoring,
+  cancellation, and recovery distinct language and states. Never infer outcome
+  success from a collection of successful tasks.
+- State responsibility and the next action positively. Put a limitation at the
+  decision it changes; do not surround ordinary progress with repeated
+  incapability copy.
 - Approval shows exact scope before action and remains separate from execution.
   Overall progress must not hide unresolved or externally owned work.
 

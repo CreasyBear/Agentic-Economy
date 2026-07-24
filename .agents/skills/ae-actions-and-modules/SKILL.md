@@ -10,6 +10,15 @@ real source owner and one intended surface before editing. The action registry i
 the shared contract seam; it is not proof that every declared surface is
 customer-reachable.
 
+AE works on two axes. Horizontal capabilities recur across domains: discovery,
+comparison, recommendation, communication, authority, execution, payment,
+monitoring, reconciliation, cancellation, recovery, and proof. Vertical
+outcomes compose them around a customer's goal.
+
+The domain owns its language, providers, constraints, risks, evidence, and
+action contracts. It never owns a parallel authority, attempt, or recovery
+system.
+
 ## 1. Establish current truth
 
 Read `AGENTS.md`, the current-state and target sections of `PRODUCT.md`, then:
@@ -91,9 +100,9 @@ For a consequential transition:
 - keep cancellation honest after provider release;
 - preserve existing Request-owned lineage while standalone lineage is added.
 
-Simple provider-supported booking is one registered booking action and Action
-Invocation; do not fabricate a Customer Request or RoutePlan. Coordinated
-booking may compose only when real dependencies earn orchestration.
+A provider-supported operation remains one registered action and Action
+Invocation; do not fabricate a Customer Request or RoutePlan. Compose operations
+only when the customer outcome has real dependencies.
 
 Authority mode is `inspect_only`, `approve_each`, `bounded_mandate`, or
 `full_yolo`. Every effect still consumes one exact authority use. `full_yolo`
@@ -106,10 +115,14 @@ Action Attempt, evidence, or Customer Request. Persist shared control meaning
 only after both Request-owned and standalone callers demonstrate the same
 semantics.
 
-## 5. Write boundary-honest contract text
+## 5. Write capable, boundary-honest contract text
 
 Start with the observable result, then state what remains unresolved and the
 safe continuation. Use `PRODUCT.md` and `AGENTS.md` for claim limits.
+
+Lead with the useful action and name who owns the next commitment. State a
+limitation once where it changes the decision. Do not repeat “does not book,”
+“cannot pay,” or similar slogans across every projection.
 
 - A receipt proves receipt, not fulfilment.
 - A published listing proves published supplied information, not availability.
@@ -139,6 +152,10 @@ not adopted as a cleanup project.
 Every loop ends with working source plus an executable demonstration, or the
 earliest reproducible failed transition. Local and mock evidence proves only
 development contract behavior.
+
+For a vertical outcome, prove the end-to-end customer loop. For a horizontal
+capability, prove that another conformant domain can use the same host and
+control plane. Do not accept empty shared scaffolding as horizontal proof.
 
 ## Stop conditions
 

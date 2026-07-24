@@ -1,38 +1,103 @@
 # Agentic Economy operating instructions
 
-Read this before acting. `PRODUCT.md` owns the product promise and maturity
-boundary. `DESIGN.md` owns human-interface decisions. Live source and executable
-behavior decide what is implemented now.
+Read this before acting. `PRODUCT.md` owns the product destination and maturity
+boundary. `DESIGN.md` owns human-interface direction. Live source and executable
+behavior decide what exists now.
+
+## Product direction
+
+AE is an execution product for agentic commerce. It helps agents discover real
+businesses and decide between viable options.
+
+It carries authorized work through booking, payment, dispatch, fulfilment,
+recovery, and other registered actions.
+
+Qualified inquiry is one action, not the product category or the ceiling.
+
+Build toward the target contract even when current surfaces expose less. Never
+turn a present implementation gap into a permanent product prohibition.
+
+Customer Request is the canonical aggregate for a broader outcome. A useful
+standalone action remains standalone.
+
+Do not require a synthetic Request or RoutePlan to satisfy architectural
+ceremony. Both paths use the same action, authority, attempt, evidence, and
+recovery system.
+
+AE works horizontally and vertically. Horizontal capabilities recur across
+domains.
+
+They include discovery, evidence gathering, comparison, recommendation,
+communication, negotiation, authority, execution, payment, monitoring,
+reconciliation, cancellation, recovery, and proof.
+
+Vertical outcomes compose those capabilities around a customer's real goal.
+Each domain owns its providers, language, constraints, risks, evidence standards,
+and action contracts. It never owns a parallel control plane.
+
+Decompose an objective into independently useful tasks. Preserve the difference
+between read-only, advisory, communicative, and consequential work. Compose only
+the tasks needed to finish the outcome.
+
+AE supports four operating modes:
+
+| Mode | Agent may do |
+| --- | --- |
+| `inspect_only` | Discover, compare, and prepare without causing an external effect. |
+| `approve_each` | Prepare work and obtain approval for each consequential action. |
+| `bounded_mandate` | Act without repeated approval inside an explicit standing mandate. |
+| `full_yolo` | Pursue the stated objective autonomously inside a broad, explicit, revocable mandate. |
+
+`full_yolo` is not ambient or unlimited authority. It is the widest deliberate
+mandate the principal grants.
+
+Its objective, actions, recipients, purposes, data, spend, currency, count, time,
+parallelism, fallback, and risk ceilings remain attributable and inspectable.
+
+Widening those limits requires a new mandate or step-up.
 
 ## Work forward
 
-Start from the decision or customer outcome being supported. Establish the
-relevant source owner and blast radius with one focused initial trace, implement
-a coherent vertical change, then re-trace every changed boundary during
-verification. Re-open the trace when the revision or source owner changes.
+Start from the customer outcome or decision being supported. Trace the live
+source owner and blast radius once, implement the smallest coherent vertical
+slice, and demonstrate it with labelled real, sandbox, mock, or fixture data.
 
-Every work loop ends in one of three things:
+Retrace every changed boundary.
+
+Each vertical slice must exercise a real customer loop and identify the
+horizontal capability it proves. Reuse an existing capability when its contract
+fits. Add domain policy to the registered contract or adapter, not the kernel.
+
+Do not build horizontal scaffolding without a real operation and acceptance
+eval. Do not duplicate shared control machinery to make one vertical move
+faster. A vertical is complete only when its customer outcome is observable.
+
+Every loop ends in one of three outcomes:
 
 1. working source plus an executable demonstration;
-2. a source-linked decision that narrows or changes the implementation; or
+2. a source-linked decision that changes or narrows implementation; or
 3. the earliest reproducible blocker and the smallest decision needed.
 
-Planning, issue commentary, test inventories, and repeated source audits are not
-progress by themselves. Open research and broad red suites may limit claims;
-they do not automatically veto authorized development work.
+Plans, issue commentary, inventories, and repeated audits are inputs, not
+progress.
 
-Use focused tests and evals to steer the transition being changed. Fix failures
-caused by the change. Record unrelated failures without turning the task into
-repository-wide cleanup.
+Follow a plan only while it serves the live product direction and current
+source. Supersede stale plans and ADRs instead of bending the product around
+them.
 
-When work has independent vertical slices, isolate them with explicit revision,
-ownership, observable outcome, evidence ceiling, and stop conditions. Use child
-tasks when isolation reduces risk, context pressure, or elapsed time. Require a
-scoped commit only in an isolated worktree; otherwise require a
-revision-addressed handoff and exact changed paths. One integrator owns
-conflicts and completion claims.
+Use focused tests and evals to steer the changed transition. Do not gate useful
+implementation on unrelated broad suites or endless test loops. Fix regressions
+caused by the change and record unrelated failures without absorbing them.
 
-## Truth and evidence
+Evaluate both axes. A vertical eval proves the end-to-end outcome, including its
+failure and recovery path. A horizontal eval proves the same capability can
+serve another conformant domain without a new host workflow or control plane.
+
+When independent vertical slices can proceed safely, isolate each by revision,
+ownership, observable outcome, evidence ceiling, and stop condition. One
+integrator owns conflicts and completion claims.
+
+## Truth and claims
 
 Keep these evidence classes distinct:
 
@@ -43,151 +108,113 @@ Keep these evidence classes distinct:
 - independently operated provider evidence;
 - real customer and operating evidence.
 
-One class never silently upgrades another. A fixture can prove contract
-behavior. It cannot prove deployment, useful supply, provider fulfilment,
-customer value, accessibility in use, or production safety.
+One class never silently upgrades another. Fixtures can prove contracts, not
+deployment, supply quality, provider fulfilment, customer value, accessibility
+in use, or production safety.
 
-`PRODUCT.md` separates the current evidenced state from the target contract.
-Implement toward the target without describing it as currently available.
-When source, runtime, tests, plans, ADRs, or docs disagree, report the
-contradiction and follow the authority appropriate to the decision:
+When sources disagree, use live source and intended-surface execution for
+current implementation, `PRODUCT.md` for product meaning, `DESIGN.md` for
+interface direction, and accepted ADRs for durable architecture.
 
-- live source and intended-surface execution for current implementation;
-- `PRODUCT.md` for product meaning and claim limits;
-- `DESIGN.md` for human-interface direction;
-- accepted ADRs for durable architectural decisions;
-- proposed ADRs and plans as constraints under evaluation, not permanent cages.
+Proposed ADRs, plans, issues, mocks, and tests are evidence under evaluation,
+not cages.
 
-Change or supersede an ADR when evidence invalidates it. Do not distort source
-to preserve a stale plan.
+Public claims remain narrower than internal capability. Published business
+information is discovery inventory.
 
-## Product boundary
+Routeable supply requires current admission, binding, eligibility, credentials,
+and readiness evidence.
 
-AE is building the trust, discovery, decision, and bounded-action layer for
-agentic commerce. Customer Request remains the canonical broader-outcome
-aggregate. Independently useful actions may enter without a synthetic Request
-when their lineage and trust meaning remain exact.
+A receipt proves the event it names, not later fulfilment. Use `verified` only
+with a named current standard and matching evidence.
 
-Public claims must remain narrower than internal capability:
+## Execution invariants
 
-- published business information is supplied discovery inventory;
-- routeable supply requires current admitted business, contract, offering,
-  binding, eligibility/publication, credentials, and readiness evidence;
-- a qualified inquiry is a human first-contact communication, not booking,
-  payment, dispatch, availability, acceptance, or fulfilment;
-- a receipt proves the recorded event it names, not a later external outcome;
-- use `verified` only with a named current standard and matching evidence.
+Prefer deep source-owned modules and thin transport, conversation, and rendering
+adapters.
 
-Assistants and authenticated agents may use only the operations and
-continuations exposed by the live intended surface. Discover surface inventory
-from current routes, `ActionSurface`, action registration, descriptors, and
-tests—never from a hard-coded list in this file.
-
-## Architecture invariants
-
-Prefer deep modules with one source owner and thin adapters.
-
-- New operations use the registered-action seam when that seam truthfully owns
-  their shared contract. Registration alone does not create a route.
-- Hosts own transport, authentication, conversation, navigation, and
-  rendering. Business rules stay in domain/application modules.
-- Conversation about a broader customer outcome compiles into and resumes
-  Customer Request. A supported standalone task may remain standalone. No host
-  may create a competing intent compiler, recommendation history, authority,
-  attempt, evidence, or recovery lifecycle.
+- New operations use the registered-action seam when it truthfully owns their
+  contract. Registration alone does not create a reachable route.
+- Identity attributes a caller. A current mandate authorizes consequences.
+  Possession of a Request, invocation, receipt, signature, or prior approval is
+  not authority.
+- Every consequential attempt records the mandate and limit reservation it
+  consumed, its stable idempotency meaning, provider target, and effect
+  generation.
+- Reserve and settle spend, count, and concurrency limits atomically where
+  oversubscription would violate the mandate.
+- One effect generation is current. Fence stale workers and observations so
+  cancellation, retry, or late completion cannot overwrite newer truth.
+- After a possible external release, uncertainty remains visible.
+  Reconciliation precedes retry. Cancellation never claims reversal without
+  provider evidence.
+- Durable records must reconstruct authority, attempts, uncertainty,
+  cancellation, and safe continuations without transcript, component, or
+  process memory.
+- Business records own business facts. Shared control projections own
+  continuity only and must be removable without erasing action-specific results.
 - Domain variation belongs in registered contracts and adapters. A conformant
-  provider swap must not require a new neutral compiler or host workflow.
-- Identity attributes a caller. Exact bounded authority permits a consequence.
-  Possession of a Request, action, invocation, receipt, signature, or prior
-  approval is not ambient authority.
-- Consequential work admits one current effect generation. Use explicit
-  concurrency ownership and stale-write fencing so a late worker, cancellation,
-  or observation cannot overwrite newer state.
-- Durable work reconstructs authority, attempts, uncertainty, cancellation, and
-  safe continuations from source-owned records. Transcript, component, and
-  process memory are never required for recovery.
-- Preserve exact historical Request lineage. Never make existing Request
-  lineage broadly optional as a migration shortcut.
-- For ADR-009/010 implementation, evaluate discriminated standalone lineage,
-  separated control state, reference-only composition, and persistence earned
-  by both caller origins. Keep these choices narrow and reversible until their
-  acceptance evals pass.
-- Every consequential attempt is attributable and has stable idempotency
-  meaning. After possible release, uncertainty remains visible; reconciliation
-  precedes retry; cancellation never claims reversal without provider evidence.
-- Business records remain authoritative for business facts. Any shared control
-  projection owns continuity only and must be removable without erasing the
-  action-specific result.
+  provider swap must not require a new host workflow or neutral compiler.
+- Preserve exact historical Request lineage. Standalone lineage is
+  discriminated, not achieved by making all existing Request references vague.
 
-No god files. Split by responsibility when a file begins to combine contracts,
-state transitions, persistence, transport adapters, projections, and host
-behavior. Do not split cohesive behavior into ceremonial wrappers; the test is
-whether each module has one reason to change and a clear deletion boundary.
+For ADR-009/010 work, evaluate standalone lineage, separated control state,
+reference-only composition, and persistence through both caller origins.
+
+Keep implementation choices reversible until their acceptance evals pass. Do
+not keep the product direction reversible.
+
+No god files. Split contracts, transitions, persistence, transport, projections,
+and host behavior when they acquire different reasons to change. Do not create
+ceremonial wrappers around cohesive behavior.
 
 ## Implementation quality
 
-- Preserve unrelated dirty work. Never use destructive Git cleanup, bulk
-  restore, hard reset, or permanent deletion.
-- Prefer the smallest coherent vertical slice over horizontal scaffolding.
-- Use typed contracts and discriminated outcomes at module boundaries.
-- Model ordinary refusal, conflict, stale input, and unknown effect explicitly;
-  reserve thrown exceptions for unexpected faults.
-- Keep routes and Convex hosts thin enough to reveal the source-owned operation.
-- Avoid premature abstraction. Earn shared interfaces through at least two
-  semantically matching uses or a required boundary.
-- Use clearly labelled mock/sandbox data while building and show the important
-  non-happy state, not only the success path.
-- A work result must include changed paths, commands and results, observable
-  behavior, remaining failure, evidence class, and claim ceiling.
+Preserve unrelated dirty work. Never permanently delete files or use destructive
+Git cleanup, bulk restore, or hard reset.
 
-## Human interface and copy
+Use typed contracts and discriminated ordinary outcomes. Reserve thrown
+exceptions for unexpected faults. Bound growing reads, scheduling, retries, and
+fan-out.
 
-Read `DESIGN.md` completely before visual work. Follow the current system named
-there; today that is Astryx with the neutral theme and the existing
-semantic-token bridge. Reuse or compose its primitives first. Do not introduce
-a competing component system, route-local palette, retired Daylight assets, or
-bespoke presentation layer. If the current system cannot meet a product or
-accessibility requirement, make the smallest local exception, demonstrate the
-gap and resulting behavior, and update `DESIGN.md` when the exception changes
-the durable interface direction.
+Use clearly labelled mock or sandbox data while building. Demonstrate success,
+refusal, exhausted authority, duplicate delivery, provider uncertainty, and
+cancellation when relevant.
 
-Avoid generic AI styling. Preserve complete interaction states, keyboard
-access, persistent labels, visible focus, non-colour cues, responsive behavior,
-and practical touch targets.
+A work result states changed paths, commands and results, observable behavior,
+remaining failure, evidence class, and claim ceiling.
 
-Public human copy uses ordinary customer language. Keep internal implementation
-terms such as `source-owned`, `readback`, `manifest`, `capability`, `gateway`,
-`operator`, `MCP`, `OpenAPI`, `callable`, `agent-native`, `DTO`, and `fixture`
-inside technical or protected diagnostic surfaces.
+## Human interface
 
-`KNOWN`, `UNKNOWN`, `UNAVAILABLE`, and `NEXT_STEP` are machine/diagnostic
-vocabulary, not public human labels.
+Read `DESIGN.md` completely before visual work. Use Astryx with the neutral
+theme and the semantic-token bridge. Do not introduce a competing system,
+route-local palette, retired Daylight assets, or generic AI styling.
 
-## Research and records
+The interface makes autonomy legible without turning it into approval theatre.
+Show the current mode, mandate boundary, material work, consumed limits,
+uncertainty, and a durable way to pause or revoke future work.
 
-Research supports a concrete decision; it is not an implementation holding
-pattern. Before creating research, positioning, competitor, GTM, ecosystem, or
-business-model records, read `.planning/records/README.md` and use the existing
-records system. Label observation, inference, unknown, hypothesis, owner, and
-review date. Update the source register and research queue when their governed
-state changes.
+In `bounded_mandate` and `full_yolo`, do not ask again for authorized actions.
+Step up only to widen the mandate or resolve a decision left to the principal.
 
+Preserve keyboard access, persistent labels, visible focus, non-colour cues,
+responsive behavior, practical touch targets, and complete interaction states.
+
+Public copy uses customer language. Protocol and implementation vocabulary
+belongs in builder or diagnostic surfaces.
+
+## Records and Convex
+
+Research supports a concrete decision and uses `.planning/records/README.md`.
 Create or supersede an ADR when changing a public contract, authority boundary,
 canonical data model, interoperability posture, or neutrality constraint.
+
 Preserve prior decisions as provenance.
 
-## Convex
-
-Before editing Convex code, read
-`convex/_generated/ai/guidelines.md` completely. It is the API authority for the
-installed Convex version.
-
-Keep schema fragments with their owning modules and compose them in
-`convex/schema.ts`. Bound growing reads and scheduled work. Treat self-scheduling
-loops, zero-delay retries, and `.collect()` as cost and termination risks that
-require explicit limits and stop conditions. Isolate Node-dependent actions in
-dedicated `"use node";` files.
+Before editing Convex, read `convex/_generated/ai/guidelines.md` completely.
+Keep schema fragments with their owners, bound growing work, and isolate
+Node-dependent actions in dedicated `"use node";` files.
 
 During a suspected cost incident, begin with static/local inspection. Do not
-probe, seed, deploy, or repeatedly run control-plane commands without explicit
+probe, seed, deploy, or repeatedly call the control plane without explicit
 authorization.

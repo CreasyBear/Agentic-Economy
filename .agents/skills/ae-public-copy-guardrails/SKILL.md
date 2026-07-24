@@ -18,6 +18,9 @@ public feature claims.
 2. Write the current action in ordinary nouns and verbs. Lead with the person's
    need or useful next step; state a limitation once where it changes the
    decision.
+   State responsibility positively: who confirms, commits, pays, acts, or owns
+   the next step. Do not make incapability the page headline or repeat a
+   disclaimer across answer, card, composer, and footer.
 3. Compare human copy, action `summary` and `boundaries`, agent JSON, discovery
    output, metadata, and refusal behavior that describe the same operation.
 4. Run `npm run test:copy`; add `npm run test:seo` for discovery, metadata,
@@ -28,13 +31,20 @@ The loop is complete only when every changed public and assistant-visible
 projection agrees, every claim has matching evidence at that surface, and the
 earliest unproven boundary is explicit.
 
-## Current safe language
+## Product and evidence language
 
-AE currently lets people and assistants read, compare, summarize, and see a
-supported next step. `inquiry.submit` may send a qualified inquiry when the
-listing publishes that action. It does not prove booking, charging, payment,
-dispatch, availability, autonomous fulfilment, provider quality, or outcome
-validity.
+State AE's destination confidently: it decomposes objectives into useful tasks
+and composes those tasks into completed outcomes. Horizontal capabilities recur
+across domains; verticals supply domain meaning, providers, risks, and evidence.
+
+State current reachability only where it affects the action in front of the
+person. On today's public discovery surface, lead with reading, comparing, and
+the supported next action. For inquiry, say the business reviews the request and
+confirms timing, price, availability, and the work.
+
+Do not enforce truth with a mandatory negative slogan such as “AE does not
+book.” A copy gate must detect action overclaims and require a clear
+responsibility boundary. It must not require defensive wording.
 
 Use `verified` only with a named current standard and its evidence reference;
 otherwise use `checked`, `supplied`, `published`, `last checked`, or `needs
@@ -50,6 +60,7 @@ does not imply unsupported availability.
 `llms.txt`, agent payloads, and owner/admin surfaces. Human pages communicate
 the same honesty in ordinary language.
 
-Action summaries state read/write scope; `boundaries` state approval,
-unsupported effects, failure behavior, and fallback. Registration or a business
-page is discovery inventory, not proof of routeable supply.
+Action summaries state the observable result. `boundaries` state responsibility,
+approval, unsupported effects, failure behavior, and fallback once, at the
+decision point. Registration or a business page is discovery inventory, not
+proof of routeable supply.

@@ -11,6 +11,11 @@ the authenticated Customer Request API has a narrow evidenced journey; the
 complete neutral route lifecycle and partial-entry Action Invocation plane
 remain target contracts.
 
+The target decomposes an objective into independently useful tasks and composes
+the tasks required to finish the outcome. Discovery, comparison, execution, and
+recovery are horizontal capabilities. Domain routes provide vertical meaning
+without creating a new compiler or control plane.
+
 ## 1. Trace the customer job once
 
 Read `AGENTS.md`, `PRODUCT.md`, and `UBIQUITOUS_LANGUAGE.md`. For the requested
@@ -60,8 +65,8 @@ projection, Request API, or host business rules.
 
 Choose the existing owner:
 
-- Customer outcome, facts, revisions, route proposals, decisions, and durable
-  resume belong to Customer Request.
+- Customer outcome, task decomposition, facts, revisions, route proposals,
+  decisions, and durable resume belong to Customer Request.
 - One independently useful consequential operation is declared in the action
   registry and, when continuity requires it, controlled through Action
   Invocation.
@@ -78,6 +83,10 @@ Request-owned fields stay valid; standalone work must not fabricate a Request.
 Completion: the change adds no parallel compiler, customer history,
 recommendation model, authority path, attempt lifecycle, or recovery state
 machine.
+
+Do not force every useful task into a Request. Do not let a standalone task hide
+its origin. Do not encode a seed vertical's nouns or sequence in the neutral
+compiler.
 
 ## 4. Make failure and continuation observable
 
@@ -119,6 +128,10 @@ Every loop ends with working source plus an executable labelled demonstration,
 or the earliest reproducible failed transition. Mock/sandbox evidence proves
 development semantics only. It does not prove production fulfilment,
 independent supply, reduced customer effort, or customer value.
+
+Evaluate both axes when the change claims both. A vertical eval proves the
+customer outcome and recovery path. A horizontal eval proves reuse by another
+conformant domain without a new host workflow or control plane.
 
 ## Stop conditions
 

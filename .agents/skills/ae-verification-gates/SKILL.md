@@ -13,6 +13,8 @@ runtime proof.
 
 1. State the behavior, failure mode, surface, and evidence class the change must
    prove.
+   State whether the claim is vertical outcome completion, horizontal capability
+   reuse, or both. Each axis needs its own observable result.
 2. Run the narrowest test that exercises the changed transition. Include a
    labelled mock/dev failure or recovery state when the behavior has one.
 3. Fix regressions caused by the change. If a broad suite fails elsewhere,
@@ -60,10 +62,18 @@ deployment, independent supply, real fulfilment, human parity, customer value,
 or production safety. An issue or ADR gate can remain externally unproven while
 authorized development implementation continues.
 
-For ADR-019 booking or authority-mode work, the minimum development eval crosses
-one registered booking action through the real Action Invocation seam and
-proves: no effect in `inspect_only`; exact use in `approve_each`; standing-use
-capacity in bounded modes; expiry/revocation/generation fencing; atomic
-reservation and settlement; uncertainty holds; honest cancellation; and
-step-up on every material widening. This proves labelled development contract
-behavior only, never current booking reachability or provider fulfilment.
+For ADR-019 authority-mode work, the minimum development eval crosses one
+provider-published operation through the real Action Invocation seam.
+
+Prove no effect in `inspect_only`; exact use in `approve_each`; standing-use
+capacity in bounded modes; expiry, revocation, and generation fencing; atomic
+reservation and settlement; uncertainty holds; cancellation is honest; and
+every material widening steps up.
+
+This proves labelled development contract behavior only. It never proves
+current customer reachability or provider fulfilment.
+
+For a vertical claim, execute the decomposed customer loop through its outcome,
+including refusal, uncertainty, and recovery. For a horizontal claim, run the
+same capability contract through another conformant domain without a new host
+workflow or control plane.
