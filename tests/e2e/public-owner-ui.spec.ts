@@ -58,7 +58,7 @@ test.describe('public owner routes', () => {
     }).toPass({ timeout: 20_000 })
     await expect(page.getByRole('heading', { name: 'Publish a page customers can understand.' })).toBeVisible()
     await expect(page.getByText('You review every public detail before anything appears.')).toBeVisible()
-    await expect(page.getByText('AE does not book, charge, confirm availability, or accept work for your business.')).toBeVisible()
+    await expect(page.getByText('You confirm availability, price, and every request before work begins.')).toBeVisible()
     await expect(page.getByRole('link', { name: 'Sign in to start' })).toHaveAttribute('href', '/claim/form')
     await assertPublicLanguage(page)
   })
@@ -227,7 +227,7 @@ test.describe('public owner routes', () => {
     await expect(page.getByRole('heading', { name: /service page status/i })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Request admission' })).toBeVisible()
     await expect(
-      page.getByText('These checks currently prevent this business page from receiving requests.', { exact: true }),
+      page.getByText('Complete these checks to start receiving requests from this page.', { exact: true }),
     ).toBeVisible()
     await expect(page.getByText('Add a usable owner notification email', { exact: true })).toBeVisible()
     await expect(page.getByText('Finish inquiry setup', { exact: true })).toBeVisible()

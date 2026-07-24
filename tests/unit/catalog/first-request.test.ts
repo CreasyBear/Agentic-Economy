@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { validateServiceCatalogInput } from '@/modules/catalog/public'
 
 describe('service catalog validation', () => {
-  it('requires at least one valid service', () => {
-    expect(validateServiceCatalogInput([])).toEqual({ kind: 'invalid', reason: 'empty_services' })
+  it('allows a business profile before its first offering but still rejects malformed services', () => {
+    expect(validateServiceCatalogInput([])).toEqual({ kind: 'valid', services: [] })
     expect(
       validateServiceCatalogInput([
         {

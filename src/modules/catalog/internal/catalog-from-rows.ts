@@ -346,7 +346,7 @@ function ensureServiceFirstRequestCapabilities(
       status: 'unavailable',
       firstRequest: {
         mode: 'not_available_yet',
-        publicDisclosure: 'First request is not available yet.',
+        publicDisclosure: 'This business has not published a request path.',
         publicChannel: 'not_available',
         noContactReason: 'Owner has not supplied public contact instructions.',
       },

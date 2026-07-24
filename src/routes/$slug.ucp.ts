@@ -2,16 +2,17 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { discoveryJsonResponse } from '@/lib/http/discovery-response'
-import { readPublicCatalogDiscoveryManifest } from '@/modules/discovery/discovery.functions'
+import { readPublicOfferingDiscoveryManifest } from '@/modules/discovery/discovery.functions'
 import {
   readFixtureCatalogDiscoveryManifest,
 } from '@/modules/discovery/public'
-import { projectCurrentDiscoveryInquiryAvailability } from '@/modules/registry/public-inquiry-projection'
 import type {
   DiscoveryManifestContract,
+  OfferingDiscoveryManifestContract,
 } from '@/modules/discovery/public'
 
 type PublicUcpManifest = Omit<DiscoveryManifestContract, 'businessId' | 'sourceHash'>
+type PublicOfferingUcpManifest = Omit<OfferingDiscoveryManifestContract, 'businessId'>
 
 export const Route = createFileRoute('/$slug/ucp')({
   server: {
@@ -22,7 +23,7 @@ export const Route = createFileRoute('/$slug/ucp')({
 })
 
 export async function handleDurableUcpManifestRequest(request: Request, slug: string): Promise<Response> {
-  const result = await readPublicCatalogDiscoveryManifest({
+  const result = await readPublicOfferingDiscoveryManifest({
     slug,
     canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
     now: Date.now(),
@@ -39,8 +40,7 @@ export async function handleDurableUcpManifestRequest(request: Request, slug: st
     )
   }
 
-  const currentManifest = await projectCurrentDiscoveryInquiryAvailability(result.manifest)
-  return discoveryJsonResponse(toPublicUcpManifest(currentManifest))
+  return discoveryJsonResponse(toPublicOfferingUcpManifest(result.manifest))
 }
 
 export function handleUcpManifestRequest(request: Request, slug: string): Response {
@@ -66,5 +66,10 @@ export function handleUcpManifestRequest(request: Request, slug: string): Respon
 
 function toPublicUcpManifest(manifest: DiscoveryManifestContract): PublicUcpManifest {
   const { businessId: _businessId, sourceHash: _sourceHash, ...publicManifest } = manifest
+  return publicManifest
+}
+
+function toPublicOfferingUcpManifest(manifest: OfferingDiscoveryManifestContract): PublicOfferingUcpManifest {
+  const { businessId: _businessId, ...publicManifest } = manifest
   return publicManifest
 }

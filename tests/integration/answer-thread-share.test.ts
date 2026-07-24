@@ -28,8 +28,8 @@ describe('public thread share route', () => {
       prose: {
         oneLine: 'One listed business matches this need.',
         summary:
-          'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+          'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+        whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
       },
     }))
     const restoreOpenRouter = server.installEnv()

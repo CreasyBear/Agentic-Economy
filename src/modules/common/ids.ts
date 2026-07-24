@@ -7,6 +7,8 @@ export type Brand<Value, Name extends string> = Value & {
 export type OwnerId = Brand<string, 'OwnerId'>
 export type BusinessId = Brand<string, 'BusinessId'>
 export type ServiceId = Brand<string, 'ServiceId'>
+export type OfferingRef = Brand<string, 'OfferingRef'>
+export type AccessPathRef = Brand<string, 'AccessPathRef'>
 export type ClaimId = Brand<string, 'ClaimId'>
 export type Slug = Brand<string, 'Slug'>
 export type OperationKey = Brand<string, 'OperationKey'>
@@ -38,6 +40,8 @@ export type BrandedId =
   | OwnerId
   | BusinessId
   | ServiceId
+  | OfferingRef
+  | AccessPathRef
   | ClaimId
   | Slug
   | OperationKey

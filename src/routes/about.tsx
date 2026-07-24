@@ -4,7 +4,6 @@ import {
   GitCompareIcon,
   SearchIcon,
   SendIcon,
-  XIcon,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@astryxdesign/core/Button'
@@ -31,13 +30,6 @@ const doesItems = [
   { icon: GitCompareIcon, label: 'Compare what businesses offer' },
   { icon: SendIcon, label: 'Send inquiry when available' },
   { icon: BotIcon, label: 'Use the same details with an assistant' },
-]
-
-const doesNotItems = [
-  'No booking',
-  'No payment',
-  'No dispatch',
-  'No confirmed availability',
 ]
 
 const commerceShift = [
@@ -188,16 +180,11 @@ function AboutRoute() {
                   Timing, price, materials, scope, and whether the job is a fit. AE helps the conversation start with better context.
                 </Text>
               </Card>
-              <Card padding={4} variant="red" className="grid gap-2">
-                <Text type="large" weight="medium" color="primary" display="block">What AE never does</Text>
-                <div className="grid gap-2">
-                  {doesNotItems.map((label) => (
-                    <div key={label} className="flex items-center gap-3 text-sm text-secondary">
-                      <XIcon className="size-4 shrink-0 opacity-70" aria-hidden="true" />
-                      <span>{label}</span>
-                    </div>
-                  ))}
-                </div>
+              <Card padding={4} className="grid gap-2">
+                <Text type="large" weight="medium" color="primary" display="block">What happens next</Text>
+                <Text color="secondary" display="block">
+                  The business reviews the request and confirms fit, timing, price, availability, and the work.
+                </Text>
               </Card>
             </div>
           </div>
@@ -327,19 +314,14 @@ function MobileTrustAccordion() {
         </Collapsible>
 
         <Collapsible
-          className="rounded-sm border border-destructive/25 bg-destructive/5"
-          isOpen={openItem === 'does-not'}
-          onOpenChange={(nextOpen) => setOpenItem(nextOpen ? 'does-not' : '')}
-          trigger={<MobileAccordionTrigger title="What AE never does" />}
+          className="rounded-sm border bg-card"
+          isOpen={openItem === 'next-step'}
+          onOpenChange={(nextOpen) => setOpenItem(nextOpen ? 'next-step' : '')}
+          trigger={<MobileAccordionTrigger title="What happens next" />}
         >
-          <div className="grid gap-2 px-4 pb-4">
-            {doesNotItems.map((label) => (
-              <div key={label} className="flex items-center gap-3 text-sm text-secondary">
-                <XIcon className="size-4 shrink-0 opacity-70" aria-hidden="true" />
-                <span>{label}</span>
-              </div>
-            ))}
-          </div>
+          <Text as="p" color="secondary" display="block" className="px-4 pb-4">
+            The business reviews the request and confirms fit, timing, price, availability, and the work.
+          </Text>
         </Collapsible>
       </div>
     </div>

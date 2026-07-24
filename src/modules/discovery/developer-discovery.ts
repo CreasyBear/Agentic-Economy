@@ -5,8 +5,11 @@ import type { FunnelEventType, OperatorControlReadback } from '@/modules/observa
 import { readCatalogHealth } from '@/modules/registry/public'
 import type {
   PublicBusinessCatalogApiDto,
+  PublicBusinessCatalogApiV2Dto,
   PublicBusinessCatalogApiPage,
+  PublicBusinessCatalogApiV2Page,
   PublicBusinessCatalogDetailResult,
+  PublicBusinessCatalogV2DetailResult,
 } from '@/modules/registry/public'
 import type { DiscoverySourceState, DiscoveryStatus } from '@/modules/discovery/public'
 import { readDiscoveryHealth as readDiscoveryHealthImpl } from './internal/manifest-attempts'
@@ -137,7 +140,7 @@ export type DeveloperDiscoveryPublicCatalogFact = {
   suburb: string
   stateTerritory: string
   publicUrl: string
-  schemaVersion: PublicBusinessCatalogApiDto['schemaVersion']
+  schemaVersion: PublicBusinessCatalogApiDto['schemaVersion'] | PublicBusinessCatalogApiV2Dto['schemaVersion']
   indexStatus: PublicCatalogContract['indexStatus']
   discoveryStatus: PublicCatalogContract['discoveryStatus']
   updatedAt: number
@@ -188,10 +191,10 @@ export type DeveloperDiscoveryRouteSnapshotResponse<Body> = DeveloperDiscoveryRo
 }
 
 export type DeveloperDiscoveryRouteSnapshot = {
-  list: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogApiPage>
-  search: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogApiPage>
-  detail?: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogDetailResult>
-  missingDetail?: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogDetailResult>
+  list: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogApiPage | PublicBusinessCatalogApiV2Page>
+  search: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogApiPage | PublicBusinessCatalogApiV2Page>
+  detail?: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogDetailResult | PublicBusinessCatalogV2DetailResult>
+  missingDetail?: DeveloperDiscoveryRouteSnapshotResponse<PublicBusinessCatalogDetailResult | PublicBusinessCatalogV2DetailResult>
   routeExecutions: readonly DeveloperDiscoveryRouteExecution[]
 }
 
@@ -267,7 +270,7 @@ export type DeveloperDiscoverySchemaArtifact = DeveloperDiscoveryArtifactBase & 
 
 export type DeveloperDiscoveryExamplesArtifact = DeveloperDiscoveryArtifactBase & {
   kind: 'public_catalog_examples'
-  examples: readonly PublicBusinessCatalogApiDto[]
+  examples: readonly (PublicBusinessCatalogApiDto | PublicBusinessCatalogApiV2Dto)[]
   emptyExample: {
     kind: 'ok'
     items: []
@@ -281,7 +284,7 @@ export type DeveloperDiscoveryExamplesArtifact = DeveloperDiscoveryArtifactBase 
 export type DeveloperDiscoveryFixtureBundleArtifact = DeveloperDiscoveryArtifactBase & {
   kind: 'public_catalog_fixture_bundle'
   schema: DeveloperDiscoverySchemaArtifact
-  examples: readonly PublicBusinessCatalogApiDto[]
+  examples: readonly (PublicBusinessCatalogApiDto | PublicBusinessCatalogApiV2Dto)[]
   supportMatrix: readonly DiscoverySupportMatrixRow[]
   gatedExclusions: readonly DiscoveryGatedExclusion[]
   routeHealth: readonly DeveloperDiscoveryRouteHealth[]
@@ -1275,11 +1278,13 @@ function readDeveloperDiscoveryPublicRouteCatalogs(state: DiscoverySourceState):
     .sort((left, right) => left.slug.localeCompare(right.slug))
 }
 
+type DeveloperDiscoveryRouteCatalog = PublicBusinessCatalogApiDto | PublicBusinessCatalogApiV2Dto
+
 function readDeveloperDiscoveryPublicRouteCatalogsFromSnapshot(
   snapshot: DeveloperDiscoveryRouteSnapshot
-): readonly PublicBusinessCatalogApiDto[] {
-  const bySlug = new Map<string, PublicBusinessCatalogApiDto>()
-  const add = (catalog: PublicBusinessCatalogApiDto): void => {
+): readonly DeveloperDiscoveryRouteCatalog[] {
+  const bySlug = new Map<string, DeveloperDiscoveryRouteCatalog>()
+  const add = (catalog: DeveloperDiscoveryRouteCatalog): void => {
     bySlug.set(catalog.slug, catalog)
   }
 
@@ -1302,7 +1307,30 @@ function readDeveloperDiscoveryPublicRouteCatalogsFromSnapshot(
   return Array.from(bySlug.values()).sort((left, right) => left.slug.localeCompare(right.slug))
 }
 
-function toDeveloperDiscoveryFactFromApi(catalog: PublicBusinessCatalogApiDto): DeveloperDiscoveryPublicCatalogFact {
+function toDeveloperDiscoveryFactFromApi(catalog: DeveloperDiscoveryRouteCatalog): DeveloperDiscoveryPublicCatalogFact {
+  if (catalog.schemaVersion === 'public-business-catalog-api:v2') {
+    return {
+      slug: catalog.slug,
+      name: catalog.name,
+      category: catalog.category,
+      suburb: catalog.suburb,
+      stateTerritory: catalog.stateTerritory,
+      publicUrl: catalog.publicUrl,
+      schemaVersion: catalog.schemaVersion,
+      indexStatus: catalog.disposition === 'current' ? 'indexed' : 'stale',
+      discoveryStatus: catalog.disposition === 'current' ? 'available' : 'stale',
+      updatedAt: catalog.observedAt,
+      serviceCount: catalog.offerings.length,
+      capabilityStatuses: uniqueSorted(catalog.offerings.map((offering) =>
+        offering.support.aeSupportedAction ? 'available' as const : 'unavailable' as const,
+      )),
+      firstRequestModes: uniqueSorted(catalog.offerings.flatMap((offering) =>
+        offering.accessPaths
+          .filter((path) => path.kind === 'human_request')
+          .map((path) => path.channel === 'ae_inquiry' ? 'inquiry_available' as const : 'quote_request_available' as const),
+      )),
+    }
+  }
   return {
     slug: catalog.slug,
     name: catalog.name,

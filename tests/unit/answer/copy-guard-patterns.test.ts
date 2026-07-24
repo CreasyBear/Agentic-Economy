@@ -35,8 +35,8 @@ describe('copy guard patterns', () => {
   })
 
   it('detects boundary copy', () => {
-    expect(hasBoundaryCopy('Agentic Economy does not book or take payment on this page.')).toBe(true)
-    expect(hasBoundaryCopy('The business handles timing, price, and availability.')).toBe(false)
+    expect(hasBoundaryCopy('The business confirms timing, price, availability, and the work.')).toBe(true)
+    expect(hasBoundaryCopy('Agentic Economy does not book or take payment on this page.')).toBe(false)
     expect(hasBoundaryCopy('Decorative local commerce copy.')).toBe(false)
   })
 
@@ -53,7 +53,7 @@ describe('copy guard patterns', () => {
       'Checking fit',
       'Preparing the next step',
       'Preparing the answer',
-      'This page can help read, compare, and route to a listed business page. It does not book, take payment, or dispatch work.',
+      'The business confirms timing, price, availability, and the work.',
     ].join(' ')
 
     expect(hasOverclaim(copy)).toBe(false)

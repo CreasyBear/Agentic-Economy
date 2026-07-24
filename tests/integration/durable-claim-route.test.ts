@@ -29,7 +29,7 @@ describe('durable public owner claim route readbacks', () => {
       serviceSummary: 'Urgent switchboard fault triage for Fremantle homes and shops.',
       serviceArea: 'Fremantle, South Fremantle, and Beaconsfield',
       hoursOrUnknown: 'After-hours availability supplied by owner',
-      publicDisclosure: 'First request instructions are not available yet.',
+      publicDisclosure: 'This business has not published a request path.',
       noContactReason: 'Owner has not supplied a public contact path yet.',
     }
 

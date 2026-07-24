@@ -383,7 +383,7 @@ describe('AeChat route promotion', () => {
 
     expectComposerCopy(
       'Ask limits, refine, or continue with the selected business',
-      'AE keeps that business in context for qualified inquiry review. The business still confirms timing, quote, and availability.',
+      'AE keeps that business in context. The business confirms timing, quote, availability, and the work.',
     )
   })
 })

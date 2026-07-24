@@ -93,8 +93,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
               content: JSON.stringify({
                 oneLine: 'One listed business matches this need.',
                 summary:
-                  'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-                whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+                  'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+                whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
               }),
             },
           },
@@ -455,7 +455,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       prose: {
         oneLine: 'Fictional Plumbing is the best pick.',
         summary:
-          'Fictional Plumbing can help. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+          'Fictional Plumbing can help. The business confirms timing, price, availability, and the work.',
         whatToDoNow: 'Contact fictional-plumbing directly.',
       },
     }))
@@ -519,8 +519,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       prose: {
         oneLine: 'One listing matches the prior results.',
         summary:
-          'The earlier provider still applies. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+          'The earlier provider still applies. The business confirms timing, price, availability, and the work.',
+        whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
       },
     }))
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -609,8 +609,8 @@ function matchingProviderProse(): OpenRouterProsePlan {
   return {
     oneLine: 'One listed business matches this need.',
     summary:
-      'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-    whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+      'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+    whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
   }
 }
 

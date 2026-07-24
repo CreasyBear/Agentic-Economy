@@ -43,7 +43,7 @@ import type { Infer } from 'convex/values'
 
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
-import { listEligibleCapabilitySupply } from './capabilitySupply'
+import { listRouteableCapabilitySupply } from './capabilitySupply'
 import {
   getActiveExactCapabilityContract,
 } from './capabilityContractDocuments'
@@ -271,11 +271,11 @@ export function customerRequestV2WritePorts(ctx: MutationCtx): CustomerRequestV2
 }
 
 async function validateAggregateAgainstCurrentCapabilityGraph(
-  db: Parameters<typeof listEligibleCapabilitySupply>[0],
+  db: Parameters<typeof listRouteableCapabilitySupply>[0],
   aggregate: Aggregate,
   routeGeneration: RouteGeneration | undefined,
 ): Promise<GraphValidationStatus> {
-  const currentSupply = await listEligibleCapabilitySupply(db, {
+  const currentSupply = await listRouteableCapabilitySupply(db, {
     networkId: aggregate.snapshot.networkId,
     limit: 64,
   })
@@ -429,7 +429,7 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
 }
 
 type AvailableEligibleCapabilitySupply = Extract<
-  Awaited<ReturnType<typeof listEligibleCapabilitySupply>>,
+  Awaited<ReturnType<typeof listRouteableCapabilitySupply>>,
   { kind: 'available' }
 >
 

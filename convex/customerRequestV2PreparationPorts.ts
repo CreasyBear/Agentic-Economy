@@ -30,7 +30,7 @@ import type { Infer } from 'convex/values'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
-import { listEligibleCapabilitySupply } from './capabilitySupply'
+import { listRouteableCapabilitySupply } from './capabilitySupply'
 
 type Aggregate = Infer<typeof customerRequestV2AggregateValue>
 type StoredPreparation = Infer<typeof durableActionPreparationV2Value>
@@ -277,7 +277,7 @@ async function loadCurrentActionModel(
   aggregate: CustomerRequestV2Aggregate,
   action: CustomerRequestV2Aggregate['plan']['actions'][number],
 ): Promise<CapabilityDecisionModel | undefined> {
-  const supply = await listEligibleCapabilitySupply(db, {
+  const supply = await listRouteableCapabilitySupply(db, {
     networkId: aggregate.snapshot.networkId,
     limit: 64,
   })

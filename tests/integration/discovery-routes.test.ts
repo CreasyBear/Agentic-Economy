@@ -13,6 +13,8 @@ import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
 
 beforeEach(() => {
   vi.stubEnv('AE_CANONICAL_HOST_ALLOWLIST', 'ae.example')
+  vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://ae.example')
+  vi.stubEnv('AE_ROUTING_PUBLIC_BASE_URL', 'https://ae.example')
 })
 
 afterEach(() => {
@@ -188,7 +190,7 @@ function createDurablePublishedDiscoveryState(input: {
         firstRequest: {
           mode: 'not_available_yet',
           publicChannel: 'not_available',
-          publicDisclosure: 'First request is not available yet.',
+          publicDisclosure: 'This business has not published a request path.',
           noContactReason: 'Owner has not supplied public contact instructions.',
         },
       },

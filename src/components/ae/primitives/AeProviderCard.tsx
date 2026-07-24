@@ -9,16 +9,16 @@ import { Token } from '@astryxdesign/core/Token'
 
 import { RouterLink } from '@/components/astryx/RouterLink'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
-import { buildProviderPresentation, pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
+import { pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
 import { capabilityStatusToAeStatus, firstRequestModeLabel } from '@/lib/ui/status-presentation'
-import { buildListingTrustProjection, NO_REPLY_HISTORY, type TrustFact } from '@/lib/ui/trust-projection'
+import { NO_REPLY_HISTORY } from '@/lib/ui/trust-projection'
 import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicRouteServiceContract } from '@/modules/catalog/public'
-import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 export type AeProviderCardProps =
   | { variant: 'answer'; source: AnswerSource; threadId?: string }
-  | { variant: 'registry'; item: PublicBusinessCatalogApiDto; onView?: () => void }
+  | { variant: 'registry'; item: PublicBusinessCatalogApiV2Dto; onView?: () => void }
   | { variant: 'capability'; service: PublicRouteServiceContract }
 
 export function AeProviderCard(props: AeProviderCardProps) {
@@ -106,21 +106,23 @@ function answerCardGrounding(source: AnswerSource): string | undefined {
 }
 
 
-function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogApiDto; onView?: () => void }) {
-  const presentation = buildProviderPresentation(item, { serviceChipLimit: 3 })
-  const trust = buildListingTrustProjection(item)
+function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogApiV2Dto; onView?: () => void }) {
   const [copied, setCopied] = useState(false)
   const location = [item.suburb.trim(), item.stateTerritory.trim()].filter(Boolean).join(', ') || 'Location not published here'
-  const serviceArea = trustFactLabel(trust.serviceArea)
-  const hours = trustFactLabel(trust.hours)
-  const phone = trustFactLabel(trust.phone)
+  const phone = item.publishedPhone?.trim() || 'Phone not published here'
+  const offeringNames = item.offerings.slice(0, 2).map((offering) => offering.name)
+  const accessSummary = [
+    ...(item.accessSummary.humanRequest ? ['Contact available'] : []),
+    ...(item.accessSummary.externalOperation ? ['Agent endpoint published'] : []),
+    ...(item.accessSummary.aeSupportedAction ? ['AE can carry out an action'] : []),
+  ]
 
   async function copyDetails() {
     const details = [
       item.name,
       item.category,
       `Location: ${location}`,
-      `Service area: ${serviceArea}`,
+      `Offerings: ${offeringNames.length === 0 ? 'None published yet' : offeringNames.join(', ')}`,
       `Phone: ${phone}`,
       `Page: ${window.location.origin}/${item.slug}`,
     ].join('\n')
@@ -149,22 +151,23 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
         </span>
       </div>
 
-      <TokenList labels={presentation.serviceChips.map((service) => service.label)} />
+      {offeringNames.length === 0 ? (
+        <Text type="supporting" color="secondary" display="block">No Offerings published yet</Text>
+      ) : <TokenList labels={offeringNames} ariaLabel="Published Offerings" />}
       <ProviderFacts facts={[
-        { term: 'Service area', description: serviceArea },
-        { term: 'Hours', description: hours },
+        { term: 'Ways to get started', description: accessSummary.length === 0 ? 'No contact or endpoint published yet' : accessSummary.join(' · ') },
         { term: 'Phone', description: phone },
-        { term: 'Reply posture', description: trust.replyPosture.kind === 'observed' ? NO_REPLY_HISTORY : trust.replyPosture.label },
+        { term: 'Reply posture', description: NO_REPLY_HISTORY },
       ]} />
       <div className="mt-auto grid grid-cols-1 gap-2 border-t border-border pt-4 sm:grid-cols-2" aria-label="Research actions">
-        {trust.phone.kind === 'published' ? (
+        {item.publishedPhone === undefined ? null : (
           <Button
-            label={`Call ${trust.phone.value}`}
+            label={`Call ${item.publishedPhone}`}
             variant="secondary"
-            href={`tel:${trust.phone.value.replace(/[^+\d]/g, '')}`}
+            href={`tel:${item.publishedPhone.replace(/[^+\d]/g, '')}`}
             className="min-h-11 w-full"
           />
-        ) : null}
+        )}
         <Button
           label={`View ${item.name}`}
           variant="secondary"
@@ -182,10 +185,6 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
       </div>
     </Card>
   )
-}
-
-function trustFactLabel(fact: TrustFact): string {
-  return fact.kind === 'published' ? fact.value : fact.label
 }
 
 function AeProviderCardCapability({ service }: { service: PublicRouteServiceContract }) {
@@ -213,7 +212,7 @@ function AeProviderCardCapability({ service }: { service: PublicRouteServiceCont
         ))}
       </ul>
       <Text type="supporting" color="secondary" display="block" role="note">
-        This page does not book, charge, or take action for the business.
+        The business publishes these details and confirms each request.
       </Text>
     </Card>
   )
@@ -232,13 +231,13 @@ function ProviderFacts({ facts }: { facts: Array<{ term: string; description: st
   )
 }
 
-function TokenList({ labels }: { labels: readonly string[] }) {
+function TokenList({ labels, ariaLabel = 'Listed services' }: { labels: readonly string[]; ariaLabel?: string }) {
   if (labels.length === 0) {
     return null
   }
 
   return (
-    <ul className="flex flex-wrap gap-2" aria-label="Listed services">
+    <ul className="flex flex-wrap gap-2" aria-label={ariaLabel}>
       {labels.map((label) => (
         <li key={label}><Token size="sm" label={label} /></li>
       ))}

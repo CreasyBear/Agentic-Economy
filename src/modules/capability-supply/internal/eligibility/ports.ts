@@ -1,4 +1,5 @@
 import type { CapabilityBindingRow } from '../binding'
+import type { CapabilityOfferingOrigin } from '../../public'
 import type { CapabilityContractRef, CapabilityOfferingRow } from '../offering'
 import type { CapabilityPublicationLifecycleRow } from '../publication'
 
@@ -28,6 +29,10 @@ export type EligibleSupplyPorts = Readonly<{
   loadOfferingByOfferingId: (offeringId: string) => Promise<CapabilityOfferingRow | null>
   loadBindingByBindingId: (bindingId: string) => Promise<CapabilityBindingRow | null>
   loadPublishedBusiness: (businessId: string) => Promise<EligiblePublishedBusiness | null>
+  catalogOriginIsCurrent: (
+    origin: Extract<CapabilityOfferingOrigin, { kind: 'catalog_offering' }>,
+    businessId: string,
+  ) => Promise<boolean>
   getActiveExactCapabilityContract: (
     ref: CapabilityContractRef,
   ) => Promise<ActiveExactCapabilityContractResult>

@@ -24,8 +24,8 @@ import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeAnimatedNumber } from '@/components/ae/motion/AeAnimatedNumber'
 import { emitRegistryResultClick } from '@/lib/observability/registry-click'
-import type { PublicBusinessCatalogApiDto, PublicBusinessCatalogApiPage } from '@/modules/registry/public'
-import { readPublicRegistryCatalogPage, readPublicRegistrySearchPage } from '@/modules/registry/registry.functions'
+import type { PublicBusinessCatalogApiV2Dto, PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
+import { readPublicOfferingRegistryPage, readPublicOfferingRegistrySearchPage } from '@/modules/registry/registry.functions'
 import { captureDemandSignalServer, type DemandCaptureServerResult } from '@/modules/demand/demand.functions'
 
 type RegistrySearchParams = {
@@ -35,7 +35,7 @@ type RegistrySearchParams = {
 }
 
 type RegistryRouteReadback = {
-  result: PublicBusinessCatalogApiPage
+  result: PublicBusinessCatalogApiV2Page
   query: string
   limit: number
 }
@@ -84,8 +84,8 @@ export const Route = createFileRoute('/registry')({
 export async function loadRegistryRouteReadback(deps: RegistrySearchParams): Promise<RegistryRouteReadback> {
   const result =
     deps.q.length === 0
-      ? await readPublicRegistryCatalogPage({ limit: deps.limit, ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }) })
-      : await readPublicRegistrySearchPage({ query: deps.q, limit: deps.limit, ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }) })
+      ? await readPublicOfferingRegistryPage({ limit: deps.limit, ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }) })
+      : await readPublicOfferingRegistrySearchPage({ query: deps.q, limit: deps.limit, ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }) })
 
   return { result, query: deps.q, limit: deps.limit }
 }
@@ -107,7 +107,7 @@ function RegistryRoute() {
     } else if (sortOrder === 'Z-A') {
       sorted.sort((a, b) => b.name.localeCompare(a.name))
     } else if (sortOrder === 'Newest') {
-      sorted.sort((a, b) => b.updatedAt - a.updatedAt)
+      sorted.sort((a, b) => b.observedAt - a.observedAt)
     }
     return sorted
   }, [effectiveCategory, result.items, sortOrder])
@@ -393,7 +393,7 @@ function RegistryDemandCaptureEmptyState({ query, showClearSearch }: { query: st
   )
 }
 
-function RegistryLibraryGrid({ items, query }: { items: readonly PublicBusinessCatalogApiDto[]; query: string }) {
+function RegistryLibraryGrid({ items, query }: { items: readonly PublicBusinessCatalogApiV2Dto[]; query: string }) {
   return (
     <Grid columns={{ minWidth: 320 }} gap={4} aria-label="Business results">
       {items.map((item, index) => (

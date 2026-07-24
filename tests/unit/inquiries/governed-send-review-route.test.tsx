@@ -157,7 +157,7 @@ describe('customer inquiry record proof boundary', () => {
 
     render(<AeCustomerRecord threadId="inquiry_thread:review" accessKey="private-record-key" />)
 
-    expect(screen.getByText('This record proves what was sent, when, to whom, and the reply recorded. It does not prove acceptance, availability, booking, confirmation, or that the work happened.')).toBeTruthy()
+    expect(screen.getByText('This record proves what was sent, when, to whom, and the reply recorded. Acceptance, availability, booking, confirmation, and completed work require separate business evidence.')).toBeTruthy()
   })
 
   it('renders the governed record fields in supplied order without exposing its digest', () => {

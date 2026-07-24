@@ -105,6 +105,24 @@ describe('capability supply registration contract', () => {
       configDigest: `sha256:${'4'.repeat(64)}`,
     })).not.toBe(capabilityBindingRegistrationHash(binding, admitted))
   })
+
+  it('binds a promoted action to exact catalog Offering lineage without copying it', () => {
+    const origin = {
+      kind: 'catalog_offering' as const,
+      offeringRef: 'offering:meridian:subgraph-query',
+      offeringRevision: 2,
+      offeringSourceHash: 'sha256:catalog-offering-v2',
+      declaredAccessPathRef: 'access:meridian:graphql',
+      accessPathSourceHash: 'sha256:declared-endpoint-v1',
+    }
+    const offering = defineCapabilityOfferingRegistration({ ...offeringInput(), origin })
+
+    expect(offering.origin).toEqual(origin)
+    expect(capabilityOfferingRegistrationHash({
+      ...offering,
+      origin: { ...origin, offeringRevision: 3 },
+    })).not.toBe(capabilityOfferingRegistrationHash(offering))
+  })
 })
 
 function offeringInput() {

@@ -212,9 +212,9 @@ function buildRetrievalFirstSnapshot(input: {
       : `${count} listed businesses match${placeSuffix}.`,
     providers,
     summary: count === 1
-      ? `${names} publishes service coverage${placeSuffix}. Agentic Economy does not book or take payment on this page.`
-      : `${names} publish service coverage${placeSuffix}. Agentic Economy does not book or take payment on this page.`,
-    nextStep: 'Open a listed business page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.',
+      ? `${names} publishes service coverage${placeSuffix}. The business confirms timing, price, availability, and the work.`
+      : `${names} publish service coverage${placeSuffix}. The businesses confirm timing, price, availability, and the work.`,
+    nextStep: 'Open a listed business page and send an inquiry when that option is published.',
     agentJsonUrl: buildAgentJsonUrl(
       buildAgentJsonQuery(input.query, input.searchInput),
       input.searchInput.limit,

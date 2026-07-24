@@ -32,7 +32,7 @@ const expectedCanonicalRows = [
 ] as const
 
 const proofBoundary =
-  'This record proves what was sent, when, to whom, and the reply recorded. It does not prove acceptance, availability, booking, confirmation, or that the work happened.'
+  'This record proves what was sent, when, to whom, and the reply recorded. Acceptance, availability, booking, confirmation, and completed work require separate business evidence.'
 
 test.describe('J3 governed send', () => {
   test('keeps record authority out of requests and telemetry while preserving fragment access through the legacy path', async ({ page }) => {

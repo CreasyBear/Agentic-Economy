@@ -16,6 +16,7 @@ export type CapabilityOfferingRow = Readonly<{
   capabilityId: string
   version: number
   contractDigest: string
+  origin?: CapabilityOfferingRegistration['origin']
   presentation: CapabilityOfferingRegistration['presentation']
   searchTerms: readonly string[]
   registrationEvidenceRefs: readonly string[]
@@ -35,6 +36,7 @@ export function offeringRegistrationFromRow(row: CapabilityOfferingRow): Capabil
   return defineCapabilityOfferingRegistration({
     offeringId: row.offeringId, businessId: row.businessId, networkId: row.networkId,
     contractRef: contractRefFromRow(row), presentation: row.presentation,
+    ...(row.origin === undefined ? {} : { origin: row.origin }),
     searchTerms: row.searchTerms, registrationEvidenceRefs: row.registrationEvidenceRefs,
   })
 }

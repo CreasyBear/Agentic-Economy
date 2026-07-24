@@ -111,8 +111,8 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       prose: {
         oneLine: 'One listed business matches this need.',
         summary:
-          'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+          'The listing publishes emergency pipe repair. The business confirms timing, price, availability, and the work.',
+        whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -157,8 +157,8 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       prose: {
         oneLine: 'One listing accepts inquiries.',
         summary:
-          'The earlier provider publishes an inquiry option. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+          'The earlier provider publishes an inquiry option. The business confirms timing, price, availability, and the work.',
+        whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -218,7 +218,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
         'parramatta-emergency-plumbing',
       ])
       expect(complete.answer.nextStep).toContain('inquiry form')
-      expect(complete.answer.nextStep).toContain('does not book, charge, or dispatch')
+      expect(complete.answer.summary).toContain('business confirms timing, quote, availability, and the work')
       expect(
         frames
           .map((frame) => frame.event)
@@ -273,7 +273,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('does not book')
+      expect(complete.answer.oneLine).toContain('business confirms what happens next')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -315,8 +315,8 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
         throw new Error(`expected complete event, got ${JSON.stringify(complete)}`)
       }
       expect(complete.answer.providers).toEqual([])
-      expect(complete.answer.oneLine).toContain('cannot book')
-      expect(complete.answer.nextStep).toContain('does not book or take payment')
+      expect(complete.answer.oneLine).toContain('business-supported action')
+      expect(complete.answer.nextStep).toContain('Find a listed business')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -346,7 +346,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('cannot book')
+      expect(complete.answer.oneLine).toContain('business-supported action')
     } finally {
       restoreOpenRouter()
       await server.close()

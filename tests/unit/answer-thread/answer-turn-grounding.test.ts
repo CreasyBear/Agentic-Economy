@@ -108,7 +108,7 @@ function buildUngroundedPriorTurn(): AnswerTurnRecord {
     snapshotHash: 'prior-hash',
     proseJson: JSON.stringify({
       oneLine: 'One listed business matches.',
-      summary: 'A listed business publishes coverage. Agentic Economy does not book or take payment on this page.',
+      summary: 'A listed business publishes coverage. The business confirms timing, price, availability, and the work.',
       nextStep: 'Open the provider page and send an inquiry when that option is published.',
     }),
     artifactKindsJson: '[]',

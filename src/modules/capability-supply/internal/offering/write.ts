@@ -30,6 +30,7 @@ export type OfferingInsertRow = Readonly<{
   capabilityId: string
   version: number
   contractDigest: string
+  origin?: CapabilityOfferingRegistration['origin']
   presentation: ReturnType<typeof writablePresentation>
   searchTerms: readonly string[]
   registrationEvidenceRefs: readonly string[]
@@ -96,6 +97,7 @@ export async function registerCapabilityOffering(
     capabilityId: registration.contractRef.capabilityId,
     version: registration.contractRef.version,
     contractDigest: registration.contractRef.contractDigest,
+    ...(registration.origin === undefined ? {} : { origin: registration.origin }),
     presentation: writablePresentation(registration.presentation),
     searchTerms: [...registration.searchTerms],
     registrationEvidenceRefs: [...registration.registrationEvidenceRefs],

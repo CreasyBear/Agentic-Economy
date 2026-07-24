@@ -150,7 +150,7 @@ describe('buildMessagePartsFromSnapshot', () => {
       providers: [selected],
       selectedProvider: selected,
       summary: 'Demo Plumbing publishes an inquiry path for owner review.',
-      nextStep: 'Open Demo Plumbing\'s inquiry form. AE does not book, charge, or dispatch.',
+      nextStep: 'Open Demo Plumbing\'s inquiry form. The business confirms timing, price, availability, and the work.',
       agentJsonUrl: '/api/businesses/search?q=plumber',
       compactLayout: true,
       layoutProfile: 'refinement_compact',

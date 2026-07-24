@@ -23,7 +23,7 @@ export function buildTurnContextLine(input: TurnContextLineInput): string | unde
     case 'inquiry_handoff':
       return buildInquiryHandoffContextLine(input.artifacts)
     case 'explain_boundary':
-      return "Checking this request against AE's inquiry-only limits."
+      return 'Checking the supported next step.'
     case 'unsupported':
       return "This request is outside AE's current inquiry path; the answer will route back to published listings."
     case 'refine_search':

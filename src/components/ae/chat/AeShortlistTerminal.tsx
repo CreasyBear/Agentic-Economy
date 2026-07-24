@@ -102,7 +102,7 @@ export function AeShortlistTerminal({
         <Button label="Close" type="button" variant="ghost" className="min-h-11" onClick={() => setClosed(true)} />
       </div>
       {callHref === undefined
-        ? <Text type="supporting" color="secondary">Call is unavailable until a business publishes a phone number here.</Text>
+        ? <Text type="supporting" color="secondary">Open the listing for its published contact options.</Text>
         : <Text type="supporting" color="secondary">Calls go directly to the published business number.</Text>}
       <AeExportPreview
         isOpen={exportPreviewOpen}
@@ -115,4 +115,3 @@ export function AeShortlistTerminal({
     </section>
   )
 }
-

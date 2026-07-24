@@ -184,7 +184,7 @@ export type BuildPublicCatalogInput = {
 
 export type BuildPublicCatalogResult =
   | { kind: 'available'; catalog: PublicCatalogContract }
-  | { kind: 'hidden'; reason: 'not_published' | 'no_published_services' }
+  | { kind: 'hidden'; reason: 'not_published' }
 
 export type PublicCatalogReadState = BusinessSourceState &
   CatalogSourceState & {
@@ -248,10 +248,6 @@ export function createEmptyCatalogSourceState(): CatalogSourceState {
 export function validateServiceCatalogInput(
   services: readonly ServiceCatalogInput[]
 ): ServiceCatalogValidationResult {
-  if (services.length === 0) {
-    return { kind: 'invalid', reason: 'empty_services' }
-  }
-
   const validatedServices: ValidatedServiceCatalogInput[] = []
   for (const service of services) {
     const name = cleanText(service.name)
@@ -337,10 +333,6 @@ export function buildPublicCatalogDto(input: BuildPublicCatalogInput): BuildPubl
       }
     })
 
-  if (services.length === 0) {
-    return { kind: 'hidden', reason: 'no_published_services' }
-  }
-
   const catalog: PublicCatalogContract = {
     businessId: input.business.businessId,
     slug: input.business.slug,
@@ -375,7 +367,7 @@ function buildFirstRequestDisclosure(input: FirstRequestDisclosureInput): Public
       return undefined
     }
 
-    const fallbackDisclosure = input.publicDisclosure === undefined ? 'First request is not available yet.' : input.publicDisclosure
+    const fallbackDisclosure = input.publicDisclosure === undefined ? 'This business has not published a request path.' : input.publicDisclosure
     const publicDisclosure = cleanText(fallbackDisclosure)
     return {
       mode: input.mode,

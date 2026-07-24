@@ -213,6 +213,51 @@ describe('frozen direct-agent baseline', () => {
       }],
     })
   })
+
+  it('keeps ordinary customer answers distinct from direct provider field mappings', async () => {
+    const cohort = {
+      ...baselineCohort(),
+      customerAnswers: { 'What exact site is proposed?': 'Fictional Riverside Forecourt' },
+      directAnswers: { proposedSite: 'Fictional Riverside Forecourt' },
+      providerInputs: [
+        {
+          provider: 'Sandbox Route Resolver',
+          directFields: ['request', 'proposedSite'],
+          aeFieldRefs: ['field:request', 'field:proposed-site'],
+        },
+        baselineCohort().providerInputs[1],
+      ],
+    }
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = input.toString()
+      if ((init?.method ?? 'GET') === 'GET') return Response.json(url.endsWith('/route-resolver')
+        ? discovery(url, 'Sandbox Route Resolver', 300, ['request', 'proposedSite'], ['serviceReference'])
+        : discovery(url, 'Sandbox Route Quoter', 700, ['serviceReference'], ['quoteReference']))
+      const body = JSON.parse(String(init?.body))
+      if (url.endsWith('/route-resolver')) {
+        expect(body).toEqual({
+          request: cohort.request,
+          proposedSite: 'Fictional Riverside Forecourt',
+        })
+        return Response.json({ serviceReference: 'sandbox-service:one' })
+      }
+      return Response.json({ quoteReference: 'sandbox-quote:one' })
+    })
+
+    const proof = await runFrozenDirectAgentBaseline({
+      job: cohort.request,
+      providerOrigins: cohort.providerOrigins,
+      credential: 'secret',
+      agent: { name: 'frozen-direct-integrator', version: '1' },
+      predeclaredGain: 'recoverable_progress',
+      hardConstraints: { maximumTotalCost: cohort.maximumTotalCost },
+      cohort,
+      fetch,
+    })
+
+    expect(proof.completion).toMatchObject({ state: 'completed' })
+    expect(proof.integrationBurden).toMatchObject({ schemaMappings: 2 })
+  })
 })
 
 function discovery(

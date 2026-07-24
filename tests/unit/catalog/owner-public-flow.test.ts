@@ -62,7 +62,7 @@ describe('public owner claim flow', () => {
       kind: 'invalid',
       errors: [
         { field: 'businessName', message: 'Business name is required.' },
-        { field: 'noContactReason', message: 'Explain why a first request is not available yet.' },
+        { field: 'noContactReason', message: 'Explain why no request path is published.' },
       ],
     })
     expect(input.serviceName).toBe(publicOwnerDefaultClaimInput.serviceName)

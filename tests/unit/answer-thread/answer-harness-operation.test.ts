@@ -342,7 +342,7 @@ describe('answer harness operation persistence bridge', () => {
       ],
       prose: {
         oneLine: 'One listed business matches.',
-        summary: 'Parramatta Emergency Plumbing publishes service coverage. Agentic Economy does not book or take payment on this page.',
+        summary: 'Parramatta Emergency Plumbing publishes service coverage. The business confirms timing, price, availability, and the work.',
         whatToDoNow: 'Open the listed provider page and send an inquiry when that option is published.',
       },
     }))
@@ -447,7 +447,7 @@ describe('answer harness operation persistence bridge', () => {
       ],
       prose: {
         oneLine: 'One listed business matches.',
-        summary: 'Parramatta Emergency Plumbing publishes service coverage. Agentic Economy does not book or take payment on this page.',
+        summary: 'Parramatta Emergency Plumbing publishes service coverage. The business confirms timing, price, availability, and the work.',
         whatToDoNow: 'Open the listed provider page and send an inquiry when that option is published.',
       },
     }))

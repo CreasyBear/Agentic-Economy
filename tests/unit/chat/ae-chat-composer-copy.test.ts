@@ -54,7 +54,7 @@ describe('chat composer loop copy', () => {
       }),
     ], null)).toEqual({
       placeholder: 'Ask limits, refine, or continue with the selected business',
-      loopHint: 'AE keeps that business in context for qualified inquiry review. The business still confirms timing, quote, and availability.',
+      loopHint: 'AE keeps that business in context. The business confirms timing, quote, availability, and the work.',
     })
   })
 

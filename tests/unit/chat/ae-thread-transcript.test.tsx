@@ -68,7 +68,7 @@ describe('AeThreadTranscript', () => {
     expect(within(actions).getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(first.detailUrl)
     expect(within(actions).getByRole('button', { name: 'Copy' }).hasAttribute('disabled')).toBe(false)
     expect(within(actions).getByRole('button', { name: 'Call' }).hasAttribute('disabled')).toBe(true)
-    expect(screen.getByText('Call is unavailable until a business publishes a phone number here.')).toBeTruthy()
+    expect(screen.getByText('Open the listing for its published contact options.')).toBeTruthy()
 
     fireEvent.click(changeCriteria)
     expect(onChangeCriteria).toHaveBeenCalledOnce()

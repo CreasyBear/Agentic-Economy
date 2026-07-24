@@ -24,7 +24,7 @@ export function buildFollowUpComposerCopy(
     return providerHasInquiryPath(state.selectedProvider)
       ? {
           placeholder: 'Ask limits, refine, or continue with the selected business',
-          loopHint: 'AE keeps that business in context for qualified inquiry review. The business still confirms timing, quote, and availability.',
+          loopHint: 'AE keeps that business in context. The business confirms timing, quote, availability, and the work.',
         }
       : {
           placeholder: 'Ask limits, refine, or review the selected listing',
@@ -71,13 +71,13 @@ function buildLiveComposerCopy(intent: FollowUpIntent, completedTurnCount: numbe
       }
     case 'explain_boundary':
       return {
-        placeholder: "Checking AE's inquiry-only limits",
-        loopHint: 'AE will route back to published listings when a request exceeds read, compare, or qualified inquiry.',
+        placeholder: 'Checking the supported next step',
+        loopHint: 'AE will keep the current objective and show the next action this business supports.',
       }
     case 'unsupported':
       return {
-        placeholder: 'Routing back to published listings',
-        loopHint: 'AE does not book, charge, or dispatch; it reads, compares, and routes qualified inquiries.',
+        placeholder: 'Finding a supported way forward',
+        loopHint: 'AE will preserve the objective and return the nearest supported next step.',
       }
     case 'refine_search':
       return {

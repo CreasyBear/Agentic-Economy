@@ -6,11 +6,14 @@ import {
   readFixtureSitemapXml,
 } from '@/modules/discovery/public'
 import type {
+  BuildOfferingDiscoveryManifestResult,
   BuildDiscoveryFileOptions,
   DiscoveryFileBuildResult,
   ReadCatalogDiscoveryManifestInput,
   ReadCatalogDiscoveryManifestResult,
 } from '@/modules/discovery/public'
+import { buildOfferingDiscoveryManifest } from '@/modules/discovery/public'
+import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 
 export type PublicDiscoverySourcePort = {
   manifest: (input: ReadCatalogDiscoveryManifestInput) => Promise<ReadCatalogDiscoveryManifestResult>
@@ -32,6 +35,17 @@ export async function readPublicCatalogDiscoveryManifest(
   input: ReadCatalogDiscoveryManifestInput
 ): Promise<ReadCatalogDiscoveryManifestResult> {
   return getPublicDiscoverySourcePort().manifest(input)
+}
+
+export async function readPublicOfferingDiscoveryManifest(
+  input: ReadCatalogDiscoveryManifestInput,
+): Promise<BuildOfferingDiscoveryManifestResult> {
+  const detail = await readPublicOfferingRegistryBusinessDetail({ slug: input.slug })
+  return buildOfferingDiscoveryManifest({
+    ...(detail.kind === 'found' ? { business: detail.business } : {}),
+    canonicalBaseUrl: input.canonicalBaseUrl,
+    now: input.now,
+  })
 }
 
 export async function readPublicLlmsTxt(options: BuildDiscoveryFileOptions): Promise<DiscoveryFileBuildResult> {

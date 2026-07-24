@@ -12,6 +12,7 @@ export function eligibleOfferingProjection<T extends CapabilityOfferingRow>(row:
   capabilityId: T['capabilityId']
   version: T['version']
   contractDigest: T['contractDigest']
+  origin?: T['origin']
   presentation: T['presentation']
   status: 'active'
   registrationHash: T['registrationHash']
@@ -19,6 +20,7 @@ export function eligibleOfferingProjection<T extends CapabilityOfferingRow>(row:
   return {
     offeringId: row.offeringId, businessId: row.businessId, networkId: row.networkId,
     ...contractRefFromRow(row), presentation: row.presentation, status: 'active' as const,
+    ...(row.origin === undefined ? {} : { origin: row.origin }),
     registrationHash: row.registrationHash,
   }
 }

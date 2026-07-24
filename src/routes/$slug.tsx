@@ -7,9 +7,11 @@ import { Skeleton } from '@astryxdesign/core/Skeleton'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
+import { offeringApiDtoToSupplyView } from '@/components/ae/offerings/offering-presentation'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
+import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 import { readPublicTargetAdmissionServer } from '@/modules/inquiries/inquiry.functions'
 import {
   buildPublicInquiryAffordance,
@@ -36,7 +38,18 @@ export const Route = createFileRoute('/$slug')({
   loader: async ({ params }) => {
     const page = await readPublicBusinessPageServer({ data: { slug: params.slug } })
     if (page.kind === 'not_found') {
-      return { page, seo: undefined, admission: undefined }
+      return { page, seo: undefined, admission: undefined, supply: undefined }
+    }
+    const offeringDetail = await readPublicOfferingRegistryBusinessDetail({ slug: params.slug })
+    // The v2 read owns cutover semantics. Once a business is in Offering mode,
+    // a missing safe projection must not silently resurrect legacy service truth.
+    if (offeringDetail.kind === 'not_found') {
+      return {
+        page: { kind: 'not_found' as const, reason: 'not_public' as const },
+        seo: undefined,
+        admission: undefined,
+        supply: undefined,
+      }
     }
     const target = selectPublicInquiryTarget(page.catalog)
     const admissionResult = target === undefined
@@ -47,6 +60,7 @@ export const Route = createFileRoute('/$slug')({
       page,
       seo,
       admission: admissionResult?.kind === 'ok' ? admissionResult.admission : undefined,
+      supply: offeringApiDtoToSupplyView(offeringDetail.business),
     }
   },
   head: ({ loaderData }) => {
@@ -216,7 +230,7 @@ function PublicBusinessRoute() {
   const { slug } = Route.useParams()
   const { from, id } = Route.useSearch()
   const location = useLocation()
-  const { page, admission } = Route.useLoaderData()
+  const { page, admission, supply } = Route.useLoaderData()
 
   if (location.pathname !== `/${slug}`) {
     return <Outlet />
@@ -246,6 +260,7 @@ function PublicBusinessRoute() {
         catalog={catalog}
         inquiryAffordance={inquiryAffordance}
         agentJsonUrl={agentJsonUrl}
+        {...(supply === undefined ? {} : { supply })}
         {...(from === undefined ? {} : { backFrom: from })}
         {...(id === undefined ? {} : { backThreadId: id })}
       />

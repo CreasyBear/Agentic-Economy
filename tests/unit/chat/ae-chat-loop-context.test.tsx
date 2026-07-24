@@ -52,7 +52,7 @@ describe('turn context line', () => {
   it('keeps normal first-turn searches quiet but labels boundaries', () => {
     expect(buildTurnContextLine({ intent: 'refine_search', seq: 1, artifacts: [] })).toBeUndefined()
     expect(buildTurnContextLine({ intent: 'explain_boundary', seq: 1, artifacts: [] })).toBe(
-      "Checking this request against AE's inquiry-only limits.",
+      "Checking the supported next step.",
     )
     expect(buildTurnContextLine({ intent: 'unsupported', seq: 1, artifacts: [] })).toBe(
       "This request is outside AE's current inquiry path; the answer will route back to published listings.",

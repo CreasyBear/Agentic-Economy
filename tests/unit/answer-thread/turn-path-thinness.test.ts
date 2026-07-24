@@ -79,7 +79,7 @@ describe('answer-thread turn-path thinness', () => {
     expect(handoff).toContain('buildInquiryHandoffNextStep')
     expect(handoff).not.toMatch(/customer-request|RoutePlan|mandate|approveRoute|compileRequest/i)
     expect(handoff).toContain('Qualified inquiry for owner review')
-    expect(handoff).toContain('it does not book, charge, or dispatch')
+    expect(handoff).toContain('The business confirms timing, quote, availability, and the work')
   })
 })
 

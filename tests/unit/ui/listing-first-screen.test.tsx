@@ -79,7 +79,7 @@ describe('ListingFirstScreen', () => {
 
     expect(text).toContain('Send an inquiry')
     expect(text).toContain('Not available')
-    expect(text).toContain('This request path is not available yet.')
+    expect(text).toContain('Ask the business directly about this request.')
     expect(text).toContain('No request path published yet.')
     expect(text).toContain('published details')
     expect(text).not.toContain('Ready')
@@ -147,6 +147,38 @@ describe('ListingFirstScreen', () => {
       { action: 'copy-details', variant: 'secondary' },
     ])
     expectForbiddenCopyAbsent(markup)
+  })
+
+  it('lets Offering v2 own visible supply without resurrecting legacy inquiry cards', () => {
+    const markup = renderToStaticMarkup(
+      <AeProviderListingPage
+        catalog={catalogFixture()}
+        inquiryAffordance={availableInquiry}
+        agentJsonUrl="/api/businesses/demo-plumbing"
+        supply={{
+          disposition: 'current',
+          observedAt: 1_900_000_000_000,
+          offerings: [{
+            offering: {
+              offeringRef: brandNonEmpty('offering:emergency-plumbing', 'OfferingRef'),
+              revision: 1,
+              name: 'Emergency plumbing visit',
+              category: 'Plumber',
+              summary: 'A published v2 Offering.',
+            },
+            accessPaths: [],
+            support: { integrated: false, routeable: false, reasons: [], observedAt: 1_900_000_000_000 },
+          }],
+        }}
+      />,
+    )
+
+    expect(markup).toContain('Emergency plumbing visit')
+    expect(markup).not.toContain('What you can do here')
+    expect(markup).not.toContain('What happens when you reach out')
+    expect(markup).not.toContain('Your request')
+    expect(markup).not.toContain('Ask this business')
+    expect(markup).not.toContain('href="/demo-plumbing/inquiry"')
   })
 })
 

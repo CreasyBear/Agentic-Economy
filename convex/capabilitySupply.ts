@@ -7,6 +7,7 @@ import {
 import {
   getEligibleExactCapabilitySupply as getEligibleExactCapabilitySupplyFromModule,
   listEligibleCapabilitySupply as listEligibleCapabilitySupplyFromModule,
+  listRouteableCapabilitySupply as listRouteableCapabilitySupplyFromModule,
   setCapabilitySupplyEligibility as setCapabilitySupplyEligibilityWrite,
   type EligibilityInput,
 } from '@/modules/capability-supply/internal/eligibility'
@@ -50,6 +51,11 @@ import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
 import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
+import {
+  deriveBusinessOfferingSupportFromCapabilitySupply,
+  rebuildBusinessSupplyProjectionSnapshotCommand,
+} from './catalogSupplyProjection'
+import { runtimeDb } from './source_state'
 
 const contractRefValue = v.object({
   capabilityId: v.string(),
@@ -80,11 +86,23 @@ const presentationValue = v.object({
   materialTerms: v.array(v.object({ termId: v.string(), label: v.string(), value: v.string() })),
   commercialRelationship: commercialRelationshipValue,
 })
+const offeringOriginValue = v.union(
+  v.object({
+    kind: v.literal('catalog_offering'),
+    offeringRef: v.string(),
+    offeringRevision: v.number(),
+    offeringSourceHash: v.string(),
+    declaredAccessPathRef: v.optional(v.string()),
+    accessPathSourceHash: v.optional(v.string()),
+  }),
+  v.object({ kind: v.literal('standalone') }),
+)
 const offeringRegistrationValue = v.object({
   offeringId: v.string(),
   businessId: v.id('businesses'),
   networkId: v.string(),
   contractRef: contractRefValue,
+  origin: v.optional(offeringOriginValue),
   presentation: presentationValue,
   searchTerms: v.array(v.string()),
   registrationEvidenceRefs: evidenceRefsValue,
@@ -112,6 +130,7 @@ const bindingRegistrationValue = v.object({
 const capabilityPublicationOfferingValue = v.object({
   offeringId: v.string(),
   networkId: v.string(),
+  origin: v.optional(offeringOriginValue),
   presentation: presentationValue,
   searchTerms: v.array(v.string()),
   registrationEvidenceRefs: evidenceRefsValue,
@@ -195,8 +214,9 @@ const bindingControlStateValue = v.union(
 )
 const eligibleSupplyValue = v.object({
   offering: v.object({
-    offeringId: v.string(), businessId: v.id('businesses'), networkId: v.string(),
+    offeringId: v.string(), businessId: v.string(), networkId: v.string(),
     capabilityId: v.string(), version: v.number(), contractDigest: v.string(),
+    origin: v.optional(offeringOriginValue),
     presentation: presentationValue, status: v.literal('active'), registrationHash: v.string(),
   }),
   binding: v.object({
@@ -210,6 +230,16 @@ const eligibleSupplyValue = v.object({
     publicationRef: v.string(), revision: v.number(), readinessValidUntil: v.number(),
   })),
 })
+const eligibleSupplyResultValue = v.union(
+  v.object({ kind: v.literal('available'), supplies: v.array(eligibleSupplyValue) }),
+  v.object({
+    kind: v.literal('unavailable'),
+    reason: v.union(
+      v.literal('limit_invalid'), v.literal('eligible_supply_limit_exceeded'),
+      v.literal('supply_integrity_failure'), v.literal('contract_integrity_failure'),
+    ),
+  }),
+)
 const publicationLifecycleValue = v.object({
   state: v.union(v.literal('inactive'), v.literal('active'), v.literal('withdrawn'), v.literal('incompatible')),
   reasons: v.array(v.union(
@@ -357,7 +387,7 @@ export const publishCapability = mutation({
       return { kind: 'refused' as const, reason: 'authorization_denied' as const }
     }
     const actor = { kind: 'owner' as const, ref: (await ctx.auth.getUserIdentity())!.subject }
-    return await publishCapabilityCommand({
+    const result = await publishCapabilityCommand({
       businessId: args.businessId,
       source: args.source,
       offering: args.offering,
@@ -369,6 +399,10 @@ export const publishCapability = mutation({
       actor,
       now: Date.now(),
     }, publicationPorts(ctx))
+    if (result.kind === 'published') {
+      await rebuildCapabilityOriginSupplyProjection(ctx, args.businessId, Date.now())
+    }
+    return result
   },
 })
 
@@ -446,7 +480,7 @@ export const observeCapabilityReadiness = internalMutation({
         .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique(),
     ])
     if (offering === null || binding === null) throw new Error('capability_publication_supply_integrity_failure')
-    return {
+    const result = {
       kind: 'observed' as const,
       publicationRef: publication.publicationRef,
       revision: publication.revision,
@@ -457,6 +491,8 @@ export const observeCapabilityReadiness = internalMutation({
         readinessValidUntil: args.validUntil,
       }, offering, binding, now),
     }
+    await rebuildCapabilityOriginSupplyProjection(ctx, publication.businessId, now)
+    return result
   },
 })
 
@@ -495,9 +531,17 @@ export const recordCapabilityProbeResult = internalMutation({
       reason: v.union(v.literal('revision_changed'), v.literal('target_changed')),
     }),
   ),
-  handler: async (ctx, args) => (
-    await recordCapabilityProbeResultFromModule(capabilitySupplyGraphPorts(ctx.db), args)
-  ),
+  handler: async (ctx, args) => {
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (index) => (
+        index.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)
+      )).unique()
+    const result = await recordCapabilityProbeResultFromModule(capabilitySupplyGraphPorts(ctx.db), args)
+    if (result.kind === 'observed' && publication !== null) {
+      await rebuildCapabilityOriginSupplyProjection(ctx, publication.businessId as Id<'businesses'>, Date.now())
+    }
+    return result
+  },
 })
 
 export const withdrawCapability = mutation({
@@ -520,11 +564,15 @@ export const withdrawCapability = mutation({
     if (!await ownsPublishedBusiness(ctx, publication.businessId as Id<'businesses'>)) {
       return { kind: 'refused' as const, reason: 'authorization_denied' as const }
     }
-    return await withdrawCapabilityCommand({
+    const result = await withdrawCapabilityCommand({
       publication,
       evidenceRefs: args.evidenceRefs,
       now: Date.now(),
     }, ports)
+    if (result.kind === 'withdrawn') {
+      await rebuildCapabilityOriginSupplyProjection(ctx, publication.businessId as Id<'businesses'>, Date.now())
+    }
+    return result
   },
 })
 
@@ -563,7 +611,7 @@ export const refreshCapability = mutation({
     if (!await ownsPublishedBusiness(ctx, publication.businessId as Id<'businesses'>)) {
       return { kind: 'refused' as const, reason: 'authorization_denied' as const }
     }
-    return await refreshCapabilityCommand({
+    const result = await refreshCapabilityCommand({
       publication,
       source: args.source,
       offering: args.offering,
@@ -574,6 +622,10 @@ export const refreshCapability = mutation({
       evidenceRefs: args.evidenceRefs,
       now: Date.now(),
     }, ports)
+    if (result.kind === 'refreshed') {
+      await rebuildCapabilityOriginSupplyProjection(ctx, publication.businessId as Id<'businesses'>, Date.now())
+    }
+    return result
   },
 })
 
@@ -589,7 +641,7 @@ export const queryCapabilityGraph = query({
         return { kind: 'unavailable' as const, reason: 'authorization_denied' as const }
       }
     }
-    return await queryCapabilityGraphFromModule(capabilitySupplyGraphPorts(ctx.db), args)
+    return await queryCapabilityGraphFromModule(capabilitySupplyGraphPorts(ctx.db), args) as Infer<typeof capabilityGraphResultValue>
   },
 })
 
@@ -605,7 +657,7 @@ export const registerOffering = mutation({
       actor: { kind: 'admin', ref: authority.membership.clerkUserId },
       registration: args.registration,
       context: args,
-    }, Date.now())
+    }, Date.now()) as Infer<typeof registerOfferingResultValue>
   },
 })
 
@@ -621,7 +673,7 @@ export const registerBinding = mutation({
       actor: { kind: 'admin', ref: authority.membership.clerkUserId },
       registration: args.registration,
       context: args,
-    }, Date.now())
+    }, Date.now()) as Infer<typeof registerBindingResultValue>
   },
 })
 
@@ -639,11 +691,16 @@ export const setEligibility = mutation({
       { db: ctx.db as never, auth: ctx.auth }, 'register_capability_supply',
     )
     if (authority.kind !== 'allowed') return { kind: 'refused' as const, reason: 'authorization_denied' as const }
-    return await setCapabilitySupplyEligibilityCommand(ctx.db, {
+    const now = Date.now()
+    const result = await setCapabilitySupplyEligibilityCommand(ctx.db, {
       actor: { kind: 'admin', ref: authority.membership.clerkUserId },
       eligibility: args,
       context: args,
-    }, Date.now())
+    }, now) as Infer<typeof eligibilityResultValue>
+    if (result.kind === 'eligible' || result.kind === 'ineligible') {
+      await rebuildCapabilityOfferingOriginSupplyProjection(ctx, args.offeringId, now)
+    }
+    return result
   },
 })
 
@@ -674,27 +731,31 @@ export const quarantineBinding = mutation({
       { db: ctx.db as never, auth: ctx.auth }, 'register_capability_supply',
     )
     if (authority.kind !== 'allowed') return { kind: 'refused' as const, reason: 'authorization_denied' as const }
-    return await quarantineCapabilityBindingCommand(ctx.db, {
+    const binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (index) => index.eq('bindingId', args.bindingId)).unique()
+    const now = Date.now()
+    const result = await quarantineCapabilityBindingCommand(ctx.db, {
       actor: { kind: 'admin', ref: authority.membership.clerkUserId },
       bindingId: args.bindingId, expectedObservedRowDigest: args.expectedObservedRowDigest,
       context: args,
-    }, Date.now())
+    }, now)
+    if (result.kind === 'quarantined' && binding !== null) {
+      await rebuildCapabilityOfferingOriginSupplyProjection(ctx, binding.offeringId, now)
+    }
+    return result
   },
 })
 
 export const listEligible = internalQuery({
   args: { networkId: v.string(), limit: v.number() },
-  returns: v.union(
-    v.object({ kind: v.literal('available'), supplies: v.array(eligibleSupplyValue) }),
-    v.object({
-      kind: v.literal('unavailable'),
-      reason: v.union(
-        v.literal('limit_invalid'), v.literal('eligible_supply_limit_exceeded'),
-        v.literal('supply_integrity_failure'), v.literal('contract_integrity_failure'),
-      ),
-    }),
-  ),
-  handler: async (ctx, args) => await listEligibleCapabilitySupply(ctx.db, args),
+  returns: eligibleSupplyResultValue,
+  handler: async (ctx, args) => await listEligibleCapabilitySupply(ctx.db, args) as Infer<typeof eligibleSupplyResultValue>,
+})
+
+export const listRouteable = internalQuery({
+  args: { networkId: v.string(), limit: v.number() },
+  returns: eligibleSupplyResultValue,
+  handler: async (ctx, args) => await listRouteableCapabilitySupply(ctx.db, args) as Infer<typeof eligibleSupplyResultValue>,
 })
 
 export async function registerCapabilityOfferingCommand(
@@ -760,6 +821,12 @@ export async function listEligibleCapabilitySupply(
   return listEligibleCapabilitySupplyFromModule(eligibleSupplyPorts(db), input)
 }
 
+export async function listRouteableCapabilitySupply(
+  db: QueryCtx['db'], input: Readonly<{ networkId: string; limit: number; now?: number }>,
+) {
+  return listRouteableCapabilitySupplyFromModule(eligibleSupplyPorts(db), input)
+}
+
 export async function getEligibleExactCapabilitySupply(
   db: QueryCtx['db'],
   input: Readonly<{
@@ -799,6 +866,32 @@ function portsFor(db: MutationCtx['db']): OperationLedgerPorts {
     registerBinding: (registration, now) => registerCapabilityTransportBinding(db, registration, now),
     setEligibility: (eligibility, now) => setCapabilitySupplyEligibility(db, eligibility, now),
   })
+}
+
+async function rebuildCapabilityOriginSupplyProjection(
+  ctx: MutationCtx,
+  businessId: Id<'businesses'>,
+  now: number,
+): Promise<void> {
+  const db = runtimeDb(ctx.db)
+  const supportByOfferingRef = await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now)
+  await rebuildBusinessSupplyProjectionSnapshotCommand(
+    db,
+    businessId,
+    supportByOfferingRef,
+    now,
+  )
+}
+
+async function rebuildCapabilityOfferingOriginSupplyProjection(
+  ctx: MutationCtx,
+  offeringId: string,
+  now: number,
+): Promise<void> {
+  const offering = await ctx.db.query('capabilityOfferings')
+    .withIndex('by_offeringId', (index) => index.eq('offeringId', offeringId)).unique()
+  if (offering?.origin?.kind !== 'catalog_offering') return
+  await rebuildCapabilityOriginSupplyProjection(ctx, offering.businessId as Id<'businesses'>, now)
 }
 
 function publicationPorts(ctx: MutationCtx) {

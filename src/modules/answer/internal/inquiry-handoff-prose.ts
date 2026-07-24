@@ -52,8 +52,7 @@ export function buildInquiryHandoffSummary(resolution: InquiryHandoffResolution)
     case 'resolved':
       return [
         `${resolution.provider.name} publishes an inquiry path for owner review.`,
-        'AE can route you to that form, but the business confirms timing, quote, and availability.',
-        'AE does not book, charge, or dispatch.',
+        'AE can route you to that form. The business confirms timing, quote, availability, and the work.',
       ].join(' ')
     case 'provider_unavailable':
       return [
@@ -78,11 +77,11 @@ export function buildInquiryHandoffSummary(resolution: InquiryHandoffResolution)
 export function buildInquiryHandoffNextStep(resolution: InquiryHandoffResolution): string {
   switch (resolution.kind) {
     case 'resolved':
-      return `Open ${resolution.provider.name}'s inquiry form, describe the job, and submit it for owner review. AE does not book, charge, or dispatch.`
+      return `Open ${resolution.provider.name}'s inquiry form, describe the job, and submit it for owner review.`
     case 'provider_unavailable':
-      return `Open ${resolution.provider.name}'s listing and use the published contact guidance. AE does not book, charge, or dispatch.`
+      return `Open ${resolution.provider.name}'s listing and use the published contact guidance.`
     case 'choose_provider':
-      return 'Use Open inquiry form from the listed businesses in this answer, or name the business you want to contact. AE does not book, charge, or dispatch.'
+      return 'Use Open inquiry form from the listed businesses in this answer, or name the business you want to contact.'
     case 'no_provider':
       return 'Ask for a service and place first, then send a qualified inquiry when a listed business publishes that path.'
   }

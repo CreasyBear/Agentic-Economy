@@ -78,9 +78,9 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('does not book')
+      expect(complete.answer.oneLine).toContain('business confirms what happens next')
       expect(complete.answer.oneLine).not.toContain('No listed businesses match')
-      expect(complete.answer.summary).toContain('The business handles timing, price, and availability')
+      expect(complete.answer.summary).toContain('The business confirms timing, price, availability, and the work')
     } finally {
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -146,7 +146,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toContain('does not book')
+      expect(complete.answer.oneLine).toContain('business confirms what happens next')
       expect(complete.answer.summary).not.toContain('No providers are listed for that yet')
     } finally {
       restoreOpenRouter()
@@ -166,8 +166,8 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       prose: {
         oneLine: 'One listed business is listed in Parramatta.',
         summary:
-          'The listing publishes emergency pipe repair around Parramatta. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+          'The listing publishes emergency pipe repair around Parramatta. The business confirms timing, price, availability, and the work.',
+        whatToDoNow: 'Open the provider page and send an inquiry when published. The business confirms timing, price, availability, and the work.',
       },
     }))
     const restoreOpenRouter = server.installEnv()

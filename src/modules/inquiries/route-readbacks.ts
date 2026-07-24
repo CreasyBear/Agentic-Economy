@@ -430,7 +430,7 @@ function firstRequestForService(
     state.serviceCapabilities.find((capability) => capability.businessId === service.businessId && capability.serviceId === service.serviceId)
       ?.firstRequest ?? {
       mode: 'not_available_yet',
-      publicDisclosure: 'First request instructions are not available yet.',
+      publicDisclosure: 'This business has not published a request path.',
       publicChannel: 'not_available',
       noContactReason: 'No first request path has been published.',
       rawContactExcluded: true,

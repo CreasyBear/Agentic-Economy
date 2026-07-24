@@ -18,7 +18,7 @@ import type {
   ReadDeveloperDiscoveryRouteOptions,
 } from '@/modules/discovery/developer-discovery'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
-import type { PublicBusinessCatalogApiPage, PublicBusinessCatalogDetailResult } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Page, PublicBusinessCatalogV2DetailResult } from '@/modules/registry/public'
 import { handleDurableBusinessDetailRequest } from './api.businesses.$slug'
 import { handleDurableListBusinessesRequest } from './api.businesses'
 import { handleDurableSearchBusinessesRequest } from './api.businesses.search'
@@ -100,39 +100,39 @@ export async function buildDeveloperDiscoveryRouteSnapshot(
   const origin = options.canonicalBaseUrl ?? resolveCanonicalBaseUrl(request).baseUrl
   const checkedAt = options.now ?? 0
   const listRoute = `${origin}/api/businesses`
-  const list = await executeJsonRoute<PublicBusinessCatalogApiPage>({
+  const list = await executeJsonRoute<PublicBusinessCatalogApiV2Page>({
     route: listRoute,
     label: 'Public catalog list JSON',
     checkedAt,
-    expectedSchemaVersion: 'public-business-catalog-api:v1',
+    expectedSchemaVersion: 'public-business-catalog-api:v2',
     run: () => handleDurableListBusinessesRequest(new Request(listRoute)),
   })
   const firstCatalog = list.body?.kind === 'ok' ? list.body.items.at(0) : undefined
   const searchQuery = firstCatalog?.category ?? firstCatalog?.name ?? ''
   const searchRoute = `${origin}/api/businesses/search?q=${encodeURIComponent(searchQuery)}`
-  const search = await executeJsonRoute<PublicBusinessCatalogApiPage>({
+  const search = await executeJsonRoute<PublicBusinessCatalogApiV2Page>({
     route: searchRoute,
     label: 'Public catalog search JSON',
     checkedAt,
-    expectedSchemaVersion: 'public-business-catalog-api:v1',
+    expectedSchemaVersion: 'public-business-catalog-api:v2',
     run: () => handleDurableSearchBusinessesRequest(new Request(searchRoute)),
   })
   const detail =
     firstCatalog === undefined
-      ? unavailableJsonRoute<PublicBusinessCatalogDetailResult>({
+      ? unavailableJsonRoute<PublicBusinessCatalogV2DetailResult>({
           route: `${origin}/api/businesses/{slug}`,
           label: 'Public catalog detail JSON',
           checkedAt,
           reason: 'No public slug was returned by /api/businesses.',
         })
-      : await executeJsonRoute<PublicBusinessCatalogDetailResult>({
+      : await executeJsonRoute<PublicBusinessCatalogV2DetailResult>({
           route: `${origin}/api/businesses/${encodeURIComponent(firstCatalog.slug)}`,
           label: 'Public catalog detail JSON',
           checkedAt,
-          expectedSchemaVersion: 'public-business-catalog-api:v1',
+          expectedSchemaVersion: 'public-business-catalog-api:v2',
           run: () => handleDurableBusinessDetailRequest(firstCatalog.slug),
         })
-  const missingDetail = await executeJsonRoute<PublicBusinessCatalogDetailResult>({
+  const missingDetail = await executeJsonRoute<PublicBusinessCatalogV2DetailResult>({
     route: `${origin}/api/businesses/__missing_discovery_slug__`,
     label: 'Public catalog missing detail JSON',
     checkedAt,
@@ -150,7 +150,7 @@ export async function buildDeveloperDiscoveryRouteSnapshot(
           route: `${origin}/${encodeURIComponent(firstCatalog.slug)}/ucp`,
           label: 'AE-hosted UCP fallback',
           checkedAt,
-          expectedSchemaVersion: 'ae-ucp-fallback:v1',
+          expectedSchemaVersion: 'ae-ucp-fallback:v2',
           run: () => handleDurableUcpManifestRequest(new Request(`${origin}/${firstCatalog.slug}/ucp`), firstCatalog.slug),
         })
   const [llms, sitemap, robots] = await Promise.all([

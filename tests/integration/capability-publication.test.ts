@@ -13,6 +13,119 @@ const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path,
 ]))
 
 describe('capability publication', () => {
+  it('rebuilds exact catalog-origin support after publish and withdrawal', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await publishedBusinessOwner(backend, 'catalog-origin-one')
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('businessContexts', {
+        businessId, category: 'Data', suburb: 'Perth', stateTerritory: 'WA',
+        sourceRefs: [], sourceHash: 'context:catalog-origin-one', approvedAt: 1,
+      })
+      await ctx.db.insert('operatorControls', {
+        key: 'offering_public_projection_enabled', enabled: true,
+        changedByAdminRef: 'test', reasonCode: 'test_projection', evidenceRefs: ['test'],
+        correlationId: 'correlation:test-projection', operationKey: 'operation:test-projection', updatedAt: 1,
+      })
+      await ctx.db.insert('businessOfferings', {
+        offeringRef: 'catalog-offering:catalog-origin-one', businessId, currentRevision: 1,
+        status: 'published', createdAt: 1, updatedAt: 1,
+      })
+      await ctx.db.insert('businessOfferingRevisions', {
+        offeringRef: 'catalog-offering:catalog-origin-one', businessId, revision: 1,
+        name: 'Catalog origin lookup', category: 'Data', summary: 'One exact lookup.',
+        sourceHash: 'catalog-source:v1', createdAt: 1,
+      })
+    })
+    const baseInput = capabilityPublicationInput(businessId, 'catalog-origin-one')
+    const input = { ...baseInput, offering: { ...baseInput.offering, origin: {
+      kind: 'catalog_offering' as const, offeringRef: 'catalog-offering:catalog-origin-one',
+      offeringRevision: 1, offeringSourceHash: 'catalog-source:v1',
+    } } }
+    const published = await owner.mutation(api.capabilitySupply.publishCapability, input)
+    if (published.kind !== 'published') throw new Error(`publication_refused:${published.reason}`)
+
+    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
+      integrated: false,
+      routeable: false,
+    })
+
+    const observer = await adminObserver(backend)
+    const validUntil = Date.now() + 60_000
+    await backend.run(async (ctx) => {
+      const revision = (await ctx.db.query('businessOfferingRevisions').collect())
+        .find((candidate) => candidate.offeringRef === 'catalog-offering:catalog-origin-one')
+      if (revision === undefined) throw new Error('catalog_revision_missing')
+      await ctx.db.patch(revision._id, { sourceHash: 'catalog-source:changed' })
+    })
+    await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: published.publicationRef,
+      expectedRevision: 1,
+      credentialState: 'ready',
+      healthState: 'healthy',
+      validUntil,
+      ...operationContext('observe-catalog-origin'),
+    })
+    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
+      integrated: false,
+      routeable: false,
+    })
+    await backend.run(async (ctx) => {
+      const revision = (await ctx.db.query('businessOfferingRevisions').collect())
+        .find((candidate) => candidate.offeringRef === 'catalog-offering:catalog-origin-one')
+      if (revision === undefined) throw new Error('catalog_revision_missing')
+      await ctx.db.patch(revision._id, { sourceHash: 'catalog-source:v1' })
+    })
+    await admitPublication(backend, observer, published, 'catalog-origin-one')
+    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
+      integrated: true,
+      routeable: true,
+      validUntil,
+    })
+
+    const hashes = await publicationRegistrationHashes(backend, published)
+    const revoked = await observer.mutation(api.capabilitySupply.setEligibility, {
+      offeringId: published.offeringId, bindingId: published.bindingId,
+      contractRef: published.contractRef, decision: 'revoke',
+      expectedOfferingRegistrationHash: hashes.offering,
+      expectedBindingRegistrationHash: hashes.binding,
+      admissionEvidenceRefs: ['test:revocation'], conformanceEvidenceRefs: ['test:revocation'],
+      ...operationContext('revoke-catalog-origin'),
+    })
+    expect(revoked.kind).toBe('ineligible')
+    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
+      integrated: false, routeable: false,
+    })
+
+    await admitPublication(backend, observer, published, 'catalog-origin-readmit')
+    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
+      integrated: true, routeable: true,
+    })
+    const control = await observer.query(api.capabilitySupply.inspectBindingControlState, {
+      bindingId: published.bindingId,
+    })
+    if (control.kind !== 'available') throw new Error(`binding_control_unavailable:${control.reason}`)
+    const quarantined = await observer.mutation(api.capabilitySupply.quarantineBinding, {
+      bindingId: published.bindingId,
+      expectedObservedRowDigest: control.observedRowDigest,
+      ...operationContext('quarantine-catalog-origin'),
+    })
+    expect(quarantined.kind).toBe('quarantined')
+    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
+      integrated: false, routeable: false,
+    })
+
+    await owner.mutation(api.capabilitySupply.withdrawCapability, {
+      publicationRef: published.publicationRef,
+      expectedRevision: 1,
+      ...operationContext('withdraw-catalog-origin'),
+    })
+    await expect(readProjectedSupport(backend, businessId)).resolves.toMatchObject({
+      integrated: false,
+      routeable: false,
+      reasons: ['not_integrated'],
+    })
+  })
+
   it('lets the source-bound business owner publish one canonical inactive AE capability', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'independent-one')
@@ -194,6 +307,7 @@ describe('capability publication', () => {
         }),
       ]),
     })
+    if (graph.kind !== 'available') throw new Error(`capability_graph_unavailable:${graph.reason}`)
     expect(graph.nodes).toHaveLength(2)
     expect(JSON.stringify(graph)).not.toContain('credentialRef')
     expect(JSON.stringify(graph)).not.toContain('_KEY')
@@ -422,6 +536,20 @@ async function publishedBusinessOwner(backend: ReturnType<typeof convexTest>, sl
   return { businessId, owner: backend.withIdentity(identity) }
 }
 
+async function readProjectedSupport(backend: ReturnType<typeof convexTest>, businessId: Id<'businesses'>) {
+  return backend.run(async (ctx) => {
+    const snapshot = (await ctx.db.query('businessSupplyProjectionSnapshots').collect())
+      .find((candidate) => candidate.businessId === businessId) ?? null
+    if (snapshot === null) throw new Error('projection_snapshot_missing')
+    const projection = JSON.parse(snapshot.projectionJson) as {
+      offerings: { support: { integrated: boolean; routeable: boolean; reasons: string[] } }[]
+    }
+    const support = projection.offerings[0]?.support
+    if (support === undefined) throw new Error('projected_offering_missing')
+    return support
+  })
+}
+
 function capabilityPublicationInput(businessId: Id<'businesses'>, suffix: string) {
   return {
     businessId,
@@ -483,14 +611,7 @@ async function admitPublication(
   } }>,
   suffix: string,
 ) {
-  const hashes = await backend.run(async (ctx) => {
-    const offering = (await ctx.db.query('capabilityOfferings').collect())
-      .find((row) => row.offeringId === publication.offeringId) ?? null
-    const binding = (await ctx.db.query('capabilityTransportBindings').collect())
-      .find((row) => row.bindingId === publication.bindingId) ?? null
-    if (offering === null || binding === null) throw new Error('publication_supply_missing')
-    return { offering: offering.registrationHash, binding: binding.registrationHash }
-  })
+  const hashes = await publicationRegistrationHashes(backend, publication)
   const admitted = await admin.mutation(api.capabilitySupply.setEligibility, {
     offeringId: publication.offeringId, bindingId: publication.bindingId,
     contractRef: publication.contractRef, decision: 'admit',
@@ -501,4 +622,18 @@ async function admitPublication(
     ...operationContext(`admit-${suffix}`),
   })
   expect(admitted.kind).toBe('eligible')
+}
+
+async function publicationRegistrationHashes(
+  backend: ReturnType<typeof convexTest>,
+  publication: Readonly<{ offeringId: string; bindingId: string }>,
+) {
+  return backend.run(async (ctx) => {
+    const offering = (await ctx.db.query('capabilityOfferings').collect())
+      .find((row) => row.offeringId === publication.offeringId) ?? null
+    const binding = (await ctx.db.query('capabilityTransportBindings').collect())
+      .find((row) => row.bindingId === publication.bindingId) ?? null
+    if (offering === null || binding === null) throw new Error('publication_supply_missing')
+    return { offering: offering.registrationHash, binding: binding.registrationHash }
+  })
 }

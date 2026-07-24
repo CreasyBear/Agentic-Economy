@@ -99,7 +99,7 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
           ) : (
             <VStack gap={2}>
               <Text type="supporting" color="secondary" display="block">
-                These checks currently prevent this business page from receiving requests.
+                Complete these checks to start receiving requests from this page.
               </Text>
               <ul className="m-0 grid list-none gap-3 p-0">
                 {readback.admission.blockers.map((blocker) => {

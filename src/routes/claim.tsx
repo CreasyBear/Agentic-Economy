@@ -280,7 +280,7 @@ const serviceFields = [
 const firstRequestModeOptions = [
   {
     value: 'not_available_yet',
-    label: 'First request not available yet',
+    label: 'No request path published',
     description: 'Use this when customers should view details but contact another way.',
   },
   {
@@ -335,7 +335,7 @@ function ClaimRoute() {
           <Text type="large" weight="semibold" display="block">You stay in control</Text>
           <Text color="secondary" display="block">You review every public detail before anything appears.</Text>
           <Text color="secondary" display="block">You choose whether to publish a phone number or accept a written first contact.</Text>
-          <Text color="secondary" display="block">AE does not book, charge, confirm availability, or accept work for your business.</Text>
+          <Text color="secondary" display="block">You confirm availability, price, and every request before work begins.</Text>
           <Text type="supporting" color="secondary" display="block">Claiming is free. Sign-in protects changes to the business page.</Text>
         </Card>
       </main>
@@ -551,7 +551,7 @@ export function ClaimFormRoute() {
               config={{
                 field: 'noContactReason',
                 label: 'Unavailable reason',
-                description: 'Required when the first request is not available yet.',
+                description: 'Required when no request path is published.',
                 control: 'textarea',
               }}
               value={value}

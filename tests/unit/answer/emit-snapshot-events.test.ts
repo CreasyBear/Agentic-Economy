@@ -49,7 +49,7 @@ function snapshot(): AnswerSnapshot {
     providers: [provider],
     selectedProvider: provider,
     summary: 'First sentence. Second sentence.',
-    nextStep: 'Open the inquiry form. AE does not book, charge, or dispatch.',
+    nextStep: 'Open the inquiry form. The business confirms timing, price, availability, and the work.',
     agentJsonUrl: '/api/businesses/search?q=plumber',
     compactLayout: true,
     layoutProfile: 'refinement_compact',

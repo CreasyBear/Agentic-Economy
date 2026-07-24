@@ -158,7 +158,8 @@ function BusinessSettingsSection() {
         description="Open the existing owner surfaces for page status, messages, and claim updates."
       />
       <div className="flex flex-wrap gap-3">
-        <Button href="/owner/status" variant="primary" label="Service page status" />
+        <Button href="/owner/status" variant="primary" label="Business page" />
+        <Button href="/owner/offerings" variant="secondary" label="Offerings" />
         <Button href="/owner/inquiries" variant="secondary" label="Messages" />
         <Button href="/claim" variant="secondary" label="List or claim a business" />
       </div>

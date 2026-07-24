@@ -13,7 +13,7 @@ import {
   useCustomerInquiryRecord,
 } from '@/modules/inquiries/customer-record-client'
 
-const PROOF_BOUNDARY = 'This record proves what was sent, when, to whom, and the reply recorded. It does not prove acceptance, availability, booking, confirmation, or that the work happened.'
+const PROOF_BOUNDARY = 'This record proves what was sent, when, to whom, and the reply recorded. Acceptance, availability, booking, confirmation, and completed work require separate business evidence.'
 
 export function AeCustomerRecord({ threadId, accessKey }: { threadId: string; accessKey: string | undefined }) {
   if (!isCustomerInquiryRecordClientAvailable()) {

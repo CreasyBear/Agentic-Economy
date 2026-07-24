@@ -24,6 +24,17 @@ const price = v.union(
   }),
   v.object({ kind: v.literal('on_request') }),
 )
+const offeringOrigin = v.union(
+  v.object({
+    kind: v.literal('catalog_offering'),
+    offeringRef: v.string(),
+    offeringRevision: v.number(),
+    offeringSourceHash: v.string(),
+    declaredAccessPathRef: v.optional(v.string()),
+    accessPathSourceHash: v.optional(v.string()),
+  }),
+  v.object({ kind: v.literal('standalone') }),
+)
 
 export const capabilitySupplyTables = {
   capabilityPublications: defineTable({
@@ -62,6 +73,7 @@ export const capabilitySupplyTables = {
     businessId: v.id('businesses'),
     networkId: v.string(),
     ...contractRefFields,
+    origin: v.optional(offeringOrigin),
     presentation: v.object({
       label: v.string(),
       summary: v.string(),

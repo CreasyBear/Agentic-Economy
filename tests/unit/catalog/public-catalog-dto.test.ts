@@ -4,6 +4,48 @@ import { brandNonEmpty } from '@/modules/common/ids'
 import { buildPublicCatalogDto } from '@/modules/catalog/public'
 
 describe('public catalog DTO', () => {
+  it('keeps a published business visible before it publishes an offering', () => {
+    const result = buildPublicCatalogDto({
+      business: {
+        businessId: brandNonEmpty('business:visible-only', 'BusinessId'),
+        ownerId: brandNonEmpty('owner:visible-only', 'OwnerId'),
+        slug: brandNonEmpty('visible-only', 'Slug'),
+        name: 'Visible Only',
+        normalizedName: 'visible only',
+        category: 'Engineering services',
+        suburb: 'Perth',
+        stateTerritory: 'WA',
+        publicStatus: 'published',
+        trustTier: 'claimed',
+        claimStatus: 'published',
+        sourceHash: brandNonEmpty('hash:visible-only', 'SourceHash'),
+        createdAt: 1,
+        updatedAt: 2,
+      },
+      context: {
+        businessId: brandNonEmpty('business:visible-only', 'BusinessId'),
+        category: 'Engineering services',
+        suburb: 'Perth',
+        stateTerritory: 'WA',
+        sourceRefs: [],
+        sourceHash: brandNonEmpty('hash:visible-only', 'SourceHash'),
+        approvedAt: 2,
+      },
+      services: [],
+      capabilities: [],
+      indexStatus: 'queued',
+      discoveryStatus: 'degraded',
+    })
+
+    expect(result).toMatchObject({
+      kind: 'available',
+      catalog: {
+        slug: 'visible-only',
+        services: [],
+      },
+    })
+  })
+
   it('returns only allowlisted public service fields', () => {
     const result = buildPublicCatalogDto({
       business: {
@@ -57,7 +99,7 @@ describe('public catalog DTO', () => {
           status: 'unavailable',
           firstRequest: {
             mode: 'not_available_yet',
-            publicDisclosure: 'First request is not available yet.',
+            publicDisclosure: 'This business has not published a request path.',
             publicChannel: 'not_available',
             noContactReason: 'Owner has not supplied public contact instructions.',
             rawContactExcluded: true,

@@ -27,7 +27,7 @@ import {
 
 import { internalMutation, internalQuery, type QueryCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
-import { listEligibleCapabilitySupply } from './capabilitySupply'
+import { listRouteableCapabilitySupply } from './capabilitySupply'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
 import { customerRequestV2WritePorts } from './customerRequestV2WritePorts'
 import {
@@ -487,7 +487,7 @@ export async function currentRoutePlanGenerationGraphStatus(
   const generation = await readExactRoutePlanGeneration(db, requestId, generationRef)
   if (generation.kind !== 'found'
     || generation.routeGeneration.requestRevision !== head.currentRevision) return 'invalid'
-  const currentSupply = await listEligibleCapabilitySupply(db, {
+  const currentSupply = await listRouteableCapabilitySupply(db, {
     networkId: revision.aggregate.snapshot.networkId,
     limit: 64,
     now,
@@ -521,7 +521,7 @@ export async function currentRoutePlanGenerationGraphStatus(
 }
 
 type AvailableEligibleCapabilitySupply = Extract<
-  Awaited<ReturnType<typeof listEligibleCapabilitySupply>>,
+  Awaited<ReturnType<typeof listRouteableCapabilitySupply>>,
   { kind: 'available' }
 >
 

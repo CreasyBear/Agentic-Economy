@@ -13,7 +13,7 @@ import type {
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
-import { listEligibleCapabilitySupply } from './capabilitySupply'
+import { listRouteableCapabilitySupply } from './capabilitySupply'
 
 type DbCtx = MutationCtx | QueryCtx
 type MutationDb = MutationCtx['db']
@@ -89,7 +89,7 @@ export function customerRequestV2PreparationEgressPorts(
     },
 
     listEligibleSupplies: async (input) => {
-      const live = await listEligibleCapabilitySupply(db, {
+      const live = await listRouteableCapabilitySupply(db, {
         networkId: input.networkId,
         limit: input.limit,
       })

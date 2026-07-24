@@ -10,6 +10,7 @@ import {
   ScrollText,
   Search,
   Settings,
+  Store,
   Wrench,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -63,7 +64,8 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
     id: 'work',
     label: 'Work',
     items: [
-      { href: '/owner/status', label: 'Status', icon: Activity, tier: 'core' },
+      { href: '/owner/status', label: 'Business page', icon: Activity, tier: 'core' },
+      { href: '/owner/offerings', label: 'Offerings', icon: Store, tier: 'core' },
       { href: '/owner/inquiries', label: 'Inquiries', icon: Inbox, tier: 'core' },
       { href: '/owner/actions', label: 'Contact follow-ups', icon: Contact, tier: 'advanced' },
       { href: '/owner/business-actions', label: 'Business actions', icon: Wrench, tier: 'advanced' },

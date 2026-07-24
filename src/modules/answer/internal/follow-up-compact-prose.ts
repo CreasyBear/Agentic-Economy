@@ -34,8 +34,8 @@ export function buildCompactFollowUpProse(input: {
     case 'unsupported':
       return {
         oneLine: input.followUpIntent === 'explain_boundary'
-          ? 'Agentic Economy reads and compares published listings. It does not book, charge, or dispatch.'
-          : 'Agentic Economy cannot book, charge, or dispatch on your behalf.',
+          ? 'Agentic Economy reads and compares published listings. The business confirms what happens next.'
+          : 'This request needs a business-supported action that is not available here.',
         summary: boundaryLine(),
         nextStep: buildInquiryNextStep(input.providers),
       }
@@ -104,12 +104,12 @@ function buildCompareSummary(providers: readonly AnswerSource[]): string {
 function buildInquiryNextStep(providers: readonly AnswerSource[]): string {
   const inquiryReady = providers.find((provider) => provider.inquiryUrl !== undefined)
   if (inquiryReady !== undefined) {
-    return 'Open a listed business page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.'
+    return 'Open a listed business page and send an inquiry when that option is published.'
   }
 
-  return 'Open a listed business page to review what they publish, then contact the business. Agentic Economy does not book or take payment on this page.'
+  return 'Open a listed business page to review what they publish, then contact the business.'
 }
 
 function boundaryLine(): string {
-  return 'The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.'
+  return 'The business confirms timing, price, availability, and the work.'
 }

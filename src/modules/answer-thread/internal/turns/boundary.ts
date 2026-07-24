@@ -48,7 +48,7 @@ async function streamBoundaryTurn(
     phase: 'route',
     status: 'running',
     title: 'Preparing the next step',
-    summary: 'Separating listed facts from actions this page does not handle.',
+    summary: 'Matching this request to the next supported step.',
     startedAtMs: routeStartedAt,
   })
   ctx.workLog.emit({
@@ -56,7 +56,7 @@ async function streamBoundaryTurn(
     phase: 'route',
     status: 'complete',
     title: 'Preparing the next step',
-    summary: 'This page can help read, compare, and route to a listed business page. It does not book, take payment, or dispatch work.',
+    summary: 'The next step stays with the listed business, which confirms timing, price, availability, and the work.',
     detailRows: [{ label: 'Listed businesses carried forward', value: String(providers.length) }],
     relatedProviderSlugs: providers.map((provider) => provider.slug),
     startedAtMs: routeStartedAt,

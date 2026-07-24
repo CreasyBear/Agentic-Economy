@@ -164,7 +164,7 @@ function intentSummary(intent: FollowUpIntent): string {
     case 'inquiry_handoff':
       return 'This follow-up is preparing a qualified inquiry next step'
     case 'explain_boundary':
-      return "This follow-up is checking AE's inquiry-only limits"
+      return 'This follow-up is checking the supported next step'
     case 'unsupported':
       return 'This follow-up is being routed back to published listings'
     case 'refine_search':
@@ -181,7 +181,7 @@ function completedIntentSummary(intent: FollowUpIntent): string {
     case 'inquiry_handoff':
       return 'This answer prepared a qualified inquiry next step'
     case 'explain_boundary':
-      return "This answer checked AE's inquiry-only limits"
+      return 'This answer checked the supported next step'
     case 'unsupported':
       return 'This answer routed the request back to published listings'
     case 'refine_search':

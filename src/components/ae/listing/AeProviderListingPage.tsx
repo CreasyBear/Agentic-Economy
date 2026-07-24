@@ -12,6 +12,8 @@ import { Token } from '@astryxdesign/core/Token'
 import { AeGenerativeMap, AeOfficeMap } from '@/components/ae/artifacts/AeGenerativeMap'
 import { AeProtectedByAe } from '@/components/ae/artifacts/AeProtectedByAe'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
+import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
+import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
 import { RouterLink } from '@/components/astryx/RouterLink'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { buildProviderPresentation, type ProviderPresentation } from '@/lib/ui/provider-presentation'
@@ -24,6 +26,7 @@ export type AeProviderListingPageProps = {
   catalog: PublicRouteCatalogContract
   inquiryAffordance: PublicInquiryAffordance
   agentJsonUrl: string
+  supply?: PublicOfferingSupplyView
   backFrom?: 'thread' | 'registry'
   backThreadId?: string
 }
@@ -36,6 +39,7 @@ export function AeProviderListingPage({
   catalog,
   inquiryAffordance,
   agentJsonUrl,
+  supply,
   backFrom,
   backThreadId,
 }: AeProviderListingPageProps) {
@@ -67,24 +71,35 @@ export function AeProviderListingPage({
         inquiryAffordance={inquiryAffordance}
         inquiryHref={inquiryHref}
         pseudonymousJourneyId={journeyIdentity?.slug === catalog.slug ? journeyIdentity.id : null}
+        offeringDetailMode={supply !== undefined}
       />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         <div className="grid gap-8">
           <ListingPhotosSection catalog={catalog} presentation={presentation} />
 
-          <Grid columns={{ minWidth: 300 }} gap={4}>
-            <ReachOutStepsCard updatedAt={catalog.updatedAt} inquiryAvailable={inquiryAffordance.kind === 'available'} />
-            <SourceStampCard updatedAt={catalog.updatedAt} />
-          </Grid>
+          {supply === undefined ? null : (
+            <AeOfferingSupplyList
+              offerings={supply.offerings}
+              disposition={supply.disposition}
+              observedAt={supply.observedAt}
+            />
+          )}
 
-          <CapabilityCardsSection catalog={catalog} inquiryAffordance={inquiryAffordance} inquiryHref={inquiryHref} />
+          {supply === undefined ? (
+            <Grid columns={{ minWidth: 300 }} gap={4}>
+              <ReachOutStepsCard updatedAt={catalog.updatedAt} inquiryAvailable={inquiryAffordance.kind === 'available'} />
+              <SourceStampCard updatedAt={catalog.updatedAt} />
+            </Grid>
+          ) : <SourceStampCard updatedAt={catalog.updatedAt} />}
 
-          <WhatTheyOfferCard catalog={catalog} presentation={presentation} officeAddress={officeAddress} />
+          {supply === undefined ? <CapabilityCardsSection catalog={catalog} inquiryAffordance={inquiryAffordance} inquiryHref={inquiryHref} /> : null}
+
+          {supply === undefined ? <WhatTheyOfferCard catalog={catalog} presentation={presentation} officeAddress={officeAddress} /> : null}
         </div>
 
         <aside className="grid content-start gap-6 lg:sticky lg:top-20" aria-label="Actions for this business">
-          <Card padding={5}>
+          {supply === undefined ? <Card padding={5}>
             <VStack gap={4}>
               <div>
                 <Text type="large" weight="semibold" color="primary" display="block">
@@ -101,7 +116,7 @@ export function AeProviderListingPage({
               )}
               <AeProtectedByAe />
             </VStack>
-          </Card>
+          </Card> : null}
 
           <Card padding={5} className="bg-surface" aria-label="Details for your assistant">
             <VStack gap={3}>
@@ -132,12 +147,14 @@ export function ListingFirstScreen({
   inquiryAffordance,
   inquiryHref,
   pseudonymousJourneyId,
+  offeringDetailMode = false,
 }: {
   catalog: PublicRouteCatalogContract
   trust: ListingTrustProjection
   inquiryAffordance: PublicInquiryAffordance
   inquiryHref: string
   pseudonymousJourneyId?: PseudonymousJourneyId | null
+  offeringDetailMode?: boolean
 }) {
   const [detailsCopied, setDetailsCopied] = useState(false)
   const phone = trust.phone.kind === 'published' ? trust.phone.value : undefined
@@ -222,7 +239,7 @@ export function ListingFirstScreen({
               onClick={copyDetails}
             />
           </div>
-          {inquiryAffordance.kind === 'available' ? (
+          {offeringDetailMode ? null : inquiryAffordance.kind === 'available' ? (
             <div data-peer-action="ask" data-variant="secondary">
               <Button label="Ask this business" variant="secondary" size="lg" href={inquiryHref} className={peerActionClassName} />
             </div>
@@ -275,7 +292,7 @@ function CapabilityCardsSection({
             What you can do here
           </Text>
           <Text type="supporting" color="secondary" display="block">
-            Each option is a request the business reviews. AE does not book, charge, or confirm.
+            Each option goes to the business for review. The business confirms what happens next.
           </Text>
         </div>
         <Grid columns={{ minWidth: 260 }} gap={4}>
@@ -330,7 +347,7 @@ function capabilityCardPresentation(
   actionable: boolean,
 ): { label: string; body: string } {
   if (!actionable) {
-    return { label: capabilityLabel(kind), body: 'This request path is not available yet.' }
+    return { label: capabilityLabel(kind), body: 'Ask the business directly about this request.' }
   }
   switch (kind) {
     case 'phone_inquiry':

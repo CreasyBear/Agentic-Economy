@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { Button } from '@astryxdesign/core/Button'
 
 import { AeOwnerStatusEmptyState } from '@/components/ae/status/AeOwnerStatusEmptyState'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
@@ -54,7 +55,7 @@ export const Route = createFileRoute('/_operator/owner/status')({
   },
   head: () => ({
     meta: [
-      { title: 'Service page status | Agentic Economy' },
+      { title: 'Business page | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -68,8 +69,8 @@ function OwnerStatusRoute() {
   return (
     <AeOperatorShell
       operatorRole="owner"
-      title="Service page status"
-      description="See whether your page is published and searchable, and what must change before it can receive requests."
+      title="Business page"
+      description="Preview what customers and agents can see, then keep your Offerings and contact paths current."
       currentPath="/owner/status"
     >
       <div className="grid gap-6">
@@ -78,6 +79,9 @@ function OwnerStatusRoute() {
         ) : (
           <>
             <AeStatusCard readback={readback} />
+            <div className="flex flex-wrap gap-3">
+              <Button href="/owner/offerings" label="Manage Offerings" variant="primary" />
+            </div>
             <AeCapabilityList catalog={readback.catalog} />
           </>
         )}

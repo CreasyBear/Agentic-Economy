@@ -62,7 +62,7 @@ export function AeOwnerReplyComposer({
     }
   }
 
-  const description = 'This reply is saved on the thread and sent through the customer notification path. It does not confirm booking, payment, or dispatch.'
+  const description = 'This reply is saved on the thread and sent to the customer. Booking, payment, and dispatch require their own confirmed action.'
   const descriptionId = `${id}-desc`
   const statusId = `${id}-error`
   const describedBy = [descriptionId, invalid ? statusId : undefined].filter(Boolean).join(' ')

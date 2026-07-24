@@ -37,6 +37,10 @@ export async function getEligibleExactCapabilitySupply(
   }
   const business = await ports.loadPublishedBusiness(offering.businessId)
   if (business === null) return { kind: 'unavailable' as const }
+  if (offering.origin?.kind === 'catalog_offering'
+    && !await ports.catalogOriginIsCurrent(offering.origin, offering.businessId)) {
+    return { kind: 'unavailable' as const }
+  }
   const contract = await ports.getActiveExactCapabilityContract(input.contractRef)
   if (contract.kind !== 'found') return { kind: 'unavailable' as const }
   return { kind: 'available' as const, offering, binding, business, contract }

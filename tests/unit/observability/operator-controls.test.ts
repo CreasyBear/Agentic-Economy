@@ -129,6 +129,17 @@ describe('operator controls', () => {
       },
     })
   })
+
+  it('keeps Offering authoring and public cutover dark until an operator enables them', () => {
+    const controls = readOperatorControls(emptyState(), 10)
+    for (const key of ['offering_authoring_enabled', 'offering_public_projection_enabled'] as const) {
+      expect(controls.find((control) => control.key === key)).toMatchObject({
+        configuredEnabled: false,
+        effectiveEnabled: false,
+        source: 'default',
+      })
+    }
+  })
 })
 
 function emptyState(): OperatorControlSourceState {
