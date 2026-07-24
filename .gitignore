@@ -38,3 +38,8 @@ graphify-out/
 /.clerk/
 .vercel
 examples/agent-experience/.local/
+.gstack/
+
+# gsd drift-check scratch artifacts and research response cache
+/ae-phase4-founder-*.json.tsv
+.planning/research/.cache/
