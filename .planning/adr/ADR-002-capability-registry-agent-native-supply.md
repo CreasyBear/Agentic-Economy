@@ -1,8 +1,13 @@
 ---
 # ADR-002: Capability Registry — Agent-Native Supply Remodel
-Status: Proposed
+Status: Superseded by ADR-026
 Date: 2026-07-03
 Scope: 2 — Capability registry (agent-native supply remodel)
+
+> Superseded 2026-07-22. The four-rung capability ladder conflated public
+> description, human reachability, declared machine surfaces and AE-supported
+> execution. ADR-026 replaces it with one Offering identity and independent
+> access/support facets. This file remains as provenance.
 
 ## Context
 

@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
-status: planned
-stopped_at: Phase 05 planned; execution blocked on Gate 0 Offering custody
-last_updated: "2026-07-23T03:22:32Z"
+status: phase_05_source_landed
+stopped_at: Phase 05 offering lane committed; source + unit/integration evidence only
+last_updated: "2026-07-24T06:34:00Z"
 progress:
   total_phases: 6
   completed_phases: 1
@@ -26,17 +26,31 @@ that a second operation-owned provider can use the same paid-operation host,
 semantics and query-agnostic renderer without fallback or a second product
 stack.
 
-Phase 05 is planned as a public, no-login, inspect-only decision-support loop:
-browse businesses, inspect one Offering, shortlist exact Offering revisions,
-compare source-owned facts and explain trade-offs against stated priorities.
-The former quote-to-close Phase 5 scope is superseded and deferred.
+Phase 05 (public, no-login, inspect-only decision-support loop: browse
+businesses, inspect one Offering, shortlist exact Offering revisions, compare
+source-owned facts and explain trade-offs) is IMPLEMENTED and committed. The
+ADR-026 one-business supply graph (offering source/migration/supply,
+catalog/capability-supply/discovery/registry projections, owner offering routes,
+UCP/offering manifests) and the answer-first consumer surfaces landed on
+`codex/shared-tree-checkpoint-20260714`.
+
+Evidence is source + focused-test only: the offering-lane unit and integration
+suites pass (catalog/registry/discovery/offering-surfaces + discovery-routes,
+121 tests). `tsc --noEmit` is NOT clean — this shared checkpoint branch carries
+heavy pre-existing type debt: 109 errors at the prior tip `a27ee0c9`, reduced to
+72 by the offering lane (net -37, no regression introduced). Typecheck cleanup is
+in-flight on the `phase5-typecheck-a/b/c` / `phase5-source-gates` worktrees and
+is not yet merged here. Live Convex data, hosted, provider, demand and customer
+evidence remain unproven — no Convex dev backend was run. The former
+quote-to-close Phase 5 scope is superseded and deferred.
 
 ## Next transition
 
-Execute Plan 05-01 only after the parent supplies one exact clean Offering
-predecessor revision/tree, a literal custody allowlist and named ownership for
-the inherited typecheck failures. No later Phase 05 plan may dispatch from the
-current dirty shared tree.
+Merge the `phase5-typecheck-*` cleanup to drive `tsc --noEmit` toward zero, then
+validate the live browse -> Offering -> shortlist -> compare loop against a
+seeded Convex backend before claiming operating proof. The residual 72 typecheck
+errors span customer-request, action-invocation and capability-supply modules and
+are tracked on the dedicated typecheck worktrees.
 
 ## Remaining evidence gaps
 

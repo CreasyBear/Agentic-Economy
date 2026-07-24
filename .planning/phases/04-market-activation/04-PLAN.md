@@ -172,12 +172,14 @@ provider billing, payout work or unbounded reconstruction.
 
 **Depends on:** parent-integrated WP2.3.
 
-**Source-owned outcome:** revisioned services, one paid-information seed
+**Source-owned outcome:** revisioned customer-recognisable Offerings with
+independent human and declared-operation access paths, one paid-information seed
 operation with its own durable result/reconciliation owner, and a narrow shared
 availability projection. Appointment and dispatch remain domain-owned hostile
 substitution fixtures.
 
-**Target behavior:** create/order/preview/publish/pause/retire; shared
+**Target behavior:** publish a Business Profile with zero Offerings;
+create/order/preview/publish/pause/retire Offerings and access paths; shared
 availability is only disposition/currentness/customer impact; paid-information
 result and reconciliation truth survives without Phase 3 evaluator records.
 
@@ -195,14 +197,16 @@ the shared availability schema.
 WP4 is a serial source stream:
 
 - **WP4.1** owns Integration summary/detail, many-to-many offering relations,
-  exact binding, readiness and publication with protected disclosure.
+  exact catalogue origin, binding, readiness and publication with protected
+  disclosure. Declared access does not imply AE support.
 - **WP4.2** owns one reachable seed operation: materialized supply, registered
   action, human and authenticated-agent adapters, exact authority, current
   attempt, `routeable_operation_start:v1` Usage reservation/settlement and a
   source-created business-affinity Work reference.
 
 **Target behavior:** one-to-many, many-to-one and account-wide Integrations;
-source/currentness; no secret readback; approve-each plus the single admitted
+source/currentness; integrated and routeable supply are distinct; no secret
+readback; approve-each plus the single admitted
 one-unit bounded-mandate fixture enter the same Action Invocation host without
 Phase 3 evaluator records. Further authority modes and broader mandate policy
 remain deferred.
@@ -325,7 +329,8 @@ cannot rewrite Work; partial closure cannot claim closed.
 panels.
 
 **Target behavior:** canonical Integrations under settings; technical shortcut
-same route; visibility and availability separate.
+same route; Offering, human/machine access and AE support render together while
+visibility and routeability remain separate.
 
 **Falsifier:** four Integration topologies remain coherent and appointment/
 dispatch substitutions introduce no shared vertical field.

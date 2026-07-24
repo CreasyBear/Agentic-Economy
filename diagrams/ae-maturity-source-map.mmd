@@ -1,0 +1,58 @@
+flowchart LR
+  %% AE product maturity mapped to the live source, 2026-07-22
+
+  subgraph MARKET["How a business becomes agent-native"]
+    direction LR
+    V["1. Visible — Who are you?"] --> U["2. Understandable — What do you sell?"]
+    U --> R["3. Reachable — How can I ask?"]
+    R --> S["4. Responsive — Can we exchange scope and price?"]
+    S --> C["5. Callable — What endpoint can my agent use?"]
+    C --> T["6. Transactable — Can AE safely carry the action?"]
+    T --> A["7. Composable / autonomous — Can actions fulfil a larger goal?"]
+  end
+
+  subgraph SOURCE["What the live AE source currently provides"]
+    direction LR
+    BIZ["Business identity — businesses + businessContexts — EXISTS"]
+    CAT["Service catalogue — businessServices + public catalog — COUPLED"]
+    CH["Request affordance — serviceCapabilities — MISNAMED"]
+    INQ["Human inquiry — inquiry.submit + customer record — EXISTS"]
+    ENDPOINT["Exposed Endpoint — business-owned route + description — MISSING"]
+    SUP["Supported Action — contract + offering + transport binding — EXISTS"]
+    P1["Phase 1: Action Invocation — authority, attempts, uncertainty, recovery, evidence"]
+    P2["Phase 2: Cross-surface parity — one action plane for human and agent hosts"]
+  end
+
+  V -. "maps to" .-> BIZ
+  U -. "maps to" .-> CAT
+  R -. "maps to" .-> CH
+  S -. "maps to" .-> INQ
+  C -. "no source owner" .-> ENDPOINT
+  T -. "maps to" .-> SUP
+  T -. "governed by" .-> P1
+  A -. "hosted through" .-> P2
+
+  BIZ --> CAT --> CH --> INQ
+  INQ == "CURRENT FORCED JUMP" ==> SUP
+  ENDPOINT -. "new thin publication layer" .-> SUP
+  SUP --> P1 --> P2
+
+  NOTE["The Graph-style page belongs here: publish the endpoint first; AE support is a later promotion"]
+  NOTE -.-> ENDPOINT
+
+  classDef exists fill:#DCFCE7,stroke:#15803D,color:#14532D,stroke-width:2px;
+  classDef coupled fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px;
+  classDef missing fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D,stroke-width:3px;
+  classDef downstream fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px;
+  classDef market fill:#F8FAFC,stroke:#64748B,color:#0F172A,stroke-width:1.5px;
+  classDef note fill:#F5F3FF,stroke:#7C3AED,color:#4C1D95,stroke-width:2px;
+
+  class BIZ,INQ exists;
+  class CAT,CH coupled;
+  class ENDPOINT missing;
+  class SUP,P1,P2 downstream;
+  class V,U,R,S,C,T,A market;
+  class NOTE note;
+
+  style MARKET fill:#FFFFFF,stroke:#CBD5E1,stroke-width:1px
+  style SOURCE fill:#FFFFFF,stroke:#CBD5E1,stroke-width:1px
