@@ -70,7 +70,7 @@ function RootDocument({ children }: { children: ReactNode }) {
 }
 
 function requiresClerkProvider(pathname: string): boolean {
-  return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin')
+  return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin') || pathname.startsWith('/claim')
 }
 
 // Client-side mirror of the canonical server check in

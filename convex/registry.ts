@@ -322,12 +322,19 @@ export const searchPublicBusinessOfferingSupply = queryGeneric({
     const tokens = needle.split(' ').filter((token) => !SEARCH_STOP_WORDS.has(token)).map(normalizeSearchToken)
     const locationKey = resolveSearchLocationKey(args)
     const rows = await readPublishedBusinessRows(db, undefined, CATALOG_TOTAL_COUNT_LIMIT + 1)
-    const items = (await Promise.all(rows.map((business) => readOfferingSupplyForBusiness(db, business))))
+    const supply = (await Promise.all(rows.map((business) => readOfferingSupplyForBusiness(db, business))))
       .filter((item): item is NonNullable<typeof item> => item !== undefined)
+    const placesOf = (item: OfferingSupplyDto): readonly string[] =>
+      [item.suburb, `${item.suburb} ${item.stateTerritory}`, item.stateTerritory, item.postcode]
+        .filter((value): value is string => typeof value === 'string').map(normalizeSearchText)
+    // Only treat an extracted location as a filter when it matches a real published place;
+    // otherwise a bare category term (e.g. "dental", "cafe") is misread as a suburb and excludes everything.
+    const effectiveLocationKey = locationKey !== undefined && supply.some((item) => placesOf(item).includes(locationKey))
+      ? locationKey
+      : undefined
+    const items = supply
       .filter((item) => {
-        const places = [item.suburb, `${item.suburb} ${item.stateTerritory}`, item.stateTerritory, item.postcode]
-          .filter((value): value is string => typeof value === 'string').map(normalizeSearchText)
-        if (locationKey !== undefined && !places.includes(locationKey)) return false
+        if (effectiveLocationKey !== undefined && !placesOf(item).includes(effectiveLocationKey)) return false
         const haystack = normalizeSearchText([item.name, item.category, item.suburb, item.stateTerritory, ...item.offerings.flatMap((offering) => [offering.name, offering.category, offering.summary])].join(' '))
         return (tokens.length === 0 ? [needle] : tokens).every((token) => haystack.includes(token))
       })
