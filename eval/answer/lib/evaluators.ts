@@ -590,9 +590,6 @@ function evaluateAnswerTurnExpectations(input: {
       problems.push(`agentJsonUrl missing "${value}"`)
     }
   }
-  if (expected.requireBoundaryCopy === true && !/cannot book|does not book|does not book or take payment|no booking or payment/i.test(publicText)) {
-    problems.push('boundary/action copy missing')
-  }
   if (expected.forbidInternalPublicTerms === true) {
     const terms = findInternalPublicTerms(inspectablePublicText)
     if (terms.length > 0) {

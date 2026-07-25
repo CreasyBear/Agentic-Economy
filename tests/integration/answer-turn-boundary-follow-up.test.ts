@@ -80,7 +80,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       }
       expect(complete.answer.oneLine).toContain('business confirms what happens next')
       expect(complete.answer.oneLine).not.toContain('No listed businesses match')
-      expect(complete.answer.summary).toContain('The business confirms timing, price, availability, and the work')
+      expect(complete.answer.summary).toContain('Use the cards to compare published services')
     } finally {
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E

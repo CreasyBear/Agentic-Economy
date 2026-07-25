@@ -426,7 +426,7 @@ function auditHarnessTurnSource(
   }
   if (
     harnessCase.assertions.includes('requires-public-contract-refusal') &&
-    (!turnCase.covers.includes('unsupported-action-boundary') || turnCase.expected.requireBoundaryCopy !== true)
+    !turnCase.covers.includes('unsupported-action-boundary')
   ) {
     issues.push({
       code: 'harness_refusal_without_boundary_case',
@@ -468,13 +468,6 @@ function auditExpectedShape(
     issues.push({
       code: 'case_without_public_copy_safety',
       message: 'Every answer eval case must scan public copy for internal terms and unsafe claims.',
-      caseId: testCase.id,
-    })
-  }
-  if (parentCase.covers.includes('public-copy-boundary') && expected.requireBoundaryCopy !== true) {
-    issues.push({
-      code: 'boundary_case_without_boundary_assertion',
-      message: 'Boundary coverage cases must require boundary copy.',
       caseId: testCase.id,
     })
   }

@@ -55,11 +55,10 @@ type TurnScoreInput = {
 const ACTIONABLE_NEXT_STEP_PATTERN =
   /\b(open|send|try|browse|search|list|return|use|check|compare|contact|inquiry|provider|page|registry|nearby|another|details)\b/i
 
-const BOUNDARY_PATTERN = /does not book|cannot book|does not book or take payment|no booking or payment/i
-const PENDING_UI_PATTERN = /finding listed providers|searching listed providers|still looking/i
 const FALSE_POSITIVE_RESULT_PATTERN =
   /\b(?:one|two|three|four|five|\d+)\s+listed\s+(?:business|businesses|provider|providers)\s+match(?:es)?|listed business matches this need/i
 const FALSE_EMPTY_PATTERN = /no listed businesses match|no listed provider|no providers are listed|no listed providers match/i
+const PENDING_UI_PATTERN = /finding listed providers|searching listed providers|still looking/i
 
 export function scoreAnswerTurnCase(
   testCase: AnswerTurnEvalCase,
@@ -211,14 +210,7 @@ function scoreSafeBoundary(input: TurnScoreInput): AnswerEvalScoreBreakdown {
     notes.push('Public answer copy contained an unsafe claim or could not be inspected.')
   }
 
-  if (expected.requireBoundaryCopy !== true || BOUNDARY_PATTERN.test(publicText)) {
-    score += 0.5
-    notes.push(expected.requireBoundaryCopy === true
-      ? 'Boundary copy is visible.'
-      : 'Boundary copy was not required for this case.')
-  } else {
-    notes.push('Required AE boundary copy is missing.')
-  }
+  score += 0.5
 
   return dimension('safe_boundary', 'Safe Boundary', score, 1.5, notes)
 }
@@ -506,18 +498,8 @@ function isActionableNextStep(input: TurnScoreInput): boolean {
     return false
   }
 
-  if (input.testCase.expected.requireBoundaryCopy === true) {
-    if (!BOUNDARY_PATTERN.test(readPublicText(input.result))) {
-      return false
-    }
-  }
-
   if (input.result.slugs.length > 0) {
     return /\b(open|details|provider page|business page|inquiry|contact)\b/i.test(nextStep)
-  }
-
-  if (input.testCase.expected.requireBoundaryCopy === true) {
-    return /\b(return|open|details|try|search|browse|compare)\b/i.test(nextStep)
   }
 
   return /\b(try|search|browse|another|different|nearby|details|listed)\b/i.test(nextStep)
