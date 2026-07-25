@@ -382,8 +382,9 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         developmentOnlySuppliedQuoteQualificationPorts: ports,
         developmentOnlySuppliedQuoteNow: () => nowMs,
       },
-    })
+    }) as SuppliedCandidateQuoteResult
     expect(directResult).toMatchObject({ kind: 'quote_returned' })
+    if (directResult.kind !== 'quote_returned') throw new Error(directResult.kind)
 
     const durableState = createDevelopmentDurableState<SuppliedCandidateQuoteResult>()
     const durablePort = createDevelopmentDurablePort(durableState)
@@ -391,7 +392,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     const controlledResult = {
       ...directResult,
       quote: {
-        ...(directResult.kind === 'quote_returned' ? directResult.quote : {}),
+        ...directResult.quote,
         quoteRef: 'dev:transfer:quote:controlled',
       },
     }
@@ -464,7 +465,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     if (accepted.kind !== 'accepted') throw new Error(accepted.code)
     controlledEvents.push({
       kind: 'approval_policy',
-      policy: 'ask',
+      policy: 'prompt',
       reason: 'exact invocation authority accepted before release',
     })
     controlledEvents.push({
@@ -533,7 +534,7 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
           }),
         ),
     })
-    if (attached.kind !== 'attached') throw new Error(attached.reason)
+    if (attached.kind === 'refused') throw new Error(attached.reason)
     const coldRequest = structuredClone(
       JSON.parse(JSON.stringify(attached.aggregate)) as CustomerRequestV2Aggregate,
     )

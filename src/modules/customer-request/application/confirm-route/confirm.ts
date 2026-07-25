@@ -63,10 +63,15 @@ export async function confirmCustomerRoute(
     }
     return { kind: 'conflict', requestRef: input.requestRef, reason: 'options_changed' }
   }
-  return projectNeedsAttention({
-    requestRef: input.requestRef, revision: input.revision,
-    summary: result.reason === 'authentication_required'
-      ? 'Sign in again before confirming this choice.'
-      : 'This choice can no longer be confirmed. Review the current options.',
-  })
+  if ('reason' in result) {
+    return projectNeedsAttention({
+      requestRef: input.requestRef, revision: input.revision,
+      summary: result.reason === 'authentication_required'
+        ? 'Sign in again before confirming this choice.'
+        : 'This choice can no longer be confirmed. Review the current options.',
+    })
+  }
+  return projectConfirmedRoute(
+    current.aggregate, selected.displayedRoute, result.mandate,
+  )
 }

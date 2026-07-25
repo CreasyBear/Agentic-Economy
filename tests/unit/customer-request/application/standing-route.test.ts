@@ -9,11 +9,14 @@ import {
   resolveSelectableCurrentRoute,
   revokeStandingRoute,
   applyStandingRoute,
-  type StandingRouteAggregate,
-  type StandingRouteGeneration,
   type StandingRoutePorts,
 } from '@/modules/customer-request/application/public'
+import type {
+  StandingRouteAggregate,
+  StandingRouteGeneration,
+} from '@/modules/customer-request/application/standing-route'
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
+import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 
 const NOW = Date.now()
 const FUTURE = NOW + 60_000
@@ -88,6 +91,34 @@ const policy = {
   validUntil: FUTURE,
 }
 
+const routesReadyPreview: CustomerRequestView = {
+  kind: 'request',
+  requestRef: 'req:1',
+  revision: 3,
+  state: 'routes_ready',
+  summary: 'Options ready',
+  nextAction: 'inspect_routes',
+  missingFields: [],
+  criteria: [],
+  options: [],
+  decision: {
+    generationRef,
+    requestRevision: 3,
+    outcome: { kind: 'routes_available', routeCount: 1, summary: 'One option' },
+    routes: [displayedRoute as never],
+    comparison: { kind: 'single', summary: 'One option' },
+    actions: {
+      review: { kind: 'inspect_current_option', createsAuthority: false, startsWork: false, summary: 'Review' },
+      confirm: { kind: 'confirm_current_option', createsAuthority: true, startsWork: false, summary: 'Confirm' },
+      start: { kind: 'start_confirmed_option', availableAfter: 'confirmation', startsWork: true, summary: 'Start' },
+      change: { kind: 'revise_request', createsAuthority: false, startsWork: false, preservesRequest: true, summary: 'Change' },
+      decline: { kind: 'leave_unconfirmed', createsAuthority: false, startsWork: false, preservesRequest: true, summary: 'Decline' },
+    },
+    changes: { kind: 'initial' },
+    nextBoundary: { kind: 'confirmation', authorityCreated: false },
+  },
+}
+
 function basePorts(overrides: Partial<StandingRoutePorts> = {}): StandingRoutePorts {
   return {
     loadCurrent: vi.fn(async () => ({
@@ -96,22 +127,7 @@ function basePorts(overrides: Partial<StandingRoutePorts> = {}): StandingRoutePo
       routeGenerationNumber: 2,
       routeGenerationRef: generationRef,
     })),
-    projectCurrentRoutePlans: vi.fn(async () => ({
-      kind: 'request' as const,
-      requestRef: 'req:1',
-      revision: 3,
-      state: 'routes_ready' as const,
-      summary: 'Options ready',
-      nextAction: 'inspect_routes' as const,
-      missingFields: [],
-      criteria: [],
-      options: [],
-      decision: {
-        generationRef,
-        outcome: { kind: 'routes_available' as const },
-        routes: [displayedRoute as never],
-      },
-    })),
+    projectCurrentRoutePlans: vi.fn(async () => routesReadyPreview),
     getCurrentRoutePlanGeneration: vi.fn(async () => ({
       kind: 'found' as const,
       routeGeneration: generation,

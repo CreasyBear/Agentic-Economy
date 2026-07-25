@@ -56,6 +56,11 @@ export function attachCompletedTaskReference(
     actor: { principalRef: input.principalRef, callerRef: input.callerRef },
   })
   if (identity.kind === 'refused') return { kind: 'refused', reason: identity.code }
+  // The producer (readCompletedResultIdentity) already enforces referenceability, but its
+  // businessOutcome is typed `string` because a provider may mark any terminal outcome
+  // referenceable via terminalResultReferenceable. Narrow at this boundary without refusing.
+  const businessOutcome = identity.businessOutcome as CustomerRequestCompletedTaskReference['businessOutcome']
+
 
   const referenceRef = `completed-task:${canonicalDigest({
     invocationRef: identity.invocationRef,
@@ -76,7 +81,7 @@ export function attachCompletedTaskReference(
     actionVersion: identity.actionVersion,
     sourceResultRef: identity.sourceResultRef,
     resultDigest: identity.resultDigest,
-    businessOutcome: identity.businessOutcome,
+    businessOutcome,
     referencedAt: input.referencedAt,
   })
   const { aggregateDigest: _priorDigest, ...priorMaterial } = input.candidateAggregate

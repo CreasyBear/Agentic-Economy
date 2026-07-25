@@ -168,7 +168,7 @@ function serviceFixture(
   }
   const command = vi.fn(async () => ({ kind: 'accepted', value: projection }) as const)
   const service: PaidOperationApplicationService = {
-    inspect: vi.fn(() => ({ kind: 'accepted', value: projection })),
+    inspect: vi.fn(() => ({ kind: 'accepted', value: projection }) as const),
     command,
   }
   return { service, projection, command }

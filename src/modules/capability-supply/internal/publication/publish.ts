@@ -4,6 +4,7 @@ import {
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
+import { type StableHashValue } from '@/modules/common/stable-hash'
 
 import { bindingIntegrityIsValid } from '../binding'
 import { offeringIntegrityIsValid } from '../offering'
@@ -97,17 +98,20 @@ export async function publishCapabilityCommand(
     draft.offering.offeringId,
     draft.binding.bindingId,
   )
+  // Offering draft carries nested optional fields (origin, access paths) that hash
+  // deterministically via stableStringify but make it non-assignable to StableHashValue directly.
+  const requestMaterial: StableHashValue = {
+    businessId: input.businessId,
+    source: draft.source,
+    offering: draft.offering as StableHashValue,
+    binding: draft.binding,
+  }
   const operation = await beginOperation(
     ports,
     input.actor,
     'publishCapability',
     input,
-    {
-      businessId: input.businessId,
-      source: draft.source,
-      offering: draft.offering,
-      binding: draft.binding,
-    },
+    requestMaterial,
     input.now,
   )
   if (operation.kind === 'conflict') {

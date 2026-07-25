@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { type StableHashValue } from '@/modules/common/stable-hash'
 import {
   admitPublicationDraft,
   publishCapabilityCommand,
@@ -254,7 +255,7 @@ describe('capability-supply publication commands', () => {
       requestMaterial: {
         businessId: 'business-1',
         source: admitted.draft.source,
-        offering: admitted.draft.offering,
+        offering: admitted.draft.offering as StableHashValue,
         binding: admitted.draft.binding,
       },
       correlationId: context.correlationId,

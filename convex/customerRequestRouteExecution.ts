@@ -416,17 +416,8 @@ export const reportProblem = internalMutation({
   },
   returns: v.union(
     v.object({
-      kind: v.literal('reported'), reportRef: v.string(), reportedAt: v.number(),
-      affected: v.object({
-        step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
-      }),
-      visibility: v.union(
-        v.literal('customer_and_ae_only'), v.literal('share_with_affected_business'),
-      ),
-      evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
-    }),
-    v.object({
-      kind: v.literal('replayed'), reportRef: v.string(), reportedAt: v.number(),
+      kind: v.union(v.literal('reported'), v.literal('replayed')),
+      reportRef: v.string(), reportedAt: v.number(),
       affected: v.object({
         step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
       }),
@@ -441,9 +432,13 @@ export const reportProblem = internalMutation({
       reason: v.union(v.literal('request_not_found'), v.literal('evidence_not_found')),
     }),
   ),
-  handler: async (ctx, args) => (
-    await reportProblemMachine(args, problemMutationPorts(ctx))
-  ),
+  handler: async (ctx, args) => {
+    const result = await reportProblemMachine(args, problemMutationPorts(ctx))
+    // The machine returns a readonly evidence list; the return validator declares a mutable array.
+    return 'evidence' in result
+      ? { ...result, evidence: result.evidence.map((item) => ({ receiptRef: item.receiptRef, label: item.label })) }
+      : result
+  },
 })
 
 const businessCausalityPosition = v.union(

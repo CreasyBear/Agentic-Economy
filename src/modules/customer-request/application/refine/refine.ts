@@ -5,6 +5,7 @@ import { customerRouteRef } from '@/modules/customer-request/route-plan-customer
 
 import { rebindStoredFacts } from '../interpret-compile'
 import type {
+  RefineAggregate,
   RefineCustomerRequestInput,
   RefineCustomerRequestPorts,
   RefineCustomerRequestResult,
@@ -109,7 +110,7 @@ export async function refineCustomerRequest(
     const graph = await ports.loadRequestGraph(current.aggregate.snapshot.networkId)
     if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
     const reboundFacts = rebindStoredFacts(current.aggregate.snapshot.facts as never, graph.models)
-    const selections = current.aggregate.plan.actions.flatMap((action) => {
+    const selections = current.aggregate.plan.actions.flatMap((action: RefineAggregate['plan']['actions'][number]) => {
       const model = graph.models.find((candidate) => (
         sameCapabilityContractRef(candidate.contractRef, action.contractRef)
       ))

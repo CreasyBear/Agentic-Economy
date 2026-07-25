@@ -19,14 +19,53 @@ export function standingRoutePorts(ctx: ActionCtx): StandingRoutePorts {
     resolvePermission: (input) => ctx.runQuery(
       internal.customerRequestStandingRoutePolicy.resolvePermission, input,
     ) as ReturnType<StandingRoutePorts['resolvePermission']>,
-    issueStandingPolicy: (input) => ctx.runMutation(
-      internal.customerRequestStandingRoutePolicy.issue, input,
+    issueStandingPolicy: ({ serviceAuthorization, ...rest }) => ctx.runMutation(
+      internal.customerRequestStandingRoutePolicy.issue,
+      {
+        ...rest,
+        ...(serviceAuthorization === undefined ? {} : {
+          serviceAuthorization: {
+            operation: serviceAuthorization.operation,
+            command: serviceAuthorization.command,
+            assertion: {
+              ...serviceAuthorization.assertion,
+              scopes: [...serviceAuthorization.assertion.scopes],
+            },
+          },
+        }),
+      },
     ) as ReturnType<StandingRoutePorts['issueStandingPolicy']>,
-    issueMandate: (input) => ctx.runMutation(
-      internal.customerRequestStandingRoutePolicy.issueMandate, input,
+    issueMandate: ({ serviceAuthorization, ...rest }) => ctx.runMutation(
+      internal.customerRequestStandingRoutePolicy.issueMandate,
+      {
+        ...rest,
+        ...(serviceAuthorization === undefined ? {} : {
+          serviceAuthorization: {
+            operation: serviceAuthorization.operation,
+            command: serviceAuthorization.command,
+            assertion: {
+              ...serviceAuthorization.assertion,
+              scopes: [...serviceAuthorization.assertion.scopes],
+            },
+          },
+        }),
+      },
     ) as ReturnType<StandingRoutePorts['issueMandate']>,
-    revokeStandingPolicy: (input) => ctx.runMutation(
-      internal.customerRequestStandingRoutePolicy.revoke, input,
+    revokeStandingPolicy: ({ serviceAuthorization, ...rest }) => ctx.runMutation(
+      internal.customerRequestStandingRoutePolicy.revoke,
+      {
+        ...rest,
+        ...(serviceAuthorization === undefined ? {} : {
+          serviceAuthorization: {
+            operation: serviceAuthorization.operation,
+            command: serviceAuthorization.command,
+            assertion: {
+              ...serviceAuthorization.assertion,
+              scopes: [...serviceAuthorization.assertion.scopes],
+            },
+          },
+        }),
+      },
     ) as ReturnType<StandingRoutePorts['revokeStandingPolicy']>,
   }
 }

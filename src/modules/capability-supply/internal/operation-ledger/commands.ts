@@ -90,8 +90,11 @@ export async function registerCapabilityOfferingCommand(
     afterState: 'inactive',
     createdAt: now,
   }
+  // Validated offering registration hashes deterministically via stableStringify; its
+  // nested optional fields make the zod type non-assignable to StableHashValue directly.
+  const requestMaterial: StableHashValue = { registration: registration as StableHashValue }
   const operation = await beginOperation(
-    ports, command.actor, 'registerCapabilityOffering', command.context, { registration }, now,
+    ports, command.actor, 'registerCapabilityOffering', command.context, requestMaterial, now,
   )
   if (operation.kind === 'conflict') return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
   if (operation.kind === 'replay') {

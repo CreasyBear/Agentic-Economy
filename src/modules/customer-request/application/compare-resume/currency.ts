@@ -17,7 +17,12 @@ export function routesAreCurrent(
       binding.businessId === step.businessId
       && binding.offeringId === step.offeringId
       && binding.bindingId === step.bindingId
-      && sameCapabilityContractRef(binding.contractRef, step.contractRef)
+      && step.contractRef.contractDigest !== undefined
+      && sameCapabilityContractRef(binding.contractRef, {
+        capabilityId: step.contractRef.capabilityId,
+        version: step.contractRef.version,
+        contractDigest: step.contractRef.contractDigest,
+      })
       && binding.offeringRegistrationHash === step.offeringRegistrationHash
       && binding.bindingRegistrationHash === step.bindingRegistrationHash
       && binding.publicationRef === step.publicationRef
@@ -39,7 +44,12 @@ export function hasTransientBindingUnavailable(
       binding.businessId === step.businessId
       && binding.offeringId === step.offeringId
       && binding.bindingId === step.bindingId
-      && sameCapabilityContractRef(binding.contractRef, step.contractRef)
+      && step.contractRef.contractDigest !== undefined
+      && sameCapabilityContractRef(binding.contractRef, {
+        capabilityId: step.contractRef.capabilityId,
+        version: step.contractRef.version,
+        contractDigest: step.contractRef.contractDigest,
+      })
       && (binding.publicationRef === undefined
         || binding.readinessValidUntil === undefined
         || binding.readinessValidUntil <= now)

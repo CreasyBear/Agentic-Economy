@@ -39,7 +39,7 @@ export async function recordOutcome(
     return { kind: 'refused', reason: 'output_invalid' }
   }
   const observationPatch = observation === undefined ? {} : {
-    transportObservationJson: args.observationJson,
+    ...(args.observationJson === undefined ? {} : { transportObservationJson: args.observationJson }),
     transportObservationDigest: canonicalDigest(observation),
   }
   if (args.outcome.kind === 'partial') {

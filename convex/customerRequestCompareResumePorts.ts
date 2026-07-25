@@ -45,10 +45,21 @@ export function compareResumePorts(ctx: ActionCtx): CompareResumePorts {
       internal.customerRequestV2.getCurrentAggregate, { requestId },
     ),
     getSubmissionShell: (input) => ctx.runQuery(internal.customerRequestV2.getSubmissionShell, input),
-    getCurrentRouteRun: (input) => ctx.runQuery(internal.customerRequestRouteExecution.getCurrent, input),
-    getCurrentMandate: (input) => ctx.runQuery(
-      internal.customerRequestRouteMandate.getCurrentForPrincipal, input,
-    ),
+    getCurrentRouteRun: async (input) => {
+      const result = await ctx.runQuery(internal.customerRequestRouteExecution.getCurrent, input)
+      return result.kind === 'found' ? result : { kind: 'not_found' as const }
+    },
+    getCurrentMandate: async (input) => {
+      const result = await ctx.runQuery(
+        internal.customerRequestRouteMandate.getCurrentForPrincipal, input,
+      )
+      if (result.kind === 'active') return result
+      if (result.kind === 'expired') return { kind: 'expired' as const }
+      if (result.kind === 'revoked' || result.kind === 'superseded') {
+        return { kind: 'consumed' as const }
+      }
+      return { kind: 'not_found' as const }
+    },
     getCurrentRoutePlanGeneration: (input) => ctx.runQuery(
       internal.customerRequestV2.getCurrentRoutePlanGeneration, input,
     ),
@@ -94,14 +105,16 @@ export function compareResumePorts(ctx: ActionCtx): CompareResumePorts {
     getRoutePlanGenerationRefreshReplay: (input) => ctx.runQuery(
       internal.customerRequestV2.getRoutePlanGenerationRefreshReplay, input,
     ),
-    refreshRoutePlanGeneration: async (input) => await ctx.runMutation(
+    refreshRoutePlanGeneration: async ({
+      candidateAggregate, candidateRouteGeneration, ...rest
+    }) => await ctx.runMutation(
       internal.customerRequestV2.refreshRoutePlanGeneration,
       {
-        ...input,
-        candidateAggregate: writableCustomerRequestV2Aggregate(input.candidateAggregate),
-        ...(input.candidateRouteGeneration === undefined ? {} : {
+        ...rest,
+        candidateAggregate: writableCustomerRequestV2Aggregate(candidateAggregate),
+        ...(candidateRouteGeneration === undefined ? {} : {
           candidateRouteGeneration: writableCustomerRequestRoutePlanGeneration(
-            input.candidateRouteGeneration,
+            candidateRouteGeneration,
           ),
         }),
       },

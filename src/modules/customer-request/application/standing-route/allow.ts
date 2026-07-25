@@ -73,13 +73,18 @@ export async function allowStandingRoute(
       ? { kind: 'conflict', requestRef: input.requestRef, reason: 'idempotency_key_reused' }
       : { kind: 'conflict', requestRef: input.requestRef, reason: 'options_changed' }
   }
-  return {
-    kind: 'unavailable',
-    reason: result.reason === 'credential_not_authorized'
-      ? 'credential_not_authorized'
-      : 'repeat_permission_not_available',
-    summary: result.reason === 'credential_not_authorized'
-      ? 'That assistant is not authorized for repeat permission.'
-      : 'Repeat permission is not available for this choice.',
+  if ('reason' in result) {
+    return {
+      kind: 'unavailable',
+      reason: result.reason === 'credential_not_authorized'
+        ? 'credential_not_authorized'
+        : 'repeat_permission_not_available',
+      summary: result.reason === 'credential_not_authorized'
+        ? 'That assistant is not authorized for repeat permission.'
+        : 'Repeat permission is not available for this choice.',
+    }
   }
+  return projectRepeatPermission(
+    input.requestRef, input.revision, input.routeRef, result.policy,
+  )
 }

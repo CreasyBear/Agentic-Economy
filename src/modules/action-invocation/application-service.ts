@@ -342,6 +342,7 @@ function bindHost(
       if (view.control.state !== 'reconciliation_required') {
         return { kind: 'refused', code: 'invalid_control_state', view }
       }
+      const control = view.control
       const paymentValidation = await adapter.reconcilePayment({
         evidence: paymentEvidence,
         persist: false,
@@ -349,7 +350,7 @@ function bindHost(
       if (paymentValidation.kind === 'refused') {
         return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }
       }
-      const attempt = view.attempts.find(({ attemptRef }) => attemptRef === view.control.attemptRef)
+      const attempt = view.attempts.find(({ attemptRef }) => attemptRef === control.attemptRef)
       if (attempt === undefined) {
         return { kind: 'refused', code: 'reconciliation_evidence_unavailable', view }
       }

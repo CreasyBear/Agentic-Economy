@@ -1,3 +1,4 @@
+import type { NotificationOutboxErrorCode } from '../internal/commands'
 import type {
   NotificationProviderFamily,
   NotificationSignatureStatus,
@@ -36,20 +37,24 @@ export type MarkNoRepairArgs = Readonly<{
 
 export type OperatorOkWebhookResult = Readonly<{
   kind: 'ok'
-  code: string
+  code:
+    | 'notification_webhook_received'
+    | 'notification_webhook_duplicate'
+    | 'notification_webhook_rejected'
+    | 'notification_webhook_held'
   webhookEvent: ReturnType<typeof serializeWebhookEvent>
   dispatch?: ReturnType<typeof serializeDispatch>
 }>
 
 export type OperatorOkDispatchResult = Readonly<{
   kind: 'ok'
-  code: string
+  code: 'notification_retry_scheduled' | 'notification_no_repair_marked'
   dispatch: ReturnType<typeof serializeDispatch>
 }>
 
 export type OperatorErrorResult = Readonly<{
   kind: 'error'
-  code: string
+  code: NotificationOutboxErrorCode
   retryable: boolean
   reason: string
 }>

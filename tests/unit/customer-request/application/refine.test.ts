@@ -4,6 +4,10 @@ import {
   refineCustomerRequest,
   type RefineCustomerRequestPorts,
 } from '@/modules/customer-request/application/public'
+import type {
+  CapabilityDecisionModel,
+  CapabilitySelectionKey,
+} from '@/modules/capability-contract/public'
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
 
 const NOW = Date.now()
@@ -50,11 +54,26 @@ const aggregate = {
 }
 
 const model = {
-  selectionKey: 'sel:1',
+  selectionKey: 'sel:1' as CapabilitySelectionKey,
   semanticDigest: 'sem:1',
   contractRef,
   inputs: [],
-}
+  evidence: [],
+  dataUse: [],
+  effects: [],
+  lifecycle: { idempotency: 'not_applicable' as const, recovery: 'retry_safe' as const },
+  assessInput: vi.fn(() => ({ kind: 'viable' as const, stage: 'option_selection' as const })),
+  projectPreparation: vi.fn(() => ({
+    kind: 'ready' as const,
+    contractRef,
+    selectionKey: 'sel:1' as CapabilitySelectionKey,
+    semanticDigest: 'sem:1',
+    input: null,
+    dataUse: [],
+  })),
+  validateInput: vi.fn(() => ({ kind: 'valid' as const, value: null })),
+  validateOutput: vi.fn(() => ({ kind: 'valid' as const, value: null })),
+} satisfies CapabilityDecisionModel
 
 const graph = {
   kind: 'available' as const,
@@ -301,7 +320,7 @@ describe('customer-request refine', () => {
     const ports = basePorts({
       loadRequestGraph: vi.fn(async () => ({
         ...graph,
-        models: [{ ...model, selectionKey: 'sel:other' }],
+        models: [{ ...model, selectionKey: 'sel:other' as CapabilitySelectionKey }],
       })),
     })
     const result = await refineCustomerRequest({

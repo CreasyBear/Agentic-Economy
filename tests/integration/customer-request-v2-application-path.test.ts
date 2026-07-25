@@ -874,7 +874,7 @@ describe('current V2 Customer Request application path', () => {
         admissionEvidenceRefs: ['test:supply-drift'],
         conformanceEvidenceRefs: ['test:supply-drift'],
       }, 3_000)
-      if (result.kind !== 'ineligible') throw new Error(`revoke failed: ${result.reason}`)
+      if (result.kind !== 'ineligible') throw new Error(`revoke failed: ${result.kind === 'refused' ? result.reason : result.kind}`)
     })
 
     await expect(customer.action(api.customerRequestApplication.resume, {
@@ -1692,7 +1692,7 @@ async function registerDisclosureSupply(
       admissionEvidenceRefs: ['test:disclosure-business-reviewed'],
       conformanceEvidenceRefs: ['test:disclosure-binding-reviewed'],
     }, 3_003)
-    if (eligibility.kind !== 'eligible') throw new Error(`disclosure eligibility failed: ${eligibility.reason}`)
+    if (eligibility.kind !== 'eligible') throw new Error(`disclosure eligibility failed: ${eligibility.kind === 'refused' ? eligibility.reason : eligibility.kind}`)
   })
 }
 
@@ -1718,7 +1718,7 @@ async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {
         admissionEvidenceRefs: ['test:business-and-contract-reviewed'],
         conformanceEvidenceRefs: ['test:adapter-contract-reviewed'],
       }, 2_000)
-      if (result.kind !== 'eligible') throw new Error(`sandbox admission failed: ${result.reason}`)
+      if (result.kind !== 'eligible') throw new Error(`sandbox admission failed: ${result.kind === 'refused' ? result.reason : result.kind}`)
     }
   })
   await backend.finishInProgressScheduledFunctions()

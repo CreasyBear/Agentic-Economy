@@ -3,6 +3,7 @@ import { projectNeedsAttention } from '@/modules/customer-request/customer-proje
 
 import { bindRequirementAnswer, rebindStoredFacts } from '../interpret-compile'
 import type {
+  ProvideFactsAggregate,
   ProvideFactsInput,
   ProvideFactsPorts,
   ProvideFactsResult,
@@ -54,7 +55,7 @@ export async function provideCustomerRequestFacts(
       summary: 'That answer does not match the requested information.',
     })
   }
-  const selections = current.aggregate.plan.actions.flatMap((action) => {
+  const selections = current.aggregate.plan.actions.flatMap((action: ProvideFactsAggregate['plan']['actions'][number]) => {
     const model = graph.models.find((candidate) => (
       sameCapabilityContractRef(candidate.contractRef, action.contractRef)
     ))

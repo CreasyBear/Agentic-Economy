@@ -4,6 +4,7 @@ import {
   confirmCustomerRoute,
   type ConfirmRoutePorts,
 } from '@/modules/customer-request/application/public'
+import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
 
 const NOW = Date.now()
@@ -62,20 +63,31 @@ const mandate = {
   expiresAt: FUTURE,
 }
 
-const routesReadyPreview = {
-  kind: 'request' as const,
+const routesReadyPreview: CustomerRequestView = {
+  kind: 'request',
   requestRef: 'req:1',
   revision: 3,
-  state: 'routes_ready' as const,
+  state: 'routes_ready',
   summary: 'Options ready',
-  nextAction: 'inspect_routes' as const,
+  nextAction: 'inspect_routes',
   missingFields: [],
   criteria: [],
   options: [],
   decision: {
     generationRef,
-    outcome: { kind: 'routes_available' as const },
+    requestRevision: 3,
+    outcome: { kind: 'routes_available', routeCount: 1, summary: 'One option' },
     routes: [displayedRoute as never],
+    comparison: { kind: 'single', summary: 'One option' },
+    actions: {
+      review: { kind: 'inspect_current_option', createsAuthority: false, startsWork: false, summary: 'Review' },
+      confirm: { kind: 'confirm_current_option', createsAuthority: true, startsWork: false, summary: 'Confirm' },
+      start: { kind: 'start_confirmed_option', availableAfter: 'confirmation', startsWork: true, summary: 'Start' },
+      change: { kind: 'revise_request', createsAuthority: false, startsWork: false, preservesRequest: true, summary: 'Change' },
+      decline: { kind: 'leave_unconfirmed', createsAuthority: false, startsWork: false, preservesRequest: true, summary: 'Decline' },
+    },
+    changes: { kind: 'initial' },
+    nextBoundary: { kind: 'confirmation', authorityCreated: false },
   },
 }
 
@@ -150,7 +162,7 @@ describe('customer-request confirm-route', () => {
       revision: 3,
       state: 'needs_attention' as const,
       summary: 'No current options',
-      nextAction: 'review_request' as const,
+      nextAction: 'retry' as const,
       missingFields: [],
       criteria: [],
       options: [],

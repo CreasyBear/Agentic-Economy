@@ -282,7 +282,7 @@ describe.each(providers)('$label published-operation provider conformance', (pro
     }))
   })
 
-  it.each(provider.invalidPayloads)('refuses $label', ({ payload }) => {
+  it.each(provider.invalidPayloads as ProviderCase['invalidPayloads'])('refuses $label', ({ payload }) => {
     expect(provider.projector({ payload, receivedAt })).toMatchObject({ kind: 'refused' })
   })
 

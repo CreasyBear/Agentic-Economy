@@ -31,7 +31,7 @@ describe('evidence-load problem-row integrity', () => {
   it('loadProblemUpdates enforces integrity through ports', async () => {
     const ports = {
       listProblemUpdatesByReportRef: vi.fn(async () => [
-        { version: 1, state: 'received' as const, source: 'customer' as const, message: 'a', createdAt: 1 },
+        { version: 1, state: 'investigating' as const, source: 'customer' as const, message: 'a', createdAt: 1 },
       ]),
     }
     const updates = await loadProblemUpdates(ports, 'report:1')

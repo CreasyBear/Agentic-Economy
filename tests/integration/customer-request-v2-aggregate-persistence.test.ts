@@ -1053,7 +1053,7 @@ async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {
         expectedBindingRegistrationHash: binding.registrationHash,
         admissionEvidenceRefs: ['test:business-reviewed'], conformanceEvidenceRefs: ['test:adapter-reviewed'],
       }, 2_000)
-      if (result.kind !== 'eligible') throw new Error(`sandbox admission failed: ${result.reason}`)
+      if (result.kind !== 'eligible') throw new Error(`sandbox admission failed: ${result.kind === 'refused' ? result.reason : result.kind}`)
     }
   })
 }
@@ -1085,7 +1085,7 @@ async function revokeFirstSupply(backend: ReturnType<typeof convexTest>) {
       expectedBindingRegistrationHash: binding.registrationHash,
       admissionEvidenceRefs: ['test:revoked'], conformanceEvidenceRefs: ['test:revoked'],
     }, 3_000)
-    if (result.kind !== 'ineligible') throw new Error(`sandbox revocation failed: ${result.reason}`)
+    if (result.kind !== 'ineligible') throw new Error(`sandbox revocation failed: ${result.kind === 'refused' ? result.reason : result.kind}`)
   })
 }
 

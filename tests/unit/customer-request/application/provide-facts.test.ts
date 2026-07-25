@@ -4,6 +4,12 @@ import {
   provideCustomerRequestFacts,
   type ProvideFactsPorts,
 } from '@/modules/customer-request/application/public'
+import type {
+  CapabilityDecisionModel,
+  CapabilityInputKey,
+  CapabilitySelectionKey,
+  PointedSchemaIdentity,
+} from '@/modules/capability-contract/public'
 
 const NOW = Date.now()
 const contractRef = { capabilityId: 'cap:ride', version: 1, contractDigest: 'digest:1' }
@@ -60,16 +66,37 @@ const aggregate = {
 }
 
 const model = {
-  selectionKey: 'sel:1',
+  selectionKey: 'sel:1' as CapabilitySelectionKey,
   semanticDigest: 'sem:1',
   contractRef,
   inputs: [{
-    key: 'destination',
+    key: 'destination' as CapabilityInputKey,
+    annotationId: 'destination',
     inputPointer: '/destination',
-    schemaIdentity: 'schema:destination',
+    label: 'Destination',
+    role: 'constraint' as const,
+    inference: 'allowed' as const,
+    stage: 'option_selection' as const,
+    required: true,
+    schemaIdentity: 'schema:destination' as PointedSchemaIdentity,
+    dataUse: [],
   }],
+  evidence: [],
+  dataUse: [],
+  effects: [],
+  lifecycle: { idempotency: 'not_applicable' as const, recovery: 'retry_safe' as const },
   assessInput: vi.fn(() => ({ kind: 'viable' as const, stage: 'option_selection' as const })),
-}
+  projectPreparation: vi.fn(() => ({
+    kind: 'ready' as const,
+    contractRef,
+    selectionKey: 'sel:1' as CapabilitySelectionKey,
+    semanticDigest: 'sem:1',
+    input: null,
+    dataUse: [],
+  })),
+  validateInput: vi.fn(() => ({ kind: 'valid' as const, value: null })),
+  validateOutput: vi.fn(() => ({ kind: 'valid' as const, value: null })),
+} satisfies CapabilityDecisionModel
 
 const graph = {
   kind: 'available' as const,
@@ -220,9 +247,16 @@ describe('customer-request provide-facts', () => {
         models: [{
           ...model,
           inputs: [{
-            key: 'other',
+            key: 'other' as CapabilityInputKey,
+            annotationId: 'other',
             inputPointer: '/other',
-            schemaIdentity: 'schema:other',
+            label: 'Other',
+            role: 'constraint' as const,
+            inference: 'allowed' as const,
+            stage: 'option_selection' as const,
+            required: true,
+            schemaIdentity: 'schema:other' as PointedSchemaIdentity,
+            dataUse: [],
           }],
         }],
       })),

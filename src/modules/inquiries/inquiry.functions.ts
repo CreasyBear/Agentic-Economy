@@ -409,7 +409,14 @@ function wrapLocalE2eInquiryServerBackend(local: LocalE2eInquiryServerBackend): 
         if (resolved.kind === 'error') {
           return resolved
         }
-        return local.submitPublicInquiry(data, resolved.target) as PublicInquirySubmitServerResult
+        return local.submitPublicInquiry({
+          target: data.target,
+          body: data.body,
+          contact: compactContact(data.contact),
+          expectedDigest: data.expectedDigest,
+          ...(data.operationKey === undefined ? {} : { operationKey: data.operationKey }),
+          ...(data.inquiryOrigin === undefined ? {} : { inquiryOrigin: data.inquiryOrigin }),
+        }, resolved.target) as PublicInquirySubmitServerResult
       } catch (error) {
         return inquirySourceError(error)
       }

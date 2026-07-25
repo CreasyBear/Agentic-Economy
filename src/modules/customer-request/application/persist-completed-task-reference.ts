@@ -96,7 +96,12 @@ export async function persistCompletedTaskReference(
     actor: { principalRef: input.principalRef, callerRef: input.callerRef },
   })
   if (identity.kind === 'refused') return { kind: 'refused', reason: identity.code }
-  const expectedReference = referenceFromIdentity(identity, input.referencedAt)
+  // Referenceability is already enforced by the producer; narrow the typed-as-string outcome
+  // at this boundary instead of refusing (providers may mark any terminal outcome referenceable).
+  const expectedReference = referenceFromIdentity(
+    { ...identity, businessOutcome: identity.businessOutcome as CustomerRequestCompletedTaskReference['businessOutcome'] },
+    input.referencedAt,
+  )
   const commandDigest = canonicalDigest({
     operation: 'customer_request.attach_completed_task:v1',
     requestRef: input.requestRef,
@@ -224,7 +229,8 @@ export async function persistCompletedTaskReference(
 }
 
 function referenceFromIdentity(
-  identity: Extract<CompletedResultIdentity, { kind: 'completed_result' }>,
+  identity: Extract<CompletedResultIdentity, { kind: 'completed_result' }>
+    & Readonly<{ businessOutcome: CustomerRequestCompletedTaskReference['businessOutcome'] }>,
   referencedAt: number,
 ): CustomerRequestCompletedTaskReference {
   return {

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
+import type { RouteMandate } from '@/modules/customer-request/route-mandate'
 import { deriveRouteStepAuthority } from '@/modules/customer-request/route-mandate-admission'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
@@ -1295,8 +1296,10 @@ describe('durable RouteMandate lifecycle', () => {
       mandateRef: command.mandateRef,
       idempotencyKey: command.idempotencyKey,
     })
+    // Convex serialization erases branded types (e.g. PointedSchemaIdentity); the runtime shape is exact.
+    const issuedMandate = fixture.issued.mandate as unknown as RouteMandate
     const derived = deriveRouteStepAuthority({
-      mandate: fixture.issued.mandate,
+      mandate: issuedMandate,
       expectedMandateDigest: command.expectedMandateDigest,
       expectedGenerationRef: command.expectedGenerationRef,
       expectedRoutePlanId: command.expectedRoutePlanId,
@@ -1438,7 +1441,9 @@ async function committedRequest(
         admissionEvidenceRefs: ['test:business-reviewed'],
         conformanceEvidenceRefs: ['test:adapter-reviewed'],
       }, 2_000)
-      if (result.kind !== 'eligible') throw new Error(`sandbox admission failed: ${result.reason}`)
+      if (result.kind !== 'eligible') {
+        throw new Error(`sandbox admission failed: ${result.kind === 'refused' ? result.reason : result.kind}`)
+      }
     }
   })
   await new Promise<void>((resolve) => setTimeout(resolve, 0))

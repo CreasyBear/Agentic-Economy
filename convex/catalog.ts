@@ -674,14 +674,15 @@ export async function seedBusinessOfferingSupplyCommand(
 ): Promise<{ kind: 'ok'; migrated: number; mode: 'legacy' | 'compare' | 'offering' } | { kind: 'error'; code: string }> {
   const services = await db.query('businessServices').withIndex('by_business_status', (q) => q.eq('businessId', businessId)).collect()
   if (services.length === 0) return { kind: 'ok', migrated: 0, mode: 'legacy' }
-  const capabilityRows = await Promise.all(services.map((service) => db.query('serviceCapabilities')
-    .withIndex('by_business_service_status', (q) => q.eq('businessId', businessId).eq('serviceId', service._id)).take(21)))
+  const capabilityRows = await Promise.all(services.map(async (service) => await db.query('serviceCapabilities')
+    .withIndex('by_business_service_status', (q) => q.eq('businessId', businessId).eq('serviceId', service._id)).take?.(21)
+    ?? (await db.query('serviceCapabilities').withIndex('by_business_service_status', (q) => q.eq('businessId', businessId).eq('serviceId', service._id)).collect()).slice(0, 21)))
   if (capabilityRows.some((rows) => rows.length > 20)) return { kind: 'error', code: 'migration_capability_limit_exceeded' }
   const planned = planLegacyOfferingMigrationBatch({
     services: services.map(toBusinessServiceRecord),
     capabilities: capabilityRows.flat().map(toServiceCapabilityRecord),
   })
-  if (!Array.isArray(planned)) return { kind: 'error', code: planned.kind === 'refused' ? planned.code : 'migration_refused' }
+  if ('kind' in planned) return { kind: 'error', code: planned.kind === 'refused' ? planned.code : 'migration_refused' }
   for (const migration of planned) {
     const existing = await db.query('legacyOfferingCrosswalks').withIndex('by_serviceId', (q) => q.eq('serviceId', migration.crosswalk.serviceId)).unique()
     if (existing !== null && stringField(existing, 'serviceSourceHash') !== migration.crosswalk.serviceSourceHash) {
