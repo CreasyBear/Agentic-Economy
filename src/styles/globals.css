@@ -29,6 +29,34 @@
 @source not "../../.planning";
 
 /*
+ * Break a self-referential font-weight cycle.
+ *
+ * The Astryx Tailwind bridge emits this, unlayered, into `:root, :host`:
+ *   font-weight-semibold: var(font-weight-semibold)
+ * (and the same for normal, medium, and bold, each with the leading dashes).
+ * A custom property defined as itself is cyclic, so CSS resolves it to the
+ * guaranteed-invalid value.
+ *
+ * theme-neutral does define the real numbers, but inside a cascade layer, and
+ * an unlayered declaration beats every layered one. The cycle therefore won,
+ * all 22 theme rules of the form
+ *   font-weight: var(text-heading-1-weight)
+ * resolved to nothing, and every role on every page fell back to the
+ * inherited 400: a 60px h1 and a 12px caption differed in size and colour but
+ * never in weight, which is why the type read flat.
+ *
+ * This block must stay UNLAYERED and must stay after the imports above so it
+ * is the last unlayered declaration and wins. Delete it once the bridge stops
+ * aliasing these tokens to themselves.
+ */
+:root {
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+}
+
+/*
  * Legacy dark-surface variant (operator shell). Dies with legacy.css.
  */
 @custom-variant dark (&:is(body[data-ae-surface="register"] *));

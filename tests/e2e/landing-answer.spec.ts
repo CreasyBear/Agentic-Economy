@@ -57,7 +57,7 @@ test.describe('landing query -> thread answer', () => {
     await expect(page.getByRole('radio', { name: 'Today' })).toHaveAttribute('aria-checked', 'true')
     const jsonAction = page.getByRole('button', { name: 'Get as agent JSON' })
     await jsonAction.click()
-    const preview = page.getByRole('dialog', { name: 'Agent JSON preview' })
+    const preview = page.getByRole('dialog', { name: 'What gets copied' })
     await expect(preview).toBeVisible()
     await expect(preview.getByLabel('Agent JSON payload')).toContainText(`"query": "${query}"`)
     await expect(preview.getByRole('button', { name: 'Confirm and copy JSON' })).toBeEnabled()

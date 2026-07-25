@@ -10,9 +10,9 @@
 export const CUSTOMER_REQUEST_PUBLIC_COMPREHENSION = Object.freeze({
   situation: 'Name the outcome. AE finds the businesses, compares real options, and carries the work through.',
   examples: 'Book a trade, plan an itinerary, run a procurement decision, or recover when plans fall apart.',
-  support: 'AE shows only what registered businesses can do right now, and says so plainly when nothing can.',
+  support: 'AE shows what registered businesses can do right now.',
   sandboxBoundary: 'Multi-business examples currently run on labelled AE sandbox businesses. They prove the workflow, not independent supply, booking, payment, dispatch, or fulfilment.',
-  authority: 'You confirm the choice. Starting it is a separate decision.',
+  authority: 'You pick the option. Starting it is a separate step you control.',
 })
 
 export const CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES = Object.freeze([

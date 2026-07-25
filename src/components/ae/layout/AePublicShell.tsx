@@ -2,7 +2,6 @@ import { useEffect, type ReactNode } from 'react'
 import { AppShell, useAppShellMobile } from '@astryxdesign/core/AppShell'
 import { Button } from '@astryxdesign/core/Button'
 import { Link } from '@astryxdesign/core/Link'
-import { MobileNavToggle } from '@astryxdesign/core/MobileNav'
 import { TopNav, TopNavItem } from '@astryxdesign/core/TopNav'
 import { Text } from '@astryxdesign/core/Text'
 import { NetworkIcon, RouteIcon } from 'lucide-react'
@@ -39,41 +38,20 @@ function AeSkipFocusBridge() {
 
   return null
 }
-
+/**
+ * THESIS: The shell names where you are and gets out of the way. It refuses the
+ * every-destination-twice top bar the current build ships.
+ * OWN-WORLD: Astryx neutral, eucalyptus reserved for the single primary action.
+ * STORY: brand goes home, two links go sideways, one button is the supply-side ask.
+ * FIRST VIEWPORT: brand left; Businesses and For agents right; one filled action.
+ * FORM: marketplace-canon top bar (Airbnb/Uber), played straight.
+ */
 const publicTopNav = (
   <TopNav
     label="Public"
     heading={<PublicBrandLink />}
     startContent={<PublicNavItems />}
-    endContent={
-      <>
-        <div className="hidden items-center gap-2 md:flex">
-          <Button label="Businesses" variant="ghost" size="sm" href={defaultRegistryHref} icon={<NetworkIcon aria-hidden="true" />} />
-          <Button label="Ask AE" variant="primary" size="sm" href="/" icon={<RouteIcon aria-hidden="true" />} />
-        </div>
-        <div className="flex items-center gap-1 md:hidden">
-          <Button
-            label="Businesses"
-            variant="ghost"
-            size="lg"
-            href={defaultRegistryHref}
-            icon={<NetworkIcon aria-hidden="true" />}
-            isIconOnly
-            className="min-h-11 min-w-11"
-          />
-          <Button
-            label="Ask AE"
-            variant="primary"
-            size="lg"
-            href="/"
-            icon={<RouteIcon aria-hidden="true" />}
-            isIconOnly
-            className="min-h-11 min-w-11"
-          />
-          <MobileNavToggle label="Open public menu" className="min-h-11 min-w-11" />
-        </div>
-      </>
-    }
+    endContent={<PublicNavActions />}
   />
 )
 
@@ -86,7 +64,7 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
         height={immersive ? 'fill' : 'auto'}
         variant="surface"
         contentPadding={0}
-        mobileNav={{ hasToggle: false }}
+        mobileNav={{ hasToggle: true }}
         topNav={publicTopNav}
       >
         <div id="main-content" tabIndex={-1} className={immersive ? 'h-full min-h-0' : undefined}>
@@ -98,26 +76,41 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
   )
 }
 
+/**
+ * Every destination appears once. The brand mark is the way back to Ask, so
+ * Ask is not also a nav item. On mobile these collapse into the drawer; the
+ * desktop row stays inline.
+ */
 function PublicNavItems() {
   const { isMobile } = useAppShellMobile()
 
   if (isMobile) {
     return (
       <>
-        <TopNavItem label="Ask AE" href="/" />
         <TopNavItem label="Businesses" href={defaultRegistryHref} />
-        <TopNavItem label="Claim your business page" href="/claim" />
         <TopNavItem label="For agents" href="/for-agents" />
+        <TopNavItem label="List your business" href="/claim" />
       </>
     )
   }
 
   return (
     <div className="hidden md:contents">
-      <Button label="Ask AE" variant="ghost" size="sm" href="/" />
       <Button label="Businesses" variant="ghost" size="sm" href={defaultRegistryHref} />
-      <Button label="Claim your business page" variant="ghost" size="sm" href="/claim" />
       <Button label="For agents" variant="ghost" size="sm" href="/for-agents" />
+    </div>
+  )
+}
+
+/**
+ * One filled action, because listing a business is the only thing the bar asks
+ * anyone to do. On mobile it lives in the drawer and only the toggle shows.
+ */
+function PublicNavActions() {
+  // AppShell owns the mobile drawer toggle; adding one here renders two.
+  return (
+    <div className="hidden md:flex md:items-center">
+      <Button label="List your business" variant="primary" size="sm" href="/claim" />
     </div>
   )
 }
@@ -151,7 +144,6 @@ function PublicFooter({ immersive }: { immersive: boolean }) {
           <a href="/llms.txt" className="text-secondary underline-offset-4 hover:text-primary hover:underline">Assistants</a>
           <Link href="/privacy">Privacy</Link>
           <Link href="/terms">Terms</Link>
-          {immersive ? null : <Link href="/">Ask AE</Link>}
         </nav>
       </div>
     </footer>

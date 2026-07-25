@@ -27,9 +27,9 @@ export function businessList(names: readonly string[]): string {
   return `${names.slice(0, -1).join(', ')}, and ${names.at(-1)}`
 }
 export function effectLabel(kind: 'information_shared' | 'financial_commitment' | 'external_change'): string {
-  if (kind === 'information_shared') return 'Information would be shared'
-  if (kind === 'financial_commitment') return 'A financial commitment could be created'
-  return 'An external change could be made'
+  if (kind === 'information_shared') return 'Shares information'
+  if (kind === 'financial_commitment') return 'Creates a financial commitment'
+  return 'Makes an external change'
 }
 export function reversibilityLabel(value: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible'): string {
   if (value === 'not_applicable') return 'reversal does not apply'

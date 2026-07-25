@@ -63,7 +63,7 @@ describe('AeAgentJsonAffordance', () => {
     expect(fetchPayload).toHaveBeenCalledWith(agentJsonUrl)
     expect(writeText).not.toHaveBeenCalled()
 
-    const dialog = screen.getByRole('dialog', { name: 'Agent JSON preview' })
+    const dialog = screen.getByRole('dialog', { name: 'What gets copied' })
     const payloadPreview = await within(dialog).findByLabelText('Agent JSON payload')
     const previewText = payloadPreview.textContent
 

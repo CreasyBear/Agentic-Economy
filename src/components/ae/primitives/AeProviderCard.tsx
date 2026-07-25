@@ -165,32 +165,31 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
         </ul>
       )}
 
-      <div className="mt-auto grid grid-cols-1 gap-2 border-t border-border pt-4 sm:grid-cols-2" aria-label="Research actions">
-        {phone.length === 0 ? null : (
-          <Button
-            label={`Call ${phone}`}
-            variant="secondary"
-            href={`tel:${phone.replace(/[^+\d]/g, '')}`}
-            className="min-h-11 w-full"
-          />
-        )}
-        {/* A constant label: the business name is already the card heading, and
-            interpolating it here truncates to "View Joondalup Ra…" in a grid. */}
+      {/* One destination leads. Three equal buttons made every card a menu and
+          wrapped to a second row whenever a phone number was published, so the
+          grid lost its baseline. Calling is the alternative; copying is a tool. */}
+      <div className="mt-auto grid gap-2 border-t border-border pt-4" aria-label="Research actions">
         <Button
           label="View business"
-          variant="secondary"
+          variant="primary"
           href={`/${item.slug}?from=registry`}
           className="min-h-11 w-full"
           aria-label={`View ${item.name}`}
           {...(onView === undefined ? {} : { onClick: onView })}
         />
-        <Button
-          label={copied ? 'Details copied' : 'Copy details'}
-          variant="secondary"
-          type="button"
-          className="min-h-11 w-full"
-          onClick={() => { void copyDetails() }}
-        />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {phone.length === 0 ? null : (
+            <Button label={`Call ${phone}`} variant="ghost" size="sm" href={`tel:${phone.replace(/[^+\d]/g, '')}`} className="min-h-11" />
+          )}
+          <Button
+            label={copied ? 'Details copied' : 'Copy details'}
+            variant="ghost"
+            size="sm"
+            type="button"
+            className="min-h-11"
+            onClick={() => { void copyDetails() }}
+          />
+        </div>
       </div>
     </Card>
   )

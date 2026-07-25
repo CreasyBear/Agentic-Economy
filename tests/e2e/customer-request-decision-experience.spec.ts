@@ -43,7 +43,7 @@ test('choice review is legible and authority-free until explicit confirmation', 
   await expect(page.getByRole('heading', { name: 'What confirming means' })).toBeVisible()
   await expect(page.getByText('Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.')).toBeVisible()
   await expect(page.getByText('Starting uses that confirmation to contact the listed businesses and begin the work.')).toBeVisible()
-  await expect(page.getByText('What starting could change')).toBeVisible()
+  await expect(page.getByText('What starting changes')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Change this Request' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Decline this choice' })).toBeVisible()
   expect(await page.locator('main').innerText()).not.toMatch(

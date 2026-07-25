@@ -74,8 +74,8 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
       >
         <div className="grid gap-4">
           <div className="grid gap-1">
-            <Heading id={headingId} level={2} className="text-xl font-semibold">Agent JSON preview</Heading>
-            <Text color="secondary">Review every field and value before copying.</Text>
+            <Heading id={headingId} level={2} className="text-xl font-semibold">What gets copied</Heading>
+            <Text color="secondary">Check the fields and values before you copy them.</Text>
           </div>
           {preview.status === 'loading' ? <Text role="status" color="secondary">Loading payload preview...</Text> : null}
           {preview.status === 'error' ? (

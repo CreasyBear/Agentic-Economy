@@ -28,15 +28,11 @@ export type AeOfferingSupplyListProps = Readonly<{
 export function AeOfferingSupplyList({ offerings, disposition = 'current', observedAt }: AeOfferingSupplyListProps) {
   return (
     <section aria-labelledby="business-offerings-title" className="grid gap-5">
-      <div className="flex flex-col gap-3 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div className="grid gap-1">
-          <Text type="supporting" weight="semibold" color="secondary" display="block">SERVICES AND PRODUCTS</Text>
-          <Heading id="business-offerings-title" level={2}>What this business offers</Heading>
-          <Text as="p" type="supporting" color="secondary">
-            Open an Offering to see what it includes and the clearest way to begin.
-          </Text>
-        </div>
-        {offerings.length === 0 ? null : <Badge label={`${offerings.length} published`} variant="neutral" />}
+      {/* One label, not four. The eyebrow restated the heading, the helper text
+          explained how to use a list, and the badge counted rows the reader can
+          already see. */}
+      <div className="border-b border-border pb-5">
+        <Heading id="business-offerings-title" level={2}>What this business offers</Heading>
       </div>
 
       {disposition === 'current' ? null : (

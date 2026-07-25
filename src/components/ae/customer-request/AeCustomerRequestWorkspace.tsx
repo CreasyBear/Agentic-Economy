@@ -447,7 +447,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
                 CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.examples,
                 CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.support,
                 CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority,
-                'Keep contact, payment, and account details until AE asks for them.',
+                'AE asks for contact and payment details only when the option you picked needs them.',
               ].map((line) => <li key={line}>
                 <Text type="supporting" color="secondary">{line}</Text>
               </li>)}

@@ -89,8 +89,8 @@ async function provePreApprovalDisclosures(page: import('@playwright/test').Page
   for (const label of [
     'Maximum cost',
     'Confirm before',
-    'What would be shared',
-    'What starting could change',
+    'What you share',
+    'What starting changes',
     'What remains uncertain',
     'Commercial relationships',
     'If something goes wrong',
@@ -105,7 +105,7 @@ async function provePreApprovalDisclosures(page: import('@playwright/test').Page
   await expect(main).toContainText('$10.00')
   await expect(main).toContainText(/resolve sandbox service reference/iu)
   await expect(main).toContainText(/prepare sandbox service quote/iu)
-  await expect(main).toContainText('Information would be shared')
+  await expect(main).toContainText('Shares information')
   await expect(main).toContainText('cannot be reversed automatically')
   await expect(main).toContainText('No uncertainty is declared for this choice.')
   await expect(main).toContainText('Completion timing has not been declared.')

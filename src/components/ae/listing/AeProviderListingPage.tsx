@@ -125,7 +125,7 @@ export function AeProviderListingPage({
                   For your assistant
                 </Text>
                 <Text type="supporting" color="secondary" display="block">
-                  Copy the same page data into an assistant before you choose the next step.
+                  Give your assistant everything on this page.
                 </Text>
               </div>
               <AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={catalog.name} />

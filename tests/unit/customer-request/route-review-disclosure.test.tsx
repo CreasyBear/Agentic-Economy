@@ -55,8 +55,8 @@ describe('route review keeps one decision immediate', () => {
   it('keeps commitment detail expanded because it is what confirming buys', () => {
     renderReview()
 
-    expect(insideCollapsedRegion(screen.getByText('What would be shared'))).toBe(false)
-    expect(insideCollapsedRegion(screen.getByText('What starting could change'))).toBe(false)
+    expect(insideCollapsedRegion(screen.getByText('What you share'))).toBe(false)
+    expect(insideCollapsedRegion(screen.getByText('What starting changes'))).toBe(false)
     expect(insideCollapsedRegion(screen.getByText('Cancellation'))).toBe(false)
   })
 

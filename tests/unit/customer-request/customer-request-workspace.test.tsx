@@ -760,18 +760,18 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('1 irreversible effect')).toBeTruthy()
     // Disclosure is one idiom now: an Astryx Collapsible whose trigger carries
     // the expanded state, rather than a native <details> beside chevron rows.
-    for (const trigger of ['Important details', 'How this would work']) {
+    for (const trigger of ['Important details', 'How it works']) {
       expect(screen.getByRole('button', { name: trigger }).getAttribute('aria-expanded')).toBe('false')
     }
     fireEvent.click(screen.getByText('Important details'))
     expect(screen.getByText(/Fields: Request \(public\)/)).toBeTruthy()
-    expect(screen.getByText(/Information would be shared/)).toBeTruthy()
+    expect(screen.getByText(/Shares information/)).toBeTruthy()
     expect(screen.getByText('A fact you marked as uncertain still needs evidence')).toBeTruthy()
     expect(screen.getByText('The businesses do not publish a cancellation path for this option.')).toBeTruthy()
-    fireEvent.click(screen.getByText('How this would work'))
+    fireEvent.click(screen.getByText('How it works'))
     expect(screen.getByText('City Ledger will follow step 1.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Review this option' })).toBeTruthy()
-    expect(screen.getByText(/Nothing has been authorized or shared/)).toBeTruthy()
+    expect(screen.getByText(/Nothing is authorized or shared until you confirm/)).toBeTruthy()
     // The sandbox boundary qualifies multi-business examples, so it belongs
     // here rather than stacked in front of the landing input.
     expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.sandboxBoundary)).toBeTruthy()
@@ -992,7 +992,7 @@ describe('customer Request workspace', () => {
 
     expect(await screen.findByRole('heading', { name: 'Review before you confirm' })).toBeTruthy()
     expect(screen.getByText('Choice code quote:route:confirm')).toBeTruthy()
-    expect(screen.getByText('No information would be shared.')).toBeTruthy()
+    expect(screen.getByText('Nothing is shared.')).toBeTruthy()
     expect(screen.getByText('No cancellation path is published.')).toBeTruthy()
     expect(fetchMock).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: 'Confirm this choice' }))

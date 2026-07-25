@@ -252,7 +252,7 @@ describe('CustomerRequest source completeness', () => {
       expect(requestSchema, `Request schema missing ${marker}`).toContain(marker)
     }
     expect(publicComprehension).toContain('labelled AE sandbox businesses')
-    expect(publicComprehension).toContain('Starting it is a separate decision')
+    expect(publicComprehension).toContain('Starting it is a separate step you control')
     expect(`${fixtureDiscovery}\n${durableDiscovery}`).not.toMatch(/Advanced routing kernel:|\.well-known\/ae-routing|\/v1\/route|\/mcp/)
   })
 

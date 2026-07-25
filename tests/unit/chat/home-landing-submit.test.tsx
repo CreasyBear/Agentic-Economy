@@ -62,7 +62,7 @@ describe('Request-first home', () => {
 
     renderHomeRoute()
 
-    expect(screen.getByText(/Keep contact, payment, and account details until AE asks/)).toBeTruthy()
+    expect(screen.getByText(/AE asks for contact and payment details only when the option you picked needs them/)).toBeTruthy()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

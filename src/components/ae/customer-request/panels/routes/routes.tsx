@@ -55,7 +55,7 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
       <Heading level={2} className="text-3xl">{decision.outcome.summary}</Heading>
       <Text color="secondary" className="block">{decision.outcome.kind === 'routes_expired'
         ? 'Your Request is preserved. Check again to rebuild the available ways forward from current business information.'
-        : 'Compare who is involved, the maximum cost, what would be shared, and how problems would be handled.'}</Text>
+        : 'Compare cost, who is involved, what you share, and what happens if something goes wrong.'}</Text>
       {/* The comparison summary restates the count in the heading and adds the
           not-a-recommendation boundary. Keep the exact string, demote the weight
           so it reads as a qualifier instead of a second headline. */}
@@ -108,7 +108,7 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
             </Text>}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Fact label="What it could cost">
+            <Fact label="Cost">
               <FactValue tone={route.maximumTotalCost.kind === 'known' ? 'material' : 'unresolved'}>
                 {route.maximumTotalCost.kind === 'known'
                   ? `Maximum ${formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor)}`
@@ -133,7 +133,7 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
             <span className="text-secondary">{route.comparison.duration === 'not_declared' ? 'Timing not declared' : route.comparison.duration}</span>
           </div>
           <RouteImportantDetails route={route} />
-          <Collapsible defaultIsOpen={false} trigger={<span className="text-base font-semibold">How this would work</span>}>
+          <Collapsible defaultIsOpen={false} trigger={<span className="text-base font-semibold">How it works</span>}>
             <ol className="mt-3 grid gap-3 text-sm text-secondary">
               {(route.steps ?? []).map((step) => <li key={step.step}>
                 <strong>Step {step.step}: {step.business.name}.</strong>{' '}
@@ -153,10 +153,10 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
       </Card>)}
     </div>
     <Card padding={4}>
-      <Text weight="semibold" className="block">Nothing has been authorized or shared.</Text>
-      <Text color="secondary" className="mt-1 block">A separate confirmation step is required before AE can create authority for any action.</Text>
-      {/* The sandbox boundary belongs where multi-business examples actually
-          appear, not stacked in front of the input on the landing surface. */}
+      <Text color="secondary" className="block">Nothing is authorized or shared until you confirm a choice.</Text>
+      {/* The sandbox boundary names which businesses these examples use. That
+          is a claim about the supply, not a disclaimer about AE, so it stays
+          while the repeated reassurance above it does not. */}
       <Text type="supporting" color="secondary" className="mt-2 block">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.sandboxBoundary}</Text>
     </Card>
     <RecoveryActions edit={edit} restart={restart} />
@@ -251,8 +251,8 @@ export function RouteReviewCard({ projection, routeRef, turns, confirm, reportUn
 
         {/* Expanded: what confirming commits you to. */}
         <div className="grid gap-5 border-t border-border pt-6">
-          <SharingDetail route={route} emptyLabel="No information would be shared." />
-          <EffectsDetail route={route} label="What starting could change" />
+          <SharingDetail route={route} emptyLabel="Nothing is shared." />
+          <EffectsDetail route={route} label="What starting changes" />
           <CancellationDetail route={route} />
           <Text type="supporting" color="secondary">{actions.start.summary}</Text>
         </div>
@@ -318,7 +318,7 @@ export function RouteConfirmationCard({ projection, turns, start, edit, restart 
           <div><Text type="supporting" weight="semibold">Confirmed until</Text><Text color="secondary">{formatOptionTime(confirmation.validUntil)}</Text></div>
         </div>
         <div><Text weight="semibold">Information recipients</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>{recipient.name} — {recipient.purposes.map(readableLabel).join(', ')}. Fields: {recipient.fields.map(({ label, classification }) => `${label} (${classification})`).join(', ')}</li>)}</ul></div>
-        <div><Text weight="semibold">What could change</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>{effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}</li>)}</ul></div>
+        <div><Text weight="semibold">What changes</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>{effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}</li>)}</ul></div>
         <div><Text weight="semibold">Evidence expected</Text><Text color="secondary" className="mt-1">{route.evidence.map(({ label }) => label).join(', ') || 'No completion evidence is declared.'}</Text></div>
         <div><Text weight="semibold">What still needs confirmation</Text><Text color="secondary" className="mt-1">{route.uncertainty.length === 0 ? 'No uncertainty is declared for this choice.' : route.uncertainty.map(uncertaintyLabel).join(', ')}</Text></div>
         <div><Text weight="semibold">Fallback</Text><Text color="secondary" className="mt-1">{route.fallback.available ? `${route.fallback.alternatives.length} alternative ${route.fallback.alternatives.length === 1 ? 'way is' : 'ways are'} available before work starts.` : 'No alternative way is currently declared.'}</Text></div>

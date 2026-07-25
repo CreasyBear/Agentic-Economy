@@ -20,7 +20,7 @@ import {
 
 export function SharingSummary({ route }: { route: CustomerRoute }) {
   const recipients = route.dataUse.recipients
-  if (recipients.length === 0) return <Text color="secondary">Nothing would be shared.</Text>
+  if (recipients.length === 0) return <Text color="secondary">Nothing</Text>
   const fieldCount = recipients.reduce((total, recipient) => total + recipient.fields.length, 0)
   return <Text color="secondary">
     {fieldCount} {fieldCount === 1 ? 'detail' : 'details'} to {recipients.map(({ name }) => name).join(', ')}
@@ -28,7 +28,7 @@ export function SharingSummary({ route }: { route: CustomerRoute }) {
 }
 
 export function SharingDetail({ route, emptyLabel }: { route: CustomerRoute; emptyLabel: string }) {
-  return <FactBlock label="What would be shared">
+  return <FactBlock label="What you share">
     {route.dataUse.recipients.length === 0
       ? <Text color="secondary">{emptyLabel}</Text>
       : <ul className="grid gap-2 text-sm text-secondary">
@@ -123,8 +123,8 @@ export function FullRouteDisclosure({ route, subject }: { route: CustomerRoute; 
 /** Flat stack of every section, for surfaces that compare rather than decide. */
 export function RouteDisclosureDetails({ route }: { route: CustomerRoute }) {
   return <>
-    <SharingDetail route={route} emptyLabel="No information sharing is declared for this way forward." />
-    <EffectsDetail route={route} label="What this way could change" />
+    <SharingDetail route={route} emptyLabel="This way forward shares nothing." />
+    <EffectsDetail route={route} label="What this changes" />
     <UncertaintyDetail route={route} subject="way forward" />
     <CommercialDetail route={route} />
     <RecoveryDetail route={route} />
