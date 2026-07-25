@@ -4,7 +4,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { AeCustomerRequestWorkspace } from '@/components/ae/customer-request/AeCustomerRequestWorkspace'
-import { countPublishedStates, supplyFacetsFromListings, type SupplyFacet } from '@/components/ae/customer-request/AeSupplyFacets'
+import { supplyFacetsFromListings, type SupplyFacet } from '@/components/ae/customer-request/AeSupplyFacets'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { readPublicOfferingRegistryPage } from '@/modules/registry/registry.functions'
 
@@ -19,21 +19,16 @@ const homeSearchSchema = z.object({
  */
 type ColdStart = Readonly<{
   facets: readonly SupplyFacet[]
-  businessCount: number
-  stateCount: number
 }>
 
 const readColdStart = createServerFn().handler(async (): Promise<ColdStart> => {
   try {
-    // Bounded read: the front door must not grow an unbounded query as supply does.
-    const page = await readPublicOfferingRegistryPage({ limit: 200 })
-    return {
-      facets: supplyFacetsFromListings(page.items),
-      businessCount: page.items.length,
-      stateCount: countPublishedStates(page.items),
-    }
+    // Bounded read. The projection pages at a fixed size, so this names the
+    // trades on the first page rather than claiming to enumerate the catalogue.
+    const page = await readPublicOfferingRegistryPage({ limit: 50 })
+    return { facets: supplyFacetsFromListings(page.items) }
   } catch {
-    return { facets: [], businessCount: 0, stateCount: 0 }
+    return { facets: [] }
   }
 })
 
@@ -59,12 +54,7 @@ function Home() {
 
   return (
     <AePublicShell>
-      <AeCustomerRequestWorkspace
-        initialNeed={initialQuery}
-        supplyFacets={coldStart.facets}
-        supplyBusinessCount={coldStart.businessCount}
-        supplyStateCount={coldStart.stateCount}
-      />
+      <AeCustomerRequestWorkspace initialNeed={initialQuery} supplyFacets={coldStart.facets} />
     </AePublicShell>
   )
 }

@@ -33,16 +33,9 @@ type StoredRequestPointer = Readonly<{ requestRef: string; summary?: string }>
 export type AeCustomerRequestWorkspaceProps = Readonly<{
   initialNeed?: string
   supplyFacets?: readonly SupplyFacet[]
-  supplyBusinessCount?: number
-  supplyStateCount?: number
 }>
 
-export function AeCustomerRequestWorkspace({
-  initialNeed = '',
-  supplyFacets = [],
-  supplyBusinessCount = 0,
-  supplyStateCount = 0,
-}: AeCustomerRequestWorkspaceProps) {
+export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = [] }: AeCustomerRequestWorkspaceProps) {
   const [need, setNeed] = useState(initialNeed)
   const [answer, setAnswer] = useState('')
   const [state, setState] = useState<WorkspaceState>({ kind: 'idle' })
@@ -442,7 +435,7 @@ export function AeCustomerRequestWorkspace({
             </button>
           </div>
         </form>
-        <AeSupplyFacets facets={supplyFacets} businessCount={supplyBusinessCount} stateCount={supplyStateCount} />
+        <AeSupplyFacets facets={supplyFacets} />
         {editingRevision !== undefined ? <Text type="supporting" color="secondary" className="block">Editing revision {editingRevision} of this Request.</Text> : null}
         {/* The terms stay reachable and complete, one click away, instead of
             forming a wall of qualifiers between the promise and the input. The

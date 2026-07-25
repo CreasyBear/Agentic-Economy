@@ -32,6 +32,8 @@ type RegistrySearchParams = {
   q: string
   limit: number
   cursor?: string
+  /** Pins the category filter so a counted entry point lands on exactly what it counted. */
+  category?: string
 }
 
 type RegistryRouteReadback = {
@@ -65,8 +67,16 @@ export const Route = createFileRoute('/registry')({
     const limitValue = typeof search.limit === 'string' ? Number(search.limit) : Number(search.limit ?? 10)
     const limit = Number.isFinite(limitValue) ? Math.min(Math.max(Math.trunc(limitValue), 1), 20) : 10
     const cursor = typeof search.cursor === 'string' && search.cursor.trim().length > 0 ? search.cursor.trim() : undefined
+    const category = typeof search.category === 'string' && search.category.trim().length > 0
+      ? search.category.trim().slice(0, 120)
+      : undefined
 
-    return { q, limit, ...(cursor === undefined ? {} : { cursor }) }
+    return {
+      q,
+      limit,
+      ...(cursor === undefined ? {} : { cursor }),
+      ...(category === undefined ? {} : { category }),
+    }
   },
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => readRegistryRouteServer({ data: deps }),
@@ -94,7 +104,7 @@ function RegistryRoute() {
   const { result, query, limit } = Route.useLoaderData()
   const hasQuery = query.length > 0
   const isEmpty = result.items.length === 0
-  const [activeCategory, setActiveCategory] = useState('All')
+  const [activeCategory, setActiveCategory] = useState(Route.useSearch().category ?? 'All')
   const [sortOrder, setSortOrder] = useState('A-Z')
   const categories = useMemo(() => ['All', ...Array.from(new Set(result.items.map((item) => item.category))).sort()], [result.items])
   const effectiveCategory = categories.includes(activeCategory) ? activeCategory : 'All'
@@ -142,7 +152,6 @@ function RegistryRoute() {
                 sortOrder={sortOrder}
                 setSortOrder={setSortOrder}
               />
-              <RegistryContextCards />
               {isEmpty ? (
                 <RegistryDemandCaptureEmptyState
                   key={query.length > 0 ? `search-${query}` : 'browse-empty'}
@@ -152,14 +161,10 @@ function RegistryRoute() {
               ) : null}
               {!isEmpty ? (
                 <VStack gap={6}>
-                  <HStack vAlign="end" gap={4}>
-                    <StackItem size="fill">
-                      <VStack gap={1}>
-                        <Heading level={2}>Published businesses</Heading>
-                      </VStack>
-                    </StackItem>
-                    <Text color="secondary" display="block"><AeAnimatedNumber value={result.pagination.total} /> {resultSummary(result.pagination.total, query)}</Text>
-                  </HStack>
+                  {/* The page heading already says what this is. A second
+                      "Published businesses" title above the grid restates it;
+                      the count is the only new fact, so the count stands alone. */}
+                  <Text color="secondary" display="block"><AeAnimatedNumber value={result.pagination.total} /> {resultSummary(result.pagination.total, query)}</Text>
                   {filteredItems.length === 0 ? (
                     <Center>
                       <Text type="supporting" color="secondary">No results found in this category.</Text>
@@ -283,24 +288,6 @@ function RegistrySearchControls({
   )
 }
 
-function RegistryContextCards() {
-  return (
-    <Grid columns={{ minWidth: 320 }} gap={4}>
-      <Card padding={5}>
-        <VStack gap={2}>
-          <Text type="large" weight="semibold" color="primary" display="block">Service area, response cue, and next step sit beside the provider.</Text>
-          <Text color="secondary" display="block">Search, compare, then choose the next step for the job.</Text>
-        </VStack>
-      </Card>
-      <Card padding={5}>
-        <VStack gap={2}>
-          <Text type="large" weight="semibold" color="primary" display="block">Assistants can read it too.</Text>
-          <Text color="secondary" display="block">Each listing keeps a quiet JSON view for assistants. People still confirm timing, quote, and availability with the business.</Text>
-        </VStack>
-      </Card>
-    </Grid>
-  )
-}
 
 type DemandCaptureField = 'service' | 'suburb' | 'note' | 'queryText'
 
