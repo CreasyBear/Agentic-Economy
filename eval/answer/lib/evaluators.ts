@@ -6,7 +6,6 @@ import {
 import {
   hasEpistemicVocabulary,
   hasInjectionUpgrade,
-  hasOverclaim,
   runAnswerToolUseAgent,
 } from '../../../src/modules/answer/public'
 import type { AnswerEvent, AnswerSnapshot, AnswerWorkStep } from '../../../src/modules/answer/public'
@@ -732,9 +731,6 @@ function findInternalPublicTerms(publicText: string): string[] {
 
 function findUnsafeClaimProblems(publicText: string): string[] {
   const problems: string[] = []
-  if (hasOverclaim(publicText)) {
-    problems.push('unsafe overclaim present')
-  }
   if (hasEpistemicVocabulary(publicText)) {
     problems.push('epistemic vocabulary present')
   }

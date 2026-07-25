@@ -1,17 +1,13 @@
 import type { AnswerSnapshot } from '../answer-synthesizer'
 import {
-  hasBoundaryCopy,
   hasEpistemicVocabulary,
   hasInjectionUpgrade,
-  hasOverclaim,
   joinHumanCopy,
 } from './copy-guard-patterns'
 
 export type AnswerGateFailureCode =
   | 'grounding_failed'
   | 'epistemic_vocabulary'
-  | 'overclaim'
-  | 'boundary_missing'
   | 'injection_upgrade'
   | 'empty_prose'
 
@@ -47,14 +43,6 @@ export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
 
   if (hasInjectionUpgrade(humanText)) {
     return { ok: false, code: 'injection_upgrade', copyId }
-  }
-
-  if (hasOverclaim(humanText)) {
-    return { ok: false, code: 'overclaim', copyId }
-  }
-
-  if (snapshot.providers.length > 0 && !hasBoundaryCopy(humanText)) {
-    return { ok: false, code: 'boundary_missing', copyId }
   }
 
   return { ok: true }

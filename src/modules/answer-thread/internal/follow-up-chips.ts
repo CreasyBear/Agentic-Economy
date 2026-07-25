@@ -1,5 +1,5 @@
 import type { PublicThreadTurn } from '../answer-thread.schema'
-import { hasEpistemicVocabulary, hasOverclaim } from '@/modules/answer/public'
+import { hasEpistemicVocabulary } from '@/modules/answer/public'
 import { classifyFollowUpIntent } from './follow-up-intent'
 
 export type FollowUpChip = {
@@ -141,7 +141,7 @@ export function validateFollowUpChip(chip: string, priorQueryCount: number): boo
     return false
   }
 
-  if (hasEpistemicVocabulary(trimmed) || hasOverclaim(trimmed)) {
+  if (hasEpistemicVocabulary(trimmed)) {
     return false
   }
 

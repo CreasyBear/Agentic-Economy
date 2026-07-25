@@ -13,7 +13,6 @@ export function buildBoundarySummary(providers: readonly AnswerSource[]): string
   return [
     context,
     'Use the cards to compare published services, service area, and contact path.',
-    'The business confirms timing, price, availability, and the work after you make contact.',
   ].join(' ')
 }
 
@@ -38,7 +37,6 @@ export function buildUnsupportedSummary(providers: readonly AnswerSource[]): str
   return [
     route,
     'The business reviews your message and replies through your contact detail.',
-    'The business confirms timing, price, availability, and the work.',
   ].join(' ')
 }
 

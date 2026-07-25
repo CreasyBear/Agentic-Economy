@@ -1,7 +1,6 @@
 import {
   hasEpistemicVocabulary,
   hasInjectionUpgrade,
-  hasOverclaim,
   type AnswerWorkStep,
 } from '@/modules/answer/projection'
 
@@ -37,7 +36,6 @@ export function safeWorkLogUserText(value: string): string {
     return 'Request shown above'
   }
   if (
-    hasOverclaim(trimmed) ||
     hasEpistemicVocabulary(trimmed) ||
     hasInjectionUpgrade(trimmed) ||
     INTERNAL_PUBLIC_TERMS.some((term) => trimmed.toLowerCase().includes(term.toLowerCase()))

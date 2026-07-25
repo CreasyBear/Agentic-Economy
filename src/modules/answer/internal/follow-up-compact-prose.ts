@@ -13,7 +13,7 @@ export function buildCompactFollowUpProse(input: {
     case 'filter_known':
       return {
         oneLine: buildFilterOneLine(count),
-        summary: boundaryLine(),
+        summary: resultsLine(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
     case 'compare_known':
@@ -27,7 +27,7 @@ export function buildCompactFollowUpProse(input: {
         oneLine: count === 1 && input.providers[0] !== undefined
           ? `Ready to open ${input.providers[0].name}'s qualified inquiry form.`
           : 'Choose which listed business to message.',
-        summary: boundaryLine(),
+        summary: resultsLine(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
     case 'explain_boundary':
@@ -36,7 +36,7 @@ export function buildCompactFollowUpProse(input: {
         oneLine: input.followUpIntent === 'explain_boundary'
           ? 'Agentic Economy reads and compares published listings. The business confirms what happens next.'
           : 'This request needs a business-supported action that is not available here.',
-        summary: boundaryLine(),
+        summary: resultsLine(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
     default: {
@@ -44,14 +44,14 @@ export function buildCompactFollowUpProse(input: {
       if (suburb !== undefined) {
         return {
           oneLine: buildNarrowOneLine(count, suburb),
-          summary: boundaryLine(),
+          summary: resultsLine(input.providers),
           nextStep: buildInquiryNextStep(input.providers),
         }
       }
 
       return {
         oneLine: buildDefaultOneLine(count, input.displayQuery),
-        summary: boundaryLine(),
+        summary: resultsLine(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
     }
@@ -92,13 +92,10 @@ function buildCompareSummary(providers: readonly AnswerSource[]): string {
   const first = providers[0]
   const second = providers[1]
   if (first === undefined || second === undefined) {
-    return boundaryLine()
+    return resultsLine(providers)
   }
 
-  return [
-    `${first.name} works around ${first.serviceArea || first.suburb}. ${second.name} works around ${second.serviceArea || second.suburb}.`,
-    boundaryLine(),
-  ].join(' ')
+  return `${first.name} works around ${first.serviceArea || first.suburb}. ${second.name} works around ${second.serviceArea || second.suburb}.`
 }
 
 function buildInquiryNextStep(providers: readonly AnswerSource[]): string {
@@ -110,6 +107,17 @@ function buildInquiryNextStep(providers: readonly AnswerSource[]): string {
   return 'Open a listed business page to review what they publish, then contact the business.'
 }
 
-function boundaryLine(): string {
-  return 'The business confirms timing, price, availability, and the work.'
+/**
+ * The summary describes the results in front of the reader.
+ *
+ * It used to append a standing caveat about what the business confirms later,
+ * on every answer, regardless of what was being answered. That told the reader
+ * nothing about these results and made every reply read like a disclaimer.
+ */
+function resultsLine(providers: readonly AnswerSource[]): string {
+  if (providers.length === 0) {
+    return 'Try a different service or area.'
+  }
+
+  return 'Each card shows the published services, the service area, and how to get started.'
 }

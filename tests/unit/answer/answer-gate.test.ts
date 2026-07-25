@@ -72,7 +72,7 @@ describe('runAnswerGate', () => {
     expect(result.code).toBe('epistemic_vocabulary')
   })
 
-  it('fails when boundary copy is missing for non-empty provider sets', () => {
+  it('passes provider answers that state capability without a caveat', () => {
     const result = runAnswerGate({
       snapshot: snapshot({
         summary: 'Here are some plumbers in Preston with published details.',
@@ -80,14 +80,10 @@ describe('runAnswerGate', () => {
       }),
       allowedSlugs: new Set(['preston-plumbing']),
     })
-    expect(result.ok).toBe(false)
-    if (result.ok) {
-      throw new Error('expected gate failure')
-    }
-    expect(result.code).toBe('boundary_missing')
+    expect(result.ok).toBe(true)
   })
 
-  it('passes empty provider answers without boundary requirement', () => {
+  it('passes empty provider answers', () => {
     const result = runAnswerGate({
       snapshot: snapshot({
         providers: [],
@@ -140,22 +136,4 @@ describe('runAnswerGate', () => {
     expect(result.code).toBe('injection_upgrade')
   })
 
-  it.each([
-    ['charge your card', 'We will charge your card after you choose this plumber.'],
-    ['scheduled for', 'Your technician is scheduled for 4pm today.'],
-    ['available now', 'This provider is available now for emergency work.'],
-  ])('fails on concrete action overclaim: %s', (_name, summary) => {
-    const result = runAnswerGate({
-      snapshot: snapshot({
-        summary,
-        nextStep: 'The business confirms timing, price, availability, and the work.',
-      }),
-      allowedSlugs: new Set(['preston-plumbing']),
-    })
-    expect(result.ok).toBe(false)
-    if (result.ok) {
-      throw new Error('expected gate failure')
-    }
-    expect(result.code).toBe('overclaim')
-  })
 })

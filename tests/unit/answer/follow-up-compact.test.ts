@@ -34,7 +34,7 @@ describe('follow-up compact prose', () => {
     })
 
     expect(prose.oneLine).toBe('2 listed in Parramatta.')
-    expect(prose.summary).toContain('The business confirms timing, price, availability, and the work')
+    expect(prose.summary).toContain('published services')
   })
 })
 

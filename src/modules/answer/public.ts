@@ -14,10 +14,8 @@ export {
   type AnswerGateFailureCode,
 } from './internal/answer-gate'
 export {
-  hasBoundaryCopy,
   hasEpistemicVocabulary,
   hasInjectionUpgrade,
-  hasOverclaim,
 } from './internal/copy-guard-patterns'
 export {
   assembleAnswerEvidence,
