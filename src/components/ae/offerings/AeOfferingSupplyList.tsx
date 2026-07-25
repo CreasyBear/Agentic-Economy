@@ -130,6 +130,9 @@ function AccessPathItem({ path }: { path: PublicOfferingSupplyProjection['access
             <Text weight="semibold" color="primary">{presentation.label}</Text>
         {presentation.provenance === undefined ? null : <Badge label={presentation.provenance} variant="neutral" />}
           </HStack>
+          {presentation.price === undefined ? null : (
+            <Text weight="semibold" color="primary" display="block">{presentation.price}</Text>
+          )}
           <Text type="supporting" color="secondary" display="block">{presentation.detail}</Text>
         </div>
       </div>

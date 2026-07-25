@@ -68,6 +68,7 @@ export type OfferingAccessPresentation = Readonly<{
   href?: string
   external: boolean
   provenance?: 'Published by the business' | 'Found in public information'
+  price?: string
   technical?: ReadonlyArray<Readonly<{ label: string; value: string }>>
 }>
 
@@ -93,6 +94,7 @@ export function presentOfferingAccessPath(path: PublicAccessPath): OfferingAcces
     provenance: descriptor.provenance === 'business_declared'
       ? 'Published by the business'
       : 'Found in public information',
+    ...(descriptor.pricingSummary === undefined ? {} : { price: descriptor.pricingSummary }),
     ...(technical.length === 0 ? {} : { technical }),
   }
 }
@@ -139,9 +141,6 @@ function externalOperationTechnicalFacts(
     ...(descriptor.authenticationSummary === undefined
       ? []
       : [{ label: 'Authentication', value: descriptor.authenticationSummary }]),
-    ...(descriptor.pricingSummary === undefined
-      ? []
-      : [{ label: 'Pricing', value: descriptor.pricingSummary }]),
   ]
 }
 

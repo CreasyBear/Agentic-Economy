@@ -73,6 +73,7 @@ import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.req
 import { Route as ApiSandboxProvidersWorkflowRouteImport } from './routes/api.sandbox.providers.workflow'
 import { Route as ApiSandboxProvidersRouteResolverRouteImport } from './routes/api.sandbox.providers.route-resolver'
 import { Route as ApiSandboxProvidersRouteQuoterRouteImport } from './routes/api.sandbox.providers.route-quoter'
+import { Route as ApiSandboxSlugCheckupQuoteRouteImport } from './routes/api.sandbox.$slug.checkup-quote'
 import { Route as ApiRequestsRequestRefRunRouteImport } from './routes/api.requests.$requestRef.run'
 import { Route as ApiRequestsRequestRefRepeatPermissionsRouteImport } from './routes/api.requests.$requestRef.repeat-permissions'
 import { Route as ApiRequestsRequestRefProblemsRouteImport } from './routes/api.requests.$requestRef.problems'
@@ -438,6 +439,12 @@ const ApiSandboxProvidersRouteQuoterRoute =
     path: '/api/sandbox/providers/route-quoter',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiSandboxSlugCheckupQuoteRoute =
+  ApiSandboxSlugCheckupQuoteRouteImport.update({
+    id: '/api/sandbox/$slug/checkup-quote',
+    path: '/api/sandbox/$slug/checkup-quote',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiRequestsRequestRefRunRoute =
   ApiRequestsRequestRefRunRouteImport.update({
     id: '/run',
@@ -719,6 +726,7 @@ export interface FileRoutesByFullPath {
   '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
   '/api/requests/$requestRef/repeat-permissions': typeof ApiRequestsRequestRefRepeatPermissionsRouteWithChildren
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
+  '/api/sandbox/$slug/checkup-quote': typeof ApiSandboxSlugCheckupQuoteRoute
   '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
@@ -817,6 +825,7 @@ export interface FileRoutesByTo {
   '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
   '/api/requests/$requestRef/repeat-permissions': typeof ApiRequestsRequestRefRepeatPermissionsRouteWithChildren
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
+  '/api/sandbox/$slug/checkup-quote': typeof ApiSandboxSlugCheckupQuoteRoute
   '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
@@ -917,6 +926,7 @@ export interface FileRoutesById {
   '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
   '/api/requests/$requestRef/repeat-permissions': typeof ApiRequestsRequestRefRepeatPermissionsRouteWithChildren
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
+  '/api/sandbox/$slug/checkup-quote': typeof ApiSandboxSlugCheckupQuoteRoute
   '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
   '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
@@ -1017,6 +1027,7 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef/problems'
     | '/api/requests/$requestRef/repeat-permissions'
     | '/api/requests/$requestRef/run'
+    | '/api/sandbox/$slug/checkup-quote'
     | '/api/sandbox/providers/route-quoter'
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
@@ -1115,6 +1126,7 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef/problems'
     | '/api/requests/$requestRef/repeat-permissions'
     | '/api/requests/$requestRef/run'
+    | '/api/sandbox/$slug/checkup-quote'
     | '/api/sandbox/providers/route-quoter'
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
@@ -1214,6 +1226,7 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef/problems'
     | '/api/requests/$requestRef/repeat-permissions'
     | '/api/requests/$requestRef/run'
+    | '/api/sandbox/$slug/checkup-quote'
     | '/api/sandbox/providers/route-quoter'
     | '/api/sandbox/providers/route-resolver'
     | '/api/sandbox/providers/workflow'
@@ -1278,6 +1291,7 @@ export interface RootRouteChildren {
   ApiStorefrontImportDraftRoute: typeof ApiStorefrontImportDraftRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1RequestsRoute: typeof ApiV1RequestsRouteWithChildren
+  ApiSandboxSlugCheckupQuoteRoute: typeof ApiSandboxSlugCheckupQuoteRoute
   ApiSandboxProvidersRouteQuoterRoute: typeof ApiSandboxProvidersRouteQuoterRoute
   ApiSandboxProvidersRouteResolverRoute: typeof ApiSandboxProvidersRouteResolverRoute
   ApiSandboxProvidersWorkflowRoute: typeof ApiSandboxProvidersWorkflowRoute
@@ -1731,6 +1745,13 @@ declare module '@tanstack/react-router' {
       path: '/api/sandbox/providers/route-quoter'
       fullPath: '/api/sandbox/providers/route-quoter'
       preLoaderRoute: typeof ApiSandboxProvidersRouteQuoterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sandbox/$slug/checkup-quote': {
+      id: '/api/sandbox/$slug/checkup-quote'
+      path: '/api/sandbox/$slug/checkup-quote'
+      fullPath: '/api/sandbox/$slug/checkup-quote'
+      preLoaderRoute: typeof ApiSandboxSlugCheckupQuoteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/requests/$requestRef/run': {
@@ -2339,6 +2360,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiStorefrontImportDraftRoute: ApiStorefrontImportDraftRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1RequestsRoute: ApiV1RequestsRouteWithChildren,
+  ApiSandboxSlugCheckupQuoteRoute: ApiSandboxSlugCheckupQuoteRoute,
   ApiSandboxProvidersRouteQuoterRoute: ApiSandboxProvidersRouteQuoterRoute,
   ApiSandboxProvidersRouteResolverRoute: ApiSandboxProvidersRouteResolverRoute,
   ApiSandboxProvidersWorkflowRoute: ApiSandboxProvidersWorkflowRoute,

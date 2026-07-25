@@ -12,7 +12,7 @@ export const CUSTOMER_REQUEST_PUBLIC_COMPREHENSION = Object.freeze({
   examples: 'Book a trade, plan an itinerary, run a procurement decision, or recover when plans fall apart.',
   support: 'AE shows only what registered businesses can do right now, and says so plainly when nothing can.',
   sandboxBoundary: 'Multi-business examples currently run on labelled AE sandbox businesses. They prove the workflow, not independent supply, booking, payment, dispatch, or fulfilment.',
-  authority: 'Nothing starts until you confirm it.',
+  authority: 'You confirm the choice. Starting it is a separate decision.',
 })
 
 export const CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES = Object.freeze([

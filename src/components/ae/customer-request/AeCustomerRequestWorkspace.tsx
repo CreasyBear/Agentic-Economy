@@ -55,7 +55,8 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = 
           requestIdentityRef.current = undefined
           forgetStoredRequestIdentity()
         }
-        setState(errorState(response.status, 'AE could not reopen this Request. You can start a new one below.'))
+        // The composer sits above this message, so do not send the reader down.
+        setState(errorState(response.status, 'AE could not reopen this Request. Start a new one above.'))
         return
       }
       setNeed(result.summary)
@@ -357,6 +358,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = 
       {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-4 text-center">
         <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">What do you need to make happen?</Heading>
         <Text type="large" color="secondary" className="block">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation}</Text>
+        <Link href="/for-agents" className="mx-auto min-h-11 py-2 font-semibold">Use AE with your AI</Link>
       </header> : null}
 
       {state.kind === 'request' && state.projection.recovery?.state === 'restored'
@@ -375,9 +377,22 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = 
               opacity composites it to roughly 1.4:1 and reads as broken. */}
           <button type="submit" disabled={need.trim().length === 0} className="min-h-11 self-end rounded-md px-5 font-semibold transition-[background-color,color] duration-150 enabled:bg-accent enabled:text-on-accent enabled:hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-surface disabled:text-secondary">Start my Request</button>
         </form>
-        <Text type="supporting" color="secondary" className="block text-center">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.examples} {CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority}</Text>
+        {/* One quiet run of terms, not four stacked paragraphs. Each stays its
+            own node so it is individually findable, but the group reads as a
+            single line under the composer instead of a disclaimer column. */}
+        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center">
+          {[
+            CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.examples,
+            CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.support,
+            CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority,
+            'Keep contact, payment, and account details until AE asks for them.',
+          ].map((line, index) => <span key={line} className="flex items-center gap-2">
+            {index === 0 ? null : <span aria-hidden="true" className="text-secondary">·</span>}
+            <Text type="supporting" color="secondary">{line}</Text>
+          </span>)}
+        </div>
         <AeStarterPrompts prompts={starterPrompts} onChoose={setNeed} />
-        {editingRevision !== undefined ? <Text type="supporting" color="secondary">Editing revision {editingRevision} of this Request.</Text> : null}
+        {editingRevision !== undefined ? <Text type="supporting" color="secondary" className="block">Editing revision {editingRevision} of this Request.</Text> : null}
         {state.kind === 'error' ? <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} /> : null}
       </section> : <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} />}
     </main>

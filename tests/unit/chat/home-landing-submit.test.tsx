@@ -10,6 +10,8 @@ const routeState = vi.hoisted(() => {
   const state = {
     HomeComponent: null as (() => ReactNode) | null,
     search: { q: '' },
+    // Openings are generated from published listings by the route loader.
+    loaderData: { starterPrompts: [] as readonly { id: string; label: string; prompt: string }[] },
     navigate: vi.fn(async () => undefined),
   }
   return state
@@ -21,6 +23,7 @@ vi.mock('@tanstack/react-router', () => ({
     return {
       ...options,
       useSearch: () => routeState.search,
+      useLoaderData: () => routeState.loaderData,
       useNavigate: () => routeState.navigate,
     }
   },
@@ -28,6 +31,10 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to, ...props }: { children: ReactNode; to: string }) => (
     <a href={to} {...props}>{children}</a>
   ),
+}))
+
+vi.mock('@tanstack/react-start', () => ({
+  createServerFn: () => ({ handler: (fn: unknown) => fn, validator: () => ({ handler: (fn: unknown) => fn }) }),
 }))
 
 vi.mock('@/components/ae/layout/AePublicShell', () => ({
@@ -76,8 +83,16 @@ describe('Request-first home', () => {
 
     renderHomeRoute()
 
-    for (const statement of Object.values(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION)) {
-      expect(screen.getByText(statement)).toBeTruthy()
+    // The sandbox boundary is deliberately not on this surface. It qualifies
+    // multi-business examples, so it renders on the decision surface where
+    // those examples actually appear (covered in the workspace suite) rather
+    // than as a disclaimer stacked in front of the input.
+    for (const [key, statement] of Object.entries(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION)) {
+      if (key === 'sandboxBoundary') {
+        expect(screen.queryByText(statement)).toBeNull()
+        continue
+      }
+      expect(screen.getByText(statement), key).toBeTruthy()
     }
   })
 

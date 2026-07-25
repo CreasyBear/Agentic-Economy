@@ -695,6 +695,9 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('City Ledger will follow step 1.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Review this option' })).toBeTruthy()
     expect(screen.getByText(/Nothing has been authorized or shared/)).toBeTruthy()
+    // The sandbox boundary qualifies multi-business examples, so it belongs
+    // here rather than stacked in front of the landing input.
+    expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.sandboxBoundary)).toBeTruthy()
     expect(screen.queryByText(/capability|binding|transport|graph node/i)).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Review this option' }))
