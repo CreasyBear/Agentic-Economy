@@ -61,7 +61,7 @@ describe('AeThreadTranscript', () => {
 
     expect(screen.getByRole('heading', { level: 2, name: 'Your shortlist is ready' })).toBeTruthy()
     expect(screen.getByText('Compare the listed facts, then open a business page when you are ready.')).toBeTruthy()
-    expect(screen.getAllByText('No reply history yet')).toHaveLength(2)
+    expect(screen.queryByText('No reply history yet')).toBeNull()
 
     const actions = screen.getByLabelText('Shortlist actions')
     const changeCriteria = within(actions).getByRole('button', { name: 'Change criteria' })
@@ -159,13 +159,13 @@ describe('AeThreadTranscript', () => {
     ).toBeTruthy()
     const urgentContact = screen.getByLabelText('Call first option')
     expect(within(urgentContact).getByText(phoneCapable.name)).toBeTruthy()
-    expect(within(urgentContact).getByText('No reply history yet')).toBeTruthy()
+    expect(within(urgentContact).queryByText('No reply history yet')).toBeNull()
     expect(
       within(urgentContact).getByRole('link', { name: 'Call 0412 345 678' }).getAttribute('href'),
     ).toBe('tel:0412345678')
 
     const replayQuery = screen.getByText('Find plumbers near Parramatta')
-    const processCopy = screen.getByText('How AE checked this')
+    const processCopy = screen.getByText('How AE checked this', { selector: 'summary' })
     expect(urgentContact.compareDocumentPosition(replayQuery) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(urgentContact.compareDocumentPosition(processCopy) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
 

@@ -11,7 +11,6 @@ import { RouterLink } from '@/components/astryx/RouterLink'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
 import { capabilityStatusToAeStatus, firstRequestModeLabel } from '@/lib/ui/status-presentation'
-import { NO_REPLY_HISTORY } from '@/lib/ui/trust-projection'
 import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicRouteServiceContract } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
@@ -65,9 +64,8 @@ function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; thre
       </div>
       <ProviderFacts
         facts={[
-          { term: 'Location', description: [source.suburb, source.stateTerritory].filter(Boolean).join(', ') || 'Location not published' },
-          { term: 'Service area', description: area || 'Service area not published here' },
-          { term: 'Replies', description: NO_REPLY_HISTORY },
+          { term: 'Location', description: [source.suburb, source.stateTerritory].filter(Boolean).join(', ') || undefined },
+          { term: 'Service area', description: area || undefined },
           { term: 'Hours', description: source.hoursLabel },
           ...(source.freshnessLabel !== undefined && source.freshnessLabel.length > 0
             ? [{ term: 'Updated', description: source.freshnessLabel }]
@@ -108,22 +106,20 @@ function answerCardGrounding(source: AnswerSource): string | undefined {
 
 function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogApiV2Dto; onView?: () => void }) {
   const [copied, setCopied] = useState(false)
-  const location = [item.suburb.trim(), item.stateTerritory.trim()].filter(Boolean).join(', ') || 'Location not published here'
-  const phone = item.publishedPhone?.trim() || 'Phone not published here'
+  const location = [item.suburb.trim(), item.stateTerritory.trim()].filter(Boolean).join(', ')
+  const phone = item.publishedPhone?.trim() ?? ''
   const offeringNames = item.offerings.slice(0, 2).map((offering) => offering.name)
-  const accessSummary = [
-    ...(item.accessSummary.humanRequest ? ['Contact available'] : []),
-    ...(item.accessSummary.externalOperation ? ['Agent endpoint published'] : []),
-    ...(item.accessSummary.aeSupportedAction ? ['AE can carry out an action'] : []),
-  ]
+  const price = offeringPrice(item)
+  const badges = capabilityBadges(item)
 
   async function copyDetails() {
     const details = [
       item.name,
       item.category,
-      `Location: ${location}`,
-      `Offerings: ${offeringNames.length === 0 ? 'None published yet' : offeringNames.join(', ')}`,
-      `Phone: ${phone}`,
+      ...(location.length === 0 ? [] : [`Location: ${location}`]),
+      ...(offeringNames.length === 0 ? [] : [`Services: ${offeringNames.join(', ')}`]),
+      ...(price === undefined ? [] : [`Price: ${price}`]),
+      ...(phone.length === 0 ? [] : [`Phone: ${phone}`]),
       `Page: ${window.location.origin}/${item.slug}`,
     ].join('\n')
 
@@ -138,33 +134,43 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
   return (
     <Card
       padding={4}
-      className="grid h-full content-start gap-4"
+      className="grid h-full content-start gap-3"
       data-variant="registry"
       aria-labelledby={`registry-card-${item.slug}`}
     >
       <div className="grid gap-1">
         <Text type="supporting" color="secondary" display="block">{item.category}</Text>
         <Text id={`registry-card-${item.slug}`} type="large" weight="semibold" color="primary" display="block">{item.name}</Text>
-        <span className="flex items-center gap-1">
-          <MapPin aria-hidden="true" className="size-3.5 shrink-0 text-secondary" strokeWidth={1.75} />
-          <Text type="supporting" color="secondary">{location}</Text>
-        </span>
+        {location.length === 0 ? null : (
+          <span className="flex items-center gap-1">
+            <MapPin aria-hidden="true" className="size-3.5 shrink-0 text-secondary" strokeWidth={1.75} />
+            <Text type="supporting" color="secondary">{location}</Text>
+          </span>
+        )}
       </div>
 
-      {offeringNames.length === 0 ? (
-        <Text type="supporting" color="secondary" display="block">No Offerings published yet</Text>
-      ) : <TokenList labels={offeringNames} ariaLabel="Published Offerings" />}
-      <ProviderFacts facts={[
-        { term: 'Ways to get started', description: accessSummary.length === 0 ? 'No contact or endpoint published yet' : accessSummary.join(' · ') },
-        { term: 'Phone', description: phone },
-        { term: 'Replies', description: NO_REPLY_HISTORY },
-      ]} />
+      <TokenList labels={offeringNames} ariaLabel="Published services" />
+
+      {/* Price is the decision fact. It leads, at the weight of the name, the
+          way a nightly rate does on a listing card. */}
+      {price === undefined ? null : (
+        <Text type="large" weight="semibold" color="primary" display="block">{price}</Text>
+      )}
+
+      {/* Badge only what is exceptional. Every business can be contacted, so
+          "contact available" on every card is noise, not information. */}
+      {badges.length === 0 ? null : (
+        <ul className="flex flex-wrap gap-2" aria-label="What this business supports">
+          {badges.map((badge) => <li key={badge}><Badge label={badge} variant="success" /></li>)}
+        </ul>
+      )}
+
       <div className="mt-auto grid grid-cols-1 gap-2 border-t border-border pt-4 sm:grid-cols-2" aria-label="Research actions">
-        {item.publishedPhone === undefined ? null : (
+        {phone.length === 0 ? null : (
           <Button
-            label={`Call ${item.publishedPhone}`}
+            label={`Call ${phone}`}
             variant="secondary"
-            href={`tel:${item.publishedPhone.replace(/[^+\d]/g, '')}`}
+            href={`tel:${phone.replace(/[^+\d]/g, '')}`}
             className="min-h-11 w-full"
           />
         )}
@@ -188,6 +194,40 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
       </div>
     </Card>
   )
+}
+
+/**
+ * A published price outranks everything else on the card, so it is worth
+ * looking for in both places supply can declare it: on the offering itself,
+ * and on the access path that actually quotes it.
+ */
+function offeringPrice(item: PublicBusinessCatalogApiV2Dto): string | undefined {
+  for (const offering of item.offerings) {
+    const summary = offering.pricingSummary?.trim()
+    if (summary !== undefined && summary.length > 0) {
+      return summary
+    }
+    for (const path of offering.accessPaths) {
+      if (path.kind !== 'external_operation') {
+        continue
+      }
+      const pathSummary = path.pricingSummary?.trim()
+      if (pathSummary !== undefined && pathSummary.length > 0) {
+        return pathSummary
+      }
+    }
+  }
+  return undefined
+}
+
+function capabilityBadges(item: PublicBusinessCatalogApiV2Dto): readonly string[] {
+  if (item.accessSummary.aeSupportedAction) {
+    return ['AE can complete this']
+  }
+  if (item.accessSummary.externalOperation) {
+    return ['Answers instantly']
+  }
+  return []
 }
 
 function AeProviderCardCapability({ service }: { service: PublicRouteServiceContract }) {
@@ -226,10 +266,15 @@ function AeProviderCardCapability({ service }: { service: PublicRouteServiceCont
  * every listing four nested cards and makes a simple listing look like a form,
  * so separation comes from a rule and whitespace instead.
  */
-function ProviderFacts({ facts }: { facts: Array<{ term: string; description: string }> }) {
+function ProviderFacts({ facts }: { facts: Array<{ term: string; description: string | undefined }> }) {
+  const present = facts.filter((fact) => fact.description !== undefined && fact.description.trim().length > 0)
+  if (present.length === 0) {
+    return null
+  }
+
   return (
     <dl className="grid gap-x-6 gap-y-3 border-t border-border pt-3 sm:grid-cols-2">
-      {facts.map((fact) => (
+      {present.map((fact) => (
         <div key={fact.term}>
           <dt><Text type="supporting" color="secondary" display="block">{fact.term}</Text></dt>
           <dd className="mt-0.5"><Text type="supporting" color="primary" weight="medium" display="block">{fact.description}</Text></dd>

@@ -17,7 +17,7 @@ describe('AeProviderCard answer variant', () => {
     render(<AeProviderCard variant="answer" source={provider({ citationIndex: 2 })} threadId="thread-abc" />)
 
     expect(screen.getByText('Choice 2 in this answer')).toBeTruthy()
-    expect(screen.getAllByText('No reply history yet')).toHaveLength(1)
+    expect(screen.queryByText('No reply history yet')).toBeNull()
     expect(screen.getByRole('link', { name: 'Ask this business' }).getAttribute('href')).toBe(
       '/demo-plumbing?from=thread&id=thread-abc',
     )
@@ -33,15 +33,15 @@ describe('AeProviderCard registry variant', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows source-backed decision facts and explicit missing trust facts', () => {
+  it('omits trust facts the business has not published', () => {
     render(<AeProviderCard variant="registry" item={registryBusiness()} />)
 
     expect(screen.getByText('Demo Plumbing')).toBeTruthy()
     expect(screen.getByText('Plumber')).toBeTruthy()
     expect(screen.getByText('Joondalup, WA')).toBeTruthy()
     expect(screen.getByText('Emergency plumbing')).toBeTruthy()
-    expect(screen.getByText('No reply history yet')).toBeTruthy()
-    expect(screen.getByText('Phone not published here')).toBeTruthy()
+    expect(screen.queryByText('No reply history yet')).toBeNull()
+    expect(screen.queryByText('Phone not published here')).toBeNull()
     expect(screen.queryByRole('link', { name: /Call/ })).toBeNull()
 
     const view = screen.getByRole('link', { name: 'View Demo Plumbing' })
@@ -58,8 +58,8 @@ describe('AeProviderCard registry variant', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy details' }))
 
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
-    expect(writeText.mock.calls[0]?.[0]).toContain('Offerings: Emergency plumbing')
-    expect(writeText.mock.calls[0]?.[0]).toContain('Phone: Phone not published here')
+    expect(writeText.mock.calls[0]?.[0]).toContain('Services: Emergency plumbing')
+    expect(writeText.mock.calls[0]?.[0]).not.toContain('Phone:')
     expect(screen.getByRole('button', { name: 'Details copied' })).toBeTruthy()
   })
 })

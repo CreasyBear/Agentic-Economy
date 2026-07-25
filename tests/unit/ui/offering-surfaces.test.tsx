@@ -60,17 +60,18 @@ describe('Offering market surfaces', () => {
       { offeringRef: 'offering:second', revision: 1, name: 'Second Offering', category: 'Data', summary: 'Second.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
       { offeringRef: 'offering:third', revision: 1, name: 'Hidden third Offering', category: 'Data', summary: 'Third.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
     ] }} />)
-    expect(screen.getByLabelText('Published Offerings').textContent).toContain('Data lookup')
-    expect(screen.getByLabelText('Published Offerings').textContent).toContain('Second Offering')
+    expect(screen.getByLabelText('Published services').textContent).toContain('Data lookup')
+    expect(screen.getByLabelText('Published services').textContent).toContain('Second Offering')
     expect(screen.queryByText('Hidden third Offering')).toBeNull()
-    expect(screen.getByText('Contact available')).toBeTruthy()
+    // Every business can be contacted, so contactability is not a badge.
+    expect(screen.queryByText('Contact available')).toBeNull()
   })
 
   it('keeps a profile-only business visible in the v2 registry card', () => {
     render(<AeProviderCard variant="registry" item={{ ...v2BusinessFixture(), offerings: [], accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false } }} />)
     expect(screen.getByText('V2 Business')).toBeTruthy()
-    expect(screen.getByText('No Offerings published yet')).toBeTruthy()
-    expect(screen.getByText('No contact or endpoint published yet')).toBeTruthy()
+    expect(screen.queryByText('No Offerings published yet')).toBeNull()
+    expect(screen.queryByText('No contact or endpoint published yet')).toBeNull()
   })
 
   it('shows last-safe public facts when projection freshness degrades', () => {

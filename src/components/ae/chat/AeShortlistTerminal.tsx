@@ -42,7 +42,6 @@ export function AeShortlistTerminal({
         <div className="grid gap-3 rounded-md border border-border bg-body p-4" aria-label="Call first option">
           <div className="grid gap-1">
             <Text type="large" weight="semibold" color="primary" display="block">{urgentBusiness.name}</Text>
-            <Text type="supporting" color="secondary" display="block">No reply history yet</Text>
           </div>
           <Button label={`Call ${urgentPhone}`} variant="primary" className="min-h-11 justify-self-start" href={urgentCallHref} />
         </div>
