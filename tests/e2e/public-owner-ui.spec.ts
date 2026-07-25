@@ -27,7 +27,7 @@ test.describe('public owner routes', () => {
 
     await expect(page.getByRole('heading', { name: 'What do you need to make happen?' })).toBeVisible()
     await expect(page.getByLabel('What are you looking for?')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Start my Request' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Find options' })).toBeDisabled()
     for (const statement of CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES) {
       await expect(page.getByText(statement, { exact: true })).toBeVisible()
     }
@@ -74,7 +74,7 @@ test.describe('public owner routes', () => {
       expect(assistantText).toContain(statement)
     }
 
-    await expect(page.getByRole('button', { name: 'Start my Request' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Find options' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Use AE with your AI' })).toHaveAttribute('href', '/for-agents')
     expect(assistantText).toContain('Human entry=')
     expect(assistantText).toContain('/api/v1/requests')

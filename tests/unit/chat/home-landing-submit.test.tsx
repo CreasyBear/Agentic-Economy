@@ -10,8 +10,8 @@ const routeState = vi.hoisted(() => {
   const state = {
     HomeComponent: null as (() => ReactNode) | null,
     search: { q: '' },
-    // Openings are generated from published listings by the route loader.
-    loaderData: { starterPrompts: [] as readonly { id: string; label: string; prompt: string }[] },
+    // Supply facets are derived from published listings by the route loader.
+    loaderData: { coldStart: { facets: [], businessCount: 0, stateCount: 0 } },
     navigate: vi.fn(async () => undefined),
   }
   return state
@@ -75,7 +75,10 @@ describe('Request-first home', () => {
     expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation)).toBeTruthy()
     expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority)).toBeTruthy()
     expect(screen.queryByText('Your agent knows who to call.')).toBeNull()
-    expect(screen.getByRole('link', { name: 'Use AE with your AI' }).getAttribute('href')).toBe('/for-agents')
+    // The agent-audience entry lives in the shell nav as "For agents", which is
+    // where DESIGN.md's information architecture puts it. The hero no longer
+    // carries a second copy of the same destination.
+    expect(screen.queryByRole('link', { name: 'Use AE with your AI' })).toBeNull()
   })
 
   it('lets a cold customer recognize workflow-shaped requests and both authority stops', () => {
@@ -119,7 +122,7 @@ describe('Request-first home', () => {
     renderHomeRoute()
     enterQuery('Emergency plumber in Brunswick')
 
-    const submit = screen.getByRole('button', { name: 'Start my Request' })
+    const submit = screen.getByRole('button', { name: 'Find options' })
     const form = submit.closest('form')
     if (form === null) throw new Error('The home composer submit action must belong to a form.')
 
@@ -142,7 +145,7 @@ describe('Request-first home', () => {
     renderHomeRoute()
     enterQuery('Replace a leaking kitchen tap')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find options' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     const request = fetchMock.mock.calls[0]

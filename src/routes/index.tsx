@@ -4,7 +4,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { AeCustomerRequestWorkspace } from '@/components/ae/customer-request/AeCustomerRequestWorkspace'
-import { starterPromptsFromSupply, type StarterPrompt } from '@/components/ae/customer-request/AeStarterPrompts'
+import { countPublishedStates, supplyFacetsFromListings, type SupplyFacet } from '@/components/ae/customer-request/AeSupplyFacets'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { readPublicOfferingRegistryPage } from '@/modules/registry/registry.functions'
 
@@ -13,22 +13,33 @@ const homeSearchSchema = z.object({
 })
 
 /**
- * Openings are generated from published listings so the front door shows real
- * reachable supply. A source failure is not worth failing the page over: the
- * strip disappears and the input still works.
+ * The front door states the supply it actually has, so a visitor learns what
+ * AE can reach without composing a sentence first. A source failure is not
+ * worth failing the page over: the block disappears and the input still works.
  */
-const readStarterPrompts = createServerFn().handler(async (): Promise<readonly StarterPrompt[]> => {
+type ColdStart = Readonly<{
+  facets: readonly SupplyFacet[]
+  businessCount: number
+  stateCount: number
+}>
+
+const readColdStart = createServerFn().handler(async (): Promise<ColdStart> => {
   try {
-    const page = await readPublicOfferingRegistryPage({ limit: 24 })
-    return starterPromptsFromSupply(page.items)
+    // Bounded read: the front door must not grow an unbounded query as supply does.
+    const page = await readPublicOfferingRegistryPage({ limit: 200 })
+    return {
+      facets: supplyFacetsFromListings(page.items),
+      businessCount: page.items.length,
+      stateCount: countPublishedStates(page.items),
+    }
   } catch {
-    return []
+    return { facets: [], businessCount: 0, stateCount: 0 }
   }
 })
 
 export const Route = createFileRoute('/')({
   validateSearch: homeSearchSchema,
-  loader: async () => ({ starterPrompts: await readStarterPrompts() }),
+  loader: async () => ({ coldStart: await readColdStart() }),
   head: () => ({ meta: [
     { title: 'Ask Agentic Economy' },
     { name: 'description', content: 'Name the outcome. Agentic Economy finds the businesses, compares real options, and carries the work through.' },
@@ -39,7 +50,7 @@ export const Route = createFileRoute('/')({
 function Home() {
   const navigate = useNavigate()
   const { q } = Route.useSearch()
-  const { starterPrompts } = Route.useLoaderData()
+  const { coldStart } = Route.useLoaderData()
   const [initialQuery] = useState(() => sanitizeInitialQuery(q))
   useEffect(() => {
     if (initialQuery.length === 0) return
@@ -48,7 +59,12 @@ function Home() {
 
   return (
     <AePublicShell>
-      <AeCustomerRequestWorkspace initialNeed={initialQuery} starterPrompts={starterPrompts} />
+      <AeCustomerRequestWorkspace
+        initialNeed={initialQuery}
+        supplyFacets={coldStart.facets}
+        supplyBusinessCount={coldStart.businessCount}
+        supplyStateCount={coldStart.stateCount}
+      />
     </AePublicShell>
   )
 }

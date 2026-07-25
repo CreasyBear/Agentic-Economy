@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
 import { Link } from '@astryxdesign/core/Link'
 import { Heading, Text } from '@astryxdesign/core/Text'
 
@@ -10,7 +12,7 @@ import {
   type ReplacementCommandIdentity,
 } from '@/modules/customer-request/replacement-command-key'
 import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
-import { AeStarterPrompts, type StarterPrompt } from './AeStarterPrompts'
+import { AeSupplyFacets, type SupplyFacet } from './AeSupplyFacets'
 import { RequestResult } from './panels'
 import { customerClarificationPrompt } from './panels/shared'
 import type {
@@ -22,12 +24,25 @@ import type {
 
 const ACTIVE_REQUEST_STORAGE_KEY = 'ae.customer-request.active:v1'
 
+/** A saved Request stops being offered after this, so a stale pointer cannot
+ *  keep greeting someone who has moved on. */
+const RESUME_OFFER_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000
+
+type StoredRequestPointer = Readonly<{ requestRef: string; summary?: string }>
+
 export type AeCustomerRequestWorkspaceProps = Readonly<{
   initialNeed?: string
-  starterPrompts?: readonly StarterPrompt[]
+  supplyFacets?: readonly SupplyFacet[]
+  supplyBusinessCount?: number
+  supplyStateCount?: number
 }>
 
-export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = [] }: AeCustomerRequestWorkspaceProps) {
+export function AeCustomerRequestWorkspace({
+  initialNeed = '',
+  supplyFacets = [],
+  supplyBusinessCount = 0,
+  supplyStateCount = 0,
+}: AeCustomerRequestWorkspaceProps) {
   const [need, setNeed] = useState(initialNeed)
   const [answer, setAnswer] = useState('')
   const [state, setState] = useState<WorkspaceState>({ kind: 'idle' })
@@ -38,18 +53,29 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = 
   const replacementCommandRef = useRef<ReplacementCommandIdentity | undefined>(undefined)
   const submittingRef = useRef(false)
 
+  // Arriving is not a request to resume. The front door renders immediately and
+  // a saved Request is offered, never reopened on the visitor's behalf.
+  const [resumeOffer, setResumeOffer] = useState<StoredRequestPointer | undefined>(undefined)
   useEffect(() => {
     if (initialNeed.trim().length > 0) return
-    const identity = readStoredRequestIdentity()
-    if (identity === undefined) return
+    setResumeOffer(readStoredRequest())
+  }, [initialNeed])
+
+  function dismissResumeOffer() {
+    setResumeOffer(undefined)
+    forgetStoredRequestIdentity()
+  }
+
+  async function resumeStoredRequest(pointer: StoredRequestPointer) {
+    const identity = browserIdentityFor(pointer.requestRef)
     requestIdentityRef.current = identity
+    setResumeOffer(undefined)
     setState({ kind: 'resuming' })
-    let active = true
-    void fetch(`/api/requests/${encodeURIComponent(identity.requestRef)}`, {
-      method: 'GET', headers: { Accept: 'application/json' },
-    }).then(async (response) => {
+    try {
+      const response = await fetch(`/api/requests/${encodeURIComponent(identity.requestRef)}`, {
+        method: 'GET', headers: { Accept: 'application/json' },
+      })
       const result: SubmitResponse = await response.json()
-      if (!active) return
       if (!response.ok || !('kind' in result) || result.kind !== 'request') {
         if (response.status === 404) {
           requestIdentityRef.current = undefined
@@ -64,14 +90,13 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = 
         ? []
         : [{ speaker: 'ae', text: customerClarificationPrompt(result.clarification) }])
       setState({ kind: 'request', projection: result })
-    }).catch(() => {
-      if (active) setState({
+    } catch {
+      setState({
         kind: 'error', message: 'AE could not be reached. Your Request is still saved in this browser.',
         authenticationRequired: false,
       })
-    })
-    return () => { active = false }
-  }, [initialNeed])
+    }
+  }
 
   async function submit() {
     if (need.trim().length === 0 || submittingRef.current || state.kind === 'submitting'
@@ -119,7 +144,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = 
           speaker: 'ae' as const, text: customerClarificationPrompt(result.clarification),
         }]),
       ])
-      rememberRequestIdentity(result.requestRef)
+      rememberRequestIdentity(result.requestRef, result.summary)
       if (replacing && result.revision !== editingRevision) replacementCommandRef.current = undefined
       setEditingRevision(undefined)
       setState({ kind: 'request', projection: result })
@@ -136,6 +161,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = 
   }
 
   function restart() {
+    setResumeOffer(undefined)
     setNeed('')
     setAnswer('')
     setTurns([])
@@ -350,16 +376,31 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = 
     }
   }
 
-  const showStartHeader = (state.kind === 'idle' || state.kind === 'error')
-    && requestIdentityRef.current === undefined
+  const showStartHeader = state.kind === 'idle' || state.kind === 'error'
 
+  // Idle is the front door and gets the whole viewport; once there is a Request
+  // to read, the surface becomes a document and starts at the top.
   return (
-    <main className="mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14">
+    <main className={`mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14 ${showStartHeader ? 'min-h-[calc(100dvh-9rem)] content-center' : 'content-start'}`}>
       {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-4 text-center">
         <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">What do you need to make happen?</Heading>
         <Text type="large" color="secondary" className="block">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation}</Text>
-        <Link href="/for-agents" className="mx-auto min-h-11 py-2 font-semibold">Use AE with your AI</Link>
       </header> : null}
+
+      {showStartHeader && resumeOffer !== undefined ? <Card padding={4} className="mx-auto w-full max-w-3xl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <Text weight="semibold" className="block">You have a Request saved on this device.</Text>
+            {resumeOffer.summary === undefined
+              ? null
+              : <Text type="supporting" color="secondary" className="mt-1 block">{resumeOffer.summary}</Text>}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button label="Pick it up" variant="secondary" clickAction={() => void resumeStoredRequest(resumeOffer)} />
+            <Button label="Discard" variant="ghost" clickAction={dismissResumeOffer} />
+          </div>
+        </div>
+      </Card> : null}
 
       {state.kind === 'request' && state.projection.recovery?.state === 'restored'
         ? <Card padding={3} className="mx-auto w-full max-w-4xl" aria-live="polite">
@@ -369,30 +410,57 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = 
           </Card>
         : null}
 
-      {state.kind === 'idle' || state.kind === 'error' ? <section className="mx-auto grid w-full max-w-3xl gap-3" aria-label="Start a request">
-        <form onSubmit={(event) => { event.preventDefault(); void submit() }} className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-low sm:flex-row">
+      {state.kind === 'idle' || state.kind === 'error' ? <section className="mx-auto grid w-full max-w-3xl gap-5" aria-label="Start a request">
+        {/* The composer is the object on this surface, not a field beside a
+            button. Controls live inside the field the way an answer-engine
+            input does, so nothing competes with the one thing to do. */}
+        <form
+          onSubmit={(event) => { event.preventDefault(); void submit() }}
+          className="grid min-w-0 gap-3 rounded-2xl border border-border bg-card p-4 shadow-low transition-[border-color,box-shadow] duration-150 focus-within:border-accent focus-within:shadow-medium"
+        >
           <label className="sr-only" htmlFor="customer-need">What are you looking for?</label>
-          <textarea id="customer-need" value={need} onChange={(event) => setNeed(event.target.value)} rows={2} maxLength={2_000} required placeholder="A burst pipe in Parramatta, someone today, under $500" className="min-h-16 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-lg text-primary outline-none focus:ring-2 focus:ring-accent" />
-          {/* Disabled stays legible: ghosting a filled accent button at 0.4
-              opacity composites it to roughly 1.4:1 and reads as broken. */}
-          <button type="submit" disabled={need.trim().length === 0} className="min-h-11 self-end rounded-md px-5 font-semibold transition-[background-color,color] duration-150 enabled:bg-accent enabled:text-on-accent enabled:hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-surface disabled:text-secondary">Start my Request</button>
+          <textarea
+            id="customer-need"
+            value={need}
+            onChange={(event) => setNeed(event.target.value)}
+            rows={2}
+            maxLength={2_000}
+            required
+            placeholder="A burst pipe in Parramatta, someone today, under $500"
+            className="min-h-16 min-w-0 resize-none bg-transparent px-1 text-lg leading-relaxed text-primary outline-none placeholder:text-secondary"
+          />
+          <div className="flex items-center justify-end">
+            {/* Disabled keeps its outline so it still reads as the control that
+                is waiting on you. Ghosting a filled accent button composites it
+                to roughly 1.4:1 and reads as broken instead. */}
+            <button
+              type="submit"
+              disabled={need.trim().length === 0}
+              className="min-h-11 rounded-full border px-6 font-semibold transition-[background-color,border-color,color] duration-150 enabled:border-accent enabled:bg-accent enabled:text-on-accent enabled:hover:border-accent-strong enabled:hover:bg-accent-strong disabled:cursor-not-allowed disabled:border-border disabled:bg-transparent disabled:text-secondary"
+            >
+              Find options
+            </button>
+          </div>
         </form>
-        {/* One quiet run of terms, not four stacked paragraphs. Each stays its
-            own node so it is individually findable, but the group reads as a
-            single line under the composer instead of a disclaimer column. */}
-        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center">
-          {[
-            CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.examples,
-            CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.support,
-            CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority,
-            'Keep contact, payment, and account details until AE asks for them.',
-          ].map((line, index) => <span key={line} className="flex items-center gap-2">
-            {index === 0 ? null : <span aria-hidden="true" className="text-secondary">·</span>}
-            <Text type="supporting" color="secondary">{line}</Text>
-          </span>)}
-        </div>
-        <AeStarterPrompts prompts={starterPrompts} onChoose={setNeed} />
+        <AeSupplyFacets facets={supplyFacets} businessCount={supplyBusinessCount} stateCount={supplyStateCount} />
         {editingRevision !== undefined ? <Text type="supporting" color="secondary" className="block">Editing revision {editingRevision} of this Request.</Text> : null}
+        {/* The terms stay reachable and complete, one click away, instead of
+            forming a wall of qualifiers between the promise and the input. The
+            trigger hugs its label; a full-width row strands the chevron. */}
+        <div className="mx-auto max-w-md">
+          <Collapsible defaultIsOpen={false} trigger={<span className="text-sm font-semibold">How AE works</span>}>
+            <ul className="grid gap-2 pt-3 text-start">
+              {[
+                CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.examples,
+                CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.support,
+                CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority,
+                'Keep contact, payment, and account details until AE asks for them.',
+              ].map((line) => <li key={line}>
+                <Text type="supporting" color="secondary">{line}</Text>
+              </li>)}
+            </ul>
+          </Collapsible>
+        </div>
         {state.kind === 'error' ? <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} /> : null}
       </section> : <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} />}
     </main>
@@ -400,7 +468,13 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = 
 }
 
 function errorState(status: number, message: string): WorkspaceState { return { kind: 'error', message: status === 401 ? 'Sign in so AE can keep this request private and resumable.' : message, authenticationRequired: status === 401 } }
-function readStoredRequestIdentity(): BrowserRequestIdentity | undefined {
+/**
+ * The stored pointer carries enough to *offer* a continuation without asking
+ * the network: the reference, a short label, and when it was saved. Arriving at
+ * AE must never spend a request, or start work, on something the visitor did
+ * not ask for.
+ */
+function readStoredRequest(): StoredRequestPointer | undefined {
   try {
     const raw = window.localStorage.getItem(ACTIVE_REQUEST_STORAGE_KEY)
     if (raw === null) return undefined
@@ -409,11 +483,26 @@ function readStoredRequestIdentity(): BrowserRequestIdentity | undefined {
       forgetStoredRequestIdentity()
       return undefined
     }
-    return { requestRef: value.requestRef, agentRef: `web:${crypto.randomUUID()}` }
+    const savedAt = typeof value.savedAt === 'number' ? value.savedAt : 0
+    if (savedAt > 0 && Date.now() - savedAt > RESUME_OFFER_LIFETIME_MS) {
+      forgetStoredRequestIdentity()
+      return undefined
+    }
+    return {
+      requestRef: value.requestRef,
+      ...(boundedIdentityPart(value.summary) ? { summary: value.summary } : {}),
+    }
   } catch { return undefined }
 }
-function rememberRequestIdentity(requestRef: string): void {
-  try { window.localStorage.setItem(ACTIVE_REQUEST_STORAGE_KEY, JSON.stringify({ requestRef })) } catch { /* optional browser pointer */ }
+function browserIdentityFor(requestRef: string): BrowserRequestIdentity {
+  return { requestRef, agentRef: `web:${crypto.randomUUID()}` }
+}
+function rememberRequestIdentity(requestRef: string, summary: string): void {
+  try {
+    window.localStorage.setItem(ACTIVE_REQUEST_STORAGE_KEY, JSON.stringify({
+      requestRef, summary: summary.slice(0, 200), savedAt: Date.now(),
+    }))
+  } catch { /* optional browser pointer */ }
 }
 function forgetStoredRequestIdentity(): void {
   try { window.localStorage.removeItem(ACTIVE_REQUEST_STORAGE_KEY) } catch { /* optional browser pointer */ }
