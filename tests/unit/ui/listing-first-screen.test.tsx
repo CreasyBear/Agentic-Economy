@@ -88,25 +88,24 @@ describe('ListingFirstScreen', () => {
     expect(markup).not.toContain('href="/demo-plumbing/inquiry"')
   })
 
-  it('puts source-backed trust facts and posture before the available ask action', () => {
+  it('puts the published trust facts and posture before the available ask action', () => {
     const markup = renderFirstScreen(catalogFixture(), availableInquiry)
 
     expect(markup).toContain('Demo Plumbing')
     expect(markup).toContain('Plumber')
-    expect(markup).toContain('Phone not published here')
     expect(markup).toContain('Mon–Fri, 8am–5pm')
     expect(markup).toContain('Parramatta and nearby suburbs')
     expect(markup).toContain(AE_EXPLAINER_NO_PHONE)
     expect(markup).not.toContain('call directly')
-    expect(markup).toContain(NO_REPLY_HISTORY)
     expect(markup).not.toContain('href="tel:')
+    // An unpublished phone and an absent reply history are omitted, not named.
+    expect(markup).not.toContain('Phone not published here')
+    expect(markup).not.toContain(NO_REPLY_HISTORY)
 
     expectStringsInOrder(markup, [
-      'Phone not published here',
       'Mon–Fri, 8am–5pm',
       'Parramatta and nearby suburbs',
       AE_EXPLAINER_NO_PHONE,
-      NO_REPLY_HISTORY,
       'Ask this business',
     ])
     expect(peerActions(markup)).toEqual([
@@ -124,14 +123,16 @@ describe('ListingFirstScreen', () => {
     expect(markup).not.toContain(AE_EXPLAINER_NO_PHONE)
   })
 
-  it('states each unpublished trust fact instead of inventing contact or operating details', () => {
+  it('omits every unpublished trust fact instead of naming its absence', () => {
     const catalog = catalogFixture({ hoursOrUnknown: 'Unknown', serviceArea: 'unknown' })
     const markup = renderFirstScreen(catalog, availableInquiry)
 
-    expect(markup).toContain('Phone not published here')
-    expect(markup).toContain('Hours not published here')
-    expect(markup).toContain('Service area not published here')
+    expect(markup).not.toContain('Phone not published here')
+    expect(markup).not.toContain('Hours not published here')
+    expect(markup).not.toContain('Service area not published here')
+    // Nothing is invented to fill the gap either.
     expect(markup).not.toContain('href="tel:')
+    expect(markup).toContain('Demo Plumbing')
     expectForbiddenCopyAbsent(markup)
   })
 

@@ -158,6 +158,7 @@ export function ListingFirstScreen({
 }) {
   const [detailsCopied, setDetailsCopied] = useState(false)
   const phone = trust.phone.kind === 'published' ? trust.phone.value : undefined
+  const publishedFacts = [trust.phone, trust.hours, trust.serviceArea].filter((fact) => fact.kind === 'published')
   function recordDirectCall() {
     if (pseudonymousJourneyId === null || pseudonymousJourneyId === undefined) {
       return
@@ -204,18 +205,31 @@ export function ListingFirstScreen({
           <Text type="large" color="secondary" display="block">{catalog.category}</Text>
         </VStack>
 
-        <dl className="grid gap-3 sm:grid-cols-3" aria-label="Published business details">
-          <TrustFactRow label="Phone" fact={trust.phone} />
-          <TrustFactRow label="Hours" fact={trust.hours} />
-          <TrustFactRow label="Service area" fact={trust.serviceArea} />
-        </dl>
+        {publishedFacts.length === 0 ? null : (
+          <dl className="grid gap-3 sm:grid-cols-3" aria-label="Published business details">
+            <TrustFactRow label="Phone" fact={trust.phone} />
+            <TrustFactRow label="Hours" fact={trust.hours} />
+            <TrustFactRow label="Service area" fact={trust.serviceArea} />
+          </dl>
+        )}
 
-        <Text color="primary" display="block" className="max-w-3xl text-pretty">{trust.explainer}</Text>
+        {/* The offerings section below states the actual ways to get started.
+            When it is present it owns that question outright, and this line
+            would otherwise claim no contact path is published on a page that
+            is already offering one. */}
+        {offeringDetailMode ? null : (
+          <Text color="primary" display="block" className="max-w-3xl text-pretty">{trust.explainer}</Text>
+        )}
 
         <VStack gap={2}>
-          <Text type="supporting" color="secondary" weight="semibold" display="block">
-            {replyPostureLabel(trust.replyPosture)}
-          </Text>
+          {/* A business with no reply history is the ordinary case, not a fact
+              about this business. Naming it on every listing tells the reader
+              nothing and costs them a line. */}
+          {trust.replyPosture.kind === 'no_history' ? null : (
+            <Text type="supporting" color="secondary" weight="semibold" display="block">
+              {replyPostureLabel(trust.replyPosture)}
+            </Text>
+          )}
           {phone === undefined ? null : (
             <Text type="supporting" color="secondary" display="block">
               Need someone now? <a className="underline underline-offset-4" href={`tel:${phone}`} onClick={recordDirectCall}>Call {phone}</a>
@@ -252,11 +266,20 @@ export function ListingFirstScreen({
   )
 }
 
+/**
+ * An unpublished fact is omitted, never announced. "Hours not published here"
+ * fills a row, teaches nothing, and previously contradicted the offer section
+ * below, which states the hours the owner did supply.
+ */
 function TrustFactRow({ label, fact }: { label: string; fact: TrustFact }) {
+  if (fact.kind !== 'published') {
+    return null
+  }
+
   return (
     <div className="grid min-w-0 gap-1">
       <dt><Text type="supporting" color="secondary" weight="semibold">{label}</Text></dt>
-      <dd className="m-0 break-words"><Text color="primary">{trustFactText(fact)}</Text></dd>
+      <dd className="m-0 break-words"><Text color="primary">{fact.value}</Text></dd>
     </div>
   )
 }
@@ -495,7 +518,7 @@ function WhatTheyOfferCard({
           What they offer
         </Text>
         <Text type="supporting" color="secondary" display="block">
-          Published services, area, and hours for {catalog.name}.
+          Published by {catalog.name}.
         </Text>
       </VStack>
 
@@ -569,16 +592,11 @@ function appendThreadOrigin(href: string, from: 'thread' | 'registry' | undefine
 function ListingPhotosSection({ catalog, presentation }: { catalog: PublicRouteCatalogContract; presentation: ProviderPresentation }) {
   const photos = catalog.photos ?? []
 
+  // No photo is better than a stock category image captioned as a stock
+  // category image: it occupied a third of the mobile page to tell the reader
+  // that AE has no picture of this business.
   if (photos.length === 0) {
-    return (
-      <Card padding={0} className="overflow-hidden" aria-labelledby="listing-photos">
-        <h2 id="listing-photos" className="sr-only">Photos</h2>
-        <figure>
-          <img className="h-72 w-full object-cover" src={presentation.image.url} alt="" />
-          <figcaption className="px-4 py-3 text-sm text-secondary">Category reference image</figcaption>
-        </figure>
-      </Card>
-    )
+    return null
   }
 
   return (
