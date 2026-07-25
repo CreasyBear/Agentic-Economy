@@ -5,8 +5,14 @@ export type InterpreterEnvironment = Readonly<{
   openRouterApiKey?: string
   modelName?: string
   siteUrl?: string
+  maximumCompletionTokens?: number
   maximumDescriptorBytes: number
 }>
+
+/** Reasoning-capable models spend part of the completion budget on reasoning tokens, so a
+ *  budget sized for a non-reasoning model truncates them to `finish_reason: length` with a
+ *  null message. Keep enough headroom for the proposal plus reasoning. */
+const DEFAULT_MAXIMUM_COMPLETION_TOKENS = 4_096
 
 export function createConfiguredRequestInterpreter(env: InterpreterEnvironment) {
   const apiKey = env.openRouterApiKey?.trim()
@@ -18,7 +24,7 @@ export function createConfiguredRequestInterpreter(env: InterpreterEnvironment) 
       apiKey, model: modelName,
       ...(env.siteUrl?.trim() ? { siteUrl: env.siteUrl.trim() } : {}),
       reasoningEffort: 'low',
-      maximumCompletionTokens: 1_024,
+      maximumCompletionTokens: env.maximumCompletionTokens ?? DEFAULT_MAXIMUM_COMPLETION_TOKENS,
     }),
     timeoutMs: 45_000,
     maximumPayloadBytes: env.maximumDescriptorBytes,

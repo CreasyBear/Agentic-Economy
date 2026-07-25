@@ -34,14 +34,16 @@ export async function runBusinessCommand(args: readonly string[], options: CliOp
     ['phone', String(business.publishedPhone ?? 'not published')],
   ])
 
-  const services = Array.isArray(business.services) ? business.services : []
+  // Search results call these "services"; the detail record calls them
+  // "offerings". Read both so the CLI is not hostage to that inconsistency.
+  const services = [business.services, business.offerings].find(Array.isArray) ?? []
   line(`\nServices: ${services.length}`)
   for (const service of services) {
     if (!isRecord(service)) continue
     const firstRequest = isRecord(service.firstRequest) ? service.firstRequest : {}
     line(`  - ${String(service.name ?? '')} [${String(service.category ?? '')}]`)
-    line(`    area: ${String(service.serviceArea ?? 'not supplied')}`)
-    line(`    hours: ${String(service.hoursOrUnknown ?? 'not supplied')}`)
-    line(`    what to do now: ${String(firstRequest.mode ?? 'unknown')} via ${String(firstRequest.publicChannel ?? 'unknown')}`)
+    line(`    area: ${String(service.serviceArea ?? service.serviceAreaSummary ?? 'not supplied')}`)
+    line(`    hours: ${String(service.hoursOrUnknown ?? service.availabilitySummary ?? 'not supplied')}`)
+    line(`    what to do now: ${String(firstRequest.mode ?? 'see access paths')} via ${String(firstRequest.publicChannel ?? 'unknown')}`)
   }
 }

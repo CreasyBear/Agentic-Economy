@@ -1,5 +1,5 @@
-import { useMemo, useState, type CSSProperties, type FormEvent } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { Button } from '@astryxdesign/core/Button'
@@ -134,7 +134,6 @@ function RegistryRoute() {
           <LayoutContent padding={6}>
             <VStack gap={6}>
               <RegistrySearchControls
-                key={query}
                 initialSearch={query}
                 limit={limit}
                 categories={categories}
@@ -215,7 +214,23 @@ function RegistrySearchControls({
   sortOrder: string
   setSortOrder: (value: string) => void
 }) {
+  const navigate = useNavigate()
   const [search, setSearch] = useState(() => initialSearch)
+  const debounceRef = useRef<number | undefined>(undefined)
+
+  useEffect(() => () => clearTimeout(debounceRef.current), [])
+
+  // Router-driven so the URL stays shareable and the loader keeps SSR
+  // semantics. Debouncing lives in the change handler so no navigation is ever
+  // scheduled by a render. The plain form GET below is the no-JS fallback.
+  function changeSearch(next: string) {
+    setSearch(next)
+    clearTimeout(debounceRef.current)
+    const trimmed = next.trim().slice(0, 120)
+    debounceRef.current = window.setTimeout(() => {
+      void navigate({ to: '/registry', search: { q: trimmed, limit }, replace: true })
+    }, 300)
+  }
 
   return (
     <Card padding={5} aria-label="Search business details">
@@ -226,13 +241,18 @@ function RegistrySearchControls({
             label="Business, service, or place"
             htmlName="q"
             value={search}
-            onChange={setSearch}
+            onChange={changeSearch}
             placeholder="emergency plumber parramatta"
             startIcon={<SearchIcon aria-hidden="true" />}
             size="lg"
           />
           <Button label="Search businesses" variant="primary" type="submit" />
         </form>
+        {activeCategory === 'All' ? null : (
+          <Text type="supporting" color="secondary" display="block">
+            Filtering this page of results.
+          </Text>
+        )}
         <Toolbar
           label="Filter and sort businesses"
           size="lg"

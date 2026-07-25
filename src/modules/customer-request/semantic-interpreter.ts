@@ -248,6 +248,33 @@ const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
   },
 })
 
+/**
+ * Value-constraint keywords are enforced by the post-parse validation below, never on the
+ * wire. Several providers (Gemini in particular) reject them inside nested objects with a
+ * hard HTTP 400, which would lock this interpreter to a single vendor. Keeping the wire
+ * schema structural keeps the contract portable while validation stays authoritative.
+ */
+const NON_STRUCTURAL_SCHEMA_KEYWORDS: Record<string, true> = {
+  minLength: true, maxLength: true, minItems: true, maxItems: true,
+  minimum: true, maximum: true, multipleOf: true, uniqueItems: true,
+  pattern: true, format: true,
+}
+
+function toPortableJsonSchema(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(toPortableJsonSchema)
+  if (!isPlainObject(node)) return node
+  return Object.fromEntries(
+    Object.entries(node)
+      .filter(([key]) => NON_STRUCTURAL_SCHEMA_KEYWORDS[key] !== true)
+      .map(([key, value]) => [key, toPortableJsonSchema(value)]),
+  )
+}
+
+const SEMANTIC_RESPONSE_WIRE_SCHEMA = Object.freeze({
+  ...SEMANTIC_RESPONSE_SCHEMA,
+  schema: toPortableJsonSchema(SEMANTIC_RESPONSE_SCHEMA.schema),
+})
+
 export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
   interpreterId: string
   transport: CustomerRequestSemanticInterpretationTransport
@@ -284,7 +311,7 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
         }
         const generated = input.transport.generateJson({
           systemInstruction: SYSTEM_INSTRUCTION, payload: publicPayload,
-          signal: controller.signal, responseSchema: SEMANTIC_RESPONSE_SCHEMA,
+          signal: controller.signal, responseSchema: SEMANTIC_RESPONSE_WIRE_SCHEMA,
         })
         const deadline = new Promise<never>((_resolve, reject) => {
           timeout = setTimeout(() => {

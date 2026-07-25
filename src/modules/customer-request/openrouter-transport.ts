@@ -102,7 +102,16 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
         }
         const body: unknown = await response.json()
         const content = extractContent(body)
-        if (content === undefined) throw new Error('customer_request_interpretation_provider_invalid')
+        if (content === undefined) {
+          // Surface WHY the provider returned no content (commonly finish_reason 'length'
+          // when the completion budget is exhausted) without logging model output.
+          console.error(
+            'customer_request_interpretation_provider_invalid',
+            config.model,
+            extractFinishReason(body) ?? 'unknown_finish_reason',
+          )
+          throw new Error('customer_request_interpretation_provider_invalid')
+        }
         return { content }
       }
       throw new Error('customer_request_interpretation_provider_unavailable')
@@ -115,6 +124,17 @@ function extractContent(value: unknown): string | undefined {
   const first: unknown = value.choices[0]
   if (!isRecord(first) || !isRecord(first.message)) return undefined
   return typeof first.message.content === 'string' ? first.message.content : undefined
+}
+
+function extractFinishReason(value: unknown): string | undefined {
+  if (!isRecord(value) || !Array.isArray(value.choices)) {
+    return isRecord(value) && isRecord(value.error) && typeof value.error.message === 'string'
+      ? `provider_error:${value.error.message}`
+      : undefined
+  }
+  const first: unknown = value.choices[0]
+  if (!isRecord(first)) return undefined
+  return typeof first.finish_reason === 'string' ? first.finish_reason : undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

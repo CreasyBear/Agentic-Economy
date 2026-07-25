@@ -156,17 +156,62 @@ export function AeOwnerOfferingsList({
   )
 }
 
+export const OWNER_OFFERING_DRAFT_STORAGE_KEY = 'ae.ownerOfferingDraft.v1'
+
+export function readStoredOfferingDraft(businessId: string): OwnerOfferingEditorValue | undefined {
+  if (typeof window === 'undefined') return undefined
+  const raw = window.sessionStorage.getItem(`${OWNER_OFFERING_DRAFT_STORAGE_KEY}:${businessId}`)
+  if (raw === null) return undefined
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return undefined
+    return { ...emptyOwnerOfferingEditorValue, ...parsed }
+  } catch {
+    return undefined
+  }
+}
+
+export function writeStoredOfferingDraft(businessId: string, value: OwnerOfferingEditorValue): void {
+  if (typeof window === 'undefined') return
+  window.sessionStorage.setItem(`${OWNER_OFFERING_DRAFT_STORAGE_KEY}:${businessId}`, JSON.stringify(value))
+}
+
+export function clearStoredOfferingDraft(businessId: string): void {
+  if (typeof window === 'undefined') return
+  window.sessionStorage.removeItem(`${OWNER_OFFERING_DRAFT_STORAGE_KEY}:${businessId}`)
+}
+
+/**
+ * The single publish gate, shared by the editor and the save path. A draft may
+ * park with any subset of fields; publishing needs the facts a customer reads
+ * first. Returns the field to name and focus, or undefined to proceed.
+ */
+export function publishGateRefusal(
+  value: OwnerOfferingEditorValue,
+): Readonly<{ field: string; message: string }> | undefined {
+  if (value.status !== 'published') return undefined
+  if (value.name.trim().length === 0) return { field: 'name', message: 'Add a name before publishing this Offering.' }
+  if (value.category.trim().length === 0) return { field: 'category', message: 'Add a category before publishing this Offering.' }
+  if (value.summary.trim().length === 0) return { field: 'summary', message: 'Add a summary before publishing this Offering.' }
+  return undefined
+}
+
 export function AeOwnerOfferingEditor({
   initialValue,
   onSave,
+  seed,
+  draftKey,
 }: {
   initialValue: OwnerOfferingEditorValue
   onSave: (value: OwnerOfferingEditorValue) => Promise<OwnerOfferingSaveResult>
+  seed?: Readonly<{ label: string; value: Partial<OwnerOfferingEditorValue> }>
+  draftKey?: string
 }) {
   const [value, setValue] = useState(initialValue)
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<OwnerOfferingSaveResult | undefined>()
   const [dirty, setDirty] = useState(false)
+  const [draftRestored, setDraftRestored] = useState(false)
   const firstFieldRef = useRef<HTMLInputElement>(null)
   const liveRegionId = useId()
   const retryingPartialSave = result?.kind === 'refused' && result.retry !== undefined
@@ -179,6 +224,21 @@ export function AeOwnerOfferingEditor({
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
 
+  useEffect(() => {
+    if (draftKey === undefined || draftRestored) return
+    setDraftRestored(true)
+    const stored = readStoredOfferingDraft(draftKey)
+    if (stored === undefined) return
+    // A restored draft never overwrites the field the owner is typing in.
+    const focusedName = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.offeringField : undefined
+    setValue((current) => (focusedName === undefined ? stored : { ...stored, [focusedName]: current[focusedName as keyof OwnerOfferingEditorValue] }))
+  }, [draftKey, draftRestored])
+
+  useEffect(() => {
+    if (draftKey === undefined || !dirty) return
+    writeStoredOfferingDraft(draftKey, value)
+  }, [draftKey, dirty, value])
+
   function update(patch: Partial<OwnerOfferingEditorValue>) {
     setDirty(true)
     setValue((current) => ({ ...current, ...patch }))
@@ -188,7 +248,7 @@ export function AeOwnerOfferingEditor({
     event.preventDefault()
     if (pending) return
     // Requiredness belongs to the publish gate, not to saving a draft.
-    const missing = value.status === 'published' ? firstMissingPublishField(value) : undefined
+    const missing = publishGateRefusal(value)
     if (missing !== undefined) {
       setResult({ kind: 'invalid', field: missing.field, message: missing.message })
       firstFieldRef.current?.focus()
@@ -202,6 +262,7 @@ export function AeOwnerOfferingEditor({
       if (next.kind === 'saved') {
         setValue(next.value)
         setDirty(false)
+        if (draftKey !== undefined) clearStoredOfferingDraft(draftKey)
       } else if (next.kind === 'revision_conflict') {
         firstFieldRef.current?.focus()
       }
@@ -227,6 +288,18 @@ export function AeOwnerOfferingEditor({
         <EditorStep icon={<Link2Icon aria-hidden="true" />} label="Add ways to begin" detail="Phone, web, AE, or API" active={value.accessPaths.length > 0} />
         <EditorStep icon={value.status === 'published' ? <CheckCircle2Icon aria-hidden="true" /> : <CircleDashedIcon aria-hidden="true" />} label="Publish" detail={value.status === 'published' ? 'Visible on your page' : 'Choose when it goes live'} active={value.status === 'published'} />
       </ol>
+      {seed === undefined ? null : (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            label={`Start from ${seed.label}`}
+            variant="secondary"
+            isDisabled={editorDisabled}
+            onClick={() => update(seed.value)}
+          />
+          <Text type="supporting" color="secondary">Fills the details below. You can change every field.</Text>
+        </div>
+      )}
       <Card padding={5} className="grid gap-5">
         <div className="grid gap-1">
           <Text type="supporting" weight="semibold" color="secondary" display="block">1 · THE OFFERING</Text>
@@ -255,7 +328,7 @@ export function AeOwnerOfferingEditor({
 
       <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-canvas/95 py-4 backdrop-blur sm:flex-row sm:justify-end">
         <Button href="/owner/offerings" label="Back to Offerings" variant="secondary" className="min-h-11" />
-        <Button type="submit" label={retryingPartialSave ? 'Retry save' : 'Save Offering'} variant="primary" isDisabled={pending || !dirty} isLoading={pending} className="min-h-11" />
+        <Button type="submit" label={retryingPartialSave ? 'Retry save' : value.status === 'published' ? 'Publish Offering' : 'Save draft'} variant="primary" isDisabled={pending || !dirty} isLoading={pending} className="min-h-11" />
       </div>
     </form>
   )

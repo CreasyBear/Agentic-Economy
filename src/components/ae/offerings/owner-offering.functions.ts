@@ -9,6 +9,7 @@ import type {
   OfferingAccessPathRecord,
 } from '@/modules/catalog/public'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import { publishGateRefusal } from './AeOwnerOfferings'
 import type { OwnerOfferingEditorValue, OwnerOfferingSaveResult } from './AeOwnerOfferings'
 
 export type OwnerOfferingSupplyReadResult =
@@ -96,6 +97,9 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
   .validator((data) => editorSchema.parse(data))
   .handler(async ({ data, context }): Promise<OwnerOfferingSaveResult> => {
     const value = normalizeEditorValue(data.value)
+    // Requiredness is a publish gate, not a save gate. A draft may park empty.
+    const missing = publishGateRefusal(value)
+    if (missing !== undefined) return { kind: 'invalid', field: missing.field, message: missing.message }
     const offeringRef = value.offeringRef ?? `offering:${data.businessId}:${data.requestKey}`
     const facts = compactFacts(value)
     const first = value.offeringRef === undefined
@@ -146,7 +150,9 @@ async function write(
 
 function compactFacts(value: OwnerOfferingEditorValue): OfferingFacts {
   return {
-    name: value.name, category: value.category, summary: value.summary,
+    name: value.name.trim().length === 0 ? 'Untitled offering' : value.name,
+    category: value.category,
+    summary: value.summary,
     ...(value.serviceAreaSummary.trim() === '' ? {} : { serviceAreaSummary: value.serviceAreaSummary }),
     ...(value.availabilitySummary.trim() === '' ? {} : { availabilitySummary: value.availabilitySummary }),
     ...(value.pricingSummary.trim() === '' ? {} : { pricingSummary: value.pricingSummary }),

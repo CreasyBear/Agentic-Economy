@@ -39,7 +39,12 @@ export async function runJourneyCommand(args: readonly string[], options: CliOpt
     const detailPath = `/api/businesses/${encodeURIComponent(firstSlug)}`
     const detail = await callJson(options.baseUrl, detailPath)
     const business = readBusiness(detail.body)
-    const hasNextStep = business !== undefined && Array.isArray(business.services) && business.services.length > 0
+    // The search page names these "services"; the detail record names them
+    // "offerings". Same concept, two public vocabularies.
+    const services = business === undefined
+      ? []
+      : [business.services, business.offerings].find(Array.isArray) ?? []
+    const hasNextStep = services.length > 0
     steps.push({
       step: 'understand',
       path: detailPath,
