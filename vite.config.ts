@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url'
+
 import { sentryVitePlugin } from '@sentry/vite-plugin'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
@@ -30,7 +32,7 @@ function localDiscoveryPathCompatibility(): Plugin {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   server: {
     port: 3000,
     allowedHosts: ['jc-mbp.tail4d4766.ts.net'],
@@ -63,6 +65,19 @@ export default defineConfig({
   },
   resolve: {
     tsconfigPaths: true,
+    /*
+     * Astryx 0.1.5 ships a development build whose components import
+     * `react/jsx-dev-runtime`. In a production build React resolves that to
+     * `react-jsx-dev-runtime.production.js`, which exports no `jsxDEV`, so
+     * every render threw and every route 500'd. Point the specifier at a shim
+     * that forwards to the production factories.
+     *
+     * Build only: the dev server keeps React's real development runtime, so
+     * component stacks and warnings are unaffected.
+     */
+    alias: command === 'build'
+      ? { 'react/jsx-dev-runtime': fileURLToPath(new URL('./src/lib/compat/react-jsx-dev-runtime.production.ts', import.meta.url)) }
+      : {},
   },
   ssr: {
     // Astryx dist uses extensionless relative imports (bundler-style ESM);
@@ -100,4 +115,4 @@ export default defineConfig({
         ]
       : []),
   ],
-})
+}))
