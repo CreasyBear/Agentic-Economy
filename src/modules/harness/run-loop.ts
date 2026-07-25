@@ -3,6 +3,7 @@ import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime
 
 import {
   runHarnessTool,
+  type HarnessToolSurface,
   type RunHarnessToolInput,
   type RunHarnessToolOutcome,
 } from './action-tool'
@@ -36,7 +37,7 @@ export type HarnessRunLoopOptions = {
   timeoutMs?: number
   toolTimeoutMs?: number
   toolContext?: ActionContext
-  surface?: ActionSurface
+  surface?: HarnessToolSurface
   allowWrites?: boolean
   onEvent?: HarnessRunLoopEventSink
   throwOnError?: boolean
@@ -120,7 +121,7 @@ export class HarnessRunLoop {
   private readonly timeoutMs: number | undefined
   private readonly toolTimeoutMs: number | undefined
   private readonly toolContext: ActionContext | undefined
-  private readonly surface: ActionSurface | undefined
+  private readonly surface: HarnessToolSurface | undefined
   private readonly allowWrites: boolean | undefined
   private readonly onEvent: HarnessRunLoopEventSink | undefined
   private readonly shouldThrowOnError: boolean

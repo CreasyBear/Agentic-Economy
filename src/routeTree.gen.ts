@@ -41,6 +41,7 @@ import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
 import { Route as ApiV1RequestsRouteImport } from './routes/api.v1.requests'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
 import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
+import { Route as ApiStorefrontEnrichRouteImport } from './routes/api.storefront.enrich'
 import { Route as ApiSandboxCapabilityRouteImport } from './routes/api.sandbox.capability'
 import { Route as ApiRequestsRequestRefRouteImport } from './routes/api.requests.$requestRef'
 import { Route as ApiObservabilityFunnelRouteImport } from './routes/api.observability.funnel'
@@ -267,6 +268,11 @@ const ApiStorefrontImportDraftRoute =
     path: '/api/storefront/import-draft',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiStorefrontEnrichRoute = ApiStorefrontEnrichRouteImport.update({
+  id: '/api/storefront/enrich',
+  path: '/api/storefront/enrich',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSandboxCapabilityRoute = ApiSandboxCapabilityRouteImport.update({
   id: '/api/sandbox/capability',
   path: '/api/sandbox/capability',
@@ -693,6 +699,7 @@ export interface FileRoutesByFullPath {
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
+  '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
@@ -790,6 +797,7 @@ export interface FileRoutesByTo {
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
+  '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
@@ -889,6 +897,7 @@ export interface FileRoutesById {
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
+  '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
@@ -988,6 +997,7 @@ export interface FileRouteTypes {
     | '/api/observability/funnel'
     | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
+    | '/api/storefront/enrich'
     | '/api/storefront/import-draft'
     | '/api/v1/release'
     | '/api/v1/requests'
@@ -1085,6 +1095,7 @@ export interface FileRouteTypes {
     | '/api/observability/funnel'
     | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
+    | '/api/storefront/enrich'
     | '/api/storefront/import-draft'
     | '/api/v1/release'
     | '/api/v1/requests'
@@ -1183,6 +1194,7 @@ export interface FileRouteTypes {
     | '/api/observability/funnel'
     | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
+    | '/api/storefront/enrich'
     | '/api/storefront/import-draft'
     | '/api/v1/release'
     | '/api/v1/requests'
@@ -1262,6 +1274,7 @@ export interface RootRouteChildren {
   ApiNotificationResendWebhookRoute: typeof ApiNotificationResendWebhookRoute
   ApiObservabilityFunnelRoute: typeof ApiObservabilityFunnelRoute
   ApiSandboxCapabilityRoute: typeof ApiSandboxCapabilityRoute
+  ApiStorefrontEnrichRoute: typeof ApiStorefrontEnrichRoute
   ApiStorefrontImportDraftRoute: typeof ApiStorefrontImportDraftRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1RequestsRoute: typeof ApiV1RequestsRouteWithChildren
@@ -1494,6 +1507,13 @@ declare module '@tanstack/react-router' {
       path: '/api/storefront/import-draft'
       fullPath: '/api/storefront/import-draft'
       preLoaderRoute: typeof ApiStorefrontImportDraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/storefront/enrich': {
+      id: '/api/storefront/enrich'
+      path: '/api/storefront/enrich'
+      fullPath: '/api/storefront/enrich'
+      preLoaderRoute: typeof ApiStorefrontEnrichRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/sandbox/capability': {
@@ -2315,6 +2335,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiNotificationResendWebhookRoute: ApiNotificationResendWebhookRoute,
   ApiObservabilityFunnelRoute: ApiObservabilityFunnelRoute,
   ApiSandboxCapabilityRoute: ApiSandboxCapabilityRoute,
+  ApiStorefrontEnrichRoute: ApiStorefrontEnrichRoute,
   ApiStorefrontImportDraftRoute: ApiStorefrontImportDraftRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1RequestsRoute: ApiV1RequestsRouteWithChildren,

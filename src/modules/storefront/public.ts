@@ -1,4 +1,5 @@
 export {
+  StorefrontEnrichmentSourceLabel,
   StorefrontImportConfirmationState,
   StorefrontImportSourceLabel,
   confirmStorefrontImportDraft,
@@ -8,6 +9,7 @@ export {
 
 export type {
   StorefrontDraftConfirmationResult,
+  StorefrontDraftSourceLabel,
   StorefrontImportDraft,
   StorefrontImportedFact,
   StorefrontImportedFactField,
@@ -15,3 +17,12 @@ export type {
   StorefrontImportInput,
   StorefrontImportResult,
 } from './internal/import-draft'
+
+export { enrichBusinessFromWebSearch } from './internal/business-enrichment'
+
+export type {
+  BusinessEnrichmentFetch,
+  BusinessEnrichmentInput,
+  BusinessEnrichmentOptions,
+  BusinessEnrichmentResult,
+} from './internal/business-enrichment'

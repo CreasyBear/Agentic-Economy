@@ -24,12 +24,16 @@ export type ActionHarnessTool = HarnessToolDefinition<unknown, unknown> & {
   strictOutputSchemaViolation?: string
 }
 
+/** Surfaces the harness can run a tool on. Excludes 'cli' from ActionSurface: the harness
+ *  tool runner has no CLI transport. */
+export type HarnessToolSurface = 'ui' | 'http' | 'agentJson' | 'answerThread'
+
 export type RunHarnessToolInput = {
   tool: HarnessToolDefinition<unknown, unknown>
   input: unknown
   context?: ActionContext
   toolCallId?: string
-  surface?: 'ui' | 'http' | 'agentJson' | 'answerThread'
+  surface?: HarnessToolSurface
   allowWrites?: boolean
   timeoutMs?: number
   signal?: AbortSignal

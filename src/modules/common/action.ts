@@ -23,7 +23,7 @@ import { z } from 'zod'
  * bundler tree-shakes bare side-effect imports.
  */
 
-export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'answerThread'
+export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'answerThread' | 'cli'
 
 export type ActionSourceWriteRequest = {
   method: string
@@ -58,6 +58,12 @@ export type ActionContext = {
     attemptRef: string
     effectGeneration: number
   }>
+  /**
+   * Normalized dispatch seam that invoked this action. Attribution only; it is
+   * never write authority. A caller-supplied value carries no more weight than
+   * the transport it arrived on.
+   */
+  caller?: ActionSurface
   /** Admission context for writes; built from the calling surface's request. */
   sourceWriteRequest?: ActionSourceWriteRequest
   /** The raw incoming request, when available at an HTTP boundary. */

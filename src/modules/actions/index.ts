@@ -34,7 +34,7 @@ import {
   registrySearchAction,
 } from '@/modules/registry/registry.actions'
 import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/settings.actions'
-import { storefrontImportDraftAction } from '@/modules/storefront/storefront.actions'
+import { storefrontEnrichDraftAction, storefrontImportDraftAction } from '@/modules/storefront/storefront.actions'
 
 const actions: readonly AnyAction[] = [
   collectSuppliedCandidateQuoteAction,
@@ -55,6 +55,7 @@ const actions: readonly AnyAction[] = [
   registrySearchAction,
   registryDetailAction,
   storefrontImportDraftAction,
+  storefrontEnrichDraftAction,
   demandCaptureAction,
   updateOwnerNotificationPreferencesAction,
 ]

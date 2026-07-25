@@ -187,8 +187,10 @@ export function AeOwnerOfferingEditor({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
-    if (value.name.trim().length === 0 || value.category.trim().length === 0 || value.summary.trim().length === 0) {
-      setResult({ kind: 'invalid', field: 'name', message: 'Name, category, and summary are required.' })
+    // Requiredness belongs to the publish gate, not to saving a draft.
+    const missing = value.status === 'published' ? firstMissingPublishField(value) : undefined
+    if (missing !== undefined) {
+      setResult({ kind: 'invalid', field: missing.field, message: missing.message })
       firstFieldRef.current?.focus()
       return
     }

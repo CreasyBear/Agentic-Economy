@@ -5,7 +5,16 @@ import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget, type DnsRe
 import type { PublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 
 export const StorefrontImportSourceLabel = 'imported-from-website' as const
+export const StorefrontEnrichmentSourceLabel = 'gathered-from-web-search' as const
 export const StorefrontImportConfirmationState = 'unconfirmed' as const
+
+/**
+ * A drafted fact is either read from a business website or gathered by a web
+ * search. Both stay unconfirmed until the owner reviews them.
+ */
+export type StorefrontDraftSourceLabel =
+  | typeof StorefrontImportSourceLabel
+  | typeof StorefrontEnrichmentSourceLabel
 
 export type StorefrontImportInput = {
   websiteUrl: string
@@ -22,7 +31,7 @@ export type StorefrontImportedFact = {
   field: StorefrontImportedFactField
   label: string
   value: string
-  sourceLabel: typeof StorefrontImportSourceLabel
+  sourceLabel: StorefrontDraftSourceLabel
   confirmation: typeof StorefrontImportConfirmationState
   evidenceRef: string
 }
@@ -34,9 +43,9 @@ export type StorefrontImportDraft = {
   profile: PublicOwnerClaimFlowInput
   facts: readonly StorefrontImportedFact[]
   source: {
-    kind: 'website'
+    kind: 'website' | 'web_search'
     url: string
-    label: typeof StorefrontImportSourceLabel
+    label: StorefrontDraftSourceLabel
     confirmation: typeof StorefrontImportConfirmationState
   }
   boundaryStatement: string

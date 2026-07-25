@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useState, type FormEvent } from 'react'
-import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
-import { useServerFn } from '@tanstack/react-start'
+import { Outlet, createFileRoute, useLocation, useNavigate, useSearch } from '@tanstack/react-router'
+import { createServerFn, useServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
 import { ArrowRightIcon } from 'lucide-react'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Badge } from '@astryxdesign/core/Badge'
@@ -27,7 +28,15 @@ import {
   type ClaimDraftSnapshot,
   type TextClaimField,
 } from '@/modules/catalog/claim-draft'
-import { importStorefrontDraftServer } from '@/modules/storefront/storefront.functions'
+import { enrichBusinessDraftServer, importStorefrontDraftServer } from '@/modules/storefront/storefront.functions'
+import { readPublicOfferingRegistrySearchPage } from '@/modules/registry/registry.functions'
+import {
+  AeFindMyBusiness,
+  clearClaimEnrichIntent,
+  readClaimEnrichIntent,
+  writeClaimEnrichIntent,
+  type FoundBusiness,
+} from '@/components/ae/claim/AeFindMyBusiness'
 import { validatePublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 import type { PublicOwnerClaimField, PublicOwnerClaimFlowInput, PublicOwnerClaimValidationError } from '@/modules/catalog/public'
 import type { StorefrontImportDraft } from '@/modules/storefront/public'
@@ -192,6 +201,38 @@ function readClaimInput(form: HTMLFormElement, fallback: PublicOwnerClaimFlowInp
 
 const submitClaimServer = submitOwnerClaimServer
 const importDraftServer = importStorefrontDraftServer
+const enrichDraftServer = enrichBusinessDraftServer
+
+const claimBusinessSearchSchema = z.object({ query: z.string().trim().min(1).max(120) })
+
+export const searchClaimableBusinessesServer = createServerFn()
+  .validator((data) => claimBusinessSearchSchema.parse(data))
+  .handler(async ({ data }): Promise<readonly FoundBusiness[]> => {
+    const page = await readPublicOfferingRegistrySearchPage({ query: data.query, limit: 5 })
+    return page.items.map((item) => ({
+      slug: item.slug,
+      name: item.name,
+      category: item.category,
+      suburb: item.suburb,
+      stateTerritory: item.stateTerritory,
+    }))
+  })
+
+/** Prefill carried from the find step. It never overrides a stored draft. */
+const prefillFields = ['businessName', 'category', 'suburb', 'stateTerritory', 'requestedSlug'] as const
+
+type ClaimSearchParams = Partial<Record<(typeof prefillFields)[number], string>>
+
+function readClaimPrefill(search: Record<string, unknown>): ClaimSearchParams {
+  const prefill: ClaimSearchParams = {}
+  for (const field of prefillFields) {
+    const value = search[field]
+    if (typeof value !== 'string') continue
+    const trimmed = value.trim().slice(0, 120)
+    if (trimmed.length > 0) prefill[field] = trimmed
+  }
+  return prefill
+}
 
 const identityFields = [
   {
@@ -296,6 +337,7 @@ const firstRequestModeOptions = [
 ] as const
 
 export const Route = createFileRoute('/claim')({
+  validateSearch: (search: Record<string, unknown>): ClaimSearchParams => readClaimPrefill(search),
   head: () => ({
     meta: [
       { title: 'Get your business found | Agentic Economy' },
@@ -308,6 +350,8 @@ export const Route = createFileRoute('/claim')({
 
 function ClaimRoute() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const searchBusinesses = useServerFn(searchClaimableBusinessesServer)
 
   if (location.pathname !== '/claim') return <Outlet />
 
@@ -319,6 +363,15 @@ function ClaimRoute() {
         description="Show what your business does, where you work, and the supported next step using facts you supply."
         actions={<Button label="Sign in to start" variant="primary" href="/claim/form" />}
       />
+      <section aria-label="Find your business" className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-6 md:px-6">
+        <AeFindMyBusiness
+          search={async (query) => await searchBusinesses({ data: { query } })}
+          onBuildFromWeb={(businessName) => {
+            writeClaimEnrichIntent({ businessName })
+            void navigate({ to: '/claim/form' })
+          }}
+        />
+      </section>
       <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)] md:px-6">
         <section aria-labelledby="claim-before-you-start" className="grid content-start gap-4">
           <Text id="claim-before-you-start" type="large" weight="semibold" display="block">
@@ -354,10 +407,14 @@ export function ClaimFormRoute() {
   const [pending, setPending] = useState(false)
   const importDraft = useServerFn(importDraftServer)
   const [importWebsiteUrl, setImportWebsiteUrl] = useState('')
-  const [importAbn, setImportAbn] = useState('')
   const [importPending, setImportPending] = useState(false)
   const [importDraftResult, setImportDraftResult] = useState<StorefrontImportDraft | undefined>()
   const [importMessage, setImportMessage] = useState<string | undefined>()
+  const enrichDraft = useServerFn(enrichDraftServer)
+  const [enrichPending, setEnrichPending] = useState(false)
+  const [enrichMessage, setEnrichMessage] = useState<string | undefined>()
+  const [enrichAttempted, setEnrichAttempted] = useState(false)
+  const prefill = useSearch({ strict: false }) as ClaimSearchParams
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
   const firstRequestModeError = errorByField.get('firstRequestMode')
   const firstRequestModeInvalid = firstRequestModeError !== undefined
@@ -368,8 +425,50 @@ export function ClaimFormRoute() {
     }
 
     const storedDraft = readStoredClaimDraft()
-    dispatchDraft(storedDraft === undefined ? { type: 'hydrate' } : { type: 'hydrate', snapshot: storedDraft })
-  }, [draftState.phase, hydrated])
+    if (storedDraft !== undefined) {
+      dispatchDraft({ type: 'hydrate', snapshot: storedDraft })
+      // The owner's own saved work outranks anything carried in from the find step.
+      clearClaimEnrichIntent()
+      return
+    }
+
+    dispatchDraft({ type: 'hydrate' })
+    const prefilled = Object.entries(prefill).filter(([, entry]) => typeof entry === 'string' && entry.length > 0)
+    if (prefilled.length > 0) {
+      dispatchDraft({ type: 'import', value: { ...emptyPublicOwnerClaimInput, ...Object.fromEntries(prefilled) } })
+    }
+  }, [draftState.phase, hydrated, prefill])
+
+  useEffect(() => {
+    if (!hydrated || draftState.phase !== 'ready' || enrichAttempted) return
+
+    const intent = readClaimEnrichIntent()
+    if (intent === undefined) return
+
+    clearClaimEnrichIntent()
+    setEnrichAttempted(true)
+    setEnrichPending(true)
+    setEnrichMessage('Gathering your public details.')
+
+    void (async () => {
+      try {
+        const result = await enrichDraft({ data: intent })
+        if (result.kind === 'draft') {
+          setImportDraftResult(result.draft)
+          dispatchDraft({ type: 'import', value: result.draft.profile })
+          setEnrichMessage('Review the gathered details below. Nothing publishes until you confirm and submit.')
+          return
+        }
+        if (result.kind === 'unavailable') {
+          setEnrichMessage(undefined)
+          return
+        }
+        setEnrichMessage(result.reason)
+      } finally {
+        setEnrichPending(false)
+      }
+    })()
+  }, [draftState.phase, enrichAttempted, enrichDraft, hydrated])
 
   useEffect(() => {
     if (!hydrated) return
@@ -392,7 +491,6 @@ export function ClaimFormRoute() {
       const result = await importDraft({
         data: {
           websiteUrl: importWebsiteUrl,
-          ...(importAbn.trim().length === 0 ? {} : { abn: importAbn }),
         },
       })
       if (result.kind === 'ok') {
@@ -465,14 +563,19 @@ export function ClaimFormRoute() {
           <Text type="large" weight="semibold" display="block" className="text-on-accent">Free to claim. No lead fees.</Text>
           <Text display="block" className="text-on-accent/85">You own the page, choose what appears, and set how customers reach you.</Text>
         </Card>
+        {enrichMessage === undefined ? null : (
+          <Banner
+            status={enrichPending ? 'info' : importDraftResult === undefined ? 'warning' : 'success'}
+            title={enrichPending ? 'Gathering your public details' : importDraftResult === undefined ? 'We could not draft your page' : 'Details gathered for review'}
+            description={enrichMessage}
+          />
+        )}
         <ImportDraftSection
           websiteUrl={importWebsiteUrl}
-          abn={importAbn}
           draft={importDraftResult}
           message={importMessage}
           pending={importPending}
           onWebsiteUrlChange={setImportWebsiteUrl}
-          onAbnChange={setImportAbn}
           onImport={handleImportDraft}
         />
         <AeClaimFormSection title="Business identity" description="This is how customers recognize the business.">
@@ -601,31 +704,26 @@ export function ClaimFormRoute() {
 
 function ImportDraftSection({
   websiteUrl,
-  abn,
   draft,
   message,
   pending,
   onWebsiteUrlChange,
-  onAbnChange,
   onImport,
 }: {
   websiteUrl: string
-  abn: string
   draft: StorefrontImportDraft | undefined
   message: string | undefined
   pending: boolean
   onWebsiteUrlChange: (value: string) => void
-  onAbnChange: (value: string) => void
   onImport: () => void
 }) {
   const websiteDescriptionId = 'storefront-import-url-description'
-  const abnDescriptionId = 'storefront-import-abn-description'
   const inputClassName = 'min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50'
 
   return (
     <AeClaimFormSection
-      title="Start from a website"
-      description="Import a draft from a business website, then review and edit every public detail before publishing."
+      title="Fastest way: paste your website"
+      description="We read your site into a draft, then you review and edit every public detail below before publishing. Prefer to type it yourself? The fields below are always open."
     >
       <div className="grid gap-4">
         {message === undefined ? null : (
@@ -652,23 +750,6 @@ function ImportDraftSection({
               aria-describedby={websiteDescriptionId}
               className={inputClassName}
               onChange={(event) => onWebsiteUrlChange(event.currentTarget.value)}
-            />
-          </Field>
-          <Field
-            label="ABN (optional)"
-            inputID="storefront-import-abn"
-            description="Stored only in the draft review. It is not published by the import."
-            descriptionID={abnDescriptionId}
-          >
-            <input
-              id="storefront-import-abn"
-              name="storefront-import-abn"
-              aria-label="ABN (optional)"
-              value={abn}
-              disabled={pending}
-              aria-describedby={abnDescriptionId}
-              className={inputClassName}
-              onChange={(event) => onAbnChange(event.currentTarget.value)}
             />
           </Field>
         </FormLayout>
