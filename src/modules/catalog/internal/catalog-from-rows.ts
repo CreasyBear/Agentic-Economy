@@ -140,8 +140,8 @@ export type DiscoveryPublicCatalogProjection = Readonly<{
         publicChannel: PublicFirstRequestDisclosure['publicChannel']
         noContactReason?: string
       }>
-      callable: false
-      paymentRequired: false
+      callable: boolean
+      paymentRequired: boolean
       reason?: string
     }>[]
     sourceHash: string

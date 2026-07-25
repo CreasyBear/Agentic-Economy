@@ -681,8 +681,11 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('The registered steps can return the stated result. AE has not independently verified every detail in your Request.')).toBeTruthy()
     expect(screen.getByText('2 information recipients')).toBeTruthy()
     expect(screen.getByText('1 irreversible effect')).toBeTruthy()
-    expect(screen.getByText(/Fields: Request \(public\)/).closest('details')?.hasAttribute('open')).toBe(false)
-    expect(screen.getByText('City Ledger will follow step 1.').closest('details')?.hasAttribute('open')).toBe(false)
+    // Disclosure is one idiom now: an Astryx Collapsible whose trigger carries
+    // the expanded state, rather than a native <details> beside chevron rows.
+    for (const trigger of ['Important details', 'How this would work']) {
+      expect(screen.getByRole('button', { name: trigger }).getAttribute('aria-expanded')).toBe('false')
+    }
     fireEvent.click(screen.getByText('Important details'))
     expect(screen.getByText(/Fields: Request \(public\)/)).toBeTruthy()
     expect(screen.getByText(/Information would be shared/)).toBeTruthy()
@@ -690,11 +693,11 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('The businesses do not publish a cancellation path for this option.')).toBeTruthy()
     fireEvent.click(screen.getByText('How this would work'))
     expect(screen.getByText('City Ledger will follow step 1.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Review Prepare a governed result' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Review this option' })).toBeTruthy()
     expect(screen.getByText(/Nothing has been authorized or shared/)).toBeTruthy()
     expect(screen.queryByText(/capability|binding|transport|graph node/i)).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review Prepare a governed result' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review this option' }))
     expect(await screen.findByRole('heading', { name: 'Review before you confirm' })).toBeTruthy()
     expect(screen.getByText('Prepare a governed result.')).toBeTruthy()
     expect(screen.getByText('Maximum $14.00')).toBeTruthy()
@@ -702,17 +705,21 @@ describe('customer Request workspace', () => {
     expect(screen.getByText(/cannot be reversed automatically/)).toBeTruthy()
     expect(screen.getByText('The businesses do not publish a cancellation path for this option.')).toBeTruthy()
     expect(screen.getByText('Choice code quote:opaque')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'What confirming means' })).toBeTruthy()
-    expect(screen.getByText(
+    // What confirming means now sits directly under the primary action instead
+    // of behind its own heading, so the meaning travels with the decision.
+    const confirmMeaning = screen.getByText(
       'Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.',
-    )).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Confirm this choice' })).toBeTruthy()
+    )
+    expect(confirmMeaning).toBeTruthy()
+    const confirmButton = screen.getByRole('button', { name: 'Confirm this choice' })
+    expect(confirmButton).toBeTruthy()
+    expect(confirmButton.parentElement?.contains(confirmMeaning)).toBe(true)
     expect(screen.getByRole('button', { name: 'Change this Request' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Decline this choice' })).toBeTruthy()
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByRole('button', { name: 'Decline this choice' }))
-    expect(await screen.findByRole('button', { name: 'Review Prepare a governed result' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Review this option' })).toBeTruthy()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -770,7 +777,7 @@ describe('customer Request workspace', () => {
       target: { value: 'Find an option before Friday.' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Review Result from route:unavailable' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Review this option' }))
     expect(await screen.findByRole('heading', { name: 'Review before you confirm' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Why does this option not work?'), {
       target: { value: 'It cannot meet the Friday deadline.' },
@@ -898,7 +905,7 @@ describe('customer Request workspace', () => {
 
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Prepare a result' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Review Result from route:confirm' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Review this option' }))
 
     expect(await screen.findByRole('heading', { name: 'Review before you confirm' })).toBeTruthy()
     expect(screen.getByText('Choice code quote:route:confirm')).toBeTruthy()

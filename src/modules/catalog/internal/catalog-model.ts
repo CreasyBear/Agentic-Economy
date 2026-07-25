@@ -105,8 +105,8 @@ export type ServiceCapabilityRecord = {
   kind: CapabilityKind
   status: ServiceCapabilityStatus
   firstRequest: PublicFirstRequestDisclosure
-  callable: false
-  paymentRequired: false
+  callable: boolean
+  paymentRequired: boolean
   reason?: string
   sourceHash: SourceHash
   createdAt: number
@@ -130,8 +130,8 @@ export type ServiceCapabilityContract = {
   kind: CapabilityKind
   status: ServiceCapabilityStatus
   firstRequest: PublicFirstRequestDisclosure
-  callable: false
-  paymentRequired: false
+  callable: boolean
+  paymentRequired: boolean
   reason?: string
   sourceHash: SourceHash
 }

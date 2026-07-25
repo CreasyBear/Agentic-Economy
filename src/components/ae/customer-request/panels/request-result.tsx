@@ -37,7 +37,7 @@ export function RequestResult({ state, compare, reviewRoute, leaveRouteReview, r
     return <RouteConfirmationCard projection={state.projection} turns={turns} start={() => actOnRoute(state.projection, 'run')} edit={() => edit(state.projection)} restart={restart} />
   }
   if (state.kind === 'reviewing') {
-    return <RouteReviewCard projection={state.projection} routeRef={state.routeRef} turns={turns} confirm={() => confirmRoute(state.projection, state.routeRef)} reportUnavailable={() => reportRouteUnavailable(state.projection, state.routeRef)} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} decline={() => leaveRouteReview(state.projection)} edit={() => edit(state.projection)} restart={restart} />
+    return <RouteReviewCard projection={state.projection} routeRef={state.routeRef} turns={turns} confirm={() => confirmRoute(state.projection, state.routeRef)} reportUnavailable={() => reportRouteUnavailable(state.projection, state.routeRef)} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} decline={() => leaveRouteReview(state.projection)} edit={() => edit(state.projection)} />
   }
   if (state.kind === 'request' && state.projection.decision !== undefined) {
     return <RouteDecisionCard projection={state.projection} turns={turns} review={(routeRef) => reviewRoute(state.projection, routeRef)} check={() => compare(state.projection)} edit={() => edit(state.projection)} restart={restart} />

@@ -110,7 +110,7 @@ describe('Offering market surfaces', () => {
     expect(screen.getByLabelText('Endpoint URL')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Data query updated' } })
-    const save = screen.getByRole('button', { name: 'Save Offering' })
+    const save = screen.getByRole('button', { name: 'Save draft' })
     fireEvent.click(save)
     fireEvent.click(save)
     expect(onSave).toHaveBeenCalledTimes(1)
@@ -137,7 +137,7 @@ describe('Offering market surfaces', () => {
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Online service' } })
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'Services' } })
     fireEvent.change(screen.getByLabelText('Summary'), { target: { value: 'Request the service online.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save Offering' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       accessPaths: [expect.objectContaining({
@@ -159,7 +159,7 @@ describe('Offering market surfaces', () => {
     render(<AeOwnerOfferingEditor initialValue={value} onSave={onSave} />)
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Data query updated' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save Offering' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Retry save' })).toBeTruthy())
 
     expect(screen.getByLabelText('Name')).toHaveProperty('disabled', true)

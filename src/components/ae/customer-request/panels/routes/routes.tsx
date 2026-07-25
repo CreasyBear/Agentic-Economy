@@ -2,11 +2,16 @@ import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
+import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
 import { CustomerRequestRepeatPermissionControl } from '../../CustomerRequestRepeatPermissionControl'
 import type { ConversationTurn, CustomerRoute } from '../../workspace-types'
 import {
   Conversation,
+  Fact,
+  FactBlock,
+  FactValue,
   WorkingUnderstanding,
   RecoveryActions,
   activityResponsibility,
@@ -18,6 +23,14 @@ import {
   reversibilityLabel,
   uncertaintyLabel,
 } from '../shared'
+import {
+  CancellationDetail,
+  EffectsDetail,
+  FullRouteDisclosure,
+  RouteDisclosureDetails,
+  SharingDetail,
+  SharingSummary,
+} from './route-disclosure'
 import { RequestRecordLinks } from '../records'
 
 export function RouteDecisionCard({ projection, turns, review, check, edit, restart }: {
@@ -40,10 +53,13 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
     <header className="grid gap-2">
       <Text className="text-sm font-semibold text-accent">Ways forward</Text>
       <Heading level={2} className="text-3xl">{decision.outcome.summary}</Heading>
-      <Text color="secondary">{decision.outcome.kind === 'routes_expired'
+      <Text color="secondary" className="block">{decision.outcome.kind === 'routes_expired'
         ? 'Your Request is preserved. Check again to rebuild the available ways forward from current business information.'
         : 'Compare who is involved, the maximum cost, what would be shared, and how problems would be handled.'}</Text>
-      <Text color="secondary">{decision.comparison.summary}</Text>
+      {/* The comparison summary restates the count in the heading and adds the
+          not-a-recommendation boundary. Keep the exact string, demote the weight
+          so it reads as a qualifier instead of a second headline. */}
+      <Text type="supporting" color="secondary" className="block">{decision.comparison.summary}</Text>
     </header>
     {recommendation === undefined ? null : <Card padding={4}>
       <Text weight="semibold">Why AE recommends this way</Text>
@@ -92,34 +108,32 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
             </Text>}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Text type="supporting" weight="semibold">What it could cost</Text>
-              <Text type="large" weight="semibold">
+            <Fact label="What it could cost">
+              <FactValue tone={route.maximumTotalCost.kind === 'known' ? 'material' : 'unresolved'}>
                 {route.maximumTotalCost.kind === 'known'
                   ? `Maximum ${formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor)}`
                   : 'Price needs confirmation'}
-              </Text>
-            </div>
-            <div>
-              <Text type="supporting" weight="semibold">Available until</Text>
-              <Text color="secondary">{formatOptionTime(route.validUntil)}</Text>
-            </div>
+              </FactValue>
+            </Fact>
+            <Fact label="Available until">
+              <FactValue>{formatOptionTime(route.validUntil)}</FactValue>
+            </Fact>
           </div>
-          <div className="grid gap-2">
-            <Text weight="semibold">Why it fits</Text>
+          <FactBlock label="Why it fits">
             <Text color="secondary">{route.comparison.hardConstraints === 'satisfied'
               ? 'It covers the requested result and every constraint AE could verify.'
               : 'The registered steps can return the stated result. AE has not independently verified every detail in your Request.'}</Text>
-          </div>
-          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-secondary">
-            <span>{route.dataUse.recipientCount} information {route.dataUse.recipientCount === 1 ? 'recipient' : 'recipients'}</span>
-            <span>{route.comparison.irreversibleEffectCount} irreversible {route.comparison.irreversibleEffectCount === 1 ? 'effect' : 'effects'}</span>
-            <span>{route.comparison.recovery === 'retry_safe' ? 'Safe retry after confirmed failure' : 'Check required before retry'}</span>
-            <span>{route.comparison.duration === 'not_declared' ? 'Timing not declared' : route.comparison.duration}</span>
+          </FactBlock>
+          {/* Consequence before housekeeping: what leaves and what cannot be undone
+              lead, and the routine declarations follow in the same row. */}
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            <span className="font-semibold text-primary">{route.dataUse.recipientCount} information {route.dataUse.recipientCount === 1 ? 'recipient' : 'recipients'}</span>
+            <span className="font-semibold text-primary">{route.comparison.irreversibleEffectCount} irreversible {route.comparison.irreversibleEffectCount === 1 ? 'effect' : 'effects'}</span>
+            <span className="text-secondary">{route.comparison.recovery === 'retry_safe' ? 'Safe retry after confirmed failure' : 'Check required before retry'}</span>
+            <span className="text-secondary">{route.comparison.duration === 'not_declared' ? 'Timing not declared' : route.comparison.duration}</span>
           </div>
           <RouteImportantDetails route={route} />
-          <details className="rounded-md border border-border bg-surface p-4">
-            <summary className="min-h-11 cursor-pointer font-semibold">How this would work</summary>
+          <Collapsible defaultIsOpen={false} trigger={<span className="text-base font-semibold">How this would work</span>}>
             <ol className="mt-3 grid gap-3 text-sm text-secondary">
               {(route.steps ?? []).map((step) => <li key={step.step}>
                 <strong>Step {step.step}: {step.business.name}.</strong>{' '}
@@ -128,27 +142,32 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
                   : `${step.business.name} will follow ${step.after.length === 1 ? `step ${step.after[0]}` : `steps ${step.after.join(', ')}`}.`}
               </li>)}
             </ol>
-          </details>
-          {route.availability === 'current' && route.maximumTotalCost.kind === 'known'
-            ? <Button label={`Review ${route.result.summary.replace(/[.!?]+$/u, '')}`} variant="primary" clickAction={() => review(route.routeRef)} />
-            : <Button label="Check current options" variant="secondary" clickAction={() => void check()} />}
+          </Collapsible>
+          {/* Natural width so the action reads as a control, not a banner. */}
+          <div className="justify-self-start">
+            {route.availability === 'current' && route.maximumTotalCost.kind === 'known'
+              ? <Button label="Review this option" variant="primary" clickAction={() => review(route.routeRef)} />
+              : <Button label="Check current options" variant="secondary" clickAction={() => void check()} />}
+          </div>
         </article>
       </Card>)}
     </div>
     <Card padding={4}>
-      <Text weight="semibold">Nothing has been authorized or shared.</Text>
-      <Text color="secondary" className="mt-1">A separate confirmation step is required before AE can create authority for any action.</Text>
+      <Text weight="semibold" className="block">Nothing has been authorized or shared.</Text>
+      <Text color="secondary" className="mt-1 block">A separate confirmation step is required before AE can create authority for any action.</Text>
+      {/* The sandbox boundary belongs where multi-business examples actually
+          appear, not stacked in front of the input on the landing surface. */}
+      <Text type="supporting" color="secondary" className="mt-2 block">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.sandboxBoundary}</Text>
     </Card>
     <RecoveryActions edit={edit} restart={restart} />
   </section>
 }
 function RouteImportantDetails({ route }: { route: CustomerRoute }) {
-  return <details className="rounded-md border border-border bg-surface p-4">
-    <summary className="min-h-11 cursor-pointer font-semibold">Important details</summary>
+  return <Collapsible defaultIsOpen={false} trigger={<span className="text-base font-semibold">Important details</span>}>
     <div className="mt-4 grid gap-5">
-      <RouteDisclosureDetails route={route} review={false} />
+      <RouteDisclosureDetails route={route} />
     </div>
-  </details>
+  </Collapsible>
 }
 function repeatPermissionEligible(route: CustomerRoute): boolean {
   return route.availability === 'current'
@@ -156,7 +175,12 @@ function repeatPermissionEligible(route: CustomerRoute): boolean {
     && route.effects.length > 0
     && route.effects.every((effect) => effect.kind === 'information_shared')
 }
-export function RouteReviewCard({ projection, routeRef, turns, confirm, reportUnavailable, routeFeedback, setRouteFeedback, decline, edit, restart }: {
+/**
+ * The confirm gate. Restarting is deliberately not offered here: it destroys
+ * the Request, which is a different task from deciding this choice. Declining
+ * returns to the decision surface, where restarting stays one click away.
+ */
+export function RouteReviewCard({ projection, routeRef, turns, confirm, reportUnavailable, routeFeedback, setRouteFeedback, decline, edit }: {
   projection: CustomerRequestView
   routeRef: string
   turns: readonly ConversationTurn[]
@@ -166,7 +190,6 @@ export function RouteReviewCard({ projection, routeRef, turns, confirm, reportUn
   setRouteFeedback: (feedback: string) => void
   decline: () => void
   edit: () => void
-  restart: () => void
 }) {
   const route = projection.decision?.routes.find((candidate) => candidate.routeRef === routeRef)
   const actions = projection.decision?.actions
@@ -183,128 +206,92 @@ export function RouteReviewCard({ projection, routeRef, turns, confirm, reportUn
     <header className="grid gap-2">
       <Text className="text-sm font-semibold text-accent">Your choice</Text>
       <Heading level={2} className="text-3xl">Review before you confirm</Heading>
-      <Text color="secondary">Check the result, maximum cost, information sharing, effects, expiry, and ways out before you decide.</Text>
     </header>
     <Card padding={5}>
       <div className="grid gap-6">
+        {/* Immediate: the four facts a person needs to decide, nothing else. */}
         <div className="grid gap-1">
           <Heading level={3}>{route.result.summary}</Heading>
           <Text color="secondary">Through {businessList(route.businesses.map(({ name }) => name))}</Text>
           {route.result.deliverables.length === 0 ? null : <Text type="supporting" color="secondary">Expected result: {route.result.deliverables.join(', ')}</Text>}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Text type="supporting" weight="semibold">Maximum cost</Text>
-            <Text type="large" weight="semibold">{route.maximumTotalCost.kind === 'known'
-              ? `Maximum ${formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor)}`
-              : 'Price needs confirmation'}</Text>
-          </div>
-          <div>
-            <Text type="supporting" weight="semibold">Confirm before</Text>
-            <Text color="secondary">{formatOptionTime(route.validUntil)}</Text>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Fact label="Cost">
+            {/* The qualifier rides on the value: a price ceiling must never read
+                as a fixed price, including when the value is read on its own. */}
+            <FactValue tone={route.maximumTotalCost.kind === 'known' ? 'material' : 'unresolved'}>
+              {route.maximumTotalCost.kind === 'known'
+                ? `Maximum ${formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor)}`
+                : 'Price needs confirmation'}
+            </FactValue>
+          </Fact>
+          <Fact label="Confirm before">
+            <FactValue>{formatOptionTime(route.validUntil)}</FactValue>
+          </Fact>
+          <Fact label="Shared">
+            <SharingSummary route={route} />
+          </Fact>
+        </div>
+
+        {/* The one decision. Confirming is the dominant action on this surface.
+            It sits at its natural width so it reads as a control, not a banner. */}
+        <div className="grid justify-items-start gap-3 border-t border-border pt-6">
+          <Button label="Confirm this choice" variant="primary" clickAction={confirm} />
+          <Text type="supporting" color="secondary" className="block">
+            Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.
+          </Text>
+          <div className="flex flex-wrap items-center gap-4">
+            {repeatPermissionEligible(route)
+              ? <CustomerRequestRepeatPermissionControl projection={projection} route={route} />
+              : null}
+            <Button label="Change this Request" variant="ghost" clickAction={edit} />
+            <Button label="Decline this choice" variant="ghost" clickAction={decline} />
           </div>
         </div>
-        <RouteDisclosureDetails route={route} review />
-        <Text type="supporting" color="secondary">Choice code {route.quoteDigest}</Text>
-        <div className="grid gap-3 rounded-md border border-border bg-surface p-4">
-          <Heading level={3}>What confirming means</Heading>
-          <Text color="secondary">Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.</Text>
+
+        {/* Expanded: what confirming commits you to. */}
+        <div className="grid gap-5 border-t border-border pt-6">
+          <SharingDetail route={route} emptyLabel="No information would be shared." />
+          <EffectsDetail route={route} label="What starting could change" />
+          <CancellationDetail route={route} />
           <Text type="supporting" color="secondary">{actions.start.summary}</Text>
         </div>
-        <div className="grid gap-3 rounded-md border border-border bg-surface p-4">
-          <Heading level={3}>This option does not work?</Heading>
-          <Text color="secondary">Tell AE what makes this exact option unsuitable. AE will keep this Request and look for a different current option. Nothing will be confirmed or shared.</Text>
-          <label htmlFor="route-feedback" className="text-sm font-semibold">Why does this option not work?</label>
-          <textarea
-            id="route-feedback"
-            value={routeFeedback}
-            onChange={(event) => setRouteFeedback(event.target.value)}
-            rows={3}
-            maxLength={2_000}
-            required
-            className="min-h-20 resize-y rounded-md border border-border bg-card px-3 py-2 text-primary outline-none focus:ring-2 focus:ring-accent"
-          />
-          <Button
-            label="Find another option"
-            variant="secondary"
-            isDisabled={routeFeedback.trim().length === 0}
-            clickAction={() => void reportUnavailable()}
-          />
+
+        {/* On demand: everything else AE registered about this route. */}
+        <div className="border-t border-border pt-6">
+          <FullRouteDisclosure route={route} subject="choice" />
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Button label="Confirm this choice" variant="primary" clickAction={confirm} />
-          {repeatPermissionEligible(route)
-            ? <CustomerRequestRepeatPermissionControl projection={projection} route={route} />
-            : null}
-          <Button label="Change this Request" variant="secondary" clickAction={edit} />
-          <Button label="Decline this choice" variant="secondary" clickAction={decline} />
-          <Button label="Start a new Request" variant="ghost" clickAction={restart} />
+
+        {/* On demand: the escape hatch, closed until asked for. */}
+        <div className="border-t border-border pt-6">
+          <Collapsible
+            defaultIsOpen={false}
+            trigger={<span className="text-base font-semibold">This option does not work?</span>}
+          >
+            <div className="grid gap-3 pt-4">
+              <Text color="secondary">Tell AE what makes this exact option unsuitable. AE will keep this Request and look for a different current option. Nothing will be confirmed or shared.</Text>
+              <label htmlFor="route-feedback" className="text-sm font-semibold">Why does this option not work?</label>
+              <textarea
+                id="route-feedback"
+                value={routeFeedback}
+                onChange={(event) => setRouteFeedback(event.target.value)}
+                rows={3}
+                maxLength={2_000}
+                required
+                className="min-h-20 resize-y rounded-md border border-border bg-card px-3 py-2 text-primary outline-none focus:ring-2 focus:ring-accent"
+              />
+              <Button
+                label="Find another option"
+                variant="secondary"
+                isDisabled={routeFeedback.trim().length === 0}
+                clickAction={() => void reportUnavailable()}
+              />
+            </div>
+          </Collapsible>
         </div>
       </div>
     </Card>
   </section>
-}
-function RouteDisclosureDetails({ route, review }: { route: CustomerRoute; review: boolean }) {
-  return <>
-    <div className="grid gap-2">
-      <Text weight="semibold">What would be shared</Text>
-      {route.dataUse.recipients.length === 0
-        ? <Text color="secondary">{review ? 'No information would be shared.' : 'No information sharing is declared for this way forward.'}</Text>
-        : <ul className="grid gap-2 text-sm text-secondary">
-            {route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>
-              <strong>{recipient.name}</strong> — {recipient.purposes.map(readableLabel).join(', ')}. Fields: {recipient.fields.map(({ label, classification }) => `${label} (${classification})`).join(', ')}
-            </li>)}
-          </ul>}
-    </div>
-    <div className="grid gap-2">
-      <Text weight="semibold">{review ? 'What starting could change' : 'What this way could change'}</Text>
-      {route.effects.length === 0
-        ? <Text color="secondary">No external change is declared.</Text>
-        : <ul className="grid gap-1 text-sm text-secondary">
-            {route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>
-              {effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}
-            </li>)}
-          </ul>}
-    </div>
-    <div className="grid gap-2">
-      <Text weight="semibold">What remains uncertain</Text>
-      <Text color="secondary">{route.uncertainty.length === 0
-        ? `No uncertainty is declared for this ${review ? 'choice' : 'way forward'}.`
-        : route.uncertainty.map(uncertaintyLabel).join(', ')}</Text>
-      <Text type="supporting" color="secondary">{route.comparison.duration === 'not_declared'
-        ? 'Completion timing has not been declared.'
-        : route.comparison.duration}</Text>
-    </div>
-    <div className="grid gap-2">
-      <Text weight="semibold">Commercial relationships</Text>
-      <Text color="secondary">{route.comparison.commercialInfluence.status === 'unknown'
-        ? 'AE does not have enough commercial relationship evidence to recommend this option.'
-        : route.comparison.commercialInfluence.status === 'none'
-          ? 'No registered commercial relationship affects this option.'
-          : route.comparison.commercialInfluence.summaries.join(' ')}</Text>
-    </div>
-    <div className="grid gap-2">
-      <Text weight="semibold">If something goes wrong</Text>
-      <ul className="grid gap-1 text-sm text-secondary">
-        {route.recovery.map((recovery) => <li key={recovery.step}>
-          Step {recovery.step}, {recovery.businessName}: {recovery.posture === 'retry_safe'
-            ? 'AE can safely retry after a confirmed failure.'
-            : 'AE must check what happened before any retry.'}
-        </li>)}
-      </ul>
-      <Text type="supporting" color="secondary">{route.fallback.available
-        ? `${route.fallback.alternatives.length} alternative ${route.fallback.alternatives.length === 1 ? 'way is' : 'ways are'} available before confirmation.`
-        : 'No alternative way is currently declared.'}</Text>
-    </div>
-    <div className="grid gap-2">
-      <Text weight="semibold">Cancellation</Text>
-      <Text color="secondary">{route.cancellation.summary}</Text>
-    </div>
-    <div className="grid gap-2">
-      <Text weight="semibold">Evidence expected</Text>
-      <Text color="secondary">{route.evidence.map(({ label }) => label).join(', ') || 'No completion evidence is declared.'}</Text>
-    </div>
-  </>
 }
 export function RouteConfirmationCard({ projection, turns, start, edit, restart }: {
   projection: CustomerRequestView

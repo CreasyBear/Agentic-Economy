@@ -10,6 +10,7 @@ import {
   type ReplacementCommandIdentity,
 } from '@/modules/customer-request/replacement-command-key'
 import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
+import { AeStarterPrompts, type StarterPrompt } from './AeStarterPrompts'
 import { RequestResult } from './panels'
 import { customerClarificationPrompt } from './panels/shared'
 import type {
@@ -23,9 +24,10 @@ const ACTIVE_REQUEST_STORAGE_KEY = 'ae.customer-request.active:v1'
 
 export type AeCustomerRequestWorkspaceProps = Readonly<{
   initialNeed?: string
+  starterPrompts?: readonly StarterPrompt[]
 }>
 
-export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerRequestWorkspaceProps) {
+export function AeCustomerRequestWorkspace({ initialNeed = '', starterPrompts = [] }: AeCustomerRequestWorkspaceProps) {
   const [need, setNeed] = useState(initialNeed)
   const [answer, setAnswer] = useState('')
   const [state, setState] = useState<WorkspaceState>({ kind: 'idle' })
@@ -352,15 +354,9 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
 
   return (
     <main className="mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14">
-      {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-3 text-center">
-        <Text className="text-sm font-semibold text-accent">Ask AE</Text>
+      {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-4 text-center">
         <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">What do you need to make happen?</Heading>
-        <Text type="large" color="secondary">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation}</Text>
-        <Text color="secondary">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.examples}</Text>
-        <Text type="supporting" color="secondary">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.support}</Text>
-        <Text type="supporting" color="secondary">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.sandboxBoundary}</Text>
-        <Text type="supporting" color="secondary">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority}</Text>
-        <Link href="/for-agents" className="mx-auto min-h-11 py-2 font-semibold">Use AE with your AI</Link>
+        <Text type="large" color="secondary" className="block">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation}</Text>
       </header> : null}
 
       {state.kind === 'request' && state.projection.recovery?.state === 'restored'
@@ -374,10 +370,13 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
       {state.kind === 'idle' || state.kind === 'error' ? <section className="mx-auto grid w-full max-w-3xl gap-3" aria-label="Start a request">
         <form onSubmit={(event) => { event.preventDefault(); void submit() }} className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-low sm:flex-row">
           <label className="sr-only" htmlFor="customer-need">What are you looking for?</label>
-          <textarea id="customer-need" value={need} onChange={(event) => setNeed(event.target.value)} rows={2} maxLength={2_000} required placeholder="Describe the outcome, constraints, and timing you already know" className="min-h-16 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-lg text-primary outline-none focus:ring-2 focus:ring-accent" />
-          <button type="submit" disabled={need.trim().length === 0} className="min-h-11 self-end rounded-md bg-accent px-5 font-semibold text-on-accent disabled:opacity-50">Start my Request</button>
+          <textarea id="customer-need" value={need} onChange={(event) => setNeed(event.target.value)} rows={2} maxLength={2_000} required placeholder="A burst pipe in Parramatta, someone today, under $500" className="min-h-16 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-lg text-primary outline-none focus:ring-2 focus:ring-accent" />
+          {/* Disabled stays legible: ghosting a filled accent button at 0.4
+              opacity composites it to roughly 1.4:1 and reads as broken. */}
+          <button type="submit" disabled={need.trim().length === 0} className="min-h-11 self-end rounded-md px-5 font-semibold transition-[background-color,color] duration-150 enabled:bg-accent enabled:text-on-accent enabled:hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-surface disabled:text-secondary">Start my Request</button>
         </form>
-        <Text type="supporting" color="secondary" className="text-center">No budget or full specification required. Keep contact, payment, and account details until AE asks for them.</Text>
+        <Text type="supporting" color="secondary" className="block text-center">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.examples} {CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority}</Text>
+        <AeStarterPrompts prompts={starterPrompts} onChoose={setNeed} />
         {editingRevision !== undefined ? <Text type="supporting" color="secondary">Editing revision {editingRevision} of this Request.</Text> : null}
         {state.kind === 'error' ? <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} /> : null}
       </section> : <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} />}

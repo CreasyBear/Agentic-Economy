@@ -67,7 +67,7 @@ function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; thre
         facts={[
           { term: 'Location', description: [source.suburb, source.stateTerritory].filter(Boolean).join(', ') || 'Location not published' },
           { term: 'Service area', description: area || 'Service area not published here' },
-          { term: 'Reply posture', description: NO_REPLY_HISTORY },
+          { term: 'Replies', description: NO_REPLY_HISTORY },
           { term: 'Hours', description: source.hoursLabel },
           ...(source.freshnessLabel !== undefined && source.freshnessLabel.length > 0
             ? [{ term: 'Updated', description: source.freshnessLabel }]
@@ -157,7 +157,7 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
       <ProviderFacts facts={[
         { term: 'Ways to get started', description: accessSummary.length === 0 ? 'No contact or endpoint published yet' : accessSummary.join(' · ') },
         { term: 'Phone', description: phone },
-        { term: 'Reply posture', description: NO_REPLY_HISTORY },
+        { term: 'Replies', description: NO_REPLY_HISTORY },
       ]} />
       <div className="mt-auto grid grid-cols-1 gap-2 border-t border-border pt-4 sm:grid-cols-2" aria-label="Research actions">
         {item.publishedPhone === undefined ? null : (
@@ -168,11 +168,14 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
             className="min-h-11 w-full"
           />
         )}
+        {/* A constant label: the business name is already the card heading, and
+            interpolating it here truncates to "View Joondalup Ra…" in a grid. */}
         <Button
-          label={`View ${item.name}`}
+          label="View business"
           variant="secondary"
           href={`/${item.slug}?from=registry`}
           className="min-h-11 w-full"
+          aria-label={`View ${item.name}`}
           {...(onView === undefined ? {} : { onClick: onView })}
         />
         <Button
@@ -218,13 +221,18 @@ function AeProviderCardCapability({ service }: { service: PublicRouteServiceCont
   )
 }
 
+/**
+ * Facts read as content, not containers. Boxing each fact inside a Card gives
+ * every listing four nested cards and makes a simple listing look like a form,
+ * so separation comes from a rule and whitespace instead.
+ */
 function ProviderFacts({ facts }: { facts: Array<{ term: string; description: string }> }) {
   return (
-    <dl className="grid gap-3 sm:grid-cols-2">
+    <dl className="grid gap-x-6 gap-y-3 border-t border-border pt-3 sm:grid-cols-2">
       {facts.map((fact) => (
-        <div key={fact.term} className="rounded-md border border-border bg-surface p-3">
-          <dt><Text type="supporting" color="secondary" weight="medium">{fact.term}</Text></dt>
-          <dd className="mt-1"><Text type="supporting" color="primary">{fact.description}</Text></dd>
+        <div key={fact.term}>
+          <dt><Text type="supporting" color="secondary" display="block">{fact.term}</Text></dt>
+          <dd className="mt-0.5"><Text type="supporting" color="primary" weight="medium" display="block">{fact.description}</Text></dd>
         </div>
       ))}
     </dl>

@@ -1333,3 +1333,70 @@ export async function retireSupersededSandboxV2Supply(
   }
   return retired
 }
+
+/**
+ * Publishes one machine-callable access path on an existing offering so the agent
+ * pathway can be walked end to end. Uses the internal authority available to dev
+ * seeds; the public authoring mutation still requires signed source-write admission.
+ */
+export const seedCallableOffering = internalMutation({
+  args: {
+    slug: v.string(),
+    name: v.string(),
+    summary: v.string(),
+    url: v.string(),
+    pricingSummary: v.string(),
+  },
+  returns: v.object({ kind: v.string(), accessPathRef: v.optional(v.string()), reason: v.optional(v.string()) }),
+  handler: async (ctx, args) => {
+    const now = Date.now()
+    const business = await ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', args.slug)).unique()
+    if (business === null) return { kind: 'error', reason: 'business_not_found' }
+
+    const offering = await ctx.db
+      .query('businessOfferings')
+      .withIndex('by_businessId_and_status', (query) => query.eq('businessId', business._id).eq('status', 'published'))
+      .first()
+    if (offering === null) return { kind: 'error', reason: 'published_offering_not_found' }
+
+    const revision = await ctx.db
+      .query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision))
+      .unique()
+    if (revision === null) return { kind: 'error', reason: 'offering_revision_not_found' }
+
+    const accessPathRef = `access:${args.slug}:callable`
+    const descriptor = {
+      kind: 'external_operation' as const,
+      name: args.name,
+      summary: args.summary,
+      url: args.url,
+      method: 'POST',
+      pricingSummary: args.pricingSummary,
+      provenance: 'business_declared' as const,
+    }
+    // Lineage must match the current revision or the public projection rejects the offering.
+    const row = {
+      accessPathRef,
+      businessId: business._id,
+      offeringRef: offering.offeringRef,
+      offeringRevision: revision.revision,
+      offeringSourceHash: revision.sourceHash,
+      status: 'published' as const,
+      descriptor,
+      sourceHash: await canonicalDigest({ accessPathRef, descriptor }),
+      createdAt: now,
+      updatedAt: now,
+    }
+    const existing = await ctx.db.query('offeringAccessPaths').withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPathRef)).unique()
+    if (existing === null) await ctx.db.insert('offeringAccessPaths', row)
+    else await ctx.db.patch(existing._id, row)
+
+    // Serve it publicly: the native model only reaches the public projection in
+    // 'offering' mode, and parity now permits additive native capability.
+    const cutover = await seedBusinessOfferingSupplyCommand(runtimeDb(ctx.db), business._id, 'offering', now)
+    if (cutover.kind === 'error') return { kind: 'error', reason: `cutover:${cutover.code}` }
+
+    return { kind: 'ok', accessPathRef, reason: `mode:${cutover.mode}` }
+  },
+})

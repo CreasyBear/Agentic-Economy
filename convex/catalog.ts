@@ -646,10 +646,17 @@ async function computeCatalogMigrationParity(db: RuntimeDb, businessId: string):
     const paths = await db.query('offeringAccessPaths').withIndex('by_offeringRef_and_offeringRevision', (q) => q.eq('offeringRef', expected.offering.offeringRef).eq('offeringRevision', expected.revision.revision)).collect()
     expectedItems.push({ offering: expected.offering, revision: expected.revision, accessPaths: expected.accessPaths })
     if (offering === null || revision === null) { matched = false; continue }
+    // Parity asserts the legacy contract is still projected faithfully; it must not cap
+    // native expressiveness. Access paths authored natively (a capability the legacy
+    // inquiry model cannot represent) are additive and excluded from the comparison,
+    // so adding one can never block cutover.
+    const legacyPathRefs = new Set(expected.accessPaths.map((item) => item.accessPathRef))
     const observed = {
       offering: persisted.offerings.find((item) => item.offeringRef === expected.offering.offeringRef)!,
       revision: persisted.revisions.find((item) => item.offeringRef === expected.offering.offeringRef && item.revision === expected.revision.revision)!,
-      accessPaths: persisted.accessPaths.filter((item) => item.offeringRef === expected.offering.offeringRef),
+      accessPaths: persisted.accessPaths.filter((item) => (
+        item.offeringRef === expected.offering.offeringRef && legacyPathRefs.has(item.accessPathRef)
+      )),
     }
     observedItems.push(observed)
     if (!observed.offering || !observed.revision || !legacyOfferingParityMatches(expected, observed)) matched = false

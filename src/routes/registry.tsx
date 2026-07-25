@@ -185,7 +185,9 @@ function RegistryRoute() {
                         <Text display="block" className="text-on-accent/85">Get found by people ready to ask, in writing.</Text>
                       </VStack>
                     </StackItem>
-                    <Button label="List your business, free" variant="secondary" href="/claim" />
+                    {/* A secondary button on an accent surface renders pale-on-green.
+                        Invert it so the CTA carries the contrast it needs. */}
+                    <Button label="List your business, free" variant="secondary" href="/claim" className="bg-card text-primary hover:bg-surface" />
                   </HStack>
                 </Card>
               ) : null}

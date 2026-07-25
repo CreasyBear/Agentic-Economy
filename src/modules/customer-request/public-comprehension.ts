@@ -1,9 +1,18 @@
+/**
+ * Public comprehension copy for the Customer Request surface.
+ *
+ * PRODUCT.md sets the voice: direct, capable, and exact. State the target
+ * confidently, state today's proof honestly, and never turn a safeguard into
+ * the headline. Each line below leads with what AE does. The boundary lines
+ * stay exact, but they are qualifiers, not the pitch — the surface renders them
+ * at the moment they apply rather than stacking them in front of the input.
+ */
 export const CUSTOMER_REQUEST_PUBLIC_COMPREHENSION = Object.freeze({
-  situation: 'When plans change or several businesses may be involved, start with the outcome you need.',
-  examples: 'That can be a procurement decision, an itinerary, a service journey, or recovery after disruption.',
-  support: 'AE checks current registered support and shows what is available. If nothing supports the Request, AE says so.',
-  sandboxBoundary: 'Current multi-business Request examples use labelled AE sandbox businesses. They prove the workflow only—not independent supply, booking, payment, dispatch, or fulfilment.',
-  authority: 'You decide whether to confirm an option. Starting it is a separate decision.',
+  situation: 'Name the outcome. AE finds the businesses, compares real options, and carries the work through.',
+  examples: 'Book a trade, plan an itinerary, run a procurement decision, or recover when plans fall apart.',
+  support: 'AE shows only what registered businesses can do right now, and says so plainly when nothing can.',
+  sandboxBoundary: 'Multi-business examples currently run on labelled AE sandbox businesses. They prove the workflow, not independent supply, booking, payment, dispatch, or fulfilment.',
+  authority: 'Nothing starts until you confirm it.',
 })
 
 export const CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES = Object.freeze([

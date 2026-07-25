@@ -1,3 +1,4 @@
+export { Fact, FactValue, FactBlock, type FactTone } from './fact'
 export { Conversation } from './conversation'
 export { Clarification } from './clarification'
 export { RecoveryActions } from './recovery-actions'
