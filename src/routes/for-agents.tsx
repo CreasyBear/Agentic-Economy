@@ -41,6 +41,7 @@ function ForAgentsRoute() {
             <Heading level={2}>Setup files</Heading>
             <Text color="secondary">Ask your AI to read these paths from this site. They describe the current entry point, required authentication, returned actions, progress states, and recovery rules.</Text>
             <dl className="grid gap-3">
+              <div><dt className="font-semibold">Site entry point</dt><dd><code className="text-sm text-secondary">/.well-known/ucp</code></dd></div>
               <div><dt className="font-semibold">Public index</dt><dd><code className="text-sm text-secondary">/llms.txt</code></dd></div>
               <div><dt className="font-semibold">Assistant instructions</dt><dd><code className="text-sm text-secondary">/SKILL.md</code></dd></div>
             </dl>

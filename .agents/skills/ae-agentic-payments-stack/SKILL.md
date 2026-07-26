@@ -89,7 +89,7 @@ Run focused tests first:
 npx vitest run tests/unit/capability-supply/route-transport-runtime.test.ts tests/unit/capability-supply/x402-payment-signer.test.ts tests/unit/capability-supply/transport-adapter-registry.test.ts
 ```
 
-Run `npm run test:copy` when public or customer-visible language changes, and
+Run `npm run test:ui-contract` when public or customer-visible language changes, and
 `npm run test:imports` when transport dependencies or module boundaries change.
 Tests guide the changed transition; unrelated suite failures are recorded, not
 turned into a repository-wide gate.

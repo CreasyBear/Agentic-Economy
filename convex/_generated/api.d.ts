@@ -82,6 +82,7 @@ import type * as observability from "../observability.js";
 import type * as registry from "../registry.js";
 import type * as routingKernelV1History from "../routingKernelV1History.js";
 import type * as sandboxAcceptanceSupply from "../sandboxAcceptanceSupply.js";
+import type * as searchGap from "../searchGap.js";
 import type * as security from "../security.js";
 import type * as settings from "../settings.js";
 import type * as sourceWriteAdmission from "../sourceWriteAdmission.js";
@@ -168,6 +169,7 @@ declare const fullApi: ApiFromModules<{
   registry: typeof registry;
   routingKernelV1History: typeof routingKernelV1History;
   sandboxAcceptanceSupply: typeof sandboxAcceptanceSupply;
+  searchGap: typeof searchGap;
   security: typeof security;
   settings: typeof settings;
   sourceWriteAdmission: typeof sourceWriteAdmission;

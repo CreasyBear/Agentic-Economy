@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { BusinessSupplyProjection } from '@/modules/catalog/public'
+import type { BusinessSupplyProjection, OfferingPrice } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
   adaptLegacyCatalogToOfferingApi,
@@ -127,6 +127,7 @@ describe('Offering-shaped public business API', () => {
       suburb: 'Perth',
       stateTerritory: 'WA',
       publicUrl: '/profile-only',
+      trustTier: 'claimed',
       updatedAt: 50,
       services: [],
     })
@@ -136,6 +137,92 @@ describe('Offering-shaped public business API', () => {
       offerings: [],
       disposition: 'current',
     })
+  })
+
+  it.each([
+    'Hours supplied by owner',
+    'Owner supplied hours',
+    'Hours unknown',
+    'Unknown',
+    '   ',
+  ])('never publishes %j as availability', (placeholder) => {
+    const dto = projectBusinessSupplyToPublicApi(projection({
+      offerings: [supplyOffering({ availabilitySummary: placeholder })],
+    }))
+
+    // Absent, not named: a surface that receives the key renders it as a fact.
+    expect(dto.offerings[0]).not.toHaveProperty('availabilitySummary')
+  })
+
+  it('publishes real availability and price verbatim, and omits an unsupplied price', () => {
+    const priced = projectBusinessSupplyToPublicApi(projection({
+      offerings: [supplyOffering({
+        availabilitySummary: 'Mon–Fri 7am–5pm, Sat 8am–12pm',
+        pricingSummary: 'Development sample — $180 call-out, quoted before work starts',
+      })],
+    }))
+    const unpriced = projectBusinessSupplyToPublicApi(projection({
+      offerings: [supplyOffering({ availabilitySummary: '  Mon–Sun, 24 hours  ' })],
+    }))
+
+    expect(priced.offerings[0]).toMatchObject({
+      availabilitySummary: 'Mon–Fri 7am–5pm, Sat 8am–12pm',
+      pricingSummary: 'Development sample — $180 call-out, quoted before work starts',
+    })
+    expect(unpriced.offerings[0]).toMatchObject({ availabilitySummary: 'Mon–Sun, 24 hours' })
+    expect(unpriced.offerings[0]).not.toHaveProperty('pricingSummary')
+  })
+
+  it('publishes the comparable price beside the prose, never derived from it', () => {
+    const price: OfferingPrice = {
+      kind: 'from',
+      currency: 'AUD',
+      amountMinor: 18000,
+      unit: 'visit',
+      taxTreatment: 'inclusive',
+    }
+    const dto = projectBusinessSupplyToPublicApi(projection({
+      offerings: [supplyOffering({
+        pricingSummary: 'Development sample — $180 call-out, quoted before work starts',
+        price,
+      })],
+    }))
+    const proseOnly = projectBusinessSupplyToPublicApi(projection({
+      offerings: [supplyOffering({ pricingSummary: 'Quoted on site, every time' })],
+    }))
+
+    expect(dto.offerings[0]).toMatchObject({
+      pricingSummary: 'Development sample — $180 call-out, quoted before work starts',
+      price,
+    })
+    // Prose is a published sentence, not a source to parse a number out of.
+    expect(proseOnly.offerings[0]).toMatchObject({ pricingSummary: 'Quoted on site, every time' })
+    expect(proseOnly.offerings[0]).not.toHaveProperty('price')
+    // Additive optional field: pinned readers stay on v2.
+    expect(dto.schemaVersion).toBe('public-business-catalog-api:v2')
+  })
+
+  it('drops the legacy hours sentinel on the v1 adapter and keeps published hours', () => {
+    const dto = adaptLegacyCatalogToOfferingApi({
+      slug: 'mixed-supply',
+      name: 'Mixed Supply',
+      category: 'Plumbing',
+      suburb: 'Perth',
+      stateTerritory: 'WA',
+      publicUrl: '/mixed-supply',
+      trustTier: 'claimed',
+      updatedAt: 50,
+      services: [
+        legacyService({ slug: 'unknown-hours', hoursOrUnknown: 'Hours supplied by owner' }),
+        legacyService({ slug: 'real-hours', hoursOrUnknown: 'Mon–Fri 8:30am–5pm' }),
+      ],
+    })
+
+    expect(dto.offerings[0]).not.toHaveProperty('availabilitySummary')
+    expect(dto.offerings[1]).toMatchObject({ availabilitySummary: 'Mon–Fri 8:30am–5pm' })
+    // v1 has no price column at all, so the adapter can never publish one.
+    expect(dto.offerings.every((offering) => offering.pricingSummary === undefined)).toBe(true)
+    for (const offering of dto.offerings) expect(offering).not.toHaveProperty('price')
   })
 })
 
@@ -165,4 +252,36 @@ function projection(
     disposition: 'current',
     ...overrides,
   } as BusinessSupplyProjection
+}
+
+function supplyOffering(
+  facts: Readonly<{ availabilitySummary?: string; pricingSummary?: string; price?: OfferingPrice }>,
+): BusinessSupplyProjection['offerings'][number] {
+  return {
+    offering: {
+      offeringRef: brandNonEmpty('offering:meridian:hours', 'OfferingRef'),
+      revision: 1,
+      name: 'Emergency pipe repair',
+      category: 'Emergency plumbing',
+      summary: 'Burst pipe triage.',
+      ...facts,
+    },
+    accessPaths: [],
+    support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
+  } as BusinessSupplyProjection['offerings'][number]
+}
+
+function legacyService(overrides: Readonly<{ slug: string; hoursOrUnknown: string }>) {
+  return {
+    name: 'Emergency pipe repair',
+    category: 'Emergency plumbing',
+    summary: 'Burst pipe triage.',
+    serviceArea: 'Perth and nearby suburbs',
+    firstRequest: {
+      mode: 'inquiry_available' as const,
+      publicDisclosure: 'Use the inquiry form for a first contact.',
+      publicChannel: 'ae_status_only' as const,
+    },
+    ...overrides,
+  }
 }

@@ -176,12 +176,12 @@ describe('compare-resume currency', () => {
 })
 
 describe('compare-resume resumeCustomerRequest', () => {
-  it('returns durable shell when aggregate is not current', async () => {
+  it('returns durable shell when the aggregate is not current but AE has supply to plan over', async () => {
     const ports = basePorts({
       loadCurrent: vi.fn(async () => ({ kind: 'not_found' as const })),
       getSubmissionShell: vi.fn(async () => ({
         kind: 'found' as const,
-        shell: { requestId: 'req:shell' },
+        shell: { requestId: 'req:shell', networkId: 'ae:public' },
       })),
     })
     const result = await resumeCustomerRequest(
@@ -193,6 +193,29 @@ describe('compare-resume resumeCustomerRequest', () => {
       requestRef: 'req:shell',
       state: 'needs_attention',
       nextAction: 'retry',
+    })
+  })
+
+  it('does not offer retry on a resumed shell when no business is routeable', async () => {
+    const ports = basePorts({
+      loadCurrent: vi.fn(async () => ({ kind: 'not_found' as const })),
+      getSubmissionShell: vi.fn(async () => ({
+        kind: 'found' as const,
+        shell: { requestId: 'req:shell', networkId: 'ae:public' },
+      })),
+      loadRequestGraph: vi.fn(async () => ({
+        kind: 'unavailable' as const, reason: 'no_routeable_supply' as const,
+      })),
+    })
+    const result = await resumeCustomerRequest(
+      { requestRef: 'req:shell', principalId: 'principal:1' },
+      ports,
+    )
+    expect(result).toMatchObject({
+      kind: 'request',
+      state: 'unsupported',
+      nextAction: 'revise_request',
+      summary: 'AE cannot arrange this request end to end yet.',
     })
   })
 
@@ -249,7 +272,7 @@ describe('compare-resume prepareCompare', () => {
 
   it('records retryable refresh when supply is unavailable', async () => {
     const ports = basePorts({
-      loadRequestGraph: vi.fn(async () => ({ kind: 'unavailable' as const })),
+      loadRequestGraph: vi.fn(async () => ({ kind: 'unavailable' as const, reason: 'no_routeable_supply' as const })),
     })
     const result = await prepareCompare({
       requestRef: 'req:1',

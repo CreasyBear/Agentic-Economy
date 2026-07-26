@@ -129,7 +129,7 @@ export type {
   DevelopmentHostReadReceipt,
   DevelopmentHostSemanticRead,
 } from './development-host-read'
-export type { ActionInvocationHostSeam } from './host-seam'
+export type { DevelopmentActionInvocationHostSeam } from './host-seam'
 export type {
   InvocationProjectionResolver,
   InvocationTaskSemantics,

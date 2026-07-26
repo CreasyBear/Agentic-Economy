@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { registryListAction } from '@/modules/registry/registry.actions'
-import { legacyPublicRegistryList, readPublicOfferingRegistryPage } from '@/modules/registry/registry.functions'
 
 export const Route = createFileRoute('/api/businesses')({
   server: {
@@ -11,25 +10,34 @@ export const Route = createFileRoute('/api/businesses')({
   },
 })
 
+const LIST_QUERY_PARAMS = new Set(['cursor', 'limit'])
+
+/**
+ * Browse takes no query term. Silently dropping one returns an arbitrary page
+ * with HTTP 200, and a calling agent cannot tell that its question was
+ * discarded — it just receives confident, unrelated businesses. Name the
+ * unsupported parameter and point at the endpoint that does search.
+ */
 export async function handleDurableListBusinessesRequest(request: Request): Promise<Response> {
   const url = new URL(request.url)
-  const data = registryListAction.schema.parse({
-    ...optionalCursor(url.searchParams.get('cursor')),
-    ...optionalLimit(url.searchParams.get('limit')),
-  })
-  const result = await readPublicOfferingRegistryPage(data)
+  const unsupported = [...new Set(url.searchParams.keys())].filter((key) => !LIST_QUERY_PARAMS.has(key)).sort()
+  if (unsupported.length > 0) {
+    return jsonResponse({
+      kind: 'refused',
+      reason: 'unsupported_query_parameter',
+      unsupported,
+      supported: [...LIST_QUERY_PARAMS],
+      detail: 'This endpoint lists businesses and does not accept a search term. Use /api/businesses/search?q= to search.',
+    }, { status: 400 })
+  }
 
-  return jsonResponse(result)
-}
-
-export function handleListBusinessesRequest(request: Request): Response {
-  const url = new URL(request.url)
-  const result = legacyPublicRegistryList({
-    ...optionalCursor(url.searchParams.get('cursor')),
-    ...optionalLimit(url.searchParams.get('limit')),
-  })
-
-  return jsonResponse(result)
+  return jsonResponse(await registryListAction.run({
+    data: registryListAction.schema.parse({
+      ...optionalCursor(url.searchParams.get('cursor')),
+      ...optionalLimit(url.searchParams.get('limit')),
+    }),
+    context: { caller: 'http', request },
+  }))
 }
 
 export function jsonResponse(body: unknown, init: ResponseInit = {}): Response {

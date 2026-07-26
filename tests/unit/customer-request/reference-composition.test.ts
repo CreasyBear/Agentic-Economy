@@ -67,7 +67,7 @@ function invocation(input: Readonly<{
     owner: { callerRef: 'mock:caller', principalRef: 'mock:principal' },
     action: {
       id: input.actionId ?? 'registry.detail',
-      contractVersion: input.actionVersion ?? 'registry.detail:v1',
+      contractVersion: input.actionVersion ?? 'registry.detail:v2',
     },
     desired: { state: 'invoke' },
     attempts: [],
@@ -131,7 +131,7 @@ const nodes: readonly ReferenceCompositionNode[] = [
   {
     nodeRef: 'mock:node:current',
     actionId: 'registry.detail',
-    actionVersion: 'registry.detail:v1',
+    actionVersion: 'registry.detail:v2',
     dependencies: ['mock:node:completed'],
     completionCondition: 'required',
     inspection: {
@@ -144,7 +144,7 @@ const nodes: readonly ReferenceCompositionNode[] = [
   {
     nodeRef: 'mock:node:optional',
     actionId: 'registry.detail',
-    actionVersion: 'registry.detail:v1',
+    actionVersion: 'registry.detail:v2',
     dependencies: [],
     completionCondition: 'optional',
     inspection: {

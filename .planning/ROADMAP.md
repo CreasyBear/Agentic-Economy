@@ -1,8 +1,8 @@
 # Agentic Economy — Current Product Roadmap
 
 **Status:** active
-**Rebaselined:** 2026-07-21
-**Authority:** `PRODUCT.md` → `DESIGN.md` → accepted ADRs → this roadmap
+**Rebaselined:** 2026-07-25
+**Authority:** `PROJECT.md` → accepted ADRs → this roadmap
 
 ## Roadmap rule
 
@@ -21,7 +21,7 @@ Phase 3 — Protocol/kernel → product conversion (complete)
                          ↓
 Phase 4 — Business Account and routeable-supply maturity (planning accepted)
                          ↓
-Phase 5 — Public Offering comparison proof (planned behind Gate 0)
+Phase 5 — Public Offering decision loop (source landed on main)
 ```
 
 ## Phase 1 — Action Invocation foundation
@@ -115,17 +115,21 @@ safety.
 
 **Authority:** `.planning/phases/04-market-activation/`
 
-## Phase 5 — Public Offering comparison proof
+## Phase 5 — Public Offering decision loop
 
-**Status:** planned; implementation blocked on exact Offering predecessor custody
+**Status:** source landed on `main`; hosted, provider and customer evidence absent
 **Goal:** a public visitor or agent can browse businesses, inspect an Offering,
 shortlist exact Offering revisions, compare source-owned facts and understand
-trade-offs against stated priorities without login or external effect.
+trade-offs against stated priorities without login.
 
 This founder-accepted goal supersedes the earlier Phase 5 quote-to-close and
-real-customer-operating wording. The entire phase is `inspect_only`. It does not
-request a quote, contact a business, initiate inquiry, create Customer Request,
-invoke an endpoint, authorize, book, pay, dispatch or claim fulfilment.
+real-customer-operating wording.
+
+The phase was accepted as entirely `inspect_only`. On 2026-07-25 that boundary
+was deliberately widened: catalog supply can express a callable, priced
+capability and `/api/sandbox/$slug/checkup-quote` serves it against labelled
+sandbox supply. Contacting a real business, authorizing, booking, paying,
+dispatching and claiming fulfilment remain out of this phase.
 
 **Requirements:**
 
@@ -145,17 +149,24 @@ invoke an endpoint, authorize, book, pay, dispatch or claim fulfilment.
 - `P5-EVIDENCE`: one authenticated exact-revision hosted readback over labelled
   demonstration data produces a frozen independently verified evidence packet.
 
-**Plans:** 8 plans
+**Plans:** 8 plans written; none executed through the plan sequence.
 
-Plans:
-- [ ] 05-01-PLAN.md — freeze and integrate the exact Offering predecessor lane
-- [ ] 05-02-PLAN.md — historical public revisions and closed fact profiles
-- [ ] 05-03-PLAN.md — strict registry codecs, registered actions and three public HTTP adapters
-- [ ] 05-04-PLAN.md — Answer, Answer Thread and discovery Offering-v2 consumer migration with literal inventory enforcement
-- [ ] 05-05-PLAN.md — pure exact-revision comparison semantics and URL state
-- [ ] 05-06-PLAN.md — public Offering detail, shortlist and Astryx comparison UI
-- [ ] 05-07-PLAN.md — fixed comparison POST, actual-loader parity, effect fences and transfer evals
-- [ ] 05-08-PLAN.md — clean integration, accessibility, hosted readback and evidence closeout
+The Offering supply graph and the answer-first decision surfaces landed
+directly in source (`664d533e`, `b8567dc7`, and the 2026-07-25 catalog and
+registry commits), bypassing the plan-by-plan execution the eight plans
+describe. The plans remain the specification of record for the parts still
+missing. Against the requirements above:
+
+- `P5-CUSTODY`, `P5-CATALOG`, `P5-REGISTRY` — met in integrated source on
+  `main`: offering source/migration/supply, catalog/capability-supply/discovery
+  /registry projections, owner offering routes and UCP/offering manifests.
+- `P5-COMPARE`, `P5-HUMAN` — partially met. Shortlisting exists in the answer
+  surface (`src/components/ae/chat/AeShortlistTerminal.tsx`,
+  `shortlist-projection.ts`); the specced URL-shortlist and dedicated
+  accessible comparison route do not exist.
+- `P5-AGENT` — not met. There is no `POST /api/compare` route and no registered
+  inspect-only comparison action.
+- `P5-EVIDENCE` — not met. No hosted readback or frozen evidence packet exists.
 
 Historical Phase 4B three-quote and Phase 4C quote-to-close proposals remain
 research provenance only. Quote/request/inquiry, close/start, independently

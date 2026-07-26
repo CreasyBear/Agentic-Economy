@@ -5,7 +5,9 @@ import {
   type OfferingAccessPathDescriptor,
   type OfferingAccessPathRecord,
   type OfferingSupportProjection,
+  type PublicBusinessProfile,
 } from '../src/modules/catalog/internal/offering-supply'
+import type { OfferingPrice } from '../src/modules/catalog/internal/offering-price'
 import type { AccessPathRef, BusinessId, OfferingRef } from '../src/modules/common/ids'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 
@@ -28,7 +30,20 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(db: Runtime
     return markPending(db, businessId, 'offering_revision_missing', now)
   }
   const projection = buildBusinessSupplyProjection({
-    business: { businessId: businessId as BusinessId, slug: field(business, 'slug'), name: field(business, 'name'), category: field(context, 'category'), suburb: field(context, 'suburb'), stateTerritory: field(context, 'stateTerritory'), ...(optional(business, 'publishedPhone') ? { publishedPhone: field(business, 'publishedPhone') } : {}), ...(optional(context, 'postcode') ? { postcode: field(context, 'postcode') } : {}), publicUrl: `/${field(business, 'slug')}` },
+    business: {
+      businessId: businessId as BusinessId,
+      slug: field(business, 'slug'),
+      name: field(business, 'name'),
+      category: field(context, 'category'),
+      suburb: field(context, 'suburb'),
+      stateTerritory: field(context, 'stateTerritory'),
+      ...(optional(business, 'publishedPhone') ? { publishedPhone: field(business, 'publishedPhone') } : {}),
+      ...(optional(context, 'postcode') ? { postcode: field(context, 'postcode') } : {}),
+      publicUrl: `/${field(business, 'slug')}`,
+      trustTier: businessTrustTier(business),
+      ...(typeof context.responseTimeMinutes === 'number' ? { responseTimeMinutes: context.responseTimeMinutes } : {}),
+      photos: businessPhotos(context),
+    },
     businessIsPublic: !await suppressed(db, businessId),
     offerings: offeringRecords.map((offering) => ({ offering, revision: revisionRecords.find((item) => item.offeringRef === offering.offeringRef && item.revision === offering.currentRevision)!, accessPaths: pathRecords.filter((item) => item.offeringRef === offering.offeringRef), support: sanitizeSupport(supportByOfferingRef[offering.offeringRef], now) })),
     sourceRevision: Math.max(number(business, 'updatedAt'), ...offeringRecords.map((item) => item.updatedAt), 0), observedAt: now,
@@ -71,5 +86,23 @@ function field(row: RuntimeDocument, key: string) { return typeof row[key] === '
 function optional(row: RuntimeDocument, key: string) { return typeof row[key] === 'string' ? row[key] as string : undefined }
 function number(row: RuntimeDocument, key: string) { return typeof row[key] === 'number' ? row[key] as number : 0 }
 function toOffering(row: RuntimeDocument): BusinessOfferingRecord { const status = field(row, 'status'); return { offeringRef: field(row, 'offeringRef') as OfferingRef, businessId: field(row, 'businessId') as BusinessId, currentRevision: number(row, 'currentRevision'), status: status === 'published' || status === 'paused' || status === 'retired' ? status : 'draft', createdAt: number(row, 'createdAt'), updatedAt: number(row, 'updatedAt') } }
-function toRevision(row: RuntimeDocument): BusinessOfferingRevisionRecord { return { offeringRef: field(row, 'offeringRef') as OfferingRef, businessId: field(row, 'businessId') as BusinessId, revision: number(row, 'revision'), name: field(row, 'name'), category: field(row, 'category'), summary: field(row, 'summary'), ...(optional(row, 'serviceAreaSummary') ? { serviceAreaSummary: field(row, 'serviceAreaSummary') } : {}), ...(optional(row, 'availabilitySummary') ? { availabilitySummary: field(row, 'availabilitySummary') } : {}), ...(optional(row, 'pricingSummary') ? { pricingSummary: field(row, 'pricingSummary') } : {}), sourceHash: field(row, 'sourceHash') as never, createdAt: number(row, 'createdAt') } }
+function toRevision(row: RuntimeDocument): BusinessOfferingRevisionRecord { return { offeringRef: field(row, 'offeringRef') as OfferingRef, businessId: field(row, 'businessId') as BusinessId, revision: number(row, 'revision'), name: field(row, 'name'), category: field(row, 'category'), summary: field(row, 'summary'), ...(optional(row, 'serviceAreaSummary') ? { serviceAreaSummary: field(row, 'serviceAreaSummary') } : {}), ...(optional(row, 'availabilitySummary') ? { availabilitySummary: field(row, 'availabilitySummary') } : {}), ...(optional(row, 'pricingSummary') ? { pricingSummary: field(row, 'pricingSummary') } : {}), ...(row.price === undefined ? {} : { price: row.price as OfferingPrice }), sourceHash: field(row, 'sourceHash') as never, createdAt: number(row, 'createdAt') } }
 function toPath(row: RuntimeDocument): OfferingAccessPathRecord { const status = field(row, 'status'); return { accessPathRef: field(row, 'accessPathRef') as AccessPathRef, businessId: field(row, 'businessId') as BusinessId, offeringRef: field(row, 'offeringRef') as OfferingRef, offeringRevision: number(row, 'offeringRevision'), offeringSourceHash: field(row, 'offeringSourceHash') as never, status: status === 'published' || status === 'withdrawn' ? status : 'draft', descriptor: row.descriptor as OfferingAccessPathDescriptor, sourceHash: field(row, 'sourceHash') as never, createdAt: number(row, 'createdAt'), updatedAt: number(row, 'updatedAt') } }
+
+function businessTrustTier(document: RuntimeDocument): PublicBusinessProfile['trustTier'] {
+  const value = document.trustTier
+  return value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified'
+    ? value
+    : 'claimed'
+}
+
+function businessPhotos(document: RuntimeDocument): readonly Readonly<{ url: string; alt: string }>[] {
+  const value = document.photos
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return []
+    const url = 'url' in entry ? entry.url : undefined
+    const alt = 'alt' in entry ? entry.alt : undefined
+    return typeof url === 'string' && typeof alt === 'string' ? [{ url, alt }] : []
+  })
+}

@@ -1338,7 +1338,7 @@ describe('V2 Request semantics', () => {
     expect(mixedCurrency).not.toHaveProperty('routeGeneration')
     expect(projectCustomerRequest(mixedCurrency)).toMatchObject({
       state: 'unsupported', nextAction: 'revise_request',
-      summary: 'No business on AE can support this request right now.',
+      summary: 'AE cannot arrange this request end to end yet.',
     })
     const unsafeSum = compileWithPrices([
       { kind: 'fixed', currency: 'AUD', amountMinor: Number.MAX_SAFE_INTEGER },

@@ -34,7 +34,7 @@
   --ae-oxide: var(--ae-danger);
   --ae-info: oklch(0.42 0.07 250);           /* slate #345A7A */
 
-  /* Radii — 4px panels/cards/objects, 6px buttons, 999px status pills only (DESIGN.md §17) */
+  /* Radii — 4px panels/cards/objects, 6px buttons, 999px status pills only */
   --ae-radius-sm: 4px;
   --ae-radius-md: 6px;
   --ae-radius-lg: 4px;

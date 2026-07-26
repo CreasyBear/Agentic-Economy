@@ -1,7 +1,7 @@
 /**
  * Public comprehension copy for the Customer Request surface.
  *
- * PRODUCT.md sets the voice: direct, capable, and exact. State the target
+ * Voice: direct, capable, and exact. State the target
  * confidently, state today's proof honestly, and never turn a safeguard into
  * the headline. Each line below leads with what AE does. The boundary lines
  * stay exact, but they are qualifiers, not the pitch — the surface renders them

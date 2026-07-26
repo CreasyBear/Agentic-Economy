@@ -49,6 +49,13 @@ export type PublicBusinessCatalogSearchInput =
     query: string
     mode?: 'near_me' | 'whole_catalogue'
     location?: string
+    /**
+     * Upper bound in minor units. Applied only to Offerings that published a
+     * comparable ceiling; `quote_only` and unpriced supply are never removed.
+     */
+    maxPriceMinor?: number
+    /** `true` keeps only businesses publishing at least one structured price. */
+    hasPrice?: boolean
   }
 
 export type PublicBusinessCatalogApiDto = {

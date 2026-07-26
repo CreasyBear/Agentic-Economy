@@ -25,6 +25,7 @@ export function offeringApiDtoToSupplyView(dto: PublicBusinessCatalogApiV2Dto): 
         ...(item.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: item.serviceAreaSummary }),
         ...(item.availabilitySummary === undefined ? {} : { availabilitySummary: item.availabilitySummary }),
         ...(item.pricingSummary === undefined ? {} : { pricingSummary: item.pricingSummary }),
+        ...(item.price === undefined ? {} : { price: item.price }),
       },
       accessPaths: item.accessPaths.map((path) => ({
         accessPathRef: path.accessPathRef as never,

@@ -11,6 +11,7 @@ import {
   customerClarificationPrompt,
   statusLabel,
 } from './shared'
+import { DirectoryFallback } from './directory-fallback'
 import { OptionsCard, NoOptions } from './options'
 import { DisclosureReview } from './disclosure'
 import {
@@ -51,7 +52,7 @@ export function RequestResult({ state, compare, reviewRoute, leaveRouteReview, r
     || state.projection.state === 'completed' || state.projection.state === 'failed')) {
     return <ActionStatusCard projection={state.projection} turns={turns} refresh={() => refresh(state.projection)} edit={() => edit(state.projection)} restart={restart} />
   }
-  if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={state.projection} correct={() => edit(state.projection)} />{state.projection.clarification ? <Clarification prompt={customerClarificationPrompt(state.projection.clarification)} answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.dataHandling === undefined ? null : <Text color="secondary">{state.projection.dataHandling.explanation}</Text>}{state.projection.unsupportedRecovery === undefined ? null : <Text color="secondary">{state.projection.unsupportedRecovery.nextStep.summary}</Text>}{state.projection.nextAction === 'prepare_options' ? <Button label="Show available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : state.projection.unsupportedRecovery === undefined ? <Text color="secondary">AE cannot prepare a useful choice for this request yet.</Text> : null}<RecoveryActions edit={() => edit(state.projection)} restart={restart} /></div></Card>}</section>
+  if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={state.projection} correct={() => edit(state.projection)} />{state.projection.clarification ? <Clarification prompt={customerClarificationPrompt(state.projection.clarification)} answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <><Card padding={5}><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.dataHandling === undefined ? null : <Text color="secondary">{state.projection.dataHandling.explanation}</Text>}{state.projection.unsupportedRecovery === undefined ? null : <Text color="secondary">{state.projection.unsupportedRecovery.nextStep.summary}</Text>}{state.projection.nextAction === 'prepare_options' ? <Button label="Show available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : state.projection.unsupportedRecovery === undefined ? <Text color="secondary">AE cannot prepare a useful choice for this request yet.</Text> : null}<RecoveryActions edit={() => edit(state.projection)} restart={restart} /></div></Card>{state.projection.state === 'unsupported' ? <DirectoryFallback intent={customerIntentFrom(turns)} /> : null}</>}</section>
   if (state.kind === 'confirming') return <ConfirmationLoadingCard />
   if (state.kind === 'resuming' || state.kind === 'submitting' || state.kind === 'comparing' || state.kind === 'refreshing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'resuming' ? 'Reopening your Request…' : state.kind === 'submitting' ? 'Understanding your request…' : state.kind === 'comparing' ? 'Comparing available options…' : 'Checking with the latest evidence…'}</Heading><Text color="secondary" className="mt-2">No purchase, booking, or business step occurs during this moment.</Text></Card>
   return <Card padding={5} className="min-w-0 bg-surface"><Heading level={2}>Your result will appear here</Heading><Text color="secondary" className="mt-2">AE will show missing information, unsupported requests, or comparable business options.</Text></Card>
@@ -61,4 +62,13 @@ function conflictExplanation(reason: Extract<CustomerRequestProjection, { kind: 
   if (reason === 'options_changed') return 'The available ways forward changed before this comparison finished.'
   if (reason === 'identity_changed') return 'The person or agent allowed to access this Request changed.'
   return 'This operation key was already used for different work.'
+}
+
+/**
+ * The projected view deliberately does not republish the raw request text, so
+ * the customer's own words come from the conversation. The last customer turn
+ * is the current wording after any edit.
+ */
+function customerIntentFrom(turns: readonly ConversationTurn[]): string {
+  return [...turns].reverse().find((turn) => turn.speaker === 'customer')?.text ?? ''
 }

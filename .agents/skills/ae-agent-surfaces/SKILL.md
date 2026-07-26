@@ -71,7 +71,7 @@ Run the smallest focused tests that cover the changed route and transition.
 Then run the relevant contract checks:
 
 ```sh
-npm run test:copy
+npm run test:ui-contract
 npm run test:seo
 ```
 

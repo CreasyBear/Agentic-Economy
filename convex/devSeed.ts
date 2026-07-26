@@ -13,7 +13,12 @@ import {
 import { persistDevSeedCatalogState } from './devSeedStore'
 import { runtimeDb } from './source_state'
 import { claimBusinessCommand } from './business'
-import { publishBusinessCatalogCommand, seedBusinessOfferingSupplyCommand } from './catalog'
+import {
+  deriveBusinessOfferingSupportFromCapabilitySupply,
+  publishBusinessCatalogCommand,
+  rebuildBusinessSupplyProjectionSnapshotCommand,
+  seedBusinessOfferingSupplyCommand,
+} from './catalog'
 import { seedDiscoveryManifestForBusinessCommand } from './discovery'
 import { registerCapabilityContractDocument } from './capabilityContractDocuments'
 import {
@@ -23,6 +28,7 @@ import {
 } from './capabilitySupply'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import type { CapabilityContractRef } from '@/modules/capability-contract/public'
+import type { OfferingPrice } from '@/modules/catalog/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { capabilityOfferingRegistrationHash } from '@/modules/capability-supply/public'
 import {
@@ -205,8 +211,16 @@ export const seedOfferingSupply = internalMutation({
     let migrated = 0
     for (const business of page.page) {
       // Deterministic mode spread across businesses for full cutover-state variety.
+      // A business carrying a seeded price always requests 'offering': price is the
+      // one public fact the retained v1 service row cannot hold, so leaving a priced
+      // business in 'compare' or 'legacy' silently drops it and the catalog
+      // demonstrates no prices at all.
+      const pricingSummary = DEV_SEED_PRICING_BY_SLUG[business.slug]
+      const price = DEV_SEED_PRICE_BY_SLUG[business.slug]
       const bucket = [...business.slug].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 10
-      const requestedMode = bucket < 7 ? 'offering' : bucket < 9 ? 'compare' : 'legacy'
+      const requestedMode = pricingSummary !== undefined
+        ? 'offering'
+        : bucket < 7 ? 'offering' : bucket < 9 ? 'compare' : 'legacy'
       const result = await seedBusinessOfferingSupplyCommand(db, business._id, requestedMode, now)
       if (result.kind === 'error') {
         errors.push(`${business.slug}:${result.code}`)
@@ -214,6 +228,14 @@ export const seedOfferingSupply = internalMutation({
       }
       migrated += result.migrated
       modes[result.mode] += 1
+      // A price is the one public fact the retained v1 service row cannot hold,
+      // so the seeded catalog can only demonstrate it by writing the Offering
+      // revision directly. Only worth doing in 'offering' mode: 'compare' and
+      // 'legacy' serve the v1 adapter, which has nowhere to put a price.
+      if (pricingSummary !== undefined && result.mode === 'offering') {
+        const priced = await publishSeedOfferingPrice(ctx, business._id, pricingSummary, price, now)
+        if (priced.kind === 'error') errors.push(`${business.slug}:price_${priced.code}`)
+      }
     }
     if (!page.isDone) {
       await ctx.scheduler.runAfter(0, internal.devSeed.seedOfferingSupply, { cursor: page.continueCursor })
@@ -353,6 +375,62 @@ export const seedTestCapabilityPublication = internalMutation({
     return { publicationRef, credentialRef: binding.credentialRef }
   },
 })
+
+const DEV_SEED_PRICING_BY_SLUG: Readonly<Record<string, string>> = Object.fromEntries(
+  DEV_SEED_BUSINESS_FIXTURES.flatMap((fixture) => (
+    fixture.pricingSummary === undefined ? [] : [[fixture.requestedSlug, fixture.pricingSummary]]
+  )),
+)
+
+/**
+ * The comparable twin of each seeded `pricingSummary`, authored by hand against
+ * the sentence it sits beside. Nothing is parsed out of the prose at runtime:
+ * the two are independent published facts, and a fixture sentence with no entry
+ * here seeds prose only, exactly as it did before prices existed.
+ */
+const DEV_SEED_PRICE_BY_PRICING_SUMMARY: Readonly<Record<string, OfferingPrice>> = {
+  'Development sample — $180 call-out, quoted before work starts': { kind: 'fixed', currency: 'AUD', amountMinor: 18_000, unit: 'visit', taxTreatment: 'inclusive' },
+  'Development sample — $140 first hour, then $95 per hour': { kind: 'from', currency: 'AUD', amountMinor: 14_000, unit: 'hour', taxTreatment: 'inclusive' },
+  'Development sample — $95 check-up and clean': { kind: 'fixed', currency: 'AUD', amountMinor: 9_500, unit: 'visit', taxTreatment: 'inclusive' },
+  'Development sample — $350 first consultation': { kind: 'fixed', currency: 'AUD', amountMinor: 35_000, unit: 'visit', taxTreatment: 'inclusive' },
+  'Development sample — $55 per hour, 3 hour minimum': { kind: 'from', currency: 'AUD', amountMinor: 5_500, unit: 'hour', taxTreatment: 'inclusive' },
+}
+
+export const DEV_SEED_PRICE_BY_SLUG: Readonly<Record<string, OfferingPrice>> = Object.fromEntries(
+  Object.entries(DEV_SEED_PRICING_BY_SLUG).flatMap(([slug, summary]) => {
+    const price = DEV_SEED_PRICE_BY_PRICING_SUMMARY[summary]
+    return price === undefined ? [] : [[slug, price]]
+  }),
+)
+
+async function publishSeedOfferingPrice(
+  ctx: MutationCtx,
+  businessId: Id<'businesses'>,
+  pricingSummary: string,
+  price: OfferingPrice | undefined,
+  now: number,
+): Promise<{ kind: 'ok' } | { kind: 'error'; code: string }> {
+  const offering = await ctx.db
+    .query('businessOfferings')
+    .withIndex('by_businessId_and_status', (query) => query.eq('businessId', businessId).eq('status', 'published'))
+    .first()
+  if (offering === null) return { kind: 'error', code: 'offering_not_found' }
+  const revision = await ctx.db
+    .query('businessOfferingRevisions')
+    .withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision))
+    .unique()
+  if (revision === null) return { kind: 'error', code: 'revision_not_found' }
+  // Prose and structured price publish together, so a revision carrying only the
+  // prose is not yet seeded — re-running has to finish the pair.
+  if (revision.pricingSummary === pricingSummary && (price === undefined || revision.price !== undefined)) return { kind: 'ok' }
+
+  await ctx.db.patch(revision._id, { pricingSummary, ...(price === undefined ? {} : { price }) })
+  const db = runtimeDb(ctx.db)
+  const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand(
+    db, businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now), now,
+  )
+  return rebuilt.kind === 'ok' ? { kind: 'ok' } : { kind: 'error', code: rebuilt.code }
+}
 
 function isSandboxFixture(fixture: DevSeedBusinessFixture): boolean {
   return fixture.requestedSlug.startsWith('sandbox-')

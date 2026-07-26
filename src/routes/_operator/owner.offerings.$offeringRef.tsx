@@ -52,6 +52,9 @@ function toEditorValue(source: Extract<Extract<Awaited<ReturnType<typeof readOwn
     serviceAreaSummary: source.revision.serviceAreaSummary ?? '',
     availabilitySummary: source.revision.availabilitySummary ?? '',
     pricingSummary: source.revision.pricingSummary ?? '',
+    // Without this the next save would publish a revision with no price and
+    // silently retire one the owner already published.
+    price: source.revision.price,
     status: source.status,
     accessPaths: source.accessPaths.map((path) => ({ accessPathRef: path.accessPathRef, status: path.status, descriptor: path.descriptor })),
   }

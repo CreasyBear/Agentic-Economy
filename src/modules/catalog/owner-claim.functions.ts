@@ -23,6 +23,7 @@ import { readCurrentOwnerTargetAdmissionThroughSource } from '@/modules/inquirie
 import { selectOwnerAdmissionTarget } from '@/modules/inquiries/route-readbacks'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import type {
+  PublicBusinessPageNotFoundReason,
   PublicBusinessPageRouteReadbackResult,
   PublicBusinessPageReadbackResult,
   PublicCatalogContract,
@@ -62,7 +63,7 @@ const ownerStatusInputSchema = z.object({
 
 type ClaimSuccessPageResult =
   | { kind: 'available'; catalog: PublicRouteCatalogContract }
-  | { kind: 'not_found'; reason: 'not_public' }
+  | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
   | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
 
 const publicPageInputSchema = z.object({
@@ -139,7 +140,7 @@ type PublishCatalogResult =
 
 type PublicCatalogReadResult =
   | { kind: 'available'; catalog: PublicCatalogContract }
-  | { kind: 'not_found'; reason: 'not_public' }
+  | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
 
 type Env = Record<string, string | undefined>
 
@@ -298,7 +299,7 @@ async function readPublicBusinessPageThroughSource(slug: string): Promise<Public
   const result = await ownerCatalogSourcePort().readPublicCatalogBySlug({ slug })
   return result.kind === 'available'
     ? { kind: 'available', catalog: redactCatalogSourceHashes(result.catalog) }
-    : { kind: 'not_found', reason: 'not_public' }
+    : { kind: 'not_found', reason: result.reason }
 }
 
 async function redactOwnerClaimResult(result: PublicOwnerClaimFlowResult): Promise<PublicOwnerClaimFlowRouteResult> {

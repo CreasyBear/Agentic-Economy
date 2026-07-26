@@ -59,6 +59,8 @@ export async function refreshCurrentRouteGeneration(
       intent: current.aggregate.snapshot.intent,
       priorFacts,
       graph,
+      // A propose failure ends the refresh below, so this is always the interpreter's last ask.
+      finalAttempt: true,
       compileBase: {
         commandKey,
         commandDigest,
@@ -166,7 +168,7 @@ export async function projectGenerationRefreshResult(
     return {
       kind: 'request', requestRef: result.aggregate.snapshot.requestId,
       revision: result.aggregate.snapshot.revision, state: 'unsupported',
-      summary: 'No business on AE can support this request right now.',
+      summary: 'AE cannot arrange this request end to end yet.',
       nextAction: 'revise_request', missingFields: [],
       criteria: projectCustomerCriteria(result.aggregate.evaluation.criteria),
       options: [],

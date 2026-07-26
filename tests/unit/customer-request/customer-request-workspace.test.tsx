@@ -413,7 +413,7 @@ describe('customer Request workspace', () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'privacy-disposition' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({
       kind: 'request', requestRef: 'request:privacy-disposition', revision: 1, state: 'unsupported',
-      summary: 'No business on AE can support this request right now.',
+      summary: 'AE cannot arrange this request end to end yet.',
       nextAction: 'revise_request', missingFields: [], criteria: [], options: [],
       dataHandling: {
         requestStorage: 'saved_for_revision',
@@ -440,7 +440,7 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Find options' }))
 
     expect(await screen.findByRole('heading', {
-      name: 'No business on AE can support this request right now.',
+      name: 'AE cannot arrange this request end to end yet.',
     })).toBeTruthy()
     expect(screen.getByText(
       'AE saved this revision so you can change it. No information from this revision was sent to a business.',

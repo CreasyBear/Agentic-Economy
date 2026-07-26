@@ -72,11 +72,29 @@ export const attemptTransitionValue = v.object({
     v.literal('timed_out'), v.literal('reconciled_not_released'), v.literal('reconciled_released'),
   ),
 })
+/**
+ * Accepting authority stamps `acceptedAuthority` on the control and
+ * `acceptedBasis` on the binding. Both must be persistable or a durable
+ * authorized invocation cannot be written at all, and a cold resume cannot
+ * reconstruct which authority was consumed.
+ */
+export const acceptedAuthorityValue = v.union(
+  v.object({ kind: v.literal('approve_each'), authorityRef: v.string() }),
+  v.object({
+    kind: v.literal('standing_mandate_use'),
+    mandateRef: v.string(),
+    mandateVersion: v.number(),
+    mandateGeneration: v.number(),
+    authorityUseRef: v.string(),
+    grantEvidenceRef: v.string(),
+  }),
+)
 export const authorityBindingValue = v.object({
   reference: v.string(), invocationRef: v.string(), actor: invocationActorValue, origin: actionInvocationOriginValue,
   invocationVersion: v.number(), actionId: v.string(), contractVersion: v.string(),
   digest: v.string(), targetDigest: v.string(), consequence: v.string(),
   limits: v.record(v.string(), v.number()), expiresAt: v.string(),
+  acceptedBasis: v.optional(acceptedAuthorityValue),
 })
 export const durableControlProjectionValue = v.object({
   invocationRef: v.string(), invocationVersion: v.number(),
@@ -85,6 +103,7 @@ export const durableControlProjectionValue = v.object({
   action: v.object({ id: v.string(), contractVersion: v.string() }),
   desired: v.object({ state: v.literal('invoke') }),
   authority: v.optional(v.object({ reference: v.string(), expiresAt: v.string() })),
+  acceptedAuthority: v.optional(acceptedAuthorityValue),
   freshness: invocationFreshnessValue, control: invocationControlValue,
 })
 

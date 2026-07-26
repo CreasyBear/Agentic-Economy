@@ -93,9 +93,11 @@ export type PublicOwnerClaimFlowResult =
       errors?: readonly PublicOwnerClaimValidationError[]
     }
 
+export type PublicBusinessPageNotFoundReason = 'not_public' | 'no_such_business'
+
 export type PublicBusinessPageReadbackResult =
   | { kind: 'available'; catalog: PublicCatalogContract }
-  | { kind: 'not_found'; reason: 'not_public' }
+  | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
 
 export const publicOwnerDefaultClaimInput = {
   businessName: 'Parramatta Emergency Plumbing',
@@ -315,7 +317,7 @@ export function getPublicBusinessPageReadback(slug: string): PublicBusinessPageR
       return { kind: 'available', catalog: routeCatalog }
     }
 
-    return { kind: 'not_found', reason: 'not_public' }
+    return { kind: 'not_found', reason: 'no_such_business' }
   }
 
   return { kind: 'available', catalog: readback.catalog }

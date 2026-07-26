@@ -1,73 +1,90 @@
+import { readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 import { describe, expect, it } from 'vitest'
 
 import {
   formatOperatorNavBadge,
   isOperatorPathActive,
-  isOperatorSectionPathActive,
   listOperatorCommandDestinations,
   navGroupsForRole,
   operatorUtilityItemsForRole,
-  resolveOperatorSection,
-  sectionNavForSection,
+  roleHomeHref,
+  type OperatorRole,
 } from '@/lib/operator/navigation'
 
+const operatorRoles: readonly OperatorRole[] = ['owner', 'admin', 'developer']
+
+/**
+ * Every `_operator` leaf route as a URL path. `owner.status.tsx` is
+ * `/owner/status`; parameter and index segments are dropped because a nav
+ * destination can never be one.
+ */
+function operatorRoutePaths(): ReadonlySet<string> {
+  const directory = fileURLToPath(new URL('../../src/routes/_operator', import.meta.url))
+  const paths = readdirSync(directory)
+    .filter((entry) => entry.endsWith('.tsx'))
+    .map((entry) => entry.replace(/\.tsx$/, ''))
+    .filter((entry) => !entry.split('.').some((segment) => segment.startsWith('$')))
+    .map((entry) => `/${entry.split('.').join('/')}`)
+  return new Set(paths)
+}
+
+/** Public destinations are not operator routes; they are validated separately. */
+const publicDestinations = new Set(['/', '/registry', '/help'])
+
 describe('operator navigation', () => {
-  it('groups owner nav with billing under account', () => {
-    const groups = navGroupsForRole('owner')
-    const labels = groups.flatMap((group) => group.items.map((item) => item.label))
+  const routePaths = operatorRoutePaths()
 
-    expect(labels).toContain('Billing')
-    expect(labels).toContain('Inquiries')
+  it.each(operatorRoles)('advertises only real routes to a %s', (role) => {
+    const advertised = navGroupsForRole(role, { advanced: true })
+      .flatMap((group) => group.items.map((item) => item.href))
+
+    const missing = advertised.filter((href) => !routePaths.has(href))
+    expect(missing, `navigation advertises routes that do not exist: ${missing.join(', ')}`)
+      .toEqual([])
   })
 
-  it('groups admin monetization separately from review queues', () => {
-    const groups = navGroupsForRole('admin')
-
-    expect(groups.map((group) => group.id)).toEqual(['review', 'operations', 'monetization'])
+  it.each(operatorRoles)('sends a %s home to a real route', (role) => {
+    expect(routePaths.has(roleHomeHref[role])).toBe(true)
   })
 
-  it('resolves billing section for nested owner billing routes', () => {
-    expect(resolveOperatorSection('/owner/billing')).toBe('billing')
-    expect(resolveOperatorSection('/owner/billing/receipts/rcpt_1')).toBe('billing')
-    expect(resolveOperatorSection('/owner/inquiries')).toBeUndefined()
-  })
+  it.each(operatorRoles)('offers a %s only destinations that exist', (role) => {
+    const advertised = listOperatorCommandDestinations(role)
+      .flatMap((group) => group.items.map((item) => item.href))
 
-  it('marks nested paths active for primary nav roots', () => {
-    expect(isOperatorPathActive('/owner/billing/receipts/rcpt_1', '/owner/billing')).toBe(true)
-    expect(isOperatorPathActive('/owner/billing/activate', '/owner/billing')).toBe(true)
-  })
-
-  it('uses exact match for billing overview in section rail', () => {
-    expect(isOperatorSectionPathActive('/owner/billing', '/owner/billing', 'billing')).toBe(true)
-    expect(isOperatorSectionPathActive('/owner/billing/activate', '/owner/billing', 'billing')).toBe(false)
-    expect(isOperatorSectionPathActive('/owner/billing/activate', '/owner/billing/activate', 'billing')).toBe(true)
-  })
-
-  it('exposes billing section rail items', () => {
-    expect(sectionNavForSection('billing').map((item) => item.href)).toEqual([
-      '/owner/billing',
-      '/owner/billing/activate',
-    ])
-  })
-
-  it('stage-gates advanced owner nav when advanced mode is off', () => {
-    const labels = navGroupsForRole('owner', { advanced: false }).flatMap((group) =>
-      group.items.map((item) => item.label),
+    const missing = advertised.filter(
+      (href) => !routePaths.has(href) && !publicDestinations.has(href),
     )
+    expect(missing, `command menu advertises routes that do not exist: ${missing.join(', ')}`)
+      .toEqual([])
+  })
+
+  it('offers exactly the sidebar destinations plus public ones', () => {
+    const sidebar = navGroupsForRole('owner')
+      .flatMap((group) => group.items.map((item) => item.href))
+    const command = listOperatorCommandDestinations('owner')
+      .flatMap((group) => group.items.map((item) => item.href))
+
+    expect(command.filter((href) => !publicDestinations.has(href))).toEqual(sidebar)
+  })
+
+  it('keeps the gated owner sidebar to the core working set', () => {
+    const labels = navGroupsForRole('owner', { advanced: false })
+      .flatMap((group) => group.items.map((item) => item.label))
+
     expect(labels).toEqual(['Business page', 'Offerings', 'Inquiries', 'Settings'])
   })
 
-  it('shows advanced owner destinations in command list regardless of sidebar gate', () => {
-    const labels = listOperatorCommandDestinations('owner')
-      .flatMap((group) => group.items.map((item) => item.label))
-    expect(labels).toContain('Billing')
-    expect(labels).toContain('Ask')
+  it('marks nested paths active for their nav root', () => {
+    expect(isOperatorPathActive('/owner/offerings/off_1', '/owner/offerings')).toBe(true)
+    expect(isOperatorPathActive('/owner/offerings', '/owner/offerings')).toBe(true)
+    expect(isOperatorPathActive('/owner/offeringsx', '/owner/offerings')).toBe(false)
   })
 
   it('exposes public utility links for operator sidebar footers', () => {
-    const utilityHrefs = operatorUtilityItemsForRole('owner').map((item) => item.href)
-
-    expect(utilityHrefs).toEqual(['/', '/registry', '/help'])
+    expect(operatorUtilityItemsForRole('owner').map((item) => item.href))
+      .toEqual(['/', '/registry', '/help'])
   })
 
   it('formats operator nav badges without showing empty counts', () => {

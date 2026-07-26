@@ -26,6 +26,25 @@ export type {
   BuildOfferingDiscoveryManifestResult,
   OfferingDiscoveryManifestContract,
 } from './internal/offering-manifest'
+export {
+  SiteDiscoveryEndpointKindValues,
+  SiteDiscoveryManifestSchemaVersion,
+  buildSiteDiscoveryManifest,
+} from './internal/site-manifest'
+export type {
+  SiteDiscoveryEndpointContract,
+  SiteDiscoveryEndpointKind,
+  SiteDiscoveryManifestContract,
+} from './internal/site-manifest'
+export {
+  AgentCatalogMarkdownLimit,
+  buildBusinessMarkdown,
+  buildCatalogMarkdown,
+  buildMissingBusinessMarkdown,
+  buildSiteBriefMarkdown,
+  buildUnknownPageMarkdown,
+} from './internal/page-markdown'
+export type { AgentPageMarkdownOptions } from './internal/page-markdown'
 
 export const DiscoveryStatusValues = ['unavailable', 'degraded', 'available', 'stale'] as const
 export type DiscoveryStatus = (typeof DiscoveryStatusValues)[number]

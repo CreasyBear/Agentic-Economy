@@ -218,7 +218,7 @@ describe('customer-request provide-facts', () => {
 
   it('refuses when the request graph is unavailable', async () => {
     const ports = basePorts({
-      loadRequestGraph: vi.fn(async () => ({ kind: 'unavailable' as const })),
+      loadRequestGraph: vi.fn(async () => ({ kind: 'unavailable' as const, reason: 'no_routeable_supply' as const })),
     })
     const result = await provideCustomerRequestFacts(baseInput, ports)
     expect(result).toEqual({ kind: 'refused', reason: 'capabilities_unavailable' })

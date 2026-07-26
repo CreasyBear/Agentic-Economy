@@ -1,8 +1,11 @@
 import type {
   BusinessSupplyProjection,
+  OfferingPrice,
   PublicAccessPath,
 } from '@/modules/catalog/public'
 
+// Stays v2 across the `price` addition: an optional field a consumer can ignore
+// is not worth forcing every pinned reader to re-pin for.
 export const PublicBusinessCatalogApiSchemaVersion = 'public-business-catalog-api:v2' as const
 
 export type PublicOfferingAccessPathDto =
@@ -36,6 +39,8 @@ export type PublicOfferingDto = Readonly<{
   serviceAreaSummary?: string
   availabilitySummary?: string
   pricingSummary?: string
+  /** The comparable form of the same fact. Never derived from `pricingSummary`. */
+  price?: OfferingPrice
   accessPaths: readonly PublicOfferingAccessPathDto[]
   support: Readonly<{
     integrated: boolean
@@ -56,6 +61,9 @@ export type PublicBusinessCatalogApiV2Dto = Readonly<{
   publishedPhone?: string
   postcode?: string
   publicUrl: string
+  trustTier: BusinessSupplyProjection['business']['trustTier']
+  responseTimeMinutes?: number
+  photos: readonly Readonly<{ url: string; alt: string }>[]
   observedAt: number
   disposition: BusinessSupplyProjection['disposition']
   offerings: readonly PublicOfferingDto[]
@@ -97,6 +105,14 @@ export function projectBusinessSupplyToPublicApi(
   projection: BusinessSupplyProjection,
   now = projection.observedAt,
 ): PublicBusinessCatalogApiV2Dto {
+  /**
+   * The legacy expansion cannot see the business profile, so it derives a
+   * `phone` channel from the service's public-contact flag alone. When the
+   * profile publishes no number there is nothing to dial, and a rendered
+   * "Call" affordance is a way to get started that does not exist. The v1
+   * adapter below already applies this rule; both projections owe the same one.
+   */
+  const dialable = (projection.business.publishedPhone ?? '').trim().length > 0
   const offerings = projection.offerings.map((item): PublicOfferingDto => ({
     offeringRef: item.offering.offeringRef,
     revision: item.offering.revision,
@@ -104,9 +120,12 @@ export function projectBusinessSupplyToPublicApi(
     category: item.offering.category,
     summary: item.offering.summary,
     ...(item.offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: item.offering.serviceAreaSummary }),
-    ...(item.offering.availabilitySummary === undefined ? {} : { availabilitySummary: item.offering.availabilitySummary }),
+    ...spreadAvailability(item.offering.availabilitySummary),
     ...(item.offering.pricingSummary === undefined ? {} : { pricingSummary: item.offering.pricingSummary }),
-    accessPaths: item.accessPaths.map(projectAccessPath),
+    ...(item.offering.price === undefined ? {} : { price: item.offering.price }),
+    accessPaths: item.accessPaths
+      .filter((path) => dialable || path.descriptor.kind !== 'human_request' || path.descriptor.channel !== 'phone')
+      .map(projectAccessPath),
     support: {
       integrated: item.support.integrated,
       aeSupportedAction: item.support.routeable
@@ -129,6 +148,9 @@ export function projectBusinessSupplyToPublicApi(
     ...(projection.business.publishedPhone === undefined ? {} : { publishedPhone: projection.business.publishedPhone }),
     ...(projection.business.postcode === undefined ? {} : { postcode: projection.business.postcode }),
     publicUrl: projection.business.publicUrl,
+    trustTier: normalizeTrustTier(projection.business.trustTier),
+    ...(projection.business.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: projection.business.responseTimeMinutes }),
+    photos: normalizePhotos(projection.business.photos),
     observedAt: projection.observedAt,
     disposition: projection.disposition,
     offerings,
@@ -138,6 +160,57 @@ export function projectBusinessSupplyToPublicApi(
       aeSupportedAction: offerings.some((offering) => offering.support.aeSupportedAction),
     },
   }
+}
+
+/**
+ * The retained v1 service model requires a non-empty `hoursOrUnknown`, so
+ * "this business has not published hours" could only ever be spelled as one of
+ * a handful of sentinel strings. Passing those through as `availabilitySummary`
+ * makes every consumer — the business page, the answer thread, an agent reading
+ * /api/businesses — render a placeholder as a published fact. The public
+ * boundary drops them instead: an unpublished fact is absent, never named.
+ *
+ * Kept local rather than shared with `@/lib/ui/status-presentation`, which owns
+ * the same list for display purposes: that module is UI copy and pulls the
+ * registry types back in, and this projection is bundled into Convex.
+ */
+const UNPUBLISHED_AVAILABILITY_SENTINELS: Readonly<Record<string, true>> = {
+  'unknown': true,
+  'hours unknown': true,
+  'hours supplied by owner': true,
+  'owner supplied hours': true,
+  'owner confirmed hours are not listed yet': true,
+  'after-hours availability supplied by owner': true,
+}
+
+function spreadAvailability(value: string | undefined): { availabilitySummary?: string } {
+  const trimmed = value?.trim() ?? ''
+  return trimmed.length === 0 || UNPUBLISHED_AVAILABILITY_SENTINELS[trimmed.toLowerCase()] === true
+    ? {}
+    : { availabilitySummary: trimmed }
+}
+
+/**
+ * Supply snapshots are stored as JSON and are read back by code that may be
+ * newer than the row. A snapshot written before the business profile carried
+ * `trustTier` / `photos` still has to project into a valid public DTO, so the
+ * boundary defaults them instead of trusting the compile-time shape of a
+ * value that came off disk.
+ */
+function normalizeTrustTier(value: unknown): PublicBusinessCatalogApiV2Dto['trustTier'] {
+  return value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified'
+    ? value
+    : 'claimed'
+}
+
+function normalizePhotos(value: unknown): readonly Readonly<{ url: string; alt: string }>[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return []
+    const url = 'url' in entry ? entry.url : undefined
+    const alt = 'alt' in entry ? entry.alt : undefined
+    return typeof url === 'string' && typeof alt === 'string' ? [{ url, alt }] : []
+  })
 }
 
 export function summarizeOfferingAccess(dto: PublicBusinessCatalogApiV2Dto): Readonly<{
@@ -161,6 +234,9 @@ export function adaptLegacyCatalogToOfferingApi(catalog: Readonly<{
   publishedPhone?: string
   postcode?: string
   publicUrl: string
+  trustTier: BusinessSupplyProjection['business']['trustTier']
+  responseTimeMinutes?: number
+  photos?: readonly Readonly<{ url: string; alt: string }>[]
   updatedAt: number
   services: readonly Readonly<{
     slug: string
@@ -177,16 +253,30 @@ export function adaptLegacyCatalogToOfferingApi(catalog: Readonly<{
   }>[]
 }>): PublicBusinessCatalogApiV2Dto {
   const offerings: PublicOfferingDto[] = catalog.services.map((service) => {
-    const hasRequestPath = service.firstRequest.mode !== 'not_available_yet'
-    const accessPaths: PublicOfferingAccessPathDto[] = hasRequestPath
-      ? [{
-          accessPathRef: `legacy-access:${catalog.slug}:${service.slug}`,
-          kind: 'human_request',
-          channel: service.firstRequest.publicChannel === 'public_business_contact' && catalog.publishedPhone !== undefined
-            ? 'phone'
-            : 'ae_inquiry',
-          disclosure: service.firstRequest.publicDisclosure,
-        }]
+    /**
+     * `mode` and `publicChannel` are independent V1 facts: a business can both
+     * publish a phone number and accept an AE inquiry. Collapsing them into a
+     * single channel silently dropped the inquiry path, and with it the
+     * "Send inquiry" step, wherever this adapter runs.
+     */
+    const requestable = service.firstRequest.mode !== 'not_available_yet'
+    const publishesPhone = service.firstRequest.publicChannel === 'public_business_contact'
+      && catalog.publishedPhone !== undefined
+    const accessPaths: PublicOfferingAccessPathDto[] = requestable
+      ? [
+          ...(publishesPhone ? [{
+            accessPathRef: `legacy-access:${catalog.slug}:${service.slug}:phone`,
+            kind: 'human_request' as const,
+            channel: 'phone' as const,
+            disclosure: service.firstRequest.publicDisclosure,
+          }] : []),
+          {
+            accessPathRef: `legacy-access:${catalog.slug}:${service.slug}`,
+            kind: 'human_request' as const,
+            channel: 'ae_inquiry' as const,
+            disclosure: service.firstRequest.publicDisclosure,
+          },
+        ]
       : []
     return {
       offeringRef: `legacy-offering:${catalog.slug}:${service.slug}`,
@@ -195,7 +285,9 @@ export function adaptLegacyCatalogToOfferingApi(catalog: Readonly<{
       category: service.category,
       summary: service.summary,
       serviceAreaSummary: service.serviceArea,
-      availabilitySummary: service.hoursOrUnknown,
+      ...spreadAvailability(service.hoursOrUnknown),
+      // No `price`: the v1 service model has no price column, and a legacy row
+      // must not acquire a comparable number nobody published.
       accessPaths,
       support: { integrated: false, aeSupportedAction: false },
     }
@@ -212,6 +304,9 @@ export function adaptLegacyCatalogToOfferingApi(catalog: Readonly<{
     ...(catalog.publishedPhone === undefined ? {} : { publishedPhone: catalog.publishedPhone }),
     ...(catalog.postcode === undefined ? {} : { postcode: catalog.postcode }),
     publicUrl: catalog.publicUrl,
+    trustTier: catalog.trustTier,
+    ...(catalog.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: catalog.responseTimeMinutes }),
+    photos: catalog.photos ?? [],
     observedAt: catalog.updatedAt,
     disposition: 'current',
     offerings,

@@ -8,15 +8,12 @@ import { Heading, Text } from '@astryxdesign/core/Text'
 
 import { AeOperatorBreadcrumbs } from '@/components/ae/layout/AeOperatorBreadcrumbs'
 import { AeOperatorCommandMenu } from '@/components/ae/layout/AeOperatorCommandMenu'
-import { AeOperatorSectionNav } from '@/components/ae/layout/AeOperatorSectionNav'
 import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
 import {
   resolveOperatorListCrumb,
-  resolveOperatorSection,
   type OperatorBreadcrumbItem,
   type OperatorNavBadges,
   type OperatorRole,
-  type OperatorSectionId,
 } from '@/lib/operator/navigation'
 
 export type OperatorDensity = 'compact' | 'comfortable'
@@ -47,7 +44,6 @@ export type AeOperatorShellProps = {
   mainContentId?: string
   breadcrumbs?: readonly OperatorBreadcrumbItem[]
   navBadges?: OperatorNavBadges
-  sectionId?: OperatorSectionId
   children: ReactNode
 }
 
@@ -72,7 +68,6 @@ function NestedOperatorShell({
   mainContentId,
   breadcrumbs,
   navBadges,
-  sectionId,
   children,
 }: AeOperatorShellProps & { parentShell: OperatorShellChromeRegistration }) {
   const chrome = useMemo<OperatorShellChrome>(
@@ -86,9 +81,8 @@ function NestedOperatorShell({
       ...(mainContentId === undefined ? {} : { mainContentId }),
       ...(breadcrumbs === undefined ? {} : { breadcrumbs }),
       ...(navBadges === undefined ? {} : { navBadges }),
-      ...(sectionId === undefined ? {} : { sectionId }),
     }),
-    [operatorRole, title, description, eyebrow, actions, currentPath, mainContentId, breadcrumbs, navBadges, sectionId],
+    [operatorRole, title, description, eyebrow, actions, currentPath, mainContentId, breadcrumbs, navBadges],
   )
 
   useLayoutEffect(() => {
@@ -122,12 +116,10 @@ function RootOperatorShell(props: AeOperatorShellProps) {
     mainContentId,
     breadcrumbs: providedBreadcrumbs,
     navBadges,
-    sectionId,
   } = registeredChrome ?? props
   const { children } = props
   const titleId = useId()
   const descriptionId = useId()
-  const activeSection = sectionId ?? resolveOperatorSection(currentPath)
   const density: OperatorDensity = operatorRole === 'owner' ? 'compact' : 'comfortable'
   const isCompact = density === 'compact'
   const shellRef = useRef<HTMLDivElement>(null)
@@ -224,18 +216,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
             </section>
             <Divider variant="subtle" />
 
-            <div
-              className={
-                activeSection === undefined
-                  ? 'grid gap-6'
-                  : 'grid gap-6 lg:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)] lg:items-start'
-              }
-            >
-              {activeSection === undefined ? null : (
-                <aside className="rounded-md border border-border bg-card p-4 lg:sticky lg:top-20">
-                  <AeOperatorSectionNav sectionId={activeSection} currentPath={currentPath} />
-                </aside>
-              )}
+            <div className="grid gap-6">
               <section className="grid min-w-0 gap-4">{children}</section>
             </div>
           </div>

@@ -1,5 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 
 import { AeOwnerStatusEmptyState } from '@/components/ae/status/AeOwnerStatusEmptyState'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
@@ -8,6 +11,9 @@ import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
 import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import { readOwnerStatusServer } from '@/modules/catalog/owner-claim.functions'
 import { recordServerFunnelEventServer } from '@/modules/observability/funnel.functions'
+import { readOwnerSearchGapsServer } from '@/modules/demand/demand.functions'
+import type { OwnerSearchGapReadback } from '@/modules/demand/demand.functions'
+import type { SearchGapFact } from '@/modules/demand/public'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 type OwnerStatusSearch = {
@@ -22,7 +28,11 @@ export const Route = createFileRoute('/_operator/owner/status')({
   },
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => {
-    const result = await readOwnerStatusServer({ data: deps })
+    const [result, searchGaps] = await Promise.all([
+      readOwnerStatusServer({ data: deps }),
+      readOwnerSearchGapsServer()
+        .catch((): OwnerSearchGapReadback => ({ kind: 'unavailable' })),
+    ])
     if (result.kind === 'available') {
       const businessId = readPublicCatalogActivationRef(result.readback.catalog)
       const payload = { slug: result.readback.catalog.slug }
@@ -51,7 +61,7 @@ export const Route = createFileRoute('/_operator/owner/status')({
         },
       }).catch(() => undefined)
     }
-    return result
+    return { result, searchGaps }
   },
   head: () => ({
     meta: [
@@ -63,7 +73,7 @@ export const Route = createFileRoute('/_operator/owner/status')({
 })
 
 function OwnerStatusRoute() {
-  const result = Route.useLoaderData()
+  const { result, searchGaps } = Route.useLoaderData()
   const readback = result.kind === 'available' ? result.readback : undefined
 
   return (
@@ -79,6 +89,7 @@ function OwnerStatusRoute() {
         ) : (
           <>
             <AeStatusCard readback={readback} />
+            <OwnerSearchGapCard readback={searchGaps} />
             <div className="flex flex-wrap gap-3">
               <Button href="/owner/offerings" label="Manage Offerings" variant="primary" />
             </div>
@@ -87,5 +98,82 @@ function OwnerStatusRoute() {
         )}
       </div>
     </AeOperatorShell>
+  )
+}
+
+/**
+ * Every action must land on a surface that can actually change the fact.
+ * `/claim/form` cannot: claiming rejects a slug this owner already owns, so
+ * sending an existing owner there is a rejection funnel, not an edit.
+ */
+const ownerFactPresentation: Readonly<Record<SearchGapFact, {
+  label: string
+  action: string
+  href: '/owner/offerings' | '/help'
+}>> = {
+  price: { label: 'price', action: 'Add prices', href: '/owner/offerings' },
+  availability: { label: 'opening hours', action: 'Update hours', href: '/owner/offerings' },
+  contact: { label: 'a way to contact you', action: 'Add a contact option', href: '/owner/offerings' },
+  service_detail: { label: 'what you offer', action: 'Describe your services', href: '/owner/offerings' },
+  location: { label: 'your location', action: 'Ask us to update it', href: '/help' },
+}
+
+function OwnerSearchGapCard({ readback }: Readonly<{ readback: OwnerSearchGapReadback }>) {
+  if (readback.kind === 'denied') {
+    return null
+  }
+
+  if (readback.kind === 'unavailable') {
+    return (
+      <Card padding={6}>
+        <VStack gap={1}>
+          <Text as="h2" type="large" weight="semibold" color="primary" display="block">
+            Details customers searched for
+          </Text>
+          <Text color="secondary" display="block">
+            We could not load recent search details. Refresh to try again.
+          </Text>
+        </VStack>
+      </Card>
+    )
+  }
+
+  return (
+    <Card padding={6} aria-labelledby="owner-search-gap-heading">
+      <VStack gap={4}>
+        <VStack gap={1}>
+          <Text as="h2" type="large" weight="semibold" color="primary" display="block" id="owner-search-gap-heading">
+            Details customers searched for
+          </Text>
+          <Text type="supporting" color="secondary" display="block">Last 30 days.</Text>
+        </VStack>
+        {readback.byFact.length === 0 ? (
+          <Text color="secondary" display="block">
+            No search history yet. When your business appears in customer searches, the details they looked for will show here.
+          </Text>
+        ) : (
+          <VStack gap={3}>
+            <ul className="m-0 grid list-none gap-3 p-0">
+              {readback.byFact.map(({ fact, searches }) => {
+                const presentation = ownerFactPresentation[fact]
+                return (
+                  <li key={fact} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
+                    <Text color="primary">
+                      Your business appeared in {searches} {searches === 1 ? 'search' : 'searches'} that mentioned {presentation.label}.
+                    </Text>
+                    <Button href={presentation.href} label={presentation.action} variant="secondary" size="sm" />
+                  </li>
+                )
+              })}
+            </ul>
+            {readback.truncated ? (
+              <Text type="supporting" color="secondary" display="block">
+                Showing patterns from the 100 most recent matches.
+              </Text>
+            ) : null}
+          </VStack>
+        )}
+      </VStack>
+    </Card>
   )
 }

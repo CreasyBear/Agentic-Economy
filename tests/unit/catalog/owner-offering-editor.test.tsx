@@ -106,3 +106,166 @@ describe('owner offering editor is draft-first', () => {
     await waitFor(() => expect(screen.getByDisplayValue('Emergency plumbing')).toBeDefined())
   })
 })
+
+/** The Astryx Selector is a combobox + listbox, so a choice is two clicks. */
+function choose(select: string, option: string): void {
+  fireEvent.click(screen.getByRole('combobox', { name: select }))
+  fireEvent.click(screen.getByRole('option', { name: option }))
+}
+
+describe('owner offering editor publishes a comparable price beside the note', () => {
+  it('turns entered dollars into a minor-unit price', async () => {
+    const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
+    render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
+
+    // Nothing structured until the owner says what kind of price this is.
+    expect(screen.queryByLabelText('Amount')).toBeNull()
+    choose('Price type', 'Fixed price')
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '129.50' } })
+    choose('Charged per', 'Hour')
+    choose('Tax', 'Includes tax')
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave.mock.calls[0]?.[0]?.price).toEqual({
+      kind: 'fixed',
+      currency: 'AUD',
+      amountMinor: 12_950,
+      unit: 'hour',
+      taxTreatment: 'inclusive',
+    })
+  })
+
+  it('leaves the free-text pricing note untouched', async () => {
+    const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
+    render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
+
+    fireEvent.change(screen.getByLabelText('Pricing'), { target: { value: 'Call-out fee waived for regulars.' } })
+    choose('Price type', 'From')
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '90' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    const value = onSave.mock.calls[0]?.[0]
+    expect(value?.pricingSummary).toBe('Call-out fee waived for regulars.')
+    expect(value?.price).toEqual({ kind: 'from', currency: 'AUD', amountMinor: 9_000, taxTreatment: 'unstated' })
+  })
+
+  it('reveals a second amount for a range and drops the group until both bounds exist', async () => {
+    const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
+    render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
+
+    choose('Price type', 'Fixed price')
+    expect(screen.queryByLabelText('Maximum amount')).toBeNull()
+    choose('Price type', 'Range')
+    expect(screen.getByLabelText('Maximum amount')).toBeTruthy()
+
+    // A lower bound alone would sort and filter against a ceiling the business
+    // never published, so the whole group is dropped rather than half-sent.
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '80' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave.mock.calls[0]?.[0]?.price).toBeUndefined()
+
+    fireEvent.change(screen.getByLabelText('Maximum amount'), { target: { value: '150' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
+    expect(onSave.mock.calls[1]?.[0]?.price).toEqual({
+      kind: 'range',
+      currency: 'AUD',
+      amountMinor: 8_000,
+      maximumAmountMinor: 15_000,
+      taxTreatment: 'unstated',
+    })
+  })
+
+  it('publishes a quote-only price without asking for an amount', async () => {
+    const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
+    render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
+
+    choose('Price type', 'Quoted on request')
+    expect(screen.queryByLabelText('Amount')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave.mock.calls[0]?.[0]?.price).toEqual({ kind: 'quote_only', currency: 'AUD', taxTreatment: 'unstated' })
+  })
+
+  it('restores the price group from a parked draft', async () => {
+    const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
+    const first = render(
+      <AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} draftKey="business-price" />,
+    )
+
+    choose('Price type', 'Fixed price')
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '250' } })
+    await waitFor(() => expect(readStoredOfferingDraft('business-price')?.price).toEqual({
+      kind: 'fixed', currency: 'AUD', amountMinor: 25_000, taxTreatment: 'unstated',
+    }))
+
+    first.unmount()
+    render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} draftKey="business-price" />)
+    await waitFor(() => expect(screen.getByLabelText('Amount')).toHaveProperty('value', '250'))
+  })
+})
+
+describe('owner offering editor publishes the external operation contract', () => {
+  it('carries the name, method, interface, and authentication the owner gave', async () => {
+    const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
+    render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
+
+    choose('Add a way to get started', 'API or agent endpoint')
+    fireEvent.change(screen.getByLabelText('What this endpoint provides'), { target: { value: 'Run a quote query.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add endpoint details' }))
+    fireEvent.change(screen.getByLabelText('Endpoint name'), { target: { value: 'Quote query API' } })
+    fireEvent.change(screen.getByLabelText('Endpoint URL'), { target: { value: 'https://example.com/api/quote' } })
+    choose('Method', 'POST')
+    choose('Interface description', 'OpenAPI')
+    fireEvent.change(screen.getByLabelText('Authentication'), { target: { value: 'Bearer token issued on request.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add this way' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    const descriptor = onSave.mock.calls[0]?.[0]?.accessPaths[0]?.descriptor
+    if (descriptor?.kind !== 'external_operation') throw new Error('external operation access path missing')
+    expect(descriptor).toEqual({
+      kind: 'external_operation',
+      name: 'Quote query API',
+      summary: 'Run a quote query.',
+      url: 'https://example.com/api/quote',
+      method: 'POST',
+      interfaceDescription: { format: 'OpenAPI' },
+      authenticationSummary: 'Bearer token issued on request.',
+      provenance: 'business_declared',
+    })
+    // An untouched field is absent, not an empty string: a caller must be able
+    // to tell "not stated" apart from "stated as nothing".
+    expect(Object.keys(descriptor)).not.toContain('documentationUrl')
+    expect(Object.keys(descriptor)).not.toContain('pricingSummary')
+    expect(Object.keys(descriptor.interfaceDescription ?? {})).not.toContain('url')
+  })
+
+  it('keeps the published default name when the owner names nothing', async () => {
+    const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
+    render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
+
+    choose('Add a way to get started', 'API or agent endpoint')
+    fireEvent.change(screen.getByLabelText('What this endpoint provides'), { target: { value: 'Run a quote query.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add endpoint details' }))
+
+    // The gate is still summary plus URL, so a nameless endpoint can be added.
+    expect(screen.getByRole('button', { name: 'Add this way' })).toHaveProperty('disabled', true)
+    fireEvent.change(screen.getByLabelText('Endpoint URL'), { target: { value: 'https://example.com/api/quote' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add this way' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave.mock.calls[0]?.[0]?.accessPaths[0]?.descriptor).toEqual({
+      kind: 'external_operation',
+      name: 'API or agent endpoint',
+      summary: 'Run a quote query.',
+      url: 'https://example.com/api/quote',
+      provenance: 'business_declared',
+    })
+  })
+})

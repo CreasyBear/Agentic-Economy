@@ -95,7 +95,10 @@ export async function loadRegistryRouteReadback(deps: RegistrySearchParams): Pro
   const result =
     deps.q.length === 0
       ? await readPublicOfferingRegistryPage({ limit: deps.limit, ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }) })
-      : await readPublicOfferingRegistrySearchPage({ query: deps.q, limit: deps.limit, ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }) })
+      : await readPublicOfferingRegistrySearchPage(
+          { query: deps.q, limit: deps.limit, ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }) },
+          { surface: 'registry_ui' },
+        )
 
   return { result, query: deps.q, limit: deps.limit }
 }
@@ -163,8 +166,19 @@ function RegistryRoute() {
                 <VStack gap={6}>
                   {/* The page heading already says what this is. A second
                       "Published businesses" title above the grid restates it;
-                      the count is the only new fact, so the count stands alone. */}
-                  <Text color="secondary" display="block"><AeAnimatedNumber value={result.pagination.total} /> {resultSummary(result.pagination.total, query)}</Text>
+                      the count is the only new fact, so the count stands alone.
+                      When a page-local category is active the backend total is
+                      not what is on screen, so count what is rendered. */}
+                  <Text color="secondary" display="block">
+                    <AeAnimatedNumber
+                      value={effectiveCategory === 'All' ? result.pagination.total : filteredItems.length}
+                    />
+                    {' '}
+                    {resultSummary(
+                      effectiveCategory === 'All' ? result.pagination.total : filteredItems.length,
+                      query,
+                    )}
+                  </Text>
                   {filteredItems.length === 0 ? (
                     <Center>
                       <Text type="supporting" color="secondary">No results found in this category.</Text>

@@ -7,6 +7,7 @@ import {
 } from './evaluation'
 import type { PreparedRouteCandidateSet } from './preparation'
 import { projectCustomerOptionSet } from './customer-option-set'
+import { DETERMINISTIC_TOKEN_MATCH_INTERPRETER_ID } from './semantic-interpreter'
 import type {
   CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView, CustomerRouteConfirmation,
   CustomerRoutePlanDecision,
@@ -143,6 +144,9 @@ export function projectCustomerRequest(result: CompileCustomerRequestResult): Cu
     outcome: result.aggregate.outcome,
     actionCount: result.aggregate.plan.actions.length,
     reportedOptionFailure: (result.aggregate.snapshot.routeExclusions?.length ?? 0) > 0,
+    ...(result.aggregate.plan.interpreterId === DETERMINISTIC_TOKEN_MATCH_INTERPRETER_ID
+      ? { interpretationBasis: 'keyword_match' as const }
+      : {}),
     ...(result.routeGeneration === undefined
       ? {}
       : { routeGenerationRef: result.routeGeneration.generationRef }),
@@ -156,18 +160,22 @@ export function projectRequestEvaluation(input: Readonly<{
   actionCount?: number
   reportedOptionFailure?: boolean
   routeGenerationRef?: string
+  interpretationBasis?: CustomerRequestView['interpretationBasis']
 }>): CustomerRequestView {
   const criteria = projectCustomerCriteria(input.evaluation.criteria)
-  const routeGeneration = input.routeGenerationRef === undefined
-    ? {}
-    : { routeGenerationRef: input.routeGenerationRef }
+  // Spread into every branch below so a new outcome cannot silently drop the generation it came
+  // from or the basis AE interpreted it on.
+  const provenance = {
+    ...(input.routeGenerationRef === undefined ? {} : { routeGenerationRef: input.routeGenerationRef }),
+    ...(input.interpretationBasis === undefined ? {} : { interpretationBasis: input.interpretationBasis }),
+  }
   const maximumTotalCost = customerMaximumTotalCost(input.evaluation.criteria)
   const maximumResponseTimeMs = customerMaximumResponseTimeMs(input.evaluation.criteria)
   const providerDataSharingProhibited = input.evaluation.criteria.some((criterion) => (
     criterion.inputKey === CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY && criterion.value === false
   ))
   if (input.outcome === 'unsupported' && input.reportedOptionFailure === true) return requestView({
-    ...routeGeneration,
+    ...provenance,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
@@ -181,7 +189,7 @@ export function projectRequestEvaluation(input: Readonly<{
     ),
   })
   if (input.evaluation.posture === 'unsupported' && input.actionCount === 0) return requestView({
-    ...routeGeneration,
+    ...provenance,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
@@ -195,7 +203,7 @@ export function projectRequestEvaluation(input: Readonly<{
     ),
   })
   if (input.outcome === 'unsupported' && providerDataSharingProhibited) return requestView({
-    ...routeGeneration,
+    ...provenance,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
@@ -209,7 +217,7 @@ export function projectRequestEvaluation(input: Readonly<{
     ),
   })
   if (input.outcome === 'unsupported' && maximumResponseTimeMs !== undefined) return requestView({
-    ...routeGeneration,
+    ...provenance,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
@@ -223,7 +231,7 @@ export function projectRequestEvaluation(input: Readonly<{
     ),
   })
   if (input.outcome === 'unsupported' && maximumTotalCost !== undefined) return requestView({
-    ...routeGeneration,
+    ...provenance,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
@@ -237,11 +245,11 @@ export function projectRequestEvaluation(input: Readonly<{
     ),
   })
   if (input.evaluation.posture === 'unsupported') return requestView({
-    ...routeGeneration,
+    ...provenance,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
-    summary: 'No business on AE can support this request right now.',
+    summary: 'AE cannot arrange this request end to end yet.',
     nextAction: 'revise_request',
     criteria,
     dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
@@ -251,7 +259,7 @@ export function projectRequestEvaluation(input: Readonly<{
     ),
   })
   if (input.evaluation.nextRequirement !== undefined) return requestView({
-    ...routeGeneration,
+    ...provenance,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'needs_information',
@@ -273,7 +281,7 @@ export function projectRequestEvaluation(input: Readonly<{
     criteria,
   })
   if (input.evaluation.preparationDisclosure !== undefined) return requestView({
-    ...routeGeneration,
+    ...provenance,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'needs_authorization',
@@ -287,11 +295,11 @@ export function projectRequestEvaluation(input: Readonly<{
     },
   })
   if (input.outcome === 'unsupported' && input.actionCount !== 1) return requestView({
-    ...routeGeneration,
+    ...provenance,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
-    summary: 'No business on AE can support this request right now.',
+    summary: 'AE cannot arrange this request end to end yet.',
     nextAction: 'revise_request',
     criteria,
     dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
@@ -301,7 +309,7 @@ export function projectRequestEvaluation(input: Readonly<{
     ),
   })
   return requestView({
-    ...routeGeneration,
+    ...provenance,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'ready_to_compare',
@@ -401,6 +409,30 @@ export function projectNeedsAttention(input: Readonly<{
   criteria?: readonly CustomerCriterion[]
 }>): CustomerRequestView {
   return requestView({ ...input, state: 'needs_attention', nextAction: 'retry' })
+}
+
+/**
+ * No registered business is routeable on this network, so there is nothing to interpret against
+ * and nothing to compare. Retrying cannot change that, so this states the condition and offers a
+ * change instead of `needs_attention`/`retry`. Wording matches the unsupported posture the
+ * evaluation reaches when supply exists but none of it fits.
+ */
+export function projectNoCurrentBusiness(input: Readonly<{
+  requestRef: string
+  revision: number
+}>): CustomerRequestView {
+  return requestView({
+    requestRef: input.requestRef,
+    revision: input.revision,
+    state: 'unsupported',
+    summary: 'AE cannot arrange this request end to end yet.',
+    nextAction: 'revise_request',
+    dataHandling: UNSUPPORTED_REQUEST_DATA_HANDLING,
+    unsupportedRecovery: unsupportedRecovery(
+      'no_current_business',
+      'Change the location, timing, or outcome while keeping this Request and its history.',
+    ),
+  })
 }
 
 export type RepeatPermissionUseRefusalReason =
@@ -758,6 +790,7 @@ function requestView(input: Readonly<{
   requestRef: string
   revision: number
   routeGenerationRef?: string
+  interpretationBasis?: CustomerRequestView['interpretationBasis']
   state: CustomerRequestState
   summary: string
   nextAction: CustomerRequestNextAction
@@ -784,6 +817,7 @@ function requestView(input: Readonly<{
     requestRef: input.requestRef,
     revision: input.revision,
     ...(input.routeGenerationRef === undefined ? {} : { routeGenerationRef: input.routeGenerationRef }),
+    ...(input.interpretationBasis === undefined ? {} : { interpretationBasis: input.interpretationBasis }),
     state: input.state,
     summary: input.summary,
     nextAction: input.nextAction,

@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
+import { Outlet, createFileRoute, notFound, useLocation, type NotFoundRouteProps } from '@tanstack/react-router'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Grid } from '@astryxdesign/core/Grid'
@@ -11,6 +11,7 @@ import { offeringApiDtoToSupplyView } from '@/components/ae/offerings/offering-p
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
+import type { PublicBusinessPageNotFoundReason } from '@/modules/catalog/public'
 import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 import { readPublicTargetAdmissionServer } from '@/modules/inquiries/inquiry.functions'
 import {
@@ -38,18 +39,14 @@ export const Route = createFileRoute('/$slug')({
   loader: async ({ params }) => {
     const page = await readPublicBusinessPageServer({ data: { slug: params.slug } })
     if (page.kind === 'not_found') {
-      return { page, seo: undefined, admission: undefined, supply: undefined }
+      throw notFound({ data: { reason: page.reason } })
     }
     const offeringDetail = await readPublicOfferingRegistryBusinessDetail({ slug: params.slug })
     // The v2 read owns cutover semantics. Once a business is in Offering mode,
     // a missing safe projection must not silently resurrect legacy service truth.
+    // The business record exists, so the honest reason is "not public", not "no such business".
     if (offeringDetail.kind === 'not_found') {
-      return {
-        page: { kind: 'not_found' as const, reason: 'not_public' as const },
-        seo: undefined,
-        admission: undefined,
-        supply: undefined,
-      }
+      throw notFound({ data: { reason: 'not_public' satisfies PublicBusinessPageNotFoundReason } })
     }
     const target = selectPublicInquiryTarget(page.catalog)
     const admissionResult = target === undefined
@@ -64,10 +61,10 @@ export const Route = createFileRoute('/$slug')({
     }
   },
   head: ({ loaderData }) => {
-    if (loaderData?.seo === undefined) {
+    if (loaderData === undefined) {
       return {
         meta: [
-          { title: 'Business page unavailable | Agentic Economy' },
+          { title: 'Page not found | Agentic Economy' },
           { name: 'robots', content: 'noindex' },
         ],
       }
@@ -90,6 +87,7 @@ export const Route = createFileRoute('/$slug')({
   },
   pendingComponent: ProviderListingPending,
   errorComponent: ProviderListingError,
+  notFoundComponent: PublicBusinessNotFound,
   component: PublicBusinessRoute,
 })
 
@@ -226,6 +224,45 @@ function ProviderListingError() {
   )
 }
 
+export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
+  // `data` crosses the router's not-found boundary untyped, and a bare notFound()
+  // raised anywhere under /$slug carries none: default to the claim we can defend.
+  const reason: PublicBusinessPageNotFoundReason =
+    typeof data === 'object' && data !== null && 'reason' in data && data.reason === 'not_public'
+      ? 'not_public'
+      : 'no_such_business'
+
+  return (
+    <AePublicShell>
+      <section className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
+        {reason === 'not_public' ? (
+          <AeEmptyState
+            title="Business page unavailable"
+            description="This page is not visible right now. The business may need to claim or review it."
+            action={
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <Button label="Claim your business page" variant="primary" href="/claim" />
+                <Button label="Browse businesses" variant="secondary" href="/registry?q=&limit=10" />
+              </div>
+            }
+          />
+        ) : (
+          <AeEmptyState
+            title="No business page at this address"
+            description="Nothing is published here. Check the address, or browse the businesses that are listed."
+            action={
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <Button label="Browse businesses" variant="primary" href="/registry?q=&limit=10" />
+                <Button label="Ask a question" variant="secondary" href="/" />
+              </div>
+            }
+          />
+        )}
+      </section>
+    </AePublicShell>
+  )
+}
+
 function PublicBusinessRoute() {
   const { slug } = Route.useParams()
   const { from, id } = Route.useSearch()
@@ -234,20 +271,6 @@ function PublicBusinessRoute() {
 
   if (location.pathname !== `/${slug}`) {
     return <Outlet />
-  }
-
-  if (page.kind === 'not_found') {
-    return (
-      <AePublicShell>
-        <section className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
-          <AeEmptyState
-            title="Business page unavailable"
-            description="This page is not visible right now. The business may need to claim or review it."
-            action={<Button label="Claim your business page" variant="primary" href="/claim" />}
-          />
-        </section>
-      </AePublicShell>
-    )
   }
 
   const catalog = projectPublicInquiryAvailability(page.catalog, admission)

@@ -12,7 +12,7 @@ import {
 
 /**
  * Disclosure content for one route, split so a surface can choose how much to
- * show at once. DESIGN.md keeps technical projections in progressive detail;
+ * show at once. Technical projections stay in progressive detail:
  * the decision surface shows the sections a person needs to choose, and parks
  * the rest behind an on-demand trigger. Nothing here is ever dropped — the
  * collapsed sections stay mounted and reachable.

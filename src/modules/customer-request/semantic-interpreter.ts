@@ -76,10 +76,22 @@ export type CustomerRequestInterpretationEvidence = Readonly<{
   outputDigest: string
 }>
 
+/**
+ * Names the interpreter that answers without a model. Projections compare against this exact
+ * value to label an answer as keyword-matched rather than interpreted.
+ */
+export const DETERMINISTIC_TOKEN_MATCH_INTERPRETER_ID = 'deterministic:token-match:v1'
+
+/**
+ * `interpreterId` names the interpreter that actually produced this proposal. A composite
+ * interpreter that delegates to a fallback stamps it so the recorded plan never attributes a
+ * keyword-matched answer to a model.
+ */
 export type CustomerRequestCapabilityProposal = Readonly<{
   kind: 'capability_candidates'
   selections: readonly ResolvedCapabilitySelection[]
   canonicalCustomerJob?: string
+  interpreterId?: string
   interpretationEvidence?: CustomerRequestInterpretationEvidence
   decisionPreference?: Readonly<{
     objective: 'lowest_maximum_price'
@@ -92,6 +104,7 @@ export type CustomerRequestIntentDirectionProposal = Readonly<{
   kind: 'needs_intent_direction'
   prompt: string
   canonicalCustomerJob?: string
+  interpreterId?: string
   interpretationEvidence?: CustomerRequestInterpretationEvidence
 }>
 
@@ -99,6 +112,7 @@ export type CustomerRequestUnsupportedProposal = Readonly<{
   kind: 'unsupported_request'
   reason: 'requested_result_not_available'
   canonicalCustomerJob?: string
+  interpreterId?: string
   interpretationEvidence?: CustomerRequestInterpretationEvidence
 }>
 
@@ -625,6 +639,12 @@ export type CustomerRequestSemanticInterpreterInput = Readonly<{
   customerJob: string
   amendment?: CustomerRequestAmendment
   capabilities: readonly ServerCapabilityDescriptor[]
+  /**
+   * True when the caller will not ask again. A composite interpreter uses it to keep a degraded
+   * fallback as the last resort: absorbing the first failure would turn one transient provider
+   * blip into a permanently downgraded answer.
+   */
+  finalAttempt?: boolean
 }>
 
 export function bindCustomerCapabilityDescriptor(input: Readonly<{

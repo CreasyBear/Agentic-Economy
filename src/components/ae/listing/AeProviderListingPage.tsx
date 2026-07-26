@@ -17,10 +17,11 @@ import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offerin
 import { RouterLink } from '@/components/astryx/RouterLink'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { buildProviderPresentation, type ProviderPresentation } from '@/lib/ui/provider-presentation'
+import { telUri } from '@/lib/ui/tel-uri'
 import { buildListingTrustProjection, NO_REPLY_HISTORY, type ListingTrustProjection, type ReplyPosture, type TrustFact } from '@/lib/ui/trust-projection'
 import { emitWave1JourneyEvent, getOrCreatePseudonymousJourneyId, type PseudonymousJourneyId } from '@/lib/ui/journey-events'
 import type { PublicRouteCapabilityContract, PublicRouteCatalogContract } from '@/modules/catalog/public'
-import type { PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
+import { projectPublicInquiryOfferingSupply, type PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
 
 export type AeProviderListingPageProps = {
   catalog: PublicRouteCatalogContract
@@ -47,6 +48,15 @@ export function AeProviderListingPage({
   const trust = buildListingTrustProjection(catalog, inquiryAffordance.kind === 'available')
   const officeAddress = readOfficeAddress(catalog)
   const inquiryHref = appendThreadOrigin(inquiryAffordance.kind === 'available' ? inquiryAffordance.href : '', backFrom, backThreadId)
+  // The offering supply read carries stored access-path copy. Admission is the
+  // only fact that says whether the inquiry route will accept a first contact,
+  // so the rendered paths are derived from it rather than from what was stored.
+  const supplyOfferings = supply === undefined
+    ? undefined
+    : projectPublicInquiryOfferingSupply(
+        supply.offerings,
+        inquiryAffordance.kind === 'available' ? inquiryHref : undefined,
+      )
   const [journeyIdentity, setJourneyIdentity] = useState<{ slug: string; id: PseudonymousJourneyId } | null>(null)
 
   useEffect(() => {
@@ -78,9 +88,9 @@ export function AeProviderListingPage({
         <div className="grid gap-8">
           <ListingPhotosSection catalog={catalog} presentation={presentation} />
 
-          {supply === undefined ? null : (
+          {supply === undefined || supplyOfferings === undefined ? null : (
             <AeOfferingSupplyList
-              offerings={supply.offerings}
+              offerings={supplyOfferings}
               disposition={supply.disposition}
               observedAt={supply.observedAt}
             />
@@ -158,6 +168,7 @@ export function ListingFirstScreen({
 }) {
   const [detailsCopied, setDetailsCopied] = useState(false)
   const phone = trust.phone.kind === 'published' ? trust.phone.value : undefined
+  const telDestination = phone === undefined ? undefined : telUri(phone)
   const publishedFacts = [trust.phone, trust.hours, trust.serviceArea].filter((fact) => fact.kind === 'published')
   function recordDirectCall() {
     if (pseudonymousJourneyId === null || pseudonymousJourneyId === undefined) {
@@ -230,17 +241,17 @@ export function ListingFirstScreen({
               {replyPostureLabel(trust.replyPosture)}
             </Text>
           )}
-          {phone === undefined ? null : (
+          {phone === undefined || telDestination === undefined ? null : (
             <Text type="supporting" color="secondary" display="block">
-              Need someone now? <a className="underline underline-offset-4" href={`tel:${phone}`} onClick={recordDirectCall}>Call {phone}</a>
+              Need someone now? <a className="underline underline-offset-4" href={telDestination} onClick={recordDirectCall}>Call {phone}</a>
             </Text>
           )}
         </VStack>
 
         <div className="grid gap-3 sm:flex sm:flex-wrap" role="group" aria-label="Actions for this business">
-          {phone === undefined ? null : (
+          {phone === undefined || telDestination === undefined ? null : (
             <div data-peer-action="call" data-variant="secondary">
-              <Button label={`Call ${phone}`} variant="secondary" size="lg" href={`tel:${phone}`} className={peerActionClassName} onClick={recordDirectCall} />
+              <Button label={`Call ${phone}`} variant="secondary" size="lg" href={telDestination} className={peerActionClassName} onClick={recordDirectCall} />
             </div>
           )}
           <div data-peer-action="copy-details" data-variant="secondary">

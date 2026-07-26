@@ -1,4 +1,4 @@
-import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 import type { AnswerArtifact } from './answer-schema'
 import type { AnswerLayoutProfile } from './internal/answer-layout-profile'
@@ -12,10 +12,10 @@ import type { AnswerLayoutProfile } from './internal/answer-layout-profile'
  * `synthesize` method with real token streaming — no route or client rewrite.
  *
  * Contract: every field on {@link AnswerSource} must be derivable from a live
- * {@link PublicBusinessCatalogApiDto}. No hardcoded answer text, no invented
- * availability, no booking/payment/dispatch/callable claims, no "verified" claim
- * unless a real trust standard was met. Read-only synthesis over the public,
- * non-suppressed catalog.
+ * {@link PublicBusinessCatalogApiV2Dto}. No hardcoded answer text, no invented
+ * availability or price, no booking/payment/dispatch/callable claims, no
+ * "verified" claim unless a real trust standard was met. Read-only synthesis
+ * over the public, non-suppressed catalog.
  */
 
 export type AnswerSynthesizerFollowUpIntent =
@@ -86,9 +86,15 @@ export type AnswerWorkStep = {
 }
 
 /**
- * A single provider source card. Plain, Google-Maps-clean. Every string is
- * derived from real catalog fields via the plain label mappers in
- * `src/lib/ui/status-presentation.ts`.
+ * A single provider source card, derived from the public Offering projection
+ * ({@link PublicBusinessCatalogApiV2Dto}) by `toAnswerSource`. Plain,
+ * Google-Maps-clean.
+ *
+ * Every `*Label` string is produced by the plain mappers in
+ * `src/lib/ui/status-presentation.ts`. `pricingSummary` and
+ * `availabilitySummary` are the opposite: verbatim strings the business
+ * published, present only when it published one, never reworded, rounded, or
+ * inferred. V1 could carry neither.
  */
 export type AnswerSource = {
   citationIndex: number
@@ -106,6 +112,10 @@ export type AnswerSource = {
   freshnessLabel?: string
   photoUrl?: string
   publishedPhone?: string
+  /** Verbatim published price string from the first offering that publishes one. */
+  pricingSummary?: string
+  /** Verbatim published availability string; absent for placeholder hours text. */
+  availabilitySummary?: string
   nextStepLabel: string
   detailUrl: string
   inquiryUrl?: string
@@ -113,6 +123,10 @@ export type AnswerSource = {
     name: string
     category: string
     summary: string
+    /** Verbatim published price string for this offering. */
+    pricingSummary?: string
+    /** Verbatim published availability string for this offering. */
+    availabilitySummary?: string
   }[]
 }
 

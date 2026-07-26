@@ -2,7 +2,10 @@ import { mkdirSync } from 'node:fs'
 
 import { expect, test, type Page } from '@playwright/test'
 import { LOCAL_E2E_BUSINESS_FIXTURES } from '../../src/lib/dev/local-e2e-business-fixtures'
-import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '../../src/modules/customer-request/public-comprehension'
+import {
+  CUSTOMER_REQUEST_PUBLIC_COMPREHENSION,
+  CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES,
+} from '../../src/modules/customer-request/public-comprehension'
 
 const demoBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.requestedSlug === 'plumbing-demo')
 if (demoBusiness === undefined) {
@@ -71,6 +74,15 @@ test.describe('public owner routes', () => {
     const assistantText = await assistantIndex.text()
     for (const statement of CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES) {
       await expect(page.getByText(statement, { exact: true })).toBeVisible()
+    }
+    // The agent index is bounded so it survives a truncating reader: it carries
+    // the framing needed to decide AE is relevant plus the sandbox qualifier,
+    // and defers the rest of the procedure to /SKILL.md.
+    for (const statement of [
+      CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation,
+      CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.examples,
+      CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.sandboxBoundary,
+    ]) {
       expect(assistantText).toContain(statement)
     }
 

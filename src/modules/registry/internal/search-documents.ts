@@ -1,5 +1,11 @@
 import { stableHash } from '@/modules/common/stable-hash'
 import type { SourceHash } from '@/modules/common/ids'
+import {
+  canonicalTradeToken,
+  TRADE_CANONICAL_TOKENS,
+  TRADE_WORDS,
+  tradeAliasesForText,
+} from './trade-vocabulary'
 import type {
   PublicBusinessCatalogApiDto,
   PublicBusinessCatalogSearchInput,
@@ -59,8 +65,12 @@ const SEARCH_STOP_WORDS = new Set([
   'to',
 ])
 
+// Every trade alias is a service word by construction. Listing them by hand is
+// how `electrical` and `sparky` came to be parsed as suburb names and filtered
+// the whole result set away.
 const SERVICE_WORDS = new Set([
   ...SEARCH_STOP_WORDS,
+  ...TRADE_WORDS,
   'appointment',
   'callout',
   'cleaner',
@@ -210,8 +220,8 @@ export function documentMatchesRegistryQuery(
   const tokens = query
     .split(' ')
     .filter((token) => !SEARCH_STOP_WORDS.has(token))
-    .map(normalizeSearchToken)
-  const serviceIntentTokens = tokens.filter((token) => token === 'plumbing' || token === 'electrical')
+    .map(canonicalTradeToken)
+  const serviceIntentTokens = tokens.filter((token) => TRADE_CANONICAL_TOKENS.has(token))
   if (serviceIntentTokens.length > 0) {
     return serviceIntentTokens.some((token) => document.searchText.includes(token))
   }
@@ -230,15 +240,7 @@ export function normalizePlaceKey(value: string): string {
   return normalizeRegistrySearchText(value)
 }
 
-function normalizeSearchToken(token: string): string {
-  if (token === 'plumber' || token === 'plumbers') {
-    return 'plumbing'
-  }
-  if (token === 'electrician' || token === 'electricians') {
-    return 'electrical'
-  }
-  return token
-}
+
 
 function placeKeysFor(input: {
   suburb: string
@@ -263,17 +265,7 @@ function placeKeysFor(input: {
 
 function serviceKeywordsFor(...values: readonly string[]): readonly string[] {
   const text = normalizeRegistrySearchText(values.join(' '))
-  const keywords = new Set<string>()
-  if (/\bplumbing\b/.test(text)) {
-    keywords.add('plumber')
-    keywords.add('plumbers')
-  }
-  if (/\blocksmith\b/.test(text)) {
-    keywords.add('locksmiths')
-  }
-  if (/\belectrician\b/.test(text)) {
-    keywords.add('electricians')
-  }
+  const keywords = new Set<string>(tradeAliasesForText(text))
   if (/\bemergency\b/.test(text)) {
     keywords.add('urgent')
   }
@@ -336,7 +328,22 @@ function normalizeLocationLabel(value: string | undefined): string | undefined {
   }
 
   const label = words.join(' ').trim()
-  return label.length >= 3 ? label : undefined
+  return isPlausiblePlaceLabel(label) ? label : undefined
+}
+
+/**
+ * Whatever survives service-word trimming is treated as a place, so free text
+ * like "someone today under 500" became a suburb and filtered every result away.
+ *
+ * Only digits are rejected, deliberately. A long leftover label is still
+ * load-bearing: `documentMatchesRegistryQuery` keeps a document whose own place
+ * name appears anywhere in the query and drops the rest, so the label's job is
+ * to signal "this query named somewhere", not to be a clean suburb. Rejecting
+ * multi-word labels here silently disables that narrowing and a query naming a
+ * suburb starts returning every other suburb too.
+ */
+function isPlausiblePlaceLabel(label: string): boolean {
+  return label.length >= 3 && !/\d/.test(label)
 }
 
 function dropTrailingState(tokens: readonly string[]): readonly string[] {

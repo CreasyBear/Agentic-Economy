@@ -5,9 +5,9 @@ import {
 } from '@/modules/answer/projection'
 
 /**
- * Internal architecture words that must never reach a public human surface
- * (AGENTS.md / DESIGN.md §public copy). Kept here as the single source so the
- * live orchestrator and the replay projection scrub identically.
+ * Internal architecture words that must never reach a public human surface.
+ * Kept here as the single source so the live orchestrator and the replay
+ * projection scrub identically.
  */
 const INTERNAL_PUBLIC_TERMS = [
   'source-owned',

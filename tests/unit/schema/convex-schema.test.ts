@@ -124,6 +124,8 @@ const durableTables = [
   'registrySearchSyncAttempts',
   'indexStatus',
   'demandSignals',
+  'searchGapRecords',
+  'searchGapBusinessRecords',
   'discoveryManifests',
   'discoveryManifestAttempts',
   'auditEvents',
@@ -200,6 +202,18 @@ const durableTables = [
   'routingKernelProviderOffers',
   'routingKernelProviderOfferExecutionFields',
   'routingKernelProviderOfferMaterialTerms',
+  'actionInvocationControls',
+  'actionInvocationAttempts',
+  'actionInvocationHistory',
+  'customerRequestRouteCancellationAttempts',
+  'customerRequestRouteProblemBusinessReports',
+  'customerRequestStandingRoutePolicyIssues',
+  'customerRequestStandingRoutePolicyCommands',
+  'customerRequestStandingRoutePolicyRevocations',
+  'customerRequestStandingRoutePolicyRevocationCommands',
+  'customerRequestStandingRouteAuthorityUses',
+  'customerRequestStandingRouteAuthorityUseCommands',
+  'customerRequestV2SubmissionShells',
 ] as const
 
 const requiredIndexes = {

@@ -1,4 +1,4 @@
-import { readPublicRegistrySearchPage } from '@/modules/registry/registry.functions'
+import { readPublicOfferingRegistrySearchPage } from '@/modules/registry/registry.functions'
 import { toAnswerSource } from './dto-to-answer-source'
 
 import {
@@ -26,11 +26,11 @@ export async function assembleAnswerEvidence(
     providers = input.prefetchedProviders
   } else {
     try {
-      const page = await readPublicRegistrySearchPage({
+      const page = await readPublicOfferingRegistrySearchPage({
         query,
         limit,
         ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-      })
+      }, { surface: 'answer_thread' })
       providers = page.items.map((dto, index) => toAnswerSource(dto, index + 1))
     } catch {
       return undefined

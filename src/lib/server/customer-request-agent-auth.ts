@@ -30,16 +30,19 @@ export type CustomerRequestAgentPrincipal = Readonly<{
 export async function authenticateCustomerRequestAgent(options: Readonly<{
   authenticate?: () => Promise<ApiKeyAuth>
   verifyKeyState?: (keyId: string) => Promise<CurrentApiKey>
+  /** Defaults to the Customer Request scope; business tool calling requires its own. */
+  requiredScope?: string
 }> = {}): Promise<Readonly<{ kind: 'authenticated'; principal: CustomerRequestAgentPrincipal }> | Readonly<{
   kind: 'refused'
   status: 401 | 403
   reason: 'authentication_required' | 'scope_required'
 }>> {
+  const requiredScope = options.requiredScope ?? CUSTOMER_REQUEST_AGENT_SCOPE
   const candidate = await (options.authenticate ?? (async () => await auth({ acceptsToken: 'api_key' }) as ApiKeyAuth))()
   if (!candidate.isAuthenticated || candidate.tokenType !== 'api_key' || candidate.id === null || candidate.subject === null || candidate.scopes === null) {
     return { kind: 'refused', status: 401, reason: 'authentication_required' }
   }
-  if (!candidate.scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return { kind: 'refused', status: 403, reason: 'scope_required' }
+  if (!candidate.scopes.includes(requiredScope)) return { kind: 'refused', status: 403, reason: 'scope_required' }
   let admittedScopes = candidate.scopes
   if (options.verifyKeyState !== undefined || options.authenticate === undefined) {
     try {
@@ -50,7 +53,7 @@ export async function authenticateCustomerRequestAgent(options: Readonly<{
       if (current.id !== candidate.id || current.subject !== candidate.subject || current.revoked || current.expired) {
         return { kind: 'refused', status: 401, reason: 'authentication_required' }
       }
-      if (!current.scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) {
+      if (!current.scopes.includes(requiredScope)) {
         return { kind: 'refused', status: 403, reason: 'scope_required' }
       }
       admittedScopes = current.scopes

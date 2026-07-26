@@ -75,9 +75,8 @@ describe('Request-first home', () => {
     expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation)).toBeTruthy()
     expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority)).toBeTruthy()
     expect(screen.queryByText('Your agent knows who to call.')).toBeNull()
-    // The agent-audience entry lives in the shell nav as "For agents", which is
-    // where DESIGN.md's information architecture puts it. The hero no longer
-    // carries a second copy of the same destination.
+    // The agent-audience entry lives in the shell nav as "For agents". The hero
+    // no longer carries a second copy of the same destination.
     expect(screen.queryByRole('link', { name: 'Use AE with your AI' })).toBeNull()
   })
 

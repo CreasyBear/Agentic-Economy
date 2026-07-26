@@ -1,23 +1,28 @@
 # Planning manifest
 
-**Rebaselined:** 2026-07-20
+**Rebaselined:** 2026-07-25
 
 ## Authority order
 
 1. live source and executable behavior for what exists;
-2. `PRODUCT.md` for product destination and maturity;
-3. `DESIGN.md` for human-interface direction;
-4. accepted ADRs for durable architecture;
-5. `.planning/PROJECT.md`, `ROADMAP.md`, `REQUIREMENTS.md` and `STATE.md`;
-6. the current phase and active scope.
+2. accepted ADRs for durable architecture;
+3. `.planning/PROJECT.md` for product destination and maturity;
+4. `ROADMAP.md`, `REQUIREMENTS.md` and `STATE.md`;
+5. the current phase and active scope.
+
+`PRODUCT.md`, `DESIGN.md` and `AGENTS.md` were removed from the repository on
+2026-07-25 (`ba263c10`, recoverable at `8dbef716`). Nothing in the active
+corpus may cite them as authority. `PROJECT.md` now owns the product
+destination; `UBIQUITOUS_LANGUAGE.md` owns domain vocabulary; interface
+direction lives with the Astryx component usage in source.
 
 Proposed ADRs, research, issues, mocks and tests are evidence under evaluation,
 not product authority.
 
 ## Current program
 
-- `PROJECT.md` — protocol/kernel → product charter;
-- `ROADMAP.md` — current three-phase sequence;
+- `PROJECT.md` — product charter and destination;
+- `ROADMAP.md` — current phase sequence;
 - `REQUIREMENTS.md` — Phase 3 acceptance baseline;
 - `STATE.md` — current frontier and claim ceiling;
 - `adr/ADR-009...` — accepted Action Invocation architecture;

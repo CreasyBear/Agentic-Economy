@@ -90,12 +90,22 @@ describe('durable llms Offering parity', () => {
     const result = await backend.query(api.discovery.readLlmsTxt, {
       canonicalBaseUrl: 'https://ae.example', routingBaseUrl: 'https://ae.example', now: 3,
     })
-    expect(result.body).toContain('slug=offering-engineering')
-    expect(result.body).toContain('offerings=Current Design Review')
-    expect(result.body).toContain('slug=profile-only-consulting')
-    expect(result.body).toContain('offerings=none')
+    expect(result.body).toContain('- slug=offering-engineering url=https://ae.example/offering-engineering')
+    expect(result.body).toContain('- slug=profile-only-consulting url=https://ae.example/profile-only-consulting')
+    expect(result.body).toContain('- total=2; the lines above are a sample, not the catalog')
     expect(result.body).not.toContain('Retired Legacy Drilling')
     expect(result.body).not.toContain('secret:must-not-leak')
     expect(result.body).not.toContain('credentialRef')
+
+    // The index no longer inlines Offering names, so the cutover contract is
+    // asserted where Offering names are actually published.
+    const supply = await backend.query(api.registry.listPublicBusinessOfferingSupply, {})
+    const offeringNames = supply.items.flatMap(
+      (item: { slug: string; offerings: readonly { name: string }[] }) => item.offerings.map((offering) => offering.name)
+    )
+    expect(offeringNames).toContain('Current Design Review')
+    expect(offeringNames).not.toContain('Retired Legacy Drilling')
+    expect(supply.items.find((item: { slug: string }) => item.slug === 'profile-only-consulting')?.offerings).toEqual([])
+    expect(JSON.stringify(supply)).not.toContain('secret:must-not-leak')
   })
 })

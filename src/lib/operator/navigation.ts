@@ -46,14 +46,6 @@ export type OperatorNavGroup = {
   items: readonly OperatorNavItem[]
 }
 
-export type OperatorSectionId = 'billing' | 'monetization'
-
-export type OperatorSectionNavItem = {
-  href: string
-  label: string
-  description?: string
-}
-
 export type OperatorBreadcrumbItem = {
   label: string
   href?: string
@@ -67,8 +59,6 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
       { href: '/owner/status', label: 'Business page', icon: Activity, tier: 'core' },
       { href: '/owner/offerings', label: 'Offerings', icon: Store, tier: 'core' },
       { href: '/owner/inquiries', label: 'Inquiries', icon: Inbox, tier: 'core' },
-      { href: '/owner/actions', label: 'Contact follow-ups', icon: Contact, tier: 'advanced' },
-      { href: '/owner/business-actions', label: 'Business actions', icon: Wrench, tier: 'advanced' },
     ],
   },
   {
@@ -76,7 +66,7 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
     label: 'Account',
     items: [
       { href: '/owner/settings', label: 'Settings', icon: Settings, tier: 'core' },
-      { href: '/owner/billing', label: 'Billing', icon: CreditCard, tier: 'advanced' },
+      { href: '/agent-access', label: 'Assistant access', icon: Contact, tier: 'advanced' },
     ],
   },
 ] as const
@@ -89,6 +79,7 @@ const adminNavGroups: readonly OperatorNavGroup[] = [
       { href: '/admin/claims', label: 'Claims', icon: ClipboardList, tier: 'core' },
       { href: '/admin/audit-events', label: 'Audit events', icon: ScrollText, tier: 'advanced' },
       { href: '/admin/index-health', label: 'Index health', icon: Activity, tier: 'advanced' },
+      { href: '/admin/search-gaps', label: 'Search gaps', icon: Search, tier: 'core' },
       { href: '/admin/runs', label: 'Run evidence', icon: ListChecks, tier: 'advanced' },
     ],
   },
@@ -96,16 +87,9 @@ const adminNavGroups: readonly OperatorNavGroup[] = [
     id: 'operations',
     label: 'Operations',
     items: [
-      { href: '/admin/business-actions', label: 'Business actions', icon: Wrench, tier: 'advanced' },
-      { href: '/admin/protected-actions', label: 'Protected actions', icon: LockKeyhole, tier: 'advanced' },
       { href: '/admin/inquiries', label: 'Inquiries', icon: Inbox, tier: 'core' },
       { href: '/admin/request-problems', label: 'Request problems', icon: CircleHelp, tier: 'core' },
     ],
-  },
-  {
-    id: 'monetization',
-    label: 'Monetization',
-    items: [{ href: '/admin/monetization', label: 'Billing', icon: CreditCard, tier: 'advanced' }],
   },
 ] as const
 
@@ -126,27 +110,6 @@ const operatorUtilityItems: readonly OperatorUtilityItem[] = [
   { href: '/', label: 'Ask', icon: Search },
   { href: '/registry', label: 'Browse services', icon: ScrollText },
   { href: '/help', label: 'Help', icon: CircleHelp },
-] as const
-
-const billingSectionNav: readonly OperatorSectionNavItem[] = [
-  {
-    href: '/owner/billing',
-    label: 'Overview',
-    description: 'Read billing state and receipts',
-  },
-  {
-    href: '/owner/billing/activate',
-    label: 'Activate',
-    description: 'Start paid activation when an offer exists',
-  },
-] as const
-
-const monetizationSectionNav: readonly OperatorSectionNavItem[] = [
-  {
-    href: '/admin/monetization',
-    label: 'Overview',
-    description: 'Offers, evidence, and operation queue',
-  },
 ] as const
 
 export const roleHomeHref: Record<OperatorRole, string> = {
@@ -206,7 +169,7 @@ function baseNavGroupsForRole(role: OperatorRole): readonly OperatorNavGroup[] {
 }
 
 export function listOperatorCommandDestinations(role: OperatorRole): readonly OperatorNavGroup[] {
-  const operatorGroups = baseNavGroupsForRole(role)
+  const operatorGroups = navGroupsForRole(role)
   return [
     ...operatorGroups,
     {
@@ -245,60 +208,6 @@ export function isOperatorPathActive(currentPath: string, href: string): boolean
   }
 
   return currentPath.startsWith(`${href}/`)
-}
-
-export function isOperatorSectionPathActive(
-  currentPath: string,
-  href: string,
-  sectionId: OperatorSectionId,
-): boolean {
-  if (sectionId === 'billing' && href === '/owner/billing') {
-    return currentPath === '/owner/billing'
-  }
-
-  if (sectionId === 'monetization' && href === '/admin/monetization') {
-    return currentPath === '/admin/monetization'
-  }
-
-  return isOperatorPathActive(currentPath, href)
-}
-
-export function resolveOperatorSection(currentPath: string): OperatorSectionId | undefined {
-  if (currentPath.startsWith('/owner/billing')) {
-    return 'billing'
-  }
-
-  if (currentPath.startsWith('/admin/monetization')) {
-    return 'monetization'
-  }
-
-  return undefined
-}
-
-export function sectionNavForSection(sectionId: OperatorSectionId): readonly OperatorSectionNavItem[] {
-  switch (sectionId) {
-    case 'billing':
-      return billingSectionNav
-    case 'monetization':
-      return monetizationSectionNav
-    default: {
-      const exhaustive: never = sectionId
-      return exhaustive
-    }
-  }
-}
-
-export function sectionLabel(sectionId: OperatorSectionId): string {
-  switch (sectionId) {
-    case 'billing':
-      return 'Billing'
-    case 'monetization':
-      return 'Billing'
-    default: {
-      const exhaustive: never = sectionId
-      return exhaustive
-    }
-  }
 }
 
 /**

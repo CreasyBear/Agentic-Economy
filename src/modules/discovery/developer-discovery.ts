@@ -440,7 +440,7 @@ const developerDiscoverySchemaFields = [
   'services.capabilities.status',
 ] as const
 
-const developerDiscoveryRoutes = [
+export const DeveloperDiscoveryPublicRoutes = [
   { path: '/api/businesses', label: 'Public catalog list JSON' },
   { path: '/api/businesses/search?q=', label: 'Public catalog search JSON' },
   { path: '/api/businesses/{slug}', label: 'Public catalog detail JSON' },
@@ -450,7 +450,7 @@ const developerDiscoveryRoutes = [
   { path: '/robots.txt', label: 'Robots discovery file' },
 ] as const
 
-const developerDiscoveryArtifacts = [
+export const DeveloperDiscoveryArtifacts = [
   {
     kind: 'public_catalog_schema',
     label: 'Public catalog schema',
@@ -471,7 +471,7 @@ const developerDiscoveryArtifacts = [
   },
 ] as const
 
-const developerDiscoveryUnsupportedCapabilities = [
+export const DeveloperDiscoveryUnsupportedCapabilities = [
   {
     label: 'Business-origin discovery file',
     state: 'unavailable',
@@ -808,7 +808,7 @@ export function readDeveloperDiscoveryRoute(
     gatedExclusions: readDeveloperDiscoveryGatedExclusions(),
     publicFacts,
     routeHealth,
-    artifacts: developerDiscoveryArtifacts.map((artifact) => ({
+    artifacts: DeveloperDiscoveryArtifacts.map((artifact) => ({
       kind: artifact.kind,
       label: artifact.label,
       downloadLabel: artifact.downloadLabel,
@@ -818,7 +818,7 @@ export function readDeveloperDiscoveryRoute(
       reason: freshness.reason,
       schemaFields: developerDiscoverySchemaFields,
     })),
-    unsupportedCapabilities: developerDiscoveryUnsupportedCapabilities,
+    unsupportedCapabilities: DeveloperDiscoveryUnsupportedCapabilities,
     copy: {
       eyebrow: 'Builder readbacks',
       title: 'Read-only public catalog files',
@@ -1081,7 +1081,7 @@ function fallbackDeveloperDiscoveryRouteHealth(
     freshness.state === 'current' ? undefined : freshness.state === 'degraded' ? ('stale' as const) : ('unavailable' as const)
 
   return mapDeveloperDiscoveryRouteExecutions(
-    developerDiscoveryRoutes.map((route) => ({
+    DeveloperDiscoveryPublicRoutes.map((route) => ({
       route: `${canonicalBaseUrl}${route.path}`,
       label: route.label,
       ok: freshness.state === 'current',

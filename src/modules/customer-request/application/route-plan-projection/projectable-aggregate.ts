@@ -35,5 +35,5 @@ export type ProjectableCustomerRequestAggregate = Readonly<{
     }>
   }>
   outcome: 'plan_ready' | 'needs_information' | 'unsupported'
-  plan: Readonly<{ actions: readonly unknown[] }>
+  plan: Readonly<{ actions: readonly unknown[]; interpreterId?: string }>
 }>

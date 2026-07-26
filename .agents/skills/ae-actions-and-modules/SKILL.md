@@ -142,7 +142,7 @@ Make the smallest coherent source change, then run focused checks selected from:
 - the action/domain unit test;
 - `npm run typecheck` for contract/type changes;
 - `npm run test:imports` for module-boundary changes;
-- `npm run test:copy` for assistant- or human-visible text;
+- `npm run test:ui-contract` for assistant- or human-visible text;
 - a focused integration or development smoke for the changed surface.
 
 Use clearly labelled mock/sandbox data to expose the state being built. Tests

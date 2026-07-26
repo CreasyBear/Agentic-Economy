@@ -1,5 +1,6 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { constantTimeStringEqual } from '@/lib/server/constant-time'
 
+import { encodePrivateRecordFragment } from '@/lib/observability/private-route-safety'
 import { stableHash } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { RedactedPayload } from '@/modules/observability/public'
@@ -654,7 +655,7 @@ export async function readNovuTransactionMessages(
   }
 }
 
-export function verifyResendWebhook(input: VerifyResendWebhookInput): ResendVerifiedWebhook {
+export async function verifyResendWebhook(input: VerifyResendWebhookInput): Promise<ResendVerifiedWebhook> {
   const svixId = input.headers.get('svix-id')
   const svixTimestamp = input.headers.get('svix-timestamp')
   const svixSignature = input.headers.get('svix-signature')
@@ -667,7 +668,7 @@ export function verifyResendWebhook(input: VerifyResendWebhookInput): ResendVeri
   }
 
   assertFreshTimestamp(svixTimestamp, input.now ?? Date.now())
-  if (!verifySvixSignature({ secret: input.secret, svixId, svixTimestamp, svixSignature, rawBody: input.rawBody })) {
+  if (!(await verifySvixSignature({ secret: input.secret, svixId, svixTimestamp, svixSignature, rawBody: input.rawBody }))) {
     throw new NotificationProviderError('invalid_resend_signature', 'Resend webhook signature verification failed.', 401)
   }
 
@@ -697,21 +698,49 @@ function normalizeResendWebhookPayload(rawBody: string, svixId: string): ResendV
   }
 }
 
-function verifySvixSignature(input: {
+async function verifySvixSignature(input: {
   secret: string
   svixId: string
   svixTimestamp: string
   svixSignature: string
   rawBody: string
-}): boolean {
+}): Promise<boolean> {
   const signedContent = `${input.svixId}.${input.svixTimestamp}.${input.rawBody}`
-  const expected = createHmac('sha256', decodeSvixSecret(input.secret)).update(signedContent).digest('base64')
-  return readSvixSignatures(input.svixSignature).some((candidate) => constantTimeEqual(candidate, expected))
+  const expected = await hmacSha256Base64(decodeSvixSecret(input.secret), signedContent)
+  return readSvixSignatures(input.svixSignature).some((candidate) => constantTimeStringEqual(candidate, expected))
 }
 
-function decodeSvixSecret(secret: string): Buffer {
+/**
+ * Web Crypto rather than `node:crypto`. Route modules are reachable from the
+ * generated client route tree, so a top-level `node:` import here throws during
+ * hydration and leaves every page as inert server-rendered HTML.
+ */
+async function hmacSha256Base64(secret: Uint8Array<ArrayBuffer>, content: string): Promise<string> {
+  const key = await globalThis.crypto.subtle.importKey('raw', secret, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const signature = await globalThis.crypto.subtle.sign('HMAC', key, new TextEncoder().encode(content))
+  return base64FromBytes(new Uint8Array(signature))
+}
+
+function decodeSvixSecret(secret: string): Uint8Array<ArrayBuffer> {
   const normalized = secret.startsWith('whsec_') ? secret.slice('whsec_'.length) : secret
-  return Buffer.from(normalized, 'base64')
+  return bytesFromBase64(normalized)
+}
+
+function bytesFromBase64(value: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(value)
+  const bytes = new Uint8Array(new ArrayBuffer(binary.length))
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return bytes
+}
+
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+  return btoa(binary)
 }
 
 function readSvixSignatures(header: string): string[] {
@@ -721,12 +750,6 @@ function readSvixSignatures(header: string): string[] {
     .filter((part) => part.startsWith('v1,'))
     .map((part) => part.slice('v1,'.length))
     .filter((part) => part.length > 0)
-}
-
-function constantTimeEqual(candidate: string, expected: string): boolean {
-  const candidateBuffer = Buffer.from(candidate)
-  const expectedBuffer = Buffer.from(expected)
-  return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer)
 }
 
 function assertFreshTimestamp(timestamp: string, now: number): void {
@@ -833,14 +856,18 @@ function ownerInquiryLink(appBaseUrl: string | undefined, inquiryThreadId: strin
   return url.toString()
 }
 
-function customerInquiryRecordLink(appBaseUrl: string | undefined, inquiryThreadId: string, accessToken: string): string | undefined {
+/**
+ * The fragment must round-trip through `decodePrivateRecordFragment`, which
+ * only accepts `#record&…`. A hand-built `#record?…` link parses as no access
+ * key at all, so the recipient lands on "record not available".
+ */
+export function customerInquiryRecordLink(appBaseUrl: string | undefined, inquiryThreadId: string, accessToken: string): string | undefined {
   if (appBaseUrl === undefined || appBaseUrl.trim().length === 0 || accessToken.trim().length === 0) {
     return undefined
   }
 
   const url = new URL(`/t/${encodeURIComponent(inquiryThreadId)}`, appBaseUrl)
-  const fragment = new URLSearchParams({ access: accessToken })
-  url.hash = `record?${fragment.toString()}`
+  url.hash = encodePrivateRecordFragment(accessToken)
   return url.toString()
 }
 

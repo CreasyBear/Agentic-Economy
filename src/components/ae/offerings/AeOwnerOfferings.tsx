@@ -17,11 +17,22 @@ import {
 } from 'lucide-react'
 
 import { AeSelectField } from '@/components/ae/forms/AeSelectField'
+import {
+  OfferingPriceKindValues,
+  OfferingPriceTaxTreatmentValues,
+  OfferingPriceUnitValues,
+  normalizeOfferingPrice,
+} from '@/modules/catalog/public'
 import type {
   BusinessOfferingProjection,
   BusinessOfferingStatus,
   OfferingAccessPathDescriptor,
   OfferingAccessPathStatus,
+  OfferingPrice,
+  OfferingPriceInput,
+  OfferingPriceKind,
+  OfferingPriceTaxTreatment,
+  OfferingPriceUnit,
   PublicAccessPath,
   PublicOfferingSupplyProjection,
 } from '@/modules/catalog/public'
@@ -43,6 +54,12 @@ export type OwnerOfferingEditorValue = Readonly<{
   serviceAreaSummary: string
   availabilitySummary: string
   pricingSummary: string
+  /**
+   * The comparable twin of `pricingSummary`, never derived from it. Present as
+   * a declared key so every construction site has to decide, and so clearing
+   * the price group actually clears the published price.
+   */
+  price: OfferingPrice | undefined
   status: BusinessOfferingStatus
   accessPaths: readonly OwnerAccessPathEditorValue[]
 }>
@@ -212,6 +229,7 @@ export function AeOwnerOfferingEditor({
   const [result, setResult] = useState<OwnerOfferingSaveResult | undefined>()
   const [dirty, setDirty] = useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
+  const [priceDraft, setPriceDraft] = useState(() => toOwnerPriceDraft(initialValue.price))
   const firstFieldRef = useRef<HTMLInputElement>(null)
   const liveRegionId = useId()
   const retryingPartialSave = result?.kind === 'refused' && result.retry !== undefined
@@ -229,9 +247,13 @@ export function AeOwnerOfferingEditor({
     setDraftRestored(true)
     const stored = readStoredOfferingDraft(draftKey)
     if (stored === undefined) return
+    // Stored drafts are untrusted text. A price that no longer holds together
+    // is dropped here rather than carried into a save the source would reject.
+    const restored: OwnerOfferingEditorValue = { ...stored, price: normalizeOfferingPrice(stored.price) }
+    setPriceDraft(toOwnerPriceDraft(restored.price))
     // A restored draft never overwrites the field the owner is typing in.
     const focusedName = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.offeringField : undefined
-    setValue((current) => (focusedName === undefined ? stored : { ...stored, [focusedName]: current[focusedName as keyof OwnerOfferingEditorValue] }))
+    setValue((current) => (focusedName === undefined ? restored : { ...restored, [focusedName]: current[focusedName as keyof OwnerOfferingEditorValue] }))
   }, [draftKey, draftRestored])
 
   useEffect(() => {
@@ -242,6 +264,14 @@ export function AeOwnerOfferingEditor({
   function update(patch: Partial<OwnerOfferingEditorValue>) {
     setDirty(true)
     setValue((current) => ({ ...current, ...patch }))
+  }
+
+  function updatePrice(patch: Partial<OwnerOfferingPriceDraft>) {
+    const next = { ...priceDraft, ...patch }
+    setPriceDraft(next)
+    // The boundary: a group that is not internally consistent is dropped here
+    // rather than published as a number the business never agreed to.
+    update({ price: normalizeOfferingPrice(offeringPriceInputFromDraft(next)) })
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -313,6 +343,50 @@ export function AeOwnerOfferingEditor({
           <TextInput label="Service area" value={value.serviceAreaSummary} onChange={(serviceAreaSummary) => update({ serviceAreaSummary })} disabled={editorDisabled} optional />
           <TextInput label="Availability" value={value.availabilitySummary} onChange={(availabilitySummary) => update({ availabilitySummary })} disabled={editorDisabled} optional />
           <TextInput label="Pricing" value={value.pricingSummary} onChange={(pricingSummary) => update({ pricingSummary })} disabled={editorDisabled} optional />
+          <div className="grid gap-4 rounded-lg border border-border p-4">
+            <div className="grid gap-1">
+              <Text weight="semibold" display="block">Comparable price</Text>
+              <Text type="supporting" color="secondary" display="block">Optional, and separate from the note above. Published in Australian dollars so an agent can compare and filter it. Your note is never read to fill this in, and this never rewrites your note.</Text>
+            </div>
+            <Field label="Price type" inputID="offering-price-kind" description="Leave unpublished to keep only the note above.">
+              <AeSelectField id="offering-price-kind" value={priceDraft.kind === '' ? unsetOptionValue : priceDraft.kind} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ kind: OfferingPriceKindValues.find((kind) => kind === chosen) ?? '' })} options={[
+                { value: unsetOptionValue, label: 'Not published' },
+                { value: 'fixed', label: 'Fixed price' },
+                { value: 'from', label: 'From' },
+                { value: 'range', label: 'Range' },
+                { value: 'quote_only', label: 'Quoted on request' },
+              ]} />
+            </Field>
+            {priceDraft.kind === '' ? null : (
+              <>
+                {priceDraft.kind === 'quote_only' ? null : (
+                  <TextInput label="Amount" value={priceDraft.amount} onChange={(amount) => updatePrice({ amount })} disabled={editorDisabled} inputMode="decimal" description={priceDraft.kind === 'range' ? 'Lowest price, in dollars.' : 'In dollars.'} />
+                )}
+                {priceDraft.kind === 'range' ? (
+                  <TextInput label="Maximum amount" value={priceDraft.maximumAmount} onChange={(maximumAmount) => updatePrice({ maximumAmount })} disabled={editorDisabled} inputMode="decimal" description="Highest price, in dollars." />
+                ) : null}
+                <Field label="Charged per" inputID="offering-price-unit" description="Optional">
+                  <AeSelectField id="offering-price-unit" value={priceDraft.unit === '' ? unsetOptionValue : priceDraft.unit} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ unit: OfferingPriceUnitValues.find((unit) => unit === chosen) ?? '' })} options={[
+                    { value: unsetOptionValue, label: 'Not per unit' },
+                    { value: 'job', label: 'Job' },
+                    { value: 'hour', label: 'Hour' },
+                    { value: 'visit', label: 'Visit' },
+                    { value: 'item', label: 'Item' },
+                    { value: 'day', label: 'Day' },
+                    { value: 'week', label: 'Week' },
+                    { value: 'month', label: 'Month' },
+                  ]} />
+                </Field>
+                <Field label="Tax" inputID="offering-price-tax">
+                  <AeSelectField id="offering-price-tax" value={priceDraft.taxTreatment} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ taxTreatment: OfferingPriceTaxTreatmentValues.find((treatment) => treatment === chosen) ?? 'unstated' })} options={[
+                    { value: 'inclusive', label: 'Includes tax' },
+                    { value: 'exclusive', label: 'Excludes tax' },
+                    { value: 'unstated', label: 'Not stated' },
+                  ]} />
+                </Field>
+              </>
+            )}
+          </div>
           <Field label="Public state" inputID="offering-status" description="Draft stays private. Paused and retired Offerings are removed from the public page.">
             <AeSelectField id="offering-status" value={value.status} disabled={editorDisabled} onValueChange={(status) => update({ status: toStatus(status) })} options={[
               { value: 'draft', label: 'Draft' },
@@ -339,7 +413,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
   const [technicalExpanded, setTechnicalExpanded] = useState(false)
   const technicalId = useId()
   const [draftDetail, setDraftDetail] = useState('')
-  const [endpointUrl, setEndpointUrl] = useState('')
+  const [endpoint, setEndpoint] = useState(emptyOwnerEndpointDraft)
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [websiteUrlError, setWebsiteUrlError] = useState<string | undefined>()
   return (
@@ -385,18 +459,48 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
             <button type="button" className="min-h-11 justify-self-start text-sm font-semibold underline underline-offset-4" aria-expanded={technicalExpanded} aria-controls={technicalId} onClick={() => setTechnicalExpanded((current) => !current)}>
               {technicalExpanded ? 'Hide endpoint details' : 'Add endpoint details'}
             </button>
-            {technicalExpanded ? <div id={technicalId}><TextInput label="Endpoint URL" value={endpointUrl} onChange={setEndpointUrl} disabled={disabled} /></div> : null}
+            {technicalExpanded ? (
+              <div id={technicalId} className="grid gap-4">
+                <TextInput label="Endpoint name" value={endpoint.name} onChange={(name) => setEndpoint((current) => ({ ...current, name }))} disabled={disabled} description="What an agent should call this. Left blank, it publishes as “API or agent endpoint”." />
+                <TextInput label="Endpoint URL" value={endpoint.url} onChange={(url) => setEndpoint((current) => ({ ...current, url }))} disabled={disabled} inputMode="url" />
+                <Field label="Method" inputID="access-path-method" description="Optional">
+                  <AeSelectField id="access-path-method" value={endpoint.method === '' ? unsetOptionValue : endpoint.method} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, method: ownerEndpointMethods.find((method) => method === chosen) ?? '' }))} options={[
+                    { value: unsetOptionValue, label: 'Not stated' },
+                    { value: 'GET', label: 'GET' },
+                    { value: 'POST', label: 'POST' },
+                    { value: 'PUT', label: 'PUT' },
+                    { value: 'PATCH', label: 'PATCH' },
+                    { value: 'DELETE', label: 'DELETE' },
+                  ]} />
+                </Field>
+                <TextInput label="Documentation URL" value={endpoint.documentationUrl} onChange={(documentationUrl) => setEndpoint((current) => ({ ...current, documentationUrl }))} disabled={disabled} inputMode="url" optional />
+                <Field label="Interface description" inputID="access-path-interface-format" description="Optional">
+                  <AeSelectField id="access-path-interface-format" value={endpoint.interfaceFormat === '' ? unsetOptionValue : endpoint.interfaceFormat} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, interfaceFormat: ownerInterfaceFormats.find((format) => format === chosen) ?? '' }))} options={[
+                    { value: unsetOptionValue, label: 'Not stated' },
+                    { value: 'OpenAPI', label: 'OpenAPI' },
+                    { value: 'JSON Schema', label: 'JSON Schema' },
+                    { value: 'MCP', label: 'MCP' },
+                    { value: 'Other', label: 'Other' },
+                  ]} />
+                </Field>
+                {endpoint.interfaceFormat === '' ? null : (
+                  <TextInput label="Interface description URL" value={endpoint.interfaceUrl} onChange={(interfaceUrl) => setEndpoint((current) => ({ ...current, interfaceUrl }))} disabled={disabled} inputMode="url" optional />
+                )}
+                <TextInput label="Authentication" value={endpoint.authenticationSummary} onChange={(authenticationSummary) => setEndpoint((current) => ({ ...current, authenticationSummary }))} disabled={disabled} description="Optional. How a caller authenticates, in your own words." />
+                <TextInput label="Endpoint pricing note" value={endpoint.pricingSummary} onChange={(pricingSummary) => setEndpoint((current) => ({ ...current, pricingSummary }))} disabled={disabled} description="Optional. Published exactly as written." />
+              </div>
+            ) : null}
           </div>
         ) : null}
-        <Button type="button" label="Add this way" variant="secondary" isDisabled={disabled || draftDetail.trim().length === 0 || (selectedKind === 'external_operation' && endpointUrl.trim().length === 0) || (selectedKind === 'website' && websiteUrl.trim().length === 0)} onClick={() => {
+        <Button type="button" label="Add this way" variant="secondary" isDisabled={disabled || draftDetail.trim().length === 0 || (selectedKind === 'external_operation' && endpoint.url.trim().length === 0) || (selectedKind === 'website' && websiteUrl.trim().length === 0)} onClick={() => {
           if (selectedKind === 'website' && !isHttpsUrl(websiteUrl)) {
             setWebsiteUrlError('Enter a full HTTPS website address, such as https://example.com/start.')
             return
           }
           const descriptor: OfferingAccessPathDescriptor = selectedKind === 'external_operation'
-            ? { kind: 'external_operation', name: 'API or agent endpoint', summary: draftDetail.trim(), url: endpointUrl.trim(), provenance: 'business_declared' }
+            ? externalOperationDescriptor(endpoint, draftDetail.trim())
             : { kind: 'human_request', channel: selectedKind, disclosure: draftDetail.trim(), ...(selectedKind === 'website' ? { url: websiteUrl.trim() } : {}) }
-          onChange([...paths, { status: 'draft', descriptor }]); setDraftDetail(''); setEndpointUrl(''); setWebsiteUrl(''); setWebsiteUrlError(undefined); setTechnicalExpanded(false)
+          onChange([...paths, { status: 'draft', descriptor }]); setDraftDetail(''); setEndpoint(emptyOwnerEndpointDraft); setWebsiteUrl(''); setWebsiteUrlError(undefined); setTechnicalExpanded(false)
         }} />
       </div>
     </Card>
@@ -424,9 +528,10 @@ function EditorStep({ icon, label, detail, active }: { icon: ReactNode; label: s
   )
 }
 
-function TextInput({ label, value, onChange, disabled, optional = false, inputRef, inputMode, ariaInvalid, describedBy }: { label: string; value: string; onChange: (value: string) => void; disabled: boolean; optional?: boolean; inputRef?: Ref<HTMLInputElement>; inputMode?: 'url'; ariaInvalid?: boolean; describedBy?: string }) {
+function TextInput({ label, value, onChange, disabled, optional = false, description, inputRef, inputMode, ariaInvalid, describedBy }: { label: string; value: string; onChange: (value: string) => void; disabled: boolean; optional?: boolean; description?: string; inputRef?: Ref<HTMLInputElement>; inputMode?: 'url' | 'decimal'; ariaInvalid?: boolean; describedBy?: string }) {
   const id = `offering-${label.toLowerCase().replaceAll(' ', '-')}`
-  return <Field label={label} inputID={id} {...(optional ? { description: 'Optional' } : {})}><input ref={inputRef} id={id} aria-label={label} value={value} disabled={disabled} inputMode={inputMode} aria-invalid={ariaInvalid} aria-describedby={describedBy} onChange={(event) => onChange(event.currentTarget.value)} className="min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none focus:border-primary disabled:opacity-50" /></Field>
+  const hint = description ?? (optional ? 'Optional' : undefined)
+  return <Field label={label} inputID={id} {...(hint === undefined ? {} : { description: hint })}><input ref={inputRef} id={id} aria-label={label} value={value} disabled={disabled} inputMode={inputMode} aria-invalid={ariaInvalid} aria-describedby={describedBy} onChange={(event) => onChange(event.currentTarget.value)} className="min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none focus:border-primary disabled:opacity-50" /></Field>
 }
 
 function TextAreaInput({ label, value, onChange, disabled }: { label: string; value: string; onChange: (value: string) => void; disabled: boolean }) {
@@ -447,6 +552,108 @@ function isHttpsUrl(value: string): boolean {
   }
 }
 
+/**
+ * What the owner typed into the price group. Amounts stay as entered dollar
+ * text so a half-typed figure survives a re-render; the group only becomes a
+ * comparable price at the editor boundary. Nothing here is ever read from, or
+ * written back to, the free-text pricing note beside it.
+ */
+type OwnerOfferingPriceDraft = Readonly<{
+  kind: OfferingPriceKind | ''
+  amount: string
+  maximumAmount: string
+  unit: OfferingPriceUnit | ''
+  taxTreatment: OfferingPriceTaxTreatment
+}>
+
+/** What the owner typed about an external operation before it is added. */
+type OwnerEndpointDraft = Readonly<{
+  name: string
+  url: string
+  method: string
+  documentationUrl: string
+  interfaceFormat: string
+  interfaceUrl: string
+  authenticationSummary: string
+  pricingSummary: string
+}>
+
+/** The one select value that means "the owner has not chosen". */
+const unsetOptionValue = 'none'
+
+/** AE supply is Australian. The owner types dollars; the record keeps minor units. */
+const ownerOfferingPriceCurrency = 'AUD'
+
+const emptyOwnerOfferingPriceDraft: OwnerOfferingPriceDraft = { kind: '', amount: '', maximumAmount: '', unit: '', taxTreatment: 'unstated' }
+const emptyOwnerEndpointDraft: OwnerEndpointDraft = { name: '', url: '', method: '', documentationUrl: '', interfaceFormat: '', interfaceUrl: '', authenticationSummary: '', pricingSummary: '' }
+
+const ownerEndpointMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+const ownerInterfaceFormats = ['OpenAPI', 'JSON Schema', 'MCP', 'Other'] as const
+
+/** Dollars exactly as typed, or nothing when that is not a plain amount. */
+function dollarsToMinor(entered: string): number | undefined {
+  const trimmed = entered.trim()
+  if (!/^\d+(?:\.\d{1,2})?$/u.test(trimmed)) return undefined
+  return Math.round(Number(trimmed) * 100)
+}
+
+function minorToDollars(amountMinor: number | undefined): string {
+  if (amountMinor === undefined) return ''
+  const major = amountMinor / 100
+  return Number.isInteger(major) ? String(major) : major.toFixed(2)
+}
+
+function toOwnerPriceDraft(price: OfferingPrice | undefined): OwnerOfferingPriceDraft {
+  if (price === undefined) return emptyOwnerOfferingPriceDraft
+  return {
+    kind: price.kind,
+    amount: minorToDollars(price.amountMinor),
+    maximumAmount: minorToDollars(price.maximumAmountMinor),
+    unit: price.unit ?? '',
+    taxTreatment: price.taxTreatment,
+  }
+}
+
+/** Dollars in, minor units out, absent until the owner chooses a price type. */
+function offeringPriceInputFromDraft(draft: OwnerOfferingPriceDraft): OfferingPriceInput | undefined {
+  if (draft.kind === '') return undefined
+  const amountMinor = dollarsToMinor(draft.amount)
+  const maximumAmountMinor = dollarsToMinor(draft.maximumAmount)
+  return {
+    kind: draft.kind,
+    currency: ownerOfferingPriceCurrency,
+    taxTreatment: draft.taxTreatment,
+    ...(amountMinor === undefined ? {} : { amountMinor }),
+    ...(maximumAmountMinor === undefined ? {} : { maximumAmountMinor }),
+    ...(draft.unit === '' ? {} : { unit: draft.unit }),
+  }
+}
+
+/**
+ * Everything the owner published about the endpoint. An untouched field is
+ * absent rather than an empty string, so a caller can tell "not stated" apart
+ * from "stated as nothing".
+ */
+function externalOperationDescriptor(draft: OwnerEndpointDraft, summary: string): OfferingAccessPathDescriptor {
+  const name = draft.name.trim()
+  const documentationUrl = draft.documentationUrl.trim()
+  const interfaceUrl = draft.interfaceUrl.trim()
+  const authenticationSummary = draft.authenticationSummary.trim()
+  const pricingSummary = draft.pricingSummary.trim()
+  return {
+    kind: 'external_operation',
+    name: name.length === 0 ? 'API or agent endpoint' : name,
+    summary,
+    url: draft.url.trim(),
+    ...(draft.method === '' ? {} : { method: draft.method }),
+    ...(documentationUrl.length === 0 ? {} : { documentationUrl }),
+    ...(draft.interfaceFormat === '' ? {} : { interfaceDescription: { format: draft.interfaceFormat, ...(interfaceUrl.length === 0 ? {} : { url: interfaceUrl }) } }),
+    ...(authenticationSummary.length === 0 ? {} : { authenticationSummary }),
+    ...(pricingSummary.length === 0 ? {} : { pricingSummary }),
+    provenance: 'business_declared',
+  }
+}
+
 export function toOwnerOfferingSummary(projection: PublicOfferingSupplyProjection, status: BusinessOfferingStatus = 'published'): OwnerOfferingSummary {
   return { offering: projection.offering, status, accessPathCount: projection.accessPaths.length, support: projection.support }
 }
@@ -461,11 +668,12 @@ export function toOwnerEditorValue(projection: PublicOfferingSupplyProjection, s
     serviceAreaSummary: projection.offering.serviceAreaSummary ?? '',
     availabilitySummary: projection.offering.availabilitySummary ?? '',
     pricingSummary: projection.offering.pricingSummary ?? '',
+    price: projection.offering.price,
     status,
     accessPaths: projection.accessPaths.map((path: PublicAccessPath) => ({ accessPathRef: path.accessPathRef, status: 'published', descriptor: path.descriptor })),
   }
 }
 
 export const emptyOwnerOfferingEditorValue: OwnerOfferingEditorValue = {
-  expectedRevision: 0, name: '', category: '', summary: '', serviceAreaSummary: '', availabilitySummary: '', pricingSummary: '', status: 'draft', accessPaths: [],
+  expectedRevision: 0, name: '', category: '', summary: '', serviceAreaSummary: '', availabilitySummary: '', pricingSummary: '', price: undefined, status: 'draft', accessPaths: [],
 }

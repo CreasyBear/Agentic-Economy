@@ -1532,7 +1532,7 @@ describe('durable Customer Request submission recovery', () => {
     vi.unstubAllGlobals()
   })
 
-  it('saves and resumes an idempotent Request shell before interpretation, then completes it after recovery', async () => {
+  it('answers without a provider account, replays the command, and still reaches comparison with a model', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await admitSandboxSupply(backend)
@@ -1545,24 +1545,23 @@ describe('durable Customer Request submission recovery', () => {
       routing: { networkId: 'ae:public' },
     }
 
-    const unavailable = await customer.action(api.customerRequestApplication.submit, command)
-    expect(unavailable).toMatchObject({
+    // No OPENROUTER_API_KEY is configured. AE answers from the request text instead of saving an
+    // uninterpretable Request and telling the customer to retry a permanently failing condition.
+    const withoutProvider = await customer.action(api.customerRequestApplication.submit, command)
+    expect(withoutProvider).toMatchObject({
       kind: 'request',
       requestRef: command.requestId,
-      revision: 0,
-      state: 'needs_attention',
-      nextAction: 'retry',
+      revision: 1,
+      state: 'needs_information',
+      nextAction: 'provide_information',
+      interpretationBasis: 'keyword_match',
     })
-    await expect(backend.query(internal.customerRequestV2.getSubmissionShell, {
-      requestId: command.requestId,
-      principalId,
-    })).resolves.toMatchObject({ kind: 'found' })
-    await expect(customer.action(api.customerRequestApplication.submit, command)).resolves.toEqual(unavailable)
-    const resumedShell = await customer.action(api.customerRequestApplication.resume, {
+    await expect(customer.action(api.customerRequestApplication.submit, command)).resolves.toEqual(withoutProvider)
+    const resumed = await customer.action(api.customerRequestApplication.resume, {
       requestRef: command.requestId,
     })
-    expect(resumedShell).toMatchObject({
-      ...unavailable,
+    expect(resumed).toMatchObject({
+      ...withoutProvider,
       recovery: {
         state: 'restored',
         restoredAt: expect.any(Number),
@@ -1592,9 +1591,14 @@ describe('durable Customer Request submission recovery', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
 
-    await expect(customer.action(api.customerRequestApplication.submit, command)).resolves.toMatchObject({
+    // The already-committed command replays; a fresh one takes the model path to comparison.
+    await expect(customer.action(api.customerRequestApplication.submit, {
+      ...command,
+      compilationKey: 'submit:v2:interpreter-recovery:model',
+      requestId: 'request:v2:interpreter-recovery-model',
+    })).resolves.toMatchObject({
       kind: 'request',
-      requestRef: command.requestId,
+      requestRef: 'request:v2:interpreter-recovery-model',
       revision: 1,
       state: 'ready_to_compare',
       nextAction: 'prepare_options',

@@ -1,3 +1,5 @@
+export { ANSWER_THREAD_AGENT_ENTRYPOINT, AGENT_KEY_ISSUANCE_PATH } from './agent-entry'
+
 export type {
   AnswerThreadRecord,
   AnswerThreadSharePolicy,

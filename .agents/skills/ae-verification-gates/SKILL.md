@@ -36,7 +36,7 @@ a source change, demonstration, or concrete blocker are not progress.
 | Convex schema/function | affected Convex/schema test, typecheck, then `npm run check:convex-codegen` when configured and authorized |
 | HTTP route or module wiring | affected integration test and direct response inspection |
 | Module/import ownership | `npm run test:imports` |
-| Public or assistant-visible copy | `npm run test:copy` and emitted-output inspection |
+| Public or assistant-visible copy | `npm run test:ui-contract` and emitted-output inspection |
 | SEO/discovery output | `npm run test:seo` and serialized-output inspection |
 | UI structure or state | `npm run test:ui-contract` and the relevant `tests/e2e/` spec |
 | Cross-cutting source change | `npm run test:all` after focused checks |

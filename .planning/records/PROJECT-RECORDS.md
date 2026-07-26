@@ -1,12 +1,18 @@
 # Project records
 
 **Owner:** Founder
-**Last reviewed:** 2026-07-21
+**Last reviewed:** 2026-07-25
 **Next field review:** 2026-08-15
 
 This is the project ledger for decisions, research provenance, hypotheses,
-unknowns, owners, and review dates. `PRODUCT.md` remains the authority for what
-is current and what is target. A row here cannot make a product claim current.
+unknowns, owners, and review dates. `PROJECT.md` is the authority for what is
+current and what is target. A row here cannot make a product claim current.
+
+Rows recorded before 2026-07-25 cite `PRODUCT.md`, `DESIGN.md` or `AGENTS.md`
+in their Authority column. Those files were removed on 2026-07-25 (`ba263c10`,
+recoverable at `8dbef716`) and their product authority moved to `PROJECT.md`.
+The citations are left intact as provenance: a decision's recorded basis is not
+rewritten when a document is retired.
 
 ## Decisions
 

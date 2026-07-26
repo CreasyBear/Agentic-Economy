@@ -658,6 +658,12 @@ export const customerRequestViewSchema = z.strictObject({
     explanation: z.string(),
   }).strict().optional(),
   unsupportedRecovery: customerUnsupportedRecoverySchema.optional(),
+  /**
+   * Present only when AE matched keywords from the request text instead of interpreting it,
+   * which happens when the semantic interpreter is unavailable. Absence means ordinary
+   * interpretation; it never means the request was understood better than this.
+   */
+  interpretationBasis: z.literal('keyword_match').optional(),
   preparationRef: z.string().optional(),
   clarification: z.union([
     z.object({

@@ -14,7 +14,7 @@ describe('project record-keeping system', () => {
     const system = read('.planning/records/README.md')
 
     expect(system).toContain('Production source and executable evidence decide what exists now.')
-    expect(system).toContain('`PRODUCT.md` decides the current evidenced state and target product contract.')
+    expect(system).toContain('`PROJECT.md` decides the current evidenced state and target product contract.')
     expect(system).toContain('research is not a decision;')
     expect(system).toContain('implementation is not customer reachability;')
   })
@@ -38,7 +38,7 @@ describe('project record-keeping system', () => {
     expect(knowledge).toContain('| UNKNOWN |')
     expect(sources).toContain('| S-001 | OpenAI |')
     expect(sources).toContain('Refresh trigger')
-    expect(queue).toContain('| P0 | Q-001 |')
+    expect(queue).toMatch(/\|\s*P0\s*\|\s*Q-001\s*\|/)
     expect(queue).toContain('Closing research does not resolve the associated decision')
   })
 
@@ -60,11 +60,11 @@ describe('project record-keeping system', () => {
     expect(research).toContain('do not establish production reliability')
   })
 
-  it('records the partial-entry product boundary as a proposed ADR', () => {
+  it('records the partial-entry product boundary as an accepted ADR', () => {
     const adr = read('.planning/adr/ADR-009-partial-entry-without-request-ownership.md')
 
-    expect(adr).toContain('status: proposed')
+    expect(adr).toContain('status: accepted')
     expect(adr).toContain('partial entry')
-    expect(adr).toContain('full route')
+    expect(adr).toContain('standalone')
   })
 })

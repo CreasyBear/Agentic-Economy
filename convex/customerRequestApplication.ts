@@ -44,6 +44,7 @@ import {
   type EligibleSupplyResult,
   type ExactContractResult,
   type RequestGraph,
+  type RequestGraphUnavailable,
 } from '@/modules/customer-request/application/public'
 
 import { internal } from './_generated/api'
@@ -444,6 +445,7 @@ const customerView = v.object({
     businessContactedForThisRevision: v.literal(false),
     nextStep: v.object({ kind: v.literal('change_request'), summary: v.string() }),
   })),
+  interpretationBasis: v.optional(v.literal('keyword_match')),
   preparationRef: v.optional(v.string()),
   clarification: v.optional(v.union(
     v.object({ kind: v.literal('intent_direction'), prompt: v.string(), answerKind: v.literal('natural_language') }),
@@ -1640,10 +1642,13 @@ async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
   return result === undefined ? undefined : toActionResult(result) as ActionResult
 }
 
-async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<RequestGraph | Readonly<{ kind: 'unavailable' }>> {
+async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<RequestGraph | RequestGraphUnavailable> {
   return await loadRequestGraphApplication(networkId, {
+    // Routeable, not merely integrated: commitAggregate validates the recorded plan against
+    // `listRouteable`, so planning over a wider set guarantees `context_stale` at commit and
+    // hands the customer a retry that can never succeed.
     listEligible: async (id) => await ctx.runQuery(
-      internal.capabilitySupply.listEligible, { networkId: id, limit: 64 },
+      internal.capabilitySupply.listRouteable, { networkId: id, limit: 64 },
     ) as EligibleSupplyResult,
     getActiveExact: async (contractRef) => await ctx.runQuery(
       internal.capabilityContractDocuments.getActiveExactInternal, contractRef,

@@ -11,8 +11,8 @@ import {
   type HarnessToolStatus,
 } from '@/modules/harness/public'
 import type {
-  PublicBusinessCatalogApiPage,
-  PublicBusinessCatalogDetailResult,
+  PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogV2DetailResult,
 } from '@/modules/registry/public'
 import { isAnswerReadToolId } from './answer-tool-registry'
 
@@ -216,14 +216,14 @@ function extractProviders(
   result: unknown,
 ): { providers: AnswerSource[]; count: number } {
   if (toolId === 'registry.search') {
-    const page = result as PublicBusinessCatalogApiPage
+    const page = result as PublicBusinessCatalogApiV2Page
     return {
       providers: page.items.map((dto, index) => toAnswerSource(dto, index + 1)),
       count: page.pagination.total,
     }
   }
 
-  const detail = result as PublicBusinessCatalogDetailResult
+  const detail = result as PublicBusinessCatalogV2DetailResult
   if (detail.kind === 'found') {
     return {
       providers: [toAnswerSource(detail.business, 1)],

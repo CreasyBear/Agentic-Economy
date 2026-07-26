@@ -74,6 +74,7 @@ export {
   type ReplayCommittedCommandPorts,
   type RequestGraph,
   type RequestGraphLimits,
+  type RequestGraphUnavailable,
 } from './interpret-compile'
 
 export {

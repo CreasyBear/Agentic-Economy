@@ -14,6 +14,7 @@ import type {
   EligibleSupplyResult,
   ExactContractResult,
   RequestGraph,
+  RequestGraphUnavailable,
 } from './types'
 
 export function exactRefKey(ref: CapabilityContractRef): string {
@@ -34,9 +35,10 @@ export async function loadRequestGraph(
   networkId: string,
   ports: LoadRequestGraphPorts,
   limits: RequestGraphLimits,
-): Promise<RequestGraph | Readonly<{ kind: 'unavailable' }>> {
+): Promise<RequestGraph | RequestGraphUnavailable> {
   const supply = await ports.listEligible(networkId)
-  if (supply.kind !== 'available' || supply.supplies.length === 0) return { kind: 'unavailable' }
+  if (supply.kind !== 'available') return { kind: 'unavailable', reason: 'graph_unreadable' }
+  if (supply.supplies.length === 0) return { kind: 'unavailable', reason: 'no_routeable_supply' }
   return assembleRequestGraph(supply.supplies, ports.getActiveExact, limits)
 }
 
@@ -44,7 +46,7 @@ export async function assembleRequestGraph(
   supplies: readonly EligibleSupply[],
   getActiveExact: (ref: CapabilityContractRef) => Promise<ExactContractResult>,
   limits: RequestGraphLimits,
-): Promise<RequestGraph | Readonly<{ kind: 'unavailable' }>> {
+): Promise<RequestGraph | RequestGraphUnavailable> {
   const modelsByRef = new Map<string, CapabilityDecisionModel>()
   const descriptors: ReturnType<typeof bindCustomerCapabilityDescriptor>[] = []
   let descriptorBytes = 0
@@ -59,9 +61,9 @@ export async function assembleRequestGraph(
     let model = modelsByRef.get(key)
     if (model === undefined) {
       const stored = await getActiveExact(contractRef)
-      if (stored.kind !== 'found') return { kind: 'unavailable' }
+      if (stored.kind !== 'found') return { kind: 'unavailable', reason: 'graph_unreadable' }
       const decoded = encodeCapabilityContractDocumentJson(stored.documentJson)
-      if (!sameCapabilityContractRef(decoded.contract.ref, contractRef)) return { kind: 'unavailable' }
+      if (!sameCapabilityContractRef(decoded.contract.ref, contractRef)) return { kind: 'unavailable', reason: 'graph_unreadable' }
       model = openCapabilityDecisionModel(decoded.contract)
       modelsByRef.set(key, model)
       let descriptor: ReturnType<typeof bindCustomerCapabilityDescriptor>
@@ -83,10 +85,10 @@ export async function assembleRequestGraph(
           })),
         })
       } catch {
-        return { kind: 'unavailable' }
+        return { kind: 'unavailable', reason: 'graph_unreadable' }
       }
       descriptorBytes += new TextEncoder().encode(JSON.stringify(descriptor)).byteLength
-      if (descriptorBytes > limits.maximumDescriptorBytes) return { kind: 'unavailable' }
+      if (descriptorBytes > limits.maximumDescriptorBytes) return { kind: 'unavailable', reason: 'graph_unreadable' }
       descriptors.push(descriptor)
     }
     bindings.push({

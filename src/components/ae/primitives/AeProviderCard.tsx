@@ -10,6 +10,7 @@ import { Token } from '@astryxdesign/core/Token'
 import { RouterLink } from '@/components/astryx/RouterLink'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
+import { telUri } from '@/lib/ui/tel-uri'
 import { capabilityStatusToAeStatus, firstRequestModeLabel } from '@/lib/ui/status-presentation'
 import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicRouteServiceContract } from '@/modules/catalog/public'
@@ -108,6 +109,7 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
   const [copied, setCopied] = useState(false)
   const location = [item.suburb.trim(), item.stateTerritory.trim()].filter(Boolean).join(', ')
   const phone = item.publishedPhone?.trim() ?? ''
+  const telDestination = telUri(phone)
   const offeringNames = item.offerings.slice(0, 2).map((offering) => offering.name)
   const price = offeringPrice(item)
   const badges = capabilityBadges(item)
@@ -178,8 +180,8 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
           {...(onView === undefined ? {} : { onClick: onView })}
         />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          {phone.length === 0 ? null : (
-            <Button label={`Call ${phone}`} variant="ghost" size="sm" href={`tel:${phone.replace(/[^+\d]/g, '')}`} className="min-h-11" />
+          {telDestination === undefined ? null : (
+            <Button label={`Call ${phone}`} variant="ghost" size="sm" href={telDestination} className="min-h-11" />
           )}
           <Button
             label={copied ? 'Details copied' : 'Copy details'}
@@ -219,12 +221,17 @@ function offeringPrice(item: PublicBusinessCatalogApiV2Dto): string | undefined 
   return undefined
 }
 
+/**
+ * `externalOperation` proves an online path is published, not that anyone
+ * measured a response time. "Answers instantly" was a latency claim with no
+ * observation behind it.
+ */
 function capabilityBadges(item: PublicBusinessCatalogApiV2Dto): readonly string[] {
   if (item.accessSummary.aeSupportedAction) {
     return ['AE can complete this']
   }
   if (item.accessSummary.externalOperation) {
-    return ['Answers instantly']
+    return ['Online request published']
   }
   return []
 }

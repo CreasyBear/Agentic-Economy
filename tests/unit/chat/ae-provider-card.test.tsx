@@ -97,6 +97,8 @@ function registryBusiness(): PublicBusinessCatalogApiV2Dto {
     suburb: 'Joondalup',
     stateTerritory: 'WA',
     publicUrl: '/demo-plumbing',
+    trustTier: 'claimed',
+    photos: [],
     observedAt: 1_700_000_000_000,
     disposition: 'current',
     offerings: [{

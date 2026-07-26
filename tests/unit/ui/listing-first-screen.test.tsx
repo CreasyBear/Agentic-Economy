@@ -44,6 +44,9 @@ const unavailableInquiry: PublicInquiryAffordance = {
   serviceName: 'Emergency plumbing',
 }
 
+/** The exact copy the dev seed and the v1 catalog stamp onto every human channel. */
+const STORED_INQUIRY_DISCLOSURE = 'Use the inquiry form for a first contact.'
+
 describe('ListingFirstScreen', () => {
   it('does not present catalog capability readiness or provenance beyond the unavailable inquiry path', () => {
     const catalog = catalogFixture()
@@ -115,12 +118,21 @@ describe('ListingFirstScreen', () => {
     expectForbiddenCopyAbsent(markup)
   })
 
-  it('renders the direct-call explainer only with a published phone', () => {
+  it('renders the direct-call explainer with a dialable target only when a phone is published', () => {
     const markup = renderFirstScreen(catalogFixture({}, '08 6111 2222'), availableInquiry)
 
     expect(markup).toContain(AE_EXPLAINER_FULL)
-    expect(markup).toContain('href="tel:08 6111 2222"')
+    // The reading format keeps its spaces; the tel: target must not, or the
+    // dialer refuses the link on the device where calling is the whole point.
+    expect(markup).toContain('href="tel:0861112222"')
+    expect(markup).toContain('Call 08 6111 2222')
     expect(markup).not.toContain(AE_EXPLAINER_NO_PHONE)
+  })
+
+  it('hides the call affordance when the published phone has no dialable digits', () => {
+    const markup = renderFirstScreen(catalogFixture({}, 'ask reception'), availableInquiry)
+
+    expect(markup).not.toContain('href="tel:')
   })
 
   it('omits every unpublished trust fact instead of naming its absence', () => {
@@ -181,7 +193,64 @@ describe('ListingFirstScreen', () => {
     expect(markup).not.toContain('Ask this business')
     expect(markup).not.toContain('href="/demo-plumbing/inquiry"')
   })
+
+  it('withdraws the stored inquiry instruction when the inquiry route would refuse', () => {
+    const markup = renderOfferingListing(unavailableInquiry)
+    const text = fragmentFrom(markup).textContent ?? ''
+
+    expect(text).toContain('Ways to get started')
+    expect(text).not.toContain(STORED_INQUIRY_DISCLOSURE)
+    expect(text).not.toContain('Ask through AE')
+    expect(text).toContain('Call the business directly.')
+    expect(markup).not.toContain('/demo-plumbing/inquiry')
+  })
+
+  it('renders one reachable inquiry link when the inquiry route would accept', () => {
+    const markup = renderOfferingListing(availableInquiry)
+    const links = Array.from(
+      fragmentFrom(markup).querySelectorAll<HTMLAnchorElement>('a[href="/demo-plumbing/inquiry"]'),
+    )
+
+    expect(links).toHaveLength(1)
+    expect(links[0]?.textContent).toBe('Ask through AE')
+    // The clickable channel and the sentence describing it are the same path.
+    expect(fragmentFrom(markup).textContent ?? '').toContain(STORED_INQUIRY_DISCLOSURE)
+  })
 })
+
+function renderOfferingListing(inquiryAffordance: PublicInquiryAffordance): string {
+  return renderToStaticMarkup(
+    <AeProviderListingPage
+      catalog={catalogFixture()}
+      inquiryAffordance={inquiryAffordance}
+      agentJsonUrl="/api/businesses/demo-plumbing"
+      supply={{
+        disposition: 'current',
+        observedAt: 1_900_000_000_000,
+        offerings: [{
+          offering: {
+            offeringRef: brandNonEmpty('legacy-offering:demo-plumbing:emergency-plumbing', 'OfferingRef'),
+            revision: 1,
+            name: 'Emergency plumbing visit',
+            category: 'Plumber',
+            summary: 'A published v2 Offering.',
+          },
+          accessPaths: [
+            {
+              accessPathRef: brandNonEmpty('legacy-access:demo-plumbing:emergency-plumbing:phone', 'AccessPathRef'),
+              descriptor: { kind: 'human_request', channel: 'phone', disclosure: STORED_INQUIRY_DISCLOSURE },
+            },
+            {
+              accessPathRef: brandNonEmpty('legacy-access:demo-plumbing:emergency-plumbing', 'AccessPathRef'),
+              descriptor: { kind: 'human_request', channel: 'ae_inquiry', disclosure: STORED_INQUIRY_DISCLOSURE },
+            },
+          ],
+          support: { integrated: false, routeable: false, reasons: [], observedAt: 1_900_000_000_000 },
+        }],
+      }}
+    />,
+  )
+}
 
 function renderFirstScreen(
   catalog: PublicRouteCatalogContract,

@@ -3,9 +3,11 @@ import { v } from 'convex/values'
 
 import {
   catalogFromRows,
+  offeringPriceCeilingMinor,
   projectRegistryCatalogApiItem,
 } from '../src/modules/catalog/public'
 import type { BusinessSupplyProjection } from '../src/modules/catalog/public'
+import { canonicalTradeToken, TRADE_CANONICAL_TOKENS, TRADE_WORDS } from '../src/modules/registry/internal/trade-vocabulary'
 import {
   adaptLegacyCatalogToOfferingApi,
   projectBusinessSupplyToPublicApi,
@@ -252,7 +254,7 @@ export const searchPublicBusinessCatalog = queryGeneric({
     const tokens = query
       .split(' ')
       .filter((token) => !SEARCH_STOP_WORDS.has(token))
-      .map(normalizeSearchToken)
+      .map(canonicalTradeToken)
     const locationKey = resolveSearchLocationKey(args)
     const matches = await readPublicSearchCatalogs(
       db,
@@ -310,6 +312,8 @@ export const searchPublicBusinessOfferingSupply = queryGeneric({
     query: v.string(),
     mode: v.optional(v.union(v.literal('near_me'), v.literal('whole_catalogue'))),
     location: v.optional(v.string()),
+    maxPriceMinor: v.optional(v.number()),
+    hasPrice: v.optional(v.boolean()),
     cursor: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
@@ -319,7 +323,7 @@ export const searchPublicBusinessOfferingSupply = queryGeneric({
     const input = queryInput(args)
     const needle = normalizeSearchText(args.query)
     if (needle.length === 0) return paginateOfferingSupply([], input, '')
-    const tokens = needle.split(' ').filter((token) => !SEARCH_STOP_WORDS.has(token)).map(normalizeSearchToken)
+    const tokens = needle.split(' ').filter((token) => !SEARCH_STOP_WORDS.has(token)).map(canonicalTradeToken)
     const locationKey = resolveSearchLocationKey(args)
     const rows = await readPublishedBusinessRows(db, undefined, CATALOG_TOTAL_COUNT_LIMIT + 1)
     const supply = (await Promise.all(rows.map((business) => readOfferingSupplyForBusiness(db, business))))
@@ -332,12 +336,13 @@ export const searchPublicBusinessOfferingSupply = queryGeneric({
     const effectiveLocationKey = locationKey !== undefined && supply.some((item) => placesOf(item).includes(locationKey))
       ? locationKey
       : undefined
-    const items = supply
+    const matched = supply
       .filter((item) => {
         if (effectiveLocationKey !== undefined && !placesOf(item).includes(effectiveLocationKey)) return false
         const haystack = normalizeSearchText([item.name, item.category, item.suburb, item.stateTerritory, ...item.offerings.flatMap((offering) => [offering.name, offering.category, offering.summary])].join(' '))
-        return (tokens.length === 0 ? [needle] : tokens).every((token) => haystack.includes(token))
+        return matchesQueryTokens(haystack, tokens.length === 0 ? [needle] : tokens)
       })
+    const items = filterOfferingSupplyByPrice(matched, args)
     return paginateOfferingSupply(items, input, needle)
   },
 })
@@ -685,6 +690,37 @@ export async function readOfferingSupplyForBusiness(
   }
 }
 
+/**
+ * Price narrowing runs after token and location matching, on whole businesses:
+ * a business stays when any one of its Offerings answers the filter.
+ *
+ * A budget removes only supply that published a comparable ceiling above it.
+ * `quote_only` has no ceiling, and neither does an Offering that published no
+ * structured price, so neither is dropped — most local supply is quoted on
+ * request, and hiding it behind a budget would make the filter lie about what
+ * the registry holds. `hasPrice` is the opt-in for the opposite need: only
+ * businesses that did publish a comparable number.
+ */
+function filterOfferingSupplyByPrice(
+  items: readonly OfferingSupplyDto[],
+  args: { maxPriceMinor?: number; hasPrice?: boolean },
+): readonly OfferingSupplyDto[] {
+  const budgetMinor = Number.isInteger(args.maxPriceMinor) && (args.maxPriceMinor ?? 0) > 0
+    ? args.maxPriceMinor
+    : undefined
+  if (budgetMinor === undefined && args.hasPrice !== true) return items
+  return items.filter((item) => {
+    if (args.hasPrice === true && !item.offerings.some((offering) => offering.price !== undefined)) {
+      return false
+    }
+    if (budgetMinor === undefined) return true
+    return !item.offerings.every((offering) => {
+      const ceilingMinor = offeringPriceCeilingMinor(offering.price)
+      return ceilingMinor !== undefined && ceilingMinor > budgetMinor
+    })
+  })
+}
+
 function paginateOfferingSupply(
   items: readonly OfferingSupplyDto[],
   input: QueryInput,
@@ -762,6 +798,14 @@ async function resolvePublishedInquiryTargetFromDb(
   }
 }
 
+/**
+ * A location guessed from free text is a hint, not a requirement. Treating it
+ * as a hard filter means any word missing from the service-word list is read as
+ * a suburb and silently empties the result set — `cheap plumber` and
+ * `plumber tonight` both returned nothing while `plumber` returned ten. When a
+ * guessed location matches no supply, drop the guess rather than the answer.
+ * An explicitly supplied location is still honoured strictly by the caller.
+ */
 async function readPublicSearchCatalogs(
   db: RuntimeDb,
   query: string,
@@ -775,9 +819,9 @@ async function readPublicSearchCatalogs(
     locationKey,
   )
   if (indexedMatches.length > 0) {
-    return indexedMatches.filter((catalog) =>
-      matchesCatalog(catalog, tokens, locationKey),
-    )
+    const located = indexedMatches.filter((catalog) => matchesCatalog(catalog, tokens, locationKey))
+    if (located.length > 0 || locationKey === undefined) return located
+    return indexedMatches.filter((catalog) => matchesCatalog(catalog, tokens, undefined))
   }
 
   const fallbackCatalogs = await readPublicCatalogsFromPublishedBusinessScan(
@@ -791,9 +835,9 @@ async function readPublicSearchCatalogs(
     locationScoped: locationKey !== undefined,
     scannedLimit: SEARCH_FALLBACK_BUSINESS_SCAN_LIMIT,
   })
-  return fallbackCatalogs.filter((catalog) =>
-    matchesCatalog(catalog, tokens, locationKey),
-  )
+  const located = fallbackCatalogs.filter((catalog) => matchesCatalog(catalog, tokens, locationKey))
+  if (located.length > 0 || locationKey === undefined) return located
+  return fallbackCatalogs.filter((catalog) => matchesCatalog(catalog, tokens, undefined))
 }
 
 async function readSearchDocumentCatalogs(
@@ -815,11 +859,11 @@ async function readSearchDocumentCatalogs(
     ),
     SEARCH_DOCUMENT_CANDIDATE_LIMIT,
   )
-  const businessSlugs = uniqueBusinessSlugs(
-    documents.filter((document) =>
-      matchesSearchDocument(document, tokens, locationKey),
-    ),
-  ).slice(0, SEARCH_HYDRATION_BUSINESS_LIMIT)
+  const located = documents.filter((document) => matchesSearchDocument(document, tokens, locationKey))
+  const matched = located.length > 0 || locationKey === undefined
+    ? located
+    : documents.filter((document) => matchesSearchDocument(document, tokens, undefined))
+  const businessSlugs = uniqueBusinessSlugs(matched).slice(0, SEARCH_HYDRATION_BUSINESS_LIMIT)
   const catalogs = await Promise.all(
     businessSlugs.map((slug) => readPublicCatalogBySlug(db, slug)),
   )
@@ -844,7 +888,7 @@ function matchesSearchDocument(
   }
 
   const searchText = stringField(document, 'searchText')
-  return tokens.every((token) => searchText.includes(token))
+  return matchesQueryTokens(searchText, tokens)
 }
 
 function uniqueBusinessSlugs(
@@ -1414,6 +1458,7 @@ const SEARCH_STOP_WORDS = new Set([
 
 const SERVICE_WORDS = new Set([
   ...SEARCH_STOP_WORDS,
+  ...TRADE_WORDS,
   'appointment',
   'callout',
   'cleaner',
@@ -1478,7 +1523,22 @@ function matchesCatalog(
       ]),
     ].join(' '),
   )
-  return queryTokens.every((token) => haystack.includes(token))
+  return matchesQueryTokens(haystack, queryTokens)
+}
+
+/**
+ * When a query names a trade, the trade decides the match and the surrounding
+ * words ("emergency", "cheap", "tonight") are intent, not extra requirements.
+ * Requiring every token instead means `emergency electrician` returns nothing
+ * while `electrician` returns nine. Mirrors documentMatchesRegistryQuery so the
+ * indexed and fallback paths cannot answer the same query differently.
+ */
+function matchesQueryTokens(haystack: string, tokens: readonly string[]): boolean {
+  const tradeTokens = tokens.filter((token) => TRADE_CANONICAL_TOKENS.has(token))
+  if (tradeTokens.length > 0) {
+    return tradeTokens.some((token) => haystack.includes(token))
+  }
+  return tokens.every((token) => haystack.includes(token))
 }
 
 function resolveSearchLocationKey(input: { query: string; mode?: string; location?: string }): string | undefined {
@@ -1557,7 +1617,10 @@ function normalizeLocationLabel(value: string | undefined): string | undefined {
     words.pop()
   }
   const label = words.join(' ').trim()
-  return label.length >= 3 ? label : undefined
+  // Leftover free text is not an address. Australian locality names are short
+  // and carry no digits; without this, "someone today under 500" became a suburb.
+  if (label.length < 3 || /\d/.test(label)) return undefined
+  return label
 }
 
 function dropTrailingState(tokens: readonly string[]): readonly string[] {
@@ -1592,9 +1655,7 @@ function normalizeSearchText(value: string): string {
     .replace(/\s+/g, ' ')
 }
 
-function normalizeSearchToken(token: string): string {
-  return token === 'plumber' || token === 'plumbers' ? 'plumbing' : token
-}
+
 
 function normalizeLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) {

@@ -67,8 +67,16 @@ describe('action registry', () => {
     }
   })
 
-  it('accepts slug-addressed public catalog DTOs and rejects internal business identity', () => {
+  /**
+   * The Offering projection publishes `businessId` as a stable public
+   * reference, exactly as the UCP manifest already does, so it is no longer
+   * treated as leaked identity. Every other internal identifier must still be
+   * rejected by the strict output schema.
+   */
+  it('accepts the public Offering DTO and rejects internal identity beyond the published reference', () => {
     const business = {
+      schemaVersion: 'public-business-catalog-api:v2',
+      businessId: 'business:adelaide-emergency-plumbing',
       slug: 'adelaide-emergency-plumbing',
       name: 'Adelaide Emergency Plumbing',
       category: 'Emergency plumbing',
@@ -76,34 +84,35 @@ describe('action registry', () => {
       stateTerritory: 'SA',
       publicUrl: '/adelaide-emergency-plumbing',
       trustTier: 'claimed',
-      publicStatus: 'published' as const,
-      indexStatus: 'not_queued',
-      discoveryStatus: 'degraded',
-      schemaVersion: 'public-business-catalog-api:v1',
-      updatedAt: 1,
       photos: [] as Array<{ url: string; alt: string }>,
-      services: [
+      observedAt: 1,
+      disposition: 'current' as const,
+      offerings: [
         {
-          slug: 'emergency-pipe-repair',
+          offeringRef: 'legacy-offering:adelaide-emergency-plumbing:emergency-pipe-repair',
+          revision: 1,
           name: 'Emergency pipe repair',
           category: 'Emergency plumbing',
           summary: 'Urgent local plumbing.',
-          serviceArea: 'Adelaide and nearby suburbs',
-          hoursOrUnknown: 'Hours supplied by owner',
-          firstRequest: {
-            mode: 'inquiry_available',
-            publicDisclosure: 'Use the inquiry form for a first contact.',
-            publicChannel: 'public_business_contact',
-          },
-          status: 'published' as const,
-          capabilities: [{ kind: 'phone_inquiry', status: 'available' }],
+          serviceAreaSummary: 'Adelaide and nearby suburbs',
+          availabilitySummary: 'Hours supplied by owner',
+          accessPaths: [
+            {
+              accessPathRef: 'legacy-access:adelaide-emergency-plumbing:emergency-pipe-repair',
+              kind: 'human_request' as const,
+              channel: 'ae_inquiry' as const,
+              disclosure: 'Use the inquiry form for a first contact.',
+            },
+          ],
+          support: { integrated: false, aeSupportedAction: false },
         },
       ],
+      accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
     }
 
     const search = findAction('registry.search')!.outputSchema.safeParse({
       kind: 'ok',
-      schemaVersion: 'public-business-catalog-api:v1',
+      schemaVersion: 'public-business-catalog-api:v2',
       query: 'plumber',
       items: [business],
       pagination: { limit: 1, total: 1, hasMore: false },
@@ -112,16 +121,18 @@ describe('action registry', () => {
 
     const detail = findAction('registry.detail')!.outputSchema.safeParse({
       kind: 'found',
-      schemaVersion: 'public-business-catalog-api:v1',
+      schemaVersion: 'public-business-catalog-api:v2',
       business,
     })
     expect(detail.success).toBe(true)
 
-    expect(findAction('registry.detail')!.outputSchema.safeParse({
-      kind: 'found',
-      schemaVersion: 'public-business-catalog-api:v1',
-      business: { ...business, businessId: 'business:adelaide-emergency-plumbing' },
-    }).success).toBe(false)
+    for (const leaked of ['ownerId', 'sourceHash', 'serviceId', 'rawContactValue'] as const) {
+      expect(findAction('registry.detail')!.outputSchema.safeParse({
+        kind: 'found',
+        schemaVersion: 'public-business-catalog-api:v2',
+        business: { ...business, [leaked]: 'internal-value' },
+      }).success, leaked).toBe(false)
+    }
   })
 
   it('exposes schema metadata on agent-facing descriptors', () => {
@@ -226,5 +237,35 @@ describe('action registry', () => {
     expect(schema.safeParse({ ...baseInput, contact: { email: `${'a'.repeat(242)}@example.test` } }).success).toBe(false)
     expect(schema.safeParse({ ...baseInput, contact: { phone: '1'.repeat(32) } }).success).toBe(true)
     expect(schema.safeParse({ ...baseInput, contact: { phone: '1'.repeat(33) } }).success).toBe(false)
+  })
+
+  it('accepts a whole positive price ceiling and refuses a ceiling nobody can pay', () => {
+    const schema = findAction('registry.search')!.schema
+
+    expect(schema.safeParse({ query: 'plumber' }).success).toBe(true)
+    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: 25_000, hasPrice: true }).success).toBe(true)
+    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: 0 }).success).toBe(false)
+    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: -1 }).success).toBe(false)
+    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: 250.5 }).success).toBe(false)
+    expect(schema.safeParse({ query: 'plumber', hasPrice: 'yes' }).success).toBe(false)
+  })
+
+  /**
+   * The filter is only safe to use if the descriptor says what it does to
+   * supply that quotes on request. An agent that assumes a budget removes
+   * unpriced options would read the narrowed page as the whole market.
+   */
+  it('tells an agent that a budget never removes quoted-on-request supply', () => {
+    const descriptor = describeActionForAgent(findAction('registry.search')!)
+    const parameters = descriptor.parameters.map((parameter) => parameter.name)
+
+    expect(parameters).toContain('maxPriceMinor')
+    expect(parameters).toContain('hasPrice')
+
+    const boundaries = descriptor.boundaries.join(' ')
+    expect(boundaries).toMatch(/maxPriceMinor/)
+    expect(boundaries).toMatch(/minor units/i)
+    expect(boundaries).toMatch(/quoted on request/i)
+    expect(boundaries).toMatch(/hasPrice/)
   })
 })

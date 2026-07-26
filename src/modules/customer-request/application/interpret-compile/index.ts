@@ -26,6 +26,7 @@ export {
   type ProposeThenCompileInterpreter,
   type ProposeThenCompileResult,
 } from './interpret'
+export { createDeterministicCustomerRequestInterpreter } from './deterministic-interpreter'
 export {
   createConfiguredRequestInterpreter,
   interpreterFailureCode,
@@ -39,4 +40,5 @@ export type {
   EligibleSupplyResult,
   ExactContractResult,
   RequestGraph,
+  RequestGraphUnavailable,
 } from './types'

@@ -4,7 +4,7 @@ import { brandNonEmpty } from '@/modules/common/ids'
 import {
   filterPublicRegistryDetail,
   filterPublicRegistryPage,
-  readPublicRegistrySearchPage,
+  readPublicOfferingRegistrySearchPage,
   setCatalogSearchBackendForTests,
   setCatalogSearchPortForTests,
 } from '@/modules/registry/registry.functions'
@@ -12,6 +12,7 @@ import type { CatalogSearchPort } from '@/modules/registry/internal/catalog-sear
 import type { PublicBusinessCatalogApiDto, PublicBusinessCatalogApiPage } from '@/modules/registry/public'
 import {
   searchPublicBusinessCatalog as convexSearchPublicBusinessCatalog,
+  searchPublicBusinessOfferingSupply as convexSearchPublicBusinessOfferingSupply,
   setRegistrySearchFallbackMetricSinkForTests,
   type RegistrySearchFallbackMetric,
 } from '../../../convex/registry'
@@ -45,10 +46,29 @@ type ConvexSearchHandler = (
   args: { query: string; limit?: number },
 ) => Promise<unknown>
 type ConvexRegisteredSearch = { _handler: ConvexSearchHandler }
+type ConvexOfferingSearchArgs = {
+  query: string
+  mode?: 'near_me' | 'whole_catalogue'
+  location?: string
+  maxPriceMinor?: number
+  hasPrice?: boolean
+  cursor?: string
+  limit?: number
+}
+type ConvexOfferingSearchPage = {
+  kind: string
+  items: readonly { slug: string }[]
+  pagination: { total: number; limit: number; hasMore: boolean }
+}
+type ConvexRegisteredOfferingSearch = {
+  _handler: (ctx: ConvexRegistryQueryCtx, args: ConvexOfferingSearchArgs) => Promise<ConvexOfferingSearchPage>
+}
 
 // Convex registered functions expose _handler in this unit-test seam.
 const registeredConvexSearch = convexSearchPublicBusinessCatalog as unknown as ConvexRegisteredSearch
 const convexSearchHandler = registeredConvexSearch._handler
+const convexOfferingSearchHandler =
+  (convexSearchPublicBusinessOfferingSupply as unknown as ConvexRegisteredOfferingSearch)._handler
 
 describe('registry convex fallback', () => {
   afterEach(() => {
@@ -66,7 +86,7 @@ describe('registry convex fallback', () => {
 
     try {
       await expect(
-        readPublicRegistrySearchPage({
+        readPublicOfferingRegistrySearchPage({
           query: 'emergency plumber parramatta',
           limit: 10,
         }),
@@ -87,7 +107,7 @@ describe('registry convex fallback', () => {
     delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
 
     try {
-      await readPublicRegistrySearchPage({
+      await readPublicOfferingRegistrySearchPage({
         query: 'Emergency plumber Brunswick',
         limit: 10,
       })
@@ -110,7 +130,7 @@ describe('registry convex fallback', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const demoPage = await readPublicRegistrySearchPage({
+      const demoPage = await readPublicOfferingRegistrySearchPage({
         query: 'diagnostic plumbing parramatta',
         limit: 10,
       })
@@ -118,9 +138,11 @@ describe('registry convex fallback', () => {
         'plumbing-demo',
         'parramatta-emergency-plumbing',
       ])
-      expect(demoPage.items[0]?.services[0]?.firstRequest.mode).toBe('inquiry_available')
+      expect(demoPage.items[0]?.offerings[0]?.accessPaths.some(
+        (path) => path.kind === 'human_request' && path.channel === 'ae_inquiry',
+      )).toBe(true)
 
-      const genericPage = await readPublicRegistrySearchPage({
+      const genericPage = await readPublicOfferingRegistrySearchPage({
         query: 'emergency plumber parramatta',
         limit: 10,
       })
@@ -160,7 +182,7 @@ describe('registry convex fallback', () => {
     }))
 
     try {
-      const page = await readPublicRegistrySearchPage({
+      const page = await readPublicOfferingRegistrySearchPage({
         query: 'emergency plumber parramatta',
         limit: 10,
       })
@@ -183,7 +205,7 @@ describe('registry convex fallback', () => {
     }))
 
     try {
-      const page = await readPublicRegistrySearchPage({
+      const page = await readPublicOfferingRegistrySearchPage({
         query: 'emergency plumber parramatta',
         limit: 10,
       })
@@ -194,9 +216,85 @@ describe('registry convex fallback', () => {
       ])
       expect(page).toMatchObject({
         kind: 'ok',
-        schemaVersion: 'public-business-catalog-api:v1',
+        schemaVersion: 'public-business-catalog-api:v2',
         pagination: { total: 2, hasMore: false },
       })
+    } finally {
+      restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalBypass)
+    }
+  })
+
+  it('falls back to the explicit local e2e source when Meili answers a real query with zero hits', async () => {
+    const previousLocalBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    setCatalogSearchBackendForTests('meilisearch')
+    setCatalogSearchPortForTests(fakeCatalogSearchPort({
+      search: async () => ({
+        kind: 'ok',
+        backend: 'meilisearch',
+        query: 'emergency plumber parramatta',
+        estimatedTotalHits: 0,
+        hits: [],
+      }),
+    }))
+
+    try {
+      const page = await readPublicOfferingRegistrySearchPage({
+        query: 'emergency plumber parramatta',
+        limit: 10,
+      })
+
+      expect(page.items.map((item) => item.slug)).toEqual([
+        'plumbing-demo',
+        'parramatta-emergency-plumbing',
+      ])
+      expect(page).toMatchObject({
+        kind: 'ok',
+        schemaVersion: 'public-business-catalog-api:v2',
+        pagination: { total: 2, hasMore: false },
+      })
+    } finally {
+      restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalBypass)
+    }
+  })
+
+  it('keeps a non-empty Meili hit set as the answer without a second source search', async () => {
+    const previousLocalBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    let searchCalls = 0
+    setCatalogSearchBackendForTests('meilisearch')
+    setCatalogSearchPortForTests(fakeCatalogSearchPort({
+      search: async () => {
+        searchCalls += 1
+        return {
+          kind: 'ok',
+          backend: 'meilisearch',
+          query: 'emergency plumber parramatta',
+          estimatedTotalHits: 1,
+          hits: [
+            {
+              documentId: 'parramatta-emergency-plumbing__emergency-pipe-repair',
+              businessSlug: 'parramatta-emergency-plumbing',
+              serviceSlug: 'emergency-pipe-repair',
+              generatedHash: brandNonEmpty('hash:generated:parramatta', 'SourceHash'),
+              rank: 1,
+            },
+          ],
+        }
+      },
+    }))
+
+    try {
+      const page = await readPublicOfferingRegistrySearchPage({
+        query: 'emergency plumber parramatta',
+        limit: 10,
+      })
+
+      expect(searchCalls).toBe(1)
+      // The source search would also return plumbing-demo, so a single ranked slug
+      // proves the hydration path answered without a fallback source read.
+      expect(page.items.map((item) => item.slug)).toEqual(['parramatta-emergency-plumbing'])
+      expect(page).toMatchObject({ pagination: { total: 1 } })
     } finally {
       restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalBypass)
     }
@@ -261,6 +359,86 @@ describe('registry convex fallback', () => {
     } finally {
       resetMetricSink()
     }
+  })
+})
+
+/**
+ * A budget filter that hides quoted-on-request supply would remove most real
+ * local businesses while looking like it removed expensive ones. These pin the
+ * distinction between "priced above the budget" and "no comparable price".
+ */
+describe('registry offering supply price filter', () => {
+  const searchPricedSupply = async (
+    args: Omit<ConvexOfferingSearchArgs, 'query'>,
+  ): Promise<readonly string[]> => {
+    const db = new ConvexRegistryFakeDb()
+    seedConvexOfferingPriceSupply(db)
+    const page = await convexOfferingSearchHandler({ db }, { query: 'plumbing', ...args })
+    return page.items.map((item) => item.slug)
+  }
+
+  it('returns every matching business when no price filter is supplied', async () => {
+    expect(await searchPricedSupply({})).toEqual([
+      'budget-plumbing',
+      'premium-plumbing',
+      'quoted-plumbing',
+      'unpriced-plumbing',
+    ])
+  })
+
+  it('drops supply priced above the budget and keeps supply quoted on request', async () => {
+    expect(await searchPricedSupply({ maxPriceMinor: 20_000 })).toEqual([
+      'budget-plumbing',
+      'quoted-plumbing',
+      'unpriced-plumbing',
+    ])
+  })
+
+  it('compares a range against its upper bound, not its starting price', async () => {
+    // premium-plumbing is a 30000-90000 range: its floor fits a $500 budget,
+    // but the job could cost $900, so the budget must not promise it.
+    expect(await searchPricedSupply({ maxPriceMinor: 50_000 })).toEqual([
+      'budget-plumbing',
+      'quoted-plumbing',
+      'unpriced-plumbing',
+    ])
+    expect(await searchPricedSupply({ maxPriceMinor: 90_000 })).toContain('premium-plumbing')
+  })
+
+  it('keeps a business when any one of its offerings fits the budget', async () => {
+    expect(await searchPricedSupply({ maxPriceMinor: 12_000 })).toEqual([
+      'budget-plumbing',
+      'quoted-plumbing',
+      'unpriced-plumbing',
+    ])
+  })
+
+  it('narrows to published comparable prices only when hasPrice is true', async () => {
+    expect(await searchPricedSupply({ hasPrice: true })).toEqual([
+      'budget-plumbing',
+      'premium-plumbing',
+      'quoted-plumbing',
+    ])
+    expect(await searchPricedSupply({ hasPrice: false })).toHaveLength(4)
+  })
+
+  it('combines both filters and reports the narrowed total', async () => {
+    const db = new ConvexRegistryFakeDb()
+    seedConvexOfferingPriceSupply(db)
+
+    const page = await convexOfferingSearchHandler(
+      { db },
+      { query: 'plumbing', maxPriceMinor: 20_000, hasPrice: true },
+    )
+
+    expect(page.items.map((item) => item.slug)).toEqual(['budget-plumbing', 'quoted-plumbing'])
+    expect(page.pagination).toMatchObject({ total: 2, hasMore: false })
+  })
+
+  it('ignores a budget that is not a whole positive number of minor units', async () => {
+    expect(await searchPricedSupply({ maxPriceMinor: 0 })).toHaveLength(4)
+    expect(await searchPricedSupply({ maxPriceMinor: -1 })).toHaveLength(4)
+    expect(await searchPricedSupply({ maxPriceMinor: 12_000.5 })).toHaveLength(4)
   })
 })
 
@@ -436,6 +614,100 @@ function seedConvexRegistrySearchDocument(db: ConvexRegistryFakeDb): void {
     sourceHash: 'hash:search-source:1',
     generatedHash: 'hash:search-generated:1',
     updatedAt: 5,
+  })
+}
+
+/**
+ * Four published plumbers that differ only in what they published about price:
+ * a two-Offering business with one cheap and one expensive job, a range, a
+ * quote-on-request price, and an Offering carrying no structured price at all.
+ */
+function seedConvexOfferingPriceSupply(db: ConvexRegistryFakeDb): void {
+  const supply: readonly {
+    slug: string
+    name: string
+    offerings: readonly { name: string; price?: Record<string, unknown> }[]
+  }[] = [
+    {
+      slug: 'budget-plumbing',
+      name: 'Budget Plumbing',
+      offerings: [
+        { name: 'Tap washer replacement', price: { kind: 'fixed', currency: 'AUD', amountMinor: 10_000, unit: 'job', taxTreatment: 'inclusive' } },
+        { name: 'Whole-house re-pipe', price: { kind: 'fixed', currency: 'AUD', amountMinor: 150_000, unit: 'job', taxTreatment: 'inclusive' } },
+      ],
+    },
+    {
+      slug: 'premium-plumbing',
+      name: 'Premium Plumbing',
+      offerings: [
+        { name: 'Bathroom rough-in', price: { kind: 'range', currency: 'AUD', amountMinor: 30_000, maximumAmountMinor: 90_000, unit: 'job', taxTreatment: 'inclusive' } },
+      ],
+    },
+    {
+      slug: 'quoted-plumbing',
+      name: 'Quoted Plumbing',
+      offerings: [
+        { name: 'Emergency plumbing call-out', price: { kind: 'quote_only', currency: 'AUD', taxTreatment: 'unstated' } },
+      ],
+    },
+    {
+      slug: 'unpriced-plumbing',
+      name: 'Unpriced Plumbing',
+      offerings: [{ name: 'General plumbing repairs' }],
+    },
+  ]
+
+  supply.forEach((entry, index) => {
+    const businessId = `businesses:price:${index}`
+    db.seed('businesses', {
+      _id: businessId,
+      _creationTime: 10 + index,
+      slug: entry.slug,
+      name: entry.name,
+      publicStatus: 'published',
+      trustTier: 'claimed',
+      updatedAt: 10 + index,
+    })
+    db.seed('catalogSupplyCutovers', {
+      _id: `catalogSupplyCutovers:price:${index}`,
+      _creationTime: 20 + index,
+      businessId,
+      mode: 'offering',
+    })
+    db.seed('businessSupplyProjectionSnapshots', {
+      _id: `businessSupplyProjectionSnapshots:price:${index}`,
+      _creationTime: 30 + index,
+      businessId,
+      status: 'current',
+      projectionJson: JSON.stringify({
+        business: {
+          businessId,
+          slug: entry.slug,
+          name: entry.name,
+          category: 'Plumbing',
+          suburb: 'Perth',
+          stateTerritory: 'WA',
+          publicUrl: `/b/${entry.slug}`,
+          trustTier: 'claimed',
+        },
+        offerings: entry.offerings.map((offering, offeringIndex) => ({
+          offering: {
+            offeringRef: `offering:${entry.slug}:${offeringIndex}`,
+            revision: 1,
+            name: offering.name,
+            category: 'Plumbing',
+            summary: `${offering.name} for Perth households.`,
+            ...(offering.price === undefined ? {} : { price: offering.price }),
+          },
+          accessPaths: [],
+          support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
+        })),
+        sourceRevision: 1,
+        sourceDigest: `hash:projection:${entry.slug}`,
+        observedAt: 30 + index,
+        disposition: 'current',
+      }),
+    })
   })
 }
 

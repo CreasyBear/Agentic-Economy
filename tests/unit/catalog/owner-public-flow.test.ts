@@ -135,9 +135,9 @@ describe('public owner claim flow', () => {
     })
   })
 
-  it('serves the default public page by slug and hides unknown slugs', () => {
+  it('serves the default public page by slug and reports unknown slugs as no such business', () => {
     expect(getDefaultPublicOwnerStatusReadback().catalog.name).toBe('Parramatta Emergency Plumbing')
     expect(getPublicBusinessPageReadback('parramatta-emergency-plumbing')).toMatchObject({ kind: 'available' })
-    expect(getPublicBusinessPageReadback('unknown-service')).toEqual({ kind: 'not_found', reason: 'not_public' })
+    expect(getPublicBusinessPageReadback('unknown-service')).toEqual({ kind: 'not_found', reason: 'no_such_business' })
   })
 })

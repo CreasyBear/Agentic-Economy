@@ -23,7 +23,7 @@ public feature claims.
    disclaimer across answer, card, composer, and footer.
 3. Compare human copy, action `summary` and `boundaries`, agent JSON, discovery
    output, metadata, and refusal behavior that describe the same operation.
-4. Run `npm run test:copy`; add `npm run test:seo` for discovery, metadata,
+4. Run `npm run test:ui-contract`; add `npm run test:seo` for discovery, metadata,
    `llms.txt`, sitemap, robots, or structured-data changes. Inspect the actual
    rendered or serialized output because a string scan is not readback proof.
 
