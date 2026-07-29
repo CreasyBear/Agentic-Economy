@@ -1,147 +1,149 @@
+---
+last_mapped_commit: b1b105b1e07a46f637f4dcfb33537eaf4dca6bc0
+last_mapped_at: 2026-07-29
+last_mapped_tree: e6a09cd838ecd86ccb4b6693b5d25a58fc85bddf
+worktree_dirty_files: 189
+---
 # Coding Conventions
 
-**Analysis Date:** 2026-07-21
-**last_mapped_commit:** `63a451f43edea453d0a1a8d8502504433acf76fb`
+**Analysis Date:** 2026-07-29
 
 ## Naming Patterns
 
 **Files:**
-- Use kebab-case for domain directories and most implementation files: `src/modules/customer-request/`, `src/modules/capability-supply/`, and `src/modules/customer-request/route-execution/machines/open-leased-dispatch.ts`.
-- Use `public.ts` as the intentional external seam for a domain. Keep implementation-only files under `internal/`; examples are `src/modules/registry/public.ts` and `src/modules/registry/internal/search.ts`.
-- Name cross-surface declarations `<domain>.actions.ts` and source adapters `<domain>.functions.ts`, then register actions in `src/modules/actions/index.ts`.
-- Keep Convex hosts in camelCase files under `convex/`, such as `convex/customerRequestApplication.ts`; co-located IO adapters use a `*Ports.ts` suffix.
-- Name Vitest files `*.test.ts` or `*.test.tsx`, Playwright files `*.spec.ts`, and architectural source locks `*-thinness.test.ts`.
+- Use lowercase kebab-case for domain directories and most implementation files. Current examples include `src/modules/action-invocation/internal/async-durable-port.ts`, `src/modules/catalog/internal/owner-public-flow.ts`, and `src/modules/notification-outbox/internal/dispatch-request.ts`.
+- Use `public.ts` for a module's supported external seam and keep implementation-only code below `internal/`; current examples are `src/modules/catalog/public.ts` and `src/modules/registry/public.ts`.
+- Use `<domain>.actions.ts` for registered action contracts and `<domain>.functions.ts` for source adapters. Register actions explicitly in `src/modules/actions/index.ts`.
+- Use camelCase filenames for Convex hosts, such as `convex/customerRequestApplication.ts`; co-located adapters use role-oriented names such as `convex/customerRequestRefinePorts.ts`.
+- Name Vitest files `*.test.ts` or `*.test.tsx`; name Playwright files `*.spec.ts`. Architectural source locks use the `*-thinness.test.ts` suffix.
 
 **Functions:**
-- Use camelCase verb phrases: `describeActionForAgent`, `searchPublicBusinessCatalog`, and `provideCustomerRequestFacts`.
-- Name implementation imports with an `Impl` suffix when re-exporting through a public seam, as in `src/modules/registry/public.ts`.
-- Name dependency-injection factories `<concern>Ports(ctx)` and pure operations by the business action they perform.
-- Do not introduce `use*` names outside genuine React hooks; application thinness tests under `tests/unit/customer-request/application/` enforce this separation.
+- Use camelCase verb phrases such as `buildCatalogDiscoveryManifest`, `searchPublicBusinessCatalog`, and `listOwnerInbox`.
+- Name dependency-injection factories with a concern plus `Ports`, for example `setCatalogSearchBackendForTests` and source-owned ports factories.
+- Keep `use*` names for genuine React hooks; application and module tests treat route/application thinness as a separately checked concern.
+- Prefer one source-owned operation behind multiple adapters rather than duplicating business decisions in routes, UI, Convex hosts, or test harnesses.
 
 **Variables:**
-- Use camelCase for locals and module values.
-- Use SCREAMING_SNAKE_CASE for stable shared constants, especially test constants and fixed policy values.
-- Use `Values` suffixes for literal vocabularies and derive their union types: `IndexStatusValues` and `IndexStatus` in `src/modules/registry/public.ts`.
-- Preserve semantic identifiers in names (`requestRef`, `routeRef`, `operationKey`) instead of generic `id` where the domain distinguishes identities.
+- Use camelCase for locals and module values; use SCREAMING_SNAKE_CASE for stable shared constants and test catalogs.
+- Preserve semantic identities in names (`requestRef`, `routeRef`, `offeringRef`, `operationKey`) instead of collapsing distinct identifiers into generic `id` values.
+- Use `Values` suffixes for literal vocabularies and derive their union types, as in the catalog and registry modules.
 
 **Types:**
-- Use PascalCase type aliases. The codebase prefers `type` over `interface` for DTOs, ports, commands, results, and function contracts.
-- Model expected outcomes as discriminated unions, normally on `kind`; do not use thrown exceptions for ordinary refused, missing, conflict, or proof-gap states.
-- Make result variants explicit and readonly. `PaidOperationApplicationResult<Value>` in `src/modules/action-invocation/paid-operation-application-service.ts` separates `{ kind: 'accepted'; value }` from `{ kind: 'refused'; code }`; extend that vocabulary instead of returning booleans or loosely typed errors.
-- Keep authority and identity distinct in names and types. `src/lib/server/hosted-paid-operation-agent-api.ts` admits an authenticated principal, while the application service separately enforces invocation ownership, expected version, advertised continuation, and accepted authority.
-- Mark public collections `readonly` and use `as const` for literal vocabularies.
-- Keep Convex runtime types (`MutationCtx`, `QueryCtx`, `Doc`) out of pure modules under `src/modules/`.
+- Use PascalCase type aliases. Current module contracts favor `type` for ports, commands, results, and DTOs.
+- Model ordinary refusal, missing, conflict, unsupported, and uncertainty outcomes as discriminated unions, normally on `kind`; do not replace them with booleans or generic exceptions.
+- Keep result variants explicit and readonly where the contract is shared across surfaces. `src/modules/common/action.ts` defines action result and authority/retry vocabularies as literal unions.
+- Keep identity and authority distinct in names and types. An authenticated caller or agent identity is attribution; it is not by itself permission for a different consequence.
+- Mark public collections readonly and use `as const` for literal vocabularies. Keep Convex runtime types and `ctx` access at Convex boundaries rather than in pure domain modules.
 
 ## Code Style
 
 **Formatting:**
-- No Prettier configuration is present. Match the established TypeScript style: two-space indentation, single quotes, trailing commas in multiline constructs, and no semicolons.
-- Keep multiline object and function arguments trailing-comma safe. Let neighboring source determine compact versus expanded JSX.
-- Keep comments focused on invariants, authority, or non-obvious platform constraints rather than narrating implementation.
+- No Prettier, Biome, or ESLint configuration is present. No `format` script exists in `package.json`.
+- Representative TypeScript uses two-space indentation, single quotes, no semicolons, and trailing commas in multiline calls and objects. Follow the neighboring file rather than introducing style-only churn.
+- Keep comments focused on invariants, authority boundaries, registration, recovery, or non-obvious platform constraints.
 
 **Linting:**
-- Run `npm run lint`; `package.json` invokes `oxlint src convex tests tools examples --deny-warnings`.
-- `.oxlintrc.json` enables `correctness` errors with TypeScript and Oxc plugins, ignores generated Convex output and deliberate bad fixtures, and explicitly disables a small set of noisy rules.
-- Treat `tsconfig.json` as a quality gate: `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, and `noImplicitOverride` are enabled.
-- Run `npm run test:ts-standards`; `tests/imports/ts-standards.test.ts` scans live source for unsafe TypeScript patterns that lint alone does not govern.
+- The available lint command is `npm run lint`, which runs `oxlint src convex tests tools examples --deny-warnings` from `package.json`.
+- `.oxlintrc.json` enables the `correctness` category as errors, turns `suspicious` off, and enables the `typescript` and `oxc` plugins.
+- `.oxlintrc.json` sets `no-debugger` to error and explicitly disables `no-control-regex`, `no-underscore-dangle`, `no-unused-vars`, `no-useless-escape`, and `typescript/triple-slash-reference`.
+- Generated Convex output, the routing-agent worker declaration, deliberate fixtures, and `vendor/` are ignored by `.oxlintrc.json`.
+- `tsconfig.json` is a separate type-quality gate with `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride`, `forceConsistentCasingInFileNames`, `isolatedModules`, and `noEmit` enabled.
 
 ## Import Organization
 
 **Order:**
-1. Node built-ins such as `node:fs`.
+1. Node built-ins, when a runtime file needs them.
 2. Third-party runtime and test packages.
-3. `@/` or `~/` imports from `src/`.
-4. Relative imports inside the same module/package.
-5. Use `import type` wherever the import is type-only.
+3. `@/` or `~/` aliases into `src/`.
+4. Relative imports within the same module or package.
+5. Use `import type` for type-only imports.
 
-Blank lines separate major import groups. Existing files sometimes interleave a related value import and its type import; preserve local grouping instead of performing style-only churn.
+Representative tests such as `tests/integration/registry-api.test.ts` separate Vitest imports, source aliases, and route-relative imports with blank lines. Preserve a local file's established grouping when a value import and its type import are intentionally adjacent.
 
 **Path Aliases:**
 - `@/*` and `~/*` both resolve to `src/*` in `tsconfig.json`.
-- Operator route aliases in `tsconfig.json` remap owner, admin, and developer-discovery paths.
-- Vitest resolves these aliases through `tsconfigPaths: true` in `vitest.config.ts`.
+- `@/routes/owner.*`, `@/routes/admin.*`, and `@/routes/developers.discovery` map operator route aliases in `tsconfig.json`.
+- Vitest resolves aliases with `tsconfigPaths: true` in `vitest.config.ts`.
 
 **Boundary Rules:**
-- Import another domain through `src/modules/<domain>/public.ts`; do not reach into a sibling domain's `internal/` directory.
-- Routes and Convex hosts consume module public seams. Pure domain code must not import `convex/_generated`, `convex/server`, or access `ctx.db`.
-- `tests/imports/private-imports.test.ts`, `tests/imports/route-boundary.test.ts`, and the domain-specific boundary tests under `tests/imports/` are executable architecture policy.
-- Register operations explicitly in `src/modules/actions/index.ts`; do not rely on module-evaluation side effects.
-- Keep HTTP routes as transport adapters. `src/routes/api.v1.paid-operations.$invocationRef.commands.ts` authenticates through `src/lib/server/hosted-paid-operation-agent-api.ts` and obtains the source runtime from `src/lib/server/hosted-paid-operation-runtime.ts`; it does not implement payment, authority, or reconciliation rules.
-- Keep business facts in the owning source module. Shared Action Invocation control may project continuity, but result interpretation remains in `src/modules/action-invocation/paid-operation-semantics.ts` and action-specific source records rather than route state.
+- Import another domain through `src/modules/<domain>/public.ts`; sibling modules and routes must not reach into `internal/`.
+- Routes and Convex hosts consume public/source seams. Pure domain modules do not import `convex/_generated`, `convex/server`, or access `ctx.db`.
+- `tests/imports/private-imports.test.ts`, `tests/imports/route-boundary.test.ts`, and domain-specific files in `tests/imports/` are executable architecture policy, not merely examples.
+- Register operations explicitly in `src/modules/actions/index.ts`; module evaluation side effects do not constitute registration.
+- Keep routes as transport adapters. The route should authenticate/parse/project and delegate to a source-owned function, not own business rules, authority, reconciliation, or provider policy.
+- Preserve the distinction between discovery inventory and routeable supply, identity and authority, and dispatch attempts and external outcomes. `src/modules/registry/` and `src/modules/customer-request/` are different ownership seams.
+- For action contracts, use `defineAction` with strict schemas, honest `summary` and `boundaries`, explicit surfaces, and a `run` function that delegates to the shared source operation; the contract is defined in `src/modules/common/action.ts`.
+- For payment-adjacent transport, keep caller-controlled amount, currency, recipient, endpoint, and credential out of authority decisions. Tests and copy gates must not translate a challenge, signature, identifier, or receipt into proof of real-world work.
+- For Convex changes, keep schema fragments owned by the domain and composed by the root schema; keep `node:*` imports out of modules reachable by queries and mutations. `npm run check:convex-codegen` is the configured dry-run gate.
 
 ## Error Handling
 
 **Patterns:**
-- Return typed discriminated unions for expected domain outcomes. Callers must branch on `kind` and preserve specific refusal/error codes.
-- Return uncertainty as data. `src/lib/server/hosted-paid-operation-agent-api.ts` returns `update_not_confirmed` with an inspect relation after an ambiguous command failure; `src/modules/action-invocation/hosted-sandbox-reconciliation.ts` accepts only intent and obtains trusted observations behind the server boundary.
-- Throw only for broken invariants, impossible setup, or programmer errors. `src/modules/action-invocation/paid-operation-application-service.ts` throws `paid_operation_pre_attempt_payment_invariant` only when a declared source port contradicts its contract.
-- Validate external inputs at boundaries with strict Zod schemas or exact shape guards, and validate Convex arguments/returns with `v.*`. Use `safeParse` for ordinary invalid input, as in `src/lib/server/customer-request-route-action-api.ts`; use `z.strictObject` for proof/evidence packet contracts in `tools/release/paid-operation-hosted-proof-contract.ts`.
+- Return typed discriminated unions for expected domain outcomes. Callers branch on `kind` and preserve specific refusal or error codes.
+- Return uncertainty as data and expose the safe continuation. Do not treat an ambiguous external effect as an ordinary retryable failure.
+- Throw only for broken invariants, impossible setup, or programmer errors. Expected unsupported, refused, stale, missing, and conflict states are result values.
+- Validate external inputs at boundaries with strict Zod schemas or exact shape guards; validate Convex inputs and returns with `v.*`. Use `safeParse` for ordinary invalid input.
 - Use exhaustive union handling with a `never` assignment when switching over a closed vocabulary.
-- Use `try`/`finally` when a test or runtime adapter temporarily changes process state, globals, servers, or injected backends.
-- Do not expose raw provider, database, or sensitive payload errors. Return redacted codes/messages and persist structured evidence through the observability module.
+- Use `try`/`finally` whenever tests or adapters temporarily change environment variables, globals, servers, injected backends, or timers.
+- Do not expose raw provider, database, credential, or private customer payloads. Return redacted structured codes and persist evidence through the owning observability seam.
 
 ## Logging
 
-**Framework:** Structured product telemetry uses Sentry and PostHog; durable business evidence uses `src/modules/observability/`. Console logging is not the default domain pattern.
+**Framework:** Structured telemetry dependencies are present (`@sentry/node`, `@sentry/react`, `posthog-js`, and `posthog-node`); durable business evidence is owned by `src/modules/observability/`. Console logging is not the default domain pattern.
 
 **Patterns:**
-- Record business-significant actions as structured audit/funnel/receipt records, not free-form console strings.
-- Redact private inquiry content, credentials, and provider payloads before persistence or logging.
-- Use `console` only at CLI/script boundaries or where a runtime integration explicitly owns operational logging.
-- When logging interpretation failures in Convex, emit a stable redacted code rather than customer/provider input; examples are `convex/customerRequestApplication.ts` and `convex/customerRequestRefinePorts.ts`.
+- Record business-significant actions as structured audit, funnel, receipt, or evidence records rather than free-form console strings.
+- Redact inquiry content, credentials, and provider payloads before persistence or logging.
+- Use `console` at CLI/script boundaries or where a runtime integration explicitly owns operational logging.
+- In Convex interpretation failures, emit a stable redacted code instead of customer or provider input; keep logging behavior behind the relevant source/host seam.
 
 ## Comments
 
 **When to Comment:**
-- Explain trust boundaries, why a registration is explicit, why a runtime choice is constrained, or why an apparently simpler implementation is unsafe.
-- Keep public action intent in the action's `summary` and `boundaries` fields rather than duplicating it in scattered comments.
-- Avoid stale phase-history comments and TODOs as substitutes for typed states or tests.
+- Explain trust boundaries, explicit registration, recovery behavior, or why a simpler implementation would weaken authority or evidence.
+- Keep public action intent in action `summary` and `boundaries` fields rather than duplicating it in scattered comments.
+- Do not use stale phase-history comments or TODOs in place of typed states, executable policy tests, or source-owned evidence.
 
 **JSDoc/TSDoc:**
-- Use sparingly for exported contracts whose invariants are not evident from types. `src/modules/common/action.ts` is the representative pattern.
-- Prefer types and boundary-honest names over extensive API prose.
+- Use sparingly for exported contracts whose invariants are not evident from types. `src/modules/common/action.ts` contains representative contract documentation.
+- Prefer names, discriminated types, and boundary tests over extensive API prose.
 
 ## Function Design
 
-**Size:** Keep pure decisions small enough to test directly. Convex hosts should be thin validator/auth/wiring shells; source-structure limits are enforced by `*-thinness.test.ts` suites under `tests/unit/customer-request/`, `tests/unit/capability-supply/`, `tests/unit/inquiries/`, and `tests/unit/notification-outbox/`.
+**Size:** Keep pure decisions small enough to test directly. Keep Convex hosts thin: validator, authentication, persistence, scheduler, and source wiring should remain separate from domain decisions. Thinness locks are located under `tests/unit/` in domain-specific suites.
 
-**Parameters:** Prefer a typed input object plus a typed ports object over long positional argument lists. Inject clocks, network calls, persistence, and schedulers through ports or explicit options.
+**Parameters:** Prefer a typed input object plus a typed ports object over long positional lists. Inject clocks, network calls, persistence, and schedulers through ports or explicit options.
 
-**Return Values:** Return serializable, readonly result shapes with specific `kind` and `code` values. Do not return deferred patch plans for a host to interpret; ports perform semantic IO inside the owning transaction.
+**Return Values:** Return serializable readonly result shapes with specific `kind` and `code` values. Do not return deferred patch plans for hosts to interpret; ports perform semantic IO inside the owning transaction.
 
-**Runtime validation:** Parse unknown request and provider input once at the boundary. Do not cast unknown payloads into domain types. Keep Zod schemas near the owned contract and Convex validators at the host boundary; the corresponding behavior test must include extra-key, malformed, and materially stale cases.
+**Runtime validation:** Parse unknown request and provider input once at the boundary. Do not cast unknown payloads into domain types. Keep Zod schemas near the owned contract and Convex validators at the host boundary; tests should include malformed, extra-key, and materially stale cases where applicable.
 
 ## Module Design
 
 **Exports:**
-- Export a narrow domain API from `public.ts`; alias private implementations with `Impl` when the public seam intentionally renames them.
-- Put pure decisions in `src/modules/`; keep database/scheduler IO in Convex hosts and `convex/*Ports.ts`.
-- Declare actions once in `<domain>.actions.ts`, call shared source functions, and register them in `src/modules/actions/index.ts`.
-- Keep validators on the external/Convex boundary and domain-specific state machines independent of Convex runtime types.
+- Export a narrow domain API from `public.ts`; keep implementation details under `internal/`.
+- Put pure decisions and contracts in `src/modules/`; keep database, scheduler, and runtime IO in Convex hosts or explicit ports.
+- Declare actions once in `<domain>.actions.ts`, delegate to shared source functions, and register them in `src/modules/actions/index.ts`.
+- Keep validators on external/Convex boundaries and domain state machines independent of Convex runtime types.
 
 **Barrel Files:**
-- Use `public.ts` for external module APIs and `index.ts` for a deliberately cohesive internal family.
-- Do not create barrels that bypass `internal/` privacy or produce deep re-export chains.
+- Use `public.ts` for external module APIs and `index.ts` for a deliberately cohesive internal family, as in `src/modules/inquiries/internal/ledger/index.ts`.
+- Do not create barrels that bypass `internal/` privacy or create deep, opaque re-export chains.
 
 **Prescriptive Layering:**
-
 | Layer | Location | Use | Avoid |
 |---|---|---|---|
-| Pure domain | `src/modules/<domain>/` | Types, decisions, state machines, ports contracts | Convex runtime and direct IO |
+| Pure domain | `src/modules/<domain>/` | Types, decisions, state machines, port contracts | Convex runtime and direct IO |
 | Private implementation | `src/modules/<domain>/internal/` | Same-domain details | Cross-domain imports |
 | Source adapters/actions | `src/modules/<domain>/*.functions.ts`, `*.actions.ts` | Bind shared operations to surfaces | Duplicate business logic |
 | Convex host/adapters | `convex/*.ts`, `convex/*Ports.ts` | Validators, auth, DB, scheduler | Large inline decision engines |
 | Routes/UI | `src/routes/`, `src/components/` | Projection and interaction | Private module imports |
 
-**Project-Specific Constraints:**
-- Use Astryx components first for UI and Tailwind only as layout glue; `DESIGN.md` and `.agents/skills/ae-design-system/SKILL.md` govern presentation work.
-- Keep public and assistant-visible copy within the evidenced safe contract. Run `npm run test:copy` for changes to action summaries, boundaries, public routes, or assistant output.
-- When changing Convex code, read `convex/_generated/ai/guidelines.md` first.
-- Bound growing Convex reads with indexed `.unique()`, `.first()`, `.take(limit)`, or `.paginate(...)`. `convex/actionInvocationControl.ts` paginates attempts/history, and `convex/customerRequestEvidenceLoadPorts.ts` makes caller-supplied bounds explicit. Do not copy the legacy `.collect()` patterns still present in files such as `convex/catalog.ts`, `convex/discovery.ts`, and `convex/answerThreads.ts` into new work.
-- Preserve exact effect generations, command identities, and optimistic versions across consequential transitions. `convex/actionInvocationControl.ts` refuses stale versions, effect-generation drift, and command-identity conflicts before writes.
-- After a possibly released effect, expose reconciliation as the only safe continuation. Do not retry, switch provider, or infer settlement from a receipt; cover this with source-owned tests such as `tests/unit/action-invocation/hosted-paid-operation-reconciliation.test.ts`.
-- Add or update an architectural thinness test when moving a host decision into a machine/ports seam; pair that static lock with behavior tests.
+**Project-specific quality constraints:**
+- Use the registered-action seam and current `ActionSurface` values from `src/modules/common/action.ts`; registration alone does not prove a public route or customer reachability.
+- Keep identity attribution separate from exact bounded authority, and preserve refusal, uncertainty, idempotency, and reconciliation semantics in the source-owned contract.
+- Keep assistant and human projections aligned with the same source-owned meaning. Run `npm run test:ui-contract` for visible contract changes and `npm run test:seo` for discovery/metadata output.
 
 ---
 
-*Convention analysis: 2026-07-21*
+*Convention analysis: 2026-07-29*
