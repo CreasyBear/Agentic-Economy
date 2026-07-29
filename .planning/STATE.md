@@ -4,7 +4,7 @@ milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
 status: phase_05_source_landed
 stopped_at: Phase 05 offering lane committed; source + unit/integration evidence only
-last_updated: "2026-07-24T06:34:00Z"
+last_updated: "2026-07-29T00:00:00Z"
 progress:
   total_phases: 6
   completed_phases: 1
@@ -16,6 +16,8 @@ current_phase_name: consumer-decision-support
 ---
 
 # Current state
+
+Branch `main`, revision `b1b105b1`. Working tree dirty: 137 modified, 11 deleted, 45 untracked (193 files) as of 2026-07-29 — uncommitted work in progress, not shipped behaviour.
 
 Phases 1 and 2 are complete at the local control-plane evidence boundary.
 ADR-009 is accepted. ADR-010 is accepted with Gate 10 narrowed. ADR-019 owns
