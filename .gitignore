@@ -43,3 +43,6 @@ graphify-out/
 .planning/research/.cache/
 
 eval/parity/results.tsv
+
+# knowledge-graph dumps are generated, never tracked
+.planning/graphs/

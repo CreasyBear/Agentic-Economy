@@ -222,6 +222,19 @@ describe('ListingFirstScreen', () => {
     // The clickable channel and the sentence describing it are the same path.
     expect(fragmentFrom(markup).textContent ?? '').toContain(STORED_INQUIRY_DISCLOSURE)
   })
+  it('renders a real href for the typed thread back link', () => {
+    const markup = renderListingToStaticMarkup(
+      <AeProviderListingPage
+        catalog={catalogFixture()}
+        inquiryAffordance={availableInquiry}
+        agentJsonUrl="/api/businesses/demo-plumbing"
+        backFrom="thread"
+        backThreadId="thread-abc"
+      />,
+    )
+
+    expect(fragmentFrom(markup).querySelector('nav a')?.getAttribute('href')).toBe('/t/thread-abc')
+  })
 })
 
 function renderOfferingListing(inquiryAffordance: PublicInquiryAffordance): string {
