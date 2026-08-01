@@ -35,6 +35,15 @@ beforeEach(() => {
   // parity assertion depend on whose laptop is running it.
   vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://ae.example')
   vi.stubEnv('AE_CANONICAL_HOST_ALLOWLIST', 'ae.example')
+  // Same class of leak, worse consequence: Vite loads `.env.local`, so a
+  // developer's `VITE_CONVEX_URL` reaches this process and
+  // `useLocalRegistryFixture()` (registry.functions.ts:409-412) turns false.
+  // These cases then silently assert against whatever the local Convex
+  // deployment happens to hold instead of the explicit fixture below. The keys
+  // must be removed rather than blanked — the gate tests `=== undefined`, and
+  // an empty string would still read as configured.
+  vi.stubEnv('CONVEX_URL', undefined)
+  vi.stubEnv('VITE_CONVEX_URL', undefined)
 })
 
 afterEach(() => {

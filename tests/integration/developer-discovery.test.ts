@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createDefaultDiscoverySourceState,
@@ -21,6 +21,21 @@ import { loadDeveloperDiscoveryRoute } from '@/routes/developers.discovery'
 
 const privateOrAuthorityPattern =
   /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|sourceHash|rawContact(?!Excluded)|private:evidence|ownerId|clerk|callable":true|paymentRequired":true|providerOperation":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu
+
+beforeEach(() => {
+  // Vite loads `.env.local`, so a developer's `VITE_CONVEX_URL` reaches this
+  // process and `useLocalRegistryFixture()` (registry.functions.ts:409-412)
+  // turns false — these handlers then read whatever the local Convex
+  // deployment holds instead of the state each case constructs. Remove the
+  // keys rather than blanking them: the gate tests `=== undefined`, so an
+  // empty string still reads as configured.
+  vi.stubEnv('CONVEX_URL', undefined)
+  vi.stubEnv('VITE_CONVEX_URL', undefined)
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 describe('developer discovery route handlers', () => {
   it('serves schema, examples, and fixtures with public headers and read-only payloads', async () => {
