@@ -13,7 +13,7 @@ const productionAuthority = {
   preparationPersistence: 'convex/customerRequestV2Preparation.ts',
   preparationEgressState: 'convex/customerRequestV2PreparationEgressState.ts',
   preparationEgress: 'convex/customerRequestV2PreparationEgress.ts',
-  routing: 'src/modules/customer-request/kernel-router.ts',
+  routing: 'src/modules/customer-request/route-mandate.ts',
   projection: 'src/modules/customer-request/customer-projection.ts',
   application: 'convex/customerRequestApplication.ts',
   persistence: 'convex/customerRequestV2.ts',
@@ -209,7 +209,10 @@ describe('CustomerRequest source completeness', () => {
     expect(agentHttp).not.toMatch(/authorizePreparation|approvePreparedAction|admitApprovedAction|operation:\s*['"]approve/)
     const ui = source('humanUi')
     expect(ui).toContain("from '@/modules/customer-request/customer-projection'")
-    expect(ui).toContain('fetch(replacing')
+    expect(ui).toContain('const replacing = editingRevision !== undefined')
+    expect(ui).toContain('const endpoint = replacing')
+    expect(ui).toContain('fetch(endpoint, requestInit)')
+    expect(ui).toContain('projectCustomerRequestDecisionRecords(state.projection)')
     expect(ui).toContain(": '/api/requests'")
     expect(ui).toContain('/messages`')
     expect(ui).toContain("mode: 'replace'")
@@ -287,14 +290,13 @@ describe('CustomerRequest source completeness', () => {
     const endpointDeploy = workflow.indexOf('Deploy the dual-compatible exact clean source revision')
     const convexDeploy = workflow.indexOf('Deploy the exact-revision Convex schema and functions')
     const supplyMigration = workflow.indexOf('Register labelled sandbox acceptance supply')
-    const hostedReadback = workflow.indexOf('Verify authenticated deployment readback')
+    const hostedReadback = workflow.indexOf('Verify exact deployed human and agent Request lifecycle')
     expect(sourceGate).toBeLessThan(endpointDeploy)
     expect(checkoutGuard).toBeLessThan(endpointDeploy)
     expect(endpointDeploy).toBeLessThan(convexDeploy)
     expect(convexDeploy).toBeLessThan(supplyMigration)
     expect(supplyMigration).toBeLessThan(hostedReadback)
-    expect(workflow.indexOf('Verify authenticated deployment readback'))
-      .toBeLessThan(workflow.indexOf('Run cold external-agent Request journey against the exact deployment'))
+    expect(workflow).toContain('npm run test:release:hosted')
     expect(workflow.indexOf('Frozen dependency install for independent readback')).toBeLessThan(endpointDeploy)
 
     const packageJson = readFileSync('package.json', 'utf8')
@@ -305,6 +307,9 @@ describe('CustomerRequest source completeness', () => {
   it('makes handlers and hosted proof consume one canonical Request wire contract', () => {
     const contract = source('publicContract')
     const journey = source('hostedJourney')
+    const journeyRun = readFileSync('src/modules/customer-request/hosted-agent-journey/run.ts', 'utf8')
+    const journeyRuntime = readFileSync('src/modules/customer-request/hosted-agent-journey/runtime.ts', 'utf8')
+    const journeyDiscovery = readFileSync('src/modules/customer-request/hosted-agent-journey/discovery.ts', 'utf8')
     for (const schema of [
       'customerRequestSubmitInputSchema', 'customerRequestMessageInputSchema',
       'customerRequestFactInputSchema', 'customerRequestOptionsInputSchema',
@@ -318,13 +323,15 @@ describe('CustomerRequest source completeness', () => {
       ['optionsHttp', 'customerRequestOptionsInputSchema'],
     ] as const
     for (const [handler, schema] of handlerContracts) expect(source(handler)).toContain(schema)
-    expect(journey).toMatch(/customerRequestFactInputSchema\.parse/)
-    expect(journey).toMatch(/customerRequestAgentResultSchema\.parse/)
-    expect(journey).toMatch(/customerRequestRouteConfirmationInputSchema\.parse/)
-    expect(journey).toMatch(/customerRequestRouteActionInputSchema\.parse/)
-    expect(journey).toContain("'route_confirmation'")
-    expect(journey).not.toMatch(/prepared_action_approval|\/approval/)
-    expect(journey).not.toMatch(/providerId|bindingId|offeringId|Convex|customerRequestApplication:/)
+    expect(journey).toContain("from './hosted-agent-journey/index'")
+    expect(journeyRun).toMatch(/customerRequestSubmitInputSchema\.parse/)
+    expect(journeyRuntime).toMatch(/customerRequestAgentResultSchema\.parse/)
+    expect(journeyRuntime).toMatch(/customerRequestJsonValueSchema\.parse/)
+    expect(journeyDiscovery).toMatch(/customerRequestAgentResultSchema\.safeParse/)
+    const hostedSource = `${journey}\n${journeyRun}\n${journeyRuntime}\n${journeyDiscovery}`
+    expect(hostedSource).toContain("'route_confirmation'")
+    expect(hostedSource).not.toMatch(/prepared_action_approval|\/approval/)
+    expect(hostedSource).not.toMatch(/providerId|bindingId|offeringId|Convex|customerRequestApplication:/)
 
     const smoke = readFileSync('tools/release/customer-request-production-smoke.ts', 'utf8')
     expect(smoke).toContain('runHostedCustomerRequestJourney')

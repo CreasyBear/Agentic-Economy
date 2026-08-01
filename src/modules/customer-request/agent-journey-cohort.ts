@@ -10,6 +10,7 @@ type Money = Readonly<{ currency: string; amountMinor: number }>
 const agentJourneyCohortInputSchema = z.strictObject({
   request: z.string().min(1),
   customerAnswers: z.record(z.string(), z.json()),
+  directAnswers: z.record(z.string(), z.json()).default({}),
   providerOrigins: z.array(z.url()).min(2),
   maximumTotalCost: z.strictObject({
     currency: z.string().min(1),
@@ -36,6 +37,7 @@ const agentJourneyCohortInputSchema = z.strictObject({
 export type AgentJourneyCohortInput = Readonly<{
   request: string
   customerAnswers: Readonly<Record<string, StableHashValue>>
+  directAnswers?: Readonly<Record<string, StableHashValue>>
   providerOrigins: readonly string[]
   maximumTotalCost: Money
   authorityScope: Readonly<{
@@ -60,6 +62,7 @@ export function freezeAgentJourneyCohort(input: AgentJourneyCohortInput) {
   const normalized = {
     request: input.request,
     customerAnswers: cloneStableRecord(input.customerAnswers),
+    directAnswers: cloneStableRecord(input.directAnswers ?? {}),
     providerOrigins: [...input.providerOrigins].sort(),
     maximumTotalCost: { ...input.maximumTotalCost },
     authorityScope: {

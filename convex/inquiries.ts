@@ -53,7 +53,7 @@ import {
   serializeInquiryPrivacyTombstone,
   serializeOwnerInbox,
   serializeOwnerInquiryDetail,
-} from '../src/modules/inquiries/internal/projections/serialize'
+} from '../src/modules/inquiries/public'
 import {
   NotificationAttemptStatusValues,
   NotificationProviderFamilyValues,

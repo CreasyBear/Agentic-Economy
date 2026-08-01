@@ -42,6 +42,7 @@ import {
   type RegistrationContext,
   type SupplyCommandActor,
 } from '@/modules/capability-supply/internal/shared'
+import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 
 import type { Id } from './_generated/dataModel'
 import { internalMutation, internalQuery, mutation, query, action, type ActionCtx, type MutationCtx, type QueryCtx } from './_generated/server'
@@ -1095,6 +1096,9 @@ export const runOwnerSupplyReadiness = action({
     }
     const endpoint = ownerSupplyEndpoint(args.value)
     if (endpoint.kind === 'refused') return { step: 'readiness', state: 'refused', refusal: endpoint.refusal }
+    if (!await isPublicHttpTarget(endpoint.url, defaultDnsResolver)) {
+      return { step: 'readiness', state: 'refused', refusal: 'target_not_public' }
+    }
     try {
       const response = await fetch(endpoint.url, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(10_000) })
       if (response.status < 200 || response.status >= 300) {
@@ -1116,6 +1120,9 @@ export const runOwnerSupplyTest = action({
     }
     const endpoint = ownerSupplyEndpoint(args.value)
     if (endpoint.kind === 'refused') return { step: 'test', state: 'refused', refusal: endpoint.refusal }
+    if (!await isPublicHttpTarget(endpoint.url, defaultDnsResolver)) {
+      return { step: 'test', state: 'refused', refusal: 'target_not_public' }
+    }
     try {
       const response = await fetch(endpoint.url, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },

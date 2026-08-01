@@ -14,6 +14,12 @@
 export const BUSINESS_TOOL_AGENT_SCOPE = 'business_tools:invoke' as const
 
 export const BusinessToolContractVersion = 'ae-business-tools:v1' as const
+export {
+  InquirySubmitToolId,
+  businessToolInvokeSchema,
+  businessToolPrepareSchema,
+} from './public-values'
+
 
 export type BusinessToolInvocationStyle = Readonly<{
   /**
@@ -49,4 +55,6 @@ export type BusinessToolDescriptor = Readonly<{
 // The descriptor builder deliberately is not re-exported here. It reaches into
 // the action registry, and this module is imported by discovery documents that
 // must stay free of that graph — a barrel re-export would drag server-only
-// code into every consumer that only wanted the scope constant.
+// code into every consumer that only wanted the scope constant. The pure
+// URL-bound tool id and input schemas live in public-values.ts and are safe to
+// expose for server adapters without pulling in that registry graph.

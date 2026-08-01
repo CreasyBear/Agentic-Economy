@@ -7,7 +7,7 @@ import {
   projectRegistryCatalogApiItem,
 } from '../src/modules/catalog/public'
 import type { BusinessSupplyProjection } from '../src/modules/catalog/public'
-import { canonicalTradeToken, TRADE_CANONICAL_TOKENS, TRADE_WORDS } from '../src/modules/registry/internal/trade-vocabulary'
+import { canonicalTradeToken, TRADE_CANONICAL_TOKENS, TRADE_WORDS } from '../src/modules/registry/public'
 import {
   adaptLegacyCatalogToOfferingApi,
   projectBusinessSupplyToPublicApi,

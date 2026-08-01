@@ -2,21 +2,21 @@ import { authenticateCustomerRequestAgent } from '@/lib/server/customer-request-
 import {
   BUSINESS_TOOL_AGENT_SCOPE,
   BusinessToolContractVersion,
-} from '@/modules/business-tools/public'
-import {
   InquirySubmitToolId,
   businessToolInvokeSchema,
   businessToolPrepareSchema,
-} from '@/modules/business-tools/internal/descriptors'
+} from '@/modules/business-tools/public'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import { encodeGovernedAction } from '@/modules/governed-action/public'
-import { buildGovernedSendIntent } from '@/modules/inquiries/internal/governed-send'
+import {
+  buildGovernedSendIntent,
+  type InquiryTargetRef,
+} from '@/modules/inquiries/public'
 import {
   readPublicTargetAdmissionServer,
   submitPublicInquiryServer,
 } from '@/modules/inquiries/inquiry.functions'
 import { selectPublicInquiryTarget } from '@/modules/inquiries/route-readbacks'
-import type { InquiryTargetRef } from '@/modules/inquiries/public'
 
 type ToolRefusalCode =
   | 'authentication_required'

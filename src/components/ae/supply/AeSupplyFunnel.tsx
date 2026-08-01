@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import type { PricingConfig } from '@/modules/money/public'
 import { AeOwnerOfferingEditor, type OwnerOfferingEditorValue, type OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
 import type { SupplyFunnelDraft, SupplyFunnelRefusal, SupplyFunnelStep, SupplyFunnelStepCompletion, SupplyFunnelStepState } from '@/modules/capability-supply/supply-funnel.functions'
-import { defaultSupplyPricingConfig } from '@/modules/capability-supply/internal/supply-funnel/pricing-port'
+import { defaultSupplyPricingConfig } from '@/modules/capability-supply/public'
 import { AeSupplyEndpointConfigStep, type SupplyEndpointConfigValue } from './AeSupplyEndpointConfigStep'
 
 export const OWNER_SUPPLY_DRAFT_STORAGE_KEY = 'ae.supplyFunnelDraft.v1'

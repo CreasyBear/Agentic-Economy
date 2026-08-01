@@ -2,13 +2,11 @@ import type {
   BindingInsertRow,
   BindingWritePorts,
   CapabilityBindingRow,
-} from '@/modules/capability-supply/internal/binding'
-import type { EligibilityWritePorts } from '@/modules/capability-supply/internal/eligibility'
-import type {
   CapabilityOfferingRow,
+  EligibilityWritePorts,
   OfferingInsertRow,
   OfferingWritePorts,
-} from '@/modules/capability-supply/internal/offering'
+} from '@/modules/capability-supply/public'
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'

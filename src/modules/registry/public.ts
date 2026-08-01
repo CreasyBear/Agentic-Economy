@@ -304,6 +304,12 @@ export type {
   PublicBusinessCatalogSearchInput,
   PublishedInquiryTargetResolution,
 }
+export {
+  canonicalTradeToken,
+  TRADE_CANONICAL_TOKENS,
+  TRADE_WORDS,
+  type TradeVocabularyEntry,
+} from './internal/trade-vocabulary'
 
 export const createDefaultRegistrySourceState = createDefaultRegistrySourceStateImpl
 export const createLocalE2eRegistrySourceState = createLocalE2eRegistrySourceStateImpl

@@ -159,6 +159,14 @@ export type {
   GovernedSendIntegrityTargetBinding,
   GovernedSendReceiptRecord,
 } from './internal/governed-send'
+export {
+  serializeCustomerRecord,
+  serializeInquiryDeliveryReadback,
+  serializeInquiryExport,
+  serializeInquiryPrivacyTombstone,
+  serializeOwnerInbox,
+  serializeOwnerInquiryDetail,
+} from './internal/projections/serialize'
 
 export const createEmptyInquirySourceState = createEmptyInquirySourceStateImpl
 export const submitInquiry = submitInquiryImpl

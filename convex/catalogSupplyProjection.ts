@@ -6,8 +6,8 @@ import {
   type OfferingAccessPathRecord,
   type OfferingSupportProjection,
   type PublicBusinessProfile,
-} from '../src/modules/catalog/internal/offering-supply'
-import type { OfferingPrice } from '../src/modules/catalog/internal/offering-price'
+  type OfferingPrice,
+} from '../src/modules/catalog/public'
 import type { AccessPathRef, BusinessId, OfferingRef } from '../src/modules/common/ids'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 

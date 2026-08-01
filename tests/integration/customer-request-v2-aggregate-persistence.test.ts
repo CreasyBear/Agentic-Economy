@@ -894,9 +894,9 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
   await admitSandboxSupply(backend)
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
   await backend.finishInProgressScheduledFunctions()
-  await observeSandboxPublication(backend)
-  const supply = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 64 })
-  if (supply.kind !== 'available') throw new Error(`eligible supply unavailable: ${supply.reason}`)
+  await observeSandboxPublications(backend)
+  const supply = await backend.query(internal.capabilitySupply.listRouteable, { networkId: 'ae:public', limit: 64 })
+  if (supply.kind !== 'available') throw new Error(`routeable supply unavailable: ${supply.reason}`)
   const contract = defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT)
   const model = openCapabilityDecisionModel(contract)
   const input = model.inputs[0]
@@ -956,8 +956,8 @@ async function compileRefreshCandidate(
   proposal: CustomerRequestSemanticProposal,
   now: number,
 ) {
-  const supply = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 64 })
-  if (supply.kind !== 'available') throw new Error(`refresh supply unavailable: ${supply.reason}`)
+  const supply = await backend.query(internal.capabilitySupply.listRouteable, { networkId: 'ae:public', limit: 64 })
+  if (supply.kind !== 'available') throw new Error(`refresh routeable supply unavailable: ${supply.reason}`)
   const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
   const result = compileCustomerRequest({
     requestId: aggregate.snapshot.requestId,
@@ -1057,19 +1057,22 @@ async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {
     }
   })
 }
-
-async function observeSandboxPublication(backend: ReturnType<typeof convexTest>) {
-  const publication = await backend.run(async (ctx) => await ctx.db.query('capabilityPublications').first())
-  if (publication === null) throw new Error('sandbox publication missing')
+async function observeSandboxPublications(backend: ReturnType<typeof convexTest>) {
+  const publications = await backend.run(async (ctx) => await ctx.db.query('capabilityPublications').collect())
+  if (publications.length === 0) throw new Error('sandbox publications missing')
   const now = Date.now()
-  const result = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
-    publicationRef: publication.publicationRef, expectedRevision: publication.revision,
-    credentialState: 'ready', healthState: 'healthy', validUntil: now + 300_000,
-    operationKey: 'test:observe-publication', correlationId: 'test:aggregate-persistence',
-    reasonCode: 'test_readiness', evidenceRefs: ['test:readiness'],
-  })
-  if (result.kind !== 'observed') throw new Error(`sandbox readiness failed: ${result.reason}`)
+  for (const publication of publications) {
+    const result = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: publication.publicationRef, expectedRevision: publication.revision,
+      credentialState: 'ready', healthState: 'healthy', validUntil: now + 300_000,
+      operationKey: `test:observe-publication:${publication.publicationRef}`,
+      correlationId: 'test:aggregate-persistence',
+      reasonCode: 'test_readiness', evidenceRefs: ['test:readiness'],
+    })
+    if (result.kind !== 'observed') throw new Error(`sandbox readiness failed: ${result.reason}`)
+  }
 }
+
 
 async function revokeFirstSupply(backend: ReturnType<typeof convexTest>) {
   await backend.run(async (ctx) => {

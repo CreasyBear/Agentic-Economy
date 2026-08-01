@@ -1,10 +1,10 @@
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
 import type {
+  CapabilityBindingRow,
+  CapabilityOfferingRow,
   OperationLedgerPorts,
   OperationKeyRecord,
-} from '@/modules/capability-supply/internal/operation-ledger'
-import type { SupplyAuditEventRow } from '@/modules/capability-supply/internal/shared'
+  SupplyAuditEventRow,
+} from '@/modules/capability-supply/public'
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'

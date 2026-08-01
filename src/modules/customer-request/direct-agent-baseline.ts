@@ -80,7 +80,8 @@ export async function runFrozenDirectAgentBaseline(input: FrozenDirectAgentBasel
   }
 
   const customerAnswers = cohort?.input.customerAnswers ?? {}
-  const available: Record<string, unknown> = { request: input.job, ...customerAnswers }
+  const directAnswers = cohort?.input.directAnswers ?? {}
+  const available: Record<string, unknown> = { request: input.job, ...customerAnswers, ...directAnswers }
   const remaining = [...discoveries]
   const invocations: Array<Readonly<{
     business: string

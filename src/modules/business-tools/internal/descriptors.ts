@@ -1,37 +1,15 @@
 import { convertSchemaToJsonSchema } from '@tanstack/ai'
-import { z } from 'zod'
 
 import { describeActionForAgent, resolveActionContract } from '@/modules/common/action'
 import { submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
 
 import {
   BUSINESS_TOOL_AGENT_SCOPE,
+  businessToolInvokeSchema,
+  businessToolPrepareSchema,
+  InquirySubmitToolId,
   type BusinessToolDescriptor,
 } from '../public'
-
-export const InquirySubmitToolId = 'inquiry.submit' as const
-
-/**
- * The agent-facing shape is deliberately narrower than the action's own input.
- *
- * `target` is absent because the URL already names the business; letting a
- * caller pass one would create two sources of truth for who is being
- * contacted. `expectedDigest` is absent from prepare because prepare is what
- * produces it.
- */
-export const businessToolPrepareSchema = z.strictObject({
-  body: z.string().min(1).max(2_000),
-  contact: z.strictObject({
-    name: z.string().max(200).optional(),
-    email: z.string().max(254).optional(),
-    phone: z.string().max(32).optional(),
-  }),
-})
-
-export const businessToolInvokeSchema = businessToolPrepareSchema.extend({
-  expectedDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
-  operationKey: z.string().trim().min(16).max(240).optional(),
-})
 
 const prepareJsonSchema = convertSchemaToJsonSchema(businessToolPrepareSchema)
 const invokeJsonSchema = convertSchemaToJsonSchema(businessToolInvokeSchema)

@@ -1,5 +1,4 @@
-import type { PublicationCommandPorts } from '@/modules/capability-supply/internal/publication'
-import type { OperationLedgerPorts } from '@/modules/capability-supply/internal/operation-ledger'
+import type { PublicationCommandPorts, OperationLedgerPorts } from '@/modules/capability-supply/public'
 
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'

@@ -66,6 +66,64 @@ export {
   buildDevelopmentAlternatePublishedOperationEvidence,
   verifyDevelopmentAlternatePublishedOperationEvidence,
 } from './development-alternate-published-operation-evidence'
+export {
+  bindingObservedRowDigest,
+} from './internal/quarantine'
+export {
+  registerCapabilityTransportBinding,
+  type BindingInsertRow,
+  type BindingWritePorts,
+  type CapabilityBindingRow,
+} from './internal/binding'
+export {
+  getEligibleExactCapabilitySupply,
+  listEligibleCapabilitySupply,
+  listRouteableCapabilitySupply,
+  setCapabilitySupplyEligibility,
+  type EligiblePublicationRow,
+  type EligiblePublishedBusiness,
+  type EligibleSupplyPorts,
+  type EligibilityInput,
+  type EligibilityWritePorts,
+} from './internal/eligibility'
+export {
+  queryCapabilityGraph,
+  readCapabilityProbeTarget,
+  recordCapabilityProbeResult,
+  type CapabilityGraphPorts,
+  type GraphPublicationRow,
+  type GraphPublishedBusiness,
+} from './internal/graph'
+export {
+  contractRefFromRow,
+  registerCapabilityOffering,
+  type CapabilityOfferingRow,
+  type OfferingInsertRow,
+  type OfferingWritePorts,
+} from './internal/offering'
+export {
+  registerCapabilityBindingCommand,
+  registerCapabilityOfferingCommand,
+  quarantineCapabilityBindingCommand,
+  setCapabilitySupplyEligibilityCommand,
+  type OperationKeyRecord,
+  type OperationLedgerPorts,
+} from './internal/operation-ledger'
+export {
+  publicationLifecycle,
+  publicationProjection,
+  publishCapabilityCommand,
+  refreshCapabilityCommand,
+  withdrawCapabilityCommand,
+  type PublicationCommandPorts,
+} from './internal/publication'
+export {
+  validRegistrationContext,
+  type RegistrationContext,
+  type SupplyCommandActor,
+  type SupplyAuditEventRow,
+} from './internal/shared'
+export { defaultSupplyPricingConfig } from './internal/supply-funnel/pricing-port'
 
 const identifier = z.string().trim().min(1).max(200)
 const MAX_OPAQUE_CONFIG_BYTES = 65_536

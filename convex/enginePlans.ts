@@ -8,7 +8,7 @@ import {
   PLAN_EXPIRY_MS,
   planContractSchema,
   type PlanStepStatus,
-} from '../src/modules/plan-proposal/internal/plan-contract'
+} from '../src/modules/plan-proposal/public'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 
@@ -65,7 +65,7 @@ export const recordPlanRevision = mutationGeneric({
     if (!Number.isInteger(args.revision) || args.revision < 1) throw new Error('plan_revision_invalid')
     if (args.expiresAt !== args.createdAt + PLAN_EXPIRY_MS) throw new Error('plan_expiry_invalid')
     const contract = planContractSchema.parse(JSON.parse(args.contractJson))
-    if (canonicalDigest(contract as unknown as StableHashValue) !== args.planDigest) {
+    if (canonicalDigest(contract as StableHashValue) !== args.planDigest) {
       throw new Error('plan_digest_invalid')
     }
     const payloadDigest = canonicalDigest({
@@ -78,7 +78,7 @@ export const recordPlanRevision = mutationGeneric({
       createdAt: args.createdAt,
       expiresAt: args.expiresAt,
       ...(args.costUsd === undefined ? {} : { costUsd: args.costUsd }),
-    } as unknown as StableHashValue)
+    })
     const operation = await ctx.db.query('enginePlans')
       .withIndex('by_operationKey', (query) => query.eq('operationKey', args.operationKey))
       .first()
@@ -175,7 +175,7 @@ export const recordPlanEvent = mutationGeneric({
       ...(args.costUsd === undefined ? {} : { costUsd: args.costUsd }),
       at: args.at,
       ...(args.outcomeJson === undefined ? {} : { outcomeJson: args.outcomeJson }),
-    } as unknown as StableHashValue)
+    })
     const operation = await ctx.db.query('enginePlanEvents')
       .withIndex('by_operationKey', (query) => query.eq('operationKey', args.operationKey))
       .first()

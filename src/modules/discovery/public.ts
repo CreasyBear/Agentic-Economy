@@ -13,6 +13,7 @@ import {
 import { buildPublicAgentSkillMarkdown as buildPublicAgentSkillMarkdownImpl } from './internal/agent-skill'
 import {
   buildLlmsTxt as buildLlmsTxtImpl,
+  buildOfferingLlmsTxt as buildOfferingLlmsTxtImpl,
   buildRobotsTxt as buildRobotsTxtImpl,
   buildSitemapXml as buildSitemapXmlImpl,
 } from './internal/discovery-files'
@@ -303,6 +304,7 @@ export const invalidateDiscoveryManifest = invalidateDiscoveryManifestImpl
 export const readDiscoveryHealth = readDiscoveryHealthImpl
 
 export const buildLlmsTxt = buildLlmsTxtImpl
+export const buildOfferingLlmsTxt = buildOfferingLlmsTxtImpl
 
 export const buildPublicAgentSkillMarkdown = buildPublicAgentSkillMarkdownImpl
 

@@ -10,15 +10,13 @@ import {
   decisionMapConstraintChangeInputSchema,
   decisionMapDraftSchema,
   decisionMapSnapshotSchema,
-  type DecisionMapChoiceInput,
-  type DecisionMapConstraintChangeInput,
-  type DecisionMapSnapshot,
-} from '../src/modules/decision-map/internal/contract'
-import {
   applyDecisionMapChoice,
   applyDecisionMapConstraintChange,
   authorDecisionMapSnapshot,
-} from '../src/modules/decision-map/internal/kernel'
+  type DecisionMapChoiceInput,
+  type DecisionMapConstraintChangeInput,
+  type DecisionMapSnapshot,
+} from '../src/modules/decision-map/public'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import { isRecord } from './inquiryRuntimeDbHelpers'
 
