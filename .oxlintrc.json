@@ -15,7 +15,6 @@
   },
   "ignorePatterns": [
     "convex/_generated/**",
-    "examples/routing-agent-directory/worker-configuration.d.ts",
     "tests/fixtures/**",
     "vendor/**"
   ]
