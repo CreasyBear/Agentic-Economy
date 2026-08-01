@@ -1,5 +1,6 @@
 import type { ActionContext, ActionSurface } from '@/modules/common/action'
 import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
+import { isRecord } from '@/modules/common/is-record'
 
 import {
   runHarnessTool,
@@ -784,6 +785,3 @@ function normalizeErrorCode(value: string): string {
   return value.trim().replaceAll(/[^a-zA-Z0-9_-]/g, '_').toLowerCase()
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

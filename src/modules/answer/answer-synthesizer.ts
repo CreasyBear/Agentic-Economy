@@ -1,6 +1,8 @@
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 
+import type { DecisionMapSnapshot } from '@/modules/decision-map/public'
+
 import type { AnswerArtifact } from './answer-schema'
 import type { AnswerLayoutProfile } from './internal/answer-layout-profile'
 /**
@@ -146,6 +148,8 @@ export type AnswerSnapshot = {
   compactLayout?: boolean
   /** Generative panel shape for this turn. */
   layoutProfile?: AnswerLayoutProfile
+  /** Persisted marker that rehydrates the canonical decision-map presenter on replay. */
+  decisionMapRevision?: number
 }
 
 export type AnswerResponseMode = 'clarify' | 'answer' | 'compare' | 'filter' | 'empty' | 'boundary' | 'error'
@@ -184,6 +188,11 @@ export type EnginePlanStreamEvent =
     }
   | { type: 'clarifying-question'; question: string }
   | { type: 'recommendation'; summary: string; recommendedSlug?: string; nextStep: string }
+export type DecisionMapStreamEvent = {
+  type: 'decision-map'
+  snapshot: DecisionMapSnapshot
+}
+
 
 /** SSE event stream shape. Order: thread? -> work-step* -> plan -> ... -> complete | error. */
 export type AnswerEvent =
@@ -192,6 +201,7 @@ export type AnswerEvent =
   | { type: 'thinking'; step?: 'search' | 'read' | 'write'; label?: string }
   | AnswerPlanEvent
   | EnginePlanStreamEvent
+  | DecisionMapStreamEvent
   | { type: 'one-line'; oneLine: string }
   | { type: 'sources'; providers: readonly AnswerSource[] }
   | { type: 'summary-delta'; delta: string }

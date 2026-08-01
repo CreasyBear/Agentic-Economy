@@ -1,4 +1,5 @@
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import { routeMandateDigest, type RouteMandate, type RouteMandateStep } from './route-mandate'
@@ -261,10 +262,3 @@ function validMoney(currency: string, amountMinor: number): boolean {
   return currency.trim().length > 0 && Number.isSafeInteger(amountMinor) && amountMinor >= 0
 }
 
-function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
-    Object.freeze(value)
-    for (const nested of Object.values(value)) deepFreeze(nested)
-  }
-  return value
-}

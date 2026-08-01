@@ -118,7 +118,7 @@ function OperatorSidebarToggle() {
     <SidebarTrigger
       ref={triggerRef}
       type="button"
-      aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+      aria-label={expanded ? 'Close operator navigation' : 'Open operator navigation'}
       aria-controls="operator-sidebar-navigation"
       aria-expanded={expanded}
       className="min-h-11 min-w-11"
@@ -155,7 +155,6 @@ function RootOperatorShell(props: AeOperatorShellProps) {
   const descriptionId = useId()
   const resolvedMainContentId = mainContentId ?? 'operator-main-content'
   const density: OperatorDensity = operatorRole === 'owner' ? 'compact' : 'comfortable'
-  const isCompact = density === 'compact'
   const shellRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -186,14 +185,14 @@ function RootOperatorShell(props: AeOperatorShellProps) {
     const listCrumb = resolveOperatorListCrumb(operatorRole, currentPath)
     return providedBreadcrumbs ?? (listCrumb === undefined ? [] : [listCrumb, { label: title }])
   }, [currentPath, operatorRole, providedBreadcrumbs, title])
-  const sidebar = isCompact ? null : (
+  const sidebar = (
     <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} navBadges={navBadges ?? {}} />
   )
 
   const topNav = useMemo(
     () => (
       <div className="flex min-h-14 items-center gap-3 px-4 md:px-6">
-        {isCompact ? null : <OperatorSidebarToggle />}
+        <OperatorSidebarToggle />
         {breadcrumbs.length === 0 ? null : (
           <div className="hidden min-w-0 flex-1 md:block">
             <AeOperatorBreadcrumbs items={breadcrumbs} />
@@ -204,7 +203,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
         </div>
       </div>
     ),
-    [breadcrumbs, isCompact, operatorRole],
+    [breadcrumbs, operatorRole],
   )
 
   return (

@@ -252,22 +252,25 @@ async function readOwnerClaimSuccessThroughSource(slug: string | undefined): Pro
 }
 
 export async function readOwnerStatusThroughSource(slug: string | undefined): Promise<PublicOwnerStatusRouteReadbackResult> {
-  if (isLocalE2EAuthBypassEnabled()) {
-    return readLocalOwnerStatus(slug)
-  }
-
   const readsCurrentOwner = slug === undefined || slug.trim().length === 0
+  const localE2E = isLocalE2EAuthBypassEnabled()
+  if (localE2E && !readsCurrentOwner) return readLocalOwnerStatus(slug)
 
   try {
     const result = readsCurrentOwner
       ? await callSourceQuery(currentOwnerCatalogQuery, {})
       : await callPublicSourceQuery(publicCatalogBySlugQuery, { slug })
 
-    return result.kind === 'available'
-      ? { kind: 'available', readback: await buildOwnerStatusRouteReadback(buildPublicOwnerStatusReadback(result.catalog)) }
+    if (result.kind === 'available') {
+      return { kind: 'available', readback: await buildOwnerStatusRouteReadback(buildPublicOwnerStatusReadback(result.catalog)) }
+    }
+    return localE2E
+      ? readLocalOwnerStatus(slug)
       : { kind: 'not_found', reason: result.reason }
   } catch {
-    return { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
+    return localE2E
+      ? readLocalOwnerStatus(slug)
+      : { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
   }
 }
 

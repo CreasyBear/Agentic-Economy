@@ -1,3 +1,5 @@
+import { distance as levenshteinDistance } from 'fastest-levenshtein'
+
 import type { AnswerSource } from '../answer-synthesizer'
 import {
   aeSearchContextLocationQuery,
@@ -271,26 +273,6 @@ function isLikelyModelCorrection(userLocation: string, toolLocation: string): bo
   const longest = Math.max(userKey.length, toolKey.length)
   const maxDistance = longest <= 8 ? 2 : 3
   return distance <= maxDistance && distance / longest <= 0.34
-}
-
-function levenshteinDistance(left: string, right: string): number {
-  const previous = Array.from({ length: right.length + 1 }, (_, index) => index)
-  const current = Array.from({ length: right.length + 1 }, () => 0)
-
-  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
-    current[0] = leftIndex
-    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
-      const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1
-      current[rightIndex] = Math.min(
-        previous[rightIndex]! + 1,
-        current[rightIndex - 1]! + 1,
-        previous[rightIndex - 1]! + substitutionCost,
-      )
-    }
-    previous.splice(0, previous.length, ...current)
-  }
-
-  return previous[right.length] ?? 0
 }
 
 function reindexProviders(providers: readonly AnswerSource[]): AnswerSource[] {

@@ -5,6 +5,7 @@ import {
 } from '@/modules/capability-supply/public'
 import type { RouteTransportRuntime } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { ActionContext } from '@/modules/common/action'
 
@@ -785,7 +786,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         || view.owner.principalRef !== request.actor.principalRef) {
         return 'cross_principal_refused'
       }
-      if (JSON.stringify(view.origin) !== JSON.stringify(request.origin)) {
+      if (stableStringify(view.origin) !== stableStringify(request.origin)) {
         return 'cross_origin_refused'
       }
       if (view.control.state !== 'reconciliation_required'

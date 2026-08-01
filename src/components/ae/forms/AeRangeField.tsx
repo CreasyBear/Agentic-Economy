@@ -31,7 +31,7 @@ export function AeRangeField({
   const descriptionId = `${controlId}-description`
   const errorId = `${controlId}-error`
   const numericValue = normalize(value, min, max)
-  const describedBy = errorMessage === undefined ? descriptionId : `${descriptionId} ${errorId}`
+  const describedBy = [description === undefined ? undefined : descriptionId, errorMessage === undefined ? undefined : errorId].filter((entry): entry is string => entry !== undefined).join(' ') || undefined
 
   return (
     <FieldGroup>

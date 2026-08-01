@@ -1,5 +1,5 @@
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 
 export type AeCheckboxFieldProps = {
   id: string
@@ -9,6 +9,7 @@ export type AeCheckboxFieldProps = {
   checked: boolean
   disabled?: boolean
   invalid?: boolean
+  errorMessage?: string
   onCheckedChange: (checked: boolean) => void
 }
 
@@ -20,9 +21,12 @@ export function AeCheckboxField({
   checked,
   disabled = false,
   invalid = false,
+  errorMessage,
   onCheckedChange,
 }: AeCheckboxFieldProps) {
   const descriptionId = `${id}-description`
+  const errorId = `${id}-error`
+  const describedBy = [description === undefined ? undefined : descriptionId, errorMessage === undefined ? undefined : errorId].filter((entry): entry is string => entry !== undefined).join(' ') || undefined
 
   return (
     <FieldGroup>
@@ -33,12 +37,13 @@ export function AeCheckboxField({
           checked={checked}
           disabled={disabled}
           {...(invalid ? { 'aria-invalid': true } : {})}
-          {...(description === undefined ? {} : { 'aria-describedby': descriptionId })}
+          {...(describedBy === undefined ? {} : { 'aria-describedby': describedBy })}
           onCheckedChange={(next) => onCheckedChange(next === true)}
         />
         <FieldContent>
-          <FieldLabel htmlFor={id}>{label}</FieldLabel>
+          <FieldLabel htmlFor={id} className="min-h-11 items-center">{label}</FieldLabel>
           {description === undefined ? null : <FieldDescription id={descriptionId}>{description}</FieldDescription>}
+          {errorMessage === undefined ? null : <FieldError id={errorId}>{errorMessage}</FieldError>}
         </FieldContent>
       </Field>
     </FieldGroup>

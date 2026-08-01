@@ -1,3 +1,4 @@
+import { parseArgs } from 'node:util'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
@@ -21,6 +22,6 @@ console.log([
 if (!report.ok) process.exit(1)
 
 function readOutputPath(): string {
-  const index = process.argv.findIndex((argument) => argument === '--output')
-  return (index === -1 ? undefined : process.argv[index + 1]) ?? 'output/eval/engine-suite-report.json'
+  const { values } = parseArgs({ options: { output: { type: 'string' } }, strict: false })
+  return typeof values.output === 'string' ? values.output : 'output/eval/engine-suite-report.json'
 }

@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import {
+  CodeBlock,
+  CodeBlockActions,
+  CodeBlockCopyButton,
+  CodeBlockHeader,
+  CodeBlockTitle,
+} from '@/components/ai-elements/code-block'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 
 export type AeAssistantInstallFunnelProps = Readonly<{
@@ -13,20 +19,15 @@ export function AeAssistantInstallFunnel({ canonicalBaseUrl }: AeAssistantInstal
     { id: 'codex', label: 'Codex', command: `codex mcp add agentic-economy --url ${baseUrl}/mcp` },
   ] as const
   const [copiedId, setCopiedId] = useState<string>()
-  const [copyFailed, setCopyFailed] = useState(false)
+  const [copyNotice, setCopyNotice] = useState<string>()
 
-  async function copyCommand(id: string, command: string) {
-    if (navigator.clipboard?.writeText === undefined) {
-      setCopyFailed(true)
-      return
-    }
-    try {
-      await navigator.clipboard.writeText(command)
-      setCopiedId(id)
-      setCopyFailed(false)
-    } catch {
-      setCopyFailed(true)
-    }
+  function handleCopy(id: string, label: string) {
+    setCopiedId(id)
+    setCopyNotice(`${label} command copied.`)
+  }
+
+  function handleCopyError(label: string) {
+    setCopyNotice(`Could not copy the ${label} command. Select it and copy it manually.`)
   }
 
   return (
@@ -41,20 +42,29 @@ export function AeAssistantInstallFunnel({ canonicalBaseUrl }: AeAssistantInstal
       <CardContent className="grid gap-3">
         <h3 className="font-semibold text-foreground">Copy a setup command</h3>
         {commands.map(({ id, label, command }) => (
-          <div key={id} className="grid gap-2">
+          <div key={id} className="grid min-w-0 gap-2">
             <p className="block text-sm font-semibold text-muted-foreground">{label}</p>
-            <pre className="overflow-x-auto rounded-md border border-border bg-muted p-4 text-sm leading-6 text-foreground"><code>{command}</code></pre>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void copyCommand(id, command)}
-              className="min-h-11 justify-self-start"
+            <CodeBlock
+              code={command}
+              language="bash"
+              className="min-w-0 [&_code]:break-all [&_pre]:whitespace-pre-wrap"
             >
-              {copiedId === id ? 'Copied' : `Copy ${label} command`}
-            </Button>
+              <CodeBlockHeader>
+                <CodeBlockTitle>{label} setup command</CodeBlockTitle>
+                <CodeBlockActions>
+                  <CodeBlockCopyButton
+                    className="min-h-11 min-w-11"
+                    aria-label={copiedId === id ? 'Copied' : `Copy ${label} command`}
+                    title={copiedId === id ? 'Copied' : `Copy ${label} command`}
+                    onCopy={() => handleCopy(id, label)}
+                    onError={() => handleCopyError(label)}
+                  />
+                </CodeBlockActions>
+              </CodeBlockHeader>
+            </CodeBlock>
           </div>
         ))}
-        {copyFailed ? <p role="status" className="block text-sm text-muted-foreground">Select the command above and copy it manually.</p> : null}
+        {copyNotice === undefined ? null : <p role="status" aria-live="polite" className="block text-sm text-muted-foreground">{copyNotice}</p>}
         <p className="block text-sm text-muted-foreground">
           You approve each action before it runs. Revoke assistant access from this page at any time.
         </p>

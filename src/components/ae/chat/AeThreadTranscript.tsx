@@ -145,10 +145,7 @@ function buildFollowUpContext(turns: readonly PublicThreadTurn[]): FollowUpConte
     return latest === undefined ? undefined : { turn: latest, contextPlacement: 'current' }
   }
 
-  const providerContextTurn = turns
-    .slice(0, -1)
-    .reverse()
-    .find(hasProviderContext)
+  const providerContextTurn = turns.slice(0, -1).findLast(hasProviderContext)
   if (providerContextTurn === undefined) {
     return { turn: latest, contextPlacement: 'current' }
   }

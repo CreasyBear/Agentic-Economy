@@ -401,6 +401,7 @@ function buildFrozenProse(snapshot: AnswerSnapshot): FrozenTurnProse {
     nextStep: snapshot.nextStep,
     ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),
     ...(snapshot.layoutProfile === undefined ? {} : { layoutProfile: snapshot.layoutProfile }),
+    ...(snapshot.decisionMapRevision === undefined ? {} : { decisionMapRevision: snapshot.decisionMapRevision }),
   }
 }
 

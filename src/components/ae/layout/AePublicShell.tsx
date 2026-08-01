@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { cva } from 'class-variance-authority'
 import { MenuIcon, XIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -101,8 +102,15 @@ function PublicNavActions({
   mobileNavOpen: boolean
   onMobileNavOpenChange: (open: boolean) => void
 }) {
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const handleMobileNavOpenChange = (open: boolean) => {
+    onMobileNavOpenChange(open)
+    if (!open) {
+      window.setTimeout(() => triggerRef.current?.focus(), 350)
+    }
+  }
   return (
-    <Sheet open={mobileNavOpen} onOpenChange={onMobileNavOpenChange}>
+    <Sheet open={mobileNavOpen} onOpenChange={handleMobileNavOpenChange}>
       <a href="/claim" className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-xs font-semibold text-brand hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:text-sm">
         List your business
       </a>
@@ -110,23 +118,25 @@ function PublicNavActions({
         Sign in
       </a>
       <SheetTrigger asChild>
-        <Button type="button" variant="ghost" className="min-h-11 min-w-11 px-2 sm:min-w-20 sm:px-3 md:hidden" aria-label="Open public menu">
+        <Button ref={triggerRef} type="button" variant="ghost" className="min-h-11 min-w-11 px-2 sm:min-w-20 sm:px-3 md:hidden" aria-label="Open public menu">
           <MenuIcon data-icon="inline-start" aria-hidden="true" />
           <span className="hidden sm:inline">Menu</span>
         </Button>
       </SheetTrigger>
+      {mobileNavOpen ? (
       <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)] p-0" showCloseButton={false}>
         <SheetHeader className="border-b border-border">
           <div className="flex items-center justify-between gap-3">
             <SheetTitle>Public navigation</SheetTitle>
-            <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Close public menu" onClick={() => onMobileNavOpenChange(false)}>
+            <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Close public menu" onClick={() => handleMobileNavOpenChange(false)}>
               <XIcon data-icon="inline-start" aria-hidden="true" />
             </Button>
           </div>
           <SheetDescription className="sr-only">Choose where to go on Agentic Economy.</SheetDescription>
         </SheetHeader>
-        <PublicMobileNav onNavigate={() => onMobileNavOpenChange(false)} />
+        <PublicMobileNav onNavigate={() => handleMobileNavOpenChange(false)} />
       </SheetContent>
+      ) : null}
     </Sheet>
   )
 }
@@ -134,7 +144,7 @@ function PublicNavActions({
 function PublicBrandLink() {
   return (
     <a href="/" aria-label="Agentic Economy home" className="flex min-h-11 min-w-11 items-center gap-3 no-underline">
-      <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary font-mono text-sm font-semibold text-on-brand">AE</span>
+      <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-md bg-brand font-mono text-sm font-semibold text-on-brand">AE</span>
       <span className="hidden min-w-0 sm:block">
         <span className="font-semibold text-foreground">Agentic Economy</span>
       </span>
@@ -142,12 +152,29 @@ function PublicBrandLink() {
   )
 }
 
+const publicFooter = cva('', {
+  variants: {
+    immersive: {
+      true: 'fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card',
+      false: 'border-t border-border bg-card',
+    },
+  },
+})
+const publicFooterInner = cva('mx-auto flex w-full max-w-6xl items-center justify-center gap-3 px-4', {
+  variants: {
+    immersive: {
+      true: 'py-2 text-xs leading-5 text-muted-foreground md:px-6',
+      false: 'py-3 text-xs leading-5 text-muted-foreground md:px-6 md:py-4 md:text-sm',
+    },
+  },
+})
+
 function PublicFooter({ immersive }: { immersive: boolean }) {
   return (
-    <footer className={immersive ? 'fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card' : 'border-t border-border bg-card'}>
-      <div className={immersive ? 'mx-auto flex w-full max-w-6xl items-center justify-center gap-3 px-4 py-2 text-xs leading-5 text-muted-foreground md:px-6' : 'mx-auto flex w-full max-w-6xl items-center justify-center gap-3 px-4 py-3 text-xs leading-5 text-muted-foreground md:px-6 md:py-4 md:text-sm'}>
+    <footer className={publicFooter({ immersive })}>
+      <div className={publicFooterInner({ immersive })}>
         <nav aria-label="Footer" className="flex flex-wrap justify-center gap-x-3 gap-y-1 md:gap-x-4">
-          <a href="/llms.txt" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">For assistants</a>
+          <a href="/for-agents" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">For agents</a>
           <a href="/privacy" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Privacy</a>
           <a href="/terms" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Terms</a>
         </nav>

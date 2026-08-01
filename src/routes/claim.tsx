@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState, type FormEvent } from 'react'
+import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react'
 import { Outlet, createFileRoute, useLocation, useNavigate, useSearch } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
@@ -7,7 +7,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Label } from '@/components/ui/label'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { AeClaimFormSection } from '@/components/ae/forms/AeClaimFormSection'
 import { AeFileUploadField } from '@/components/ae/forms/AeFileUploadField'
 import { AeRangeField } from '@/components/ae/forms/AeRangeField'
@@ -20,6 +22,7 @@ import { AeActionButton } from '@/components/ae/motion/AeActionButton'
 import { submitOwnerClaimServer } from '@/modules/catalog/owner-claim.functions'
 import {
   emptyPublicOwnerClaimInput,
+  hasClaimDraftContent,
   initialClaimDraftState,
   reduceClaimDraft,
   snapshotClaimDraft,
@@ -46,6 +49,9 @@ type FieldConfig = {
   label: string
   description: string
   control: 'input' | 'tel' | 'textarea'
+  /** Native browser autofill token. Mobile keyboards and password managers use
+   *  this; omitting it makes an owner retype details their device already has. */
+  autoComplete?: string
 }
 
 const textClaimFields = [
@@ -241,6 +247,7 @@ const identityFields = [
     label: 'Business name',
     description: 'Use the public name customers already know.',
     control: 'input',
+    autoComplete: 'organization',
   },
   {
     field: 'category',
@@ -253,12 +260,14 @@ const identityFields = [
     label: 'Suburb',
     description: 'The primary local suburb.',
     control: 'input',
+    autoComplete: 'address-level2',
   },
   {
     field: 'stateTerritory',
     label: 'State or territory',
     description: 'Use the short Australian state label.',
     control: 'input',
+    autoComplete: 'address-level1',
   },
   {
     field: 'requestedSlug',
@@ -375,7 +384,7 @@ function ClaimRoute() {
           </p>
         </div>
       </header>
-      <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-6 md:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] md:px-6">
+      <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-6 md:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] md:px-6">
         <section aria-labelledby="claim-before-you-start" className="grid content-start gap-3 border-y border-border py-4">
           <h2 id="claim-before-you-start" className="text-lg font-semibold text-foreground">
             What people get when they ask their AI
@@ -394,7 +403,7 @@ function ClaimRoute() {
           <p className="block text-muted-foreground">You confirm availability, price, and every request before work begins.</p>
           <p className="block text-muted-foreground">Change a detail any time. Nothing starts until you confirm the request.</p>
         </section>
-      </main>
+      </div>
       <section aria-label="Find your business" className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-6 md:px-6">
         <AeFindMyBusiness
           search={async (query) => await searchBusinesses({ data: { query } })}
@@ -417,6 +426,8 @@ export function ClaimFormRoute() {
   const [errors, setErrors] = useState<readonly PublicOwnerClaimValidationError[]>([])
   const [message, setMessage] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
+  const [draftNotice, setDraftNotice] = useState<string | undefined>()
+  const persistedDraftRef = useRef<string>(undefined)
   const importDraft = useServerFn(importDraftServer)
   const [importWebsiteUrl, setImportWebsiteUrl] = useState('')
   const [importPending, setImportPending] = useState(false)
@@ -439,6 +450,9 @@ export function ClaimFormRoute() {
     const storedDraft = readStoredClaimDraft()
     if (storedDraft !== undefined) {
       dispatchDraft({ type: 'hydrate', snapshot: storedDraft })
+      // An autosaved-but-untouched draft is not work worth announcing; only a
+      // draft the owner actually put something into is "restored".
+      if (hasClaimDraftContent(storedDraft)) setDraftNotice('Draft restored from this device.')
       // The owner's own saved work outranks anything carried in from the find step.
       clearClaimEnrichIntent()
       return
@@ -482,11 +496,28 @@ export function ClaimFormRoute() {
     })()
   }, [draftState.phase, enrichAttempted, enrichDraft, hydrated])
 
+  // Only a write that actually changes the stored draft is worth announcing.
+  // Persisting the snapshot we just restored is not a save the owner made.
   useEffect(() => {
     if (!hydrated) return
     const snapshot = snapshotClaimDraft(draftState)
-    if (snapshot !== undefined) writeStoredClaimDraft(snapshot)
+    if (snapshot === undefined) return
+    const serialized = JSON.stringify(snapshot)
+    if (serialized === persistedDraftRef.current) return
+    const isFirstWrite = persistedDraftRef.current === undefined
+    persistedDraftRef.current = serialized
+    writeStoredClaimDraft(snapshot)
+    if (!isFirstWrite) setDraftNotice('Draft saved on this device.')
   }, [draftState, hydrated])
+
+  // Autosave is per-device, not an account record: leaving still loses the work
+  // on a different browser, so the owner gets the browser's own confirmation.
+  useEffect(() => {
+    if (!hydrated || draftState.phase !== 'ready' || dirtyFields.size === 0) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirtyFields.size, draftState.phase, hydrated])
 
   useEffect(() => {
     focusFirstError(errors)
@@ -557,10 +588,13 @@ export function ClaimFormRoute() {
 
   return (
     <AePublicShell>
+      {/* The pitch belongs on /claim; someone who reached the form has already
+          decided. Repeating the hero pushed the first field below the fold and
+          made the two pages look like the same screen rendered twice. */}
       <AePageHeader
-        eyebrow="For businesses"
-        title="Get your business found — and quoted — by AI assistants and the people they work for."
-        description="When people ask their AI, your business is found and can answer with your real services and prices. You review every message before you confirm availability, price, and timing."
+        density="operator"
+        title="Publish your business page"
+        description="Add your facts, services, and how customers can reach you. Nothing publishes until you confirm it."
       />
       {!hydrated ? (
         <div className="mx-auto w-full max-w-6xl px-4 pb-16 text-sm text-muted-foreground md:px-6" aria-live="polite">
@@ -593,7 +627,7 @@ export function ClaimFormRoute() {
           onImport={handleImportDraft}
         />
         <AeClaimFormSection title="Business identity" description="Enter the name, trade, and place customers use to find you.">
-          <div className="grid gap-4">
+          <FieldGroup className="grid gap-4">
             {identityFields.map((field) => (
               <ClaimTextField
                 key={field.field}
@@ -604,10 +638,10 @@ export function ClaimFormRoute() {
                 disabled={pending}
               />
             ))}
-          </div>
+          </FieldGroup>
         </AeClaimFormSection>
         <AeClaimFormSection title="Service details" description="Name one job customers ask you to do, such as emergency pipe repair.">
-          <div className="grid gap-4">
+          <FieldGroup className="grid gap-4">
             {serviceFields.map((field) => (
               <ClaimTextField
                 key={field.field}
@@ -629,13 +663,13 @@ export function ClaimFormRoute() {
               description="Preview files while preparing the claim. Use the Photo URL field for the image that should publish."
               accept="image/*,.pdf"
             />
-          </div>
+          </FieldGroup>
         </AeClaimFormSection>
         <AeClaimFormSection title="First customer request" description="Tell people whether they can call, ask a question, or ask for a quote today.">
-          <div className="grid gap-4">
-            <fieldset className="grid gap-2">
-              <legend className="text-sm font-medium text-foreground">First customer request</legend>
-              <p id="firstRequestMode-description" className="text-sm text-muted-foreground">Choose no contact route if people should only read your details for now.</p>
+          <FieldGroup className="grid gap-4">
+            <FieldSet {...(firstRequestModeInvalid ? { 'data-invalid': true } : {})}>
+              <FieldLegend>First customer request</FieldLegend>
+              <FieldDescription id="firstRequestMode-description">Choose no contact route if people should only read your details for now.</FieldDescription>
               <AeRadioCardGroup
                 name="firstRequestMode"
                 value={value.firstRequestMode}
@@ -647,8 +681,8 @@ export function ClaimFormRoute() {
                   dispatchDraft({ type: 'edit_first_request_mode', value: toFirstRequestMode(nextValue) })
                 }}
               />
-              {firstRequestModeInvalid ? <p id="firstRequestMode-error" className="text-sm text-destructive">{firstRequestModeError}</p> : null}
-            </fieldset>
+              {firstRequestModeError === undefined ? null : <FieldError id="firstRequestMode-error">{firstRequestModeError}</FieldError>}
+            </FieldSet>
             <ClaimTextField
               config={{
                 field: 'publicDisclosure',
@@ -685,7 +719,7 @@ export function ClaimFormRoute() {
               updateTextField={updateTextField}
               disabled={pending}
             />
-          </div>
+          </FieldGroup>
         </AeClaimFormSection>
         <AeReviewBlock value={value} />
         <AeCheckboxField
@@ -706,6 +740,9 @@ export function ClaimFormRoute() {
             Publish my service page
           </AeActionButton>
           {previewButton(value.requestedSlug)}
+          {draftNotice === undefined ? null : (
+            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{draftNotice} Nothing publishes until you submit.</p>
+          )}
         </div>
         </form>
       )}
@@ -729,7 +766,9 @@ function ImportDraftSection({
   onImport: () => void
 }) {
   const websiteDescriptionId = 'storefront-import-url-description'
-  const inputClassName = 'min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary disabled:opacity-50'
+  const websiteErrorId = 'storefront-import-url-error'
+  const invalid = message !== undefined && draft === undefined
+  const describedBy = invalid ? `${websiteDescriptionId} ${websiteErrorId}` : websiteDescriptionId
 
   return (
     <AeClaimFormSection
@@ -743,22 +782,23 @@ function ImportDraftSection({
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         )}
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="storefront-import-url">Business website URL</Label>
-            <p id={websiteDescriptionId} className="text-sm text-muted-foreground">We read the title, services, phone, and other public details into an unpublished draft.</p>
-            <input
+        <FieldGroup className="grid gap-4">
+          <Field {...(invalid ? { 'data-invalid': true } : {})} {...(pending ? { 'data-disabled': true } : {})}>
+            <FieldLabel htmlFor="storefront-import-url">Business website URL</FieldLabel>
+            <FieldDescription id={websiteDescriptionId}>We read the title, services, phone, and other public details into an unpublished draft.</FieldDescription>
+            <Input
               id="storefront-import-url"
               name="storefront-import-url"
               type="url"
-              aria-label="Business website URL"
               value={websiteUrl}
               disabled={pending}
-              aria-describedby={websiteDescriptionId}
-              className={inputClassName}
+              aria-describedby={describedBy}
+              aria-invalid={invalid}
+              className="min-h-11"
               onChange={(event) => onWebsiteUrlChange(event.currentTarget.value)}
             />
-          </div>
+            {message === undefined || draft !== undefined ? null : <FieldError id={websiteErrorId}>{message}</FieldError>}
+          </Field>
           <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
@@ -772,7 +812,7 @@ function ImportDraftSection({
               The draft stays unpublished until you confirm the reviewed form.
             </p>
           </div>
-        </div>
+        </FieldGroup>
         {draft === undefined ? null : <ImportedDraftReview draft={draft} />}
       </div>
     </AeClaimFormSection>
@@ -851,45 +891,43 @@ function ClaimTextField({
   const invalid = error !== undefined
   const descriptionId = `${config.field}-description`
   const errorId = `${config.field}-error`
-  const describedBy = [descriptionId, invalid ? errorId : undefined].filter(Boolean).join(' ') || undefined
-  const inputClassName = 'min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary disabled:opacity-50'
+  const describedBy = invalid ? `${descriptionId} ${errorId}` : descriptionId
 
   const fieldInput = config.control === 'textarea' ? (
-    <textarea
+    <Textarea
       id={config.field}
       name={config.field}
-      aria-label={config.label}
       value={value[config.field] ?? ''}
       disabled={disabled}
       aria-describedby={describedBy}
       aria-invalid={invalid}
-      className={`${inputClassName} min-h-28 resize-y`}
+      className="min-h-28 resize-y"
       onChange={(event) => updateTextField(config.field, event.currentTarget.value)}
     />
   ) : (
-    <input
+    <Input
       id={config.field}
       name={config.field}
       type={config.control === 'tel' ? 'tel' : 'text'}
-      inputMode={config.control === 'tel' ? 'tel' : undefined}
-      autoComplete={config.control === 'tel' ? 'tel' : undefined}
-      aria-label={config.label}
+      {...(config.control === 'tel'
+        ? { inputMode: 'tel' as const, autoComplete: 'tel' }
+        : config.autoComplete === undefined ? {} : { autoComplete: config.autoComplete })}
       value={value[config.field] ?? ''}
       disabled={disabled}
       aria-describedby={describedBy}
       aria-invalid={invalid}
-      className={inputClassName}
+      className="min-h-11"
       onChange={(event) => updateTextField(config.field, event.currentTarget.value)}
     />
   )
 
   return (
-    <div className="grid gap-2">
-      <Label htmlFor={config.field}>{config.label}</Label>
-      <p id={descriptionId} className="text-sm text-muted-foreground">{config.description}</p>
+    <Field {...(invalid ? { 'data-invalid': true } : {})} {...(disabled ? { 'data-disabled': true } : {})}>
+      <FieldLabel htmlFor={config.field}>{config.label}</FieldLabel>
+      <FieldDescription id={descriptionId}>{config.description}</FieldDescription>
       {fieldInput}
-      {error === undefined ? null : <p id={errorId} role="alert" className="text-sm text-destructive">{error}</p>}
-    </div>
+      {error === undefined ? null : <FieldError id={errorId}>{error}</FieldError>}
+    </Field>
   )
 }
 

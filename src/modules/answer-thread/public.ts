@@ -18,6 +18,7 @@ export { answerTurnRequestSchema } from './answer-thread.schema'
 
 export {
   deleteAnswerThread,
+  getAnswerThread,
   getPublicThreadProjection,
   listSessionThreads,
 } from './answer-thread.functions'

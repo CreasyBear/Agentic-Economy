@@ -7,6 +7,8 @@ import {
 } from '@/components/ae/chat/answer-turn-state'
 import type { AnswerEvent, AnswerSource } from '@/modules/answer/public'
 
+import type { DecisionMapSnapshot } from '@/modules/decision-map/public'
+
 const provider = (overrides: Partial<AnswerSource> = {}): AnswerSource => ({
   citationIndex: 1,
   slug: 'demo-plumber',
@@ -129,6 +131,24 @@ describe('reduceAnswerTurnEvent', () => {
       nextStep: 'Review the listing.',
     })
   })
+  it('carries the acknowledged decision-map snapshot and keeps it authoritative over answer artifacts', () => {
+    const snapshot = {
+      projectId: 'project-1',
+      threadId: 'thread-1',
+    } as unknown as DecisionMapSnapshot
+    const withMap = reduceAnswerTurnEvent(initialAnswerTurnUiState, {
+      type: 'decision-map',
+      snapshot,
+    })
+    const withArtifact = reduceAnswerTurnEvent(withMap, {
+      type: 'one-line',
+      oneLine: 'A generic answer should not replace this map.',
+    })
+
+    expect(withArtifact.decisionMap).toBe(snapshot)
+    expect(withArtifact.oneLineFallback).toBe('A generic answer should not replace this map.')
+  })
+
 
   it('merges provider-card artifacts idempotently by kind', () => {
     const card = provider()

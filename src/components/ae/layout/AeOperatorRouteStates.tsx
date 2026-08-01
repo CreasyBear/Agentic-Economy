@@ -30,9 +30,8 @@ export function OperatorRoutePending() {
   )
 }
 
-export function OperatorRouteError({ error }: { error: unknown }) {
+export function OperatorRouteError({ error: _error }: { error: unknown }) {
   const { pathname } = useLocation()
-  const message = error instanceof Error ? error.message : 'This page could not load right now.'
 
   return (
     <AeOperatorShell
@@ -43,7 +42,7 @@ export function OperatorRouteError({ error }: { error: unknown }) {
     >
       <Alert variant="destructive">
         <AlertTitle>Unable to load this page</AlertTitle>
-        <AlertDescription>{message}</AlertDescription>
+        <AlertDescription>The latest details could not be loaded. Refresh the page to try again.</AlertDescription>
       </Alert>
     </AeOperatorShell>
   )

@@ -108,13 +108,13 @@ function OwnerStatusRoute() {
 const ownerFactPresentation: Readonly<Record<SearchGapFact, {
   label: string
   action: string
-  href: '/owner/offerings' | '/help'
+  href: '/owner/offerings' | '/privacy/remove-business'
 }>> = {
   price: { label: 'price', action: 'Add prices', href: '/owner/offerings' },
   availability: { label: 'opening hours', action: 'Update hours', href: '/owner/offerings' },
   contact: { label: 'a way to contact you', action: 'Add a contact option', href: '/owner/offerings' },
   service_detail: { label: 'what you offer', action: 'Describe your services', href: '/owner/offerings' },
-  location: { label: 'your location', action: 'Ask us to update it', href: '/help' },
+  location: { label: 'your location', action: 'Ask us to update it', href: '/privacy/remove-business' },
 }
 
 function OwnerSearchGapCard({ readback }: Readonly<{ readback: OwnerSearchGapReadback }>) {

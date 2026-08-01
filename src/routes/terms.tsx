@@ -20,6 +20,7 @@ import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 export const Route = createFileRoute('/terms')({
   head: () => ({
     meta: [
+      { title: 'Terms | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
       { name: 'description', content: 'Plain-language terms for using Agentic Economy to find, compare, and contact businesses.' },
     ],
@@ -71,7 +72,7 @@ function TermsRoute() {
         title="The deal in plain English."
         description="Use AE to find and contact businesses. The business confirms the work."
       />
-      <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
+      <div className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
         <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
           {canDoItems.map(({ icon: Icon, title, body }) => (
             <Card key={title} className="grid h-full gap-1.5 p-5">
@@ -109,7 +110,7 @@ function TermsRoute() {
             <Button asChild variant="secondary"><a href="/privacy/remove-business">Fix a page <ArrowRightIcon aria-hidden="true" /></a></Button>
           </div>
         </section>
-      </main>
+      </div>
     </AePublicShell>
   )
 }

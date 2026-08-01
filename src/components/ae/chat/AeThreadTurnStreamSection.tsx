@@ -11,6 +11,8 @@ import { Message, MessageContent } from '@/components/ai-elements/message'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
 import { AePlanWork } from './AePlanWork'
+import { AeDecisionMapJourney } from '@/components/ae/decision-map/AeDecisionMapJourney'
+
 import { AeTurnContextLine } from './AeTurnContextLine'
 import { ANSWER_SECTION_CLASS } from './thread-turn-view'
 import { orderShortlistArtifacts } from './shortlist-projection'
@@ -197,32 +199,38 @@ export function AeThreadTurnStreamSection({
             {...(state.thinkingStep === undefined ? {} : { thinkingStep: state.thinkingStep })}
             query={query}
           />
-          {state.enginePlan === undefined ? null : <AePlanWork plan={state.enginePlan} />}
-          <AeGenerativeAnswer
-            artifacts={orderShortlistArtifacts(state.artifacts, searchContext?.timing)}
-            query={query}
-            {...(state.layoutProfile === undefined ? {} : { layoutProfile: state.layoutProfile })}
-            busy={busy}
-            oneLineFallback={state.oneLineFallback}
-            onStop={stop}
-            phase={state.phase}
-            {...(threadId === undefined ? {} : { threadId })}
-            errorMessage={
-              state.phase === 'error' || state.phase === 'stopped' ? (
-                <>
-                  {state.phase === 'stopped' ? 'Answer stopped.' : (state.errorMessage ?? STREAM_ERROR_COPY)}{' '}
-                  {onRetry !== undefined ? (
-                    <button type="button" className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-foreground underline underline-offset-4 hover:text-foreground" onClick={onRetry}>
-                      Try again
-                    </button>
-                  ) : null}{' '}
-                  <Link to="/registry" search={{ q: '', limit: 10 }} className="text-foreground underline underline-offset-4">
-                    Browse services
-                  </Link>
-                </>
-              ) : null
-            }
-          />
+          {state.decisionMap === undefined ? (
+            <>
+              {state.enginePlan === undefined ? null : <AePlanWork plan={state.enginePlan} />}
+              <AeGenerativeAnswer
+                artifacts={orderShortlistArtifacts(state.artifacts, searchContext?.timing)}
+                query={query}
+                {...(state.layoutProfile === undefined ? {} : { layoutProfile: state.layoutProfile })}
+                busy={busy}
+                oneLineFallback={state.oneLineFallback}
+                onStop={stop}
+                phase={state.phase}
+                {...(threadId === undefined ? {} : { threadId })}
+                errorMessage={
+                  state.phase === 'error' || state.phase === 'stopped' ? (
+                    <>
+                      {state.phase === 'stopped' ? 'Answer stopped.' : (state.errorMessage ?? STREAM_ERROR_COPY)}{' '}
+                      {onRetry !== undefined ? (
+                        <button type="button" className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-foreground underline underline-offset-4 hover:text-foreground" onClick={onRetry}>
+                          Try again
+                        </button>
+                      ) : null}{' '}
+                      <Link to="/" className="text-foreground underline underline-offset-4">
+                        Start a new ask
+                      </Link>
+                    </>
+                  ) : null
+                }
+              />
+            </>
+          ) : (
+            <AeDecisionMapJourney snapshot={state.decisionMap} />
+          )}
         </MessageContent>
       </Message>
     </div>

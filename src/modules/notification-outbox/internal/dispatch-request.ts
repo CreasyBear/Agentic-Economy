@@ -1,7 +1,11 @@
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { NotificationProviderError } from '@/lib/server/notification-provider'
+import { z } from 'zod'
 
 export const MAX_NOTIFICATION_DISPATCH_BODY_BYTES = 4 * 1024
+const dispatchBodySchema = z.object({
+  dispatchId: z.string().trim().min(1),
+})
 
 export function requireDispatchAuthorization(headers: Headers, systemKey: string): void {
   const authorization = headers.get('authorization')?.trim()
@@ -25,10 +29,8 @@ export async function readDispatchId(request: Request): Promise<string> {
   }
 
   try {
-    const body = JSON.parse(boundedBody.text) as unknown
-    if (isRecord(body) && typeof body.dispatchId === 'string' && body.dispatchId.trim().length > 0) {
-      return body.dispatchId.trim()
-    }
+    const parsed = dispatchBodySchema.safeParse(JSON.parse(boundedBody.text))
+    if (parsed.success) return parsed.data.dispatchId
   } catch {
     // Handled below.
   }
@@ -40,6 +42,3 @@ export async function readDispatchId(request: Request): Promise<string> {
   )
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

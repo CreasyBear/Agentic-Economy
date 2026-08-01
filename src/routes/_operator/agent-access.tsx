@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 
 import { AeAgentOperatorConsole, type AgentOperatorKeyReadback } from '@/components/ae/console/AeAgentOperatorConsole'
@@ -53,6 +53,11 @@ export const Route = createFileRoute('/_operator/agent-access')({
 })
 
 function AgentAccessRoute() {
+  const location = useLocation()
+  return location.pathname !== '/agent-access' ? <Outlet /> : <AgentAccessHome />
+}
+
+function AgentAccessHome() {
   const readConsole = useServerFn(readAgentAccessConsoleServer)
   const localE2E = isLocalE2EAuthBypassEnabled()
   const revokeKey = useServerFn(revokeCustomerRequestAgentKeyServer)
@@ -106,16 +111,20 @@ function AgentAccessRoute() {
         <div className="grid gap-3">
           <Alert>
             <AlertTitle>Local preview — no assistant is connected</AlertTitle>
-            <AlertDescription>This browser journey does not sign in, create access, or authorize work. Browse the public demo to explore the customer experience.</AlertDescription>
-            <Button asChild variant="secondary" className="mt-2 min-h-11"><a href="/">Browse public demo</a></Button>
+            <AlertDescription>
+              <p>This browser journey does not sign in, create access, or authorize work. Browse the public demo to explore the customer experience.</p>
+              <Button asChild variant="secondary" className="mt-2 min-h-11"><Link to="/">Browse public demo</Link></Button>
+            </AlertDescription>
           </Alert>
         </div>
       ) : null}
       {error === undefined ? null : (
         <Alert variant="destructive">
           <AlertTitle>Assistant access unavailable</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-          <Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>{loading ? 'Trying again…' : 'Try again'}</Button>
+          <AlertDescription>
+            <p>{error}</p>
+            <Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>{loading ? 'Trying again…' : 'Try again'}</Button>
+          </AlertDescription>
         </Alert>
       )}
       {error === undefined ? (

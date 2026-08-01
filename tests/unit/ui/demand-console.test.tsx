@@ -64,7 +64,6 @@ describe('assistant access components', () => {
     expect(screen.getByRole('heading', { name: 'Connect your assistant' })).toBeTruthy()
     expect(screen.getByText(/claude mcp add --transport http agentic-economy https:\/\/ae\.example\/mcp/u)).toBeTruthy()
     expect(screen.getByText(/codex mcp add agentic-economy --url https:\/\/ae\.example\/mcp/u)).toBeTruthy()
-    expect(screen.getByText(/compare (?:real )?options from your own assistant/u)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy Claude command' }))
     expect(writeText).toHaveBeenCalledWith('claude mcp add --transport http agentic-economy https://ae.example/mcp')

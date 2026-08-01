@@ -9,7 +9,7 @@ export function AeSupplyPublisherHome({ readback }: Readonly<{ readback: OwnerSu
     return (
       <Card>
         <CardHeader className="p-5 pb-0">
-          <CardTitle><h1 className="text-2xl font-semibold text-foreground">Your services are unavailable</h1></CardTitle>
+          <CardTitle><h2 className="text-2xl font-semibold text-foreground">Your services are unavailable</h2></CardTitle>
         </CardHeader>
         <CardContent className="p-5">
           <p className="text-muted-foreground">We could not load your business services. Try again to continue.</p>
@@ -26,7 +26,7 @@ export function AeSupplyPublisherHome({ readback }: Readonly<{ readback: OwnerSu
     return (
       <Card>
         <CardHeader className="p-5 pb-0">
-          <CardTitle><h1 className="text-2xl font-semibold text-foreground">Claim your business to publish</h1></CardTitle>
+          <CardTitle><h2 className="text-2xl font-semibold text-foreground">Claim your business to publish</h2></CardTitle>
         </CardHeader>
         <CardContent className="p-5">
           <p className="text-muted-foreground">A business claim connects your service to the right owner.</p>
@@ -43,7 +43,7 @@ export function AeSupplyPublisherHome({ readback }: Readonly<{ readback: OwnerSu
     <div className="grid gap-8">
       <header className="grid gap-2">
         <p className="block text-sm font-semibold text-muted-foreground">BUSINESS SERVICES</p>
-        <h1 className="text-2xl font-semibold text-foreground">Get your service ready for AI assistants</h1>
+        <h2 className="text-2xl font-semibold text-foreground">Get your service ready for AI assistants</h2>
         <p className="block text-muted-foreground">Describe what you do, set a price, test it, and go live. Earn when agents bring you work.</p>
       </header>
       <Card>

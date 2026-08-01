@@ -123,6 +123,7 @@ export {
   buildDetailUrl,
   type AnswerEvent,
   type EnginePlanStreamEvent,
+  type DecisionMapStreamEvent,
   type AnswerSnapshot,
   type AnswerSource,
   type AnswerSynthesizer,

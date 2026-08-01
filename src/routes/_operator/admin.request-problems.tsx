@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
@@ -35,8 +35,8 @@ function RequestProblemsRoute() {
     description="Record status updates without deciding cause, responsibility, or remedy."
     currentPath="/admin/request-problems"
   >
-    {result.kind === 'denied'
-      ? <Card className="p-5"><p className="text-muted-foreground">Active support access is required.</p></Card>
+    {result.kind !== 'allowed'
+      ? <Card className="p-5"><p className="text-muted-foreground">{result.kind === 'unavailable' ? 'Request problems could not be loaded. Refresh the page to try again.' : 'Active support access is required.'}</p></Card>
       : result.rows.length === 0
         ? <Card className="p-5"><p className="text-muted-foreground">No reported Request problems need tracking.</p></Card>
         : <div className="grid gap-4">
@@ -107,7 +107,7 @@ function SupportProblemCard({ problem }: { problem: SupportProblemRow }) {
     <div className="grid gap-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-1">
-          <h2>{problem.category.replaceAll('_', ' ')}</h2>
+          <h2 className="text-lg font-semibold leading-tight tracking-tight text-foreground">{problem.category.replaceAll('_', ' ')}</h2>
           <p className="text-muted-foreground">{problem.summary}</p>
           <p className="text-sm text-muted-foreground">
             {problem.business === undefined ? 'Business not named' : problem.business} · {problem.state.replaceAll('_', ' ')} · next: {problem.nextActor}
@@ -191,9 +191,11 @@ export function SupportProblemReconstruction({
 }: {
   reconstruction: NonNullable<Extract<SupportProblemExport, { kind: 'problem_export' }>['reconstruction']>
 }) {
-  return <section aria-labelledby="support-request-reconstruction" className="grid gap-4 border-t border-border pt-4">
+  const headingId = useId()
+
+  return <section aria-labelledby={headingId} className="grid gap-4 border-t border-border pt-4">
     <div className="grid gap-1">
-      <h3 id="support-request-reconstruction">Request reconstruction</h3>
+      <h3 id={headingId} className="text-lg font-semibold leading-tight tracking-tight">Request reconstruction</h3>
       <p className="text-sm text-muted-foreground">
         One source record for what the customer asked, confirmed, shared, and can safely do next.
       </p>

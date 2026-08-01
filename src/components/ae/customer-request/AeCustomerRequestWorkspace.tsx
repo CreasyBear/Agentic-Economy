@@ -7,13 +7,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { projectCustomerRequestDecisionRecords } from '@/modules/customer-request/application/public'
 import { CUSTOMER_REQUEST_HUMAN_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
 import { DIALOG_WELCOME } from '@/content/brand-copy'
+import { cn } from '@/lib/utils'
 import {
   resolveReplacementCommandKey,
   type ReplacementCommandIdentity,
 } from '@/modules/customer-request/replacement-command-key'
 import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
 import { AeDecisionTrail } from '../plan/AeDecisionTrail'
-import { AeSupplyFacets, type SupplyFacet } from './AeSupplyFacets'
 import { RequestResult } from './panels'
 import { customerClarificationPrompt } from './panels/shared'
 import type {
@@ -37,10 +37,9 @@ type StoredRequestPointer = Readonly<{ requestRef: string; summary?: string }>
 
 export type AeCustomerRequestWorkspaceProps = Readonly<{
   initialNeed?: string
-  supplyFacets?: readonly SupplyFacet[]
 }>
 
-export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = [] }: AeCustomerRequestWorkspaceProps) {
+export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerRequestWorkspaceProps) {
   const [need, setNeed] = useState(initialNeed)
   const [answer, setAnswer] = useState('')
   const [state, setState] = useState<WorkspaceState>({ kind: 'idle' })
@@ -379,7 +378,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
   // Idle is the front door and gets the whole viewport; once there is a Request
   // to read, the surface becomes a document and starts at the top.
   return (
-    <main className={`mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14 ${showStartHeader ? 'min-h-[calc(100dvh-9rem)] content-center' : 'content-start'}`}>
+    <main className={cn('mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14', showStartHeader ? 'min-h-[calc(100dvh-9rem)] content-center' : 'content-start')}>
       {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-4 text-center">
         <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">{DIALOG_WELCOME.heading}</h1>
         <p className="block text-lg text-muted-foreground">{CUSTOMER_REQUEST_HUMAN_COMPREHENSION.situation}</p>
@@ -437,7 +436,6 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
             </Field>
           </FieldGroup>
         </form>
-        <AeSupplyFacets facets={supplyFacets} />
         {editingRevision !== undefined ? <p className="block text-sm text-muted-foreground">Editing revision {editingRevision} of this Request.</p> : null}
         {/* The terms stay reachable and complete, one click away, instead of
             forming a wall of qualifiers between the promise and the input. The

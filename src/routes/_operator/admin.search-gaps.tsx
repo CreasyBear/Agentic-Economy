@@ -160,6 +160,7 @@ function SearchGapReadback({ readback }: Readonly<{ readback: AvailableOutreach 
             <AeOperatorDataTable
               columns={businessColumns}
               data={repeated}
+              caption="Businesses worth contacting"
               filterPlaceholder="Filter businesses…"
             />
           )}
@@ -180,6 +181,7 @@ function SearchGapReadback({ readback }: Readonly<{ readback: AvailableOutreach 
             <AeOperatorDataTable
               columns={businessColumns}
               data={seenOnce}
+              caption="Businesses seen on one day"
               filterPlaceholder="Filter businesses…"
             />
           </div>
@@ -204,6 +206,7 @@ function SearchGapReadback({ readback }: Readonly<{ readback: AvailableOutreach 
             <AeOperatorDataTable
               columns={unansweredColumns}
               data={readback.unanswered}
+              caption="Unanswered searches"
               filterPlaceholder="Filter searches…"
             />
           )}

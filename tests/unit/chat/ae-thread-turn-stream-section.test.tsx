@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 type AttachStreamInput = Parameters<
@@ -17,7 +17,11 @@ vi.mock('@/components/ae/chat/turn-stream-session', () => ({
   attachAnswerTurnStream: streamSession.attach,
 }))
 vi.mock('@tanstack/react-router', () => ({ Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }))
-vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({ AeGenerativeAnswer: () => <div /> }))
+vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({ AeGenerativeAnswer: () => <div data-testid="generic-answer" /> }))
+vi.mock('@/components/ae/chat/AePlanWork', () => ({ AePlanWork: () => <div data-testid="legacy-plan" /> }))
+vi.mock('@/components/ae/decision-map/AeDecisionMapJourney', () => ({
+  AeDecisionMapJourney: () => <div data-testid="decision-map-journey" />,
+}))
 vi.mock('@/components/ai-elements/message', () => ({
   Message: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   MessageContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -25,6 +29,9 @@ vi.mock('@/components/ai-elements/message', () => ({
 vi.mock('@/components/ae/chat/AeAnswerThinkingTrace', () => ({ AeAnswerThinkingTrace: () => <div /> }))
 vi.mock('@/components/ae/chat/AeThreadTurnQueryHeader', () => ({ AeThreadTurnQueryHeader: () => <div /> }))
 vi.mock('@/components/ae/chat/AeTurnContextLine', () => ({ AeTurnContextLine: () => <div /> }))
+
+import type { AnswerEvent } from '@/modules/answer/public'
+import type { DecisionMapSnapshot } from '@/modules/decision-map/public'
 
 import { AeThreadTurnStreamSection } from '@/components/ae/chat/AeThreadTurnStreamSection'
 
@@ -80,5 +87,37 @@ describe('thread turn stream lifecycle', () => {
 
     firstAttachment.subscriber.onThread?.({ threadId: 'thread:late', turnId: 'turn:late', turnSeq: 2 })
     expect(freshThreadCreated).toHaveBeenCalledTimes(1)
+  })
+  it('suppresses the generic answer and legacy plan presenter when a decision map arrives', () => {
+    streamSession.attach.mockClear()
+    const view = render(
+      <AeThreadTurnStreamSection
+        query="We’re getting married next October — 120 people, no idea where to start"
+        generation={1}
+      />,
+    )
+    const attachment = streamSession.attach.mock.calls[0]?.[0]
+    if (attachment === undefined) throw new Error('missing stream attachment')
+
+    const snapshot = {
+      projectId: 'project-1',
+      threadId: 'thread-1',
+    } as unknown as DecisionMapSnapshot
+    const event: AnswerEvent = { type: 'decision-map', snapshot }
+    const planEvent: AnswerEvent = {
+      type: 'plan-contract',
+      planId: 'plan-1',
+      revision: 1,
+      goalText: 'A legacy engine plan',
+      steps: [{ id: 'step-1', title: 'An action', status: 'pending' }],
+    }
+    act(() => {
+      attachment.subscriber.onFrame?.({ seq: 1, event: planEvent })
+      attachment.subscriber.onFrame?.({ seq: 2, event })
+    })
+
+    expect(view.container.querySelector('[data-testid="decision-map-journey"]')).not.toBeNull()
+    expect(view.container.querySelector('[data-testid="generic-answer"]')).toBeNull()
+    expect(view.container.querySelector('[data-testid="legacy-plan"]')).toBeNull()
   })
 })

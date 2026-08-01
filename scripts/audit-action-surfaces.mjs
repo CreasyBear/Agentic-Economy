@@ -12,7 +12,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { readdir } from 'node:fs/promises'
+import { glob } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -107,23 +107,16 @@ function mentionsAction(source, actionId, exportName) {
 
 async function collectSourceFiles(root) {
   const found = []
-  let entries
   try {
-    entries = await readdir(root, { withFileTypes: true })
+    for await (const file of glob(['**/*.ts', '**/*.tsx'], { cwd: root })) {
+      const name = path.basename(file)
+      if (!name.endsWith('.test.ts') && !name.endsWith('.test.tsx')) found.push(path.join(root, file))
+    }
   } catch {
     return found
   }
 
-  for (const entry of entries) {
-    const full = path.join(root, entry.name)
-    if (entry.isDirectory()) {
-      found.push(...(await collectSourceFiles(full)))
-    } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
-      if (!entry.name.endsWith('.test.ts') && !entry.name.endsWith('.test.tsx')) found.push(full)
-    }
-  }
-
-  return found
+  return found.toSorted()
 }
 
 async function loadRegistry() {

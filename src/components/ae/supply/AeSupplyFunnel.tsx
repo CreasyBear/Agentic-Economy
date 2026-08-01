@@ -78,7 +78,14 @@ export function AeSupplyFunnel({
   offeringRef?: string
   callbacks: SupplyFunnelCallbacks
 }>) {
-  const [draft, setDraft] = useState<SupplyFunnelDraft>(() => readSupplyFunnelDraft() ?? emptySupplyFunnelDraft(businessId, offeringRef))
+  const [draft, setDraft] = useState<SupplyFunnelDraft>(() => {
+    const stored = readSupplyFunnelDraft()
+    return stored !== undefined
+      && stored.businessId === businessId
+      && (offeringRef === undefined || stored.offeringRef === offeringRef)
+      ? stored
+      : emptySupplyFunnelDraft(businessId, offeringRef)
+  })
   const [endpoint, setEndpoint] = useState<SupplyEndpointConfigValue>()
   const [pricing, setPricing] = useState<PricingConfig>(defaultSupplyPricingConfig)
   const [message, setMessage] = useState<string>()

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/item'
 
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { cn } from '@/lib/utils'
 
 export type AeOperatorQueueBadge = {
   label: string
@@ -67,7 +68,7 @@ export function AeOperatorQueueList({
   }
 
   const list = (
-    <ul className={`m-0 flex list-none flex-col gap-3 p-0 ${className ?? ''}`}>
+    <ul className={cn('m-0 flex list-none flex-col gap-3 p-0', className)}>
       {rows.map((row) => (
         <AeOperatorQueueItem key={row.id} row={row} maxFacts={maxFacts} />
       ))}
@@ -92,9 +93,9 @@ function AeOperatorQueueItem({ row, maxFacts }: { row: AeOperatorQueueRow; maxFa
   return (
     <Item asChild variant="outline" className="grid gap-3 bg-card">
       <li>
-        <ItemHeader className="items-start">
-          <ItemTitle>
-            <span className="break-words font-mono">{row.title}</span>
+        <ItemHeader className="min-w-0 flex-col items-start sm:flex-row">
+          <ItemTitle className="min-w-0 max-w-full">
+            <span className="max-w-full [overflow-wrap:anywhere] font-mono">{row.title}</span>
           </ItemTitle>
           <div className="flex flex-wrap items-center gap-2">
             {row.badges.map((badge) => (
@@ -104,7 +105,7 @@ function AeOperatorQueueItem({ row, maxFacts }: { row: AeOperatorQueueRow; maxFa
             ))}
           </div>
         </ItemHeader>
-        <ItemContent className="gap-2">
+        <ItemContent className="min-w-0 gap-2">
           {row.description === undefined ? null : <p className="text-sm leading-6 text-muted-foreground">{row.description}</p>}
           {row.body}
           {visibleFacts === undefined || visibleFacts.length === 0 ? null : (

@@ -26,6 +26,13 @@ vi.mock('@openrouter/ai-sdk-provider', () => ({
   }),
 }))
 
+import {
+  authorDecisionMapSnapshot,
+  setDecisionMapStorePortForTests,
+  type DecisionMapDraft,
+  type DecisionMapSnapshot,
+} from '@/modules/decision-map/public'
+
 import type { AnswerEvent } from '@/modules/answer/public'
 import { streamAnswerTurn } from '@/modules/answer-thread/public'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
@@ -51,6 +58,76 @@ const plan = {
   }],
   rationale: 'Start with current published photography options.',
 }
+const decisionMapDraft = {
+  version: 'decisionMap_v1',
+  goalText: 'Choose the first wedding planning step',
+  summary: 'A shallow map of the decisions that matter first.',
+  assumptions: [{ id: 'date', label: 'Wedding date', value: 'Next October', source: 'inferred' }],
+  nodes: [
+    {
+      id: 'venue',
+      kind: 'area',
+      label: 'Venue',
+      parentId: null,
+      status: 'queued',
+      dependsOn: [],
+      constraintRefs: [],
+    },
+    {
+      id: 'guest-list',
+      kind: 'decision',
+      label: 'Guest list',
+      parentId: 'venue',
+      status: 'ready',
+      dependsOn: [],
+      constraintRefs: ['date'],
+      options: [
+        { id: 'small', label: 'Keep it small', summary: 'Prioritise a smaller celebration.' },
+        { id: 'full', label: 'Invite all 120', summary: 'Plan around the full guest count.' },
+      ],
+      recommendedOptionId: 'full',
+      reason: 'The guest count is already known.',
+      unlocks: [],
+      parkTrigger: 'Park until the guest count changes.',
+    },
+    {
+      id: 'venue-style',
+      kind: 'decision',
+      label: 'Venue style',
+      parentId: 'venue',
+      status: 'queued',
+      dependsOn: ['guest-list'],
+      constraintRefs: [],
+      options: [
+        { id: 'indoor', label: 'Indoor', summary: 'Keep weather out of the plan.' },
+        { id: 'outdoor', label: 'Outdoor', summary: 'Use an outdoor setting.' },
+      ],
+      recommendedOptionId: 'indoor',
+      reason: 'The guest count should shape venue capacity first.',
+      unlocks: [],
+      parkTrigger: 'Park until the guest list is settled.',
+    },
+    {
+      id: 'food',
+      kind: 'area',
+      label: 'Food',
+      parentId: null,
+      status: 'fog',
+      dependsOn: [],
+      constraintRefs: [],
+    },
+    {
+      id: 'music',
+      kind: 'area',
+      label: 'Music',
+      parentId: null,
+      status: 'fog',
+      dependsOn: [],
+      constraintRefs: [],
+    },
+  ],
+} satisfies DecisionMapDraft
+
 const vagueQuery = 'Can you help me?'
 
 const priorFlag = process.env.AE_ENGINE_PROPOSALS
@@ -58,11 +135,14 @@ const priorFlag = process.env.AE_ENGINE_PROPOSALS
 describe('proposal turn path', () => {
   let resetAnswerThread: (() => void) | undefined
   let resetPlanStore: (() => void) | undefined
+  let resetDecisionMapStore: (() => void) | undefined
   let stored: StoredEnginePlanWithEvents | null
+  let persistedDecisionMap: DecisionMapSnapshot | undefined
+  let persistedDecisionMapInput: { projectId?: string; threadId?: string; ownerSessionId?: string; operationKey?: string } | undefined
   let planSeq: number
   let revisions: number
   let persistedModelRequests: number
-
+  let persistedToolCalls: number
   beforeEach(() => {
     process.env.AE_ENGINE_PROPOSALS = 'true'
     model.call = 0
@@ -70,6 +150,9 @@ describe('proposal turn path', () => {
     planSeq = 0
     revisions = 0
     persistedModelRequests = 0
+    persistedDecisionMap = undefined
+    persistedDecisionMapInput = undefined
+    persistedToolCalls = 0
 
     resetPlanStore = setEnginePlanStorePortForTests({
       read: async () => stored,
@@ -97,8 +180,28 @@ describe('proposal turn path', () => {
           }],
         }
         return { planId: envelope.planId, revision: envelope.revision, seq: planSeq }
+
       },
       recordEvent: async (input) => ({ planId: input.planId, seq: ++planSeq }),
+    })
+    resetDecisionMapStore = setDecisionMapStorePortForTests({
+      readDecisionMapByThread: async () => persistedDecisionMap ?? null,
+      persistDecisionMapDraft: async (input) => {
+        persistedDecisionMapInput = {
+          projectId: input.projectId,
+          threadId: input.threadId,
+          ownerSessionId: input.ownerSessionId,
+          ...(input.operationKey === undefined ? {} : { operationKey: input.operationKey }),
+        }
+        persistedDecisionMap = authorDecisionMapSnapshot(input)
+        return persistedDecisionMap
+      },
+      recordDecisionMapChoice: async () => {
+        throw new Error('choice is not used by the proposal path')
+      },
+      recordDecisionMapConstraintChange: async () => {
+        throw new Error('constraint changes are not used by the proposal path')
+      },
     })
     resetAnswerThread = setAnswerThreadPortForTests({
       createThread: async (args) => ({ threadId: args.threadId }),
@@ -108,6 +211,7 @@ describe('proposal turn path', () => {
       },
       appendTurnWithToolCalls: async (args) => {
         persistedModelRequests = modelRequestCount(args.evidenceJson)
+        persistedToolCalls = args.toolCalls.length
         return { turnId: args.turnId, insertedToolCalls: args.toolCalls.length }
       },
       listSessionThreads: async () => ({ threads: [] }),
@@ -121,6 +225,7 @@ describe('proposal turn path', () => {
     resetPlanStore?.()
     if (priorFlag === undefined) delete process.env.AE_ENGINE_PROPOSALS
     else process.env.AE_ENGINE_PROPOSALS = priorFlag
+    resetDecisionMapStore?.()
   })
 
   it('authors a durable plan, asks one question, and resumes the same revision', async () => {
@@ -158,6 +263,36 @@ describe('proposal turn path', () => {
     expect(persistedModelRequests).toBe(2)
     expect(model.call).toBe(4)
   })
+  it('persists and emits one decision map without executing registered actions', async () => {
+    model.build = (proposalId) => flat({
+      kind: 'decision_map_revision',
+      proposalId,
+      decisionMap: decisionMapDraft,
+    })
+
+    const events = await runTurn('We’re getting married next October — 120 people, no idea where to start')
+    const mapEvents = events.filter((event) => event.type === 'decision-map')
+    const complete = events.find((event) => event.type === 'complete')
+
+    expect(mapEvents).toHaveLength(1)
+    expect(mapEvents[0]).toMatchObject({
+      type: 'decision-map',
+      snapshot: { projectId: 'thread-plan', threadId: 'thread-plan' },
+    })
+    expect(complete).toMatchObject({ type: 'complete', answer: { providers: [], decisionMapRevision: 1 } })
+    expect((complete?.type === 'complete' ? complete.answer.importedClaims : undefined)).toBeUndefined()
+    expect(events.some((event) => event.type === 'plan-contract')).toBe(false)
+    expect(revisions).toBe(0)
+    expect(persistedDecisionMapInput).toEqual({
+      projectId: 'thread-plan',
+      threadId: 'thread-plan',
+      ownerSessionId: 'session-plan',
+      operationKey: expect.stringContaining('decision_map:thread-plan:'),
+    })
+    expect(persistedToolCalls).toBe(0)
+    expect(model.call).toBe(1)
+  })
+
   it('keeps a clear service-and-location ask on the deterministic path', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'

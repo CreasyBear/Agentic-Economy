@@ -107,6 +107,20 @@ export function snapshotClaimDraft(state: ClaimDraftState): ClaimDraftSnapshot |
   }
 }
 
+/**
+ * Whether a stored snapshot holds work the owner actually did. The form
+ * autosaves as soon as it mounts, so "a snapshot exists" alone says nothing.
+ */
+export function hasClaimDraftContent(snapshot: ClaimDraftSnapshot): boolean {
+  if (snapshot.factsConfirmed || snapshot.dirtyFields.length > 0) return true
+  return Object.entries(snapshot.value).some(
+    ([field, entry]) =>
+      typeof entry === 'string'
+      && entry.trim().length > 0
+      && entry !== emptyPublicOwnerClaimInput[field as keyof PublicOwnerClaimFlowInput],
+  )
+}
+
 function mergeClaimInputPreservingDirty(
   current: PublicOwnerClaimFlowInput,
   incoming: PublicOwnerClaimFlowInput,

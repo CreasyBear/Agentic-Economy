@@ -132,7 +132,7 @@ function ServicesRoute() {
 
   return (
     <AePublicShell>
-      <main className="grid w-full gap-12 px-4 py-16 sm:px-6 md:py-24">
+      <div className="grid w-full gap-12 px-4 py-16 sm:px-6 md:py-24">
         <section className="mx-auto grid w-full max-w-3xl justify-items-center gap-8 text-center">
           <h1
             className={hasAnswer
@@ -212,7 +212,7 @@ function ServicesRoute() {
             </div>
           )}
         </section>
-      </main>
+      </div>
     </AePublicShell>
   )
 }
@@ -220,11 +220,11 @@ function ServicesRoute() {
 function ServicesLoading() {
   return (
     <AePublicShell>
-      <main className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-12 sm:px-6 lg:py-16" aria-busy="true">
+      <div className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-12 sm:px-6 lg:py-16" aria-busy="true">
         <Card className="border border-border bg-card p-5">
           <p role="status" className="text-muted-foreground">Finding businesses and comparing options…</p>
         </Card>
-      </main>
+      </div>
     </AePublicShell>
   )
 }
@@ -232,7 +232,7 @@ function ServicesLoading() {
 function ServicesError() {
   return (
     <AePublicShell>
-      <main className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-12 sm:px-6 lg:py-16">
+      <div className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-12 sm:px-6 lg:py-16">
         <Card className="grid gap-3 border border-destructive/50 bg-card p-5" role="alert">
           <div className="grid gap-1">
             <p className="block font-semibold text-foreground">We couldn’t load your options</p>
@@ -240,7 +240,7 @@ function ServicesError() {
           </div>
           <Button asChild variant="default" className="min-h-11 justify-self-start"><a href="/">Try another ask</a></Button>
         </Card>
-      </main>
+      </div>
     </AePublicShell>
   )
 }

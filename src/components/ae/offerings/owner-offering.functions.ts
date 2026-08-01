@@ -111,8 +111,8 @@ type OfferingFacts = Readonly<{ name: string; category: string; summary: string;
 export const readOwnerOfferingSupplyServer = createServerFn().handler(async (): Promise<OwnerOfferingSupplyReadResult> => {
   try {
     return await callSourceQuery(readSupplyQuery, {})
-  } catch (error) {
-    return { kind: 'error', code: 'source_unavailable', reason: error instanceof Error ? error.message : 'Service source is unavailable.' }
+  } catch {
+    return { kind: 'error', code: 'source_unavailable', reason: 'The service source did not answer. Try again.' }
   }
 })
 
@@ -133,7 +133,7 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
     const currentRevision = first.currentRevision ?? Math.max(1, value.expectedRevision + (value.offeringRef === undefined ? 0 : 1))
     const completedSteps: string[] = ['details']
     const status = await write(context, data.businessId, data.requestKey, 'status', (source) => callSourceMutation(changeStatusMutation, { ...source, offeringRef, expectedRevision: currentRevision, status: value.status }))
-    if (status.kind === 'error') return partialRefusal(`Service details were saved, but its public state was not changed: ${status.reason}`, offeringRef, currentRevision, completedSteps)
+    if (status.kind === 'error') return partialRefusal('Service details were saved, but its public state could not be changed. Try again.', offeringRef, currentRevision, completedSteps)
     completedSteps.push('public_state')
 
     for (const [index, path] of value.accessPaths.entries()) {
@@ -143,7 +143,7 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
           ? { kind: 'ok' as const, code: 'not_persisted' }
           : await write(context, data.businessId, data.requestKey, `withdraw-${index}`, (source) => callSourceMutation(withdrawPathMutation, { ...source, accessPathRef, expectedRevision: currentRevision }))
         : await write(context, data.businessId, data.requestKey, `path-${index}`, (source) => callSourceMutation(upsertPathMutation, { ...source, offeringRef, accessPathRef, expectedRevision: currentRevision, status: path.status as 'draft' | 'published', descriptor: path.descriptor }))
-      if (pathResult.kind === 'error') return partialRefusal(`Service details were saved, but one way to start the service was not: ${pathResult.reason}`, offeringRef, currentRevision, completedSteps)
+      if (pathResult.kind === 'error') return partialRefusal('Service details were saved, but one way to start the service could not be saved. Try again.', offeringRef, currentRevision, completedSteps)
       completedSteps.push(`access_path_${index}`)
     }
 
@@ -166,8 +166,8 @@ async function write(
   try {
     const sourceWrite = await sourceWriteAdmissionFromContext({ context, scope: 'catalog_publish', operationKey, correlationId })
     return await execute({ businessId, operationKey, correlationId, sourceWrite })
-  } catch (error) {
-    return { kind: 'error', code: 'source_unavailable', reason: error instanceof Error ? error.message : 'Service source is unavailable.' }
+  } catch {
+    return { kind: 'error', code: 'source_unavailable', reason: 'The service source did not answer. Try again.' }
   }
 }
 

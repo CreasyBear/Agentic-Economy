@@ -11,6 +11,7 @@ import type {
 import type { DevelopmentReleaseSignal, DevelopmentTimeoutSignal } from './attempts'
 import type { ReconciliationEvidenceVerifier } from './reconciliation-evidence'
 import { readPath } from './preparation'
+import { stableStringify } from '@/modules/common/stable-hash'
 
 export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly<{
   action: Action<Input, Result>
@@ -152,7 +153,7 @@ export function checkBinding<Input, Result extends ActionResult>(
     binding.actor.callerRef !== input.actor.callerRef ||
     binding.actor.principalRef !== input.actor.principalRef
   ) return { kind: 'refused', code: 'cross_principal_refused', view: record.view }
-  if (JSON.stringify(binding.origin) !== JSON.stringify(input.origin)) {
+  if (stableStringify(binding.origin) !== stableStringify(input.origin)) {
     return { kind: 'refused', code: 'cross_origin_refused', view: record.view }
   }
   if (Date.parse(now) >= Date.parse(binding.expiresAt)) {

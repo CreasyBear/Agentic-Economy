@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useRef } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -30,7 +30,7 @@ function OwnerOfferingDetailRoute() {
   return (
     <AeOperatorShell operatorRole="owner" title={source?.revision?.name ?? 'Offering'} description="Keep the public facts and ways to get started current." currentPath="/owner/offerings" breadcrumbs={[{ label: 'Offerings', href: '/owner/offerings' }, { label: source?.revision?.name ?? 'Offering' }]}>
       {result.kind === 'error' ? <Alert variant="destructive"><AlertTitle>Offering did not load</AlertTitle><AlertDescription>{result.reason ?? 'Retry this page.'}</AlertDescription></Alert>
-        : initialValue === undefined ? <Alert><AlertTitle>Offering unavailable</AlertTitle><AlertDescription>This Offering was not found for the current owner, or its current revision needs repair.</AlertDescription><Button asChild variant="secondary"><a href="/owner/offerings">Back to Offerings</a></Button></Alert>
+        : initialValue === undefined ? <Alert><AlertTitle>Offering unavailable</AlertTitle><AlertDescription><p>This Offering was not found for the current owner, or its current revision needs repair.</p><Button asChild variant="secondary"><Link to="/owner/offerings">Back to Offerings</Link></Button></AlertDescription></Alert>
         : source?.status === 'retired' ? <Alert><AlertTitle>This Offering is retired</AlertTitle><AlertDescription>Its history remains available, but retired Offerings cannot be edited.</AlertDescription></Alert>
         : businessId === undefined ? <Alert variant="destructive"><AlertTitle>Offering did not load</AlertTitle><AlertDescription>The current business owner could not be resolved.</AlertDescription></Alert>
         : <AeOwnerOfferingEditor initialValue={initialValue} onSave={(value) => {

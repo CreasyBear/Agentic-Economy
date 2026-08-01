@@ -19,6 +19,7 @@ import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 export const Route = createFileRoute('/privacy')({
   head: () => ({
     meta: [
+      { title: 'Privacy | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
       { name: 'description', content: 'What Agentic Economy shares when you ask, compare, or contact a business.' },
     ],
@@ -89,7 +90,7 @@ function PrivacyRoute() {
         title="Your details, at a glance."
         description="What is shared when you ask, compare, or contact a business."
       />
-      <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
+      <div className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
         <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
           {detailCards.map(({ icon: CardIcon, label, title, body }) => (
             <Card key={title} className="grid h-full gap-1.5 p-5">
@@ -142,7 +143,7 @@ function PrivacyRoute() {
           </div>
           <Button asChild variant="secondary"><a href="/privacy/remove-business">Open corrections <ArrowRightIcon aria-hidden="true" /></a></Button>
         </section>
-      </main>
+      </div>
     </AePublicShell>
   )
 }

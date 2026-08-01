@@ -5,6 +5,7 @@ import {
   type CapabilityDecisionModel,
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 type ActionPreparationDataUse = Readonly<{
@@ -223,7 +224,7 @@ export function projectActionPreparation(input: Readonly<{
   if (preparationDeclarations.some(({ recipient }) => recipient.kind !== 'candidate_binding')) {
     return { kind: 'refused', reason: 'preparation_recipient_unsupported' }
   }
-  const lineage: ActionPreparationLineage = freeze({
+  const lineage: ActionPreparationLineage = deepFreeze({
     requestId: input.aggregate.snapshot.requestId,
     requestRevision: input.aggregate.snapshot.revision,
     principalId: input.aggregate.snapshot.principalId,
@@ -231,7 +232,7 @@ export function projectActionPreparation(input: Readonly<{
     planRevisionId: input.aggregate.plan.planRevisionId,
     planDigest: input.aggregate.plan.planDigest,
     actionId: action.actionId,
-    contractRef: freeze({ ...action.contractRef }),
+    contractRef: deepFreeze({ ...action.contractRef }),
     selectionKey: action.selectionKey,
     semanticDigest: action.semanticDigest,
   })
@@ -259,7 +260,7 @@ export function projectActionPreparation(input: Readonly<{
     ))
       ? { kind: 'needs_authority' as const }
       : { kind: 'ready_for_routing' as const }
-  return freeze({
+  return deepFreeze({
     ...baseMaterial,
     ...statusMaterial,
     preparationDigest: canonicalDigest({ ...baseMaterial, ...statusMaterial } as StableHashValue),
@@ -300,7 +301,7 @@ export function authorizeActionPreparation(input: Readonly<{
     approvedAt: input.actor.approvedAt,
   }
   const approvalDigest = canonicalDigest(approvalMaterial as StableHashValue)
-  const approval = freeze({
+  const approval = deepFreeze({
     approvalRef: `action-preparation-approval:${approvalDigest}`,
     approvalDigest,
     ...approvalMaterial,
@@ -318,18 +319,18 @@ export function authorizeActionPreparation(input: Readonly<{
     reservedAt: approval.approvedAt,
   }
   const reservationDigest = canonicalDigest(reservationMaterial as StableHashValue)
-  const authorityReservation = freeze({
+  const authorityReservation = deepFreeze({
     reservationRef: `action-authority-reservation:${reservationDigest}`,
     reservationDigest,
     ...reservationMaterial,
   })
   const { kind: _kind, preparationDigest: _preparationDigest, ...base } = input.preparation
   const readyMaterial = { ...base, kind: 'ready_for_routing' as const, authorityReservation }
-  const preparation = freeze({
+  const preparation = deepFreeze({
     ...readyMaterial,
     preparationDigest: canonicalDigest(readyMaterial as StableHashValue),
   })
-  return freeze({ preparation, approval })
+  return deepFreeze({ preparation, approval })
 }
 
 function actionPreparationAuthorityScope(
@@ -344,7 +345,7 @@ function actionPreparationAuthorityScope(
     inputs: declaration.inputs.map((item) => ({ ...item }))
       .sort((left, right) => left.inputPointer.localeCompare(right.inputPointer)),
   })).sort((left, right) => String(left.declarationKey).localeCompare(String(right.declarationKey)))
-  return freeze({
+  return deepFreeze({
     declarations: normalized,
     limits,
     authorityScopeDigest: canonicalDigest({ declarations: normalized, limits } as StableHashValue),
@@ -380,7 +381,7 @@ function actionPreparationDisclosureReview(
     limits: authorityScope.limits,
   }
   const reviewDigest = canonicalDigest(reviewMaterial as StableHashValue)
-  return freeze({
+  return deepFreeze({
     reviewRef: `action-preparation-review:${reviewDigest}`,
     reviewDigest,
     ...reviewMaterial,
@@ -417,7 +418,7 @@ function actionPreparationDisclosureLimits(
     }
   }
   const maximumRecipients = businesses.size
-  return freeze({
+  return deepFreeze({
     maximumRecipients,
     maximumOperations: maximumRecipients,
     maximumExposures: maximumRecipients * exposureUnits.size,
@@ -428,10 +429,3 @@ function valid(value: string): boolean {
   return value.trim().length > 0 && value.length <= 300
 }
 
-function freeze<Value>(value: Value): Value {
-  if (value !== null && typeof value === 'object') {
-    for (const child of Object.values(value as Record<string, unknown>)) freeze(child)
-    Object.freeze(value)
-  }
-  return value
-}

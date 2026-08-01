@@ -78,7 +78,7 @@ export async function configureLocalSourceWriteSecret({
     secret: result.secret,
   })
 
-  return result
+  return { ...result, adminKey: convexConfig.adminKey }
 }
 
 async function readDotenvFiles(cwd) {

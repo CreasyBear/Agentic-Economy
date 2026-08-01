@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
 
 import { AeInquiryComposer } from '@/components/ae/inquiries/AeInquiryComposer'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
@@ -221,7 +221,7 @@ function PublicInquiryRoute() {
                 {phoneError === undefined ? null : <p id="inquiry-phone-error" role="alert" className="text-sm text-destructive">{phoneError}</p>}
               </div>
             </form>
-            <AeInquiryComposer label="What do you need?" description={`${value.body.length}/${readback.maxBodyLength} characters. Include where, when, and useful constraints.`} value={value.body} maxLength={readback.maxBodyLength} invalid={bodyError !== undefined} {...(bodyError === undefined ? {} : { errorMessage: bodyError })} disabled={!hydrated || pending} pending={pending} onChange={(body) => setValue((current) => ({ ...current, body }))} />
+            <AeInquiryComposer label="What do you need?" description={`${value.body.length}/${readback.maxBodyLength} characters. Include where, when, and useful constraints.`} value={value.body} maxLength={readback.maxBodyLength} invalid={bodyError !== undefined} {...(bodyError === undefined ? {} : { errorMessage: bodyError })} disabled={!hydrated || pending} pending={pending} onChange={(body) => setValue((current) => ({ ...current, body }))} onSubmit={() => void submitFormValue()} />
           </Card>
         </section>
 
@@ -283,10 +283,10 @@ function focusFirstPublicInquiryError(errors: readonly PublicInquiryValidationEr
 function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRouteReadback, { kind: 'unavailable' }> }) {
   return (
     <AePublicShell>
-      <main className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
+      <div className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
         <Empty className="border border-border bg-card p-5">
           <EmptyHeader>
-            <EmptyTitle>Not sent</EmptyTitle>
+            <h1 className="text-lg font-medium tracking-tight">Not sent</h1>
             <EmptyDescription>This request is not available to send right now.</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -295,7 +295,7 @@ function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRoute
             </Button>
           </EmptyContent>
         </Empty>
-      </main>
+      </div>
     </AePublicShell>
   )
 }

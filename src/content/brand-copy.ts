@@ -40,6 +40,17 @@ export const AGENT_DOOR = {
   href: '/for-agents',
 } as const
 
+/** Door 2 landing (`/for-agents`) — the agent-side expression of the one story. */
+export const AGENT_PAGE = {
+  metaTitle: 'Point your agent here | Agentic Economy',
+  metaDescription:
+    'Published businesses, priced capabilities, and callable actions your agent can read and use.',
+  eyebrow: 'For agents',
+  heading: 'Point your agent here.',
+  subhead:
+    'Published businesses, priced capabilities, callable actions. Your agent reads the same facts a person sees, and every action stays behind an approval.',
+} as const
+
 /** Door 3 — business strip on `/` (routes to /claim). */
 export const BUSINESS_DOOR = {
   heading: 'Own a business?',

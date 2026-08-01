@@ -4,6 +4,8 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/u
 import type { AgentToolDescriptor } from '@/modules/actions'
 import type { ServiceDto } from '@/modules/registry/public'
 
+const INITIAL_PROOF_COUNT = 3
+
 export function AeSupplyAgentProof({
   tools,
   services,
@@ -34,9 +36,21 @@ export function AeSupplyAgentProof({
               </EmptyHeader>
             </Empty>
           ) : (
-            <ul className="m-0 grid list-none gap-3 p-0">
-              {services.map((service) => <ServiceProofRow key={`${service.id}:${service.revision}`} service={service} />)}
-            </ul>
+            <>
+              <ul className="m-0 grid list-none gap-3 p-0">
+                {services.slice(0, INITIAL_PROOF_COUNT).map((service) => <ServiceProofRow key={`${service.id}:${service.revision}`} service={service} />)}
+              </ul>
+              {services.length > INITIAL_PROOF_COUNT ? (
+                <details className="mt-3 rounded-md border border-border">
+                  <summary className="flex min-h-11 cursor-pointer items-center px-3 font-medium text-foreground">
+                    Show {services.length - INITIAL_PROOF_COUNT} more published services
+                  </summary>
+                  <ul className="m-0 grid list-none gap-3 border-t border-border p-3">
+                    {services.slice(INITIAL_PROOF_COUNT).map((service) => <ServiceProofRow key={`${service.id}:${service.revision}`} service={service} />)}
+                  </ul>
+                </details>
+              ) : null}
+            </>
           )}
         </CardContent>
         <CardHeader className="border-t border-border p-5 pb-0">
@@ -53,29 +67,45 @@ export function AeSupplyAgentProof({
               </EmptyHeader>
             </Empty>
           ) : (
-            <ul className="m-0 grid list-none gap-3 p-0">
-              {tools.map((tool) => (
-                <li key={tool.id} className="grid gap-1 rounded-md border border-border p-3">
-                  <p className="block font-semibold text-foreground">{tool.name}</p>
-                  <p className="block text-muted-foreground">{tool.summary}</p>
-                  <details className="text-sm text-muted-foreground">
-                    <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
-                    <div className="mt-2 grid gap-1">
-                      <p className="block text-sm text-muted-foreground">{tool.boundaries.join(' ')}</p>
-                      <dl className="grid gap-1">
-                        <div><dt className="font-medium text-foreground">Action ID</dt><dd className="break-all">{tool.id}</dd></div>
-                        <div><dt className="font-medium text-foreground">Input schema</dt><dd className="break-all">{tool.inputJsonSchema === undefined ? 'Not supplied' : JSON.stringify(tool.inputJsonSchema)}</dd></div>
-                        <div><dt className="font-medium text-foreground">Output schema</dt><dd className="break-all">{tool.outputJsonSchema === undefined ? 'Not supplied' : JSON.stringify(tool.outputJsonSchema)}</dd></div>
-                      </dl>
-                    </div>
-                  </details>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="m-0 grid list-none gap-3 p-0">
+                {tools.slice(0, INITIAL_PROOF_COUNT).map((tool) => <ToolProofRow key={tool.id} tool={tool} />)}
+              </ul>
+              {tools.length > INITIAL_PROOF_COUNT ? (
+                <details className="mt-3 rounded-md border border-border">
+                  <summary className="flex min-h-11 cursor-pointer items-center px-3 font-medium text-foreground">
+                    Show {tools.length - INITIAL_PROOF_COUNT} more assistant actions
+                  </summary>
+                  <ul className="m-0 grid list-none gap-3 border-t border-border p-3">
+                    {tools.slice(INITIAL_PROOF_COUNT).map((tool) => <ToolProofRow key={tool.id} tool={tool} />)}
+                  </ul>
+                </details>
+              ) : null}
+            </>
           )}
         </CardContent>
       </Card>
     </section>
+  )
+}
+
+function ToolProofRow({ tool }: Readonly<{ tool: AgentToolDescriptor }>) {
+  return (
+    <li className="grid gap-1 rounded-md border border-border p-3">
+      <p className="block font-semibold text-foreground">{tool.name}</p>
+      <p className="block text-muted-foreground">{tool.summary}</p>
+      <details className="text-sm text-muted-foreground">
+        <summary className="flex min-h-11 cursor-pointer items-center font-medium text-foreground">Technical details</summary>
+        <div className="mt-2 grid gap-1">
+          <p className="block text-sm text-muted-foreground">{tool.boundaries.join(' ')}</p>
+          <dl className="grid gap-1">
+            <div><dt className="font-medium text-foreground">Action ID</dt><dd className="break-all">{tool.id}</dd></div>
+            <div><dt className="font-medium text-foreground">Input schema</dt><dd className="break-all">{tool.inputJsonSchema === undefined ? 'Not supplied' : JSON.stringify(tool.inputJsonSchema)}</dd></div>
+            <div><dt className="font-medium text-foreground">Output schema</dt><dd className="break-all">{tool.outputJsonSchema === undefined ? 'Not supplied' : JSON.stringify(tool.outputJsonSchema)}</dd></div>
+          </dl>
+        </div>
+      </details>
+    </li>
   )
 }
 
@@ -91,14 +121,14 @@ function ServiceProofRow({ service }: Readonly<{ service: ServiceDto }>) {
       </div>
       <p className="block text-muted-foreground">{service.summary}</p>
       <details className="text-sm text-muted-foreground">
-        <summary className="cursor-pointer font-medium text-foreground">Technical connection details</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center font-medium text-foreground">Technical connection details</summary>
         <div className="mt-2 grid gap-1">
           {service.endpoints.map((endpoint) => <div key={`${endpoint.url}:${endpoint.name}`}><span className="font-medium text-foreground">{endpoint.name}</span> · {endpoint.method ?? 'Request'} · {endpoint.url}</div>)}
         </div>
       </details>
       <div className="flex flex-wrap gap-3 text-sm">
-        <a href={service.links.business} className="underline underline-offset-4">Business details</a>
-        <a href={service.links.manifest} className="underline underline-offset-4">Published service details</a>
+        <a href={service.links.business} className="inline-flex min-h-11 items-center underline underline-offset-4">Business details</a>
+        <a href={service.links.manifest} className="inline-flex min-h-11 items-center underline underline-offset-4">Published service details</a>
       </div>
     </li>
   )

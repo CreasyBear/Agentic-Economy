@@ -1,5 +1,6 @@
 import {
   Activity,
+  Bot,
   CircleHelp,
   ClipboardList,
   Contact,
@@ -100,16 +101,20 @@ const developerNavGroups: readonly OperatorNavGroup[] = [
     items: [{ href: '/developers/discovery', label: 'Discovery', icon: ScrollText, tier: 'core' }],
   },
 ] as const
-
+/**
+ * `/` is the only discovery surface (MAP.md "one-feature product"), so nothing
+ * here offers a catalog. `/registry` stays a legacy 301 for inbound links; it is
+ * never minted internally, because routing through a redirect to reach the page
+ * we already have is a hop that only shows up as a slower, mislabelled link.
+ */
 const publicCommandDestinations: readonly OperatorCommandDestination[] = [
   { href: '/', label: 'Ask', icon: Search, tier: 'core', hint: 'Public' },
-  { href: '/registry', label: 'Browse services', icon: ScrollText, tier: 'core', hint: 'Public' },
 ] as const
 
 const operatorUtilityItems: readonly OperatorUtilityItem[] = [
   { href: '/', label: 'Ask', icon: Search },
-  { href: '/registry', label: 'Browse services', icon: ScrollText },
-  { href: '/help', label: 'Help', icon: CircleHelp },
+  { href: '/for-agents', label: 'For agents', icon: Bot },
+  { href: '/privacy/remove-business', label: 'Corrections', icon: CircleHelp },
 ] as const
 
 export const roleHomeHref: Record<OperatorRole, string> = {

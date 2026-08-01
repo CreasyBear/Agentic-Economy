@@ -1,6 +1,8 @@
 // Historical V1 Request grammar. Current Request authority is exported from public.ts.
 import { z } from 'zod'
 
+import { deepFreeze } from '@/modules/common/deep-freeze'
+
 export const CUSTOMER_REQUEST_STATES = [
   'needs_information',
   'planning',
@@ -526,8 +528,3 @@ function literalMatches(value: string | number | boolean, valueType: CapabilityV
   return false
 }
 
-function deepFreeze(value: unknown): unknown {
-  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value
-  for (const nested of Object.values(value)) deepFreeze(nested)
-  return Object.freeze(value)
-}

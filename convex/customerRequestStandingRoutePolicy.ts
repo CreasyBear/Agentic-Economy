@@ -22,6 +22,7 @@ import {
   authenticateRequestOwnerForServiceOperation,
   openCurrentRouteGeneration,
   persistRouteMandateIssue,
+  serviceAssertion,
 } from './customerRequestRouteMandate'
 import { currentRoutePlanGenerationGraphStatus } from './customerRequestV2'
 import { routeMandateIssueRecordIsValid } from './customerRequestRouteMandateIntegrity'
@@ -41,14 +42,6 @@ const issueCommand = {
   validUntil: v.number(),
   idempotencyKey: v.string(),
 }
-const serviceAssertion = v.object({
-  principalId: v.string(),
-  ownerId: v.string(),
-  credentialId: v.string(),
-  scopes: v.array(v.string()),
-  issuedAt: v.number(),
-  signature: v.string(),
-})
 const allowRepeatCommand = v.object({
   requestRef: v.string(),
   revision: v.number(),

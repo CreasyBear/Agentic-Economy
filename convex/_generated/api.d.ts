@@ -59,6 +59,7 @@ import type * as customerRequestV2PreparedAction from "../customerRequestV2Prepa
 import type * as customerRequestV2PreparedActionPorts from "../customerRequestV2PreparedActionPorts.js";
 import type * as customerRequestV2ReadPorts from "../customerRequestV2ReadPorts.js";
 import type * as customerRequestV2WritePorts from "../customerRequestV2WritePorts.js";
+import type * as decisionMaps from "../decisionMaps.js";
 import type * as demand from "../demand.js";
 import type * as devSeed from "../devSeed.js";
 import type * as devSeedStore from "../devSeedStore.js";
@@ -151,6 +152,7 @@ declare const fullApi: ApiFromModules<{
   customerRequestV2PreparedActionPorts: typeof customerRequestV2PreparedActionPorts;
   customerRequestV2ReadPorts: typeof customerRequestV2ReadPorts;
   customerRequestV2WritePorts: typeof customerRequestV2WritePorts;
+  decisionMaps: typeof decisionMaps;
   demand: typeof demand;
   devSeed: typeof devSeed;
   devSeedStore: typeof devSeedStore;

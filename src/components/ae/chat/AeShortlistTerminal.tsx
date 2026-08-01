@@ -96,9 +96,9 @@ export function AeShortlistTerminal({
         >
           Change criteria
         </Button>
-        <Button asChild variant="secondary" className="min-h-11">
-          <a href={firstBusiness?.detailUrl ?? '/registry'}>Open</a>
-        </Button>
+        {firstBusiness?.detailUrl === undefined
+          ? <Button type="button" variant="secondary" className="min-h-11" disabled>Open</Button>
+          : <Button asChild variant="secondary" className="min-h-11"><a href={firstBusiness.detailUrl}>Open</a></Button>}
         <Button type="button" variant="secondary" className="min-h-11" disabled={providers.length === 0} onClick={openExportPreview}>Copy</Button>
         {callHref === undefined
           ? <Button type="button" variant="secondary" className="min-h-11" disabled>Call</Button>

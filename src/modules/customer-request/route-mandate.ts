@@ -1,4 +1,6 @@
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
+import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { CustomerRequestRoutePlan } from './compiler'
@@ -471,9 +473,6 @@ function isDigest(value: unknown): value is string {
   return typeof value === 'string' && isCanonicalDigest(value)
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 
 function isRecordWithExactKeys<const Keys extends readonly string[]>(
   value: unknown,
@@ -488,10 +487,3 @@ function hasExactKeys(value: Readonly<Record<string, unknown>>, keys: readonly s
   return actual.length === expected.length && actual.every((key, index) => key === expected[index])
 }
 
-function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
-    Object.freeze(value)
-    for (const child of Object.values(value)) deepFreeze(child)
-  }
-  return value
-}

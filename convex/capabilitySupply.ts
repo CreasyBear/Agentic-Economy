@@ -933,10 +933,15 @@ export const readOwnerSupplyFunnel = query({
     if (owner === null) return { kind: 'not_found' as const }
     const business = (await db.query('businesses').withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id)).order('desc').take(1))[0]
     if (business === undefined) return { kind: 'not_found' as const }
-    const offeringRows = await db.query('businessOfferings').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id).eq('status', 'active')).take(50)
+    // `businessOfferings.status` is draft|published|paused|retired — there is no
+    // 'active'. Filtering on it returned nothing for every owner, so the funnel
+    // home always read "No services yet" while /owner/offerings listed the same
+    // offerings. Same selection rule as `loadOfferingSourceState` in catalog.ts.
+    const offeringRows = await db.query('businessOfferings').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id)).take(50)
     const [revisions, accessPaths, publications, capabilityOfferings, events] = await Promise.all([
       db.query('businessOfferingRevisions').withIndex('by_businessId_and_createdAt', (q) => q.eq('businessId', business._id)).take(100),
-      db.query('offeringAccessPaths').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id).eq('status', 'active')).take(100),
+      // Access-path status is draft|published|withdrawn; 'active' never matched.
+      db.query('offeringAccessPaths').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id)).take(100),
       db.query('capabilityPublications').withIndex('by_businessId_and_disposition', (q) => q.eq('businessId', business._id).eq('disposition', 'current')).take(50),
       db.query('capabilityOfferings').withIndex('by_businessId_and_status', (q) => q.eq('businessId', business._id).eq('status', 'active')).take(50),
       db.query('capabilityCallEvents').withIndex('by_businessId_and_observedAt', (q) => q.eq('businessId', business._id)).order('desc').take(50),

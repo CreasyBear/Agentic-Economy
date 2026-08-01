@@ -20,6 +20,12 @@ import type {
   RuntimeQuery,
   RuntimeReader,
 } from './source_state'
+import {
+  numberField,
+  optionalNumberField,
+  optionalStringField,
+  stringField,
+} from './inquiryRuntimeDbHelpers'
 
 const firstRequestDto = v.object({
   mode: v.union(
@@ -1670,18 +1676,6 @@ function normalizeSlug(value: string): string {
     .slice(0, 72)
 }
 
-function stringField(document: RuntimeDocument, field: string): string {
-  const value = document[field]
-  return typeof value === 'string' ? value : ''
-}
-
-function optionalStringField(
-  document: RuntimeDocument,
-  field: string,
-): string | undefined {
-  const value = document[field]
-  return typeof value === 'string' ? value : undefined
-}
 
 function stringArrayField(
   document: RuntimeDocument,
@@ -1693,18 +1687,6 @@ function stringArrayField(
     : []
 }
 
-function numberField(document: RuntimeDocument, field: string): number {
-  const value = document[field]
-  return typeof value === 'number' ? value : 0
-}
-
-function optionalNumberField(
-  document: RuntimeDocument,
-  field: string,
-): number | undefined {
-  const value = document[field]
-  return typeof value === 'number' ? value : undefined
-}
 
 function photosField(
   document: RuntimeDocument,

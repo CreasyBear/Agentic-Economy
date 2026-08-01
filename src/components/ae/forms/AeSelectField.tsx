@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import {
   Select,
   SelectContent,
@@ -43,12 +44,22 @@ export function AeSelectField({
   placeholder = 'Choose one',
   onValueChange,
 }: AeSelectFieldProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen)
+    if (!nextOpen) {
+      window.setTimeout(() => triggerRef.current?.focus(), 350)
+    }
+  }
+
   return (
     <FieldGroup>
       {name === undefined ? null : <input type="hidden" name={name} value={value} />}
       <Field {...(invalid ? { 'data-invalid': true } : {})} {...(disabled ? { 'data-disabled': true } : {})}>
-        <Select value={value} disabled={disabled} onValueChange={onValueChange}>
+        <Select value={value} open={open} disabled={disabled} onOpenChange={handleOpenChange} onValueChange={onValueChange}>
           <SelectTrigger
+            ref={triggerRef}
             id={id}
             className="min-h-11 w-full"
             {...(invalid ? { 'aria-invalid': true } : {})}

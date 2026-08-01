@@ -1,3 +1,5 @@
+import { cva } from 'class-variance-authority'
+
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -12,6 +14,9 @@ export type AeServiceRowProps = Readonly<{
   answerRank?: number
 }>
 
+const serviceRowCard = cva('grid h-full content-start gap-4 border', {
+  variants: { emphasized: { true: 'border-ring bg-card p-5', false: 'border-border bg-card p-5' } },
+})
 
 export function AeServiceRow({ service, emphasized = false, answerRank }: AeServiceRowProps) {
   const businessHref = `/${service.business.slug}`
@@ -26,11 +31,7 @@ export function AeServiceRow({ service, emphasized = false, answerRank }: AeServ
 
   return (
     <li className={emphasized ? 'h-full lg:col-span-2' : 'h-full'}>
-      <Card
-        className={emphasized
-          ? 'grid h-full content-start gap-4 border border-ring bg-card p-5'
-          : 'grid h-full content-start gap-4 border border-border bg-card p-5'}
-      >
+      <Card className={serviceRowCard({ emphasized })}>
         <div className="grid gap-1">
           {answerRank === undefined ? null : (
             <p className="block text-sm font-semibold text-muted-foreground">

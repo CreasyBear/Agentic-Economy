@@ -1,5 +1,6 @@
 import type { ActionContext, ActionSurface } from '@/modules/common/action'
 import type { SourceWriteAdmissionScope } from '@/modules/security/source-write-admission'
+import { isRecord } from '@/modules/common/is-record'
 
 import type {
   HarnessApprovalDecision,
@@ -275,6 +276,3 @@ function hasRequiredAuthority(
   return approval.authority === authority
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

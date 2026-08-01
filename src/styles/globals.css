@@ -191,20 +191,31 @@
   --shadow-inset-selected: inset 0 0 0 2px oklch(0.40 0.045 150 / 0.46);
 }
 
-:where(h1, h2, h3) {
-  text-wrap: balance;
-}
+/*
+ * Heading defaults MUST live in a cascade layer.
+ *
+ * An unlayered rule beats every layered one regardless of specificity, and
+ * Tailwind's utilities live in `@layer utilities`. Unlayered `:where(h2)`
+ * therefore overrode `className="text-sm"` on every heading in the app,
+ * rendering sidebar and card headings at display size. `:where()` keeps
+ * specificity at zero; the LAYER is what makes utilities win.
+ */
+@layer base {
+  :where(h1, h2, h3) {
+    text-wrap: balance;
+  }
 
-:where(h1) {
-  font-size: clamp(2.5rem, 6vw, 4.25rem);
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-}
+  :where(h1) {
+    font-size: clamp(2.5rem, 6vw, 4.25rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+  }
 
-:where(h2) {
-  font-size: clamp(2rem, 4vw, 2.5rem);
-  line-height: 1.12;
-  letter-spacing: -0.02em;
+  :where(h2) {
+    font-size: clamp(2rem, 4vw, 2.5rem);
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+  }
 }
 /*
  ---break---

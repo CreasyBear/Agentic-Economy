@@ -1,4 +1,5 @@
 import type { AnyAction } from '@/modules/common/action'
+import { isRecord } from '@/modules/common/is-record'
 import {
   actionToHarnessTool,
   findStrictToolSchemaViolation,
@@ -140,6 +141,3 @@ function openRouterType(value: unknown): OpenRouterSchemaProperty['type'] | unde
   return undefined
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

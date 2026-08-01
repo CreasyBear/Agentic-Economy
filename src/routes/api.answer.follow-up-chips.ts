@@ -107,16 +107,11 @@ function isCompleteAnswerSource(provider: Record<string, unknown>): provider is 
 }
 
 function jsonResponse(body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-  })
+  return Response.json(body, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 function jsonError(code: string, status: number): Response {
-  return new Response(JSON.stringify({ error: code }), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return Response.json({ error: code }, { status })
 }
 
 function withSession(response: Response, sessionId: string, setCookie: boolean, request: Request): Response {

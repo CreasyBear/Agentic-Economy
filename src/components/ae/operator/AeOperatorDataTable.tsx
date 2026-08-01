@@ -30,6 +30,7 @@ type AeOperatorDataTableProps<TData> = {
   filterColumnId?: string
   filterPlaceholder?: string
   emptyMessage?: string
+  caption?: string
   maxHeight?: string
 }
 
@@ -39,6 +40,7 @@ export function AeOperatorDataTable<TData>({
   filterColumnId,
   filterPlaceholder = 'Filter rows…',
   emptyMessage = 'No rows match this filter.',
+  caption = 'Operator data',
   maxHeight = 'min(70vh, 40rem)',
 }: AeOperatorDataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
@@ -80,6 +82,7 @@ export function AeOperatorDataTable<TData>({
       ) : null}
       <div className="overflow-auto rounded-md border border-border" style={{ maxHeight }}>
         <Table>
+          <caption className="sr-only">{caption}</caption>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>

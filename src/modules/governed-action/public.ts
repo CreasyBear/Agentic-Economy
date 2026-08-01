@@ -1,3 +1,4 @@
+import { base64Codec } from '@/modules/common/base64-codec'
 import { sha256 } from '@noble/hashes/sha2'
 import { bytesToHex } from '@noble/hashes/utils'
 
@@ -76,7 +77,7 @@ export function encodeGovernedAction(
   return {
     kind: 'encoded',
     canonicalBytes,
-    canonicalBytesBase64: bytesToBase64(canonicalBytes),
+    canonicalBytesBase64: base64Codec.toBase64(canonicalBytes),
     digest: `sha256:${bytesToHex(sha256(canonicalBytes))}`,
   }
 }
@@ -107,18 +108,4 @@ export function verifyGovernedActionBytes(canonicalBytes: Uint8Array, expectedDi
   return difference === 0
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-  let result = ''
-  for (let index = 0; index < bytes.length; index += 3) {
-    const first = bytes[index] ?? 0
-    const second = bytes[index + 1] ?? 0
-    const third = bytes[index + 2] ?? 0
-    const block = (first << 16) | (second << 8) | third
-    result += alphabet[(block >>> 18) & 63]
-    result += alphabet[(block >>> 12) & 63]
-    result += index + 1 < bytes.length ? alphabet[(block >>> 6) & 63] : '='
-    result += index + 2 < bytes.length ? alphabet[block & 63] : '='
-  }
-  return result
-}
+

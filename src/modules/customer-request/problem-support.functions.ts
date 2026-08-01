@@ -31,6 +31,7 @@ const supportProblemListSchema = z.union([
     reason: z.enum(['missing_membership', 'inactive_membership', 'action_not_allowed']),
     rows: z.array(z.never()),
   }),
+  z.strictObject({ kind: z.literal('unavailable'), rows: z.array(z.never()) }),
 ])
 
 const supportProblemExportSchema = z.union([
@@ -158,9 +159,13 @@ const exportSourceAction = sourceAction<{ reportRef: string }, SupportProblemExp
 )
 
 export const readSupportProblemsServer = createServerFn()
-  .handler(async () => supportProblemListSchema.parse(
-    await callSourceAction(listSourceAction, { limit: 50 }),
-  ))
+  .handler(async (): Promise<SupportProblemList> => {
+    try {
+      return supportProblemListSchema.parse(await callSourceAction(listSourceAction, { limit: 50 }))
+    } catch {
+      return { kind: 'unavailable', rows: [] }
+    }
+  })
 
 export const updateSupportProblemServer = createServerFn({ method: 'POST' })
   .validator((data) => updateInputSchema.parse(data))

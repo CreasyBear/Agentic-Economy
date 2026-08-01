@@ -44,6 +44,7 @@ const businessProblemSchema = z.union([
       'sharing_not_authorized',
     ]),
   }),
+  z.strictObject({ kind: z.literal('unavailable') }),
 ])
 
 const businessProblemStatementSchema = z.union([
@@ -99,9 +100,13 @@ const recordSourceAction = sourceAction<BusinessProblemStatementInput, BusinessP
 
 export const readBusinessProblemServer = createServerFn()
   .validator((data) => readInputSchema.parse(data))
-  .handler(async ({ data }) => businessProblemSchema.parse(
-    await callSourceAction(readSourceAction, data),
-  ))
+  .handler(async ({ data }): Promise<BusinessProblem> => {
+    try {
+      return businessProblemSchema.parse(await callSourceAction(readSourceAction, data))
+    } catch {
+      return { kind: 'unavailable' }
+    }
+  })
 
 export const recordBusinessProblemStatementServer = createServerFn({ method: 'POST' })
   .validator((data) => statementInputSchema.parse(data))

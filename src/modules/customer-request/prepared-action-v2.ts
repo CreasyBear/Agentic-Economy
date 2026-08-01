@@ -11,6 +11,7 @@ import type {
   CapabilityOfferingRegistration,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { ActionPreparationLineage } from './action-preparation'
@@ -589,10 +590,3 @@ function cloneLineage(lineage: ActionPreparationLineage): ActionPreparationLinea
   return { ...lineage, contractRef: { ...lineage.contractRef } }
 }
 
-function deepFreeze<Value>(value: Value): Value {
-  if (value !== null && typeof value === 'object') {
-    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child)
-    Object.freeze(value)
-  }
-  return value
-}

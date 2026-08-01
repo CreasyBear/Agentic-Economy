@@ -1,5 +1,6 @@
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
 import { isLegacyReferenceableInvocationOutcome } from '@/modules/actions/legacy-invocation-result-compatibility'
 import type {
   ActionInvocationTracer,
@@ -388,7 +389,7 @@ export function createDurableActionInvocationTracer<Input, Result extends Action
           current.owner.callerRef !== input.actor.callerRef ||
           current.owner.principalRef !== input.actor.principalRef
         ) return { kind: 'refused', code: 'cross_principal_refused', view: current }
-        if (JSON.stringify(current.origin) !== JSON.stringify(input.origin)) {
+        if (stableStringify(current.origin) !== stableStringify(input.origin)) {
           return { kind: 'refused', code: 'cross_origin_refused', view: current }
         }
         return prior.commandDigest === canonicalDigest(input.evidence)

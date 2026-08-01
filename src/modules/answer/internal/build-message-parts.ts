@@ -22,7 +22,7 @@ export type AnswerMessagePart =
       providers: readonly AnswerSource[]
       fields?: readonly AnswerCompareField[]
     }
-  | { kind: 'recovery-prompts'; title?: string; prompts: readonly { label: string; query: string }[]; links?: readonly { label: string; href: '/claim' | '/registry' }[] }
+  | { kind: 'recovery-prompts'; title?: string; prompts: readonly { label: string; query: string }[]; links?: readonly { label: string; href: '/claim' }[] }
   | { kind: 'location-map'; label: string; placeQuery: string }
   | { kind: 'prose'; block: 'summary'; text: string }
   | { kind: 'what-to-do-now'; text: string; compact?: boolean }

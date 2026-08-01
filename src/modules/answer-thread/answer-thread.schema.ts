@@ -177,6 +177,7 @@ export type PublicThreadTurn = {
   artifacts: readonly AnswerArtifact[]
   oneLine: string
   layoutProfile?: AnswerLayoutProfile
+  decisionMapRevision?: number
   answerCheckSummary?: PublicAnswerCheckSummary
   timing?: AeSearchContext['timing']
   timingDate?: string
@@ -232,4 +233,5 @@ export type FrozenTurnProse = {
   nextStep: string
   compactLayout?: boolean
   layoutProfile?: AnswerLayoutProfile
+  decisionMapRevision?: number
 }

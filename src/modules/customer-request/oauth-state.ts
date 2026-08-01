@@ -1,3 +1,7 @@
+import { customAlphabet } from 'nanoid'
+
+import { base64Codec } from '@/modules/common/base64-codec'
+
 import {
   CUSTOMER_REQUEST_AGENT_SCOPE,
   CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES,
@@ -132,21 +136,20 @@ export function normalizeRequestedScopes(scopeText: string | null | undefined): 
 
 export async function hashOAuthValue(value: string): Promise<string> {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
-  return toBase64Url(new Uint8Array(bytes))
+  return base64Codec.toBase64Url(new Uint8Array(bytes))
 }
 
 export function createOpaqueOAuthValue(bytes = 32): string {
   const value = new Uint8Array(bytes)
   crypto.getRandomValues(value)
-  return toBase64Url(value)
+  return base64Codec.toBase64Url(value)
 }
 
+const userCodeAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+const generateUserCode = customAlphabet(userCodeAlphabet, 8)
+
 export function createUserCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  const bytes = new Uint8Array(8)
-  crypto.getRandomValues(bytes)
-  let value = ''
-  for (const byte of bytes) value += alphabet[byte % alphabet.length]
+  const value = generateUserCode()
   return `${value.slice(0, 4)}-${value.slice(4)}`
 }
 
@@ -384,8 +387,3 @@ function pendingGrant(grant: CustomerRequestAgentOAuthGrant | null, now: number)
 }
 
 
-function toBase64Url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '')
-}

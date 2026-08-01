@@ -36,6 +36,7 @@ export function AeConfirmDialog({
   const titleId = useId()
   const descriptionId = useId()
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const openerRef = useRef<HTMLElement | null>(null)
 
   function handleOpenChange(nextOpen: boolean) {
     if (pending && !nextOpen) {
@@ -61,7 +62,14 @@ export function AeConfirmDialog({
         showCloseButton={false}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
+          const activeElement = document.activeElement
+          openerRef.current = activeElement instanceof HTMLElement ? activeElement : null
           cancelRef.current?.focus()
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          openerRef.current?.focus()
+          openerRef.current = null
         }}
         onEscapeKeyDown={(event) => {
           if (pending) {

@@ -20,6 +20,7 @@ export const Route = createFileRoute('/_operator/owner/supply/$offeringRef')({
     return { supply, offerings, source }
   },
   head: () => ({ meta: [{ title: 'Get your service ready | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  component: OwnerSupplyDetailRoute,
 })
 
 function OwnerSupplyDetailRoute() {

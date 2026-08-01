@@ -76,22 +76,24 @@ function ClaimSuccessRoute() {
       />
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
         <Card className="bg-brand p-6 text-on-brand">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
               <div className="grid gap-1">
                 <p className="block text-lg font-semibold text-on-brand">Your page is discoverable now.</p>
                 <p className="block text-on-brand/85">Share the link, or open it to see what customers and their assistants will read.</p>
               </div>
             </div>
-            <AeCopyPublicUrlButton slug={catalog.slug} />
+            <div className="flex flex-wrap gap-2">
+            <AeCopyPublicUrlButton slug={catalog.slug} variant="secondary" statusClassName="text-on-brand" />
             <Button asChild variant="secondary">
               <a href={`/${catalog.slug}`}><ExternalLinkIcon aria-hidden="true" />View public page</a>
             </Button>
+            </div>
           </div>
         </Card>
         <Card className="grid gap-4 p-5">
           <div className="grid gap-1.5">
-            <p className="block text-lg font-semibold text-foreground">What is live</p>
+            <h2 className="text-lg font-semibold text-foreground">What is live</h2>
             <p className="block text-muted-foreground">Customers can now read these details on the public service page.</p>
           </div>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">

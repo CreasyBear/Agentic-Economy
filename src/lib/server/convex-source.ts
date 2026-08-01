@@ -86,19 +86,26 @@ export async function createAuthenticatedConvexClient(
   const env = options.env ?? process.env
   const convexUrl = readRequiredConvexUrl(env)
   const localAdminKey = env.CONVEX_SELF_HOSTED_ADMIN_KEY?.trim()
-  if (isLocalE2EAuthBypassEnabled() && localAdminKey !== undefined && localAdminKey.length > 0) {
+  if (isLocalE2EAuthBypassEnabled()) {
+    if (localAdminKey === undefined || localAdminKey.length === 0) {
+      throw new ConvexSourceError('missing_auth', 'Local source credentials are unavailable.', 503)
+    }
     const client = new ConvexHttpClient(convexUrl, {
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
       ...(options.skipConvexDeploymentUrlCheck === undefined
         ? {}
         : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
     })
-    client.setAdminAuth(localAdminKey, {
+    const setAdminAuth: unknown = Reflect.get(client, 'setAdminAuth')
+    if (typeof setAdminAuth !== 'function') {
+      throw new ConvexSourceError('missing_auth', 'Local source credentials are unsupported by this Convex client.', 503)
+    }
+    Reflect.apply(setAdminAuth, client, [localAdminKey, {
       issuer: 'https://convex.test',
       subject: 'dev-seed-owner-session',
       tokenIdentifier: 'https://convex.test|dev-seed-owner-session',
       name: 'Dev Seed Owner',
-    })
+    }])
     return client
   }
   const authObject = options.authObject ?? (await auth())

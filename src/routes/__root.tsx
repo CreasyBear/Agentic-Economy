@@ -51,9 +51,36 @@ function RootComponent() {
   )
 }
 
+/**
+ * One global appearance for every Clerk component. Clerk merges component-level
+ * `appearance` over this, so sign-in and sign-up cannot drift apart, and the
+ * 44px interaction floor AE enforces everywhere applies to Clerk's own controls.
+ * Docs: https://clerk.com/docs/tanstack-react-start/guides/customizing-clerk/appearance-prop/overview
+ */
+const clerkAppearance = {
+  variables: {
+    fontSize: '1.125rem',
+    spacing: '1rem',
+    borderRadius: '0.75rem',
+  },
+  elements: {
+    formFieldRow__password: 'aria-hidden:!hidden',
+    identityPreviewEditButton: '!min-h-11 !min-w-11',
+    socialButtonsBlockButton: 'min-h-11',
+    formButtonPrimary: 'min-h-11',
+    formFieldInput: 'min-h-11',
+    formFieldInputShowPasswordButton: 'min-h-11 min-w-11',
+  },
+  options: {
+    unsafe_disableDevelopmentModeWarnings: true,
+  },
+}
+
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const content = isLocalE2EAuthBypassEnabled() || !requiresClerkProvider(pathname) ? children : <ClerkProvider>{children}</ClerkProvider>
+  const content = isLocalE2EAuthBypassEnabled() || !requiresClerkProvider(pathname)
+    ? children
+    : <ClerkProvider appearance={clerkAppearance}>{children}</ClerkProvider>
 
   return (
     <html lang="en">

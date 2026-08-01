@@ -39,3 +39,28 @@ code. Includes generation/revision fencing alignment with the frozen spine exit 
   - Donors settle: IDs + hierarchy, status-enum shape, date fields, estimate + priority, directional
     relations. Donors cannot settle: cost semantics, authority, evidence/freshness, fog lifecycle,
     rollup algebra + generation fences.
+
+## Named adopted libraries (adopt-first rule)
+
+Source: [donor hunt](../../research/2026-08-01-framework-kernel-donor-hunt.md), 2026-08-01.
+
+- **ADOPT** `graphology` + `graphology-dag` — `hasCycle`, `willCreateCycle`, `topologicalSort`,
+  `topologicalGenerations` for tree/dependency validation. No CPM in the Graphology ecosystem.
+- **ADOPT** `@flatten-js/interval-tree` — resource-exclusivity conflict detection
+  (`insert`/`search`/`intersect_any`). Closed intervals: normalize AE bookings to half-open.
+- **INSTALL (not yet installed — T31 recommended it, nobody added it)** `date-fns` v4
+  (`addBusinessDays`, `differenceInBusinessDays`, `areIntervalsOverlapping`, `eachDayOfInterval`);
+  add `@date-fns/tz` only if calendars go DST-aware. Neither supplies holidays or custom workweeks.
+- **PORT** critical-path math (ES/EF/LS/LF, total/free slack, `isCritical`) from
+  `@pyraxi/cpm-engine` `packages/engine/src/schedule.ts` (MIT) or GanttProject's
+  `CriticalPathAlgorithmImpl.java` (GPLv3, algorithm only); working calendars from
+  `@bluemillstudio/gantt` `src/store/calendar.ts` (MIT).
+- **VENDOR** Task Master AI (MIT) `find-next-task.js` frontier selection and
+  `dependency-manager.js` (`isCircularDependency`, `validateTaskDependencies`); Backlog.md (MIT)
+  `src/types/index.ts` node-field shape — its dependency validator has no cycle check, do not copy.
+
+**Recorded adoption-search failure (legitimate hand-roll):** the five-dimension rollup *contract* —
+timing uncertainty/fog envelopes, cost sum + committed/estimate envelope, resource over-allocation
+policy, effort attention-budget, scope-coverage denominator with fog — plus authority/mandate refs,
+evidence refs and quote freshness. No package computes all five; no tracker models cost envelopes,
+fog lifecycle or generation fences.

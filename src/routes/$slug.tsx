@@ -2,7 +2,7 @@ import { Outlet, createFileRoute, notFound, useLocation, type NotFoundRouteProps
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
 
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -183,7 +183,7 @@ function ProviderListingError() {
       <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
         <Empty className="border border-border bg-card p-5">
           <EmptyHeader>
-            <EmptyTitle>This listing didn't load</EmptyTitle>
+            <h1 className="text-lg font-medium tracking-tight">This listing didn't load</h1>
             <EmptyDescription>Try the page again, or return to services to compare listed businesses.</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -212,7 +212,7 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
         {reason === 'not_public' ? (
           <Empty className="border border-border bg-card p-5">
             <EmptyHeader>
-              <EmptyTitle>Business page unavailable</EmptyTitle>
+              <h1 className="text-lg font-medium tracking-tight">Business page unavailable</h1>
               <EmptyDescription>This page is not visible right now. The business may need to claim or review it.</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
@@ -225,7 +225,7 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
         ) : (
           <Empty className="border border-border bg-card p-5">
             <EmptyHeader>
-              <EmptyTitle>No business page at this address</EmptyTitle>
+              <h1 className="text-lg font-medium tracking-tight">No business page at this address</h1>
               <EmptyDescription>Nothing is published here. Check the address, or browse the businesses that are listed.</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>

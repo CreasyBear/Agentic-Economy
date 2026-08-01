@@ -12,6 +12,7 @@ import { harnessTables } from '../src/modules/harness/internal/convex-schema'
 import { inquiryTables } from '../src/modules/inquiries/internal/convex-schema'
 import { answerThreadTables } from '../src/modules/answer-thread/internal/convex-schema'
 import { enginePlanTables } from '../src/modules/plan-proposal/internal/convex-schema'
+import { decisionMapTables } from '../src/modules/decision-map/internal/convex-schema'
 import { notificationOutboxTables } from '../src/modules/notification-outbox/internal/schema'
 import { observabilityTables } from '../src/modules/observability/internal/schema'
 import { registryTables } from '../src/modules/registry/internal/schema'
@@ -25,6 +26,7 @@ export default defineSchema({
   ...actionInvocationTables,
   ...answerThreadTables,
   ...enginePlanTables,
+  ...decisionMapTables,
   ...businessTables,
   ...catalogTables,
   ...capabilityContractRegistryTables,

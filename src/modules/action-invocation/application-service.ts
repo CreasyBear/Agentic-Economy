@@ -1,4 +1,5 @@
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { stableStringify } from '@/modules/common/stable-hash'
 
 import type {
   ActionInvocationOrigin,
@@ -436,7 +437,7 @@ function assertProjectionBinding(
 ): void {
   if (identity.owner.callerRef !== actor.callerRef
     || identity.owner.principalRef !== actor.principalRef
-    || JSON.stringify(identity.origin) !== JSON.stringify(origin)) {
+    || stableStringify(identity.origin) !== stableStringify(origin)) {
     throw new Error('invocation_projection_host_binding_invalid')
   }
 }

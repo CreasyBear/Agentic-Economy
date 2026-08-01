@@ -42,7 +42,7 @@ const issueCommand = {
   expiresAt: v.number(),
   idempotencyKey: v.string(),
 }
-const serviceAssertion = v.object({
+export const serviceAssertion = v.object({
   principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
   issuedAt: v.number(), signature: v.string(),
 })

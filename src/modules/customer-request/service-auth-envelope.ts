@@ -1,3 +1,4 @@
+import { base64Codec } from '@/modules/common/base64-codec'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -24,7 +25,7 @@ export async function createCustomerRequestServiceAssertion(input: Readonly<{
 }>): Promise<CustomerRequestServiceAssertion> {
   const material = assertionMaterial(input.operation, input.command, input.principal, input.issuedAt)
   const signature = await crypto.subtle.sign('HMAC', await hmacKey(input.key, ['sign']), new TextEncoder().encode(material))
-  return Object.freeze({ ...input.principal, scopes: Object.freeze([...input.principal.scopes].sort()), issuedAt: input.issuedAt, signature: toBase64Url(new Uint8Array(signature)) })
+  return Object.freeze({ ...input.principal, scopes: Object.freeze([...input.principal.scopes].sort()), issuedAt: input.issuedAt, signature: base64Codec.toBase64Url(new Uint8Array(signature)) })
 }
 
 export async function verifyCustomerRequestServiceAssertion(input: Readonly<{
@@ -73,16 +74,10 @@ async function hmacKey(value: string, usages: Array<'sign' | 'verify'>) {
   return await crypto.subtle.importKey('raw', new TextEncoder().encode(value), { name: 'HMAC', hash: 'SHA-256' }, false, usages)
 }
 
-function toBase64Url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
-}
 
 function fromBase64Url(value: string): Uint8Array | undefined {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) return undefined
   try {
-    const binary = atob(value.replaceAll('-', '+').replaceAll('_', '/'))
-    return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    return base64Codec.fromBase64Url(value)
   } catch { return undefined }
 }

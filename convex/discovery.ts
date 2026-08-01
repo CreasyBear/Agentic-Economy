@@ -15,6 +15,13 @@ import { resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeMutationCtx, runtimeReader } from './source_state'
 import type { RuntimeDocument, RuntimeMutationCtx, RuntimeReader, RuntimeWriter } from './source_state'
+import {
+  isRecord,
+  numberField,
+  optionalNumberField,
+  optionalStringField,
+  stringField,
+} from './inquiryRuntimeDbHelpers'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { BusinessMutationActor } from '../src/modules/business/public'
 import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '../src/modules/customer-request/public-comprehension'
@@ -1173,7 +1180,10 @@ function healthStatus(
 }
 
 async function indexStatusForBusiness(db: RuntimeReader, businessId: string): Promise<PublicCatalog['indexStatus']> {
-  const statuses = await db.query('indexStatus').collect()
+  const statuses = await db
+    .query('indexStatus')
+    .withIndex('by_target_status', (query) => query.eq('targetType', 'business').eq('targetRef', businessId))
+    .collect()
   const status = statuses.find(
     (candidate) => stringField(candidate, 'targetType') === 'business' && stringField(candidate, 'targetRef') === businessId
   )
@@ -1474,34 +1484,12 @@ function safePublicText(value: string): string {
     .slice(0, 500)
 }
 
-function stringField(document: RuntimeDocument, field: string): string {
-  const value = document[field]
-  return typeof value === 'string' ? value : ''
-}
-
-function optionalStringField(document: RuntimeDocument, field: string): string | undefined {
-  const value = document[field]
-  return typeof value === 'string' ? value : undefined
-}
-
-function numberField(document: RuntimeDocument, field: string): number {
-  const value = document[field]
-  return typeof value === 'number' ? value : 0
-}
-
-function optionalNumberField(document: RuntimeDocument, field: string): number | undefined {
-  const value = document[field]
-  return typeof value === 'number' ? value : undefined
-}
 
 function stringArrayField(document: RuntimeDocument, field: string): string[] {
   const value = document[field]
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function stringFromRecord(record: Record<string, unknown>, field: string): string {
   const value = record[field]

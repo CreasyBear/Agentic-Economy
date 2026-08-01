@@ -1,4 +1,5 @@
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
+import { AeDecisionMapReadback } from '@/components/ae/decision-map/AeDecisionMapReadback'
 import { Message, MessageContent } from '@/components/ai-elements/message'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
@@ -11,6 +12,16 @@ export type AeThreadTurnReplaySectionProps = ThreadTurnViewModel & {
 }
 
 export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }: AeThreadTurnReplaySectionProps) {
+  const fallback = (
+    <AeGenerativeAnswer
+      artifacts={turn.artifacts}
+      query={turn.query}
+      oneLineFallback={turn.oneLine}
+      phase="complete"
+      {...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile })}
+      {...(threadId === undefined ? {} : { threadId })}
+    />
+  )
   return (
     <div className="flex flex-col gap-2">
       <AeThreadTurnQueryHeader query={turn.query} intent={turn.intent} seq={turn.seq} />
@@ -29,14 +40,7 @@ export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }:
             checkSummary={turn.answerCheckSummary}
             query={turn.query}
           />
-          <AeGenerativeAnswer
-            artifacts={turn.artifacts}
-            query={turn.query}
-            oneLineFallback={turn.oneLine}
-            phase="complete"
-            {...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile })}
-            {...(threadId === undefined ? {} : { threadId })}
-          />
+          {threadId === undefined || turn.decisionMapRevision === undefined ? fallback : <AeDecisionMapReadback threadId={threadId} fallback={fallback} />}
         </MessageContent>
       </Message>
     </div>

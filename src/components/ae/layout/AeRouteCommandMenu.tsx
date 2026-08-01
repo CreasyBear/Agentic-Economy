@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import type { LucideIcon } from 'lucide-react'
-import { ArrowUpRightIcon, Building2Icon, FileQuestionIcon, HelpCircleIcon, HomeIcon, SearchIcon, StoreIcon } from 'lucide-react'
+import { ArrowUpRightIcon, BotIcon, Building2Icon, FileQuestionIcon, HomeIcon, SearchIcon, StoreIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -39,8 +39,9 @@ export function AeRouteCommandMenu({
   mobile?: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const triggerRef = useRef<HTMLButtonElement>(null)
   const commandContentId = useId()
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const previousOpenRef = useRef(false)
   const router = useRouter()
   const groupedDestinations = useMemo(() => {
     const groups = new Map<string, AeCommandDestination[]>()
@@ -55,25 +56,55 @@ export function AeRouteCommandMenu({
     return [...groups.entries()]
   }, [destinations])
 
+  function focusTrigger() {
+    window.setTimeout(() => {
+      const currentTrigger = triggerRef.current
+      if (currentTrigger !== null) {
+        const styles = getComputedStyle(currentTrigger)
+        if (currentTrigger.isConnected && styles.display !== 'none' && styles.visibility !== 'hidden') {
+          currentTrigger.focus()
+          return
+        }
+      }
+
+      const visibleTrigger = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-route-command-trigger]')).find((candidate) => {
+        const styles = getComputedStyle(candidate)
+        return candidate.isConnected && styles.display !== 'none' && styles.visibility !== 'hidden'
+      })
+      if (visibleTrigger !== undefined) {
+        visibleTrigger.focus()
+        return
+      }
+
+      const sidebarTrigger = document.querySelector<HTMLButtonElement>('[data-sidebar="trigger"]')
+      if (sidebarTrigger !== null) {
+        sidebarTrigger.focus()
+      }
+    }, 0)
+  }
+
+  useEffect(() => {
+    if (previousOpenRef.current && !open) {
+      focusTrigger()
+    }
+    previousOpenRef.current = open
+  }, [open])
+
   function closeRouteMenu() {
     setOpen(false)
-    window.requestAnimationFrame(() => triggerRef.current?.focus())
+    focusTrigger()
   }
-
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen)
-    if (!nextOpen) {
-      window.requestAnimationFrame(() => triggerRef.current?.focus())
-    }
   }
-
   function navigateToDestination(destination: AeCommandDestination) {
-    void router.navigate({
+    const navigation = router.navigate({
       to: destination.href,
       ...(destination.params === undefined ? {} : { params: destination.params }),
       ...(destination.search === undefined ? {} : { search: destination.search }),
     })
     closeRouteMenu()
+    void navigation.then(focusTrigger, focusTrigger)
   }
 
   useEffect(() => {
@@ -88,6 +119,7 @@ export function AeRouteCommandMenu({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+
   return (
     <>
       <Button
@@ -96,9 +128,9 @@ export function AeRouteCommandMenu({
         variant="secondary"
         size={mobile ? 'icon' : 'sm'}
         aria-label={mobile ? 'Open route console' : label}
-        aria-haspopup="dialog"
         aria-expanded={open}
-        aria-controls={commandContentId}
+        {...(open ? { 'aria-controls': commandContentId } : {})}
+        data-route-command-trigger
         {...(triggerClassName === undefined
           ? (mobile ? { className: 'min-h-11 min-w-11' } : {})
           : { className: triggerClassName })}
@@ -112,34 +144,36 @@ export function AeRouteCommandMenu({
           </>
         )}
       </Button>
-      <CommandDialog
-        open={open}
-        onOpenChange={handleOpenChange}
-        title="Route console"
-        description="Search pages, services, and actions."
-        className="w-[min(42rem,calc(100vw-2rem))]"
-      >
-        <div id={commandContentId}>
-          <CommandInput placeholder="Search pages, services, and actions..." />
-          <CommandList>
-            <CommandEmpty>No matching route.</CommandEmpty>
-            {groupedDestinations.map(([group, groupDestinations]) => (
-              <CommandGroup key={group} heading={group}>
-                {groupDestinations.map((destination) => (
-                  <CommandItem
-                    key={destination.id}
-                    value={[destination.label, destination.href, ...(destination.keywords ?? [])].join(' ')}
-                    onSelect={() => navigateToDestination(destination)}
-                  >
-                    <RouteCommandItemContent destination={destination} />
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
-          </CommandList>
-        </div>
-        <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">Press Escape to close.</div>
-      </CommandDialog>
+      {open ? (
+        <CommandDialog
+          open={open}
+          onOpenChange={handleOpenChange}
+          title="Route console"
+          description="Search pages, services, and actions."
+          className="w-[min(42rem,calc(100vw-2rem))]"
+        >
+          <div id={commandContentId}>
+            <CommandInput placeholder="Search pages, services, and actions..." />
+            <CommandList>
+              <CommandEmpty>No matching route.</CommandEmpty>
+              {groupedDestinations.map(([group, groupDestinations]) => (
+                <CommandGroup key={group} heading={group}>
+                  {groupDestinations.map((destination) => (
+                    <CommandItem
+                      key={destination.id}
+                      value={[destination.label, destination.href, ...(destination.keywords ?? [])].join(' ')}
+                      onSelect={() => navigateToDestination(destination)}
+                    >
+                      <RouteCommandItemContent destination={destination} />
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ))}
+            </CommandList>
+          </div>
+          <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">Press Escape to close.</div>
+        </CommandDialog>
+      ) : null}
     </>
   )
 }
@@ -210,15 +244,6 @@ const publicDestinations = [
     keywords: ['question', 'search', 'answer'],
   },
   {
-    id: 'registry',
-    label: 'Browse service pages',
-    href: '/registry?q=&limit=10',
-    group: 'Discovery',
-    hint: 'Catalog',
-    icon: StoreIcon,
-    keywords: ['businesses', 'providers', 'catalog'],
-  },
-  {
     id: 'claim',
     label: 'List or claim a business',
     href: '/claim',
@@ -237,12 +262,12 @@ const publicDestinations = [
     keywords: ['remove', 'stale', 'wrong'],
   },
   {
-    id: 'help',
-    label: 'Help and boundaries',
-    href: '/help',
-    group: 'Trust',
-    hint: 'Help',
-    icon: HelpCircleIcon,
-    keywords: ['contact', 'safe', 'support'],
+    id: 'for-agents',
+    label: 'Point an agent at AE',
+    href: '/for-agents',
+    group: 'Discovery',
+    hint: 'Agents',
+    icon: BotIcon,
+    keywords: ['assistant', 'mcp', 'llms.txt', 'api'],
   },
 ] satisfies readonly AeCommandDestination[]

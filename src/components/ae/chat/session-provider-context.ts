@@ -24,12 +24,9 @@ export function activeSelectedProviderForTurns(
 }
 
 export function selectedProviderFromArtifacts(artifacts: readonly AnswerArtifact[]): AnswerSource | undefined {
-  for (const artifact of [...artifacts].reverse()) {
-    if (artifact.kind === 'selected-provider') {
-      return artifact.provider
-    }
-  }
-  return undefined
+  return artifacts.findLast(
+    (artifact): artifact is Extract<AnswerArtifact, { kind: 'selected-provider' }> => artifact.kind === 'selected-provider',
+  )?.provider
 }
 
 export function listedProvidersFromArtifacts(artifacts: readonly AnswerArtifact[]): AnswerSource[] {
@@ -71,11 +68,6 @@ export function providerHasInquiryPath(provider: AnswerSource): boolean {
 }
 
 function latestSelectedProvider(turns: readonly PublicThreadTurn[]): AnswerSource | undefined {
-  for (const turn of [...turns].reverse()) {
-    const selectedProvider = selectedProviderFromArtifacts(turn.artifacts)
-    if (selectedProvider !== undefined) {
-      return selectedProvider
-    }
-  }
-  return undefined
+  const turn = turns.findLast((candidate) => selectedProviderFromArtifacts(candidate.artifacts) !== undefined)
+  return turn === undefined ? undefined : selectedProviderFromArtifacts(turn.artifacts)
 }

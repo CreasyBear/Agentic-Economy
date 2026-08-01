@@ -110,12 +110,13 @@ export function AeFindMyBusiness({
                   onChange={(event) => setQuery(event.currentTarget.value)}
                   placeholder="Joondalup Emergency Plumbing"
                   disabled={pending}
+                  aria-describedby="claim-business-name-description"
                 />
                 <InputGroupAddon align="inline-start">
                   <SearchIcon aria-hidden="true" />
                 </InputGroupAddon>
               </InputGroup>
-              <FieldDescription>Use the name customers recognise.</FieldDescription>
+              <FieldDescription id="claim-business-name-description">Use the name customers recognise.</FieldDescription>
             </Field>
             <Button type="submit" variant="default" className="min-h-11" disabled={pending || trimmedQuery.length === 0}>
               {pending ? 'Searching' : 'Find my business'}

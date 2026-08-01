@@ -9,6 +9,10 @@ export type LocalSourceWriteSecretResult = {
   persistPath?: string
 }
 
+export type ConfiguredLocalSourceWriteSecretResult = LocalSourceWriteSecretResult & {
+  adminKey: string
+}
+
 export declare function resolveLocalSourceWriteSecret(input?: {
   env?: Record<string, string | undefined>
   dotenvFiles?: readonly DotenvFile[]
@@ -23,4 +27,4 @@ export declare function configureLocalSourceWriteSecret(input?: {
   cwd?: string
   env?: Record<string, string | undefined>
   runEnvSet?: (input: { cwd: string; url: string; adminKey: string; secret: string }) => Promise<void>
-}): Promise<LocalSourceWriteSecretResult>
+}): Promise<ConfiguredLocalSourceWriteSecretResult>

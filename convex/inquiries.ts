@@ -12,6 +12,7 @@ import {
   collect,
   stringField,
 } from './inquiryRuntimeDbHelpers'
+import { csrfArgs } from './notificationOutbox'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { literalUnion } from '../src/modules/common/convex-literals'
@@ -77,12 +78,6 @@ const inquiryOrigin = v.object({
   threadId: v.string(),
 })
 
-const csrfArgs = {
-  csrfToken: v.optional(v.string()),
-  csrfCookie: v.optional(v.string()),
-  origin: v.optional(v.string()),
-  ...sourceWriteArgs,
-} as const
 
 const admissionBlocker = v.union(
   v.object({ kind: v.literal('not_published'), ownerLabel: v.literal('Publish this business page') }),

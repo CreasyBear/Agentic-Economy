@@ -39,9 +39,11 @@ Inventory sources: `history://HumanCopyInventory`, `history://MachineCopyInvento
 | Claim funnel | `claim.tsx`, `claim.success.tsx`, `for-providers.tsx` | business-door voice; align on next pass |
 | Listing + inquiry | `$slug.tsx`, `$slug.inquiry.tsx` | surface prose |
 | Global SEO | `__root.tsx:34-37` | brand-weighted, flagged (below) |
+| `/for-agents` hero + meta | `src/routes/for-agents.tsx` | YES → `brand-copy.ts` (`AGENT_PAGE`) |
 
-`/for-agents` is a 301 → `/` (no copy of its own); the agent door currently lands on home. Real agent
-surface is `/llms.txt` + `/SKILL.md` + MCP (generated, exactness class).
+`/for-agents` is the Door 2 landing page: brand-core hero in `brand-copy.ts` (`AGENT_PAGE`), and the
+body hands over the generated agent surfaces (`/llms.txt`, `/SKILL.md`, `/api/businesses`,
+`/.well-known/ucp`, MCP) rather than restating them. Those remain exactness class.
 
 ## Flagged misalignments (managed backlog — fix deliberately, not en masse)
 

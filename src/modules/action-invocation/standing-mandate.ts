@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deepFreeze } from '@/modules/common/deep-freeze'
 import {
   verifiedGrantMatchesMandate,
   type VerifiedStandingMandateGrant,
@@ -705,10 +706,3 @@ function allowedActions(mandate: StandingMandate) {
   return mandate.scope.actions ?? [mandate.scope.action]
 }
 
-function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === 'object') {
-    Object.freeze(value)
-    for (const child of Object.values(value)) deepFreeze(child)
-  }
-  return value
-}

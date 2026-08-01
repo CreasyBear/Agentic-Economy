@@ -1,3 +1,4 @@
+import { base64Codec } from '@/modules/common/base64-codec'
 import { sha256 } from '@noble/hashes/sha2'
 import { bytesToHex } from '@noble/hashes/utils'
 
@@ -44,7 +45,7 @@ export async function encryptGovernedSendReceipt(
   const wrapIv = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(12)))
   const dataKey = await crypto.subtle.importKey('raw', dataKeyBytes, { name: 'AES-GCM' }, false, ['encrypt'])
   const wrappingKey = await importWrappingKey(keyring.secret)
-  const canonicalBytes = base64ToBytes(receipt.canonicalBytesBase64)
+  const canonicalBytes = base64Codec.fromBase64(receipt.canonicalBytesBase64)
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: contentIv, additionalData },
     dataKey,
@@ -61,14 +62,14 @@ export async function encryptGovernedSendReceipt(
     payload: {
       envelopeVersion: InquiryReceiptEnvelopeVersion,
       keyRef,
-      ciphertextBase64: bytesToBase64(new Uint8Array(ciphertext)),
-      contentIvBase64: bytesToBase64(contentIv),
+      ciphertextBase64: base64Codec.toBase64(new Uint8Array(ciphertext)),
+      contentIvBase64: base64Codec.toBase64(contentIv),
     },
     wrappedKey: {
       keyRef,
       receiptOperationKey: String(receipt.operationKey),
-      wrappedKeyBase64: bytesToBase64(new Uint8Array(wrappedKey)),
-      wrapIvBase64: bytesToBase64(wrapIv),
+      wrappedKeyBase64: base64Codec.toBase64(new Uint8Array(wrappedKey)),
+      wrapIvBase64: base64Codec.toBase64(wrapIv),
       kekKeyId: keyring.keyId,
       createdAt: receipt.createdAt,
     },
@@ -96,11 +97,11 @@ export async function decryptGovernedSendReceipt(input: Readonly<{
   const dataKeyBytes = await crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
-      iv: base64ToBytes(input.wrappedKey.wrapIvBase64),
+      iv: base64Codec.fromBase64(input.wrappedKey.wrapIvBase64),
       additionalData,
     },
     wrappingKey,
-    base64ToBytes(input.wrappedKey.wrappedKeyBase64),
+    base64Codec.fromBase64(input.wrappedKey.wrappedKeyBase64),
   )
   const dataKeyBytesView = new Uint8Array(dataKeyBytes)
 
@@ -109,13 +110,13 @@ export async function decryptGovernedSendReceipt(input: Readonly<{
     const plaintext = await crypto.subtle.decrypt(
       {
         name: 'AES-GCM',
-        iv: base64ToBytes(input.payload.contentIvBase64),
+        iv: base64Codec.fromBase64(input.payload.contentIvBase64),
         additionalData,
       },
       dataKey,
-      base64ToBytes(input.payload.ciphertextBase64),
+      base64Codec.fromBase64(input.payload.ciphertextBase64),
     )
-    return bytesToBase64(new Uint8Array(plaintext))
+    return base64Codec.toBase64(new Uint8Array(plaintext))
   } finally {
     dataKeyBytesView.fill(0)
   }
@@ -164,18 +165,7 @@ async function importWrappingKey(secret: string) {
   return crypto.subtle.importKey('raw', ownedBytes(sha256(secret)), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
-}
 
-function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(value)
-  const bytes = new Uint8Array(new ArrayBuffer(binary.length))
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
-  return bytes
-}
 
 function ownedBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   const owned = new Uint8Array(new ArrayBuffer(bytes.length))

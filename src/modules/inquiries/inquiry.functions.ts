@@ -14,6 +14,7 @@ import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import type { CapabilityKind } from '@/modules/catalog/public'
 import type { ActionAgentIdentity, ActionSourceWriteRequest } from '@/modules/common/action'
+import { isRecord } from '@/modules/common/is-record'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import { resolvePublicRegistryInquiryTarget } from '@/modules/registry/registry.functions'
 import {
@@ -875,9 +876,6 @@ function actionSourceWriteRequestFromContext(context: unknown): ActionSourceWrit
     : undefined
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 
 function normalizeOperationPart(value: string): string {

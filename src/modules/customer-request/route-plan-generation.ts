@@ -1,4 +1,8 @@
+import { DirectedGraph } from 'graphology'
+import { hasCycle } from 'graphology-dag'
+
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type {
@@ -262,31 +266,13 @@ export function routePlanGraphIsValid(
 ): boolean {
   const actionIds = new Set(route.steps.map(({ actionId }) => actionId))
   if (actionIds.size !== route.steps.length) return false
-  const outgoing = new Map<string, string[]>()
-  const indegree = new Map([...actionIds].map((actionId) => [actionId, 0]))
+  const stepGraph = new DirectedGraph()
+  for (const actionId of actionIds) stepGraph.mergeNode(actionId)
   for (const { fromStep, toStep } of route.edges) {
     if (!actionIds.has(fromStep) || !actionIds.has(toStep) || fromStep === toStep) return false
-    const successors = outgoing.get(fromStep) ?? []
-    successors.push(toStep)
-    outgoing.set(fromStep, successors)
-    indegree.set(toStep, (indegree.get(toStep) ?? 0) + 1)
+    stepGraph.mergeDirectedEdge(fromStep, toStep)
   }
-  const ready: string[] = []
-  for (const [actionId, degree] of indegree) {
-    if (degree === 0) ready.push(actionId)
-  }
-  let visited = 0
-  while (ready.length > 0) {
-    const actionId = ready.pop()
-    if (actionId === undefined) break
-    visited += 1
-    for (const successor of outgoing.get(actionId) ?? []) {
-      const degree = (indegree.get(successor) ?? 0) - 1
-      indegree.set(successor, degree)
-      if (degree === 0) ready.push(successor)
-    }
-  }
-  return visited === actionIds.size
+  return !hasCycle(stepGraph)
 }
 
 export function writableCustomerRequestRoutePlanGeneration(
@@ -319,6 +305,3 @@ function routePlanGenerationDigestMaterial(
   }
 }
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Field as UiField, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import {
   BotIcon,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 
 import { AeSelectField } from '@/components/ae/forms/AeSelectField'
+import { cn } from '@/lib/utils'
 import {
   OfferingPriceKindValues,
   OfferingPriceTaxTreatmentValues,
@@ -232,16 +233,24 @@ export function AeOwnerOfferingEditor({
   seed?: Readonly<{ label: string; value: Partial<OwnerOfferingEditorValue> }>
   draftKey?: string
 }) {
-  const [value, setValue] = useState(initialValue)
+  const [restoredDraft] = useState<OwnerOfferingEditorValue | undefined>(() => {
+    if (draftKey === undefined) return undefined
+    const stored = readStoredOfferingDraft(draftKey)
+    return stored === undefined ? undefined : { ...stored, price: normalizeOfferingPrice(stored.price) }
+  })
+  const [value, setValue] = useState(restoredDraft ?? initialValue)
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<OwnerOfferingSaveResult | undefined>()
   const [dirty, setDirty] = useState(false)
-  const [draftRestored, setDraftRestored] = useState(false)
-  const [priceDraft, setPriceDraft] = useState(() => toOwnerPriceDraft(initialValue.price))
+  const [priceDraft, setPriceDraft] = useState(() => toOwnerPriceDraft((restoredDraft ?? initialValue).price))
   const firstFieldRef = useRef<HTMLInputElement>(null)
+  const categoryFieldRef = useRef<HTMLInputElement>(null)
+  const summaryFieldRef = useRef<HTMLTextAreaElement>(null)
   const liveRegionId = useId()
   const retryingPartialSave = result?.kind === 'refused' && result.retry !== undefined
   const editorDisabled = pending || retryingPartialSave
+  const invalidField = result?.kind === 'invalid' ? result.field : undefined
+  const invalidMessage = result?.kind === 'invalid' ? result.message : undefined
 
   useEffect(() => {
     if (!dirty) return
@@ -251,27 +260,26 @@ export function AeOwnerOfferingEditor({
   }, [dirty])
 
   useEffect(() => {
-    if (draftKey === undefined || draftRestored) return
-    setDraftRestored(true)
-    const stored = readStoredOfferingDraft(draftKey)
-    if (stored === undefined) return
-    // Stored drafts are untrusted text. A price that no longer holds together
-    // is dropped here rather than carried into a save the source would reject.
-    const restored: OwnerOfferingEditorValue = { ...stored, price: normalizeOfferingPrice(stored.price) }
-    setPriceDraft(toOwnerPriceDraft(restored.price))
-    // A restored draft never overwrites the field the owner is typing in.
-    const focusedName = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.offeringField : undefined
-    setValue((current) => (focusedName === undefined ? restored : { ...restored, [focusedName]: current[focusedName as keyof OwnerOfferingEditorValue] }))
-  }, [draftKey, draftRestored])
-
-  useEffect(() => {
     if (draftKey === undefined || !dirty) return
     writeStoredOfferingDraft(draftKey, value)
   }, [draftKey, dirty, value])
 
   function update(patch: Partial<OwnerOfferingEditorValue>) {
     setDirty(true)
+    setResult(undefined)
     setValue((current) => ({ ...current, ...patch }))
+  }
+
+  function focusInvalidField(field: string | undefined): void {
+    if (field === 'category') {
+      categoryFieldRef.current?.focus()
+      return
+    }
+    if (field === 'summary') {
+      summaryFieldRef.current?.focus()
+      return
+    }
+    firstFieldRef.current?.focus()
   }
 
   function updatePrice(patch: Partial<OwnerOfferingPriceDraft>) {
@@ -289,7 +297,7 @@ export function AeOwnerOfferingEditor({
     const missing = publishGateRefusal(value)
     if (missing !== undefined) {
       setResult({ kind: 'invalid', field: missing.field, message: missing.message })
-      firstFieldRef.current?.focus()
+      focusInvalidField(missing.field)
       return
     }
     setPending(true)
@@ -339,10 +347,10 @@ export function AeOwnerOfferingEditor({
           <h2 className="text-xl font-semibold text-foreground">Service details</h2>
           <p className="block max-w-2xl text-muted-foreground">Describe the job customers ask you to do—not your internal team or process.</p>
         </div>
-        <div className="grid gap-4">
-          <TextInput label="Name" value={value.name} onChange={(name) => update({ name })} disabled={editorDisabled} inputRef={firstFieldRef} />
-          <TextInput label="Category" value={value.category} onChange={(category) => update({ category })} disabled={editorDisabled} />
-          <TextAreaInput label="Summary" value={value.summary} onChange={(summary) => update({ summary })} disabled={editorDisabled} />
+        <FieldGroup className="gap-4">
+          <TextInput label="Name" value={value.name} onChange={(name) => update({ name })} disabled={editorDisabled} inputRef={firstFieldRef} {...(invalidField === 'name' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
+          <TextInput label="Category" value={value.category} onChange={(category) => update({ category })} disabled={editorDisabled} inputRef={categoryFieldRef} {...(invalidField === 'category' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
+          <TextAreaInput label="Summary" value={value.summary} onChange={(summary) => update({ summary })} disabled={editorDisabled} inputRef={summaryFieldRef} {...(invalidField === 'summary' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
           <TextInput label="Service area" value={value.serviceAreaSummary} onChange={(serviceAreaSummary) => update({ serviceAreaSummary })} disabled={editorDisabled} optional />
           <TextInput label="Availability" value={value.availabilitySummary} onChange={(availabilitySummary) => update({ availabilitySummary })} disabled={editorDisabled} optional />
           <TextInput label="Pricing" value={value.pricingSummary} onChange={(pricingSummary) => update({ pricingSummary })} disabled={editorDisabled} optional />
@@ -398,7 +406,7 @@ export function AeOwnerOfferingEditor({
               { value: 'retired', label: 'Retired' },
             ]} />
           </Field>
-        </div>
+        </FieldGroup>
       </Card>
 
       <OwnerAccessPathsEditor paths={value.accessPaths} disabled={editorDisabled} onChange={(accessPaths) => update({ accessPaths })} />
@@ -444,7 +452,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
           ))}
         </ul>
       )}
-      <div className="grid gap-4 rounded-lg border border-border p-4">
+      <FieldGroup className="gap-4 rounded-lg border border-border p-4">
         <Field label="Add a contact route" inputID="access-path-kind">
           <AeSelectField id="access-path-kind" value={selectedKind} disabled={disabled} onValueChange={(kind) => { setSelectedKind(toAccessKind(kind)); setTechnicalExpanded(false) }} options={[
             { value: 'phone', label: 'Call' }, { value: 'website', label: 'Website' }, { value: 'ae_inquiry', label: 'Send a message' }, { value: 'external_operation', label: 'Assistant request' },
@@ -452,26 +460,23 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
         </Field>
         <TextAreaInput label={selectedKind === 'external_operation' ? 'What this request does' : 'Instructions for customers'} value={draftDetail} onChange={setDraftDetail} disabled={disabled} />
         {selectedKind === 'website' ? (
-          <div className="grid gap-1">
-            <TextInput
-              label="Website URL"
-              value={websiteUrl}
-              onChange={(next) => { setWebsiteUrl(next); setWebsiteUrlError(undefined) }}
-              disabled={disabled}
-              inputMode="url"
-              ariaInvalid={websiteUrlError !== undefined}
-              describedBy="offering-website-url-error"
-            />
-            {websiteUrlError === undefined ? null : <p id="offering-website-url-error" className="text-sm text-muted-foreground" role="alert">{websiteUrlError}</p>}
-          </div>
+          <TextInput
+            label="Website URL"
+            value={websiteUrl}
+            onChange={(next) => { setWebsiteUrl(next); setWebsiteUrlError(undefined) }}
+            disabled={disabled}
+            inputMode="url"
+            ariaInvalid={websiteUrlError !== undefined}
+            {...(websiteUrlError === undefined ? {} : { error: websiteUrlError })}
+          />
         ) : null}
         {selectedKind === 'external_operation' ? (
-          <div className="grid gap-3">
+          <FieldGroup className="gap-3">
             <button type="button" className="min-h-11 justify-self-start text-sm font-semibold underline underline-offset-4" aria-expanded={technicalExpanded} aria-controls={technicalId} onClick={() => setTechnicalExpanded((current) => !current)}>
               {technicalExpanded ? 'Hide request details' : 'Add request details'}
             </button>
             {technicalExpanded ? (
-              <div id={technicalId} className="grid gap-4">
+              <FieldGroup id={technicalId} className="gap-4">
                 <TextInput label="Request name" value={endpoint.name} onChange={(name) => setEndpoint((current) => ({ ...current, name }))} disabled={disabled} description="What an assistant should call this. Left blank, it publishes as “Assistant request”." />
                 <TextInput label="Request URL" value={endpoint.url} onChange={(url) => setEndpoint((current) => ({ ...current, url }))} disabled={disabled} inputMode="url" />
                 <Field label="Method" inputID="access-path-method" description="Optional">
@@ -499,9 +504,9 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
                 )}
                 <TextInput label="Authentication" value={endpoint.authenticationSummary} onChange={(authenticationSummary) => setEndpoint((current) => ({ ...current, authenticationSummary }))} disabled={disabled} description="Optional. Explain how a caller signs in, in your own words." />
                 <TextInput label="Request price note" value={endpoint.pricingSummary} onChange={(pricingSummary) => setEndpoint((current) => ({ ...current, pricingSummary }))} disabled={disabled} description="Optional. Published exactly as written." />
-              </div>
+              </FieldGroup>
             ) : null}
-          </div>
+          </FieldGroup>
         ) : null}
         <Button
           type="button"
@@ -525,7 +530,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
         >
           Add this way
         </Button>
-      </div>
+      </FieldGroup>
     </Card>
   )
 }
@@ -541,8 +546,8 @@ function OwnerSummaryStat({ value, label }: { value: number; label: string }) {
 
 function EditorStep({ icon, label, detail, active }: { icon: ReactNode; label: string; detail: string; active: boolean }) {
   return (
-    <li className={`flex min-h-16 items-center gap-3 rounded-lg border p-3 ${active ? 'border-ring bg-muted/60' : 'border-border bg-card'}`}>
-      <span className={`flex size-8 shrink-0 items-center justify-center rounded-full ${active ? 'bg-brand text-on-brand' : 'bg-muted text-muted-foreground'}`}>{icon}</span>
+    <li className={cn('flex min-h-16 items-center gap-3 rounded-lg border p-3', active ? 'border-ring bg-muted/60' : 'border-border bg-card')}>
+      <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-full', active ? 'bg-brand text-on-brand' : 'bg-muted text-muted-foreground')}>{icon}</span>
       <span className="grid min-w-0 gap-0.5">
         <span className="font-semibold text-foreground">{label}</span>
         <span className="text-sm text-muted-foreground">{detail}</span>
@@ -550,22 +555,65 @@ function EditorStep({ icon, label, detail, active }: { icon: ReactNode; label: s
     </li>
   )
 }
-
-function Field({ label, inputID, description, children }: { label: string; inputID: string; description?: string; children: ReactNode }) {
+function Field({
+  label,
+  inputID,
+  description,
+  error,
+  invalid = false,
+  children,
+}: {
+  label: string
+  inputID: string
+  description?: string
+  error?: string
+  invalid?: boolean
+  children: ReactNode
+}) {
+  const errorID = `${inputID}-error`
   return (
-    <div className="grid gap-2">
-      <Label htmlFor={inputID}>{label}</Label>
+    <UiField {...(invalid ? { 'data-invalid': true } : {})}>
+      <FieldLabel htmlFor={inputID}>{label}</FieldLabel>
       {children}
-      {description === undefined ? null : <p className="text-sm text-muted-foreground">{description}</p>}
-    </div>
+      {description === undefined ? null : <FieldDescription>{description}</FieldDescription>}
+      {error === undefined ? null : <FieldError id={errorID}>{error}</FieldError>}
+    </UiField>
   )
 }
 
-function TextInput({ label, value, onChange, disabled, optional = false, description, inputRef, inputMode, ariaInvalid, describedBy }: { label: string; value: string; onChange: (value: string) => void; disabled: boolean; optional?: boolean; description?: string; inputRef?: Ref<HTMLInputElement>; inputMode?: 'url' | 'decimal'; ariaInvalid?: boolean; describedBy?: string }) {
+function TextInput({
+  label,
+  value,
+  onChange,
+  disabled,
+  optional = false,
+  description,
+  inputRef,
+  inputMode,
+  ariaInvalid,
+  describedBy,
+  error,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  disabled: boolean
+  optional?: boolean
+  description?: string
+  inputRef?: Ref<HTMLInputElement>
+  inputMode?: 'url' | 'decimal'
+  ariaInvalid?: boolean
+  describedBy?: string
+  error?: string
+}) {
   const id = `offering-${label.toLowerCase().replaceAll(' ', '-')}`
   const hint = description ?? (optional ? 'Optional' : undefined)
+  const invalid = ariaInvalid === true || error !== undefined
+  const describedByValue = [describedBy, error === undefined ? undefined : `${id}-error`]
+    .filter((value): value is string => value !== undefined)
+    .join(' ')
   return (
-    <Field label={label} inputID={id} {...(hint === undefined ? {} : { description: hint })}>
+    <Field label={label} inputID={id} {...(hint === undefined ? {} : { description: hint })} {...(error === undefined ? {} : { error })} {...(invalid ? { invalid: true } : {})}>
       <Input
         ref={inputRef}
         id={id}
@@ -573,8 +621,8 @@ function TextInput({ label, value, onChange, disabled, optional = false, descrip
         value={value}
         disabled={disabled}
         {...(inputMode === undefined ? {} : { inputMode })}
-        {...(ariaInvalid === undefined ? {} : { 'aria-invalid': ariaInvalid })}
-        {...(describedBy === undefined ? {} : { 'aria-describedby': describedBy })}
+        {...(invalid ? { 'aria-invalid': true } : {})}
+        {...(describedByValue.length === 0 ? {} : { 'aria-describedby': describedByValue })}
         onChange={(event) => onChange(event.currentTarget.value)}
         className="min-h-11 bg-card"
       />
@@ -582,11 +630,43 @@ function TextInput({ label, value, onChange, disabled, optional = false, descrip
   )
 }
 
-function TextAreaInput({ label, value, onChange, disabled }: { label: string; value: string; onChange: (value: string) => void; disabled: boolean }) {
+function TextAreaInput({
+  label,
+  value,
+  onChange,
+  disabled,
+  inputRef,
+  ariaInvalid,
+  describedBy,
+  error,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  disabled: boolean
+  inputRef?: Ref<HTMLTextAreaElement>
+  ariaInvalid?: boolean
+  describedBy?: string
+  error?: string
+}) {
   const id = `offering-${label.toLowerCase().replaceAll(' ', '-')}`
+  const invalid = ariaInvalid === true || error !== undefined
+  const describedByValue = [describedBy, error === undefined ? undefined : `${id}-error`]
+    .filter((value): value is string => value !== undefined)
+    .join(' ')
   return (
-    <Field label={label} inputID={id}>
-      <Textarea id={id} aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} className="min-h-28 bg-card" />
+    <Field label={label} inputID={id} {...(error === undefined ? {} : { error })} {...(invalid ? { invalid: true } : {})}>
+      <Textarea
+        ref={inputRef}
+        id={id}
+        aria-label={label}
+        value={value}
+        disabled={disabled}
+        {...(invalid ? { 'aria-invalid': true } : {})}
+        {...(describedByValue.length === 0 ? {} : { 'aria-describedby': describedByValue })}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        className="min-h-28 bg-card"
+      />
     </Field>
   )
 }

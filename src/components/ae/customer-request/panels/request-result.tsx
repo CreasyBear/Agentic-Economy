@@ -69,5 +69,5 @@ function conflictExplanation(reason: Extract<CustomerRequestProjection, { kind: 
  * is the current wording after any edit.
  */
 function customerIntentFrom(turns: readonly ConversationTurn[]): string {
-  return [...turns].reverse().find((turn) => turn.speaker === 'customer')?.text ?? ''
+  return turns.findLast((turn) => turn.speaker === 'customer')?.text ?? ''
 }

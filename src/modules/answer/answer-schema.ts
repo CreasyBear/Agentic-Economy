@@ -140,7 +140,7 @@ export const AnswerArtifactSchema = z.discriminatedUnion('kind', [
     kind: z.literal('recovery-prompts'),
     title: z.string().optional(),
     prompts: z.array(z.object({ label: z.string(), query: z.string() })).min(1).max(4),
-    links: z.array(z.object({ label: z.string(), href: z.enum(['/claim', '/registry']) })).max(2).optional(),
+    links: z.array(z.object({ label: z.string(), href: z.enum(['/claim']) })).max(2).optional(),
   }),
   z.object({
     kind: z.literal('location-map'),
@@ -183,7 +183,7 @@ export type AnswerArtifact =
       providers: readonly AnswerSource[]
       fields?: readonly AnswerCompareField[]
     }
-  | { kind: 'recovery-prompts'; title?: string; prompts: readonly { label: string; query: string }[]; links?: readonly { label: string; href: '/claim' | '/registry' }[] }
+  | { kind: 'recovery-prompts'; title?: string; prompts: readonly { label: string; query: string }[]; links?: readonly { label: string; href: '/claim' }[] }
   | { kind: 'location-map'; label: string; placeQuery: string }
   | { kind: 'prose'; block: 'summary'; text: string }
   | { kind: 'what-to-do-now'; text: string }

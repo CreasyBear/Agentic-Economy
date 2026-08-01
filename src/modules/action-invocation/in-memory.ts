@@ -9,6 +9,7 @@ import type {
   PreparedInvocation,
 } from './contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
 import {
   actorFromOrigin,
   classifyActionResult,
@@ -335,7 +336,7 @@ export function createInMemoryActionInvocationTracer<
         || existing.view.owner.principalRef !== input.actor.principalRef) {
         return { kind: 'refused', code: 'cross_principal_refused', view: existing.view }
       }
-      if (JSON.stringify(existing.view.origin) !== JSON.stringify(input.origin)) {
+      if (stableStringify(existing.view.origin) !== stableStringify(input.origin)) {
         return { kind: 'refused', code: 'cross_origin_refused', view: existing.view }
       }
       if ((existing.view.control.state !== 'awaiting_authority'

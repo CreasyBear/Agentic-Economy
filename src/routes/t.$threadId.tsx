@@ -79,11 +79,11 @@ function ThreadPage() {
       setAccessKey(bootstrappedAccessKey)
     }
   }, [threadId])
-
   return accessKey === undefined
     ? <AeChat threadId={threadId} initialProjection={projection} />
     : <AeCustomerRecord threadId={threadId} accessKey={accessKey} />
 }
+
 
 export async function loadThreadRouteReadback(threadId: string): Promise<ThreadRouteReadback> {
   try {

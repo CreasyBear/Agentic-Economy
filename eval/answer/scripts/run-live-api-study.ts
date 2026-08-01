@@ -1,3 +1,4 @@
+import { parseArgs } from 'node:util'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
@@ -1212,24 +1213,13 @@ function normalizeBaseUrl(value: string): string {
 }
 
 function readArgs(argv: readonly string[]): { baseUrl?: string; output?: string } {
-  const parsed: { baseUrl?: string; output?: string } = {}
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index]
-    if (arg === '--base-url') {
-      const value = argv[index + 1]
-      if (value !== undefined) {
-        parsed.baseUrl = value
-        index += 1
-      }
-      continue
-    }
-    if (arg === '--output') {
-      const value = argv[index + 1]
-      if (value !== undefined) {
-        parsed.output = value
-        index += 1
-      }
-    }
+  const { values } = parseArgs({
+    args: [...argv],
+    options: { 'base-url': { type: 'string' }, output: { type: 'string' } },
+    strict: false,
+  })
+  return {
+    ...(typeof values['base-url'] === 'string' ? { baseUrl: values['base-url'] } : {}),
+    ...(typeof values.output === 'string' ? { output: values.output } : {}),
   }
-  return parsed
 }

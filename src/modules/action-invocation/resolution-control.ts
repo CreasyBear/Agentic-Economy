@@ -14,6 +14,7 @@ import {
   type ReconciliationEvidence,
 } from './reconciliation-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
 
 type OwnedControlInput = Readonly<{
   expectedInvocationVersion: number
@@ -153,7 +154,7 @@ function checkOwned<Input, Result extends ActionResult>(
     record.view.owner.callerRef !== input.actor.callerRef ||
     record.view.owner.principalRef !== input.actor.principalRef
   ) return { kind: 'refused', code: 'cross_principal_refused', view: record.view }
-  if (JSON.stringify(record.view.origin) !== JSON.stringify(input.origin)) {
+  if (stableStringify(record.view.origin) !== stableStringify(input.origin)) {
     return { kind: 'refused', code: 'cross_origin_refused', view: record.view }
   }
   return { kind: 'ok', record }

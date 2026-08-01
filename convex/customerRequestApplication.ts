@@ -62,15 +62,12 @@ import { confirmRoutePorts } from './customerRequestConfirmRoutePorts'
 import { problemRoutePorts } from './customerRequestProblemRoutePorts'
 import { provideFactsPorts } from './customerRequestProvideFactsPorts'
 import { refinePorts } from './customerRequestRefinePorts'
+import { serviceAssertion } from './customerRequestRouteMandate'
 import { standingRoutePorts } from './customerRequestStandingRoutePorts'
 
 const MAX_INTERPRETER_DESCRIPTOR_BYTES = 512_000
 const MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES = 256_000
 
-const serviceAssertion = v.object({
-  principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
-  issuedAt: v.number(), signature: v.string(),
-})
 const commercialInfluence = v.union(
   v.object({ status: v.literal('unknown') }),
   v.object({ status: v.literal('none'), summary: v.string() }),

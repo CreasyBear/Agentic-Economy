@@ -5,6 +5,11 @@ import { readActiveAdminMembership, resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
+import {
+  numberField,
+  optionalStringField,
+  stringField,
+} from './inquiryRuntimeDbHelpers'
 import { stableHash } from '../src/modules/common/stable-hash'
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
@@ -1458,7 +1463,10 @@ async function ensureDiscoveryAttempt(
 }
 
 async function upsertBusinessIndexStatus(db: RuntimeDb, businessId: string, sourceHash: string, now: number): Promise<void> {
-  const statuses = await db.query('indexStatus').collect()
+  const statuses = await db
+    .query('indexStatus')
+    .withIndex('by_target_status', (query) => query.eq('targetType', 'business').eq('targetRef', businessId))
+    .collect()
   const existing = statuses.find(
     (status) => stringField(status, 'targetType') === 'business' && stringField(status, 'targetRef') === businessId
   )
@@ -1554,7 +1562,10 @@ function publishedClaimContract(claimId: string, claim: RuntimeDocument, busines
 }
 
 async function indexStatusForBusiness(db: RuntimeDb, businessId: string): Promise<'not_queued' | 'queued' | 'indexed' | 'failed' | 'stale'> {
-  const statuses = await db.query('indexStatus').collect()
+  const statuses = await db
+    .query('indexStatus')
+    .withIndex('by_target_status', (query) => query.eq('targetType', 'business').eq('targetRef', businessId))
+    .collect()
   const status = statuses.find(
     (candidate) => stringField(candidate, 'targetType') === 'business' && stringField(candidate, 'targetRef') === businessId
   )
@@ -1589,20 +1600,6 @@ async function hasActiveBusinessSuppression(db: RuntimeDb, businessId: string): 
   return suppression !== null
 }
 
-function stringField(document: RuntimeDocument, field: string): string {
-  const value = document[field]
-  return typeof value === 'string' ? value : ''
-}
-
-function optionalStringField(document: RuntimeDocument, field: string): string | undefined {
-  const value = document[field]
-  return typeof value === 'string' ? value : undefined
-}
-
-function numberField(document: RuntimeDocument, field: string): number {
-  const value = document[field]
-  return typeof value === 'number' ? value : 0
-}
 
 function nowFromDoc(document: RuntimeDocument): number {
   const updatedAt = document.updatedAt

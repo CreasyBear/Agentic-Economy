@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 
 import { configureLocalSourceWriteSecret } from './local-source-write-secret.mjs'
 
-const { secret } = await configureLocalSourceWriteSecret()
+const { secret, adminKey } = await configureLocalSourceWriteSecret()
 
 const forwardedArgs = process.argv.slice(2)
 const appArgs = forwardedArgs.length > 0
@@ -14,6 +14,7 @@ const app = spawn('npm', ['run', 'dev', '--', ...appArgs], {
   env: {
     ...process.env,
     AE_SOURCE_WRITE_SECRET: secret,
+    CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey,
     AE_ENGINE_PROPOSALS: process.env.AE_ENGINE_PROPOSALS ?? 'false',
     VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E ?? 'true',
   },

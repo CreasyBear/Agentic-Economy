@@ -11,15 +11,8 @@ export const Route = createFileRoute('/api/answer/eval-status')({
 })
 
 export function handleEvalStatusRequest(): Response {
-  return new Response(
-    JSON.stringify({
-      llmChipsEnabled: readLlmFollowUpChipsEnabled(),
-    }),
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'private, max-age=60',
-      },
-    },
+  return Response.json(
+    { llmChipsEnabled: readLlmFollowUpChipsEnabled() },
+    { headers: { 'Cache-Control': 'private, max-age=60' } },
   )
 }

@@ -46,3 +46,38 @@ inbox). Convex remains the data plane. **Founder caveat (2026-08-01): CRM/tracke
 the consumer front door — circle patterns apply to the behind-disclosure tree view and
 operator/business consoles only; the primary person surfaces are dialog, decision inbox, and memo
 (see T30 scope ruling).**
+
+## Addendum — donor hunt partially overturns this ticket (2026-08-01)
+
+A second, deeper pass ([donor hunt](../../research/2026-08-01-framework-kernel-donor-hunt.md), five
+source-verified librarians) re-tested the "justified hand-roll" list above. Result:
+
+- **Overturned:** base CPM (forward/backward pass, ES/EF/LS/LF, slack, critical flag), working-calendar
+  arithmetic, interval-overlap detection, and graph/cycle validation ARE donor-backed —
+  PORT `@pyraxi/cpm-engine`/`@bluemillstudio/gantt`/GanttProject; ADOPT `graphology-dag` and
+  `@flatten-js/interval-tree`.
+- **Overturned in method:** TOPSIS is not "hand-roll" — PORT `kotbaton/pymcdm` `topsis.py` (MIT).
+  The npm rejection is now evidence-backed: `topsis@1.3.2` computes `D-/(D- + D-)`, a real bug.
+- **Confirmed:** the five-dimension rollup *contract*, playbooks-as-typed-data and digest batching
+  have no donor.
+- **Confirmed and sharpened:** `ln-dev7/circle` stays a pattern donor; `react-arborist` verified
+  active and React 19-compatible (not stale).
+- **New:** the whole-system analogue is Task Master AI (MIT) — VENDOR its frontier selection,
+  dependency validation and complexity-guided expansion rather than writing them.
+
+## Correction — the "ranked adoptions" above were never installed (2026-08-01)
+
+Verified directly against `package.json` and `node_modules`: **`date-fns`, `react-email`,
+`react-arborist` and XState v5 are not in this repo.** This ticket recommended them; the map's
+decision line then read as though the adoption had happened, and two later documents cited them as
+"already adopted". Caught by `history://AuditModules`, which refused to cite `date-fns` because the
+manifest contradicted its brief.
+
+Actually installed and load-bearing: `ai`, `zod`, `convex`, `@convex-dev/workflow`,
+`@convex-dev/workpool`, `graphology` + `graphology-dag` + `graphology-traversal`,
+`fastest-levenshtein` (the last four installed 2026-08-01), `clsx`, `tailwind-merge`,
+`class-variance-authority`, `ajv`, `@cfworker/json-schema`, `@noble/hashes`, `@noble/curves`,
+`eventsource-parser`, TanStack and Radix packages.
+
+Rule going forward: a ticket may not record an adoption as done without the manifest entry. "Adopt X"
+is a recommendation until `package.json` says otherwise.

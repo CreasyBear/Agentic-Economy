@@ -7,6 +7,7 @@ import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import type { AdminReadbackRow, AdminReadbackSurface, AdminShellReadback } from '@/modules/security/public'
 
 const surfaceLabels = {
@@ -41,7 +42,7 @@ type AeAdminReadbackPanelProps = {
 }
 
 export function AeAdminReadbackPanel({ title, description, readback }: AeAdminReadbackPanelProps) {
-  const accessLabel = readback.kind === 'denied' ? `HTTP ${readback.httpStatus}` : `HTTP ${readback.httpStatus}`
+  const accessLabel = `HTTP ${readback.httpStatus}`
   const titleId = useId()
   const descriptionId = useId()
 
@@ -97,10 +98,15 @@ function AllowedReadback({ readback }: { readback: Extract<AdminShellReadback, {
         <ReadbackStat label="Suppressed" value={String(readback.summary.suppressed)} />
       </div>
       {readback.rows.length === 0 ? (
-        <div className="rounded-md border border-border bg-card p-4">
-          <AeStatusBadge status="not_queued" />
-          <p className="mt-3 text-sm text-muted-foreground">No source-owned operational rows exist for this surface yet.</p>
-        </div>
+        <Empty className="border border-border bg-card p-4">
+          <EmptyHeader>
+            <EmptyTitle>No operational rows yet</EmptyTitle>
+            <EmptyDescription>No source-owned operational rows exist for this surface yet.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <AeStatusBadge status="not_queued" />
+          </EmptyContent>
+        </Empty>
       ) : (
         <AeOperatorDataTable
           columns={columns}

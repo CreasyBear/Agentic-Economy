@@ -68,7 +68,7 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
           {navGroups.map((group) => (
             <SidebarGroup key={group.id}>
               <SidebarGroupLabel asChild>
-                <h2>{group.label}</h2>
+                <span>{group.label}</span>
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
@@ -104,7 +104,7 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
         </SidebarContent>
         <SidebarFooter className="border-t border-border p-3">
           <SidebarGroupLabel asChild>
-            <h2>Public</h2>
+            <span>Public</span>
           </SidebarGroupLabel>
           <SidebarMenu>
             {utilityItems.map((item) => {

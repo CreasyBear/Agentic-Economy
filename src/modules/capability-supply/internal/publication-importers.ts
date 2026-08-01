@@ -195,10 +195,13 @@ export function importMcpCapability(
   if (!isRecord(input.tool) || !boundedTrimmed(input.tool.name, MAX_TOOL_NAME_LENGTH)) {
     return { kind: 'refused', reason: 'selector_invalid' }
   }
-  if (!isJsonObject(input.tool.inputSchema) || !isJsonObject(input.tool.outputSchema)) {
+  const inputSchema = input.tool.inputSchema
+  const outputSchema = input.tool.outputSchema
+  if (!isRecord(inputSchema) || !isRecord(outputSchema)) {
     return { kind: 'refused', reason: 'schema_missing' }
   }
-  if (containsUnsupportedReference(input.tool.inputSchema) || containsUnsupportedReference(input.tool.outputSchema)) {
+  if (containsUnsupportedReference(inputSchema as Readonly<Record<string, JsonValue>>)
+    || containsUnsupportedReference(outputSchema as Readonly<Record<string, JsonValue>>)) {
     return { kind: 'refused', reason: 'schema_profile_unsupported' }
   }
   return normalizedFromSchemas({
@@ -207,7 +210,9 @@ export function importMcpCapability(
       selector: { toolName: input.tool.name, protocolVersion: input.protocolVersion },
       evidenceRefs: input.evidenceRefs,
     },
-    contract: input.contract, inputSchema: input.tool.inputSchema, outputSchema: input.tool.outputSchema,
+    contract: input.contract,
+    inputSchema: inputSchema as Readonly<Record<string, JsonValue>>,
+    outputSchema: outputSchema as Readonly<Record<string, JsonValue>>,
     commercial: input.commercial, endpointUrl: endpoint,
     adapter: {
       adapterId: 'mcp-jsonrpc:v1',
@@ -230,7 +235,9 @@ export function importX402Capability(
   }
   const endpoint = validHttpsUrl(input.resource.resourceUrl)
   if (endpoint === undefined) return { kind: 'refused', reason: 'transport_unsupported' }
-  if (!isJsonObject(input.resource.inputSchema) || !isJsonObject(input.resource.outputSchema)) {
+  const inputSchema = input.resource.inputSchema
+  const outputSchema = input.resource.outputSchema
+  if (!isRecord(inputSchema) || !isRecord(outputSchema)) {
     return { kind: 'refused', reason: 'schema_missing' }
   }
   const method: 'GET' | 'POST' | undefined = input.resource.method === undefined
@@ -243,7 +250,8 @@ export function importX402Capability(
     || (method === 'POST' && input.resource.query !== undefined)) {
     return { kind: 'refused', reason: 'selector_invalid' }
   }
-  if (containsUnsupportedReference(input.resource.inputSchema) || containsUnsupportedReference(input.resource.outputSchema)) {
+  if (containsUnsupportedReference(inputSchema as Readonly<Record<string, JsonValue>>)
+    || containsUnsupportedReference(outputSchema as Readonly<Record<string, JsonValue>>)) {
     return { kind: 'refused', reason: 'schema_profile_unsupported' }
   }
   if (!isRecord(input.resource.price)
@@ -276,7 +284,8 @@ export function importX402Capability(
       kind: 'x402', descriptorDigest: bounded.digest,
       selector: { resourceUrl: endpoint }, evidenceRefs: input.evidenceRefs,
     },
-    contract: input.contract, inputSchema: input.resource.inputSchema, outputSchema: input.resource.outputSchema,
+    contract: input.contract, inputSchema: inputSchema as Readonly<Record<string, JsonValue>>,
+    outputSchema: outputSchema as Readonly<Record<string, JsonValue>>,
     commercial: input.commercial, endpointUrl: endpoint,
     adapter: {
       adapterId: 'x402-fetch:v2',
@@ -304,8 +313,8 @@ function openApiQueryMapping(operation: Readonly<Record<string, unknown>>): Read
   const mapping: { inputPointer: string; parameter: string }[] = []
   for (const parameter of operation.parameters) {
     if (!isRecord(parameter) || parameter.in !== 'query' || typeof parameter.name !== 'string'
-      || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(parameter.name) || !isJsonObject(parameter.schema)) return undefined
-    properties[parameter.name] = parameter.schema
+      || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(parameter.name) || !isRecord(parameter.schema)) return undefined
+    properties[parameter.name] = parameter.schema as Readonly<Record<string, JsonValue>>
     mapping.push({ inputPointer: `/${parameter.name.replace(/~/g, '~0').replace(/\//g, '~1')}`, parameter: parameter.name })
     if (parameter.required === true) required.push(parameter.name)
   }
@@ -457,7 +466,9 @@ function inspectSource(source: unknown): SourceInspection {
 function jsonContentSchema(content: unknown): Readonly<Record<string, JsonValue>> | undefined {
   if (!isRecord(content)) return undefined
   const json = content['application/json']
-  return isRecord(json) && isJsonObject(json.schema) ? json.schema : undefined
+  if (!isRecord(json)) return undefined
+  const schema = json.schema
+  return isRecord(schema) ? schema as Readonly<Record<string, JsonValue>> : undefined
 }
 
 function containsUnsupportedReference(value: JsonValue): boolean {
@@ -495,6 +506,3 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isJsonObject(value: unknown): value is Readonly<Record<string, JsonValue>> {
-  return isRecord(value)
-}

@@ -1,5 +1,8 @@
+import { DirectedGraph } from 'graphology'
+import { hasCycle } from 'graphology-dag'
 import { describeActionForAgent, listActions, type AnyAction } from '@/modules/actions'
 import { z } from 'zod'
+import { validateDecisionMapDraft } from '@/modules/decision-map/public'
 
 
 import {
@@ -65,11 +68,39 @@ export async function runProposalSegment(input: Readonly<{
   const stage = input.activePlan === undefined && input.evidence.length === 0 ? 'discover' : 'compare'
   const menu = buildCandidateMenu(stage, listActions())
   const proposalId = crypto.randomUUID()
+  let rejectedReason: string | undefined
+  const inspectProposal = (object: unknown):
+    | { proposal: Proposal; reason?: never }
+    | { proposal?: never; reason: string } => {
+    const modelProposal = modelProposalSchema.safeParse(object)
+    if (!modelProposal.success) return { reason: 'invalid_response' }
+    const folded = foldModelProposal(modelProposal.data)
+    if (folded.proposal === undefined) return { reason: folded.issue }
+    const parsed = proposalSchema.safeParse(folded.proposal)
+    if (!parsed.success) return { reason: 'invalid_response' }
+    const reason = validateProposalAgainstKernel(
+      parsed.data,
+      proposalId,
+      menu,
+      input.activePlan,
+      input.evidence,
+      input.allowedSlugs,
+      actionsUsed,
+      input.planRevisionUsed ?? false,
+    )
+    return reason === undefined ? { proposal: parsed.data } : { reason }
+  }
+
 
   try {
     const response = await requestProposalModel({
       role: 'proposal',
       schema: modelProposalSchema,
+      accept: (object) => {
+        const inspected = inspectProposal(object)
+        rejectedReason = inspected.reason
+        return inspected.reason
+      },
       system: [
         'Return one typed proposal. Never execute actions.',
         'Echo the supplied proposalId exactly; never invent a new one.',
@@ -77,11 +108,15 @@ export async function runProposalSegment(input: Readonly<{
         'Each step successCriterionKind must be one of action_completed, result_kind, nonempty_results.',
         'Each step input carries only the fields the action inputJsonSchema names (example: {"query":"wedding photographer","limit":3}); omit or null every field that does not apply — never invent placeholder values.',
         'Each step actionId must come from candidateMenu.',
+        'For a life-sized or multi-decision request that needs internal structuring rather than a registered external action, return decision_map_revision instead of plan_revision.',
+        'A decision map must reflect the request without inventing businesses, quotes, prices, availability, bookings, or completed work. It carries 1-5 inferred/default assumptions, one branchArea holding the 2-3 decisions to make now, and 2-6 otherAreas naming the remaining parts of the job.',
+        'Exactly one decision sets ready true; the others set it false. Every id is unique. Each decision needs 2-4 options, a recommendedOptionId drawn from them, a reason for that recommendation, and a parkTrigger naming the change that would reopen it.',
+        'References must resolve: dependsOn and unlocks name other decision ids, while constraintRefs name ids from the assumptions list.',
       ].join(' '),
       prompt: JSON.stringify({
         proposalId,
         requirement: input.activePlan === undefined
-          ? 'Author a plan_revision before proposing an action.'
+          ? 'Author either decision_map_revision for a life-sized multi-decision ask with no external action needed yet, or plan_revision for a bounded registered-action journey.'
           : actionsUsed >= MAX_ACTIONS_PER_TURN
             ? 'Return one terminal clarifying_question or recommendation; no more actions are available.'
             : 'Propose one frontier action, a plan revision, one clarifying question, or a recommendation.',
@@ -110,28 +145,15 @@ export async function runProposalSegment(input: Readonly<{
       return { kind: 'budget_exhausted', reason: 'turn_cost_ceiling_exceeded', model: response }
     }
 
-    const folded = foldModelProposal(modelProposalSchema.parse(response.object))
-    if (folded === undefined) {
-      return { kind: 'transport_failed', reason: 'invalid_response', model: response }
-    }
-    const proposal = proposalSchema.parse(folded)
-    const reason = validateProposalAgainstKernel(
-      proposal,
-      proposalId,
-      menu,
-      input.activePlan,
-      input.evidence,
-      input.allowedSlugs,
-      actionsUsed,
-      input.planRevisionUsed ?? false,
-    )
-    return reason === undefined
-      ? { kind: 'proposal', proposal, model: response }
-      : { kind: 'transport_failed', reason, model: response }
+    const inspected = inspectProposal(response.object)
+    return inspected.proposal === undefined
+      ? { kind: 'transport_failed', reason: inspected.reason, model: response }
+      : { kind: 'proposal', proposal: inspected.proposal, model: response }
   } catch (error) {
     return {
       kind: 'transport_failed',
-      reason: error instanceof ProposalTransportError ? error.code : 'invalid_response',
+      reason: rejectedReason
+        ?? (error instanceof ProposalTransportError ? error.code : 'invalid_response'),
     }
   }
 }
@@ -147,8 +169,23 @@ export function validateProposalAgainstKernel(
   planRevisionUsed = false,
 ): string | undefined {
   if (proposal.proposalId !== expectedProposalId) return 'proposal_nonce_mismatch'
-  if (activePlan === undefined && proposal.kind !== 'plan_revision') {
+  if (activePlan === undefined
+    && proposal.kind !== 'plan_revision'
+    && proposal.kind !== 'decision_map_revision') {
     return 'active_plan_required'
+  }
+  if (proposal.kind === 'decision_map_revision') {
+    if (activePlan !== undefined) return 'decision_map_active_plan_conflict'
+    if (planRevisionUsed) return 'plan_revision_budget_exhausted'
+    try {
+      validateDecisionMapDraft(proposal.decisionMap, { initial: true, requireReady: true })
+      return undefined
+    } catch (error) {
+      // The named invariants are the only thing a repair attempt can act on,
+      // so they travel with the stable code. Callers switch on the prefix.
+      const detail = error instanceof Error ? error.message : ''
+      return detail === '' ? 'decision_map_invalid' : `decision_map_invalid: ${detail}`
+    }
   }
   if (proposal.kind === 'plan_revision') {
     if (planRevisionUsed) return 'plan_revision_budget_exhausted'
@@ -224,19 +261,12 @@ function validatePlan(plan: PlanContract, menu: readonly AnyAction[]): string | 
     }
   }
 
-  const visiting = new Set<string>()
-  const visited = new Set<string>()
-  const cyclic = (id: string): boolean => {
-    if (visiting.has(id)) return true
-    if (visited.has(id)) return false
-    visiting.add(id)
-    const step = stepsById.get(id)
-    if (step?.dependsOn.some(cyclic) === true) return true
-    visiting.delete(id)
-    visited.add(id)
-    return false
+  const dependencyGraph = new DirectedGraph()
+  for (const step of plan.steps) dependencyGraph.mergeNode(step.id)
+  for (const step of plan.steps) {
+    for (const dependency of step.dependsOn) if (stepsById.has(dependency)) dependencyGraph.mergeDirectedEdge(step.id, dependency)
   }
-  return plan.steps.some(({ id }) => cyclic(id)) ? 'proposal_plan_cyclic' : undefined
+  return hasCycle(dependencyGraph) ? 'proposal_plan_cyclic' : undefined
 }
 
 export {

@@ -1,10 +1,11 @@
+import { cn } from '@/lib/utils'
 import { CopyIcon } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
-
 type AeCopyPublicUrlButtonVariant = 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive' | 'link'
 type AeCopyPublicUrlButtonSize = 'default' | 'sm' | 'lg' | 'icon'
 
@@ -13,6 +14,7 @@ type AeCopyPublicUrlButtonProps = {
   businessId?: string
   variant?: AeCopyPublicUrlButtonVariant
   size?: AeCopyPublicUrlButtonSize
+  statusClassName?: string
 }
 
 const buttonVariantMap: Record<AeCopyPublicUrlButtonVariant, 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive' | 'link'> = {
@@ -36,16 +38,27 @@ export function AeCopyPublicUrlButton({
   businessId,
   variant = 'outline',
   size = 'default',
+  statusClassName = 'text-foreground',
 }: AeCopyPublicUrlButtonProps) {
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
+  const [copyNotice, setCopyNotice] = useState<string>()
   const publicPath = `/${slug}`
+  const origin = typeof window === 'undefined' ? 'https://ae.example' : window.location.origin
+  const publicUrl = `${origin}${publicPath}`
   const label = copied ? 'Copied public URL' : 'Copy public URL'
+  const copyStatusId = `${slug}-copy-status`
 
   async function handleCopy() {
-    const origin = typeof window === 'undefined' ? 'https://ae.example' : window.location.origin
     try {
-      await navigator.clipboard.writeText(`${origin}${publicPath}`)
+      if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
+        throw new Error('Clipboard unavailable')
+      }
+
+      await navigator.clipboard.writeText(publicUrl)
       setCopied(true)
+      setCopyFailed(false)
+      setCopyNotice('Public URL copied.')
       void emitFunnelEvent({
         eventType: 'share_url_copied',
         stage: 'published',
@@ -55,20 +68,40 @@ export function AeCopyPublicUrlButton({
       })
       window.setTimeout(() => setCopied(false), 1600)
     } catch {
-      window.prompt('Copy your public page URL:', `${origin}${publicPath}`)
+      setCopied(false)
+      setCopyFailed(true)
+      setCopyNotice('Could not copy the public URL. Select it and copy it manually.')
     }
   }
 
   return (
-    <Button
-      type="button"
-      variant={buttonVariantMap[variant]}
-      size={buttonSizeMap[size]}
-      aria-label={label}
-      onClick={handleCopy}
-    >
-      <CopyIcon data-icon="inline-start" aria-hidden="true" />
-      {size === 'icon' ? <span className="sr-only">{label}</span> : label}
-    </Button>
+    <>
+      <Button
+        type="button"
+        variant={buttonVariantMap[variant]}
+        size={buttonSizeMap[size]}
+        aria-label={label}
+        onClick={handleCopy}
+      >
+        <CopyIcon data-icon="inline-start" aria-hidden="true" />
+        {size === 'icon' ? <span className="sr-only">{label}</span> : label}
+      </Button>
+      {copyNotice === undefined ? null : (
+        <p id={copyStatusId} role="status" aria-live="polite" className={cn('basis-full text-sm', statusClassName)}>
+          {copyNotice}
+        </p>
+      )}
+      {copyFailed ? (
+        <Input
+          aria-label="Public page URL"
+          aria-describedby={copyNotice === undefined ? undefined : copyStatusId}
+          value={publicUrl}
+          readOnly
+          onFocus={(event) => event.currentTarget.select()}
+          onClick={(event) => event.currentTarget.select()}
+          className="basis-full min-w-0 bg-background text-foreground"
+        />
+      ) : null}
+    </>
   )
 }

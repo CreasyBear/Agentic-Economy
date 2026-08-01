@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, SearchIcon } from 'lucide-react'
+import { SearchIcon, StoreIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -12,8 +12,8 @@ export function AeNotFound() {
           <p className="block text-sm font-medium text-muted-foreground">Route missing</p>
           <h1 className="text-4xl font-semibold tracking-tight text-balance text-foreground md:text-5xl">This page is not here.</h1>
           <p className="block text-lg text-pretty text-muted-foreground">
-            The address moved, expired, or was never published. Try the service search, or browse listed
-            businesses from the registry.
+            The address moved, expired, or was never published. Say what you need and AE will find the
+            businesses that can do it.
           </p>
           <div className="flex flex-row flex-wrap gap-3">
             <Button asChild variant="default" className="min-h-11">
@@ -23,9 +23,9 @@ export function AeNotFound() {
               </a>
             </Button>
             <Button asChild variant="secondary" className="min-h-11">
-              <a href="/registry?q=&limit=10">
-                <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
-                Browse services
+              <a href="/claim">
+                <StoreIcon data-icon="inline-start" aria-hidden="true" />
+                List your business
               </a>
             </Button>
           </div>

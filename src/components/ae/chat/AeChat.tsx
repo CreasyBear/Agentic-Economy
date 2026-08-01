@@ -4,7 +4,7 @@ import { PanelLeftIcon, XIcon } from 'lucide-react'
 
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@/components/ui/button'
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
@@ -13,6 +13,7 @@ import {
   getOrCreatePseudonymousJourneyId,
   markJourneyViewedAfterReopenWindow,
 } from '@/lib/ui/journey-events'
+import { cn } from '@/lib/utils'
 import {
   DEFAULT_AE_SEARCH_CONTEXT,
   aeSearchContextLocationLabel,
@@ -437,7 +438,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     ? 'lg:grid-cols-[clamp(13.5rem,16vw,16.25rem)_minmax(0,1fr)]'
     : 'lg:grid-cols-[0rem_minmax(0,1fr)]'
   const shell = (
-    <div className={`grid h-full min-h-0 w-full bg-background motion-safe:transition-[grid-template-columns] motion-safe:duration-base motion-safe:ease-standard ${sidebarGridCols}`}>
+    <div className={cn('grid h-full min-h-0 w-full bg-background motion-safe:transition-[grid-template-columns] motion-safe:duration-base motion-safe:ease-standard', sidebarGridCols)}>
       <Dialog
         open={mobileSidebarOpen}
         onOpenChange={(isOpen) => {
@@ -494,7 +495,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       <AeThreadSidebar threads={threads} activeThreadId={routeThreadId} visible={sidebarVisible} onDelete={handleDeleteThread} />
       <div className="flex h-full min-h-0 w-full flex-col bg-background lg:col-start-2">
         {showSidebarToggle ? (
-          <div className={`flex min-h-10 items-center px-4 pt-2 md:px-6${showThreadChrome ? ' hidden lg:flex' : ''}`}>
+          <div className={cn('flex min-h-10 items-center px-4 pt-2 md:px-6', showThreadChrome && 'hidden lg:flex')}>
             <Button
               type="button"
               variant="ghost"
@@ -543,7 +544,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               <div className="mx-auto my-12 w-full max-w-[36rem]">
                 <Empty className="border border-border bg-card p-5">
                   <EmptyHeader>
-                    <EmptyTitle>Thread unavailable</EmptyTitle>
+                    <h1 className="text-lg font-medium tracking-tight">Thread unavailable</h1>
                     <EmptyDescription>This answer thread could not be found or loaded. Start a fresh search to keep going.</EmptyDescription>
                   </EmptyHeader>
                   <EmptyContent>
@@ -598,7 +599,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
           ) : null}
           {landingMode ? (
             <div
-              className={`absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-background px-4 py-12 md:px-6 motion-safe:transition-opacity motion-safe:duration-base motion-safe:ease-standard${!showWelcome ? ' pointer-events-none invisible opacity-0' : ''}`}
+              className={cn('absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-background px-4 py-12 md:px-6 motion-safe:transition-opacity motion-safe:duration-base motion-safe:ease-standard', !showWelcome && 'pointer-events-none invisible opacity-0')}
               aria-hidden={!showWelcome}
             >
               <div className="mx-auto flex w-full min-w-0 max-w-[44rem] flex-col gap-8">

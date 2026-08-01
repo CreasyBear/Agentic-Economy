@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 export type ShippingQuoteRequest = Readonly<{
@@ -99,8 +100,3 @@ function address(
   }
 }
 
-function deepFreeze<T>(value: T): T {
-  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value
-  for (const child of Object.values(value)) deepFreeze(child)
-  return Object.freeze(value)
-}

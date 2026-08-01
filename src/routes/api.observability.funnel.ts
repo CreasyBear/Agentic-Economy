@@ -66,8 +66,5 @@ function readStringField(value: unknown, key: string): string | undefined {
 }
 
 function jsonResponse(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return Response.json(payload, { status })
 }

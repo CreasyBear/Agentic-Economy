@@ -4,6 +4,12 @@ import { stableHash } from '../src/modules/common/stable-hash'
 import type { BusinessMutationActor } from '../src/modules/business/public'
 import { requireAdminAuthority } from '../src/modules/security/public'
 import type { AdminAction, AdminAuthorityMutationResult, AdminMembership } from '../src/modules/security/public'
+import {
+  numberField,
+  optionalNumberField,
+  optionalStringField,
+  stringField,
+} from './inquiryRuntimeDbHelpers'
 
 type RuntimeDocument = Record<string, unknown> & { _id: string }
 
@@ -152,24 +158,5 @@ function optionalIdentityText(value: string | undefined): string | undefined {
   return normalized.length === 0 ? undefined : normalized
 }
 
-function stringField(document: RuntimeDocument, field: string): string {
-  const value = document[field]
-  return typeof value === 'string' ? value : ''
-}
-
-function optionalStringField(document: RuntimeDocument, field: string): string | undefined {
-  const value = document[field]
-  return typeof value === 'string' ? value : undefined
-}
-
-function numberField(document: RuntimeDocument, field: string): number {
-  const value = document[field]
-  return typeof value === 'number' ? value : 0
-}
-
-function optionalNumberField(document: RuntimeDocument, field: string): number | undefined {
-  const value = document[field]
-  return typeof value === 'number' ? value : undefined
-}
 
 export type { AdminAuthorityResult, AdminAuthorityMutationResult }

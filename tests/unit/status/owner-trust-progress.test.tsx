@@ -20,7 +20,7 @@ const slug = brandNonEmpty('status-card-plumbing', 'Slug')
 const blockerExpectations = [
   {
     blocker: { kind: 'not_published', ownerLabel: 'Publish this business page' },
-    action: { kind: 'link', href: '/claim' },
+    action: { kind: 'link', href: '/owner/offerings', text: 'Open Offerings' },
   },
   {
     blocker: { kind: 'not_claimed', ownerLabel: 'Complete the business claim' },
@@ -44,7 +44,7 @@ const blockerExpectations = [
   },
 ] satisfies readonly Readonly<{
   blocker: AdmissionBlocker
-  action: Readonly<{ kind: 'link'; href: string }> | Readonly<{ kind: 'instruction'; text: string }>
+  action: Readonly<{ kind: 'link'; href: string; text: string }> | Readonly<{ kind: 'instruction'; text: string }>
 }>[]
 
 describe('owner request admission', () => {
@@ -59,7 +59,10 @@ describe('owner request admission', () => {
 
     for (const { blocker, action } of blockerExpectations) {
       if (action.kind === 'link') {
-        expect(screen.getByRole('link', { name: blocker.ownerLabel }).getAttribute('href')).toBe(action.href)
+        // The blocker label is the heading; a CTA that repeats it reads as a
+        // duplicate line and hides where the owner is actually being sent.
+        expect(action.text).not.toBe(blocker.ownerLabel)
+        expect(screen.getByRole('link', { name: action.text }).getAttribute('href')).toBe(action.href)
       } else {
         expect(screen.getByText(blocker.ownerLabel)).toBeTruthy()
         expect(screen.getByText(action.text)).toBeTruthy()

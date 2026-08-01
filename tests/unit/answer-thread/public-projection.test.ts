@@ -63,6 +63,7 @@ describe('public thread projection', () => {
         oneLine: 'One listed business matches.',
         summary: 'The business handles timing, price, and availability.',
         nextStep: 'Open a provider page.',
+        decisionMapRevision: 3,
       }),
       artifactKindsJson: '["one-line","provider-cards"]',
       status: 'complete',
@@ -75,6 +76,7 @@ describe('public thread projection', () => {
 
     expect(projection.turns).toHaveLength(1)
     expect(projection.turns[0]?.artifacts.length).toBeGreaterThan(0)
+    expect(projection.turns[0]?.decisionMapRevision).toBe(3)
     expect(projection.turns[0]?.workLog.map((step) => step.id)).toEqual(['step-1'])
     expect(projection.turns[0]?.answerCheckSummary).toMatchObject({
       catalogSearches: 0,

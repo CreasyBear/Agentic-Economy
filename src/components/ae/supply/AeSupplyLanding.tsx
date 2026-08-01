@@ -20,7 +20,7 @@ export function AeSupplyLanding({
       <header className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-16 sm:px-6 md:py-24">
         <div className="grid max-w-4xl gap-5">
           <p className="block text-sm font-semibold text-muted-foreground">FOR BUSINESSES</p>
-          <h1 className="text-5xl leading-none font-semibold tracking-tight text-foreground md:text-7xl">Let AI assistants bring your business more work.</h1>
+          <h1 className="text-4xl leading-none font-semibold tracking-tight text-foreground sm:text-5xl md:text-7xl">Let AI assistants bring your business more work.</h1>
           <p className="block max-w-3xl text-lg text-muted-foreground">
             Publish what you do once. Set your price. Test it, go live, and earn when agents bring you work.
           </p>
@@ -32,7 +32,7 @@ export function AeSupplyLanding({
           </div>
         </div>
       </header>
-      <main className="mx-auto grid w-full max-w-6xl gap-10 px-4 pb-16 sm:px-6">
+      <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 pb-16 sm:px-6">
         <Card className="border-0 bg-brand text-on-brand">
           <CardContent className="grid gap-3 p-6">
             <p className="block text-sm font-semibold text-on-brand">YOUR PATH TO PAID WORK</p>
@@ -52,7 +52,7 @@ export function AeSupplyLanding({
           </div>
         </section>
         <AeSupplyAgentProof tools={tools} services={services} />
-      </main>
+      </div>
     </>
   )
 }

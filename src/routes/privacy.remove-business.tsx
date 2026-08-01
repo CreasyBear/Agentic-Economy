@@ -21,7 +21,7 @@ import { useClientMounted } from '@/hooks/use-client-mounted'
 
 const removalSchema = z.object({
   slug: z.string(),
-  contactEmail: z.string(),
+  contactEmail: z.string().email(),
   reasonCode: z.enum(['privacy_removal_requested', 'ownership_contested', 'duplicate_or_impersonation', 'unsafe_or_inaccurate']),
   evidenceSummary: z.string(),
 })
@@ -109,6 +109,12 @@ function RemoveBusinessRoute() {
       return
     }
 
+    if (!z.string().email().safeParse(nextValue.contactEmail.trim()).success) {
+      setError('Enter a valid contact email.')
+      focusField(contactEmailRef)
+      return
+    }
+
     if (nextValue.evidenceSummary.trim().length === 0) {
       setError('Evidence summary is required.')
       focusField(evidenceSummaryRef)
@@ -135,11 +141,11 @@ function RemoveBusinessRoute() {
   return (
     <AePublicShell>
       <AePageHeader
-        eyebrow="Corrections"
+        eyebrow="Privacy"
         title="Corrections"
         description="Send the page slug, your email, and what should change."
       />
-      <main className="mx-auto grid w-full max-w-5xl gap-10 px-4 pb-16 md:px-6">
+      <div className="mx-auto grid w-full max-w-5xl gap-10 px-4 pb-16 md:px-6">
         <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
           {correctionPaths.map(({ icon: Icon, label, title, body }) => (
             <Card key={title} className="grid h-full gap-1.5 p-5">
@@ -248,7 +254,7 @@ function RemoveBusinessRoute() {
           </Button>
         </form>
         )}
-      </main>
+      </div>
     </AePublicShell>
   )
 }

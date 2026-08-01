@@ -17,6 +17,7 @@ import { buildProviderPresentation, type ProviderPresentation } from '@/lib/ui/p
 import { telUri } from '@/lib/ui/tel-uri'
 import { buildListingTrustProjection, NO_REPLY_HISTORY, type ListingTrustProjection, type ReplyPosture, type TrustFact } from '@/lib/ui/trust-projection'
 import { emitWave1JourneyEvent, getOrCreatePseudonymousJourneyId, type PseudonymousJourneyId } from '@/lib/ui/journey-events'
+import { cn } from '@/lib/utils'
 import type { PublicRouteCapabilityContract, PublicRouteCatalogContract } from '@/modules/catalog/public'
 import { projectPublicInquiryOfferingSupply, type PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
 
@@ -468,8 +469,8 @@ function ReachOutStepsCard({ updatedAt, inquiryAvailable }: { updatedAt: number;
             return (
               <li key={step.title} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
                 <span className="relative mt-1 flex justify-center" aria-hidden="true">
-                  <span className={`size-3 rounded-full border ${step.reached ? 'border-brand bg-brand' : 'border-border bg-card'}`} />
-                  {hasNext ? <span className={`absolute top-3 h-[calc(100%+1rem)] w-px ${step.reached && nextReached ? 'bg-brand' : 'bg-border'}`} /> : null}
+                  <span className={cn('size-3 rounded-full border', step.reached ? 'border-brand bg-brand' : 'border-border bg-card')} />
+                  {hasNext ? <span className={cn('absolute top-3 h-[calc(100%+1rem)] w-px', step.reached && nextReached ? 'bg-brand' : 'bg-border')} /> : null}
                 </span>
                 <span className="grid gap-1">
                   <span className="text-sm font-medium text-foreground">{step.title}</span>
@@ -596,7 +597,7 @@ function readOfficeAddress(catalog: PublicRouteCatalogContract): string | undefi
 }
 
 function ListingBackLink({ from, threadId }: { from?: 'thread' | 'registry'; threadId?: string }) {
-  const label = from === 'thread' && threadId !== undefined ? 'Back to answer' : from === 'registry' ? 'Back to results' : 'Find another business'
+  const label = from === 'thread' && threadId !== undefined ? 'Back to answer' : 'Find another business'
   const className = 'inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground underline-offset-4 hover:underline'
   const content = (
     <>
@@ -608,9 +609,8 @@ function ListingBackLink({ from, threadId }: { from?: 'thread' | 'registry'; thr
   if (from === 'thread' && threadId !== undefined) {
     return <Link to="/t/$threadId" params={{ threadId }} className={className}>{content}</Link>
   }
-  if (from === 'registry') {
-    return <Link to="/registry" search={{ q: '', limit: 10 }} className={className}>{content}</Link>
-  }
+  // `from=registry` only ever arrives on a legacy inbound URL; nothing in the
+  // app mints it, and there is no results page to go back to.
   return <Link to="/" className={className}>{content}</Link>
 }
 

@@ -1,4 +1,5 @@
 import type { UserIdentity } from 'convex/server'
+import { isRecord } from './inquiryRuntimeDbHelpers'
 
 export type RuntimeDocument = Record<string, unknown> & { _id: string }
 
@@ -558,6 +559,3 @@ function stringFromRecord(record: Record<string, unknown>, field: string): strin
   return typeof value === 'string' ? value : ''
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

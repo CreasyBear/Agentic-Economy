@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deepFreeze } from '@/modules/common/deep-freeze'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -99,10 +100,3 @@ function cloneStableRecord(
   return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, cloneStable(nested)]))
 }
 
-function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
-    Object.freeze(value)
-    for (const nested of Object.values(value)) deepFreeze(nested)
-  }
-  return value
-}

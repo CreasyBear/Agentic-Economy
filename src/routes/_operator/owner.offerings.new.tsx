@@ -57,7 +57,7 @@ function NewOwnerOfferingRoute() {
 function readSeed(
   result: Extract<OwnerOfferingSupplyReadResult, { kind: 'available' }>,
 ): Readonly<{ label: string; value: Partial<OwnerOfferingEditorValue> }> | undefined {
-  const latest = [...result.offerings].sort((left, right) => right.updatedAt - left.updatedAt)[0]
+  const latest = result.offerings.toSorted((left, right) => right.updatedAt - left.updatedAt)[0]
   const category = latest?.revision?.category.trim()
   if (category === undefined || category.length === 0) return undefined
   return { label: category, value: { category } }

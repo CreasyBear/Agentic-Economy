@@ -8,6 +8,8 @@ import { findAction } from '@/modules/actions'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 import { webDiscoverAction } from '@/modules/storefront/storefront.actions'
 import type { HarnessModelRequestRecord } from '@/modules/harness/public'
+import { persistDecisionMapDraft } from '@/modules/decision-map/public'
+
 import {
   activePlanFromStored,
   authorPlanEnvelope,
@@ -161,6 +163,26 @@ async function streamProposalTurn(
         ctx, fallbackPlan, active, events, toolCalls, providers, allowedSlugs, modelRequests, 'transport_failed',
       )
     }
+    if (result.proposal.kind === 'decision_map_revision' && active === undefined && toolCalls.length === 0) {
+      const snapshot = await persistDecisionMapDraft({
+        projectId: ctx.threadId,
+        threadId: ctx.threadId,
+        ownerSessionId: ctx.sessionId,
+        draft: result.proposal.decisionMap,
+        operationKey: `decision_map:${ctx.threadId}:${ctx.turnId}:${result.proposal.proposalId}`,
+      }, ctx.sourceWriteRequest)
+      ctx.send({ type: 'decision-map', snapshot })
+      return await finishSnapshot(ctx, {
+        query: ctx.query,
+        oneLine: 'Here’s what I heard.',
+        providers: [],
+        summary: 'A decision map is ready.',
+        nextStep: 'Review the decisions below.',
+        decisionMapRevision: snapshot.revision,
+        agentJsonUrl: buildAgentJsonUrl(ctx.query, DEFAULT_TURN_PROVIDER_LIMIT),
+      }, [], new Set(), modelRequests, 'proposal')
+    }
+
     consumedProposalIds.add(result.proposal.proposalId)
 
     if (result.proposal.kind === 'plan_revision') {

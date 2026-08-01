@@ -2,7 +2,9 @@ import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet, FieldLegend } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSet, FieldLegend } from '@/components/ui/field'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
@@ -38,10 +40,12 @@ function BusinessProblemRoute() {
     description="Read what the customer shared and add your business statement."
     currentPath="/owner/request-problems"
   >
-    {result.kind === 'refused'
+    {result.kind !== 'business_problem'
       ? <Card className="p-5">
         <p className="text-muted-foreground">
-          This report is unavailable. It may be private, belong to another business, or no longer be accessible.
+          {result.kind === 'unavailable'
+            ? 'The latest report could not be loaded. Refresh the page to try again.'
+            : 'This report is unavailable. It may be private, belong to another business, or no longer be accessible.'}
         </p>
       </Card>
       : <BusinessProblemPanel
@@ -130,31 +134,36 @@ export function BusinessProblemPanel({
     </Card>}
 
     <Card className="p-5">
-      <div className="grid gap-3">
+      <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); void record() }}>
         <h2>Record business statement</h2>
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="business-problem-position">Your position</FieldLabel>
-            <select
-              id="business-problem-position"
+            <Select
               value={position}
-              onChange={(event) => setPosition(event.target.value as typeof position)}
-              className="min-h-11 rounded-md border border-border bg-card px-3"
+              onValueChange={(value) => {
+                if (value === 'supports' || value === 'disputes' || value === 'uncertain') setPosition(value)
+              }}
             >
-              <option value="uncertain">Cause remains uncertain</option>
-              <option value="supports">Our records support the customer report</option>
-              <option value="disputes">Our records differ from the customer report</option>
-            </select>
+              <SelectTrigger id="business-problem-position" className="min-h-11 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="uncertain">Cause remains uncertain</SelectItem>
+                <SelectItem value="supports">Our records support the customer report</SelectItem>
+                <SelectItem value="disputes">Our records differ from the customer report</SelectItem>
+              </SelectContent>
+            </Select>
           </Field>
           <Field>
             <FieldLabel htmlFor="business-problem-statement">Statement</FieldLabel>
-            <textarea
-              id="business-problem-statement"
+            <Textarea
+              aria-describedby="business-problem-statement-description"
               value={statement}
               onChange={(event) => setStatement(event.target.value)}
               maxLength={1_000}
               required
-              className="min-h-28 rounded-md border border-border bg-card p-3"
+              className="min-h-28 bg-card"
             />
           </Field>
           {problem.availableEvidence.length === 0 ? null : (
@@ -178,15 +187,15 @@ export function BusinessProblemPanel({
               </FieldGroup>
             </FieldSet>
           )}
-          <FieldDescription>
+          <FieldDescription id="business-problem-statement-description">
             This statement becomes part of the shared record. It does not decide cause, responsibility, compensation, or remedy.
           </FieldDescription>
         </FieldGroup>
-        <Button type="button" variant="default" onClick={() => void record()} disabled={submitting || statement.trim().length === 0}>
+        <Button type="submit" variant="default" disabled={submitting || statement.trim().length === 0}>
           {submitting ? 'Recording statement…' : 'Record business statement'}
         </Button>
-        {error === undefined ? null : <p role="alert" className="text-sm text-destructive">{error}</p>}
-      </div>
+        {error === undefined ? null : <FieldError>{error}</FieldError>}
+      </form>
     </Card>
   </div>
 }

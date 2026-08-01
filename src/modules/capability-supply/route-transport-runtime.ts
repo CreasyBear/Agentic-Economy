@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -218,6 +220,64 @@ type X402Configuration = Readonly<{
 type QueryParameterMapping = Readonly<{ inputPointer: string; parameter: string }>
 
 type RegisteredConfiguration = HttpConfiguration | McpConfiguration | X402Configuration
+const nonBlankString = z.string().superRefine((value, context) => {
+  if (value.trim().length === 0) context.addIssue({ code: 'custom', message: 'must_not_be_blank' })
+})
+const requestTimeout = z.number().int().min(100).max(120_000)
+const amountExponent = z.number().int().min(0).max(18)
+const queryParameter = z.strictObject({
+  inputPointer: z.string().regex(/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/),
+  parameter: z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/),
+})
+const queryParameters = z.array(queryParameter).min(1).max(64).superRefine((items, context) => {
+  const pointers = new Set<string>()
+  const parameters = new Set<string>()
+  for (const [index, item] of items.entries()) {
+    if (pointers.has(item.inputPointer) || parameters.has(item.parameter)) {
+      context.addIssue({ code: 'custom', path: [index], message: 'query_mapping_duplicate' })
+    }
+    pointers.add(item.inputPointer)
+    parameters.add(item.parameter)
+  }
+})
+const auxiliaryExchange = z.strictObject({
+  path: z.string().regex(/^\/(?!\/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/),
+  requestTimeoutMs: requestTimeout,
+})
+const httpConfiguration = z.strictObject({
+  method: z.enum(['GET', 'POST']),
+  query: queryParameters.optional(),
+  requestTimeoutMs: requestTimeout,
+  reconciliation: auxiliaryExchange.optional(),
+  cancellation: auxiliaryExchange.optional(),
+}).superRefine((value, context) => {
+  if ((value.method === 'GET' && value.query === undefined)
+    || (value.method === 'POST' && value.query !== undefined)) {
+    context.addIssue({ code: 'custom', message: 'method_query_mismatch' })
+  }
+})
+const mcpConfiguration = z.strictObject({
+  protocolVersion: nonBlankString.max(64),
+  toolName: nonBlankString.max(200),
+  requestTimeoutMs: requestTimeout,
+})
+const x402Configuration = z.strictObject({
+  method: z.enum(['GET', 'POST']),
+  query: queryParameters.optional(),
+  requestTimeoutMs: requestTimeout,
+  scheme: z.literal('exact'),
+  network: nonBlankString.max(100),
+  currency: nonBlankString.max(20),
+  routeAmountExponent: amountExponent,
+  assetAmountExponent: amountExponent,
+  asset: nonBlankString.max(200),
+  payTo: nonBlankString.max(200),
+}).superRefine((value, context) => {
+  if ((value.method === 'GET' && value.query === undefined)
+    || (value.method === 'POST' && value.query !== undefined)) {
+    context.addIssue({ code: 'custom', message: 'method_query_mismatch' })
+  }
+})
 
 export type PreparedRouteTransportInvocation = Readonly<{
   invocation: RouteTransportInvocation
@@ -756,51 +816,15 @@ function parseConfiguration(value: string): Readonly<Record<string, unknown>> | 
 }
 
 function isHttpConfiguration(value: Readonly<Record<string, unknown>>): value is HttpConfiguration {
-  if (!optionalExactKeys(value, ['method', 'requestTimeoutMs'], ['query', 'reconciliation', 'cancellation'])
-    || !['GET', 'POST'].includes(String(value.method)) || !validTimeout(value.requestTimeoutMs)
-    || !validMethodQuery(value.method, value.query)) return false
-  return ['reconciliation', 'cancellation'].every((key) => {
-    const exchange = value[key]
-    return exchange === undefined || (isJsonObject(exchange)
-      && exactKeys(exchange, ['path', 'requestTimeoutMs'])
-      && typeof exchange.path === 'string' && validAuxiliaryPath(exchange.path)
-      && validTimeout(exchange.requestTimeoutMs))
-  })
+  return httpConfiguration.safeParse(value).success
 }
 
 function isMcpConfiguration(value: Readonly<Record<string, unknown>>): value is McpConfiguration {
-  return exactKeys(value, ['protocolVersion', 'requestTimeoutMs', 'toolName'])
-    && boundedString(value.protocolVersion, 64) && boundedString(value.toolName, 200)
-    && validTimeout(value.requestTimeoutMs)
+  return mcpConfiguration.safeParse(value).success
 }
 
 function isX402Configuration(value: Readonly<Record<string, unknown>>): value is X402Configuration {
-  return optionalExactKeys(value, [
-    'asset', 'assetAmountExponent', 'currency', 'method', 'network', 'payTo',
-    'requestTimeoutMs', 'routeAmountExponent', 'scheme',
-  ], ['query'])
-    && ['GET', 'POST'].includes(String(value.method)) && value.scheme === 'exact'
-    && validMethodQuery(value.method, value.query)
-    && boundedString(value.network, 100) && boundedString(value.currency, 20)
-    && boundedString(value.asset, 200) && boundedString(value.payTo, 200) && validTimeout(value.requestTimeoutMs)
-    && validExponent(value.routeAmountExponent) && validExponent(value.assetAmountExponent)
-}
-
-function validMethodQuery(method: unknown, query: unknown): boolean {
-  if (method === 'POST') return query === undefined
-  if (method !== 'GET' || !Array.isArray(query) || query.length < 1 || query.length > 64) return false
-  const pointers = new Set<string>()
-  const parameters = new Set<string>()
-  return query.every((item) => {
-    if (!isJsonObject(item) || !exactKeys(item, ['inputPointer', 'parameter'])
-      || typeof item.inputPointer !== 'string' || typeof item.parameter !== 'string'
-      || !/^\/(?:[^/~]|~[01])+(?:\/(?:[^/~]|~[01])+)*$/.test(item.inputPointer)
-      || !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(item.parameter)
-      || pointers.has(item.inputPointer) || parameters.has(item.parameter)) return false
-    pointers.add(item.inputPointer)
-    parameters.add(item.parameter)
-    return true
-  })
+  return x402Configuration.safeParse(value).success
 }
 
 function requestTarget(
@@ -901,35 +925,11 @@ function isJsonObject(value: unknown): value is Readonly<Record<string, unknown>
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function exactKeys(value: Readonly<Record<string, unknown>>, keys: readonly string[]): boolean {
-  return Object.keys(value).sort().join(',') === [...keys].sort().join(',')
-}
-
-function optionalExactKeys(
-  value: Readonly<Record<string, unknown>>,
-  required: readonly string[],
-  optional: readonly string[],
-): boolean {
-  const keys = Object.keys(value)
-  return required.every((key) => keys.includes(key))
-    && keys.every((key) => required.includes(key) || optional.includes(key))
-}
-
-function validAuxiliaryPath(value: string): boolean {
-  return /^\/(?!\/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/.test(value)
-}
 
 function boundedString(value: unknown, max: number): value is string {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= max
 }
 
-function validTimeout(value: unknown): value is number {
-  return Number.isInteger(value) && typeof value === 'number' && value >= 100 && value <= 120_000
-}
-
-function validExponent(value: unknown): value is number {
-  return Number.isSafeInteger(value) && typeof value === 'number' && value >= 0 && value <= 18
-}
 
 function transportKind(adapterId: string): RouteTransportObservation['transport'] {
   if (adapterId === 'http-json:v1') return 'http'

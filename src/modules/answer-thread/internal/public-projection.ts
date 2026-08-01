@@ -68,6 +68,7 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
     ...(evidence.searchContext?.timing === undefined ? {} : { timing: evidence.searchContext.timing }),
     ...(evidence.searchContext?.timingDate === undefined ? {} : { timingDate: evidence.searchContext.timingDate }),
     ...(prose.layoutProfile === undefined ? {} : { layoutProfile: prose.layoutProfile }),
+    ...(prose.decisionMapRevision === undefined ? {} : { decisionMapRevision: prose.decisionMapRevision }),
   }
 }
 

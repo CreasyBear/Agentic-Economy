@@ -41,20 +41,42 @@ function AgentAccessAuthorizeRoute() {
   const { user_code: userCode } = Route.useSearch()
   const [status, setStatus] = useState<'idle' | 'approved' | 'denied' | 'error'>('idle')
   const [pending, setPending] = useState(false)
+  const [consentLoading, setConsentLoading] = useState(userCode !== undefined)
   const [clientName, setClientName] = useState<string>()
   const [mode, setMode] = useState<string>()
 
   useEffect(() => {
-    if (userCode === undefined) return
-    void fetch(`/oauth/authorize?user_code=${encodeURIComponent(userCode)}`)
+    if (userCode === undefined) {
+      setConsentLoading(false)
+      setClientName(undefined)
+      setMode(undefined)
+      return
+    }
+
+    const controller = new AbortController()
+    setConsentLoading(true)
+    setStatus('idle')
+    setClientName(undefined)
+    setMode(undefined)
+    void fetch(`/oauth/authorize?user_code=${encodeURIComponent(userCode)}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('authorization_unavailable')
         const html = await response.text()
         const details = readConsentDetails(html)
+        if (details.clientName === undefined || details.mode === undefined) {
+          throw new Error('authorization_details_missing')
+        }
         setClientName(details.clientName)
         setMode(details.mode)
       })
-      .catch(() => setStatus('error'))
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.name === 'AbortError') return
+        setStatus('error')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setConsentLoading(false)
+      })
+    return () => controller.abort()
   }, [userCode])
 
   async function decide(decision: 'approve' | 'deny') {
@@ -75,22 +97,27 @@ function AgentAccessAuthorizeRoute() {
   }
 
   const permission = consentPermissionCopy(mode)
+  const consentReady = clientName !== undefined && mode !== undefined
 
   return (
     <AeOperatorShell operatorRole="owner" title="Review assistant access" description="Choose what your assistant may ask AE to do, then approve or decline." currentPath="/agent-access">
       <Card className="grid max-w-2xl gap-4 p-5">
         {userCode === undefined ? (
           <Alert variant="destructive"><AlertTitle>This access request is missing a code</AlertTitle><AlertDescription>Start a new request from your assistant.</AlertDescription></Alert>
+        ) : consentLoading || !consentReady ? (
+          <Alert aria-live="polite"><AlertTitle>Loading access request</AlertTitle><AlertDescription>Retrieving the assistant name and exact permission before you decide.</AlertDescription></Alert>
         ) : status === 'idle' ? (
           <>
             <h2>{clientName === undefined ? 'Connect your assistant' : `Connect ${clientName}`}</h2>
+            <div id="consent-scope" className="grid gap-2 text-sm">
+              <p><span className="font-medium">Permission:</span> Your assistant may {permission.allowed}.</p>
+              <p className="text-muted-foreground">{permission.approval}</p>
+            </div>
             <p className="text-muted-foreground">Request code: {userCode}</p>
-            <p className="text-muted-foreground">Your assistant may {permission.allowed}.</p>
-            <p className="text-muted-foreground">{permission.approval}</p>
-            <p className="text-muted-foreground">Access expires in seven days. You can revoke it at any time from Assistant access.</p>
-            <div className="flex gap-3">
-              <Button variant="default" onClick={() => void decide('approve')} disabled={pending}>{pending ? 'Approving…' : 'Approve access'}</Button>
-              <Button variant="secondary" onClick={() => void decide('deny')} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
+            <p id="consent-expiry" className="text-muted-foreground">Access expires in seven days. You can revoke it at any time from Assistant access.</p>
+            <div className="flex flex-wrap gap-3">
+              <Button aria-describedby="consent-scope consent-expiry" variant="default" onClick={() => void decide('approve')} disabled={pending}>{pending ? 'Approving…' : 'Approve access'}</Button>
+              <Button aria-describedby="consent-scope consent-expiry" variant="secondary" onClick={() => void decide('deny')} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
             </div>
           </>
         ) : status === 'approved' ? (

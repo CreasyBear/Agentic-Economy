@@ -1,4 +1,5 @@
 import type { JSONSchema } from '@tanstack/ai'
+import { isRecord } from '@/modules/common/is-record'
 
 type JsonSchemaRecord = Record<string, unknown>
 
@@ -132,6 +133,3 @@ function matchesJsonType(value: unknown, type: string): boolean {
   }
 }
 
-function isRecord(value: unknown): value is JsonSchemaRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

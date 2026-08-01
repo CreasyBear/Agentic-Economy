@@ -6,6 +6,8 @@ import type {
   AnswerSource,
 } from '@/modules/answer/public'
 import { mergeAnswerArtifact } from '@/modules/answer/public'
+import type { DecisionMapSnapshot } from '@/modules/decision-map/public'
+
 import type { ThinkingStep } from '@/modules/answer-thread/public'
 
 import { appendThinkingStep } from './answer-stream'
@@ -16,7 +18,6 @@ type AnswerPlanState = Pick<
   Extract<AnswerEvent, { type: 'plan' }>,
   'providerBudget' | 'artifactBudget'
 >
-
 type EnginePlanState = Omit<Extract<AnswerEvent, { type: 'plan-contract' }>, 'type'>
 type RecommendationState = Omit<Extract<AnswerEvent, { type: 'recommendation' }>, 'type'>
 
@@ -31,6 +32,7 @@ export type AnswerTurnUiState = {
   layoutProfile: AnswerLayoutProfile | undefined
   plan: AnswerPlanState | undefined
   enginePlan: EnginePlanState | undefined
+  decisionMap: DecisionMapSnapshot | undefined
   clarifyingQuestion: string | undefined
   recommendation: RecommendationState | undefined
   errorMessage: string | null
@@ -48,6 +50,7 @@ export const initialAnswerTurnUiState: AnswerTurnUiState = {
   layoutProfile: undefined,
   plan: undefined,
   enginePlan: undefined,
+  decisionMap: undefined,
   clarifyingQuestion: undefined,
   recommendation: undefined,
   errorMessage: null,
@@ -99,6 +102,8 @@ export function reduceAnswerTurnEvent(state: AnswerTurnUiState, event: AnswerEve
           steps: event.steps,
         },
       }
+    case 'decision-map':
+      return { ...state, decisionMap: event.snapshot }
     case 'clarifying-question':
       return { ...state, clarifyingQuestion: event.question }
     case 'recommendation':

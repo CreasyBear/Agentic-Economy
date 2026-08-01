@@ -9,6 +9,7 @@ import {
   isCustomerInquiryRecordClientAvailable,
   useCustomerInquiryRecord,
 } from '@/modules/inquiries/customer-record-client'
+import { cn } from '@/lib/utils'
 
 const PROOF_BOUNDARY = 'This record proves what was sent, when, to whom, and the reply recorded. Acceptance, availability, booking, confirmation, and completed work require separate business evidence.'
 
@@ -134,8 +135,8 @@ function CustomerRecordContent({ threadId, accessKey }: { threadId: string; acce
                 return (
                   <li key={step.key} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
                     <span className="relative mt-1 flex justify-center" aria-hidden="true">
-                      <span className={`size-3 rounded-full border ${reached ? 'border-brand bg-brand' : 'border-border bg-card'}`} />
-                      {hasNext ? <span className={`absolute top-3 h-[calc(100%+1rem)] w-px ${reached && nextReached ? 'bg-brand' : 'bg-border'}`} /> : null}
+                      <span className={cn('size-3 rounded-full border', reached ? 'border-brand bg-brand' : 'border-border bg-card')} />
+                      {hasNext ? <span className={cn('absolute top-3 h-[calc(100%+1rem)] w-px', reached && nextReached ? 'bg-brand' : 'bg-border')} /> : null}
                     </span>
                     <span className="grid gap-1">
                       <span className="flex flex-wrap items-center gap-2">

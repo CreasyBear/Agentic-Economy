@@ -1,4 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type {
@@ -876,8 +877,3 @@ function refusal(
   })
 }
 
-function deepFreeze(value: unknown): unknown {
-  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value
-  for (const nested of Object.values(value)) deepFreeze(nested)
-  return Object.freeze(value)
-}

@@ -30,8 +30,22 @@ function operatorRoutePaths(): ReadonlySet<string> {
   return new Set(paths)
 }
 
-/** Public destinations are not operator routes; they are validated separately. */
-const publicDestinations = new Set(['/', '/registry', '/help'])
+/**
+ * Public destinations are not operator routes, but they still have to exist.
+ * Derived from the public route files rather than hand-listed: a hand-listed
+ * allowlist is what let `/help` stay in the sidebar after the route was gone.
+ */
+function publicRoutePaths(): ReadonlySet<string> {
+  const directory = fileURLToPath(new URL('../../src/routes', import.meta.url))
+  const paths = readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map((entry) => entry.name.replace(/\.tsx$/, ''))
+    .filter((entry) => !entry.startsWith('_') && !entry.split('.').some((segment) => segment.startsWith('$')))
+    .map((entry) => (entry === 'index' ? '/' : `/${entry.split('.').join('/')}`))
+  return new Set(paths)
+}
+
+const publicDestinations = publicRoutePaths()
 
 describe('operator navigation', () => {
   const routePaths = operatorRoutePaths()
@@ -76,6 +90,15 @@ describe('operator navigation', () => {
     expect(labels).toEqual(['Business page', 'Offerings', 'Inquiries', 'Settings'])
   })
 
+  /** Admin carries the most surfaces, so it is the role where an untiered item
+   *  quietly turns the sidebar into a directory of readbacks. */
+  it('keeps the gated admin sidebar to the core working set', () => {
+    const labels = navGroupsForRole('admin', { advanced: false })
+      .flatMap((group) => group.items.map((item) => item.label))
+
+    expect(labels).toEqual(['Claims', 'Search gaps', 'Inquiries', 'Request problems'])
+  })
+
   it('marks nested paths active for their nav root', () => {
     expect(isOperatorPathActive('/owner/offerings/off_1', '/owner/offerings')).toBe(true)
     expect(isOperatorPathActive('/owner/offerings', '/owner/offerings')).toBe(true)
@@ -84,7 +107,19 @@ describe('operator navigation', () => {
 
   it('exposes public utility links for operator sidebar footers', () => {
     expect(operatorUtilityItemsForRole('owner').map((item) => item.href))
-      .toEqual(['/', '/registry', '/help'])
+      .toEqual(['/', '/for-agents', '/privacy/remove-business'])
+  })
+
+  /** `/registry` is a legacy 301 to `/`. Minting it internally sends a person
+   *  through a redirect to a page that never shows a catalog. */
+  it('never advertises the legacy registry redirect', () => {
+    const advertised = [
+      ...operatorUtilityItemsForRole('owner').map((item) => item.href),
+      ...operatorRoles.flatMap((role) =>
+        listOperatorCommandDestinations(role).flatMap((group) => group.items.map((item) => item.href))),
+    ]
+
+    expect(advertised.filter((href) => href.startsWith('/registry'))).toEqual([])
   })
 
   it('formats operator nav badges without showing empty counts', () => {

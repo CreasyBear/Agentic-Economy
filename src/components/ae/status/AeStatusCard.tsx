@@ -20,14 +20,20 @@ type AeStatusCardProps = {
 }
 
 
+/**
+ * The blocker's own `ownerLabel` is the heading, so an action never repeats it —
+ * and every action must land somewhere that can actually change the fact.
+ * `not_published` fires for an unpublished page *or* an unpublished service, so
+ * a claimed owner goes to Offerings; `/claim` would be a rejection funnel.
+ */
 type AdmissionOwnerAction =
-  | Readonly<{ kind: 'link'; href: '/claim' | '/owner/settings'; label: string }>
+  | Readonly<{ kind: 'link'; href: '/owner/offerings' | '/owner/settings'; label: string }>
   | Readonly<{ kind: 'instruction'; label: string }>
 
 function ownerActionForAdmissionBlocker(blocker: AdmissionBlocker): AdmissionOwnerAction {
   switch (blocker.kind) {
     case 'not_published':
-      return { kind: 'link', href: '/claim', label: 'Publish this business page' }
+      return { kind: 'link', href: '/owner/offerings', label: 'Open Offerings' }
     case 'not_claimed':
       return { kind: 'instruction', label: 'Contact AE support to repair this business claim.' }
     case 'destination_unverified':

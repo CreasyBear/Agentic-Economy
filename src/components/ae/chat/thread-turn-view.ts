@@ -17,6 +17,7 @@ export type ThreadTurnViewModel = {
   workLog: readonly AnswerWorkStep[]
   layoutProfile?: AnswerLayoutProfile
   answerCheckSummary?: PublicAnswerCheckSummary
+  decisionMapRevision?: number
 }
 
 export function toThreadViewModel(turn: PublicThreadTurn): ThreadTurnViewModel {
@@ -29,5 +30,6 @@ export function toThreadViewModel(turn: PublicThreadTurn): ThreadTurnViewModel {
     workLog: turn.workLog,
     ...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile }),
     ...(turn.answerCheckSummary === undefined ? {} : { answerCheckSummary: turn.answerCheckSummary }),
+    ...(turn.decisionMapRevision === undefined ? {} : { decisionMapRevision: turn.decisionMapRevision }),
   }
 }

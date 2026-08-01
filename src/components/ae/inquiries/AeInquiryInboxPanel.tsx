@@ -8,6 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { cn } from '@/lib/utils'
 import type { InquiryNotificationStatus, OwnerInboxBucket, OwnerInboxInquiryProjection, OwnerInboxReadback } from '@/modules/inquiries/public'
 
 type InboxFilter = 'all' | OwnerInboxBucket | 'delivery_attention'
@@ -159,7 +160,7 @@ function InboxStat({
         : 'border-border bg-card text-muted-foreground'
 
   return (
-    <div className={`grid min-h-24 content-between rounded-md border p-3 ${toneClass}`}>
+    <div className={cn('grid min-h-24 content-between rounded-md border p-3', toneClass)}>
       <div className="flex items-center justify-between gap-2 text-xs">
         <span>{label}</span>
         <span className="text-muted-foreground">{icon}</span>

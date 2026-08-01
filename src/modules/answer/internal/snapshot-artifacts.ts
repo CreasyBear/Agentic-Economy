@@ -92,10 +92,7 @@ export function buildArtifactsFromSnapshot(
       kind: 'recovery-prompts',
       title: 'Try a narrower search',
       prompts: buildRecoveryPrompts(snapshot.query),
-      links: [
-        { label: 'Own a business? List it free', href: '/claim' },
-        { label: 'Tell us what you needed', href: '/registry' },
-      ],
+      links: [{ label: 'Own a business? List it free', href: '/claim' }],
     })
   }
 

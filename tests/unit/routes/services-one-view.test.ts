@@ -52,7 +52,6 @@ describe('legacy human route redirects', () => {
 
   it.each([
     ['about', AboutRoute],
-    ['for-agents', AgentsRoute],
     ['help', HelpRoute],
   ])('%s permanently redirects to /', (_name, route) => {
     const beforeLoad = route.options.beforeLoad
@@ -68,6 +67,13 @@ describe('legacy human route redirects', () => {
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
     expect(thrown.options).toMatchObject({ to: '/', statusCode: 301 })
+  })
+
+  /** `/for-agents` is advertised in the sitemap and llms.txt, so it has to serve
+   *  the agent door itself rather than bounce a reader back to home. */
+  it('for-agents serves the agent door instead of redirecting', () => {
+    expect(AgentsRoute.options.beforeLoad).toBeUndefined()
+    expect(AgentsRoute.options.component).toBeDefined()
   })
 })
 

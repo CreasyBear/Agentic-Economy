@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { CodeBlock } from '@/components/ai-elements/code-block'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -69,7 +70,7 @@ function DevelopersDiscoveryRoute() {
         <div className="grid gap-6">
           <Card className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-foreground">Source-owned readback</div>
+              <h2 className="text-lg font-semibold text-foreground">Source-owned readback</h2>
               <div className="text-sm leading-6 text-muted-foreground">{readback.copy.readOnlyNotice}</div>
             </div>
             <div className="mt-4 grid gap-4">
@@ -93,7 +94,7 @@ function DevelopersDiscoveryRoute() {
 
           <Card id="facts" className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-foreground">Current public catalog facts</div>
+              <h2 className="text-lg font-semibold text-foreground">Current public catalog facts</h2>
               <div className="text-sm leading-6 text-muted-foreground">Rendered from the public catalog DTO, not private owner evidence.</div>
             </div>
             <div className="mt-4 grid gap-4">
@@ -128,21 +129,21 @@ function DevelopersDiscoveryRoute() {
 
           <Card id="schema" className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-foreground">Schema, examples, and fixture labels</div>
+              <h2 className="text-lg font-semibold text-foreground">Schema, examples, and fixture labels</h2>
               <div className="text-sm leading-6 text-muted-foreground">Each artifact is withheld or marked degraded from the same freshness readback.</div>
             </div>
             <div className="mt-4 grid gap-4">
               {readback.artifacts.map((artifact) => (
                 <section key={artifact.kind} id={artifact.kind} className="rounded-lg border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="font-heading text-base font-semibold">{artifact.label}</h2>
+                    <h3 className="font-heading text-base font-semibold">{artifact.label}</h3>
                     <Badge variant={developerDiscoveryStateVariant(artifact.state)}>{`${artifact.state.charAt(0).toUpperCase()}${artifact.state.slice(1)}`}</Badge>
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">{artifact.reason}</p>
-                  <p className="mt-2 text-sm font-medium">{artifact.downloadLabel}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Fields: {artifact.schemaFields.slice(0, 8).join(', ')}
-                  </p>
+                  <CodeBlock
+                    code={JSON.stringify({ route: artifact.route, fields: artifact.schemaFields.slice(0, 8) }, null, 2)}
+                    language="json"
+                    className="mt-3 min-w-0 [&_code]:break-all [&_pre]:whitespace-pre-wrap"
+                  />
                 </section>
               ))}
             </div>
@@ -152,7 +153,7 @@ function DevelopersDiscoveryRoute() {
         <aside className="grid content-start gap-6">
           <Card className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-foreground">Read path status</div>
+              <h2 className="text-lg font-semibold text-foreground">Read path status</h2>
               <div className="text-sm leading-6 text-muted-foreground">Public read paths only.</div>
             </div>
             <div className="mt-4">
@@ -177,7 +178,7 @@ function DevelopersDiscoveryRoute() {
 
           <Card id="support-matrix" className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-foreground">Discovery support matrix</div>
+              <h2 className="text-lg font-semibold text-foreground">Discovery support matrix</h2>
               <div className="text-sm leading-6 text-muted-foreground">Shipped rows are limited to route-tested public readbacks.</div>
             </div>
             <div className="mt-4">
@@ -194,7 +195,7 @@ function DevelopersDiscoveryRoute() {
 
           <Card className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-foreground">Unsupported here</div>
+              <h2 className="text-lg font-semibold text-foreground">Unsupported here</h2>
               <div className="text-sm leading-6 text-muted-foreground">Unavailable capabilities are explicit so builders do not infer authority.</div>
             </div>
             <div className="mt-4">
@@ -211,7 +212,7 @@ function DevelopersDiscoveryRoute() {
 
           <Card className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-foreground">Gated exclusions</div>
+              <h2 className="text-lg font-semibold text-foreground">Gated exclusions</h2>
               <div className="text-sm leading-6 text-muted-foreground">Deferred surfaces are not part of the shipped read-only product.</div>
             </div>
             <div className="mt-4">

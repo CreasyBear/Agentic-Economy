@@ -2,14 +2,32 @@ import { ClientOnly } from '@tanstack/react-router'
 import type { ErrorBoundary as SentryErrorBoundary } from '@sentry/react'
 import { useEffect, useState, type ReactNode } from 'react'
 
+import { Button } from '@/components/ui/button'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+
+/**
+ * A dead end is the failure mode here: telling someone to "refresh" without a
+ * control leaves them with the browser chrome as the only way out. Retry first,
+ * then the one destination that always exists.
+ */
 function AeObservabilityErrorFallback() {
   return (
-    <div className="mx-auto flex min-h-[40vh] max-w-lg flex-col justify-center gap-3 px-4 py-12">
-      <h1 className="font-heading text-xl font-semibold">Something went wrong</h1>
-      <p className="text-sm leading-6 text-muted-foreground">
-        This page hit an unexpected error. Refresh and try again. If it keeps happening, return to the registry or ask flow.
-      </p>
-    </div>
+    <Empty className="mx-auto my-12 max-w-lg border border-border bg-card p-6">
+      <EmptyHeader>
+        <EmptyTitle>Something went wrong</EmptyTitle>
+        <EmptyDescription>
+          This page hit an unexpected error. Nothing you sent was lost. Try again, or pick up from another view.
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <div className="flex flex-wrap justify-center gap-3">
+          <Button type="button" variant="default" className="min-h-11" onClick={() => window.location.reload()}>
+            Try again
+          </Button>
+          <Button asChild variant="secondary" className="min-h-11"><a href="/">Start a new ask</a></Button>
+        </div>
+      </EmptyContent>
+    </Empty>
   )
 }
 

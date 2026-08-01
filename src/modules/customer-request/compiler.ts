@@ -1,3 +1,6 @@
+import { DirectedGraph } from 'graphology'
+import { hasCycle, topologicalGenerations } from 'graphology-dag'
+
 import {
   sameCapabilityContractRef,
   type CapabilityContractRef,
@@ -816,13 +819,21 @@ export function composeRequestActions(
       inputMappings: Object.freeze(mappings.sort((left, right) => left.mappingId.localeCompare(right.mappingId))),
     })
   })
+  const composedById = new Map(composed.map((action) => [action.actionId, action]))
+  const orderGraph = new DirectedGraph()
+  for (const action of composed) orderGraph.mergeNode(action.actionId)
+  for (const action of composed) {
+    for (const dependency of action.dependsOn) {
+      if (composedById.has(dependency)) orderGraph.mergeDirectedEdge(dependency, action.actionId)
+    }
+  }
+  if (hasCycle(orderGraph)) return undefined
   const ordered: ProposedRequestAction[] = []
-  const remaining = new Map(composed.map((action) => [action.actionId, action]))
-  while (remaining.size > 0) {
-    const ready = [...remaining.values()].filter((action) => action.dependsOn.every((dependency) => !remaining.has(dependency)))
-      .sort((left, right) => left.actionId.localeCompare(right.actionId))
-    if (ready.length === 0) return undefined
-    for (const action of ready) { ordered.push(action); remaining.delete(action.actionId) }
+  for (const generation of topologicalGenerations(orderGraph)) {
+    for (const actionId of [...generation].sort((left, right) => left.localeCompare(right))) {
+      const action = composedById.get(actionId)
+      if (action !== undefined) ordered.push(action)
+    }
   }
   return Object.freeze(ordered)
 }

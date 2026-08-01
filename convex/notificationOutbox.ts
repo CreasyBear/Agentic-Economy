@@ -6,6 +6,7 @@ import { resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument, RuntimeQuery } from './source_state'
+import { booleanField, numberField, stringField } from './inquiryRuntimeDbHelpers'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import {
@@ -57,7 +58,7 @@ const notificationAttemptStatus = literalUnion(NotificationAttemptStatusValues)
 const notificationWebhookEventStatus = literalUnion(NotificationWebhookEventStatusValues)
 const notificationSignatureStatus = literalUnion(NotificationSignatureStatusValues)
 
-const csrfArgs = {
+export const csrfArgs = {
   csrfToken: v.optional(v.string()),
   csrfCookie: v.optional(v.string()),
   origin: v.optional(v.string()),
@@ -794,16 +795,3 @@ function requireNotificationSystemAccess(systemKey: string): { kind: 'allowed' }
   return { kind: 'allowed' }
 }
 
-function stringField(row: RuntimeDocument, field: string): string {
-  const value = row[field]
-  return typeof value === 'string' ? value : ''
-}
-
-function numberField(row: RuntimeDocument, field: string): number {
-  const value = row[field]
-  return typeof value === 'number' ? value : 0
-}
-
-function booleanField(row: RuntimeDocument, field: string): boolean {
-  return row[field] === true
-}

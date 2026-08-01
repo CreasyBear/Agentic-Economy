@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
-import { decodeAnswerId } from '@/modules/answer/public'
+import { decodeAnswerId, encodeAnswerId } from '@/modules/answer/public'
 
 /**
  * Legacy share links (`/q/$answerId`) redirect to the primary chat shell on `/`.
@@ -9,7 +9,7 @@ import { decodeAnswerId } from '@/modules/answer/public'
 export const Route = createFileRoute('/q/$answerId')({
   beforeLoad: ({ params }) => {
     const query = decodeAnswerId(params.answerId)
-    if (query.length === 0) {
+    if (query.length === 0 || encodeAnswerId(query) !== params.answerId) {
       throw redirect({ to: '/' })
     }
     throw redirect({ to: '/', search: { q: query } })

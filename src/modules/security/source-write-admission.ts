@@ -1,3 +1,4 @@
+import { base64Codec } from '@/modules/common/base64-codec'
 import { hkdf } from '@noble/hashes/hkdf'
 import { hmac } from '@noble/hashes/hmac'
 import { sha256 } from '@noble/hashes/sha2'
@@ -147,12 +148,12 @@ export function sourceWriteBodyDigest(body: string | Uint8Array | null | undefin
     return defaultBodyDigest
   }
   const bytes = typeof body === 'string' ? new TextEncoder().encode(body) : body
-  return base64UrlNoPadding(sha256(bytes))
+  return base64Codec.toBase64Url(sha256(bytes))
 }
 
 export function sourceWriteContentDigestHeader(body: string | Uint8Array): string {
   const bytes = typeof body === 'string' ? new TextEncoder().encode(body) : body
-  return `sha-256=:${base64Standard(sha256(bytes))}:`
+  return `sha-256=:${base64Codec.toBase64(sha256(bytes))}:`
 }
 
 export function createSourceWriteAdmission(input: {
@@ -474,16 +475,4 @@ function randomNonce(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
   return bytesToHex(bytes)
-}
-
-function base64UrlNoPadding(bytes: Uint8Array): string {
-  return base64Standard(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
-}
-
-function base64Standard(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte)
-  }
-  return btoa(binary)
 }

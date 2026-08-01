@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 import { formatRelativeTime, timestampIso } from '@/lib/ui/format-time'
+import { cn } from '@/lib/utils'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
 import { useAnswerModel } from './AeAnswerModelContext'
 
@@ -58,7 +59,7 @@ export function AeThreadSidebar({
     <aside id={layout === 'desktop' ? 'ae-thread-sidebar' : 'ae-thread-mobile-sidebar-content'} className={sidebarClassName} aria-label="Recent questions">
       <div className="flex flex-col gap-3 p-1">
         <div className="flex min-h-7 items-center justify-between gap-2">
-          <h2 className="truncate font-mono text-xs font-medium uppercase leading-tight text-muted-foreground">Recent questions</h2>
+          <span className="truncate font-mono text-xs font-medium uppercase leading-tight text-muted-foreground">Recent questions</span>
           <span className="inline-grid min-h-6 min-w-6 place-items-center rounded-sm border border-border bg-card font-mono text-xs leading-none tabular-nums text-muted-foreground" data-numeric>{threads.length}</span>
         </div>
         <Button asChild variant="secondary" size="sm" className="min-h-11 w-full">
@@ -149,7 +150,7 @@ function AnswerModelSelector() {
               {selectedModel.provider.slice(0, 1)}
             </span>
             <span className="max-w-44 truncate">{selectedModel.name}</span>
-            <ChevronDownIcon aria-hidden="true" className={`size-3.5 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+            <ChevronDownIcon aria-hidden="true" className={cn('size-3.5 text-muted-foreground transition-transform', open && 'rotate-180')} />
           </button>
         </ModelSelectorTrigger>
         <ModelSelectorContent
@@ -239,7 +240,7 @@ function AeThreadSidebarRow({
       <Link
         to="/t/$threadId"
         params={{ threadId: thread.threadId }}
-        className={`flex min-h-[2.875rem] flex-col gap-1 rounded-lg border px-3 py-2 no-underline transition-colors hover:bg-card${active ? ' border-border-strong bg-card' : ' border-transparent hover:border-border-strong'}`}
+        className={cn('flex min-h-[2.875rem] flex-col gap-1 rounded-lg border px-3 py-2 no-underline transition-colors hover:bg-card', active ? 'border-border-strong bg-card' : 'border-transparent hover:border-border-strong')}
         aria-current={active ? 'page' : undefined}
         onClick={onNavigate}
       >

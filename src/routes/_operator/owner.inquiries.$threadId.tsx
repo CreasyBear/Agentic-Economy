@@ -401,12 +401,20 @@ function OwnerReplyControls({
   onReply: () => void | Promise<void>
 }) {
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
   const replyInvalid = replyAttempted && body.trim().length === 0
+
+  function handleCloseConfirmOpenChange(nextOpen: boolean) {
+    setCloseConfirmOpen(nextOpen)
+    if (!nextOpen) {
+      window.setTimeout(() => closeButtonRef.current?.focus(), 0)
+    }
+  }
 
   async function handleCloseConfirm() {
     const closed = await onClose()
     if (closed) {
-      setCloseConfirmOpen(false)
+      handleCloseConfirmOpenChange(false)
     }
   }
 
@@ -452,6 +460,7 @@ function OwnerReplyControls({
               Reply
             </Button>
             <Button
+              ref={closeButtonRef}
               type="button"
               variant="secondary"
               disabled={!canClose || pendingAction !== undefined}
@@ -464,7 +473,7 @@ function OwnerReplyControls({
         </div>
         <AeConfirmDialog
           open={closeConfirmOpen}
-          onOpenChange={setCloseConfirmOpen}
+          onOpenChange={handleCloseConfirmOpenChange}
           title="Close this inquiry?"
           description="Nothing is deleted. The thread stays visible for reference, but it won't accept further replies or read-state updates after this."
           confirmLabel="Close inquiry"

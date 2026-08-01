@@ -1,3 +1,5 @@
+import { DirectedGraph } from 'graphology'
+import { hasCycle as graphHasCycle } from 'graphology-dag'
 import type { ActionInvocationView } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
@@ -326,18 +328,12 @@ function hasCycle(
   nodes: readonly ReferenceCompositionNode[],
   byRef: ReadonlyMap<string, ReferenceCompositionNode>,
 ): boolean {
-  const visiting = new Set<string>()
-  const visited = new Set<string>()
-  const visit = (nodeRef: string): boolean => {
-    if (visiting.has(nodeRef)) return true
-    if (visited.has(nodeRef)) return false
-    visiting.add(nodeRef)
+  const dependencyGraph = new DirectedGraph()
+  for (const { nodeRef } of nodes) dependencyGraph.mergeNode(nodeRef)
+  for (const { nodeRef } of nodes) {
     for (const dependency of byRef.get(nodeRef)?.dependencies ?? []) {
-      if (visit(dependency)) return true
+      if (byRef.has(dependency)) dependencyGraph.mergeDirectedEdge(nodeRef, dependency)
     }
-    visiting.delete(nodeRef)
-    visited.add(nodeRef)
-    return false
   }
-  return nodes.some(({ nodeRef }) => visit(nodeRef))
+  return graphHasCycle(dependencyGraph)
 }

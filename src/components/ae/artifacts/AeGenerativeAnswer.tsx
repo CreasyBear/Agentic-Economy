@@ -267,7 +267,7 @@ function AeAnswerJourney({
 
   return (
     <Card
-      className={`${REVEAL_ENTER} grid gap-5 border border-border bg-card p-4`}
+      className={cn(REVEAL_ENTER, 'grid gap-5 border border-border bg-card p-4')}
       aria-label="How this answer was put together"
       data-phase={phase}
     >
@@ -302,13 +302,13 @@ function AeAnswerJourney({
       >
         {steps.map((step, index) => {
           const state = getJourneyState({ index, activeIndex, completedIndex, phase })
-          const nodeClassName = [
+          const nodeClassName = cn(
             'absolute -left-[1.85rem] top-0 inline-flex size-5 items-center justify-center rounded-full border font-mono text-2xs font-semibold tabular-nums sm:-top-[1.9rem] sm:left-0',
-            state === 'complete' ? 'border-brand bg-brand text-on-brand' : '',
-            state === 'active' ? 'border-brand bg-card text-brand' : '',
-            state === 'pending' ? 'border-border bg-card text-muted-foreground' : '',
-            state === 'error' || state === 'stopped' ? 'border-red-ring bg-red-subtle text-red-vivid' : '',
-          ].join(' ')
+            state === 'complete' && 'border-brand bg-brand text-on-brand',
+            state === 'active' && 'border-brand bg-card text-brand',
+            state === 'pending' && 'border-border bg-card text-muted-foreground',
+            (state === 'error' || state === 'stopped') && 'border-red-ring bg-red-subtle text-red-vivid',
+          )
 
           return (
             <li
@@ -428,7 +428,7 @@ function AnswerPartView({
       return <AeImportedClaims claims={part.claims} query={query} />
     case 'provider-compare-table':
       return hasAnswerFirstSummary ? (
-        <details className={`${REVEAL_ENTER} group rounded-lg border border-border bg-card`}>
+        <details className={cn(REVEAL_ENTER, 'group rounded-lg border border-border bg-card')}>
           <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
             <span>See full comparison</span>
             <span className="font-mono text-2xs text-muted-foreground">{listingCountLabel(part.providers.length)}</span>
@@ -456,22 +456,22 @@ function AnswerPartView({
       return <AeGenerativeMap label={part.label} placeQuery={part.placeQuery} />
     case 'empty-state':
       return empty ? (
-        <div className={`${REVEAL_ENTER} rounded-md border border-border bg-card p-4 text-sm text-foreground`} role="status">
+        <div className={cn(REVEAL_ENTER, 'rounded-md border border-border bg-card p-4 text-sm text-foreground')} role="status">
           <p>{part.text}</p>
         </div>
       ) : null
     case 'prose':
       return !empty && part.text.length > 0 ? (
-        <p className={`${REVEAL_ENTER} max-w-[68ch] text-pretty text-base leading-relaxed text-foreground`} aria-live="off">
+        <p className={cn(REVEAL_ENTER, 'max-w-[68ch] text-pretty text-base leading-relaxed text-foreground')} aria-live="off">
           {part.text}
         </p>
       ) : null
     case 'what-to-do-now':
       return !empty && part.text.length > 0 ? (
         part.compact === true ? (
-          <p className={`${REVEAL_ENTER} text-sm text-muted-foreground`}>{part.text}</p>
+          <p className={cn(REVEAL_ENTER, 'text-sm text-muted-foreground')}>{part.text}</p>
         ) : (
-          <p className={`${REVEAL_ENTER} grid gap-1 border-l-2 border-border-strong py-1 pl-3 text-base text-foreground`}>
+          <p className={cn(REVEAL_ENTER, 'grid gap-1 border-l-2 border-border-strong py-1 pl-3 text-base text-foreground')}>
             <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">What to do now</span>
             <span>{part.text}</span>
           </p>
@@ -498,7 +498,7 @@ function SelectedProviderConfirmation({ provider, threadId }: { provider: Answer
 
   return (
     <section
-      className={`${REVEAL_ENTER} grid gap-3 rounded-md border border-border bg-card p-4`}
+      className={cn(REVEAL_ENTER, 'grid gap-3 rounded-md border border-border bg-card p-4')}
       aria-label="Selected business"
     >
       <header className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
@@ -550,7 +550,7 @@ function ProviderCardsRail({
   threadId: string | undefined
 }) {
   return (
-    <section className={`${REVEAL_ENTER} grid gap-3`} aria-label="Business shortlist">
+    <section className={cn(REVEAL_ENTER, 'grid gap-3')} aria-label="Business shortlist">
       <header className="grid gap-1 rounded-md border border-border bg-card px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="grid min-w-0 gap-0.5">
           <p className="block text-sm font-medium text-muted-foreground">Business shortlist</p>
@@ -601,7 +601,7 @@ function ProviderCompareTable({
 
   return (
     <section
-      className={`${REVEAL_ENTER} grid gap-0 overflow-hidden rounded-lg border border-border bg-card`}
+      className={cn(REVEAL_ENTER, 'grid gap-0 overflow-hidden rounded-lg border border-border bg-card')}
       aria-label="Business comparison"
     >
       <header className="flex items-start justify-between gap-3 border-b border-border p-4">
@@ -668,7 +668,7 @@ function ProviderCompareRow({
       {fields.map((field) => (
         <td
           key={`${provider.slug}-${field}`}
-          className={`border-t border-border px-4 py-3 align-top tabular-nums text-muted-foreground ${field === 'freshness' ? 'font-mono text-2xs tracking-wide' : ''}`}
+          className={cn('border-t border-border px-4 py-3 align-top tabular-nums text-muted-foreground', field === 'freshness' && 'font-mono text-2xs tracking-wide')}
         >
           {compareFieldValue(provider, field)}
         </td>
@@ -687,7 +687,7 @@ function RecoveryPrompts({
 }: {
   title?: string
   prompts: readonly { label: string; query: string }[]
-  links?: readonly { label: string; href: '/claim' | '/registry' }[]
+  links?: readonly { label: string; href: '/claim' }[]
 }) {
   if (prompts.length === 0 && links.length === 0) {
     return null
@@ -695,7 +695,7 @@ function RecoveryPrompts({
 
   return (
     <section
-      className={`${REVEAL_ENTER} grid gap-3 rounded-lg border border-border bg-card p-4`}
+      className={cn(REVEAL_ENTER, 'grid gap-3 rounded-lg border border-border bg-card p-4')}
       aria-label={title ?? 'Try another search'}
     >
       <header className="flex items-center gap-2">
@@ -729,15 +729,9 @@ function RecoveryPrompts({
         <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground" aria-label="More ways to continue">
           {links.map((link) => (
             <li key={link.href}>
-              {link.href === '/claim' ? (
-                <Link className="underline-offset-4 hover:text-foreground hover:underline" to="/claim">
-                  {link.label}
-                </Link>
-              ) : (
-                <Link className="underline-offset-4 hover:text-foreground hover:underline" to="/registry" search={{ q: '', limit: 10 }}>
-                  {link.label}
-                </Link>
-              )}
+              <Link className="underline-offset-4 hover:text-foreground hover:underline" to={link.href}>
+                {link.label}
+              </Link>
             </li>
           ))}
         </ul>

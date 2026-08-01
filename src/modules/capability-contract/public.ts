@@ -10,6 +10,7 @@ import rootMetaSchema from 'ajv/dist/refs/json-schema-2020-12/schema.json'
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 export const CAPABILITY_CONTRACT_FORMAT = 'ae.capability-contract:v2' as const
@@ -484,7 +485,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
     validateInput: (value) => validateDocument(inputValidator, value),
     validateOutput: (value) => validateDocument(outputValidator, value),
   }
-  return deepFreeze(model) as CapabilityDecisionModel
+  return deepFreeze(model)
 }
 
 function projectCapabilityPreparation(
@@ -906,7 +907,7 @@ function materializeInputFacts(
   facts: readonly Readonly<{ semantic: CapabilityInputSemantic; value: JsonValue }>[],
 ): JsonValue {
   const root: Record<string, JsonValue> = Object.create(null) as Record<string, JsonValue>
-  for (const fact of facts) setJsonPointer(root, fact.semantic.inputPointer, cloneJsonValue(fact.value))
+  for (const fact of facts) setJsonPointer(root, fact.semantic.inputPointer, structuredClone(fact.value))
   return root
 }
 
@@ -958,7 +959,7 @@ function validateDocument(validator: SchemaValidator, value: unknown): Capabilit
     }) as CapabilityDocumentValidation
   }
   if (validator(value)) {
-    const validatedValue = deepFreeze(cloneJsonValue(value)) as JsonValue
+    const validatedValue = deepFreeze(structuredClone(value))
     return Object.freeze({ kind: 'valid', value: validatedValue }) as CapabilityDocumentValidation
   }
   const errors = validator.errors ?? []
@@ -969,11 +970,6 @@ function validateDocument(validator: SchemaValidator, value: unknown): Capabilit
   return deepFreeze({ kind: 'invalid', issues, truncated: errors.length > MAX_VALIDATION_ISSUES }) as CapabilityDocumentValidation
 }
 
-function cloneJsonValue(value: JsonValue): JsonValue {
-  if (value === null || typeof value !== 'object') return value
-  if (Array.isArray(value)) return value.map(cloneJsonValue)
-  return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, cloneJsonValue(child)]))
-}
 
 export function isBoundedJsonValue(value: unknown): value is JsonValue {
   const active = new Set<object>()
@@ -1333,8 +1329,3 @@ function isJsonRecord(value: JsonValue | undefined): value is Readonly<Record<st
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function deepFreeze(value: unknown): unknown {
-  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value
-  for (const nested of Object.values(value)) deepFreeze(nested)
-  return Object.freeze(value)
-}

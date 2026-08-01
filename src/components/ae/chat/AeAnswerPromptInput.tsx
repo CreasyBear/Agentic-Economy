@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { SearchIcon } from 'lucide-react'
 
 import {
@@ -13,6 +13,7 @@ import {
 } from '@/components/ai-elements/prompt-input'
 import { Button } from '@/components/ui/button'
 import { useClientMounted } from '@/hooks/use-client-mounted'
+import { cn } from '@/lib/utils'
 import { NeedTimingValues, type NeedTiming } from '@/modules/answer/search-context'
 
 import { AeAnswerSuggestions } from './AeSuggestionChips'
@@ -97,7 +98,7 @@ function AeAnswerPromptInputInner({
   const [timing, setTiming] = useState<NeedTiming>(initialTiming)
   const hydrated = useClientMounted()
   const [timingDate, setTimingDate] = useState(initialTimingDate)
-  const [isComposing, setIsComposing] = useState(false)
+  const isComposingRef = useRef(false)
   const timingDateValid = timing !== 'date' || (timingDate.length > 0 && timingDate >= localToday())
   const charactersRemaining = QUERY_MAX_LENGTH - value.length
   const showCharacterLimit = charactersRemaining <= 40
@@ -108,7 +109,7 @@ function AeAnswerPromptInputInner({
   }, [focusOnMount, inputId])
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== 'Enter' || event.shiftKey || isComposing || event.nativeEvent.isComposing) {
+    if (event.key !== 'Enter' || event.shiftKey || isComposingRef.current || event.nativeEvent.isComposing) {
       return
     }
     event.preventDefault()
@@ -132,7 +133,7 @@ function AeAnswerPromptInputInner({
   }
 
   return (
-    <div className={`flex w-full min-w-0 flex-col${compact ? ' gap-2' : ' gap-3'}`}>
+    <div className={cn('flex w-full min-w-0 flex-col', compact ? 'gap-2' : 'gap-3')}>
       <PromptInput
         role="search"
         aria-label={ariaLabel}
@@ -147,7 +148,7 @@ function AeAnswerPromptInputInner({
             </span>
             <span
               id={counterId}
-              className={`inline-flex min-h-6 items-center font-mono text-xs leading-none text-muted-foreground${showCharacterLimit ? ' opacity-100' : ' opacity-0'}`}
+              className={cn('inline-flex min-h-6 items-center font-mono text-xs leading-none text-muted-foreground', showCharacterLimit ? 'opacity-100' : 'opacity-0')}
               data-numeric
               aria-live="polite"
             >
@@ -159,13 +160,13 @@ function AeAnswerPromptInputInner({
           <span id={placeholderId} className="sr-only">{placeholder}</span>
           <PromptInputTextarea
             id={inputId}
-            className={`max-h-36 min-w-0 w-full flex-1 overflow-y-auto py-1 text-base leading-snug text-foreground placeholder:text-muted-foreground${compact ? ' min-h-9' : ' min-h-12'}`}
+            className={cn('max-h-36 min-w-0 w-full flex-1 overflow-y-auto py-1 text-base leading-snug text-foreground placeholder:text-muted-foreground', compact ? 'min-h-11 sm:min-h-9' : 'min-h-12')}
             placeholder={placeholder}
             value={value}
             maxLength={QUERY_MAX_LENGTH}
             onChange={(event) => updateValue(event.currentTarget.value)}
-            onCompositionEnd={() => setIsComposing(false)}
-            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => { isComposingRef.current = false }}
+            onCompositionStart={() => { isComposingRef.current = true }}
             onKeyDown={handleInputKeyDown}
             role="searchbox"
             autoComplete="off"
@@ -240,7 +241,7 @@ function AeAnswerPromptInputInner({
         />
       ) : null}
 
-      <p id={hintId} className={`text-sm leading-snug text-muted-foreground${compact ? ' hidden' : ''}`}>
+      <p id={hintId} className={cn('text-sm leading-snug text-muted-foreground', compact && 'hidden')}>
         Type a real need. Name another place only when you want to search there.
       </p>
     </div>

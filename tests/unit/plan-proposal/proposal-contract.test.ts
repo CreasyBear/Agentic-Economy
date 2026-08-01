@@ -27,11 +27,13 @@ vi.mock('@openrouter/ai-sdk-provider', () => ({
   }),
 }))
 
+import type { DecisionMapDraft } from '@/modules/decision-map/public'
 import {
   derivePlanMetrics,
   evaluateGoalPredicate,
   flattenProposalForTransport,
   runProposalSegment,
+  validateProposalAgainstKernel,
   type PlanContract,
   type PlanEvent,
   type Proposal,
@@ -47,6 +49,53 @@ const basePlan: PlanContract = {
     dependsOn: [], successCriterion: { kind: 'nonempty_results' },
   }],
   rationale: 'Find current published options first.',
+}
+const decisionMap: DecisionMapDraft = {
+  version: 'decisionMap_v1',
+  goalText: 'Choose the first wedding planning step',
+  summary: 'A wedding next October for 120 people, with the first decisions still open.',
+  assumptions: [
+    { id: 'date', label: 'Wedding date', value: 'Next October', source: 'inferred' },
+  ],
+  nodes: [
+    { id: 'venue', kind: 'area', label: 'Venue', status: 'queued', dependsOn: [], constraintRefs: [] },
+    { id: 'food', kind: 'area', label: 'Food', status: 'fog', dependsOn: [], constraintRefs: [] },
+    { id: 'music', kind: 'area', label: 'Music', status: 'fog', dependsOn: [], constraintRefs: [] },
+    {
+      id: 'guest-list',
+      kind: 'decision',
+      label: 'Guest list',
+      status: 'ready',
+      parentId: 'venue',
+      dependsOn: [],
+      constraintRefs: ['date'],
+      options: [
+        { id: 'small', label: 'Keep it small', summary: 'Prioritise a smaller celebration.' },
+        { id: 'full', label: 'Invite all 120', summary: 'Plan around the full guest count.' },
+      ],
+      recommendedOptionId: 'full',
+      reason: 'The guest count shapes the venue decision.',
+      unlocks: ['venue-style'],
+      parkTrigger: 'when the guest count changes',
+    },
+    {
+      id: 'venue-style',
+      kind: 'decision',
+      label: 'Venue style',
+      status: 'queued',
+      parentId: 'venue',
+      dependsOn: ['guest-list'],
+      constraintRefs: [],
+      options: [
+        { id: 'indoor', label: 'Indoor', summary: 'Keep weather out of the plan.' },
+        { id: 'outdoor', label: 'Outdoor', summary: 'Use an outdoor setting.' },
+      ],
+      recommendedOptionId: 'indoor',
+      reason: 'Capacity comes first.',
+      unlocks: [],
+      parkTrigger: 'when the guest list is settled',
+    },
+  ],
 }
 
 const segmentInput = {
@@ -147,6 +196,45 @@ describe('proposal contract kernel', () => {
       activePlan: { contract: basePlan, stepStatuses: { search: 'completed' as const } },
       evidence: [{ actionId: 'registry.search', resultJson: '{"items":[{"slug":"one"}]}' }],
     })).resolves.toMatchObject({ kind: 'transport_failed', reason: 'recommendation_slug_not_allowed' })
+  })
+
+  it('accepts one typed decision-map revision and refuses invalid map invariants', async () => {
+    mocks.build = (proposalId) => flat({
+      kind: 'decision_map_revision',
+      proposalId,
+      decisionMap,
+    })
+    await expect(runProposalSegment(segmentInput)).resolves.toMatchObject({
+      kind: 'proposal',
+      proposal: { kind: 'decision_map_revision', decisionMap },
+    })
+    expect(mocks.calls).toBe(1)
+    // A dangling parentId is no longer expressible: the transport shape nests
+    // decisions under the one branch area. An unresolvable constraint
+    // reference still is, so it stands in for kernel refusal.
+    const invalidMap: DecisionMapDraft = {
+      ...decisionMap,
+      nodes: decisionMap.nodes.map((node) => node.id === 'guest-list'
+        ? { ...node, constraintRefs: ['missing-assumption'] }
+        : node),
+    }
+    mocks.build = (proposalId) => flat({
+      kind: 'decision_map_revision',
+      proposalId,
+      decisionMap: invalidMap,
+    })
+    await expect(runProposalSegment(segmentInput)).resolves.toMatchObject({
+      kind: 'transport_failed',
+      reason: expect.stringContaining('decision_map_invalid') as unknown as string,
+    })
+  })
+  it('rejects a decision-map proposal nonce mismatch before validation', () => {
+    expect(validateProposalAgainstKernel(
+      { kind: 'decision_map_revision', proposalId: 'wrong-nonce', decisionMap },
+      'expected-nonce',
+      [],
+      undefined,
+    )).toBe('proposal_nonce_mismatch')
   })
 
   it('fails closed when provider cost metadata is missing', async () => {

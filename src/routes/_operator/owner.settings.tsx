@@ -5,11 +5,12 @@ import { useServerFn } from '@tanstack/react-start'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Switch } from '@/components/ui/switch'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import {
   readOwnerNotificationPreferencesServer,
   updateOwnerNotificationPreferencesServer,
@@ -51,15 +52,24 @@ function OwnerSettingsRoute() {
 }
 
 function AccountSettingsSection() {
+  const localPreview = isLocalE2EAuthBypassEnabled()
+
   return (
     <Card className="grid gap-4 p-5">
       <SectionHeader
         title="Account"
         description="Update your Clerk profile, email addresses, security settings, and active sessions."
       />
-      <div className="overflow-hidden rounded-md border border-border bg-card p-2">
-        <UserProfile />
-      </div>
+      {localPreview ? (
+        <Alert>
+          <AlertTitle>Account settings are unavailable in local preview</AlertTitle>
+          <AlertDescription>This browser journey does not connect a Clerk account. Sign in outside local preview to manage your profile and sessions.</AlertDescription>
+        </Alert>
+      ) : (
+        <div className="overflow-hidden rounded-md border border-border bg-card p-2">
+          <UserProfile />
+        </div>
+      )}
     </Card>
   )
 }
@@ -98,6 +108,9 @@ function NotificationSettingsSection({
     try {
       const result = await updatePreferences({ data: { newInquiryEmailEnabled: nextEnabled } })
       handleMutationResult(result, previous)
+    } catch {
+      onReadbackChange(previous)
+      setError('AE could not update message email preferences. Try again.')
     } finally {
       setPending(false)
     }
@@ -136,18 +149,19 @@ function NotificationSettingsSection({
       ) : null}
       <Field orientation="horizontal" data-disabled={pending || readback.kind === 'error'} className="rounded-md border border-border bg-card p-4">
         <FieldContent>
-          <FieldLabel htmlFor="new-message-email">New message email</FieldLabel>
-          <FieldDescription>Email me when a customer sends a written message through AE. Your message list still keeps the record.</FieldDescription>
+          <FieldLabel htmlFor="new-message-email" className="min-h-11 items-center">New message email</FieldLabel>
+          <FieldDescription id="new-message-email-description">Email me when a customer sends a written message through AE. Your message list still keeps the record.</FieldDescription>
         </FieldContent>
         <Switch
           id="new-message-email"
+          aria-describedby="new-message-email-description"
           checked={enabled}
           onCheckedChange={(checked) => void handleChange(checked)}
           disabled={pending || readback.kind === 'error'}
         />
       </Field>
-      {message === undefined ? null : <p className="text-sm text-muted-foreground">{message}</p>}
-      {error === undefined ? null : <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {message === undefined ? null : <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{message}</p>}
+      {error === undefined ? null : <FieldError>{error}</FieldError>}
     </Card>
   )
 }

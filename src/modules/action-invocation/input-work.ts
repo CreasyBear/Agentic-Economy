@@ -1,5 +1,6 @@
 import type { PublishedOperation } from '@/modules/capability-supply/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { isRecord } from '@/modules/common/is-record'
 
 import type { ActionInvocationOrigin, InvocationActor } from './contracts'
 import { dynamicPublishedSourceDigest } from './dynamic-published-contract'
@@ -76,6 +77,3 @@ export function mergeUserInput(input: Readonly<{
 }
 
 
-function isRecord(value: unknown): value is Record<string, any> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
