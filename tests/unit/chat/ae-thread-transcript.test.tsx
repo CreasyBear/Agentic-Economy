@@ -1,12 +1,37 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
+import {
+  RouterContextProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from '@tanstack/react-router'
+import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AeThreadTranscript } from '@/components/ae/chat/AeThreadTranscript'
 import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicThreadProjection } from '@/modules/answer-thread/public'
+
+/**
+ * The transcript renders provider cards, which link to business pages with
+ * TanStack `Link`. `Link` needs router context, so every render in this file
+ * goes through a memory router rather than bare `render`.
+ */
+function render(ui: ReactElement) {
+  const rootRoute = createRootRoute()
+  const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/$slug' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/t/$threadId' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/registry' }),
+  ])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  return rtlRender(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
+}
 
 let showModalDescriptor: PropertyDescriptor | undefined
 let closeDescriptor: PropertyDescriptor | undefined

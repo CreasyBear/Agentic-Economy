@@ -83,6 +83,11 @@ and the current one-shot plan engine is retired. Cutover included. Saleable end-
 - [T38 — Scale + failure envelope](tickets/T38-scale-and-failure-envelope.md) — 100 global workpool
   slots are the shared budget (100k projects fails at 60s chase actions); batched sharded cron sweeps,
   never per-project timers; journals carry IDs only; degradation modes defined per surface.
+- Journeys spec (2026-08-01, [JOURNEYS.md](JOURNEYS.md)) — 16 journeys J0–J15, each step actor →
+  behavior → surface → event with gap ownership; CEO gate (`history://JourneysCeoGate`) NO-SHIP'd v1,
+  all five findings applied (arrival attribution, J12 = measured acquisition-to-paid slice, split
+  money-yes/identity-claim, provider earnings clock, daily ritual cut for event-triggered
+  interruption); J12-leads-the-wedge recommendation recorded as T27 input.
 
 ## Not yet specified
 
