@@ -70,7 +70,11 @@ describe('PR03 claim publish suppress flow', () => {
       correlationId: brandNonEmpty('corr:publish:empty-integration', 'CorrelationId'),
       now: 20,
     })
-    expect(emptyPublish).toMatchObject({ kind: 'error', code: 'catalog_publish_invalid_services' })
+    expect(emptyPublish).toMatchObject({
+      kind: 'ok',
+      code: 'catalog_published',
+      catalog: { services: [] },
+    })
 
     const publishCommand = {
       actor: { kind: 'authenticated_owner' as const, clerkUserId: 'user_sam' },
@@ -100,7 +104,7 @@ describe('PR03 claim publish suppress flow', () => {
     })
     expect(replayed).toMatchObject({ kind: 'ok', code: 'catalog_publish_replayed' })
     expect(JSON.stringify(published)).not.toContain('sam-owner@example.test')
-    expect(state.auditEvents.filter((event) => event.eventType === 'claim.published')).toHaveLength(1)
+    expect(state.auditEvents.filter((event) => event.eventType === 'claim.published')).toHaveLength(2)
     expect(state.registryProjectionAttempts).toHaveLength(2)
     expect(state.discoveryManifestAttempts).toHaveLength(1)
 

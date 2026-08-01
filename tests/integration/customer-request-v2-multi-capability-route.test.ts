@@ -2683,7 +2683,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       principalId: current.aggregate.snapshot.principalId,
       ownerId: 'owner:external-confirmation',
       credentialId: 'credential:external-confirmation',
-      scopes: ['customer_requests:create'],
+      // Confirm and run are approve_each operations; create alone is inspect_only.
+      scopes: ['customer_requests:create', 'customer_requests:approve_each'],
     }
     const key = 'external-confirmation-key-that-is-long-enough'
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', key)

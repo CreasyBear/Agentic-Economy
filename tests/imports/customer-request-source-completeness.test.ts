@@ -34,13 +34,16 @@ describe('CustomerRequest source completeness', () => {
       expect(readFileSync(file, 'utf8'), `${responsibility} authority missing at ${file}`).not.toHaveLength(0)
     }
     const application = source('application')
-    expect(application).toContain('compileProposal')
-    expect(application).toContain('capabilitySupply.listEligible')
-    expect(application).toContain('capabilityContractDocuments.getActiveExactInternal')
-    expect(application).toContain('customerRequestV2.commitAggregate')
-    expect(application).toContain('customerRequestV2Preparation.prepare')
-    expect(application).toContain('customerRequestV2PreparationEgress.run')
-    expect(application).toContain('bindCustomerCapabilityDescriptor')
+    const applicationGraph = readFileSync('src/modules/customer-request/application/interpret-compile/graph.ts', 'utf8')
+    const preparation = readFileSync('src/modules/customer-request/application/authorize-preparation/authorize.ts', 'utf8')
+    expect(application).toContain('interpretCompileCommitApplication')
+    expect(application).toContain('internal.capabilitySupply.listRouteable')
+    expect(application).toContain('internal.capabilityContractDocuments.getActiveExactInternal')
+    expect(application).toContain('internal.customerRequestV2.commitAggregate')
+    expect(application).toContain('prepareCompare')
+    expect(application).toContain('authorizePreparationApplication')
+    expect(preparation).toContain('runPreparationEgress')
+    expect(applicationGraph).toContain('bindCustomerCapabilityDescriptor')
   })
 
   it('keeps the current Request path exact-V2-only and quarantines V1 authority', () => {
@@ -220,7 +223,8 @@ describe('CustomerRequest source completeness', () => {
     expect(ui).toContain('ACTIVE_REQUEST_STORAGE_KEY')
     expect(ui).toContain('/options`')
     const publicHome = readFileSync('src/routes/index.tsx', 'utf8')
-    expect(publicHome).toContain('AeCustomerRequestWorkspace')
+    expect(publicHome).toContain('projectConsumerPlan')
+    expect(publicHome).toContain('customerRequestPlanPreviewAction')
     expect(publicHome).not.toContain('AeHomeComposer')
     for (const route of [
       'src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.messages.ts', 'src/routes/api.requests.$requestRef.options.ts',
@@ -300,7 +304,7 @@ describe('CustomerRequest source completeness', () => {
     expect(workflow.indexOf('Frozen dependency install for independent readback')).toBeLessThan(endpointDeploy)
 
     const packageJson = readFileSync('package.json', 'utf8')
-    expect(packageJson).toContain('"test:release:hosted": "tsx tools/release/verify-customer-request-release-credential.ts"')
+    expect(packageJson).toContain('"test:release:hosted:readback": "tsx tools/release/verify-customer-request-release-credential.ts"')
     expect(packageJson).not.toContain('AE_KERNEL_PROOF_MANIFEST_JSON')
   })
 
