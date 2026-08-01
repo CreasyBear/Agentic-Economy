@@ -10,7 +10,7 @@ describe('OpenRouter customer request transport', () => {
 
   it('requests one JSON object and returns only model content', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: '{"outcome":"ready"}' } }],
+      choices: [{ message: { role: 'assistant', content: '{"outcome":"ready"}' } }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
     const transport = createOpenRouterCustomerRequestTransport({ apiKey: 'secret', model: 'model:test' })
@@ -22,7 +22,7 @@ describe('OpenRouter customer request transport', () => {
     })).resolves.toEqual({ content: '{"outcome":"ready"}' })
 
     const request = fetchMock.mock.calls[0]?.[1]
-    expect(request?.headers).toMatchObject({ Authorization: 'Bearer secret', 'Content-Type': 'application/json' })
+    expect(request?.headers).toMatchObject({ authorization: 'Bearer secret', 'content-type': 'application/json' })
     expect(JSON.parse(String(request?.body))).toMatchObject({
       model: 'model:test', response_format: { type: 'json_object' }, temperature: 0,
     })
@@ -30,7 +30,7 @@ describe('OpenRouter customer request transport', () => {
 
   it('sends the strict response schema supplied by the semantic interpreter', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: '{"kind":"needs_intent_direction","prompt":"What next?","selections":[]}' } }],
+      choices: [{ message: { role: 'assistant', content: '{"kind":"needs_intent_direction","prompt":"What next?","selections":[]}' } }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
     const transport = createOpenRouterCustomerRequestSemanticTransport({ apiKey: 'secret', model: 'model:test' })
@@ -43,13 +43,14 @@ describe('OpenRouter customer request transport', () => {
 
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
       response_format: { type: 'json_schema', json_schema: responseSchema },
+      // Every AE model call carries the gateway's standing routing policy.
+      provider: { allow_fallbacks: true, require_parameters: false },
     })
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).not.toHaveProperty('provider')
   })
 
   it('bounds reasoning and output for latency-sensitive semantic interpretation', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: '{"kind":"needs_intent_direction","prompt":"What next?","selections":[]}' } }],
+      choices: [{ message: { role: 'assistant', content: '{"kind":"needs_intent_direction","prompt":"What next?","selections":[]}' } }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
     const transport = createOpenRouterCustomerRequestSemanticTransport({
@@ -67,7 +68,7 @@ describe('OpenRouter customer request transport', () => {
 
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
       reasoning: { effort: 'low', exclude: true },
-      max_completion_tokens: 1_024,
+      max_tokens: 1_024,
     })
   })
 
@@ -87,7 +88,7 @@ describe('OpenRouter customer request transport', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        choices: [{ message: { content: '{"outcome":"ready"}' } }],
+        choices: [{ message: { role: 'assistant', content: '{"outcome":"ready"}' } }],
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
@@ -100,13 +101,13 @@ describe('OpenRouter customer request transport', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 
-  it('bounds each attempt so one stalled provider call cannot consume the retry window', async () => {
+  it('fails with provider timeout when a provider call stalls', async () => {
     const fetchMock = vi.fn()
       .mockImplementationOnce(async (_url: string, init?: RequestInit) => await new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
       }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        choices: [{ message: { content: '{"outcome":"ready"}' } }],
+        choices: [{ message: { role: 'assistant', content: '{"outcome":"ready"}' } }],
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
     const transport = createOpenRouterCustomerRequestTransport({
@@ -117,8 +118,7 @@ describe('OpenRouter customer request transport', () => {
       systemInstruction: 'system',
       payload: { customerJob: 'x', knownFacts: {}, knownFactFields: [], capabilities: [] },
       signal: new AbortController().signal,
-    })).resolves.toEqual({ content: '{"outcome":"ready"}' })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    })).rejects.toThrow('customer_request_interpretation_provider_timeout')
   })
 
   it('refuses an oversized serialized request before network release', async () => {

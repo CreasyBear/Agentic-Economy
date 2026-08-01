@@ -1,14 +1,19 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import type { LucideIcon } from 'lucide-react'
 import { ArrowUpRightIcon, Building2Icon, FileQuestionIcon, HelpCircleIcon, HomeIcon, SearchIcon, StoreIcon } from 'lucide-react'
 
-import { Button } from '@astryxdesign/core/Button'
-import { CommandPalette, CommandPaletteInput } from '@astryxdesign/core/CommandPalette'
-import { Kbd } from '@astryxdesign/core/Kbd'
-import { createStaticSource, type SearchableItem } from '@astryxdesign/core/Typeahead'
+import { Button } from '@/components/ui/button'
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 
 export type AeCommandDestination = {
   id: string
@@ -20,14 +25,6 @@ export type AeCommandDestination = {
   icon?: LucideIcon
   params?: Record<string, unknown>
   search?: Record<string, unknown>
-}
-
-type RouteCommandItem = SearchableItem & {
-  auxiliaryData: {
-    destination: AeCommandDestination
-    group: string
-    keywords: string[]
-  }
 }
 
 export function AeRouteCommandMenu({
@@ -42,19 +39,33 @@ export function AeRouteCommandMenu({
   mobile?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const commandContentId = useId()
   const router = useRouter()
-  const commandItems = useMemo(() => toRouteCommandItems(destinations), [destinations])
-  const destinationById = useMemo(
-    () => new Map(destinations.map((destination) => [destination.id, destination])),
-    [destinations],
-  )
-  const searchSource = useMemo(
-    () =>
-      createStaticSource(commandItems, {
-        keywords: (item) => item.auxiliaryData?.keywords ?? [],
-      }),
-    [commandItems],
-  )
+  const groupedDestinations = useMemo(() => {
+    const groups = new Map<string, AeCommandDestination[]>()
+    for (const destination of destinations) {
+      const group = groups.get(destination.group)
+      if (group === undefined) {
+        groups.set(destination.group, [destination])
+      } else {
+        group.push(destination)
+      }
+    }
+    return [...groups.entries()]
+  }, [destinations])
+
+  function closeRouteMenu() {
+    setOpen(false)
+    window.requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen)
+    if (!nextOpen) {
+      window.requestAnimationFrame(() => triggerRef.current?.focus())
+    }
+  }
 
   function navigateToDestination(destination: AeCommandDestination) {
     void router.navigate({
@@ -62,7 +73,7 @@ export function AeRouteCommandMenu({
       ...(destination.params === undefined ? {} : { params: destination.params }),
       ...(destination.search === undefined ? {} : { search: destination.search }),
     })
-    setOpen(false)
+    closeRouteMenu()
   }
 
   useEffect(() => {
@@ -80,35 +91,55 @@ export function AeRouteCommandMenu({
   return (
     <>
       <Button
+        ref={triggerRef}
         type="button"
-        label={mobile ? 'Open route console' : label}
         variant="secondary"
-        size="sm"
-        isIconOnly={mobile}
-        icon={<SearchIcon data-icon="inline-start" aria-hidden="true" />}
-        endContent={mobile ? undefined : <Kbd keys="mod+k" />}
-        {...(triggerClassName === undefined ? {} : { className: triggerClassName })}
+        size={mobile ? 'icon' : 'sm'}
+        aria-label={mobile ? 'Open route console' : label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={commandContentId}
+        {...(triggerClassName === undefined
+          ? (mobile ? { className: 'min-h-11 min-w-11' } : {})
+          : { className: triggerClassName })}
         onClick={() => setOpen(true)}
-      />
-      <CommandPalette<RouteCommandItem>
-        isOpen={open}
-        onOpenChange={setOpen}
-        label="Route console"
-        width="min(42rem, calc(100vw - 2rem))"
-        maxHeight="min(42rem, 82vh)"
-        searchSource={searchSource}
-        emptySearchText="No matching route."
-        emptyBootstrapText="No routes available."
-        onValueChange={(id) => {
-          const destination = destinationById.get(id)
-          if (destination !== undefined) {
-            navigateToDestination(destination)
-          }
-        }}
-        input={<CommandPaletteInput placeholder="Search pages, services, and actions..." />}
-        footer={<span className="px-3 py-2 text-xs text-secondary">Press Escape to close.</span>}
-        renderItem={(item) => <RouteCommandItemContent destination={item.auxiliaryData.destination} />}
-      />
+      >
+        <SearchIcon data-icon="inline-start" aria-hidden="true" />
+        {mobile ? null : (
+          <>
+            <span>{label}</span>
+            <kbd className="ml-1 rounded border border-border px-1.5 py-0.5 font-mono text-[0.6875rem] text-muted-foreground">⌘K</kbd>
+          </>
+        )}
+      </Button>
+      <CommandDialog
+        open={open}
+        onOpenChange={handleOpenChange}
+        title="Route console"
+        description="Search pages, services, and actions."
+        className="w-[min(42rem,calc(100vw-2rem))]"
+      >
+        <div id={commandContentId}>
+          <CommandInput placeholder="Search pages, services, and actions..." />
+          <CommandList>
+            <CommandEmpty>No matching route.</CommandEmpty>
+            {groupedDestinations.map(([group, groupDestinations]) => (
+              <CommandGroup key={group} heading={group}>
+                {groupDestinations.map((destination) => (
+                  <CommandItem
+                    key={destination.id}
+                    value={[destination.label, destination.href, ...(destination.keywords ?? [])].join(' ')}
+                    onSelect={() => navigateToDestination(destination)}
+                  >
+                    <RouteCommandItemContent destination={destination} />
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </div>
+        <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">Press Escape to close.</div>
+      </CommandDialog>
     </>
   )
 }
@@ -157,32 +188,21 @@ function RouteCommandItemContent({ destination }: { destination: AeCommandDestin
 
   return (
     <>
-      <Icon aria-hidden="true" className="size-4 shrink-0 text-secondary" />
+      <Icon aria-hidden="true" className="text-muted-foreground" />
       <span className="grid min-w-0 gap-0.5">
-        <span className="truncate text-sm font-medium text-primary">{destination.label}</span>
-        <span className="truncate font-mono text-xs text-secondary">{destination.href}</span>
+        <span className="truncate text-sm font-medium text-foreground">{destination.label}</span>
+        <span className="truncate font-mono text-xs text-muted-foreground">{destination.href}</span>
       </span>
-      {destination.hint === undefined ? null : <span className="ml-auto text-xs text-secondary">{destination.hint}</span>}
+      {destination.hint === undefined ? null : <span className="ml-auto text-xs text-muted-foreground">{destination.hint}</span>}
     </>
   )
 }
 
-function toRouteCommandItems(destinations: readonly AeCommandDestination[]): RouteCommandItem[] {
-  return destinations.map((destination) => ({
-    id: destination.id,
-    label: destination.label,
-    auxiliaryData: {
-      destination,
-      group: destination.group,
-      keywords: [destination.href, ...(destination.keywords ?? [])],
-    },
-  }))
-}
 
 const publicDestinations = [
   {
     id: 'ask',
-    label: 'Ask for a local service',
+    label: 'Say what you need done',
     href: '/',
     group: 'Discovery',
     hint: 'Home',

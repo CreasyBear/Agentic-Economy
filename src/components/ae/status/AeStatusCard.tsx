@@ -5,11 +5,9 @@ import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
 import type { AdmissionBlocker } from '@/modules/inquiries/public'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Divider } from '@astryxdesign/core/Divider'
-import { HStack, VStack } from '@astryxdesign/core/Stack'
-import { Text } from '@astryxdesign/core/Text'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 import {
   discoveryStatusToAeStatus,
   indexStatusToAeStatus,
@@ -48,32 +46,28 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
   const hasUnavailableCapabilities = readback.unavailableCapabilities.length > 0
 
   return (
-    <Card padding={6} aria-labelledby={titleId}>
-      <VStack gap={6}>
-        <VStack gap={4}>
-          <VStack gap={1}>
-            <Text as="div" type="large" weight="semibold" color="primary" display="block" id={titleId}>{readback.catalog.name}</Text>
-            <Text as="div" type="supporting" color="secondary" display="block">
+    <Card className="p-6" aria-labelledby={titleId}>
+      <div className="grid gap-6">
+        <div className="grid gap-4">
+          <div className="grid gap-1">
+            <h2 className="block text-lg font-semibold text-foreground" id={titleId}>{readback.catalog.name}</h2>
+            <p className="block text-sm text-muted-foreground">
               {readback.catalog.category} in {readback.catalog.suburb}, {readback.catalog.stateTerritory}
-            </Text>
-          </VStack>
-          <HStack gap={2} wrap="wrap">
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <AeCopyPublicUrlButton
               slug={readback.catalog.slug}
               businessId={readPublicCatalogActivationRef(readback.catalog)}
               size="sm"
             />
-            <Button
-              href={readback.publicUrl}
-              variant="secondary"
-              size="sm"
-              label="Open page"
-              icon={<ExternalLinkIcon aria-hidden="true" />}
-            />
-          </HStack>
-        </VStack>
-        <Divider />
-        <VStack gap={4}>
+            <Button asChild variant="secondary" size="sm">
+              <a href={readback.publicUrl}><ExternalLinkIcon aria-hidden="true" />Open page</a>
+            </Button>
+          </div>
+        </div>
+        <Separator />
+        <div className="grid gap-4">
           <ul className="m-0 grid list-none gap-4 p-0 md:grid-cols-2">
             <li><AeStatusBadge status={publicStatusToAeStatus(readback.catalog.publicStatus)} /></li>
             <li><AeStatusBadge status={trustTierToAeStatus(readback.catalog.trustTier)} /></li>
@@ -84,43 +78,45 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
             <ul className="m-0 grid list-none gap-3 p-0">
               {readback.unavailableCapabilities.map((capability) => (
                 <li key={capability.label} className="rounded-lg border border-border bg-muted/40 p-3">
-                  <Text weight="medium" color="primary" display="block">{capability.label}</Text>
-                  <Text type="supporting" color="secondary" display="block">{capability.explanation}</Text>
+                  <p className="block font-medium text-foreground">{capability.label}</p>
+                  <p className="block text-sm text-muted-foreground">{capability.explanation}</p>
                 </li>
               ))}
             </ul>
           ) : null}
-        </VStack>
-        <Divider />
-        <VStack gap={3}>
-          <Text as="h2" type="large" weight="semibold" color="primary" display="block">Request admission</Text>
+        </div>
+        <Separator />
+        <div className="grid gap-3">
+          <h3 className="block text-lg font-semibold text-foreground">Request admission</h3>
           {readback.admission.admitted ? (
-            <Text color="primary" display="block">Your business page can receive requests.</Text>
+            <p className="block text-foreground">Your business page can receive requests.</p>
           ) : (
-            <VStack gap={2}>
-              <Text type="supporting" color="secondary" display="block">
+            <div className="grid gap-2">
+              <p className="block text-sm text-muted-foreground">
                 Complete these checks to start receiving requests from this page.
-              </Text>
+              </p>
               <ul className="m-0 grid list-none gap-3 p-0">
                 {readback.admission.blockers.map((blocker) => {
                   const action = ownerActionForAdmissionBlocker(blocker)
                   return (
                     <li key={blocker.kind} className="rounded-lg border border-border p-3">
-                      <Text weight="medium" color="primary" display="block">{blocker.ownerLabel}</Text>
+                      <p className="block font-medium text-foreground">{blocker.ownerLabel}</p>
                       {action.kind === 'link' ? (
-                        <Button href={action.href} variant="secondary" size="sm" label={action.label} />
+                        <Button asChild variant="secondary" size="sm">
+                          <a href={action.href}>{action.label}</a>
+                        </Button>
                       ) : (
-                        <Text type="supporting" color="secondary" display="block">{action.label}</Text>
+                        <p className="block text-sm text-muted-foreground">{action.label}</p>
                       )}
                     </li>
                   )
                 })}
               </ul>
-            </VStack>
+            </div>
           )}
-        </VStack>
-        <Text type="supporting" color="secondary" display="block">{readback.nextAction}</Text>
-      </VStack>
+        </div>
+        <p className="block text-sm text-muted-foreground">{readback.nextAction}</p>
+      </div>
     </Card>
   )
 }

@@ -23,13 +23,13 @@ export function AeThinkingRail({ step, label, visible }: AeThinkingRailProps) {
   const activeIndex = stepIndex === -1 ? 0 : stepIndex
 
   return (
-    <section className="grid gap-3 rounded-md border border-border bg-surface p-3" aria-label="Visible answer process">
+    <section className="grid gap-3 rounded-md border border-border bg-card p-3" aria-label="Visible answer process">
       <header className="grid gap-1">
-        <p className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">Visible process</p>
-        <p className="text-sm font-medium text-primary" role="status">
+        <p className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Visible process</p>
+        <p className="text-sm font-medium text-foreground" role="status">
           <AeStreamingLabel as="span">{label}</AeStreamingLabel>
         </p>
-        <p className="text-xs leading-snug text-secondary">
+        <p className="text-xs leading-snug text-muted-foreground">
           AE is checking published listing facts and routing to the next safe step.
         </p>
       </header>
@@ -44,15 +44,15 @@ export function AeThinkingRail({ step, label, visible }: AeThinkingRailProps) {
               aria-current={state === 'active' ? 'step' : undefined}
             >
               <span
-                className="mt-px inline-flex size-5 items-center justify-center rounded-full border border-border bg-surface font-mono text-2xs font-semibold text-secondary data-[state=active]:border-border-strong data-[state=active]:text-primary data-[state=complete]:border-border-strong data-[state=complete]:text-primary"
+                className="mt-px inline-flex size-5 items-center justify-center rounded-full border border-border bg-card font-mono text-2xs font-semibold text-muted-foreground data-[state=active]:border-border-strong data-[state=active]:text-foreground data-[state=complete]:border-border-strong data-[state=complete]:text-foreground"
                 data-state={state}
                 aria-hidden="true"
               >
                 {index + 1}
               </span>
               <span className="grid min-w-0 gap-0.5">
-                <span className="text-sm font-medium leading-snug text-primary">{item.label}</span>
-                <span className="text-xs leading-snug text-secondary">{item.detail}</span>
+                <span className="text-sm font-medium leading-snug text-foreground">{item.label}</span>
+                <span className="text-xs leading-snug text-muted-foreground">{item.detail}</span>
               </span>
             </li>
           )

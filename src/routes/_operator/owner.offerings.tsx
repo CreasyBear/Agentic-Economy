@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
-import { Banner } from '@astryxdesign/core/Banner'
-import { Button } from '@astryxdesign/core/Button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeOwnerOfferingsList, type OwnerOfferingSummary } from '@/components/ae/offerings/AeOwnerOfferings'
@@ -33,14 +33,14 @@ function OwnerOfferingsRoute() {
     : []
 
   return (
-    <AeOperatorShell operatorRole="owner" title="Offerings" description="Describe what your business provides and how customers or agents can begin." currentPath="/owner/offerings" actions={<Button href="/owner/offerings/new" label="Add an Offering" variant="primary" />}>
+    <AeOperatorShell operatorRole="owner" title="Offerings" description="Describe what your business provides and how customers or agents can begin." currentPath="/owner/offerings" actions={<Button asChild variant="default"><a href="/owner/offerings/new">Add an Offering</a></Button>}>
       {result.kind === 'error' ? (
-        <Banner status="error" title="Offerings did not load" description={result.reason ?? 'Sign in again or retry this page.'} />
+        <Alert variant="destructive"><AlertTitle>Offerings did not load</AlertTitle><AlertDescription>{result.reason ?? 'Sign in again or retry this page.'}</AlertDescription></Alert>
       ) : result.kind === 'not_found' ? (
-        <Banner status="warning" title="Claim a business first" description="Offerings belong to a claimed business page." endContent={<Button href="/claim" label="Claim a business" variant="secondary" />} />
+        <Alert><AlertTitle>Claim a business first</AlertTitle><AlertDescription>Offerings belong to a claimed business page.</AlertDescription><Button asChild variant="secondary"><a href="/claim">Claim a business</a></Button></Alert>
       ) : result.offerings.some((item) => item.revision === undefined) ? (
         <div className="grid gap-4">
-          <Banner status="warning" title="One Offering needs repair" description="Its current revision could not be read, so it is not shown or editable." />
+          <Alert><AlertTitle>One Offering needs repair</AlertTitle><AlertDescription>Its current revision could not be read, so it is not shown or editable.</AlertDescription></Alert>
           <AeOwnerOfferingsList offerings={offerings} projectionState={projectionState(result)} />
         </div>
       ) : <AeOwnerOfferingsList offerings={offerings} projectionState={projectionState(result)} />}

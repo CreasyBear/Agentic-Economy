@@ -10,9 +10,9 @@ import {
   XCircleIcon,
 } from 'lucide-react'
 
-import { Badge, type BadgeVariant } from '@astryxdesign/core/Badge'
-import { Card } from '@astryxdesign/core/Card'
-import { Text } from '@astryxdesign/core/Text'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 
 import type {
   PaidOperationContinuation,
@@ -27,7 +27,7 @@ export type AePaidOperationCardProps = Readonly<{
 
 type Presentation = Readonly<{
   label: string
-  badgeVariant: BadgeVariant
+  badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline'
   icon: typeof InfoIcon
   truth: string
   nextAction: string
@@ -47,34 +47,26 @@ export function AePaidOperationCard({
 
   return (
     <Card
-      padding={5}
-      className="grid w-full max-w-2xl gap-5"
+      className="grid w-full max-w-2xl gap-5 border border-border bg-card p-5"
       aria-labelledby={`paid-operation-${semantics.identity.invocationRef}`}
       data-paid-operation-state={presentation.label.toLowerCase().replaceAll(' ', '_')}
     >
       <header className="grid gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Badge variant="neutral" label={semantics.environment.name} />
-          <Badge
-            variant={presentation.badgeVariant}
-            icon={<Icon aria-hidden="true" />}
-            label={presentation.label}
-          />
+          <Badge variant="outline">{semantics.environment.name}</Badge>
+          <Badge variant={presentation.badgeVariant}>
+            <Icon aria-hidden="true" />
+            {presentation.label}
+          </Badge>
         </div>
         <div className="grid gap-1">
-          <Text
-            as="h2"
+          <h2
             id={`paid-operation-${semantics.identity.invocationRef}`}
-            type="large"
-            weight="semibold"
-            color="primary"
-            display="block"
+            className="text-lg font-semibold text-foreground"
           >
             {semantics.presentation.title}
-          </Text>
-          <Text color="secondary" display="block">
-            {semantics.presentation.summary}
-          </Text>
+          </h2>
+          <p className="text-muted-foreground">{semantics.presentation.summary}</p>
         </div>
       </header>
 
@@ -87,24 +79,19 @@ export function AePaidOperationCard({
       <BlockList label="Operation details" blocks={semantics.presentation.blocks} />
 
       <section
-        className="grid gap-2 rounded-md border border-border bg-surface p-4"
+        className="grid gap-2 rounded-md border border-border bg-card p-4"
         aria-labelledby={`current-truth-${semantics.identity.invocationRef}`}
       >
         <div className="flex items-start gap-3">
           <Icon className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
           <div className="grid min-w-0 gap-1">
-            <Text
-              as="h3"
+            <h3
               id={`current-truth-${semantics.identity.invocationRef}`}
-              weight="semibold"
-              color="primary"
-              display="block"
+              className="font-semibold text-foreground"
             >
               Current truth
-            </Text>
-            <p className="text-sm text-primary">
-              {presentation.truth}
-            </p>
+            </h3>
+            <p className="text-sm text-foreground">{presentation.truth}</p>
           </div>
         </div>
       </section>
@@ -115,30 +102,24 @@ export function AePaidOperationCard({
 
       <section className="grid gap-3 border-t border-border pt-4" aria-label="Safe next action">
         <div className="grid gap-1">
-          <Text weight="semibold" color="primary" display="block">Safe next action</Text>
-          <Text color="secondary" display="block">{presentation.nextAction}</Text>
+          <p className="font-semibold text-foreground">Safe next action</p>
+          <p className="text-muted-foreground">{presentation.nextAction}</p>
         </div>
         {continuation !== null && onContinue !== undefined ? (
-          <button
+          <Button
             type="button"
-            className={[
-              'inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border px-4 py-2',
-              'text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2',
-              continuation.kind === 'reconcile'
-                ? 'border-accent bg-accent text-on-accent'
-                : 'border-border bg-surface text-primary',
-              'sm:w-fit',
-            ].join(' ')}
+            variant={continuation.kind === 'reconcile' ? 'default' : 'secondary'}
+            className="min-h-11 w-full sm:w-fit"
             onClick={() => onContinue(continuation)}
           >
             {continuationIcon(continuation)}
             <span>{continuationLabel(continuation)}</span>
-          </button>
+          </Button>
         ) : null}
       </section>
 
-      <details className="group rounded-md border border-border bg-surface">
-        <summary className="flex min-h-11 cursor-pointer items-center px-4 py-3 font-medium text-primary focus-visible:outline-2 focus-visible:outline-offset-2">
+      <details className="rounded-md border border-border bg-card">
+        <summary className="flex min-h-11 cursor-pointer items-center px-4 py-3 font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2">
           Technical details
         </summary>
         <dl className="grid gap-3 border-t border-border p-4 text-sm sm:grid-cols-2">
@@ -160,8 +141,8 @@ export function AePaidOperationCard({
 function Fact({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
     <div className="grid min-w-0 gap-1">
-      <dt className="text-xs font-medium text-secondary">{label}</dt>
-      <dd className="break-words text-sm text-primary">{value}</dd>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="break-words text-sm text-foreground">{value}</dd>
     </div>
   )
 }
@@ -175,7 +156,7 @@ function BlockList({
 }>) {
   return (
     <section className="grid gap-2" aria-label={label}>
-      <Text type="supporting" color="secondary" display="block">{label}</Text>
+      <p className="text-sm text-muted-foreground">{label}</p>
       <dl className="grid gap-3 sm:grid-cols-2">
         {blocks.map((block) => (
           <Fact
@@ -214,7 +195,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
   if (uncertain) {
     return {
       label: 'Needs checking',
-      badgeVariant: 'warning',
+      badgeVariant: 'secondary',
       icon: AlertTriangleIcon,
       truth: 'The provider may have received the payment request. AE will not try again until the exact payment is checked.',
       nextAction: 'Check the existing payment and request. Do not start this purchase again.',
@@ -224,7 +205,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
   if (semantics.settlement.state === 'not_settled') {
     return {
       label: 'Checked — not paid',
-      badgeVariant: 'info',
+      badgeVariant: 'secondary',
       icon: SearchIcon,
       truth: 'The earlier payment was checked and was not settled.',
       nextAction: semantics.continuations.some(({ kind }) => kind === 'retry')
@@ -239,7 +220,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
       : 'No independent payment settlement is recorded.'
     return {
       label: 'Result received',
-      badgeVariant: 'success',
+      badgeVariant: 'default',
       icon: CheckCircle2Icon,
       truth: `The result was received and validated. ${paymentTruth}`,
       nextAction: 'Review the result and its recorded source.',
@@ -252,7 +233,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
   ) {
     return {
       label: 'Paid — result unusable',
-      badgeVariant: 'warning',
+      badgeVariant: 'secondary',
       icon: AlertTriangleIcon,
       truth: `Payment of ${money(semantics.settlement.amount)} is supported by the recorded evidence, but the returned result could not be validated.`,
       nextAction: semantics.continuations.some(({ kind }) => kind === 'reconcile')
@@ -268,7 +249,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
   ) {
     return {
       label: 'Not sent',
-      badgeVariant: 'error',
+      badgeVariant: 'destructive',
       icon: XCircleIcon,
       truth: `The request stopped before anything was sent to the provider and before any payment request was submitted. Reason: ${semantics.error.code.replaceAll('_', ' ')}.`,
       nextAction: semantics.continuations.some(({ kind }) => kind === 'retry')
@@ -283,7 +264,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
   ) {
     return {
       label: 'Prepared',
-      badgeVariant: 'info',
+      badgeVariant: 'secondary',
       icon: Clock3Icon,
       truth: 'Payment permission is prepared, but no payment request has been submitted.',
       nextAction: 'Wait for the prepared request to continue, or inspect its details.',
@@ -293,7 +274,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
   if (semantics.paymentSubmission.state === 'observed') {
     return {
       label: 'Waiting for result',
-      badgeVariant: 'info',
+      badgeVariant: 'secondary',
       icon: Clock3Icon,
       truth: 'The provider received the payment request. AE is waiting for attributable payment and result evidence.',
       nextAction: 'Wait for the recorded request to resolve. Do not send another.',
@@ -302,7 +283,7 @@ function present(semantics: PaidOperationSemantics): Presentation {
 
   return {
     label: 'Ready to inspect',
-    badgeVariant: 'neutral',
+    badgeVariant: 'outline',
     icon: InfoIcon,
     truth: 'Nothing has been sent to the provider and no payment request has been submitted.',
     nextAction: 'Review the provider, shared data and maximum charge.',

@@ -12,20 +12,20 @@ export function buildCompactFollowUpProse(input: {
   switch (input.followUpIntent) {
     case 'filter_known':
       return {
-        oneLine: buildFilterOneLine(count),
+        oneLine: buildFilterOneLine(count, input.providers),
         summary: resultsLine(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
     case 'compare_known':
       return {
-        oneLine: count >= 2 ? 'Comparing the top two listings.' : buildDefaultOneLine(count, input.displayQuery),
+        oneLine: count >= 2 ? 'Comparing the top two listings.' : buildDefaultOneLine(count, input.displayQuery, input.providers),
         summary: buildCompareSummary(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
     case 'inquiry_handoff':
       return {
         oneLine: count === 1 && input.providers[0] !== undefined
-          ? `Ready to open ${input.providers[0].name}'s qualified inquiry form.`
+          ? `Ready to open ${input.providers[0].name}'s qualified inquiry form. ${buildProviderDecisionOneLine(input.providers[0])}`
           : 'Choose which listed business to message.',
         summary: resultsLine(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
@@ -43,14 +43,14 @@ export function buildCompactFollowUpProse(input: {
       const suburb = parseNarrowToSuburb(input.displayQuery)
       if (suburb !== undefined) {
         return {
-          oneLine: buildNarrowOneLine(count, suburb),
+          oneLine: buildNarrowOneLine(count, suburb, input.providers),
           summary: resultsLine(input.providers),
           nextStep: buildInquiryNextStep(input.providers),
         }
       }
 
       return {
-        oneLine: buildDefaultOneLine(count, input.displayQuery),
+        oneLine: buildDefaultOneLine(count, input.displayQuery, input.providers),
         summary: resultsLine(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
@@ -58,34 +58,48 @@ export function buildCompactFollowUpProse(input: {
   }
 }
 
-function buildNarrowOneLine(count: number, suburb: string): string {
+function buildNarrowOneLine(count: number, suburb: string, providers: readonly AnswerSource[]): string {
   if (count === 0) {
     return `No listed businesses in ${suburb} yet.`
   }
-  if (count === 1) {
-    return `1 listed in ${suburb}.`
+  if (count === 1 && providers[0] !== undefined) {
+    return buildProviderDecisionOneLine(providers[0])
   }
   return `${count} listed in ${suburb}.`
 }
 
-function buildFilterOneLine(count: number): string {
+function buildFilterOneLine(count: number, providers: readonly AnswerSource[]): string {
   if (count === 0) {
     return 'None of the listed businesses accept inquiries yet.'
   }
-  if (count === 1) {
-    return '1 listed business accepts inquiries.'
+  if (count === 1 && providers[0] !== undefined) {
+    return `1 listed business accepts inquiries: ${buildProviderDecisionOneLine(providers[0])}`
   }
   return `${count} listed businesses accept inquiries.`
 }
 
-function buildDefaultOneLine(count: number, query: string): string {
+function buildDefaultOneLine(count: number, query: string, providers: readonly AnswerSource[]): string {
   if (count === 0) {
     return `No listed businesses match "${query}" yet.`
   }
-  if (count === 1) {
-    return `1 listed business matches.`
+  if (count === 1 && providers[0] !== undefined) {
+    return buildProviderDecisionOneLine(providers[0])
   }
   return `${count} listed businesses match.`
+}
+
+function buildProviderDecisionOneLine(provider: AnswerSource): string {
+  const suburb = provider.suburb.trim()
+  const price = provider.pricingSummary?.trim()
+  const availability = provider.availabilitySummary?.trim()
+  const details = [
+    suburb.length === 0 ? undefined : `in ${suburb}`,
+    price === undefined || price.length === 0 ? undefined : `Price: ${price}`,
+    availability === undefined || availability.length === 0 ? undefined : `Published availability: ${availability}`,
+  ].filter((detail): detail is string => detail !== undefined)
+  return details.length === 0
+    ? `${provider.name}.`
+    : `${provider.name} — ${details.join(' · ')}.`
 }
 
 function buildCompareSummary(providers: readonly AnswerSource[]): string {

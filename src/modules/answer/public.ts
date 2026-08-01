@@ -83,14 +83,8 @@ export {
   type AnswerInquiryHrefInput,
 } from './internal/inquiry-link'
 export {
-  DEFAULT_OPENROUTER_MODEL,
-  readAnswerLlmConfig,
-  readToolUseAgentEnabled,
-  readAnswerSynthesizerMode,
   readAnswerEvalPassed,
   readLlmFollowUpChipsEnabled,
-  type AnswerLlmConfig,
-  type AnswerSynthesizerMode,
 } from './internal/llm-config'
 export {
   buildFollowUpChipsSystemPrompt,
@@ -128,6 +122,7 @@ export {
   buildAgentJsonUrl,
   buildDetailUrl,
   type AnswerEvent,
+  type EnginePlanStreamEvent,
   type AnswerSnapshot,
   type AnswerSource,
   type AnswerSynthesizer,

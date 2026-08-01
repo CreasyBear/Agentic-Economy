@@ -1,7 +1,8 @@
-import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
+import type { AnswerSource } from '@/modules/answer/public'
 import type { FollowUpIntent, PublicThreadProjection } from '@/modules/answer-thread/public'
 import {
   activeSelectedProviderForTurns,
+  listedProvidersFromArtifacts,
   providerHasInquiryPath,
 } from './session-provider-context'
 
@@ -37,8 +38,11 @@ export type SessionJourneyInput = {
 export function buildSessionJourney(input: SessionJourneyInput): SessionJourney | null {
   const completedTurns = input.projection?.turns.filter((turn) => turn.status === 'complete') ?? []
   const allArtifacts = completedTurns.flatMap((turn) => turn.artifacts)
-  const providerCount = countSessionProviders(allArtifacts)
-  const hasInquiryReadyProvider = hasInquiryPath(allArtifacts)
+  const providers = listedProvidersFromArtifacts(allArtifacts)
+  const providerSlugs = new Set<string>()
+  for (const provider of providers) providerSlugs.add(provider.slug)
+  const providerCount = providerSlugs.size
+  const hasInquiryReadyProvider = providers.some((provider) => providerHasInquiryPath(provider))
   const selectedProvider = activeSelectedProviderForTurns(completedTurns)
   const completedTurnCount = completedTurns.length
   const liveIntent = input.liveTurn?.intent
@@ -180,38 +184,3 @@ function inquiryStepDetail(input: {
   return input.hasInquiryReadyProvider ? 'Qualified inquiry only' : 'Needs listed inquiry path'
 }
 
-function countSessionProviders(artifacts: readonly AnswerArtifact[]): number {
-  const slugs = new Set<string>()
-
-  for (const artifact of artifacts) {
-    switch (artifact.kind) {
-      case 'selected-provider':
-        slugs.add(artifact.provider.slug)
-        break
-      case 'provider-cards':
-      case 'provider-compare-table':
-        for (const provider of artifact.providers) {
-          slugs.add(provider.slug)
-        }
-        break
-      default:
-        break
-    }
-  }
-
-  return slugs.size
-}
-
-function hasInquiryPath(artifacts: readonly AnswerArtifact[]): boolean {
-  return artifacts.some((artifact) => {
-    switch (artifact.kind) {
-      case 'selected-provider':
-        return artifact.provider.inquiryUrl !== undefined && artifact.provider.inquiryUrl.length > 0
-      case 'provider-cards':
-      case 'provider-compare-table':
-        return artifact.providers.some((provider) => provider.inquiryUrl !== undefined && provider.inquiryUrl.length > 0)
-      default:
-        return false
-    }
-  })
-}

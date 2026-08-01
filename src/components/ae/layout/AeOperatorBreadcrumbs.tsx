@@ -1,4 +1,13 @@
-import { BreadcrumbItem, Breadcrumbs } from '@astryxdesign/core/Breadcrumbs'
+import { Fragment } from 'react'
+
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 import type { OperatorBreadcrumbItem } from '@/lib/operator/navigation'
 
 type AeOperatorBreadcrumbsProps = {
@@ -11,25 +20,28 @@ export function AeOperatorBreadcrumbs({ items }: AeOperatorBreadcrumbsProps) {
   }
 
   return (
-    <Breadcrumbs label="Breadcrumb">
-      {items.map((item, index) => {
-        const isCurrent = index === items.length - 1 || item.href === undefined
-        const itemKey = `${item.href ?? 'current'}:${item.label}`
+    <Breadcrumb aria-label="Breadcrumb">
+      <BreadcrumbList>
+        {items.map((item, index) => {
+          const isCurrent = index === items.length - 1 || item.href === undefined
+          const itemKey = `${item.href ?? 'current'}:${item.label}`
 
-        if (item.href === undefined) {
           return (
-            <BreadcrumbItem key={itemKey} isCurrent={isCurrent}>
-              {item.label}
-            </BreadcrumbItem>
+            <Fragment key={itemKey}>
+              {index === 0 ? null : <BreadcrumbSeparator />}
+              <BreadcrumbItem>
+                {isCurrent || item.href === undefined ? (
+                  <BreadcrumbPage>{item.label}</BreadcrumbPage>
+                ) : (
+                  <BreadcrumbLink asChild>
+                    <a href={item.href}>{item.label}</a>
+                  </BreadcrumbLink>
+                )}
+              </BreadcrumbItem>
+            </Fragment>
           )
-        }
-
-        return (
-          <BreadcrumbItem key={itemKey} href={item.href} isCurrent={isCurrent}>
-            {item.label}
-          </BreadcrumbItem>
-        )
-      })}
-    </Breadcrumbs>
+        })}
+      </BreadcrumbList>
+    </Breadcrumb>
   )
 }

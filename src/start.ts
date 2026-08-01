@@ -4,6 +4,9 @@ import { createCsrfMiddleware, createMiddleware, createStart } from '@tanstack/r
 import { applySecurityHeadersToResponse, resolveCspModeFromEnv } from '@/lib/http/security-headers'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { createSourceWriteAdmissionMiddleware } from '@/lib/server/source-write-admission'
+import { negotiateAgentPage } from '@/lib/http/agent-content-negotiation'
+import { respondWithAgentPageMarkdown } from '@/lib/server/agent-page-markdown'
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 
 const observabilityRequestMiddleware = createMiddleware().server(async (ctx) => {
   const { readObservabilityServerConfig } = await import('@/lib/observability/config')
@@ -44,6 +47,21 @@ const securityHeadersRequestMiddleware = createMiddleware().server(async (ctx) =
     response: applySecurityHeadersToResponse(result.response, { cspMode: resolveCspModeFromEnv() }),
   }
 })
+/**
+ * Placed after the security-header middleware so a negotiated markdown
+ * response is decorated like every other response, and before authentication
+ * because these are public reads.
+ */
+const agentContentNegotiationMiddleware = createMiddleware().server((ctx) => {
+  const negotiation = negotiateAgentPage(ctx.request)
+  return negotiation.kind === 'serve_html'
+    ? ctx.next()
+    : respondWithAgentPageMarkdown(
+        ctx.request,
+        negotiation.path,
+        resolveCanonicalBaseUrl(ctx.request).baseUrl,
+      )
+})
 
 const clerkRequestMiddleware = isLocalE2EAuthBypassEnabled() ? [] : [clerkMiddleware()]
 
@@ -51,6 +69,7 @@ export const startInstance = createStart(() => ({
   requestMiddleware: [
     observabilityRequestMiddleware,
     securityHeadersRequestMiddleware,
+    agentContentNegotiationMiddleware,
     csrfMiddleware,
     sourceWriteAdmissionMiddleware,
     ...clerkRequestMiddleware,

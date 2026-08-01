@@ -35,7 +35,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     status: 200,
     contentType: /text\/html/i,
     securityHeaders: true,
-    mustContain: ['Ask for a local service. See who fits.'],
+    mustContain: ['Say the big thing.'],
     mustNotMatch: privateSurfacePattern,
   },
   {

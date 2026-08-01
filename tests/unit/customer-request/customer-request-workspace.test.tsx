@@ -5,7 +5,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AeCustomerRequestWorkspace } from '@/components/ae/customer-request/AeCustomerRequestWorkspace'
-import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
+import { CUSTOMER_REQUEST_HUMAN_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
+import { DIALOG_WELCOME } from '@/content/brand-copy'
 
 /**
  * Arriving no longer reopens a saved Request on the visitor's behalf: the front
@@ -30,8 +31,8 @@ describe('customer Request workspace', () => {
     render(<AeCustomerRequestWorkspace />)
     if (screen.queryByRole('button', { name: 'Pick it up' }) !== null) pickUpSavedRequest()
 
-    expect(screen.getByRole('heading', { level: 1, name: 'What do you need to make happen?' })).toBeTruthy()
-    expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation)).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: DIALOG_WELCOME.heading })).toBeTruthy()
+    expect(screen.getByText(CUSTOMER_REQUEST_HUMAN_COMPREHENSION.situation)).toBeTruthy()
     expect(screen.queryByText('Start with whatever you know.')).toBeNull()
     expect(screen.queryByText(/work out the next decision/i)).toBeNull()
     expect(screen.queryByText('Lookup instruction')).toBeNull()
@@ -61,7 +62,7 @@ describe('customer Request workspace', () => {
     // fully usable rather than replaced by a loading card.
     expect(fetchMock).not.toHaveBeenCalled()
     expect(screen.queryByText(/Reopening your Request/)).toBeNull()
-    expect(screen.getByRole('heading', { level: 1, name: 'What do you need to make happen?' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: DIALOG_WELCOME.heading })).toBeTruthy()
     expect(screen.getByLabelText('What are you looking for?')).toBeTruthy()
     expect(screen.getByText('A burst pipe in Parramatta')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Pick it up' })).toBeTruthy()
@@ -184,10 +185,10 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show available options' }))
 
     await screen.findByRole('heading', { name: 'Sandbox Option Two' })
-    expect(screen.getByRole('heading', { name: 'One registered option matched.' })).toBeTruthy()
-    expect(screen.getByText('This is not a comparison or recommendation. Nothing has been selected, booked, or purchased.')).toBeTruthy()
-    expect(screen.getByText(/AE evaluated 2 connected businesses/)).toBeTruthy()
-    expect(screen.getByText('Provider-reported option')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'One business option matches.' })).toBeTruthy()
+    expect(screen.getByText('Review this option and choose what to do next.')).toBeTruthy()
+    expect(screen.getByText(/AE checked 2 businesses/)).toBeTruthy()
+    expect(screen.getByText('Published business option')).toBeTruthy()
     expect(screen.getByText('Commercial relationship disclosed')).toBeTruthy()
     expect(screen.getByText('Sandbox Option Two pays Agentic Economy: Fixed referral fee.')).toBeTruthy()
     expect(screen.getByText('Registered as not influencing eligibility, inclusion, or ordering.')).toBeTruthy()
@@ -238,7 +239,7 @@ describe('customer Request workspace', () => {
     expect(await screen.findByRole('heading', { name: 'AE recommends Option Two.' })).toBeTruthy()
     expect(screen.getByText('Recommended for your price priority')).toBeTruthy()
     expect(screen.getByText('AUD 3.00 below the next-lowest provider maximum.')).toBeTruthy()
-    expect(screen.getByText(/Nothing has been selected, booked, or purchased/)).toBeTruthy()
+    expect(screen.queryByText(/selected, booked, or purchased/)).toBeNull()
   })
 
   it('keeps contextual clarification inside the Request conversation', async () => {
@@ -413,7 +414,7 @@ describe('customer Request workspace', () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'privacy-disposition' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({
       kind: 'request', requestRef: 'request:privacy-disposition', revision: 1, state: 'unsupported',
-      summary: 'No business on AE can support this request right now.',
+      summary: 'AE cannot arrange this request end to end yet.',
       nextAction: 'revise_request', missingFields: [], criteria: [], options: [],
       dataHandling: {
         requestStorage: 'saved_for_revision',
@@ -440,7 +441,7 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Find options' }))
 
     expect(await screen.findByRole('heading', {
-      name: 'No business on AE can support this request right now.',
+      name: 'AE cannot arrange this request end to end yet.',
     })).toBeTruthy()
     expect(screen.getByText(
       'AE saved this revision so you can change it. No information from this revision was sent to a business.',
@@ -755,11 +756,11 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('What matters changed. Before: Meeting time: 15:00. Now: Meeting time: 09:00.')).toBeTruthy()
     expect(screen.getByText('The maximum for Prepare a governed result changed from $16.00 to $14.00.')).toBeTruthy()
     expect(screen.getByText('Businesses changed. Before: Prepare a governed result: North Star Services. Now: Prepare a governed result: North Star Services and City Ledger.')).toBeTruthy()
-    expect(screen.getByText('The registered steps can return the stated result. AE has not independently verified every detail in your Request.')).toBeTruthy()
+    expect(screen.getByText('The businesses can return the stated result. Some details in your request still need confirmation.')).toBeTruthy()
     expect(screen.getByText('2 information recipients')).toBeTruthy()
     expect(screen.getByText('1 irreversible effect')).toBeTruthy()
-    // Disclosure is one idiom now: an Astryx Collapsible whose trigger carries
-    // the expanded state, rather than a native <details> beside chevron rows.
+    // Disclosure uses one idiom now: RouteDisclosure's trigger carries the
+    // expanded state, rather than a native <details> beside chevron rows.
     for (const trigger of ['Important details', 'How it works']) {
       expect(screen.getByRole('button', { name: trigger }).getAttribute('aria-expanded')).toBe('false')
     }
@@ -771,10 +772,8 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByText('How it works'))
     expect(screen.getByText('City Ledger will follow step 1.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Review this option' })).toBeTruthy()
-    expect(screen.getByText(/Nothing is authorized or shared until you confirm/)).toBeTruthy()
-    // The sandbox boundary qualifies multi-business examples, so it belongs
-    // here rather than stacked in front of the landing input.
-    expect(screen.getByText(CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.sandboxBoundary)).toBeTruthy()
+    expect(screen.getByText(/You decide before AE shares details or starts work/)).toBeTruthy()
+    expect(screen.getByText(CUSTOMER_REQUEST_HUMAN_COMPREHENSION.sandboxBoundary)).toBeTruthy()
     expect(screen.queryByText(/capability|binding|transport|graph node/i)).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Review this option' }))
@@ -788,7 +787,7 @@ describe('customer Request workspace', () => {
     // What confirming means now sits directly under the primary action instead
     // of behind its own heading, so the meaning travels with the decision.
     const confirmMeaning = screen.getByText(
-      'Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.',
+      'Confirming gives AE permission for this exact choice and maximum cost. AE will ask before sharing information or starting work.',
     )
     expect(confirmMeaning).toBeTruthy()
     const confirmButton = screen.getByRole('button', { name: 'Confirm this choice' })
@@ -1163,10 +1162,9 @@ describe('customer Request workspace', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(3)
-      expect(screen.getByRole('heading', { name: 'Nothing available matched your request.' })).toBeTruthy()
+      expect(screen.getByRole('heading', { name: 'Nothing published fits this request right now.' })).toBeTruthy()
     }, { timeout: 5_000 })
-    expect(screen.getByText(/AE will not invent availability/)).toBeTruthy()
-    expect(screen.getByText('Request revision 1')).toBeTruthy()
+    expect(screen.getByText(/Your request is saved/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Edit this Request' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Start a new Request' })).toBeTruthy()
   })

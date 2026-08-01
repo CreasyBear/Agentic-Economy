@@ -169,7 +169,7 @@ export type StructuredPaidOperationProjection = Readonly<{
 export function createPaidOperationSemantics(
   input: Omit<PaidOperationSemantics, 'schema'>,
 ): PaidOperationSemantics {
-  const semantics = clone({
+  const semantics = structuredClone({
     ...input,
     schema: PAID_OPERATION_SEMANTICS_SCHEMA,
   }) as PaidOperationSemantics
@@ -492,14 +492,11 @@ function presentationBlockValid(block: PaidOperationPresentationBlock): boolean 
 }
 
 function cloneAndValidate(input: PaidOperationSemantics): PaidOperationSemantics {
-  const semantics = clone(input)
+  const semantics = structuredClone(input)
   assertPaidOperationSemantics(semantics)
   return semantics
 }
 
-function clone<T>(input: T): T {
-  return structuredClone(input)
-}
 
 function digest(input: PaidOperationSemantics): string {
   return canonicalDigest(input as unknown as StableHashValue)

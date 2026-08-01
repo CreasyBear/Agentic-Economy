@@ -1,6 +1,11 @@
 import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 
-import { CUSTOMER_REQUEST_AGENT_SCOPE } from '@/modules/customer-request/agent-contract'
+import {
+  CUSTOMER_REQUEST_AGENT_SCOPE,
+  customerRequestAuthorityModeForScopes,
+  customerRequestModeAllows,
+  type CustomerRequestAuthorityMode,
+} from '@/modules/customer-request/agent-contract'
 
 type ApiKeyAuth = Readonly<{
   isAuthenticated: boolean
@@ -25,21 +30,26 @@ export type CustomerRequestAgentPrincipal = Readonly<{
   ownerId: string
   credentialId: string
   scopes: readonly string[]
+  authorityMode: CustomerRequestAuthorityMode
 }>
 
 export async function authenticateCustomerRequestAgent(options: Readonly<{
   authenticate?: () => Promise<ApiKeyAuth>
   verifyKeyState?: (keyId: string) => Promise<CurrentApiKey>
+  /** Defaults to the Customer Request scope; business tool calling requires its own. */
+  requiredScope?: string
+  requiredMode?: CustomerRequestAuthorityMode
 }> = {}): Promise<Readonly<{ kind: 'authenticated'; principal: CustomerRequestAgentPrincipal }> | Readonly<{
   kind: 'refused'
   status: 401 | 403
   reason: 'authentication_required' | 'scope_required'
 }>> {
+  const requiredScope = options.requiredScope ?? CUSTOMER_REQUEST_AGENT_SCOPE
   const candidate = await (options.authenticate ?? (async () => await auth({ acceptsToken: 'api_key' }) as ApiKeyAuth))()
   if (!candidate.isAuthenticated || candidate.tokenType !== 'api_key' || candidate.id === null || candidate.subject === null || candidate.scopes === null) {
     return { kind: 'refused', status: 401, reason: 'authentication_required' }
   }
-  if (!candidate.scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return { kind: 'refused', status: 403, reason: 'scope_required' }
+  if (!candidate.scopes.includes(requiredScope)) return { kind: 'refused', status: 403, reason: 'scope_required' }
   let admittedScopes = candidate.scopes
   if (options.verifyKeyState !== undefined || options.authenticate === undefined) {
     try {
@@ -50,13 +60,19 @@ export async function authenticateCustomerRequestAgent(options: Readonly<{
       if (current.id !== candidate.id || current.subject !== candidate.subject || current.revoked || current.expired) {
         return { kind: 'refused', status: 401, reason: 'authentication_required' }
       }
-      if (!current.scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) {
+      if (!current.scopes.includes(requiredScope)) {
         return { kind: 'refused', status: 403, reason: 'scope_required' }
       }
       admittedScopes = current.scopes
     } catch {
       return { kind: 'refused', status: 401, reason: 'authentication_required' }
     }
+  }
+  const authorityMode = customerRequestAuthorityModeForScopes(admittedScopes)
+    ?? (requiredScope === CUSTOMER_REQUEST_AGENT_SCOPE ? undefined : 'inspect_only')
+  if (authorityMode === undefined) return { kind: 'refused', status: 403, reason: 'scope_required' }
+  if (options.requiredMode !== undefined && !customerRequestModeAllows(authorityMode, options.requiredMode)) {
+    return { kind: 'refused', status: 403, reason: 'scope_required' }
   }
   const ownerId = candidate.orgId ?? candidate.userId ?? candidate.subject
   return {
@@ -66,6 +82,7 @@ export async function authenticateCustomerRequestAgent(options: Readonly<{
       ownerId,
       credentialId: candidate.id,
       scopes: Object.freeze([...admittedScopes].sort()),
+      authorityMode,
     }),
   }
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 type Money = Readonly<{ currency: string; amountMinor: number }>
@@ -61,14 +62,14 @@ export function freezeAgentJourneyCohort(input: AgentJourneyCohortInput) {
     providerOrigins: [...input.providerOrigins].sort(),
     maximumTotalCost: { ...input.maximumTotalCost },
     authorityScope: {
-      recipients: sortedUnique(input.authorityScope.recipients),
-      purposes: sortedUnique(input.authorityScope.purposes),
-      effects: sortedUnique(input.authorityScope.effects),
+      recipients: uniqueSorted(input.authorityScope.recipients),
+      purposes: uniqueSorted(input.authorityScope.purposes),
+      effects: uniqueSorted(input.authorityScope.effects),
     },
     providerInputs: input.providerInputs.map(({ provider, directFields, aeFieldRefs }) => ({
       provider,
-      directFields: sortedUnique(directFields),
-      aeFieldRefs: sortedUnique(aeFieldRefs),
+      directFields: uniqueSorted(directFields),
+      aeFieldRefs: uniqueSorted(aeFieldRefs),
     })).sort((left, right) => left.provider.localeCompare(right.provider)),
     providerOutputs: input.providerOutputs.map((output) => ({ ...output }))
       .sort((left, right) => left.provider.localeCompare(right.provider)
@@ -85,9 +86,6 @@ export function freezeAgentJourneyCohort(input: AgentJourneyCohortInput) {
 
 export type FrozenAgentJourneyCohort = ReturnType<typeof freezeAgentJourneyCohort>
 
-function sortedUnique(values: readonly string[]): readonly string[] {
-  return [...new Set(values)].sort()
-}
 
 function cloneStable(value: StableHashValue): StableHashValue {
   if (value === null || typeof value !== 'object') return value

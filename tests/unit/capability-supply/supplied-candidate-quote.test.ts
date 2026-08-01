@@ -10,7 +10,7 @@ const { directReadFixture } = vi.hoisted(() => ({
 
 vi.mock('@/modules/registry/registry.functions', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/modules/registry/registry.functions')>(),
-  readPublicRegistryBusinessDetail: vi.fn().mockResolvedValue(directReadFixture),
+  readPublicOfferingRegistryBusinessDetail: vi.fn().mockResolvedValue(directReadFixture),
 }))
 
 import { listActions } from '@/modules/actions'

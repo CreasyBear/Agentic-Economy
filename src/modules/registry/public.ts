@@ -1,4 +1,5 @@
 import type { BusinessId, CorrelationId, OperationKey, ServiceId, Slug, SourceHash } from '@/modules/common/ids'
+import type { ConsumerSupplyOption } from '@/modules/customer-request/application/public'
 import type { PublicStatus, TrustTier } from '@/modules/business/public'
 import type { FirstRequestMode } from '@/modules/catalog/public'
 import type { PublicCatalogContract, PublicCatalogReadState } from '@/modules/catalog/public'
@@ -26,6 +27,7 @@ import type {
   PublicBusinessCatalogSearchInput,
   PublishedInquiryTargetResolution,
 } from './internal/search'
+import type { ServiceDto } from './internal/services-api-projection'
 export {
   PublicBusinessCatalogApiSchemaVersion,
   adaptLegacyCatalogToOfferingApi,
@@ -39,6 +41,54 @@ export type {
   PublicOfferingAccessPathDto,
   PublicOfferingDto,
 } from './internal/offering-api-projection'
+export {
+  PublicServicesApiSchemaVersion,
+  projectPublicServicesPage,
+} from './internal/services-api-projection'
+export type {
+  EndpointDto,
+  PublicServicesApiPage,
+  ServiceDto,
+} from './internal/services-api-projection'
+
+export function toConsumerSupplyOption(service: ServiceDto): ConsumerSupplyOption {
+  const location = [service.business.suburb, service.business.stateTerritory]
+    .filter((part): part is string => part !== undefined && part.length > 0)
+    .join(', ')
+  const quoteEndpoint = service.endpoints.find((endpoint) => endpoint.access === 'open')
+  const nextAction = quoteEndpoint === undefined
+    ? { kind: 'inspect' as const, label: 'See business details', href: `/${service.business.slug}` }
+    : { kind: 'quote' as const, label: 'Check an example quote', href: quoteEndpoint.url }
+  const price = service.price === undefined
+    ? {
+        kind: 'not_published' as const,
+        ...(service.pricingSummary === undefined ? {} : { summary: service.pricingSummary }),
+      }
+    : {
+        kind: 'published' as const,
+        published: service.price,
+        ...(service.pricingSummary === undefined ? {} : { summary: service.pricingSummary }),
+      }
+  const availability = service.availabilitySummary === undefined
+    ? { kind: 'needs_confirmation' as const }
+    : { kind: 'published' as const, summary: service.availabilitySummary }
+  return {
+    optionRef: service.id,
+    business: {
+      slug: service.business.slug,
+      name: service.business.name,
+      ...(location.length === 0 ? {} : { location }),
+    },
+    offering: { name: service.name, summary: service.summary },
+    price,
+    availability,
+    nextAction,
+    evidence: {
+      ...(service.observedAt === undefined ? {} : { observedAt: service.observedAt }),
+      source: quoteEndpoint === undefined ? 'business_published' : 'ae_sandbox',
+    },
+  }
+}
 
 export const IndexStatusValues = ['not_queued', 'queued', 'indexed', 'failed', 'stale'] as const
 export type IndexStatus = (typeof IndexStatusValues)[number]

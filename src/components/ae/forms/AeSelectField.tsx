@@ -1,8 +1,23 @@
-import { Selector } from '@astryxdesign/core/Selector'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Field, FieldGroup } from '@/components/ui/field'
 
 export type AeSelectOption = {
   value: string
   label: string
+}
+
+
+function ensureScrollIntoView(node: HTMLDivElement | null): void {
+  if (node !== null && typeof node.scrollIntoView !== 'function') {
+    node.scrollIntoView = () => undefined
+  }
 }
 
 export type AeSelectFieldProps = {
@@ -29,20 +44,29 @@ export function AeSelectField({
   onValueChange,
 }: AeSelectFieldProps) {
   return (
-    <>
+    <FieldGroup>
       {name === undefined ? null : <input type="hidden" name={name} value={value} />}
-      <Selector
-        id={id}
-        label={placeholder}
-        isLabelHidden
-        value={value}
-        options={options.map((option) => ({ value: option.value, label: option.label }))}
-        isDisabled={disabled}
-        placeholder={placeholder}
-        onChange={onValueChange}
-        {...(invalid ? { status: { type: 'error' } as const, 'aria-invalid': true } : {})}
-        {...(describedBy === undefined ? {} : { 'aria-describedby': describedBy })}
-      />
-    </>
+      <Field {...(invalid ? { 'data-invalid': true } : {})} {...(disabled ? { 'data-disabled': true } : {})}>
+        <Select value={value} disabled={disabled} onValueChange={onValueChange}>
+          <SelectTrigger
+            id={id}
+            className="min-h-11 w-full"
+            {...(invalid ? { 'aria-invalid': true } : {})}
+            {...(describedBy === undefined ? {} : { 'aria-describedby': describedBy })}
+          >
+            <SelectValue placeholder={placeholder} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {options.map((option) => (
+                <SelectItem key={option.value} value={option.value} ref={ensureScrollIntoView}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+    </FieldGroup>
   )
 }

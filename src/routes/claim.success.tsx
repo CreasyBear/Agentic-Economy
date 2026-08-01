@@ -1,25 +1,24 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useSearch } from '@tanstack/react-router'
 import { ExternalLinkIcon } from 'lucide-react'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Link } from '@astryxdesign/core/Link'
-import { HStack, StackItem, VStack } from '@astryxdesign/core/Stack'
-import { Text } from '@astryxdesign/core/Text'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
 import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { readOwnerClaimSuccessServer } from '@/modules/catalog/owner-claim.functions'
 
 type ClaimSuccessSearch = {
   slug?: string
+  source?: 'supply'
 }
 
 export const Route = createFileRoute('/claim/success')({
   validateSearch: (search: Record<string, unknown>): ClaimSuccessSearch => {
     const slug = typeof search.slug === 'string' && search.slug.trim().length > 0 ? search.slug.trim() : undefined
-    return slug === undefined ? {} : { slug }
+    const source = search.source === 'supply' ? 'supply' : undefined
+    return slug === undefined ? (source === undefined ? {} : { source }) : { slug, ...(source === undefined ? {} : { source }) }
   },
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => readOwnerClaimSuccessServer({ data: deps }),
@@ -34,6 +33,7 @@ export const Route = createFileRoute('/claim/success')({
 
 function ClaimSuccessRoute() {
   const pageState = Route.useLoaderData()
+  const search = useSearch({ from: '/claim/success' })
 
   if (pageState.kind !== 'available') {
     return (
@@ -44,14 +44,16 @@ function ClaimSuccessRoute() {
           description="We could not find a public service page for this request."
         />
         <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
-          <AeEmptyState
-            title={pageState.kind === 'not_found' ? 'Service page not found' : 'Service page status unavailable'}
-            description={
-              pageState.kind === 'not_found'
-                ? 'No public service page matched that slug.'
-                : 'Status is unavailable right now. Try again in a moment.'
-            }
-          />
+          <Empty className="border border-border bg-card p-5">
+            <EmptyHeader>
+              <EmptyTitle>{pageState.kind === 'not_found' ? 'Service page not found' : 'Service page status unavailable'}</EmptyTitle>
+              <EmptyDescription>
+                {pageState.kind === 'not_found'
+                  ? 'No public service page matched that slug.'
+                  : 'Status is unavailable right now. Try again in a moment.'}
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         </section>
       </AePublicShell>
     )
@@ -66,43 +68,48 @@ function ClaimSuccessRoute() {
         title="Your service page is live."
         description="People can now find it and reach you from the public page."
         actions={(
-          <Button label="Manage your page" variant="primary" href={`/owner/status?slug=${encodeURIComponent(catalog.slug)}`} />
+          <div className="flex flex-wrap gap-2">
+            {search.source === 'supply' ? <Button asChild variant="default"><a href="/owner/supply">List an API service</a></Button> : null}
+            <Button asChild variant="default"><a href={`/owner/status?slug=${encodeURIComponent(catalog.slug)}`}>Manage your page</a></Button>
+          </div>
         )}
       />
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
-        <Card padding={6} className="bg-accent text-on-accent">
-          <HStack vAlign="center" gap={4} wrap="wrap">
-            <StackItem size="fill">
-              <VStack gap={1}>
-                <Text type="large" weight="semibold" display="block" className="text-on-accent">Your page is discoverable now.</Text>
-                <Text display="block" className="text-on-accent/85">Share the link, or open it to see what customers and their assistants will read.</Text>
-              </VStack>
-            </StackItem>
+        <Card className="bg-brand p-6 text-on-brand">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="grid gap-1">
+                <p className="block text-lg font-semibold text-on-brand">Your page is discoverable now.</p>
+                <p className="block text-on-brand/85">Share the link, or open it to see what customers and their assistants will read.</p>
+              </div>
+            </div>
             <AeCopyPublicUrlButton slug={catalog.slug} />
-            <Button label="View public page" variant="secondary" href={`/${catalog.slug}`} icon={<ExternalLinkIcon aria-hidden="true" />} />
-          </HStack>
+            <Button asChild variant="secondary">
+              <a href={`/${catalog.slug}`}><ExternalLinkIcon aria-hidden="true" />View public page</a>
+            </Button>
+          </div>
         </Card>
-        <Card padding={5} className="grid gap-4">
+        <Card className="grid gap-4 p-5">
           <div className="grid gap-1.5">
-            <Text type="large" weight="semibold" color="primary" display="block">What is live</Text>
-            <Text color="secondary" display="block">Customers can now read these details on the public service page.</Text>
+            <p className="block text-lg font-semibold text-foreground">What is live</p>
+            <p className="block text-muted-foreground">Customers can now read these details on the public service page.</p>
           </div>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
-              <dt className="font-medium text-primary">Business</dt>
-              <dd className="text-secondary">{catalog.name}</dd>
+              <dt className="font-medium text-foreground">Business</dt>
+              <dd className="text-muted-foreground">{catalog.name}</dd>
             </div>
             <div>
-              <dt className="font-medium text-primary">Category</dt>
-              <dd className="text-secondary">{catalog.category}</dd>
+              <dt className="font-medium text-foreground">Category</dt>
+              <dd className="text-muted-foreground">{catalog.category}</dd>
             </div>
             <div>
-              <dt className="font-medium text-primary">Location</dt>
-              <dd className="text-secondary">{catalog.suburb}, {catalog.stateTerritory}</dd>
+              <dt className="font-medium text-foreground">Location</dt>
+              <dd className="text-muted-foreground">{catalog.suburb}, {catalog.stateTerritory}</dd>
             </div>
             <div>
-              <dt className="font-medium text-primary">Public page</dt>
-              <dd className="text-secondary">/{catalog.slug}</dd>
+              <dt className="font-medium text-foreground">Public page</dt>
+              <dd className="text-muted-foreground">/{catalog.slug}</dd>
             </div>
           </dl>
         </Card>

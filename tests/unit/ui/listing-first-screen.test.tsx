@@ -2,6 +2,8 @@
  * @vitest-environment jsdom
  */
 import { renderToStaticMarkup } from 'react-dom/server'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import type { ReactElement } from 'react'
 import { describe, expect, it } from 'vitest'
 
 import { AeProviderListingPage, ListingFirstScreen } from '@/components/ae/listing/AeProviderListingPage'
@@ -44,6 +46,9 @@ const unavailableInquiry: PublicInquiryAffordance = {
   serviceName: 'Emergency plumbing',
 }
 
+/** The exact copy the dev seed and the v1 catalog stamp onto every human channel. */
+const STORED_INQUIRY_DISCLOSURE = 'Use the inquiry form for a first contact.'
+
 describe('ListingFirstScreen', () => {
   it('does not present catalog capability readiness or provenance beyond the unavailable inquiry path', () => {
     const catalog = catalogFixture()
@@ -68,7 +73,7 @@ describe('ListingFirstScreen', () => {
     const projectedCatalog = projectPublicInquiryAvailability(sandboxLikeCatalog, undefined)
     expect(projectedCatalog.services[0]?.capabilities[0]?.status).toBe('unavailable')
 
-    const markup = renderToStaticMarkup(
+    const markup = renderListingToStaticMarkup(
       <AeProviderListingPage
         catalog={projectedCatalog}
         inquiryAffordance={unavailableInquiry}
@@ -77,10 +82,10 @@ describe('ListingFirstScreen', () => {
     )
     const text = fragmentFrom(markup).textContent ?? ''
 
-    expect(text).toContain('Send an inquiry')
+    expect(text).toContain('Send a message')
     expect(text).toContain('Not available')
-    expect(text).toContain('Ask the business directly about this request.')
-    expect(text).toContain('No request path published yet.')
+    expect(text).toContain('Contact the business about this job.')
+    expect(text).toContain('No way to contact this business is listed yet.')
     expect(text).toContain('published details')
     expect(text).not.toContain('Ready')
     expect(text).not.toContain('business supplied')
@@ -115,12 +120,26 @@ describe('ListingFirstScreen', () => {
     expectForbiddenCopyAbsent(markup)
   })
 
-  it('renders the direct-call explainer only with a published phone', () => {
+  it('renders the direct-call explainer with a dialable target only when a phone is published', () => {
     const markup = renderFirstScreen(catalogFixture({}, '08 6111 2222'), availableInquiry)
 
     expect(markup).toContain(AE_EXPLAINER_FULL)
-    expect(markup).toContain('href="tel:08 6111 2222"')
+    // The reading format keeps its spaces; the tel: target must not, or the
+    // dialer refuses the link on the device where calling is the whole point.
+    expect(markup).toContain('href="tel:0861112222"')
+    expect(markup).toContain('Call now: 08 6111 2222')
     expect(markup).not.toContain(AE_EXPLAINER_NO_PHONE)
+    expect(peerActions(markup)).toEqual([
+      { action: 'call', variant: 'primary' },
+      { action: 'copy-details', variant: 'secondary' },
+      { action: 'ask', variant: 'secondary' },
+    ])
+  })
+
+  it('hides the call affordance when the published phone has no dialable digits', () => {
+    const markup = renderFirstScreen(catalogFixture({}, 'ask reception'), availableInquiry)
+
+    expect(markup).not.toContain('href="tel:')
   })
 
   it('omits every unpublished trust fact instead of naming its absence', () => {
@@ -140,7 +159,7 @@ describe('ListingFirstScreen', () => {
     const markup = renderFirstScreen(catalogFixture(), unavailableInquiry)
     const actions = fragmentFrom(markup).querySelector('[aria-label="Actions for this business"]')
 
-    expect(actions?.textContent).toBe('Copy detailsThis business hasn’t joined AE yet')
+    expect(actions?.textContent).toBe('Copy detailsThis business has not enabled messages here yet')
     expect(markup).not.toContain('Ask this business')
     expect(markup).toContain(NO_CONTACT_EXPLAINER)
     expect(markup).not.toContain(AE_EXPLAINER_NO_PHONE)
@@ -151,7 +170,7 @@ describe('ListingFirstScreen', () => {
   })
 
   it('lets Offering v2 own visible supply without resurrecting legacy inquiry cards', () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderListingToStaticMarkup(
       <AeProviderListingPage
         catalog={catalogFixture()}
         inquiryAffordance={availableInquiry}
@@ -165,7 +184,7 @@ describe('ListingFirstScreen', () => {
               revision: 1,
               name: 'Emergency plumbing visit',
               category: 'Plumber',
-              summary: 'A published v2 Offering.',
+              summary: 'A published service.',
             },
             accessPaths: [],
             support: { integrated: false, routeable: false, reasons: [], observedAt: 1_900_000_000_000 },
@@ -181,7 +200,63 @@ describe('ListingFirstScreen', () => {
     expect(markup).not.toContain('Ask this business')
     expect(markup).not.toContain('href="/demo-plumbing/inquiry"')
   })
+
+  it('withdraws the stored inquiry instruction when the inquiry route would refuse', () => {
+    const markup = renderOfferingListing(unavailableInquiry)
+    const text = fragmentFrom(markup).textContent ?? ''
+
+    expect(text).toContain('How to start this service')
+    expect(text).not.toContain(STORED_INQUIRY_DISCLOSURE)
+    expect(text).not.toContain('Ask through AE')
+    expect(text).toContain('Call the business directly.')
+  })
+
+  it('renders one reachable inquiry link when the inquiry route would accept', () => {
+    const markup = renderOfferingListing(availableInquiry)
+    const links = Array.from(
+      fragmentFrom(markup).querySelectorAll<HTMLAnchorElement>('a[href="/demo-plumbing/inquiry"]'),
+    )
+
+    expect(links).toHaveLength(1)
+    expect(links[0]?.textContent).toBe('Send a message')
+    // The clickable channel and the sentence describing it are the same path.
+    expect(fragmentFrom(markup).textContent ?? '').toContain(STORED_INQUIRY_DISCLOSURE)
+  })
 })
+
+function renderOfferingListing(inquiryAffordance: PublicInquiryAffordance): string {
+  return renderListingToStaticMarkup(
+    <AeProviderListingPage
+      catalog={catalogFixture()}
+      inquiryAffordance={inquiryAffordance}
+      agentJsonUrl="/api/businesses/demo-plumbing"
+      supply={{
+        disposition: 'current',
+        observedAt: 1_900_000_000_000,
+        offerings: [{
+          offering: {
+            offeringRef: brandNonEmpty('legacy-offering:demo-plumbing:emergency-plumbing', 'OfferingRef'),
+            revision: 1,
+            name: 'Emergency plumbing visit',
+            category: 'Plumber',
+            summary: 'A published service.',
+          },
+          accessPaths: [
+            {
+              accessPathRef: brandNonEmpty('legacy-access:demo-plumbing:emergency-plumbing:phone', 'AccessPathRef'),
+              descriptor: { kind: 'human_request', channel: 'phone', disclosure: STORED_INQUIRY_DISCLOSURE },
+            },
+            {
+              accessPathRef: brandNonEmpty('legacy-access:demo-plumbing:emergency-plumbing', 'AccessPathRef'),
+              descriptor: { kind: 'human_request', channel: 'ae_inquiry', disclosure: STORED_INQUIRY_DISCLOSURE },
+            },
+          ],
+          support: { integrated: false, routeable: false, reasons: [], observedAt: 1_900_000_000_000 },
+        }],
+      }}
+    />,
+  )
+}
 
 function renderFirstScreen(
   catalog: PublicRouteCatalogContract,
@@ -266,5 +341,17 @@ function expectStringsInOrder(markup: string, values: readonly string[]): void {
 
 function expectForbiddenCopyAbsent(markup: string): void {
   const text = fragmentFrom(markup).textContent ?? ''
-  expect(text).not.toMatch(/\b(?:live|open|available|availability|routing|readiness)\b/i)
+  expect(text).not.toMatch(/\b(?:live|open|available|availability|routing|readiness|endpoint|sandbox|offering|capability|provenance|slug|revision)\b/i)
+}
+
+function renderListingToStaticMarkup(ui: ReactElement): string {
+  const rootRoute = createRootRoute()
+  const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' })
+  const slugRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug' })
+  const threadRoute = createRoute({ getParentRoute: () => rootRoute, path: '/t/$threadId' })
+  const registryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/registry' })
+  const privacyRemoveRoute = createRoute({ getParentRoute: () => rootRoute, path: '/privacy/remove-business' })
+  const routeTree = rootRoute.addChildren([homeRoute, slugRoute, threadRoute, registryRoute, privacyRemoveRoute])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  return renderToStaticMarkup(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }

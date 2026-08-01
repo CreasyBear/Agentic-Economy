@@ -5,6 +5,7 @@ import { handleCustomerRequestMessagePost, type MessageResult } from '@/lib/serv
 import type { ConfirmationResult } from '@/lib/server/customer-request-confirmation-api'
 import { handleCustomerRequestPost, type SubmitResult } from '@/lib/server/customer-request-api'
 import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
+import { base64Codec } from '@/modules/common/base64-codec'
 import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
 import type {
   CustomerRequestAgentResult,
@@ -224,7 +225,7 @@ function validSessionId(value: string | undefined): value is string {
 
 async function sign(key: string, material: string): Promise<string> {
   const signature = await crypto.subtle.sign('HMAC', await importKey(key, ['sign']), new TextEncoder().encode(material))
-  return toBase64Url(new Uint8Array(signature))
+  return base64Codec.toBase64Url(new Uint8Array(signature))
 }
 
 async function verify(key: string, material: string, signature: string): Promise<boolean> {
@@ -239,16 +240,10 @@ async function importKey(key: string, usages: Array<'sign' | 'verify'>): Promise
   return crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, usages)
 }
 
-function toBase64Url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '')
-}
 
 function fromBase64Url(value: string): Uint8Array | undefined {
   if (!/^[A-Za-z0-9_-]+$/u.test(value)) return undefined
   try {
-    const binary = atob(value.replaceAll('-', '+').replaceAll('_', '/'))
-    return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    return base64Codec.fromBase64Url(value)
   } catch { return undefined }
 }

@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Heading, Text } from '@astryxdesign/core/Text'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet, FieldLegend } from '@/components/ui/field'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
@@ -38,10 +39,10 @@ function BusinessProblemRoute() {
     currentPath="/owner/request-problems"
   >
     {result.kind === 'refused'
-      ? <Card padding={5}>
-        <Text color="secondary">
+      ? <Card className="p-5">
+        <p className="text-muted-foreground">
           This report is unavailable. It may be private, belong to another business, or no longer be accessible.
-        </Text>
+        </p>
       </Card>
       : <BusinessProblemPanel
         problem={result}
@@ -98,84 +99,93 @@ export function BusinessProblemPanel({
   }
 
   return <div className="grid gap-4">
-    <Card padding={5}>
+    <Card className="p-5">
       <div className="grid gap-3">
         <div>
-          <Heading level={2}>{problem.category.replaceAll('_', ' ')}</Heading>
-          <Text color="secondary">{problem.customerStatement}</Text>
+          <h2>{problem.category.replaceAll('_', ' ')}</h2>
+          <p className="text-muted-foreground">{problem.customerStatement}</p>
         </div>
         <div>
-          <Text type="supporting" weight="semibold">Evidence the customer selected</Text>
+          <p className="text-sm font-semibold text-foreground">Evidence the customer selected</p>
           {problem.evidence.length === 0
-            ? <Text type="supporting" color="secondary">The customer did not select recorded result evidence.</Text>
-            : <ul className="mt-1 grid gap-1 text-sm text-secondary">
+            ? <p className="text-sm text-muted-foreground">The customer did not select recorded result evidence.</p>
+            : <ul className="mt-1 grid gap-1 text-sm text-muted-foreground">
               {problem.evidence.map((item) => <li key={item.receiptRef}>{item.label}</li>)}
             </ul>}
         </div>
-        <Text type="supporting" color="secondary">
+        <p className="text-sm text-muted-foreground">
           AE has not decided what caused the problem, who is responsible, or what remedy applies.
-        </Text>
+        </p>
       </div>
     </Card>
 
-    {problem.businessClaims.length === 0 ? null : <Card padding={5}>
+    {problem.businessClaims.length === 0 ? null : <Card className="p-5">
       <div className="grid gap-2">
-        <Heading level={2}>Business statements</Heading>
+        <h2>Business statements</h2>
         {problem.businessClaims.map((claim) => <div key={claim.statementRef}>
-          <Text weight="semibold">{claim.causalityPosition.replaceAll('_', ' ')}</Text>
-          <Text color="secondary">{claim.statement}</Text>
+          <p className="font-semibold text-foreground">{claim.causalityPosition.replaceAll('_', ' ')}</p>
+          <p className="text-muted-foreground">{claim.statement}</p>
         </div>)}
       </div>
     </Card>}
 
-    <Card padding={5}>
+    <Card className="p-5">
       <div className="grid gap-3">
-        <Heading level={2}>Record business statement</Heading>
-        <label htmlFor="business-problem-position" className="text-sm font-semibold">Your position</label>
-        <select
-          id="business-problem-position"
-          value={position}
-          onChange={(event) => setPosition(event.target.value as typeof position)}
-          className="min-h-11 rounded-md border border-border bg-card px-3"
-        >
-          <option value="uncertain">Cause remains uncertain</option>
-          <option value="supports">Our records support the customer report</option>
-          <option value="disputes">Our records differ from the customer report</option>
-        </select>
-        <label htmlFor="business-problem-statement" className="text-sm font-semibold">Statement</label>
-        <textarea
-          id="business-problem-statement"
-          value={statement}
-          onChange={(event) => setStatement(event.target.value)}
-          maxLength={1_000}
-          required
-          className="min-h-28 rounded-md border border-border bg-card p-3"
-        />
-        {problem.availableEvidence.length === 0 ? null : <fieldset className="grid gap-2">
-          <legend className="text-sm font-semibold">Attach recorded evidence from your step</legend>
-          {problem.availableEvidence.map((item) => <label key={item.receiptRef} className="flex min-h-11 items-center gap-3">
-            <input
-              type="checkbox"
-              checked={selectedEvidenceSet.has(item.receiptRef)}
-              onChange={(event) => setSelectedEvidence((current) => (
-                event.target.checked
-                  ? [...current, item.receiptRef]
-                  : current.filter((receiptRef) => receiptRef !== item.receiptRef)
-              ))}
+        <h2>Record business statement</h2>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="business-problem-position">Your position</FieldLabel>
+            <select
+              id="business-problem-position"
+              value={position}
+              onChange={(event) => setPosition(event.target.value as typeof position)}
+              className="min-h-11 rounded-md border border-border bg-card px-3"
+            >
+              <option value="uncertain">Cause remains uncertain</option>
+              <option value="supports">Our records support the customer report</option>
+              <option value="disputes">Our records differ from the customer report</option>
+            </select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="business-problem-statement">Statement</FieldLabel>
+            <textarea
+              id="business-problem-statement"
+              value={statement}
+              onChange={(event) => setStatement(event.target.value)}
+              maxLength={1_000}
+              required
+              className="min-h-28 rounded-md border border-border bg-card p-3"
             />
-            <span>{item.label}</span>
-          </label>)}
-        </fieldset>}
-        <Text type="supporting" color="secondary">
-          This statement becomes part of the shared record. It does not decide cause, responsibility, compensation, or remedy.
-        </Text>
-        <Button
-          label={submitting ? 'Recording statement…' : 'Record business statement'}
-          variant="primary"
-          clickAction={() => void record()}
-          isDisabled={submitting || statement.trim().length === 0}
-        />
-        {error === undefined ? null : <Text type="supporting" color="secondary">{error}</Text>}
+          </Field>
+          {problem.availableEvidence.length === 0 ? null : (
+            <FieldSet>
+              <FieldLegend variant="label">Attach recorded evidence from your step</FieldLegend>
+              <FieldGroup className="gap-2">
+                {problem.availableEvidence.map((item, index) => (
+                  <Field key={item.receiptRef} orientation="horizontal">
+                    <Checkbox
+                      id={`evidence-${index}`}
+                      checked={selectedEvidenceSet.has(item.receiptRef)}
+                      onCheckedChange={(checked) => setSelectedEvidence((current) => (
+                        checked === true
+                          ? [...current, item.receiptRef]
+                          : current.filter((receiptRef) => receiptRef !== item.receiptRef)
+                      ))}
+                    />
+                    <FieldLabel htmlFor={`evidence-${index}`} className="font-normal">{item.label}</FieldLabel>
+                  </Field>
+                ))}
+              </FieldGroup>
+            </FieldSet>
+          )}
+          <FieldDescription>
+            This statement becomes part of the shared record. It does not decide cause, responsibility, compensation, or remedy.
+          </FieldDescription>
+        </FieldGroup>
+        <Button type="button" variant="default" onClick={() => void record()} disabled={submitting || statement.trim().length === 0}>
+          {submitting ? 'Recording statement…' : 'Record business statement'}
+        </Button>
+        {error === undefined ? null : <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>
     </Card>
   </div>

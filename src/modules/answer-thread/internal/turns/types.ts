@@ -27,6 +27,7 @@ export type TurnPathId =
   | 'frozen_filter'
   | 'frozen_compare'
   | 'agent'
+  | 'proposal'
   | 'inquiry_handoff'
   | 'boundary_explain'
   | 'unsupported'
@@ -76,6 +77,10 @@ export type TurnTimingCollector = {
 }
 
 export type TurnPathContext = {
+  sessionId: string
+  threadId: string
+  turnId: string
+  sourceWriteRequest: Request | undefined
   query: string
   intent: FollowUpIntent
   priorTurnsCount: number

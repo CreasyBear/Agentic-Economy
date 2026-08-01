@@ -26,15 +26,19 @@ import {
   customerRequestUseRepeatPermissionAction,
   customerRequestWithdrawRepeatPermissionAction,
 } from '@/modules/customer-request/customer-request.actions'
+import { customerRequestPlanPreviewAction } from '@/modules/customer-request/plan-preview.actions'
 import { demandCaptureAction } from '@/modules/demand/demand.actions'
 import { readCustomerRecordAction, submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
+import { sandboxCheckupQuoteAction } from '@/modules/sandbox-supply/sandbox-supply.actions'
 import {
   registryDetailAction,
   registryListAction,
   registrySearchAction,
+  registryServicesListAction,
+  registryServicesSearchAction,
 } from '@/modules/registry/registry.actions'
 import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/settings.actions'
-import { storefrontEnrichDraftAction, storefrontImportDraftAction } from '@/modules/storefront/storefront.actions'
+import { storefrontEnrichDraftAction, storefrontImportDraftAction, webDiscoverAction } from '@/modules/storefront/storefront.actions'
 
 const actions: readonly AnyAction[] = [
   collectSuppliedCandidateQuoteAction,
@@ -47,15 +51,20 @@ const actions: readonly AnyAction[] = [
   customerRequestAllowRepeatPermissionAction,
   customerRequestUseRepeatPermissionAction,
   customerRequestInspectRepeatPermissionAction,
+  customerRequestPlanPreviewAction,
   customerRequestListConnectedAssistantsAction,
   customerRequestWithdrawRepeatPermissionAction,
   submitInquiryAction,
   readCustomerRecordAction,
   registryListAction,
+  registryServicesListAction,
+  registryServicesSearchAction,
   registrySearchAction,
   registryDetailAction,
+  sandboxCheckupQuoteAction,
   storefrontImportDraftAction,
   storefrontEnrichDraftAction,
+  webDiscoverAction,
   demandCaptureAction,
   updateOwnerNotificationPreferencesAction,
 ]
@@ -68,6 +77,16 @@ export function listActions(): readonly AnyAction[] {
 
 export function findAction(id: string): AnyAction | undefined {
   return actions.find((action) => action.id === id)
+}
+
+/** Actions exposed on the anonymous MCP host; the adapter enforces read-only admission. */
+export function listMcpActions(): readonly AnyAction[] {
+  return actions.filter((action) => action.surfaces.includes('mcp'))
+}
+
+/** Deterministic MCP tool name: one derivation, never a hand-maintained map. */
+export function mcpToolName(action: AnyAction): string {
+  return `ae_${action.id.replace(/\./g, '_')}`
 }
 
 function assertUniqueActionIds(registry: readonly AnyAction[]): void {

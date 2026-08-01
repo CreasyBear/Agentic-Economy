@@ -1,4 +1,5 @@
-import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 
 export type AeCheckboxFieldProps = {
   id: string
@@ -12,6 +13,8 @@ export type AeCheckboxFieldProps = {
 }
 
 export function AeCheckboxField({
+  id,
+  name,
   label,
   description,
   checked,
@@ -19,14 +22,25 @@ export function AeCheckboxField({
   invalid = false,
   onCheckedChange,
 }: AeCheckboxFieldProps) {
+  const descriptionId = `${id}-description`
+
   return (
-    <CheckboxInput
-      label={label}
-      value={checked}
-      isDisabled={disabled}
-      onChange={onCheckedChange}
-      {...(description === undefined ? {} : { description })}
-      {...(invalid ? { status: { type: 'error' as const } } : {})}
-    />
+    <FieldGroup>
+      <Field orientation="horizontal" {...(invalid ? { 'data-invalid': true } : {})} {...(disabled ? { 'data-disabled': true } : {})}>
+        <Checkbox
+          id={id}
+          {...(name === undefined ? {} : { name })}
+          checked={checked}
+          disabled={disabled}
+          {...(invalid ? { 'aria-invalid': true } : {})}
+          {...(description === undefined ? {} : { 'aria-describedby': descriptionId })}
+          onCheckedChange={(next) => onCheckedChange(next === true)}
+        />
+        <FieldContent>
+          <FieldLabel htmlFor={id}>{label}</FieldLabel>
+          {description === undefined ? null : <FieldDescription id={descriptionId}>{description}</FieldDescription>}
+        </FieldContent>
+      </Field>
+    </FieldGroup>
   )
 }

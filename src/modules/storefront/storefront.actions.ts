@@ -6,6 +6,8 @@ import type {
   BusinessEnrichmentResult,
   StorefrontImportInput,
   StorefrontImportResult,
+  WebDiscoveryInput,
+  WebDiscoveryResult,
 } from '@/modules/storefront/public'
 
 const storefrontImportDraftInputSchema = z.object({
@@ -98,6 +100,14 @@ export const storefrontImportDraftAction = defineAction({
   outputSchema: storefrontImportDraftOutputSchema,
   parameters: importDraftParameters,
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: true,
+    recipientKind: 'provider_system',
+    dataClasses: ['business_website_url', 'business_identifier'],
+    spendExposure: 'none',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http'],
   run: async ({ data }) => {
     const { importStorefrontDraftFromWebsite } = await import('@/modules/storefront/public')
@@ -177,12 +187,98 @@ export const storefrontEnrichDraftAction = defineAction({
   outputSchema: storefrontEnrichOutputSchema,
   parameters: enrichParameters,
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: true,
+    recipientKind: 'provider_system',
+    dataClasses: ['business_identity', 'location'],
+    spendExposure: 'none',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http'],
   run: async ({ data }) => {
-    const [{ enrichBusinessFromWebSearch }, { readAnswerLlmConfig }] = await Promise.all([
+    const [{ enrichBusinessFromWebSearch }, { openRouterGatewayConfig }] = await Promise.all([
       import('@/modules/storefront/public'),
-      import('@/modules/answer/internal/llm-config'),
+      import('@/modules/model-gateway/public'),
     ])
-    return enrichBusinessFromWebSearch(data, readAnswerLlmConfig())
+    return enrichBusinessFromWebSearch(data, openRouterGatewayConfig())
+  },
+})
+
+const webDiscoverInputSchema = z.strictObject({
+  query: z.string().trim().min(1).max(200).describe('Service and place to search for real businesses on the web'),
+  location: z.string().trim().max(80).optional().describe('Requested suburb or area'),
+}) as z.ZodType<WebDiscoveryInput>
+
+const webDiscoveryClaimSchema = z.object({
+  businessName: z.string(),
+  suburb: z.string(),
+  phone: z.string().optional(),
+  websiteUrl: z.string().optional(),
+  serviceSummary: z.string().optional(),
+  sourceUrl: z.string(),
+})
+
+const webDiscoverOutputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('found'),
+    query: z.string(),
+    claims: z.array(webDiscoveryClaimSchema).max(5),
+  }),
+  z.object({ kind: z.literal('none'), query: z.string(), reason: z.literal('no_matches') }),
+  z.object({ kind: z.literal('unavailable'), reason: z.literal('llm_not_configured') }),
+  z.object({
+    kind: z.literal('error'),
+    code: z.literal('discovery_failed'),
+    retryable: z.boolean(),
+    reason: z.string(),
+  }),
+]) as z.ZodType<WebDiscoveryResult>
+
+const webDiscoverParameters: readonly ActionParameter[] = [
+  {
+    name: 'query',
+    type: 'string',
+    description: 'Service and place to search for real businesses on the web.',
+    required: true,
+  },
+  {
+    name: 'location',
+    type: 'string',
+    description: 'Optional suburb or area to keep the search local.',
+    required: false,
+  },
+]
+
+export const webDiscoverAction = defineAction({
+  id: 'web.discover',
+  name: 'Find unlisted businesses on the web',
+  summary: 'Search the web once for real businesses when AE has no listed supply, and return clearly labelled imported claims for review.',
+  boundaries: [
+    'Observation only: it does not create, verify, publish, book, charge, contact, or dispatch a business.',
+    'Results are web-sourced imported claims, not AE-listed supply or bookable options.',
+    'Names, locations, phone numbers, websites, and service details are shown only when grounded by the web-search response.',
+    'Each turn may run at most one bounded web discovery search.',
+    'Use the claim link to invite a business to list; an owner must review and confirm any imported details.',
+  ],
+  schema: webDiscoverInputSchema,
+  outputSchema: webDiscoverOutputSchema,
+  parameters: webDiscoverParameters,
+  readOnly: true,
+  effect: {
+    class: 'observation',
+    reversible: true,
+    recipientKind: 'none',
+    dataClasses: ['query_text', 'location'],
+    spendExposure: 'none',
+    approval: 'none',
+  },
+  surfaces: ['answerThread'],
+  run: async ({ data }) => {
+    const [{ discoverBusinessesFromWebSearch }, { openRouterGatewayConfig }] = await Promise.all([
+      import('@/modules/storefront/public'),
+      import('@/modules/model-gateway/public'),
+    ])
+    return discoverBusinessesFromWebSearch(data, openRouterGatewayConfig())
   },
 })

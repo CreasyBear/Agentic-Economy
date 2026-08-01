@@ -14,6 +14,7 @@ import {
   handleCustomerRequestRepeatPermissionUsePost,
   handleCustomerRequestRepeatPermissionWithdrawPost,
 } from '@/lib/server/customer-request-repeat-permission-api'
+import { customerRequestScopeForMode } from '@/modules/customer-request/agent-contract'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
 const key = 'repeat-permission-http-key-with-at-least-32-bytes'
@@ -27,7 +28,7 @@ const principal = {
   subject: 'user_repeat',
   userId: 'user_repeat',
   orgId: null,
-  scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+  scopes: ['customer_requests:create', customerRequestScopeForMode('bounded_mandate')],
 }
 
 describe('Customer Request repeat-permission HTTP surface', () => {
@@ -81,7 +82,7 @@ describe('Customer Request repeat-permission HTTP surface', () => {
     )
   })
 
-  it('refuses an external credential without standing-authority scope before the application call', async () => {
+  it('refuses an external credential without the bounded-mandate scope before the application call', async () => {
     const callAction = vi.fn()
     const response = await handleAgentCustomerRequestRepeatPermissionAllowPost(
       post({

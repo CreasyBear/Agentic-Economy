@@ -1,6 +1,5 @@
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Heading, Text } from '@astryxdesign/core/Text'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import type { ConversationTurn, WorkspaceState } from '../workspace-types'
 import {
@@ -11,6 +10,7 @@ import {
   customerClarificationPrompt,
   statusLabel,
 } from './shared'
+import { DirectoryFallback } from './directory-fallback'
 import { OptionsCard, NoOptions } from './options'
 import { DisclosureReview } from './disclosure'
 import {
@@ -23,13 +23,13 @@ import {
 import { ActionStatusCard, CancelledStatusCard } from './status'
 
 export function RequestResult({ state, compare, reviewRoute, leaveRouteReview, reportRouteUnavailable, confirmRoute, actOnRoute, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, routeFeedback, setRouteFeedback, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; reviewRoute: (projection: CustomerRequestView, routeRef: string) => void; leaveRouteReview: (projection: CustomerRequestView) => void; reportRouteUnavailable: (projection: CustomerRequestView, routeRef: string) => Promise<void>; confirmRoute: (projection: CustomerRequestView, routeRef: string) => Promise<void>; actOnRoute: (projection: CustomerRequestView, operation: 'run' | 'cancellation') => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; routeFeedback: string; setRouteFeedback: (feedback: string) => void; turns: readonly ConversationTurn[] }) {
-  if (state.kind === 'error') return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-4"><Heading level={2}>Request unavailable</Heading><Text color="secondary">{state.message}</Text>{state.authenticationRequired ? <Button label="Sign in to continue" href="/sign-in" variant="primary" /> : null}</div></Card>
-  if (state.kind === 'conflict') return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite">
+  if (state.kind === 'error') return <Card className="min-w-0 p-5" aria-live="polite"><div className="grid gap-4"><h2 className="text-2xl font-semibold">Request unavailable</h2><p className="text-muted-foreground">{state.message}</p>{state.authenticationRequired ? <Button asChild variant="default"><a href="/sign-in">Sign in to continue</a></Button> : null}</div></Card>
+  if (state.kind === 'conflict') return <Card className="mx-auto w-full max-w-4xl p-5" aria-live="polite">
     <div className="grid gap-4">
-      <Text className="text-sm font-semibold text-accent">A newer decision is available</Text>
-      <Heading level={2}>This Request changed.</Heading>
-      <Text color="secondary">{conflictExplanation(state.reason)} No action was authorized, and your Request is preserved.</Text>
-      <Button label="Load the current Request" variant="primary" clickAction={() => void refresh(state.projection)} />
+      <p className="text-sm font-semibold text-brand">A newer decision is available</p>
+      <h2 className="text-2xl font-semibold">This Request changed.</h2>
+      <p className="text-muted-foreground">{conflictExplanation(state.reason)} No action was authorized, and your Request is preserved.</p>
+      <Button type="button" variant="default" onClick={() => void refresh(state.projection)}>Load the current Request</Button>
       <RecoveryActions edit={() => edit(state.projection)} restart={restart} />
     </div>
   </Card>
@@ -51,14 +51,23 @@ export function RequestResult({ state, compare, reviewRoute, leaveRouteReview, r
     || state.projection.state === 'completed' || state.projection.state === 'failed')) {
     return <ActionStatusCard projection={state.projection} turns={turns} refresh={() => refresh(state.projection)} edit={() => edit(state.projection)} restart={restart} />
   }
-  if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={state.projection} correct={() => edit(state.projection)} />{state.projection.clarification ? <Clarification prompt={customerClarificationPrompt(state.projection.clarification)} answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.dataHandling === undefined ? null : <Text color="secondary">{state.projection.dataHandling.explanation}</Text>}{state.projection.unsupportedRecovery === undefined ? null : <Text color="secondary">{state.projection.unsupportedRecovery.nextStep.summary}</Text>}{state.projection.nextAction === 'prepare_options' ? <Button label="Show available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : state.projection.unsupportedRecovery === undefined ? <Text color="secondary">AE cannot prepare a useful choice for this request yet.</Text> : null}<RecoveryActions edit={() => edit(state.projection)} restart={restart} /></div></Card>}</section>
+  if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={state.projection} correct={() => edit(state.projection)} />{state.projection.clarification ? <Clarification prompt={customerClarificationPrompt(state.projection.clarification)} answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <><Card className="p-5"><div className="grid gap-4"><p className="text-sm font-medium text-brand">{statusLabel(state.projection.state)}</p><h2 className="text-2xl font-semibold">{state.projection.summary}</h2>{state.projection.dataHandling === undefined ? null : <p className="text-muted-foreground">{state.projection.dataHandling.explanation}</p>}{state.projection.unsupportedRecovery === undefined ? null : <p className="text-muted-foreground">{state.projection.unsupportedRecovery.nextStep.summary}</p>}{state.projection.nextAction === 'prepare_options' ? <Button type="button" variant="default" onClick={() => void compare(state.projection)}>Show available options</Button> : state.projection.state === 'preparing_options' ? <Button type="button" variant="secondary" onClick={() => void compare(state.projection)}>Check again</Button> : state.projection.unsupportedRecovery === undefined ? <p className="text-muted-foreground">AE cannot prepare a useful choice for this request yet.</p> : null}<RecoveryActions edit={() => edit(state.projection)} restart={restart} /></div></Card>{state.projection.state === 'unsupported' ? <DirectoryFallback intent={customerIntentFrom(turns)} /> : null}</>}</section>
   if (state.kind === 'confirming') return <ConfirmationLoadingCard />
-  if (state.kind === 'resuming' || state.kind === 'submitting' || state.kind === 'comparing' || state.kind === 'refreshing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'resuming' ? 'Reopening your Request…' : state.kind === 'submitting' ? 'Understanding your request…' : state.kind === 'comparing' ? 'Comparing available options…' : 'Checking with the latest evidence…'}</Heading><Text color="secondary" className="mt-2">No purchase, booking, or business step occurs during this moment.</Text></Card>
-  return <Card padding={5} className="min-w-0 bg-surface"><Heading level={2}>Your result will appear here</Heading><Text color="secondary" className="mt-2">AE will show missing information, unsupported requests, or comparable business options.</Text></Card>
+  if (state.kind === 'resuming' || state.kind === 'submitting' || state.kind === 'comparing' || state.kind === 'refreshing') return <Card className="min-w-0 p-5" aria-live="polite" aria-busy="true"><h2 className="text-2xl font-semibold">{state.kind === 'resuming' ? 'Reopening your Request…' : state.kind === 'submitting' ? 'Understanding your request…' : state.kind === 'comparing' ? 'Comparing your options…' : 'Checking the latest information…'}</h2><p className="mt-2 text-muted-foreground">Your request stays in place while AE works.</p></Card>
+  return <Card className="min-w-0 bg-card p-5"><h2 className="text-2xl font-semibold">Your result will appear here</h2><p className="mt-2 text-muted-foreground">AE will show missing information, unsupported requests, or comparable business options.</p></Card>
 }
 function conflictExplanation(reason: Extract<CustomerRequestProjection, { kind: 'conflict' }>['reason']): string {
   if (reason === 'revision_changed') return 'The Request was revised before this comparison finished.'
   if (reason === 'options_changed') return 'The available ways forward changed before this comparison finished.'
   if (reason === 'identity_changed') return 'The person or agent allowed to access this Request changed.'
   return 'This operation key was already used for different work.'
+}
+
+/**
+ * The projected view deliberately does not republish the raw request text, so
+ * the customer's own words come from the conversation. The last customer turn
+ * is the current wording after any edit.
+ */
+function customerIntentFrom(turns: readonly ConversationTurn[]): string {
+  return [...turns].reverse().find((turn) => turn.speaker === 'customer')?.text ?? ''
 }

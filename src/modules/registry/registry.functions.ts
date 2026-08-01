@@ -2,6 +2,9 @@ import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { buildDevSeedCatalogState } from '@/modules/dev/public'
 import type { ActionTimingSink } from '@/modules/common/action'
+import { recordSearchGaps } from '@/modules/demand/demand.functions'
+import type { SearchGapSurface } from '@/modules/demand/public'
+import { toSearchGapCandidateV2 } from '@/modules/demand/public'
 import {
   createDefaultRegistrySourceState,
   createLocalE2eRegistrySourceState,
@@ -42,6 +45,7 @@ export type PublicRegistrySourcePort = {
 
 export type PublicRegistryReadOptions = {
   timing?: ActionTimingSink
+  surface?: SearchGapSurface
 }
 
 const listPublicBusinessCatalogQuery = sourceQuery<PublicBusinessCatalogQueryInput, PublicBusinessCatalogApiPage>(
@@ -86,74 +90,10 @@ export function setCatalogSearchBackendForTests(backend: CatalogSearchBackend | 
   }
 }
 
-export async function readPublicRegistryCatalogPage(
-  input: PublicBusinessCatalogQueryInput
-): Promise<PublicBusinessCatalogApiPage> {
-  return filterPublicRegistryPage(getPublicRegistrySourcePort().list(input))
-}
-
-export async function readPublicRegistrySearchPage(
-  input: PublicBusinessCatalogSearchInput,
-  options: PublicRegistryReadOptions = {},
-): Promise<PublicBusinessCatalogApiPage> {
-  const sourcePort = getPublicRegistrySourcePort()
-  const backend = catalogSearchBackendForTests ?? readCatalogSearchBackend()
-  const timing = options.timing
-
-  if (backend === 'convex') {
-    return withTiming(timing, 'registry.search.convex', { backend }, () =>
-      filterPublicRegistryPage(sourcePort.search(input)),
-    )
-  }
-
-  const searchPort = catalogSearchPortForTests ?? createConfiguredMeiliCatalogSearchPort()
-  if (searchPort === undefined) {
-    return withTiming(timing, 'registry.search.convex_fallback', { backend }, () =>
-      filterPublicRegistryPage(sourcePort.search(input)),
-    )
-  }
-
-  if (backend === 'dual') {
-    void withTiming(timing, 'registry.search.meili_shadow', { backend }, () =>
-      searchPort.search(input),
-    ).catch(() => undefined)
-    return withTiming(timing, 'registry.search.convex', { backend }, () =>
-      filterPublicRegistryPage(sourcePort.search(input)),
-    )
-  }
-
-  try {
-    const result = await withTiming(timing, 'registry.search.meili', { backend }, () =>
-      searchPort.search(input),
-    )
-    if (result.processingTimeMs !== undefined) {
-      timing?.record('registry.search.meili_processing', result.processingTimeMs, {
-        backend,
-      })
-    }
-    return withTiming(timing, 'registry.search.hydration', {
-      backend,
-      hits: result.hits.length,
-    }, () =>
-      filterPublicRegistryPage(hydrateCatalogSearchResult(input, result, sourcePort)),
-    )
-  } catch {
-    return withTiming(timing, 'registry.search.convex_fallback', { backend }, () =>
-      filterPublicRegistryPage(sourcePort.search(input)),
-    )
-  }
-}
-
-export async function readPublicRegistryBusinessDetail(input: {
-  slug: string
-}): Promise<PublicBusinessCatalogDetailResult> {
-  return filterPublicRegistryDetail(getPublicRegistrySourcePort().detail(input))
-}
-
 export async function readPublicOfferingRegistryPage(
   input: PublicBusinessCatalogQueryInput,
 ): Promise<PublicBusinessCatalogApiV2Page> {
-  if (isLocalE2EAuthBypassEnabled()) {
+  if (useLocalRegistryFixture()) {
     return adaptLegacyPage(await createLegacyRegistrySourcePort().list(input))
   }
   return queryRegistryWithLegacyFallback(
@@ -164,9 +104,81 @@ export async function readPublicOfferingRegistryPage(
 
 export async function readPublicOfferingRegistrySearchPage(
   input: PublicBusinessCatalogSearchInput,
+  options: PublicRegistryReadOptions = {},
 ): Promise<PublicBusinessCatalogApiV2Page> {
-  if (isLocalE2EAuthBypassEnabled()) {
-    return adaptLegacyPage(await createLegacyRegistrySourcePort().search(input))
+  const page = await readOfferingSearchPageUninstrumented(input, options)
+  if (options.surface !== undefined && input.cursor === undefined) {
+    await recordSearchGaps({
+      queryText: input.query,
+      surface: options.surface,
+      candidates: page.items.map(toSearchGapCandidateV2),
+    })
+  }
+  return page
+}
+
+/**
+ * The external search backend is selected here, on the Offering projection.
+ * It used to be reachable only from the legacy projection, which meant
+ * choosing Meilisearch also meant choosing the weaker set of facts.
+ */
+async function readOfferingSearchPageUninstrumented(
+  input: PublicBusinessCatalogSearchInput,
+  options: PublicRegistryReadOptions,
+): Promise<PublicBusinessCatalogApiV2Page> {
+  const timing = options.timing
+  const backend = catalogSearchBackendForTests ?? readCatalogSearchBackend()
+  const searchPort = backend === 'convex'
+    ? undefined
+    : catalogSearchPortForTests ?? createConfiguredMeiliCatalogSearchPort()
+
+  if (searchPort === undefined) {
+    const label = backend === 'convex' ? 'registry.search.convex' : 'registry.search.convex_fallback'
+    return withTiming(timing, label, { backend }, () => readOfferingSearchPageFromSource(input))
+  }
+
+  if (backend === 'dual') {
+    void withTiming(timing, 'registry.search.meili_shadow', { backend }, () =>
+      searchPort.search(input),
+    ).catch(() => undefined)
+    return withTiming(timing, 'registry.search.convex', { backend }, () =>
+      readOfferingSearchPageFromSource(input))
+  }
+
+  let result: CatalogSearchResult | undefined
+  try {
+    result = await withTiming(timing, 'registry.search.meili', { backend }, () =>
+      searchPort.search(input),
+    )
+  } catch {
+    result = undefined
+  }
+  if (result?.processingTimeMs !== undefined) {
+    timing?.record('registry.search.meili_processing', result.processingTimeMs, { backend })
+  }
+
+  // A stale, empty, or not-yet-indexed Meili index answers a real query with zero hits.
+  // That is a miss in the index, not evidence that the registry holds nothing.
+  if (
+    result === undefined
+    || (result.hits.length === 0 && normalizeRegistrySearchText(input.query).length > 0)
+  ) {
+    return withTiming(timing, 'registry.search.convex_fallback', { backend }, () =>
+      readOfferingSearchPageFromSource(input))
+  }
+
+  const searchResult = result
+  return withTiming(timing, 'registry.search.hydration', {
+    backend,
+    hits: searchResult.hits.length,
+  }, () => hydrateOfferingSearchResult(input, searchResult))
+}
+
+function readOfferingSearchPageFromSource(
+  input: PublicBusinessCatalogSearchInput,
+): Promise<PublicBusinessCatalogApiV2Page> {
+  if (useLocalRegistryFixture()) {
+    return createLegacyRegistrySourcePort().search(input).then(adaptLegacyPage)
   }
   return queryRegistryWithLegacyFallback(
     () => callPublicSourceQuery(searchPublicBusinessOfferingSupplyQuery, input),
@@ -174,10 +186,42 @@ export async function readPublicOfferingRegistrySearchPage(
   )
 }
 
+/** Meilisearch returns ranked slugs; the Offering projection supplies the facts. */
+async function hydrateOfferingSearchResult(
+  input: PublicBusinessCatalogSearchInput,
+  result: CatalogSearchResult,
+): Promise<PublicBusinessCatalogApiV2Page> {
+  const uniqueSlugs = [...new Set(result.hits.map((hit) => hit.businessSlug))]
+  const details = await Promise.all(
+    uniqueSlugs.map((slug) => readPublicOfferingRegistryBusinessDetail({ slug })),
+  )
+  const items = details.flatMap((detail) => detail.kind === 'found' ? [detail.business] : [])
+  const limit = normalizePublicLimit(input.limit)
+  const startIndex = input.cursor === undefined
+    ? 0
+    : Math.max(items.findIndex((item) => item.slug === input.cursor), 0)
+  const pageItems = items.slice(startIndex, startIndex + limit)
+  const nextItem = items[startIndex + limit]
+
+  return {
+    kind: 'ok',
+    schemaVersion: 'public-business-catalog-api:v2',
+    query: input.query,
+    items: pageItems,
+    pagination: {
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      ...(nextItem === undefined ? {} : { nextCursor: nextItem.slug }),
+      limit,
+      total: result.estimatedTotalHits ?? items.length,
+      hasMore: nextItem !== undefined,
+    },
+  }
+}
+
 export async function readPublicOfferingRegistryBusinessDetail(
   input: { slug: string },
 ): Promise<PublicBusinessCatalogV2DetailResult> {
-  if (isLocalE2EAuthBypassEnabled()) {
+  if (useLocalRegistryFixture()) {
     const legacy = await createLegacyRegistrySourcePort().detail(input)
     return legacy.kind === 'not_found'
       ? legacy
@@ -209,26 +253,26 @@ export async function resolvePublicRegistryInquiryTarget(input: {
   return getPublicRegistrySourcePort().resolveInquiryTarget(input)
 }
 
-export function legacyPublicRegistryList(
+function legacyPublicRegistryList(
   input: PublicBusinessCatalogQueryInput = {}
 ): PublicBusinessCatalogApiPage {
   return listPublicBusinessCatalog(createDefaultRegistrySourceState(), input)
 }
 
-export function legacyPublicRegistrySearch(input: PublicBusinessCatalogSearchInput): PublicBusinessCatalogApiPage {
+function legacyPublicRegistrySearch(input: PublicBusinessCatalogSearchInput): PublicBusinessCatalogApiPage {
   return searchPublicBusinessCatalog(createDefaultRegistrySourceState(), input)
 }
 
-export function legacyPublicRegistryDetail(input: { slug: string }): PublicBusinessCatalogDetailResult {
+function legacyPublicRegistryDetail(input: { slug: string }): PublicBusinessCatalogDetailResult {
   return getPublicBusinessCatalogBySlug(createDefaultRegistrySourceState(), input)
 }
 
 function getPublicRegistrySourcePort(): PublicRegistrySourcePort {
 
-  if (isLocalE2EAuthBypassEnabled()) {
+
+  if (useLocalRegistryFixture()) {
     return createLegacyRegistrySourcePort()
   }
-
   return {
     list: (input) => queryRegistryWithLegacyFallback(() => callPublicSourceQuery(listPublicBusinessCatalogQuery, input), () => legacyPublicRegistryList(input)),
     search: (input) =>
@@ -268,64 +312,6 @@ function createLocalRegistrySourceState() {
     return buildDevSeedCatalogState().state
   }
   return createLocalE2eRegistrySourceState()
-}
-
-async function hydrateCatalogSearchResult(
-  input: PublicBusinessCatalogSearchInput,
-  result: CatalogSearchResult,
-  sourcePort: PublicRegistrySourcePort,
-): Promise<PublicBusinessCatalogApiPage> {
-  const seenSlugs = new Set<string>()
-  const uniqueSlugs: string[] = []
-
-  for (const hit of result.hits) {
-    if (seenSlugs.has(hit.businessSlug)) {
-      continue
-    }
-    seenSlugs.add(hit.businessSlug)
-    uniqueSlugs.push(hit.businessSlug)
-  }
-
-  const hydrated: PublicBusinessCatalogApiDto[] = []
-  const details = await Promise.all(uniqueSlugs.map((slug) => sourcePort.detail({ slug })))
-  for (const detail of details) {
-    if (detail.kind === 'found') {
-      hydrated.push(detail.business)
-    }
-  }
-
-  return paginateHydratedSearchResults(input, hydrated, result)
-}
-
-function paginateHydratedSearchResults(
-  input: PublicBusinessCatalogSearchInput,
-  items: PublicBusinessCatalogApiPage['items'],
-  result: CatalogSearchResult,
-): PublicBusinessCatalogApiPage {
-  const limit = normalizePublicLimit(input.limit)
-  const startIndex =
-    input.cursor === undefined
-      ? 0
-      : Math.max(
-          items.findIndex((item) => item.slug === input.cursor),
-          0,
-        )
-  const pageItems = items.slice(startIndex, startIndex + limit)
-  const next = items.at(startIndex + limit)
-
-  return {
-    kind: 'ok',
-    schemaVersion: 'public-business-catalog-api:v1',
-    query: normalizeRegistrySearchText(input.query),
-    items: pageItems,
-    pagination: {
-      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-      ...(next === undefined ? {} : { nextCursor: next.slug }),
-      limit,
-      total: Math.max(items.length, result.estimatedTotalHits ?? items.length),
-      hasMore: next !== undefined,
-    },
-  }
 }
 
 function normalizePublicLimit(limit: number | undefined): number {
@@ -413,11 +399,16 @@ async function queryRegistryWithLegacyFallback<T>(query: () => Promise<T>, fallb
   try {
     return await query()
   } catch (error) {
-    if (isLocalE2EAuthBypassEnabled()) {
+    if (useLocalRegistryFixture()) {
       return fallback()
     }
     throw new Error('registry_source_query_failed', { cause: error })
   }
+}
+
+function useLocalRegistryFixture(): boolean {
+  const convexUrl = process.env.CONVEX_URL?.trim() || process.env.VITE_CONVEX_URL?.trim()
+  return isLocalE2EAuthBypassEnabled() && convexUrl === undefined
 }
 
 async function withTiming<T>(

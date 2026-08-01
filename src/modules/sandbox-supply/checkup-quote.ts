@@ -1,3 +1,4 @@
+import type { OfferingPrice } from '@/modules/catalog/public'
 /**
  * Sandbox provider behaviour standing in for a business's own booking system.
  *
@@ -15,28 +16,31 @@ const OpeningHour = 9
 const ClosingHour = 17
 const SlotMinutes = 30
 
+export type CheckupQuoteOfferingFacts = Readonly<{
+  name: string
+  price: Readonly<{
+    currency: string
+    amountMinor: number
+    unit?: OfferingPrice['unit']
+    taxTreatment?: OfferingPrice['taxTreatment']
+  }>
+}>
+
 export type CheckupQuoteRequest = Readonly<{
   slug: string
   requestedAt: number
+  offering: CheckupQuoteOfferingFacts
 }>
 
 export type CheckupQuote = Readonly<{
   provenance: typeof SandboxQuoteProvenance
   slug: string
   service: string
-  price: Readonly<{ currency: string; amountMinor: number }>
+  price: CheckupQuoteOfferingFacts['price']
   nextAvailable: string
   quotedAt: string
   validUntil: string
 }>
-
-export type CheckupQuoteResult =
-  | Readonly<{ kind: 'quoted'; quote: CheckupQuote }>
-  | Readonly<{ kind: 'refused'; reason: 'unknown_offering' }>
-
-const CheckupPriceMinorByslug: Record<string, number> = {
-  'adelaide-dental-clinic': 18_000,
-}
 
 /**
  * Next slot inside opening hours, rounded up to the slot grid. Before opening the
@@ -58,21 +62,15 @@ export function nextAvailableSlot(from: Date): Date {
   return slot
 }
 
-export function quoteStandardCheckup(input: CheckupQuoteRequest): CheckupQuoteResult {
-  const amountMinor = CheckupPriceMinorByslug[input.slug]
-  if (amountMinor === undefined) return { kind: 'refused', reason: 'unknown_offering' }
-
+export function quoteStandardCheckup(input: CheckupQuoteRequest): CheckupQuote {
   const requestedAt = new Date(input.requestedAt)
   return {
-    kind: 'quoted',
-    quote: {
-      provenance: SandboxQuoteProvenance,
-      slug: input.slug,
-      service: 'Standard checkup',
-      price: { currency: 'AUD', amountMinor },
-      nextAvailable: nextAvailableSlot(requestedAt).toISOString(),
-      quotedAt: requestedAt.toISOString(),
-      validUntil: new Date(input.requestedAt + QuoteValidityMs).toISOString(),
-    },
+    provenance: SandboxQuoteProvenance,
+    slug: input.slug,
+    service: input.offering.name,
+    price: input.offering.price,
+    nextAvailable: nextAvailableSlot(requestedAt).toISOString(),
+    quotedAt: requestedAt.toISOString(),
+    validUntil: new Date(input.requestedAt + QuoteValidityMs).toISOString(),
   }
 }

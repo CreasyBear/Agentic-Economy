@@ -17,6 +17,9 @@ type AnswerPlanState = Pick<
   'providerBudget' | 'artifactBudget'
 >
 
+type EnginePlanState = Omit<Extract<AnswerEvent, { type: 'plan-contract' }>, 'type'>
+type RecommendationState = Omit<Extract<AnswerEvent, { type: 'recommendation' }>, 'type'>
+
 export type AnswerTurnUiState = {
   phase: AnswerTurnPhase
   artifacts: AnswerArtifact[]
@@ -27,6 +30,9 @@ export type AnswerTurnUiState = {
   workLog: readonly AnswerWorkStep[]
   layoutProfile: AnswerLayoutProfile | undefined
   plan: AnswerPlanState | undefined
+  enginePlan: EnginePlanState | undefined
+  clarifyingQuestion: string | undefined
+  recommendation: RecommendationState | undefined
   errorMessage: string | null
   complete: boolean
 }
@@ -41,6 +47,9 @@ export const initialAnswerTurnUiState: AnswerTurnUiState = {
   workLog: [],
   layoutProfile: undefined,
   plan: undefined,
+  enginePlan: undefined,
+  clarifyingQuestion: undefined,
+  recommendation: undefined,
   errorMessage: null,
   complete: false,
 }
@@ -78,6 +87,27 @@ export function reduceAnswerTurnEvent(state: AnswerTurnUiState, event: AnswerEve
         plan: {
           providerBudget: event.providerBudget,
           artifactBudget: event.artifactBudget,
+        },
+      }
+    case 'plan-contract':
+      return {
+        ...state,
+        enginePlan: {
+          planId: event.planId,
+          revision: event.revision,
+          goalText: event.goalText,
+          steps: event.steps,
+        },
+      }
+    case 'clarifying-question':
+      return { ...state, clarifyingQuestion: event.question }
+    case 'recommendation':
+      return {
+        ...state,
+        recommendation: {
+          summary: event.summary,
+          ...(event.recommendedSlug === undefined ? {} : { recommendedSlug: event.recommendedSlug }),
+          nextStep: event.nextStep,
         },
       }
     case 'one-line':

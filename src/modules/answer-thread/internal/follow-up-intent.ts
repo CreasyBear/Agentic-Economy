@@ -1,3 +1,5 @@
+import { parseNarrowToSuburb } from '@/modules/common/narrow-to-chip'
+
 import type { FollowUpIntent } from '../answer-thread.schema'
 
 const BOOKING_PATTERNS = [
@@ -58,6 +60,10 @@ export function classifyFollowUpIntent(query: string, priorQueryCount: number): 
   }
 
   if (priorQueryCount === 0) {
+    return 'refine_search'
+  }
+
+  if (parseNarrowToSuburb(normalized) !== undefined) {
     return 'refine_search'
   }
 

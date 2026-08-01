@@ -1,113 +1,55 @@
 "use client";
 
-import { Button, type ButtonProps } from "@astryxdesign/core/Button";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
-  cloneElement,
-  isValidElement,
-  type ComponentProps,
-  type MouseEvent,
-  type ReactElement,
-  type ReactNode,
-} from "react";
+  ScrollArea,
+  ScrollBar,
+} from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
+import type { ComponentProps } from "react";
+import { useCallback } from "react";
 
-export type SuggestionsProps = ComponentProps<"div"> & {
-  wrap?: boolean;
-};
+export type SuggestionsProps = ComponentProps<typeof ScrollArea>;
 
 export const Suggestions = ({
   className,
   children,
-  wrap = false,
   ...props
 }: SuggestionsProps) => (
-  <div
-    className={cn(
-      "w-full",
-      wrap ? "overflow-visible whitespace-normal" : "overflow-x-auto whitespace-nowrap",
-    )}
-    {...props}
-  >
-    <div
-      className={cn(
-        "flex items-center gap-2",
-        wrap ? "w-full flex-wrap" : "w-max flex-nowrap",
-        className,
-      )}
-    >
+  <ScrollArea className="w-full overflow-x-auto whitespace-nowrap" {...props}>
+    <div className={cn("flex w-max flex-nowrap items-center gap-2", className)}>
       {children}
     </div>
-  </div>
+    <ScrollBar className="hidden" orientation="horizontal" />
+  </ScrollArea>
 );
 
-type AstryxButtonVariant = NonNullable<ButtonProps["variant"]>;
-type SuggestionVariant = AstryxButtonVariant | "outline";
-
-export type SuggestionProps = {
-  asChild?: boolean;
-  children?: ReactNode;
-  className?: string;
-  disabled?: boolean;
-  id?: string;
+export type SuggestionProps = Omit<ComponentProps<typeof Button>, "onClick"> & {
   suggestion: string;
   onClick?: (suggestion: string) => void;
-  type?: "button" | "submit" | "reset";
-  variant?: SuggestionVariant;
-  size?: ButtonProps["size"];
-  "aria-label"?: string;
-};
-
-const suggestionVariantMap: Record<SuggestionVariant, AstryxButtonVariant> = {
-  destructive: "destructive",
-  ghost: "ghost",
-  outline: "secondary",
-  primary: "primary",
-  secondary: "secondary",
 };
 
 export const Suggestion = ({
-  asChild = false,
   suggestion,
   onClick,
   className,
-  variant = "secondary",
+  variant = "outline",
   size = "sm",
   children,
-  disabled,
-  id,
-  "aria-label": ariaLabel,
-  type = "button",
+  ...props
 }: SuggestionProps) => {
-  const handleClick = () => {
+  const handleClick = useCallback(() => {
     onClick?.(suggestion);
-  };
-
-  if (asChild && isValidElement<{ className?: string; onClick?: (event: MouseEvent<HTMLElement>) => void }>(children)) {
-    return cloneElement(children as ReactElement<{ className?: string; onClick?: (event: MouseEvent<HTMLElement>) => void }>, {
-      className: cn(
-        "inline-flex min-h-9 cursor-pointer items-center justify-center rounded-full px-4 text-sm font-medium text-primary no-underline hover:underline",
-        className,
-        children.props.className,
-      ),
-      onClick: (event: MouseEvent<HTMLElement>) => {
-        children.props.onClick?.(event);
-        if (!event.defaultPrevented) {
-          onClick?.(suggestion);
-        }
-      },
-    });
-  }
+  }, [onClick, suggestion]);
 
   return (
     <Button
-      aria-label={ariaLabel}
       className={cn("cursor-pointer rounded-full px-4", className)}
-      isDisabled={disabled ?? false}
-      label={ariaLabel ?? (typeof children === "string" ? children : suggestion)}
       onClick={handleClick}
       size={size}
-      type={type}
-      variant={suggestionVariantMap[variant]}
+      type="button"
+      variant={variant}
+      {...props}
     >
       {children || suggestion}
     </Button>

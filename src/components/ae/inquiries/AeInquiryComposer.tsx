@@ -1,11 +1,20 @@
-import { type ComponentPropsWithoutRef, type KeyboardEvent, type Ref, type RefObject } from 'react'
-import { SendIcon } from 'lucide-react'
+import { type KeyboardEvent, type RefObject } from 'react'
 
-import { Button } from '@astryxdesign/core/Button'
-import { Field } from '@astryxdesign/core/Field'
-import { FormLayout } from '@astryxdesign/core/FormLayout'
-
-import { cn } from '@/lib/utils'
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  type PromptInputMessage,
+} from '@/components/ai-elements/prompt-input'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field'
 
 export type AeInquiryComposerProps = {
   id?: string
@@ -23,33 +32,8 @@ export type AeInquiryComposerProps = {
   onSubmit?: () => void
 }
 
-type ComposerInputGroupAddonAlign = 'inline-start' | 'inline-end' | 'block-start' | 'block-end'
-
-function ComposerInputGroup({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
-  return (
-    <div
-      className={cn('flex min-h-11 items-center gap-2 rounded-md border border-border bg-card px-3 motion-safe:transition motion-safe:duration-150 focus-within:border-accent', className)}
-      {...props}
-    />
-  )
-}
-
-function ComposerInputGroupAddon({
-  className,
-  align: _align,
-  ...props
-}: ComponentPropsWithoutRef<'div'> & { align?: ComposerInputGroupAddonAlign }) {
-  return <div className={cn('flex items-center gap-1 text-secondary', className)} {...props} />
-}
-
-type ComposerInputGroupTextareaProps = ComponentPropsWithoutRef<'textarea'> & {
-  ref?: Ref<HTMLTextAreaElement> | undefined
-}
-
-function ComposerInputGroupTextarea({ className, ref, ...props }: ComposerInputGroupTextareaProps) {
-  return <textarea ref={ref} className={cn('min-h-20 flex-1 bg-transparent text-sm outline-none', className)} {...props} />
-}
-
+// Adapter retained for the inquiry-specific field/error contract that PromptInput
+// does not provide. Its input and submit controls are official PromptInput parts.
 export function AeInquiryComposer({
   id = 'body',
   name = 'body',
@@ -65,14 +49,39 @@ export function AeInquiryComposer({
   onChange,
   onSubmit,
 }: AeInquiryComposerProps) {
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (onSubmit === undefined) {
+  function insertLineBreak(event: KeyboardEvent<HTMLTextAreaElement>) {
+    const target = event.currentTarget
+    const nextValue = `${target.value.slice(0, target.selectionStart)}\n${target.value.slice(target.selectionEnd)}`
+    if (maxLength !== undefined && nextValue.length > maxLength) {
       return
     }
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-      event.preventDefault()
-      onSubmit()
+    onChange(nextValue)
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.shiftKey) {
+      return
     }
+
+    event.preventDefault()
+    if (event.metaKey || event.ctrlKey) {
+      if (!disabled && !pending && onSubmit !== undefined) {
+        event.currentTarget.form?.requestSubmit()
+      }
+      return
+    }
+
+    insertLineBreak(event)
+  }
+
+  function handlePromptSubmit({ text }: PromptInputMessage) {
+    // Files stay internal to PromptInput; inquiry submission keeps its existing
+    // no-argument callback contract and only exposes the text control.
+    const submittedText = text.length > 0 ? text : value
+    if (submittedText !== value) {
+      onChange(submittedText)
+    }
+    onSubmit?.()
   }
 
   const descriptionId = `${id}-desc`
@@ -83,44 +92,43 @@ export function AeInquiryComposer({
   ].filter(Boolean).join(' ') || undefined
 
   return (
-    <FormLayout>
+    <FieldGroup>
       <Field
-        label={label}
-        inputID={id}
-        {...(description === undefined ? {} : { description, descriptionID: descriptionId })}
-        {...(invalid && errorMessage !== undefined ? { status: { type: 'error' as const, message: errorMessage, messageID: statusId } } : {})}
+        {...(invalid ? { 'data-invalid': true } : {})}
+        {...(disabled ? { 'data-disabled': true } : {})}
       >
-        <ComposerInputGroup className="min-h-28 items-end">
-          <ComposerInputGroupTextarea
-            id={id}
-            aria-describedby={describedBy}
-            aria-invalid={invalid || undefined}
-            name={name}
-            {...(textareaRef === undefined ? {} : { ref: textareaRef })}
-            value={value}
-            rows={5}
-            maxLength={maxLength}
-            disabled={disabled}
-            onChange={(event) => onChange(event.currentTarget.value)}
-            onKeyDown={handleKeyDown}
-          />
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        <PromptInput className="w-full" onSubmit={handlePromptSubmit}>
+          <PromptInputBody>
+            <PromptInputTextarea
+              id={id}
+              {...(describedBy === undefined ? {} : { 'aria-describedby': describedBy })}
+              {...(invalid ? { 'aria-invalid': true } : {})}
+              name={name}
+              {...(textareaRef === undefined ? {} : { ref: textareaRef })}
+              value={value}
+              rows={5}
+              placeholder=""
+              className="min-h-28 items-end"
+              {...(maxLength === undefined ? {} : { maxLength })}
+              disabled={disabled}
+              onChange={(event) => onChange(event.currentTarget.value)}
+              onKeyDown={handleKeyDown}
+            />
+          </PromptInputBody>
           {onSubmit === undefined ? null : (
-            <ComposerInputGroupAddon align="inline-end" className="pb-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="primary"
-                isIconOnly
-                label="Submit inquiry"
-                icon={<SendIcon aria-hidden="true" />}
-                isDisabled={disabled || pending}
-                isLoading={pending}
-                onClick={onSubmit}
+            <PromptInputFooter className="pb-2">
+              <PromptInputSubmit
+                aria-label="Submit inquiry"
+                disabled={disabled || pending}
+                status={pending ? 'submitted' : 'ready'}
               />
-            </ComposerInputGroupAddon>
+            </PromptInputFooter>
           )}
-        </ComposerInputGroup>
+        </PromptInput>
+        {description === undefined ? null : <FieldDescription id={descriptionId}>{description}</FieldDescription>}
+        {invalid && errorMessage !== undefined ? <FieldError id={statusId}>{errorMessage}</FieldError> : null}
       </Field>
-    </FormLayout>
+    </FieldGroup>
   )
 }

@@ -1,12 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Item } from '@astryxdesign/core/Item'
-import { List } from '@astryxdesign/core/List'
-import { AeOperatorStatusList } from '@/components/ae/operator/AeOperatorStatusList'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Card } from '@astryxdesign/core/Card'
+import { AeOperatorStatusList } from '@/components/ae/operator/AeOperatorStatusList'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import type { DeveloperDiscoveryRouteReadback } from '@/modules/discovery/developer-discovery'
 
@@ -60,94 +58,89 @@ function DevelopersDiscoveryRoute() {
       actions={
         <div className="flex flex-wrap gap-2">
           {readback.artifacts.map((artifact) => (
-            <Button key={artifact.kind} href={artifact.route} variant="secondary" size="sm" label={artifact.downloadLabel} />
+            <Button asChild key={artifact.kind} variant="secondary" size="sm">
+              <a href={artifact.route}>{artifact.downloadLabel}</a>
+            </Button>
           ))}
         </div>
       }
     >
       <section className="grid w-full gap-6 md:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid gap-6">
-          <Card padding={5}>
+          <Card className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-primary">Source-owned readback</div>
-              <div className="text-sm leading-6 text-secondary">{readback.copy.readOnlyNotice}</div>
+              <div className="text-lg font-semibold text-foreground">Source-owned readback</div>
+              <div className="text-sm leading-6 text-muted-foreground">{readback.copy.readOnlyNotice}</div>
             </div>
             <div className="mt-4 grid gap-4">
               <dl className="grid gap-3 text-sm md:grid-cols-3">
                 <div>
                   <dt className="font-medium">Freshness</dt>
-                  <dd className="text-secondary">{readback.freshness.label}</dd>
+                  <dd className="text-muted-foreground">{readback.freshness.label}</dd>
                 </div>
                 <div>
                   <dt className="font-medium">Published catalogs</dt>
-                  <dd className="text-secondary">{readback.catalogCount}</dd>
+                  <dd className="text-muted-foreground">{readback.catalogCount}</dd>
                 </div>
                 <div>
                   <dt className="font-medium">Schema version</dt>
-                  <dd className="text-secondary">{readback.schemaVersion}</dd>
+                  <dd className="text-muted-foreground">{readback.schemaVersion}</dd>
                 </div>
               </dl>
-              <p className="text-sm text-secondary">{readback.freshness.reason}</p>
+              <p className="text-sm text-muted-foreground">{readback.freshness.reason}</p>
             </div>
           </Card>
 
-          <Card id="facts" padding={5}>
+          <Card id="facts" className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-primary">Current public catalog facts</div>
-              <div className="text-sm leading-6 text-secondary">Rendered from the public catalog DTO, not private owner evidence.</div>
+              <div className="text-lg font-semibold text-foreground">Current public catalog facts</div>
+              <div className="text-sm leading-6 text-muted-foreground">Rendered from the public catalog DTO, not private owner evidence.</div>
             </div>
             <div className="mt-4 grid gap-4">
               {readback.publicFacts.length === 0 ? (
-                <p className="text-sm text-secondary">No source-owned public catalog facts are published.</p>
+                <p className="text-sm text-muted-foreground">No source-owned public catalog facts are published.</p>
               ) : (
                 <div className="overflow-auto rounded-md border border-border" style={{ maxHeight: 'min(60vh, 40rem)' }}>
-                  <List density="spacious" className="gap-3 p-3">
+                  <ul className="grid gap-3 p-3">
                     {readback.publicFacts.map((fact) => (
-                      <Item
-                        key={fact.slug}
-                        as="li"
-                        density="compact"
-                        label={<span className="font-heading text-base">{fact.name}</span>}
-                        description={
-                          <div className="grid gap-2">
-                            <p>
-                              {fact.category} in {fact.suburb}, {fact.stateTerritory}
-                            </p>
-                            <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
-                              <div>
-                                <dt className="font-medium text-secondary">Discovery</dt>
-                                <dd>{fact.discoveryStatus}</dd>
-                              </div>
-                              <div>
-                                <dt className="font-medium text-secondary">Services</dt>
-                                <dd data-numeric>{fact.serviceCount}</dd>
-                              </div>
-                            </dl>
-                          </div>
-                        }
-                      />
+                      <li key={fact.slug} className="grid gap-2 rounded-md border border-border p-3">
+                        <p className="font-heading text-base">{fact.name}</p>
+                        <div className="grid gap-2">
+                          <p>{fact.category} in {fact.suburb}, {fact.stateTerritory}</p>
+                          <dl className="grid gap-2 text-xs sm:grid-cols-2">
+                            <div>
+                              <dt className="font-medium text-muted-foreground">Discovery</dt>
+                              <dd>{fact.discoveryStatus}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-medium text-muted-foreground">Services</dt>
+                              <dd data-numeric>{fact.serviceCount}</dd>
+                            </div>
+                          </dl>
+                        </div>
+                      </li>
                     ))}
-                  </List>
+                  </ul>
                 </div>
               )}
             </div>
           </Card>
 
-          <Card id="schema" padding={5}>
+          <Card id="schema" className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-primary">Schema, examples, and fixture labels</div>
-              <div className="text-sm leading-6 text-secondary">Each artifact is withheld or marked degraded from the same freshness readback.</div>
+              <div className="text-lg font-semibold text-foreground">Schema, examples, and fixture labels</div>
+              <div className="text-sm leading-6 text-muted-foreground">Each artifact is withheld or marked degraded from the same freshness readback.</div>
             </div>
             <div className="mt-4 grid gap-4">
               {readback.artifacts.map((artifact) => (
                 <section key={artifact.kind} id={artifact.kind} className="rounded-lg border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="font-heading text-base font-semibold">{artifact.label}</h2>
-                    <Badge label={`${artifact.state.charAt(0).toUpperCase()}${artifact.state.slice(1)}`} variant={developerDiscoveryStateVariant(artifact.state)} />
+                    <Badge variant={developerDiscoveryStateVariant(artifact.state)}>{`${artifact.state.charAt(0).toUpperCase()}${artifact.state.slice(1)}`}</Badge>
                   </div>
-                  <p className="mt-2 text-sm text-secondary">{artifact.reason}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{artifact.reason}</p>
                   <p className="mt-2 text-sm font-medium">{artifact.downloadLabel}</p>
-                  <p className="mt-2 text-xs text-secondary">
+                  <p className="mt-2 text-xs text-muted-foreground">
                     Fields: {artifact.schemaFields.slice(0, 8).join(', ')}
                   </p>
                 </section>
@@ -157,10 +150,10 @@ function DevelopersDiscoveryRoute() {
         </div>
 
         <aside className="grid content-start gap-6">
-          <Card padding={5}>
+          <Card className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-primary">Read path status</div>
-              <div className="text-sm leading-6 text-secondary">Public read paths only.</div>
+              <div className="text-lg font-semibold text-foreground">Read path status</div>
+              <div className="text-sm leading-6 text-muted-foreground">Public read paths only.</div>
             </div>
             <div className="mt-4">
               <AeOperatorStatusList
@@ -171,7 +164,7 @@ function DevelopersDiscoveryRoute() {
                   state: health.status,
                   description: health.route,
                   meta: (
-                    <p className="text-xs text-secondary">
+                    <p className="text-xs text-muted-foreground">
                       HTTP {health.httpStatus ?? 'n/a'} · checked {health.checkedAt} · schema {health.schemaVersion ?? 'n/a'} · cache{' '}
                       {health.cacheControl ?? 'n/a'}
                       {health.errorCode === undefined ? '' : ` · code ${health.errorCode}`}
@@ -182,10 +175,10 @@ function DevelopersDiscoveryRoute() {
             </div>
           </Card>
 
-          <Card id="support-matrix" padding={5}>
+          <Card id="support-matrix" className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-primary">Discovery support matrix</div>
-              <div className="text-sm leading-6 text-secondary">Shipped rows are limited to route-tested public readbacks.</div>
+              <div className="text-lg font-semibold text-foreground">Discovery support matrix</div>
+              <div className="text-sm leading-6 text-muted-foreground">Shipped rows are limited to route-tested public readbacks.</div>
             </div>
             <div className="mt-4">
               <AeOperatorStatusList
@@ -199,10 +192,10 @@ function DevelopersDiscoveryRoute() {
             </div>
           </Card>
 
-          <Card padding={5}>
+          <Card className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-primary">Unsupported here</div>
-              <div className="text-sm leading-6 text-secondary">Unavailable capabilities are explicit so builders do not infer authority.</div>
+              <div className="text-lg font-semibold text-foreground">Unsupported here</div>
+              <div className="text-sm leading-6 text-muted-foreground">Unavailable capabilities are explicit so builders do not infer authority.</div>
             </div>
             <div className="mt-4">
               <AeOperatorStatusList
@@ -216,10 +209,10 @@ function DevelopersDiscoveryRoute() {
             </div>
           </Card>
 
-          <Card padding={5}>
+          <Card className="p-5">
             <div className="grid gap-1.5">
-              <div className="text-lg font-semibold text-primary">Gated exclusions</div>
-              <div className="text-sm leading-6 text-secondary">Deferred surfaces are not part of the shipped read-only product.</div>
+              <div className="text-lg font-semibold text-foreground">Gated exclusions</div>
+              <div className="text-sm leading-6 text-muted-foreground">Deferred surfaces are not part of the shipped read-only product.</div>
             </div>
             <div className="mt-4">
               <AeOperatorStatusList
@@ -238,9 +231,9 @@ function DevelopersDiscoveryRoute() {
   )
 }
 
-function developerDiscoveryStateVariant(state: string): 'neutral' | 'success' | 'warning' | 'error' {
-  if (state === 'available') return 'success'
-  if (state === 'degraded') return 'warning'
-  if (state === 'unavailable') return 'error'
-  return 'neutral'
+function developerDiscoveryStateVariant(state: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (state === 'available') return 'default'
+  if (state === 'degraded') return 'secondary'
+  if (state === 'unavailable') return 'destructive'
+  return 'outline'
 }

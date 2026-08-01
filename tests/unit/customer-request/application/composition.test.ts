@@ -6,6 +6,7 @@ import {
 } from '@/modules/capability-contract/public'
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
 import { createConfiguredRequestInterpreter } from '@/modules/customer-request/application/interpret-compile/interpreter'
+import type { CustomerRequestSemanticInterpreter } from '@/modules/customer-request/semantic-interpreter'
 import {
   compileCommit,
   customerProgressState,
@@ -86,14 +87,10 @@ describe('customer-request application composition', () => {
 
     beforeEach(() => {
       vi.mocked(createConfiguredRequestInterpreter).mockReset()
-      vi.mocked(createConfiguredRequestInterpreter).mockImplementation(((env) => {
-        const apiKey = env.openRouterApiKey?.trim()
-        if (apiKey === undefined || apiKey.length === 0) return undefined
-        return {
-          interpreterId: 'test:interpreter',
-          propose: async () => fixture().proposal,
-        }
-      }) as typeof createConfiguredRequestInterpreter)
+      vi.mocked(createConfiguredRequestInterpreter).mockImplementation(() => ({
+        interpreterId: 'test:interpreter',
+        propose: async () => fixture().proposal,
+      }))
     })
 
     it('short-circuits interpretCompileCommit on committed-command replay', async () => {
@@ -112,20 +109,30 @@ describe('customer-request application composition', () => {
       expect(loadRequestGraphPort).not.toHaveBeenCalled()
     })
 
-    it('returns durable shell vs refuse when the interpreter is unavailable', async () => {
+    it('returns durable shell vs refuse when every interpretation attempt fails', async () => {
+      // The factory always yields an interpreter now, so the only remaining refusal is one that
+      // exhausts its attempts. A provider outage no longer reaches this path.
+      const propose = vi.fn(async () => {
+        throw new Error('customer_request_semantic_interpretation_failed')
+      })
+      const failing: CustomerRequestSemanticInterpreter = { interpreterId: 'test:interpreter', propose }
+      vi.mocked(createConfiguredRequestInterpreter).mockReturnValue(failing)
+      const logInterpretationFailure = vi.fn()
       const ports = {
         replayCommittedCommand: async () => undefined,
-        loadRequestGraph: async () => {
-          throw new Error('loadRequestGraph must not run without interpreter')
-        },
+        loadRequestGraph: async () => fixture().graph,
         commitAggregate: async () => {
-          throw new Error('commitAggregate must not run without interpreter')
+          throw new Error('commitAggregate must not run without an interpretation')
         },
+        logInterpretationFailure,
       }
       expect(await interpretCompileCommit({ ...baseInput, durableShell: true }, ports, interpreterEnv))
         .toEqual(durableSubmissionShellView('req:1'))
       expect(await interpretCompileCommit(baseInput, ports, interpreterEnv))
         .toEqual({ kind: 'refused', reason: 'interpreter_unavailable' })
+      expect(propose).toHaveBeenCalledTimes(4)
+      expect(logInterpretationFailure)
+        .toHaveBeenCalledWith('customer_request_semantic_interpretation_failed')
     })
 
     it('commits a compiled aggregate through compileCommit', async () => {
@@ -164,7 +171,7 @@ describe('customer-request application composition', () => {
       })
     })
 
-    it('returns unavailable from loadRequestGraph when supply is empty', async () => {
+    it('names empty supply as no routeable supply, not an unreadable graph', async () => {
       expect(await loadRequestGraph('ae:public', {
         listEligible: async () => ({ kind: 'available', supplies: [] }),
         getActiveExact: async () => {
@@ -173,23 +180,11 @@ describe('customer-request application composition', () => {
       }, {
         maximumDescriptorBytes: 512_000,
         maximumContractProjectedInputSchemaBytes: 256_000,
-      })).toEqual({ kind: 'unavailable' })
+      })).toEqual({ kind: 'unavailable', reason: 'no_routeable_supply' })
     })
 
-    it('returns durable shell vs refuse when the request graph is unavailable', async () => {
-      vi.mocked(createConfiguredRequestInterpreter).mockReturnValue({
-        interpreterId: 'test:interpreter',
-        propose: async () => {
-          throw new Error('propose must not run when graph is unavailable')
-        },
-      } as ReturnType<typeof createConfiguredRequestInterpreter>)
-      const ports = {
-        replayCommittedCommand: async () => undefined,
-        loadRequestGraph: async () => ({ kind: 'unavailable' as const }),
-        commitAggregate: async () => {
-          throw new Error('commitAggregate must not run when graph is unavailable')
-        },
-      }
+    it('returns durable shell vs refuse when the request graph cannot be read', async () => {
+      const ports = unreadableGraphPorts('graph_unreadable')
       expect(await interpretCompileCommit(
         { ...baseInput, durableShell: true },
         ports,
@@ -201,6 +196,40 @@ describe('customer-request application composition', () => {
         { ...interpreterEnv, openRouterApiKey: 'test-key' },
       )).toEqual({ kind: 'refused', reason: 'capabilities_unavailable' })
     })
+
+    it('tells the customer no business is registered instead of asking for a retry', async () => {
+      // Retrying cannot register supply, so the front door must not offer retry as the next move.
+      const result = await interpretCompileCommit(
+        { ...baseInput, durableShell: true },
+        unreadableGraphPorts('no_routeable_supply'),
+        { ...interpreterEnv, openRouterApiKey: 'test-key' },
+      )
+
+      expect(result).toMatchObject({
+        kind: 'request',
+        state: 'unsupported',
+        nextAction: 'revise_request',
+        summary: 'AE cannot arrange this request end to end yet.',
+        unsupportedRecovery: { reason: 'no_current_business', preservedRequest: true },
+      })
+      expect(result).not.toMatchObject({ nextAction: 'retry' })
+    })
+
+    function unreadableGraphPorts(reason: 'graph_unreadable' | 'no_routeable_supply') {
+      vi.mocked(createConfiguredRequestInterpreter).mockReturnValue({
+        interpreterId: 'test:interpreter',
+        propose: async () => {
+          throw new Error('propose must not run when graph is unavailable')
+        },
+      })
+      return {
+        replayCommittedCommand: async () => undefined,
+        loadRequestGraph: async () => ({ kind: 'unavailable' as const, reason }),
+        commitAggregate: async () => {
+          throw new Error('commitAggregate must not run when graph is unavailable')
+        },
+      }
+    }
   })
 
   describe('route-plan-projection', () => {

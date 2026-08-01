@@ -19,17 +19,17 @@ export function AeSessionJourney({ projection, liveTurn = null }: AeSessionJourn
 
   return (
     <section className="w-full" aria-label="Inquiry path">
-      <div className="grid gap-3 rounded-md border border-border bg-surface p-3">
+      <div className="grid gap-3 rounded-md border border-border bg-card p-3">
         <div className="grid gap-1 sm:grid-cols-[minmax(9rem,0.55fr)_minmax(0,1fr)] sm:items-center sm:gap-4">
           <div className="grid gap-0.5">
-            <p className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
               {journey.heading}
             </p>
-            <p className="text-sm font-medium leading-snug text-primary">
+            <p className="text-sm font-medium leading-snug text-foreground">
               {journey.statusText}
             </p>
           </div>
-          <p className="text-sm leading-snug text-secondary">{journey.guidance}</p>
+          <p className="text-sm leading-snug text-muted-foreground">{journey.guidance}</p>
         </div>
         <ol className="grid gap-2 sm:grid-cols-4" aria-label="Session stages">
           {journey.steps.map((step) => (
@@ -40,7 +40,7 @@ export function AeSessionJourney({ projection, liveTurn = null }: AeSessionJourn
               className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 rounded-md border border-border bg-card p-2 data-[status=active]:border-border-strong data-[status=active]:bg-muted data-[status=complete]:border-green-ring data-[status=complete]:bg-green-subtle data-[status=pending]:opacity-70"
             >
               <span
-                className="mt-px inline-flex size-5 items-center justify-center rounded-full border border-border bg-surface text-secondary data-[status=complete]:border-green-ring data-[status=complete]:text-green-vivid data-[status=active]:border-border-strong data-[status=active]:text-primary"
+                className="mt-px inline-flex size-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground data-[status=complete]:border-green-ring data-[status=complete]:text-green-vivid data-[status=active]:border-border-strong data-[status=active]:text-foreground"
                 data-status={step.status}
                 aria-hidden="true"
               >
@@ -48,8 +48,8 @@ export function AeSessionJourney({ projection, liveTurn = null }: AeSessionJourn
               </span>
               <span className="grid min-w-0 gap-0.5">
                 <span className="sr-only">{statusLabel(step.status)}: </span>
-                <span className="text-sm font-medium leading-snug text-primary">{step.label}</span>
-                <span className="text-xs leading-snug text-secondary">{step.detail}</span>
+                <span className="text-sm font-medium leading-snug text-foreground">{step.label}</span>
+                <span className="text-xs leading-snug text-muted-foreground">{step.detail}</span>
               </span>
             </li>
           ))}

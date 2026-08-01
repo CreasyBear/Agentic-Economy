@@ -1,3 +1,5 @@
+export { ANSWER_THREAD_AGENT_ENTRYPOINT, AGENT_KEY_ISSUANCE_PATH } from './agent-entry'
+
 export type {
   AnswerThreadRecord,
   AnswerThreadSharePolicy,
@@ -28,6 +30,10 @@ export {
   type FollowUpChip,
 } from './internal/follow-up-chips'
 export { classifyFollowUpIntent, buildThreadTitle } from './internal/follow-up-intent'
+export {
+  isDeterministicExactSearch,
+  planAnswerTurn,
+} from './internal/answer-response-planner'
 export { formatTurnQueryLabel } from './internal/format-turn-query-label'
 export { resolveThreadAgentJson } from './internal/resolve-thread-agent-json'
 export { generateLlmFollowUpChips } from './internal/llm-follow-up-chips'

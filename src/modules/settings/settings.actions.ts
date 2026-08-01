@@ -47,6 +47,14 @@ export const updateOwnerNotificationPreferencesAction = defineAction({
   outputSchema: ownerNotificationPreferencesOutputSchema,
   parameters: ownerNotificationPreferencesParameters,
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: true,
+    recipientKind: 'none',
+    dataClasses: [],
+    spendExposure: 'none',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http'],
   run: async ({ data }) => updateOwnerNotificationPreferencesThroughSource(data),
 })

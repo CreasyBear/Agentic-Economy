@@ -148,6 +148,26 @@ export function createDynamicPublishedAction(input: Readonly<{
 }>): Action<DynamicPublishedInvocationInput, DynamicPublishedInvocationResult> {
   const { operation, descriptor } = input
   assertExactDescriptor(operation, descriptor)
+  const classes = new Set(descriptor.effects.map(({ class: effectClass }) => effectClass))
+  const effect = {
+    class: classes.has('financial_exposure')
+      ? 'payment' as const
+      : classes.has('external_state_change')
+        ? 'external_state_change' as const
+        : classes.has('data_release')
+          ? 'disclosure' as const
+          : 'observation' as const,
+    reversible: descriptor.effects.every(({ reversibility }) =>
+      reversibility === 'not_applicable' || reversibility === 'reversible'),
+    recipientKind: descriptor.effects.length === 0 ? 'none' as const : 'provider_system' as const,
+    dataClasses: [...new Set(descriptor.dataUse.map(({ classification }) => classification))].sort(),
+    spendExposure: classes.has('financial_exposure') ? 'bounded' as const : 'none' as const,
+    approval: descriptor.effects.length === 0
+      ? 'none' as const
+      : descriptor.effects.some(({ authority }) => authority === 'mandate_or_explicit')
+        ? 'mandate_eligible' as const
+        : 'approve_each' as const,
+  }
   return {
     id: descriptor.id,
     name: descriptor.name,
@@ -156,6 +176,7 @@ export function createDynamicPublishedAction(input: Readonly<{
     schema: z.unknown() as z.ZodType<DynamicPublishedInvocationInput>,
     parameters: [],
     readOnly: false,
+    effect,
     surfaces: [],
     outputSchema: z.unknown() as z.ZodType<DynamicPublishedInvocationResult>,
     invocationContract: {

@@ -38,6 +38,29 @@ describe('capability readiness probe', () => {
     expect(send).toHaveBeenCalledOnce()
   })
 
+  it('probes a public HTTP endpoint without resolving or sending a credential', async () => {
+    const resolveCredential = vi.fn(async () => 'must-not-be-used')
+    const send = vi.fn(async (request: Request) => {
+      expect(request.headers.has('Authorization')).toBe(false)
+      return Response.json({
+        kind: 'quoted',
+        expectedCost: { currency: 'AUD', amountMinor: 1_200 },
+        maximumCost: { currency: 'AUD', amountMinor: 1_200 },
+        expectedLatencyMs: 120, dataFields: [], disclosures: [],
+      })
+    })
+    const result = await runCapabilityReadinessProbe({ ...target, credentialRef: 'none' }, {
+      resolveCredential, validateTarget: async () => true, send, now: () => 10_000,
+    })
+    expect(result).toEqual({
+      outcome: 'healthy',
+      credentialState: 'ready', healthState: 'healthy', validUntil: 310_000,
+      evidenceRefs: ['probe:credential_not_required', 'probe:target_public', 'probe:http_2xx'],
+    })
+    expect(resolveCredential).not.toHaveBeenCalled()
+    expect(send).toHaveBeenCalledOnce()
+  })
+
   it('fails closed without resolving or transmitting a credential', async () => {
     const send = vi.fn()
     await expect(runCapabilityReadinessProbe(target, {

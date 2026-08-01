@@ -1,3 +1,4 @@
+import { setTimeout } from 'node:timers/promises'
 import { z } from 'zod'
 import { pathToFileURL } from 'node:url'
 
@@ -67,7 +68,7 @@ export async function deployCustomerRequestGitSource(options: DeployOptions): Pr
       throw new Error(`vercel_git_source_deployment_failed:${deployment.readyState}`)
     }
     if (poll >= (options.maxPolls ?? 180)) throw new Error('vercel_git_source_deployment_timeout')
-    await (options.wait ?? wait)(5_000)
+    await (options.wait ?? setTimeout)(5_000)
     const readUrl = new URL(`https://api.vercel.com/v13/deployments/${encodeURIComponent(created.id)}`)
     readUrl.searchParams.set('teamId', options.teamId)
     deployment = await readDeployment(await fetchImpl(readUrl, { headers: requestHeaders }), 'vercel_git_source_deployment_read_failed')
@@ -97,10 +98,6 @@ function assertConfigured(options: DeployOptions): void {
 
 function assertSourceRevision(actual: string, expected: string): void {
   if (actual !== expected) throw new Error('vercel_git_source_revision_mismatch')
-}
-
-async function wait(milliseconds: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 export async function main(env: Record<string, string | undefined> = process.env): Promise<void> {

@@ -5,6 +5,7 @@ import type { CapabilityCancellation, CapabilityContinuation } from '@/modules/c
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
+export const PUBLIC_CREDENTIAL_REF = 'none'
 const MAX_ADAPTER_CONFIG_BYTES = 65_536
 const encoder = new TextEncoder()
 const queryMapping = z.array(z.strictObject({
@@ -78,6 +79,10 @@ const adapters = new Map<string, TransportAdapterDefinition>([
   ['mcp-jsonrpc:v1', { adapterId: 'mcp-jsonrpc:v1', admit: admitMcpJsonRpcTransport }],
   ['x402-fetch:v2', { adapterId: 'x402-fetch:v2', admit: admitX402FetchTransport }],
 ])
+function validCredentialRef(value: string, allowPublic: boolean): boolean {
+  return /^env:[A-Z][A-Z0-9_]{1,199}$/.test(value)
+    || (allowPublic && value === PUBLIC_CREDENTIAL_REF)
+}
 
 export function admitRegisteredTransport(input: TransportAdmissionInput): TransportAdmissionResult {
   const adapter = adapters.get(input.adapterId)
@@ -96,7 +101,7 @@ function admitHttpJsonTransport(input: TransportAdmissionInput): TransportAdmiss
   const configuration = httpJsonConfiguration.safeParse(input.config)
   if (
     endpoint === undefined
-    || !/^env:[A-Z][A-Z0-9_]{1,199}$/.test(input.credentialRef)
+    || !validCredentialRef(input.credentialRef, true)
     || input.continuation.kind !== 'single_response'
     || (input.cancellation.kind === 'adapter_managed') !== (configuration.success
       && configuration.data.cancellation !== undefined)
@@ -126,7 +131,7 @@ function admitMcpJsonRpcTransport(input: TransportAdmissionInput): TransportAdmi
   const configuration = mcpJsonRpcConfiguration.safeParse(input.config)
   if (
     endpoint === undefined
-    || !/^env:[A-Z][A-Z0-9_]{1,199}$/.test(input.credentialRef)
+    || !validCredentialRef(input.credentialRef, false)
     || input.continuation.kind !== 'single_response'
     || input.cancellation.kind !== 'unsupported'
     || !configuration.success
@@ -155,7 +160,7 @@ function admitX402FetchTransport(input: TransportAdmissionInput): TransportAdmis
   const configuration = x402FetchConfiguration.safeParse(input.config)
   if (
     endpoint === undefined
-    || !/^env:[A-Z][A-Z0-9_]{1,199}$/.test(input.credentialRef)
+    || !validCredentialRef(input.credentialRef, false)
     || input.continuation.kind !== 'single_response'
     || input.cancellation.kind !== 'unsupported'
     || !configuration.success

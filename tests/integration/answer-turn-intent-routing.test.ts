@@ -99,7 +99,6 @@ function turnRequest(query: string, threadId: string = PRIOR_THREAD_ID): Request
 
 describe('POST /api/answer/turn intent routing (tool-use)', () => {
   afterEach(() => {
-    delete process.env.AE_ANSWER_SYNTHESIZER
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)

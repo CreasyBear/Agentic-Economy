@@ -64,6 +64,16 @@ export type RequestGraph = Readonly<{
   registrySnapshotDigest: string
 }>
 
+/**
+ * `no_routeable_supply` is a fact about the world: no registered business is currently routeable
+ * on this network, so retrying cannot change the answer. `graph_unreadable` is an AE-side fault
+ * where supply exists but its contracts could not be assembled, which a retry may clear.
+ */
+export type RequestGraphUnavailable = Readonly<{
+  kind: 'unavailable'
+  reason: 'no_routeable_supply' | 'graph_unreadable'
+}>
+
 export type CompileCommitInput = Readonly<{
   commandKey: string
   commandDigest: string

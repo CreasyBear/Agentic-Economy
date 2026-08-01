@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react'
-import { Card } from '@astryxdesign/core/Card'
-import { Text } from '@astryxdesign/core/Text'
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 type AeClaimFormSectionProps = {
   title: string
@@ -13,17 +13,17 @@ export function AeClaimFormSection({ title, description, children }: AeClaimForm
   const descriptionId = useId()
 
   return (
-    <section>
-      <Card padding={5}>
-        <div className="grid gap-2">
-          <Text as="h2" type="large" weight="semibold" id={titleId}>
-            {title}
-          </Text>
-          <Text as="p" type="supporting" id={descriptionId}>
-            {description}
-          </Text>
-        </div>
-        <div className="mt-5 grid gap-5">{children}</div>
+    <section aria-labelledby={titleId} aria-describedby={descriptionId}>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2 id={titleId} className="text-xl font-semibold text-foreground">{title}</h2>
+          </CardTitle>
+          <CardDescription>
+            <p id={descriptionId}>{description}</p>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5">{children}</CardContent>
       </Card>
     </section>
   )

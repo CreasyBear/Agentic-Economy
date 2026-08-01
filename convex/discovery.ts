@@ -17,7 +17,7 @@ import { runtimeMutationCtx, runtimeReader } from './source_state'
 import type { RuntimeDocument, RuntimeMutationCtx, RuntimeReader, RuntimeWriter } from './source_state'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { BusinessMutationActor } from '../src/modules/business/public'
-import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '../src/modules/customer-request/public-comprehension'
+import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '../src/modules/customer-request/public-comprehension'
 import {
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
   CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES,
@@ -150,6 +150,13 @@ const auditEventResult = v.object({
   createdAt: v.number(),
 })
 
+const discoveryManifestErrorCodeMembers = [
+  v.literal('discovery_manifest_unauthenticated'),
+  v.literal('discovery_manifest_csrf_rejected'),
+  v.literal('discovery_manifest_wrong_owner'),
+  v.literal('discovery_manifest_not_public'),
+] as const
+const discoveryManifestErrorCode = v.union(...discoveryManifestErrorCodeMembers)
 const regenerateResult = v.union(
   v.object({
     kind: v.literal('ok'),
@@ -160,13 +167,7 @@ const regenerateResult = v.union(
   }),
   v.object({
     kind: v.literal('error'),
-    code: v.union(
-      v.literal('discovery_manifest_unauthenticated'),
-      v.literal('discovery_manifest_csrf_rejected'),
-      v.literal('discovery_manifest_wrong_owner'),
-      v.literal('discovery_manifest_not_public'),
-      v.literal('discovery_manifest_failed')
-    ),
+    code: v.union(...discoveryManifestErrorCodeMembers, v.literal('discovery_manifest_failed')),
     retryable: v.boolean(),
     reason: v.string(),
     attempt: v.optional(attemptResult),
@@ -183,12 +184,7 @@ const invalidateResult = v.union(
   }),
   v.object({
     kind: v.literal('error'),
-    code: v.union(
-      v.literal('discovery_manifest_unauthenticated'),
-      v.literal('discovery_manifest_csrf_rejected'),
-      v.literal('discovery_manifest_wrong_owner'),
-      v.literal('discovery_manifest_not_public')
-    ),
+    code: discoveryManifestErrorCode,
     retryable: v.boolean(),
     reason: v.string(),
   })
@@ -221,16 +217,19 @@ const discoveryFileResult = v.object({
   urls: v.array(v.string()),
 })
 
+const discoveryMutationAuthArgs = {
+  csrfToken: v.optional(v.string()),
+  csrfCookie: v.optional(v.string()),
+  origin: v.optional(v.string()),
+  operationKey: v.string(),
+  correlationId: v.string(),
+}
 export const regenerateDiscoveryManifest = mutationGeneric({
   args: {
     businessId: v.optional(v.string()),
     slug: v.optional(v.string()),
     canonicalBaseUrl: v.optional(v.string()),
-    csrfToken: v.optional(v.string()),
-    csrfCookie: v.optional(v.string()),
-    origin: v.optional(v.string()),
-    operationKey: v.string(),
-    correlationId: v.string(),
+    ...discoveryMutationAuthArgs,
     ...sourceWriteArgs,
   },
   returns: regenerateResult,
@@ -286,11 +285,7 @@ export const invalidateDiscoveryManifest = mutationGeneric({
   args: {
     businessId: v.string(),
     reasonCode: v.string(),
-    csrfToken: v.optional(v.string()),
-    csrfCookie: v.optional(v.string()),
-    origin: v.optional(v.string()),
-    operationKey: v.string(),
-    correlationId: v.string(),
+    ...discoveryMutationAuthArgs,
     ...sourceWriteArgs,
   },
   returns: invalidateResult,
@@ -887,7 +882,7 @@ function buildLlmsTxtFromCatalogs(
     '# Agentic Economy',
     '',
     'Customer journey:',
-    ...CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES.map((line) => `- ${line}`),
+    ...CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES.map((line) => `- ${line}`),
     `- Human entry=${canonicalBaseUrl}/`,
     '',
     'Public surfaces:',

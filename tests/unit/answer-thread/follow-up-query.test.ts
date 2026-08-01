@@ -13,6 +13,10 @@ describe('follow-up query resolution', () => {
   it('parses narrow-to chip labels', () => {
     expect(parseNarrowToSuburb('Narrow to Parramatta')).toBe('Parramatta')
   })
+  it('recognizes natural location refinement wording', () => {
+    expect(parseNarrowToSuburb('Only show options near Adelaide')).toBe('Adelaide')
+  })
+
 
   it('combines the thread need with the suburb for registry search', () => {
     expect(

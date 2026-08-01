@@ -22,7 +22,6 @@ function parseStream(text: string): StreamFrame[] {
 
 describe('POST /api/answer/turn gate failure', () => {
   afterEach(() => {
-    delete process.env.AE_ANSWER_SYNTHESIZER
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)

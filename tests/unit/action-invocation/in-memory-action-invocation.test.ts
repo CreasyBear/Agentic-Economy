@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { readPublicRegistryBusinessDetail } = vi.hoisted(() => ({
-  readPublicRegistryBusinessDetail: vi.fn(),
+const { readPublicOfferingRegistryBusinessDetail } = vi.hoisted(() => ({
+  readPublicOfferingRegistryBusinessDetail: vi.fn(),
 }))
 
 vi.mock('@/modules/registry/registry.functions', () => ({
-  readPublicRegistryBusinessDetail,
-  readPublicRegistryCatalogPage: vi.fn(),
-  readPublicRegistrySearchPage: vi.fn(),
+  readPublicOfferingRegistryBusinessDetail,
+  readPublicOfferingRegistryPage: vi.fn(),
+  readPublicOfferingRegistrySearchPage: vi.fn(),
 }))
 
 import { findAction } from '@/modules/actions'
@@ -77,8 +77,8 @@ function createDevelopmentEvidenceSource() {
 
 describe('in-memory Action Invocation tracer', () => {
   beforeEach(() => {
-    readPublicRegistryBusinessDetail.mockReset()
-    readPublicRegistryBusinessDetail.mockResolvedValue({
+    readPublicOfferingRegistryBusinessDetail.mockReset()
+    readPublicOfferingRegistryBusinessDetail.mockResolvedValue({
       kind: 'not_found',
       code: 'business_not_found',
       reason: 'No published business found for that slug.',

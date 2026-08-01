@@ -66,6 +66,10 @@ describe('harness tool contract', () => {
       } as unknown as z.ZodType<FakeActionResult>,
       parameters: [],
       readOnly: true,
+      effect: {
+        class: 'observation', reversible: true, recipientKind: 'none',
+        dataClasses: [], spendExposure: 'none', approval: 'none',
+      },
       surfaces: ['answerThread'],
       run: async (): Promise<FakeActionResult> => ({ kind: 'ok' }),
     })

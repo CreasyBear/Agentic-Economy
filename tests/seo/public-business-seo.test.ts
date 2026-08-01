@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { getDefaultPublicOwnerStatusReadback } from '@/modules/catalog/public'
 import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
-import { handleBusinessDetailRequest } from '@/routes/api.businesses.$slug'
+import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 
 describe('public business SEO builder', () => {
   it('builds canonical metadata and schema without ratings, offers, or payments', () => {
@@ -27,30 +27,60 @@ describe('public business SEO builder', () => {
     expect(jsonLd).not.toMatch(/AggregateRating|Review|Offer|paymentAccepted|priceRange/)
   })
 
+  /**
+   * The durable handler reaches the configured source first, and the registry
+   * seam fails loudly rather than falling back when no source URL is set. Pin
+   * the explicit local catalog so this asserts the response contract instead
+   * of whatever happens to be in a shared deployment.
+   */
   it('serves the public business JSON route as a public catalog subset only', async () => {
-    const response = handleBusinessDetailRequest('parramatta-emergency-plumbing')
-    const body = await response.json()
-    const serialized = JSON.stringify(body)
+    const previousLocalBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousViteConvexUrl = process.env.VITE_CONVEX_URL
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
-    expect(response.status).toBe(200)
-    expect(response.headers.get('Cache-Control')).toBe('no-store')
-    expect(body).toMatchObject({
-      kind: 'found',
-      schemaVersion: 'public-business-catalog-api:v1',
-      business: {
-        slug: 'parramatta-emergency-plumbing',
-        publicStatus: 'published',
-        services: [
-          {
-            slug: 'emergency-pipe-repair',
-            status: 'published',
-            capabilities: [{ kind: 'phone_inquiry', status: 'unavailable' }],
-          },
-        ],
-      },
-    })
-    expect(serialized).not.toMatch(
-      /businessId|serviceId|ownerId|clerk|sourceHash|rawContact|admin|private:evidence|MCP|OpenAPI|callable|paymentRequired/
-    )
+    try {
+      await assertPublicCatalogSubsetResponse()
+    } finally {
+      restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalBypass)
+      restoreEnv('CONVEX_URL', previousConvexUrl)
+      restoreEnv('VITE_CONVEX_URL', previousViteConvexUrl)
+    }
   })
 })
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name]
+    return
+  }
+  process.env[name] = value
+}
+
+async function assertPublicCatalogSubsetResponse(): Promise<void> {
+  const response = await handleDurableBusinessDetailRequest('parramatta-emergency-plumbing')
+  const body = await response.json()
+  const serialized = JSON.stringify(body)
+
+  expect(response.status).toBe(200)
+  expect(response.headers.get('Cache-Control')).toBe('no-store')
+  expect(body).toMatchObject({
+    kind: 'found',
+    schemaVersion: 'public-business-catalog-api:v2',
+    business: {
+      slug: 'parramatta-emergency-plumbing',
+      trustTier: 'claimed',
+      offerings: [
+        { name: 'Emergency pipe repair' },
+      ],
+    },
+  })
+  // `businessId` is deliberately absent from this list: the Offering
+  // projection publishes it as a stable public reference, exactly as the
+  // UCP manifest already does. Every other identifier here stays private.
+  expect(serialized).not.toMatch(
+    /serviceId|ownerId|clerk|sourceHash|rawContact|admin|private:evidence|MCP|OpenAPI|callable|paymentRequired/
+  )
+}

@@ -1,8 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useRef } from 'react'
-import { Banner } from '@astryxdesign/core/Banner'
-import { Button } from '@astryxdesign/core/Button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeOwnerOfferingEditor, type OwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings'
@@ -11,6 +11,7 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/offerings/$offeringRef')({
   ...operatorRouteOptions,
+  validateSearch: (search: Record<string, unknown>): Readonly<{ next?: 'supply' }> => search.next === 'supply' ? { next: 'supply' } : {},
   loader: () => readOwnerOfferingSupplyServer(),
   head: () => ({ meta: [{ title: 'Edit Offering | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: OwnerOfferingDetailRoute,
@@ -20,20 +21,25 @@ function OwnerOfferingDetailRoute() {
   const { offeringRef } = Route.useParams()
   const result = Route.useLoaderData()
   const save = useServerFn(saveOwnerOfferingServer)
+  const search = Route.useSearch()
+  const navigate = useNavigate()
   const requestKeyRef = useRef<string | undefined>(undefined)
   const source = result.kind === 'available' ? result.offerings.find((item) => item.offeringRef === offeringRef) : undefined
   const businessId = result.kind === 'available' ? result.businessId : undefined
   const initialValue = source === undefined || source.revision === undefined ? undefined : toEditorValue(source)
   return (
     <AeOperatorShell operatorRole="owner" title={source?.revision?.name ?? 'Offering'} description="Keep the public facts and ways to get started current." currentPath="/owner/offerings" breadcrumbs={[{ label: 'Offerings', href: '/owner/offerings' }, { label: source?.revision?.name ?? 'Offering' }]}>
-      {result.kind === 'error' ? <Banner status="error" title="Offering did not load" description={result.reason ?? 'Retry this page.'} />
-        : initialValue === undefined ? <Banner status="warning" title="Offering unavailable" description="This Offering was not found for the current owner, or its current revision needs repair." endContent={<Button href="/owner/offerings" label="Back to Offerings" variant="secondary" />} />
-        : source?.status === 'retired' ? <Banner status="info" title="This Offering is retired" description="Its history remains available, but retired Offerings cannot be edited." />
-        : businessId === undefined ? <Banner status="error" title="Offering did not load" description="The current business owner could not be resolved." />
+      {result.kind === 'error' ? <Alert variant="destructive"><AlertTitle>Offering did not load</AlertTitle><AlertDescription>{result.reason ?? 'Retry this page.'}</AlertDescription></Alert>
+        : initialValue === undefined ? <Alert><AlertTitle>Offering unavailable</AlertTitle><AlertDescription>This Offering was not found for the current owner, or its current revision needs repair.</AlertDescription><Button asChild variant="secondary"><a href="/owner/offerings">Back to Offerings</a></Button></Alert>
+        : source?.status === 'retired' ? <Alert><AlertTitle>This Offering is retired</AlertTitle><AlertDescription>Its history remains available, but retired Offerings cannot be edited.</AlertDescription></Alert>
+        : businessId === undefined ? <Alert variant="destructive"><AlertTitle>Offering did not load</AlertTitle><AlertDescription>The current business owner could not be resolved.</AlertDescription></Alert>
         : <AeOwnerOfferingEditor initialValue={initialValue} onSave={(value) => {
           requestKeyRef.current ??= crypto.randomUUID()
           return save({ data: { businessId, requestKey: requestKeyRef.current, value } }).then((saved) => {
-            if (saved.kind === 'saved') requestKeyRef.current = undefined
+            if (saved.kind === 'saved') {
+              requestKeyRef.current = undefined
+              if (search.next === 'supply') void navigate({ to: '/owner/supply/$offeringRef', params: { offeringRef } })
+            }
             return saved
           })
         }} />}
@@ -52,6 +58,9 @@ function toEditorValue(source: Extract<Extract<Awaited<ReturnType<typeof readOwn
     serviceAreaSummary: source.revision.serviceAreaSummary ?? '',
     availabilitySummary: source.revision.availabilitySummary ?? '',
     pricingSummary: source.revision.pricingSummary ?? '',
+    // Without this the next save would publish a revision with no price and
+    // silently retire one the owner already published.
+    price: source.revision.price,
     status: source.status,
     accessPaths: source.accessPaths.map((path) => ({ accessPathRef: path.accessPathRef, status: path.status, descriptor: path.descriptor })),
   }

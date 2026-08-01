@@ -17,6 +17,7 @@ import type {
   CustomerRequestProblemResult,
   CustomerRequestProblemStatusChange,
 } from '@/modules/customer-request/agent-contract'
+import { response } from '@/lib/server/no-store-response'
 
 export async function handleCustomerRequestProblemPost(
   request: Request,
@@ -109,6 +110,3 @@ function validRequestRef(requestRef: string): boolean {
   return requestRef.trim().length > 0 && requestRef.length <= 200
 }
 
-function response(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}

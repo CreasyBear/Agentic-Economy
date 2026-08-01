@@ -74,13 +74,34 @@ export {
   type ReplayCommittedCommandPorts,
   type RequestGraph,
   type RequestGraphLimits,
+  type RequestGraphUnavailable,
+} from './interpret-compile'
+export {
+  previewCustomerRequest,
+  type PreviewCustomerRequest,
+  type PreviewCustomerRequestInput,
+  type PreviewCustomerRequestPorts,
+  type PreviewCustomerRequestResult,
+  type PreviewCustomerRequestStep,
 } from './interpret-compile'
 
+export {
+  projectConsumerPlan,
+  projectCustomerRequestDecisionRecords,
+  type ConsumerDecisionRecord,
+  type ConsumerDestination,
+  type ConsumerNextAction,
+  type ConsumerPlan,
+  type ConsumerPlanFrontier,
+  type ConsumerPlanOption,
+  type ConsumerPlanResult,
+  type ConsumerPlanStep,
+  type ConsumerSupplyOption,
+} from './consumer-plan-projection'
 export {
   customerProgressState,
   isPartialRouteResult,
   isProviderReportedRouteFailure,
-  parseCustomerRouteResult,
   projectConfirmedRoute,
   projectRoutePlansFromMaterial,
   projectStoredAggregate,

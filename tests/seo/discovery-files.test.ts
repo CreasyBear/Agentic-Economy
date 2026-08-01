@@ -1,19 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
-import { createEmptyCatalogSourceState, publishBusinessCatalog } from '@/modules/catalog/public'
-import { brandNonEmpty } from '@/modules/common/ids'
 import {
   buildLlmsTxt,
   buildRobotsTxt,
   buildSitemapXml,
   createDefaultDiscoverySourceState,
 } from '@/modules/discovery/public'
-import type { DiscoverySourceState } from '@/modules/discovery/public'
-import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
+import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
 import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
+import { createDurablePublishedDiscoveryState } from '../fixtures/discovery-published-state'
 
 describe('discovery files', () => {
   it('builds llms and sitemap files from durable eligible source rows without private fields or positive capabilities', async () => {
@@ -23,6 +20,7 @@ describe('discovery files', () => {
       serviceName: 'Heat pump diagnostics',
       serviceQuery: 'heat pump fremantle',
       suburb: 'Fremantle',
+      idPrefix: 'discovery-seo-test',
     })
     const llms = buildLlmsTxt(state, { canonicalBaseUrl: 'http://localhost:3000' })
     const sitemap = buildSitemapXml(state, { canonicalBaseUrl: 'http://localhost:3000', now: 0 })
@@ -31,7 +29,7 @@ describe('discovery files', () => {
     expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
     expect(sitemap.body).toContain('<loc>http://localhost:3000/fremantle-heat-pump-repairs</loc>')
     expect(serialized).not.toContain('parramatta-emergency-plumbing')
-    expect(serialized).not.toMatch(/\.well-known\/ae-routing|\/v1\/route|\/mcp/)
+    expect(serialized).not.toMatch(/\.well-known\/ae-routing|\/v1\/route/)
     expect(serialized).not.toMatch(
       /ownerId|clerk|rawContact|private:evidence|admin|sourceHash|OpenAPI|callable=true|paymentRequired=true/i
     )
@@ -51,9 +49,11 @@ describe('discovery files', () => {
 
     expect(result.body).toContain('https://ae.example/parramatta-emergency-plumbing/ucp')
     expect(result.body).toContain('publicStatus=published')
-    expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route|\/mcp/)
+    // `/mcp` is the current MCP host endpoint (T6), no longer retired routing-v1 vocabulary.
+    expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
+    expect(result.body).toContain('- MCP: https://ae.example/mcp')
     expect(result.body).toContain('https://ae.example/api/v1/requests')
-    for (const statement of CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES) {
+    for (const statement of CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES) {
       expect(result.body).toContain(statement)
     }
     expect(result.body).toContain('Human entry=https://ae.example/')
@@ -141,118 +141,3 @@ describe('discovery files', () => {
     }
   })
 })
-
-function createDurablePublishedDiscoveryState(input: {
-  businessName: string
-  requestedSlug: string
-  serviceName: string
-  serviceQuery: string
-  suburb: string
-}): DiscoverySourceState {
-  const state = emptyDiscoverySourceState()
-  const claim = claimBusiness(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: `owner:${input.requestedSlug}`,
-      displayName: input.businessName,
-    },
-    facts: {
-      name: input.businessName,
-      category: 'Heat pump repair',
-      suburb: input.suburb,
-      stateTerritory: 'WA',
-      requestedSlug: input.requestedSlug,
-      ownerMessage: 'Owner supplied durable source facts.',
-      sourceRefs: [
-        {
-          label: `${input.businessName} service card`,
-          evidenceRef: `private:evidence:${input.requestedSlug}`,
-          sourceHash: brandNonEmpty(`hash:source:${input.requestedSlug}`, 'SourceHash'),
-        },
-      ],
-    },
-    security: {
-      csrf: matchingCsrf('claim'),
-      rateLimit: {
-        scope: 'claim_submit',
-        key: `discovery:${input.requestedSlug}`,
-        now: 10_000,
-        limit: 5,
-        windowMs: 60_000,
-      },
-    },
-    operationKey: operationKey(`claim:${input.requestedSlug}`),
-    correlationId: correlationId(`claim:${input.requestedSlug}`),
-    now: 10_000,
-  })
-
-  if (claim.kind === 'error') {
-    throw new Error(`Expected durable claim fixture to publish: ${claim.reason}`)
-  }
-
-  const publish = publishBusinessCatalog(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: `owner:${input.requestedSlug}`,
-      displayName: input.businessName,
-    },
-    claimId: claim.claim.claimId,
-    services: [
-      {
-        name: input.serviceName,
-        category: 'Heat pump repair',
-        summary: `${input.serviceName} for ${input.suburb} homes.`,
-        serviceArea: `${input.serviceQuery} and nearby suburbs`,
-        hoursOrUnknown: 'Weekdays by appointment',
-        firstRequest: {
-          mode: 'not_available_yet',
-          publicChannel: 'not_available',
-          publicDisclosure: 'This business has not published a request path.',
-          noContactReason: 'Owner has not supplied public contact instructions.',
-        },
-      },
-    ],
-    security: { csrf: matchingCsrf('publish') },
-    operationKey: operationKey(`publish:${input.requestedSlug}`),
-    correlationId: correlationId(`publish:${input.requestedSlug}`),
-    now: 11_000,
-  })
-
-  if (publish.kind === 'error') {
-    throw new Error(`Expected durable publish fixture to publish: ${publish.reason}`)
-  }
-
-  return state
-}
-
-function emptyDiscoverySourceState(): DiscoverySourceState {
-  return {
-    ...createEmptyBusinessSourceState(),
-    ...createEmptyCatalogSourceState(),
-    operationKeys: [],
-    auditEvents: [],
-    registryProjectionItems: [],
-    registryProjectionAttempts: [],
-    discoveryManifestAttempts: [],
-    indexStatus: [],
-    suppressionRules: [],
-    discoveryManifests: [],
-    invalidationIntents: [],
-  }
-}
-
-function matchingCsrf(key: string) {
-  return {
-    csrfToken: `csrf-${key}`,
-    csrfCookie: `csrf-${key}`,
-    allowedOrigins: ['https://ae.example'],
-  }
-}
-
-function operationKey(value: string) {
-  return brandNonEmpty(`op:discovery-seo-test:${value}`, 'OperationKey')
-}
-
-function correlationId(value: string) {
-  return brandNonEmpty(`corr:discovery-seo-test:${value}`, 'CorrelationId')
-}

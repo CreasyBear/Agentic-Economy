@@ -20,6 +20,7 @@ import {
   type X402PaymentAttemptPort,
   type X402PaymentAuthorizationEvent,
 } from './x402-payment-attempt'
+import { recordCapabilityCallObservation, type CapabilityLiquidityWritePort, type LiquidityEnvironment, type LiquidityZeroReason } from '@/modules/capability-supply/public'
 
 export type DynamicPublishedExecutionToken = Readonly<{
   invocationRef: string
@@ -30,10 +31,10 @@ export type DynamicPublishedExecutionToken = Readonly<{
   grantDigest: string
   expiresAt: number
 }>
-
 export type DynamicPublishedPreparedTransport = Readonly<{
   invocationRef: string
   operationKey: string
+  taskDigest?: string
   attemptRef: string
   effectGeneration: number
   plan: PreparedRouteTransportInvocation
@@ -65,13 +66,13 @@ export function prepareDynamicPublishedTransport(input: Readonly<{
     prepared: {
       invocationRef: input.token.invocationRef,
       operationKey: input.invocation.operationKey,
+      taskDigest: input.invocation.inputDigest,
       attemptRef: input.token.attemptRef,
       effectGeneration: input.token.effectGeneration,
       plan: preparation.prepared,
     },
   }
 }
-
 export async function executeDynamicPublishedTransport(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
@@ -81,6 +82,9 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
   paymentAttemptPort?: X402PaymentAttemptPort
   paymentAuthorizationEvents?: Map<string, X402PaymentAuthorizationEvent>
   now?: () => number
+  liquidityPort?: CapabilityLiquidityWritePort
+  taskStartedAt?: number
+  environment?: LiquidityEnvironment
 }>): Promise<DynamicPublishedInvocationResult> {
   const runtime = input.paymentAttempts === undefined && input.paymentAttemptPort === undefined
     ? input.runtime
@@ -133,10 +137,29 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
     await input.paymentAttemptPort?.persist({ authorizationEvent: event })
     input.paymentAuthorizationEvents?.set(eventKey, event)
   }
+  const result = observationResult(input.operation, input.descriptor, observation)
+  const observedAt = (input.now ?? Date.now)()
+  if (input.liquidityPort !== undefined) {
+    const outcome = observation.disposition === 'succeeded' ? 'filled' as const : 'zero' as const
+    const evidenceRefs = observation.responseDigest === undefined
+      ? [observation.failureCode ?? `transport:${observation.transport}`]
+      : [observation.responseDigest]
+    await recordCapabilityCallObservation({
+      businessId: input.operation.identity.businessId,
+      offeringRef: input.operation.identity.offeringId,
+      taskDigest: input.prepared.taskDigest ?? input.prepared.operationKey,
+      outcome,
+      ...(outcome === 'zero' ? { zeroReason: liquidityZeroReason(observation.failureCode) } : {}),
+      taskStartedAt: input.taskStartedAt ?? observedAt,
+      ...(outcome === 'filled' ? { successfulAt: observedAt } : {}),
+      observedAt,
+      evidenceRefs,
+      environment: input.environment ?? 'development',
+    }, input.liquidityPort)
+  }
   if (observation.disposition === 'unknown' && observation.releaseStarted) {
     throw new Error(`published_operation_outcome_unknown:${observation.failureCode ?? 'unknown'}`)
   }
-  const result = observationResult(input.operation, input.descriptor, observation)
   if (observation.paymentAuthorizationStatus === 'created'
     && result.kind !== 'published_operation_succeeded') {
     if (input.paymentAttempts !== undefined || input.paymentAttemptPort !== undefined) {
@@ -164,6 +187,19 @@ export async function executeDynamicPublishedTransport(input: Readonly<{
     )
   }
   return result
+}
+
+function liquidityZeroReason(failureCode: string | undefined): LiquidityZeroReason {
+  switch (failureCode) {
+    case 'credential_unavailable': return 'credential_unavailable'
+    case 'price_unavailable': return 'price_unavailable'
+    case 'insufficient_credit': return 'insufficient_credit'
+    case 'input_invalid':
+    case 'published_operation_input_invalid': return 'input_invalid'
+    case 'outcome_unknown': return 'outcome_unknown'
+    case 'readiness_unavailable': return 'readiness_unavailable'
+    default: return 'provider_refused'
+  }
 }
 
 export function createPaymentAttemptRuntime(

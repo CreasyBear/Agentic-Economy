@@ -54,9 +54,7 @@ function graphViolations(entries: readonly string[]): readonly string[] {
 
 describe('Action Invocation public host graph', () => {
   it('discovers every actual host entry', () => {
-    expect(hostContractFiles).toEqual([
-      'src/modules/action-invocation/hosts/development-hosts.ts',
-    ])
+    expect(hostContractFiles).toEqual([])
   })
 
   it('recursively keeps the actual host graph above the public application boundary', () => {

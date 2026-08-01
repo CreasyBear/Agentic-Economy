@@ -43,6 +43,7 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
     query: turn.query,
     oneLine: prose.oneLine,
     providers: evidence.providers,
+    ...(evidence.importedClaims === undefined ? {} : { importedClaims: evidence.importedClaims }),
     ...(turn.intent === 'inquiry_handoff' && evidence.providers.length === 1
       ? { selectedProvider: evidence.providers[0] }
       : {}),

@@ -1,4 +1,7 @@
-import { Slider } from '@astryxdesign/core/Slider'
+import { useId } from 'react'
+
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Slider } from '@/components/ui/slider'
 
 export function AeRangeField({
   name,
@@ -23,26 +26,42 @@ export function AeRangeField({
   errorMessage?: string
   onValueChange: (value: string) => void
 }) {
+  const controlId = useId()
+  const labelId = `${controlId}-label`
+  const descriptionId = `${controlId}-description`
+  const errorId = `${controlId}-error`
   const numericValue = normalize(value, min, max)
+  const describedBy = errorMessage === undefined ? descriptionId : `${descriptionId} ${errorId}`
 
   return (
-    <>
+    <FieldGroup>
       {name === undefined ? null : <input type="hidden" name={name} value={String(numericValue)} />}
-      <Slider
-        label={label}
-        {...(description === undefined ? {} : { description })}
-        value={numericValue}
-        min={min}
-        max={max}
-        step={step}
-        isDisabled={disabled}
-        isOptional
-        valueDisplay="text"
-        formatValue={(minutes) => `${minutes} minutes`}
-        {...(errorMessage === undefined ? {} : { status: { type: 'error' as const, message: errorMessage } })}
-        onChange={(next: number) => onValueChange(String(next))}
-      />
-    </>
+      <Field {...(errorMessage === undefined ? {} : { 'data-invalid': true })} {...(disabled ? { 'data-disabled': true } : {})}>
+        <div className="flex items-center justify-between gap-2">
+          <FieldLabel id={labelId} htmlFor={controlId}>{label}</FieldLabel>
+          <span className="text-sm tabular-nums text-muted-foreground" aria-live="polite">{numericValue} minutes</span>
+        </div>
+        {description === undefined ? null : <FieldDescription id={descriptionId}>{description}</FieldDescription>}
+        <Slider
+          id={controlId}
+          value={[numericValue]}
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          {...(errorMessage === undefined ? {} : { 'aria-invalid': true })}
+          onValueChange={(next) => {
+            const nextValue = next[0]
+            if (nextValue !== undefined) {
+              onValueChange(String(nextValue))
+            }
+          }}
+        />
+        {errorMessage === undefined ? null : <FieldError id={errorId}>{errorMessage}</FieldError>}
+      </Field>
+    </FieldGroup>
   )
 }
 

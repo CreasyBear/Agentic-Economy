@@ -1,7 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
-import { validPublicHttpsEndpoint } from './internal/transport-adapters'
+import { PUBLIC_CREDENTIAL_REF, validPublicHttpsEndpoint } from './internal/transport-adapters'
 
 const MAX_RESPONSE_BYTES = 64 * 1024
 
@@ -222,7 +222,7 @@ type RegisteredConfiguration = HttpConfiguration | McpConfiguration | X402Config
 export type PreparedRouteTransportInvocation = Readonly<{
   invocation: RouteTransportInvocation
   endpoint: URL
-  credential: string
+  credential?: string
   configuration: RegisteredConfiguration
   requestDigest: string
   target?: URL
@@ -265,8 +265,10 @@ export async function invokeRegisteredRouteCancellation(
     || configuration.cancellation === undefined) {
     return { disposition: 'unsupported', requestDigest, failureCode: 'cancellation_not_registered' }
   }
-  const credential = runtime.resolveCredential(invocation.binding.credentialRef)
-  if (credential === undefined || credential.length === 0) {
+  const publicCredential = invocation.binding.adapterId === 'http-json:v1'
+    && invocation.binding.credentialRef === PUBLIC_CREDENTIAL_REF
+  const credential = publicCredential ? undefined : runtime.resolveCredential(invocation.binding.credentialRef)
+  if (!publicCredential && (credential === undefined || credential.length === 0)) {
     return { disposition: 'unknown', requestDigest, failureCode: 'credential_unavailable' }
   }
   const cancellationEndpoint = new URL(configuration.cancellation.path, endpoint.origin)
@@ -336,8 +338,10 @@ export function prepareRegisteredRouteTransportInvocation(
     || canonicalDigest(configuration as StableHashValue) !== invocation.binding.configDigest) {
     return { kind: 'refused', observation: refused('unknown', requestDigest, false, 'adapter_config_invalid') }
   }
-  const credential = resolveCredential(invocation.binding.credentialRef)
-  if (credential === undefined || credential.length === 0) {
+  const publicCredential = invocation.binding.adapterId === 'http-json:v1'
+    && invocation.binding.credentialRef === PUBLIC_CREDENTIAL_REF
+  const credential = publicCredential ? undefined : resolveCredential(invocation.binding.credentialRef)
+  if (!publicCredential && (credential === undefined || credential.length === 0)) {
     return {
       kind: 'refused',
       observation: refused(transportKind(invocation.binding.adapterId), requestDigest, false, 'credential_unavailable'),
@@ -412,7 +416,7 @@ export function prepareRegisteredRouteTransportInvocation(
     prepared: {
       invocation,
       endpoint,
-      credential,
+      ...(credential === undefined ? {} : { credential }),
       configuration: typedConfiguration,
       requestDigest,
       ...(target === undefined ? {} : { target }),
@@ -432,15 +436,19 @@ export async function invokePreparedRouteTransport(
         runtime.send, prepared.target,
       )
     case 'mcp-jsonrpc:v1':
-      return await invokeMcp(
-        endpoint, configuration as McpConfiguration, invocation, credential, requestDigest,
-        runtime.send,
-      )
+      return credential === undefined
+        ? refused('mcp', requestDigest, false, 'credential_unavailable')
+        : await invokeMcp(
+            endpoint, configuration as McpConfiguration, invocation, credential, requestDigest,
+            runtime.send,
+          )
     case 'x402-fetch:v2':
-      return await invokeX402(
-        endpoint, configuration as X402Configuration, invocation, credential, requestDigest,
-        runtime, prepared.target,
-      )
+      return credential === undefined
+        ? refused('x402', requestDigest, false, 'credential_unavailable')
+        : await invokeX402(
+            endpoint, configuration as X402Configuration, invocation, credential, requestDigest,
+            runtime, prepared.target,
+          )
     default:
       return refused('unknown', requestDigest, false, 'adapter_not_registered')
   }
@@ -450,7 +458,7 @@ async function invokeHttp(
   endpoint: URL,
   configuration: HttpConfiguration,
   invocation: RouteTransportInvocation,
-  credential: string,
+  credential: string | undefined,
   requestDigest: string,
   send: RouteTransportFetch,
   preparedTarget: URL | undefined,

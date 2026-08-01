@@ -26,6 +26,13 @@ export type DevSeedBusinessFixture = {
   serviceSummary: string
   serviceArea: string
   hoursOrUnknown: string
+  /**
+   * Published price. The v1 service model cannot express one, so this reaches
+   * the public catalog only through the Offering revision that `convex/devSeed`
+   * writes after cutover. Absent on purpose for most fixtures: the catalog has
+   * to demonstrate both a supplied price and a genuinely missing one.
+   */
+  pricingSummary?: string
   photoUrl?: string
   responseTimeMinutes?: number
   firstRequestMode: FirstRequestMode
@@ -53,12 +60,21 @@ type DevSeedIndustryTemplate = {
   serviceCategory: string
   serviceSummary: string
   hoursOrUnknown: string
+  pricingSummary?: string
+  /**
+   * Whether the seeded business publishes a phone number. A published phone is
+   * what produces a real `phone` access path, so this is also the switch that
+   * decides which fixtures have no way to be contacted at all.
+   */
+  publishesPhone: boolean
 }
 
 type DevSeedLocale = {
   slug: string
   suburb: string
   stateTerritory: string
+  /** Geographic area code the fictitious landline is built from. */
+  areaCode: '02' | '03' | '07' | '08'
 }
 
 const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
@@ -71,6 +87,184 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
     publicDisclosure: 'Use the inquiry form for a first contact.',
     noContactReason: '',
   })),
+  {
+    requestedSlug: 'bedford-photography',
+    businessName: 'Bedford Photography',
+    category: 'Wedding photography',
+    suburb: 'Sydney',
+    stateTerritory: 'NSW',
+    publishedPhone: '0432 268 101',
+    ownerMessage: 'Publicly observed business facts used for a development/mock cohort; not AE-verified.',
+    sourceLabel: 'publicly_observed / development-mock based on cited website',
+    serviceName: 'Wedding photographer day coverage',
+    serviceCategory: 'Wedding photography',
+    serviceSummary: 'Wedding and event photography coverage with a comparable day-rate package.',
+    serviceArea: 'Sydney, South Coast, Newcastle and Hunter Valley',
+    hoursOrUnknown: 'Coverage hours agreed in the package',
+    pricingSummary: 'Demo price — publicly observed / development mock — AUD 5,000–7,000 typical wedding investment',
+    photoUrl: '/images/illustration/cat-plumbing.png',
+    responseTimeMinutes: 30,
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+    noContactReason: '',
+  },
+  {
+    requestedSlug: 'little-reed-weddings',
+    businessName: 'Little Reed Weddings',
+    category: 'Wedding photography',
+    suburb: 'Melbourne',
+    stateTerritory: 'VIC',
+    ownerMessage: 'Publicly observed business facts used for a development/mock cohort; not AE-verified.',
+    sourceLabel: 'publicly_observed / development-mock based on cited website',
+    serviceName: 'Wedding photographer coverage',
+    serviceCategory: 'Wedding photography',
+    serviceSummary: 'Candid wedding photography coverage with package and extra-hour options.',
+    serviceArea: 'Melbourne, Yarra Valley, Macedon Ranges and surrounds',
+    hoursOrUnknown: 'Coverage hours agreed in the package',
+    pricingSummary: 'Demo price — publicly observed / development mock — AUD 250 per additional hour',
+    photoUrl: '/images/illustration/cat-plumbing.png',
+    responseTimeMinutes: 35,
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+    noContactReason: '',
+  },
+  {
+    requestedSlug: 'rachel-levingston-photography',
+    businessName: 'Rachel Levingston Photography',
+    category: 'Wedding photography',
+    suburb: 'Hawkesbury',
+    stateTerritory: 'NSW',
+    ownerMessage: 'Publicly observed business facts used for a development/mock cohort; not AE-verified.',
+    sourceLabel: 'publicly_observed / development-mock based on cited website',
+    serviceName: 'Wedding photographer coverage',
+    serviceCategory: 'Wedding photography',
+    serviceSummary: 'Wedding and event photography coverage for Hawkesbury, The Hills and Sydney.',
+    serviceArea: 'Hawkesbury, The Hills and Sydney',
+    hoursOrUnknown: 'Coverage hours agreed in the package',
+    pricingSummary: 'Demo price — publicly observed / development mock — AUD 1,800 wedding coverage package',
+    photoUrl: '/images/illustration/cat-plumbing.png',
+    responseTimeMinutes: 40,
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+    noContactReason: '',
+  },
+  {
+    requestedSlug: 'wn-bull-funerals-parramatta',
+    businessName: 'WN Bull Funerals',
+    category: 'Funeral services',
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    publishedPhone: '(02) 9519 5344',
+    ownerMessage: 'Publicly observed Parramatta business facts used for a development/mock cohort; not AE-verified.',
+    sourceLabel: 'publicly_observed / development-mock based on cited website',
+    serviceName: 'Funeral service arrangement',
+    serviceCategory: 'Funeral services',
+    serviceSummary: 'Funeral director support and arrangement service for Parramatta families.',
+    serviceArea: 'Parramatta and surrounding suburbs',
+    hoursOrUnknown: '24/7 contact; office hours vary',
+    pricingSummary: 'Demo price — publicly observed / development mock — AUD 4,500 base funeral service',
+    responseTimeMinutes: 30,
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+    noContactReason: '',
+  },
+  {
+    requestedSlug: 'funerals-of-compassion-parramatta',
+    businessName: 'Funerals of Compassion',
+    category: 'Funeral services',
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    publishedPhone: '1300 906 060',
+    ownerMessage: 'Publicly observed Parramatta service facts used for a development/mock cohort; not AE-verified.',
+    sourceLabel: 'publicly_observed / development-mock based on cited website',
+    serviceName: 'Compassionate funeral arrangement',
+    serviceCategory: 'Funeral services',
+    serviceSummary: 'Funeral arrangement and family support for the Parramatta area.',
+    serviceArea: 'Parramatta and surrounding suburbs',
+    hoursOrUnknown: 'Available 24/7',
+    pricingSummary: 'Demo price — publicly observed / development mock — AUD 4,200 base funeral service',
+    responseTimeMinutes: 35,
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+    noContactReason: '',
+  },
+  {
+    requestedSlug: 'gregory-and-carr-parramatta',
+    businessName: 'Gregory & Carr',
+    category: 'Funeral services',
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    publishedPhone: '(02) 9630 6444',
+    ownerMessage: 'Publicly observed Parramatta service facts used for a development/mock cohort; not AE-verified.',
+    sourceLabel: 'publicly_observed / development-mock based on cited website',
+    serviceName: 'Funeral director consultation',
+    serviceCategory: 'Funeral services',
+    serviceSummary: 'Funeral director consultation and arrangement support serving Parramatta.',
+    serviceArea: 'Parramatta and surrounding suburbs',
+    hoursOrUnknown: '24/7 support; office hours vary',
+    pricingSummary: 'Demo price — publicly observed / development mock — AUD 4,800 base funeral service',
+    responseTimeMinutes: 40,
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+    noContactReason: '',
+  },
+  {
+    requestedSlug: 'adelaide-cbd-dentist',
+    businessName: 'Adelaide CBD Dentist',
+    category: 'Dental clinic',
+    suburb: 'Adelaide',
+    stateTerritory: 'SA',
+    ownerMessage: 'Publicly observed Adelaide dental facts used for a development/mock cohort; not AE-verified.',
+    sourceLabel: 'publicly_observed / development-mock based on cited website',
+    serviceName: 'Dental check-up and clean',
+    serviceCategory: 'Dental clinic',
+    serviceSummary: 'Routine dental check-up and clean for Adelaide CBD patients.',
+    serviceArea: 'Adelaide CBD',
+    hoursOrUnknown: 'Hours vary; appointment required',
+    pricingSummary: 'Demo price — publicly observed / development mock — AUD 150 check-up and clean',
+    responseTimeMinutes: 25,
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+    noContactReason: '',
+  },
+  {
+    requestedSlug: 'perfect-smile-adelaide',
+    businessName: 'Perfect Smile',
+    category: 'Dental clinic',
+    suburb: 'Adelaide',
+    stateTerritory: 'SA',
+    ownerMessage: 'Publicly observed Adelaide dental facts used for a development/mock cohort; not AE-verified.',
+    sourceLabel: 'publicly_observed / development-mock based on cited website',
+    serviceName: 'Dental check-up and clean',
+    serviceCategory: 'Dental clinic',
+    serviceSummary: 'General dentistry with check-up and clean appointments in Adelaide.',
+    serviceArea: 'Adelaide CBD',
+    hoursOrUnknown: 'Hours vary; appointment required',
+    pricingSummary: 'Demo price — publicly observed / development mock — AUD 199 check-up, scale and clean',
+    responseTimeMinutes: 30,
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+    noContactReason: '',
+  },
+  {
+    requestedSlug: 'fixed-dental-adelaide',
+    businessName: 'Fixed Dental',
+    category: 'Dental clinic',
+    suburb: 'Adelaide',
+    stateTerritory: 'SA',
+    ownerMessage: 'Publicly observed Adelaide dental facts used for a development/mock cohort; not AE-verified.',
+    sourceLabel: 'publicly_observed / development-mock based on cited website',
+    serviceName: 'Dental check-up and clean',
+    serviceCategory: 'Dental clinic',
+    serviceSummary: 'Routine dental check-ups and cleans for Adelaide patients.',
+    serviceArea: 'Adelaide and nearby suburbs',
+    hoursOrUnknown: 'Hours vary; appointment required',
+    pricingSummary: 'Demo price — publicly observed / development mock — AUD 139 check-up and clean',
+    responseTimeMinutes: 35,
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Development/mock supply based on publicly observed business facts; contact path is not real fulfilment.',
+    noContactReason: '',
+  },
   {
     requestedSlug: 'sandbox-option-one',
     businessName: 'Sandbox Option One',
@@ -230,18 +424,29 @@ const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
 ] as const
 
 const DEV_SEED_LOCALES: readonly DevSeedLocale[] = [
-  { slug: 'parramatta', suburb: 'Parramatta', stateTerritory: 'NSW' },
-  { slug: 'coburg', suburb: 'Coburg', stateTerritory: 'VIC' },
-  { slug: 'perth', suburb: 'Perth', stateTerritory: 'WA' },
-  { slug: 'fremantle', suburb: 'Fremantle', stateTerritory: 'WA' },
-  { slug: 'hobart', suburb: 'Hobart', stateTerritory: 'TAS' },
-  { slug: 'darwin', suburb: 'Darwin', stateTerritory: 'NT' },
-  { slug: 'adelaide', suburb: 'Adelaide', stateTerritory: 'SA' },
-  { slug: 'brisbane', suburb: 'Brisbane', stateTerritory: 'QLD' },
-  { slug: 'canberra', suburb: 'Canberra', stateTerritory: 'ACT' },
-  { slug: 'geelong', suburb: 'Geelong', stateTerritory: 'VIC' },
+  { slug: 'parramatta', suburb: 'Parramatta', stateTerritory: 'NSW', areaCode: '02' },
+  { slug: 'coburg', suburb: 'Coburg', stateTerritory: 'VIC', areaCode: '03' },
+  { slug: 'perth', suburb: 'Perth', stateTerritory: 'WA', areaCode: '08' },
+  { slug: 'fremantle', suburb: 'Fremantle', stateTerritory: 'WA', areaCode: '08' },
+  { slug: 'hobart', suburb: 'Hobart', stateTerritory: 'TAS', areaCode: '03' },
+  { slug: 'darwin', suburb: 'Darwin', stateTerritory: 'NT', areaCode: '08' },
+  { slug: 'adelaide', suburb: 'Adelaide', stateTerritory: 'SA', areaCode: '08' },
+  { slug: 'brisbane', suburb: 'Brisbane', stateTerritory: 'QLD', areaCode: '07' },
+  { slug: 'canberra', suburb: 'Canberra', stateTerritory: 'ACT', areaCode: '02' },
+  { slug: 'geelong', suburb: 'Geelong', stateTerritory: 'VIC', areaCode: '03' },
 ] as const
 
+/**
+ * Deliberately mixed supply. Before this, every seeded business published
+ * `'Hours supplied by owner'`, no price, and no reachable contact, so the
+ * catalog demonstrated exactly one state — the empty one — and the search-gap
+ * signal fired on all of it.
+ *
+ * Seven of ten industries publish hours, five publish a price, eight publish a
+ * phone. Home cleaning publishes a price but not hours, so the two facts are
+ * never assumed to travel together. HVAC repair and maths tutoring publish
+ * none of the three, keeping the honest-absence path exercised end to end.
+ */
 const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
   {
     slug: 'emergency-plumbing',
@@ -250,7 +455,9 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     serviceName: 'Emergency pipe repair',
     serviceCategory: 'Emergency plumbing',
     serviceSummary: 'Burst pipe and blocked drain triage for urgent local plumbing issues.',
-    hoursOrUnknown: 'Hours supplied by owner',
+    hoursOrUnknown: 'Mon–Sun, 24 hours',
+    pricingSummary: 'Demo price — $180 call-out, quoted before work starts',
+    publishesPhone: true,
   },
   {
     slug: 'electrical-repairs',
@@ -259,7 +466,9 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     serviceName: 'Electrical fault repairs',
     serviceCategory: 'Electrical repairs',
     serviceSummary: 'Electrical fault checks and repair coordination for homes and small businesses.',
-    hoursOrUnknown: 'Hours supplied by owner',
+    hoursOrUnknown: 'Mon–Fri 7am–5pm, Sat 8am–12pm',
+    pricingSummary: 'Demo price — $140 first hour, then $95 per hour',
+    publishesPhone: true,
   },
   {
     slug: 'dental-clinic',
@@ -268,7 +477,9 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     serviceName: 'General dental care',
     serviceCategory: 'Dental clinic',
     serviceSummary: 'Dentist check-ups, tooth pain triage, and routine dental care information.',
-    hoursOrUnknown: 'Hours supplied by owner',
+    hoursOrUnknown: 'Mon–Fri 8:30am–5pm',
+    pricingSummary: 'Demo price — $95 check-up and clean',
+    publishesPhone: true,
   },
   {
     slug: 'family-law',
@@ -277,7 +488,9 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     serviceName: 'Family lawyer consultation',
     serviceCategory: 'Family law',
     serviceSummary: 'Family lawyer guidance for separation, parenting, and property matter first steps.',
-    hoursOrUnknown: 'Hours supplied by owner',
+    hoursOrUnknown: 'Mon–Fri 9am–5pm',
+    pricingSummary: 'Demo price — $350 first consultation',
+    publishesPhone: true,
   },
   {
     slug: 'accounting',
@@ -286,7 +499,8 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     serviceName: 'Small business accounting',
     serviceCategory: 'Accounting',
     serviceSummary: 'Accountant support for BAS, payroll, and tax preparation questions.',
-    hoursOrUnknown: 'Hours supplied by owner',
+    hoursOrUnknown: 'Mon–Fri 9am–5pm',
+    publishesPhone: true,
   },
   {
     slug: 'home-cleaning',
@@ -295,7 +509,9 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     serviceName: 'Home cleaning',
     serviceCategory: 'Home cleaning',
     serviceSummary: 'Cleaner support for recurring home cleaning and end-of-lease cleaning requests.',
-    hoursOrUnknown: 'Hours supplied by owner',
+    hoursOrUnknown: 'Hours unknown',
+    pricingSummary: 'Demo price — $55 per hour, 3 hour minimum',
+    publishesPhone: true,
   },
   {
     slug: 'locksmith',
@@ -304,7 +520,8 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     serviceName: 'Locksmith lock repair',
     serviceCategory: 'Locksmith',
     serviceSummary: 'Locksmith help for lock repair, rekeying, and lost-key first steps.',
-    hoursOrUnknown: 'Hours supplied by owner',
+    hoursOrUnknown: 'Mon–Sun, 24 hours',
+    publishesPhone: true,
   },
   {
     slug: 'hvac-repair',
@@ -313,7 +530,8 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     serviceName: 'Heat pump and air conditioning repair',
     serviceCategory: 'HVAC repair',
     serviceSummary: 'Heat pump, split system, and air conditioning fault checks.',
-    hoursOrUnknown: 'Hours supplied by owner',
+    hoursOrUnknown: 'Hours unknown',
+    publishesPhone: false,
   },
   {
     slug: 'math-tutoring',
@@ -322,7 +540,8 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     serviceName: 'Math tutoring',
     serviceCategory: 'Tutoring',
     serviceSummary: 'Tutor support for maths homework, exam preparation, and study planning.',
-    hoursOrUnknown: 'Hours supplied by owner',
+    hoursOrUnknown: 'Hours unknown',
+    publishesPhone: false,
   },
   {
     slug: 'aged-care-support',
@@ -331,16 +550,27 @@ const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
     serviceName: 'Aged care support',
     serviceCategory: 'Aged care support',
     serviceSummary: 'Home support information for older people and family carers.',
-    hoursOrUnknown: 'Hours supplied by owner',
+    hoursOrUnknown: 'Mon–Fri 8am–6pm',
+    publishesPhone: true,
   },
 ] as const
 
 export const DEV_SEED_BUSINESS_FIXTURES: readonly DevSeedBusinessFixture[] = buildDevSeedBusinessFixtures()
 
+/**
+ * The email hash is what makes the owner a *resolvable recipient*. Without it
+ * `toResolvableOwnerRecipient` yields nothing, every seeded business fails
+ * admission on `recipient_unresolvable`, and no business can accept a first
+ * contact — so the whole inquiry path, human and agent, is unreachable in
+ * development. Hashed the same way `convex/authz.ts` hashes a real identity.
+ */
+export const DEV_SEED_OWNER_EMAIL = 'dev-seed-owner@agentic.market' as const
+
 const devSeedActor: BusinessMutationActor = {
   kind: 'authenticated_owner',
   clerkUserId: DEV_SEED_OWNER_CLERK_USER_ID,
   displayName: 'Dev Seed Owner',
+  emailHash: stableHash({ email: DEV_SEED_OWNER_EMAIL }),
 }
 
 const devSeedNow = 1_777_100_000_000
@@ -367,6 +597,13 @@ function buildDevSeedBusinessFixtures(): readonly DevSeedBusinessFixture[] {
   ]
 }
 
+/**
+ * Landlines come from the ACMA range reserved for fictitious use, `5550 1000`
+ * to `5550 1999` in each geographic area code. A seeded number that could ring
+ * a real household is the one fabrication a directory must never ship, and a
+ * business with no published number has no phone access path at all — which is
+ * the absent state the catalog also has to demonstrate.
+ */
 function buildBroadSeedFixture(
   locale: DevSeedLocale,
   industry: DevSeedIndustryTemplate,
@@ -374,6 +611,7 @@ function buildBroadSeedFixture(
   industryIndex: number,
 ): DevSeedBusinessFixture {
   const businessName = `${locale.suburb} ${industry.businessSuffix}`
+  const publishedPhone = `(${locale.areaCode}) 5550 1${String(localeIndex * 10 + industryIndex).padStart(3, '0')}`
 
   return {
     requestedSlug: `${locale.slug}-${industry.slug}`,
@@ -381,6 +619,7 @@ function buildBroadSeedFixture(
     category: industry.category,
     suburb: locale.suburb,
     stateTerritory: locale.stateTerritory,
+    ...(industry.publishesPhone ? { publishedPhone } : {}),
     ownerMessage: 'Owner supplied service facts for local catalog testing.',
     sourceLabel: 'Owner supplied service facts',
     serviceName: industry.serviceName,
@@ -388,10 +627,16 @@ function buildBroadSeedFixture(
     serviceSummary: industry.serviceSummary,
     serviceArea: `${locale.suburb} and nearby suburbs`,
     hoursOrUnknown: industry.hoursOrUnknown,
+    ...(industry.pricingSummary === undefined ? {} : { pricingSummary: industry.pricingSummary }),
     photoUrl: '/images/illustration/cat-plumbing.png',
     responseTimeMinutes: 15 + ((localeIndex + industryIndex) % 8) * 5,
     firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Use the inquiry form for a first contact.',
+    // The only channel these fixtures publish is the phone number above, so the
+    // disclosure names that. Pointing at an inquiry form the seeded business
+    // cannot accept is the promise-without-a-path this catalog is fixing.
+    publicDisclosure: industry.publishesPhone
+      ? 'Call the published number for a first contact.'
+      : 'No contact path is published for this service yet.',
     noContactReason: '',
   }
 }

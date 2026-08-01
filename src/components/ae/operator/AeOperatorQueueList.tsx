@@ -1,11 +1,16 @@
-import type { ComponentProps, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Item } from '@astryxdesign/core/Item'
-import { List } from '@astryxdesign/core/List'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemHeader,
+  ItemTitle,
+} from '@/components/ui/item'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
 export type AeOperatorQueueBadge = {
   label: string
@@ -15,7 +20,7 @@ export type AeOperatorQueueBadge = {
 export type AeOperatorQueueAction = {
   label: string
   href: string
-  variant?: 'primary' | 'secondary' | 'ghost' | 'destructive' | 'link'
+  variant?: 'default' | 'secondary' | 'ghost' | 'destructive' | 'link'
 }
 
 export type AeOperatorQueueRow = {
@@ -51,15 +56,22 @@ export function AeOperatorQueueList({
   maxFacts,
 }: AeOperatorQueueListProps) {
   if (rows.length === 0) {
-    return <AeEmptyState title={emptyTitle} description={emptyDescription} />
+    return (
+      <Empty className="border border-border bg-card p-5">
+        <EmptyHeader>
+          <EmptyTitle>{emptyTitle}</EmptyTitle>
+          <EmptyDescription>{emptyDescription}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
   }
 
   const list = (
-    <List density="spacious" className={`gap-3 ${className ?? ''}`}>
+    <ul className={`m-0 flex list-none flex-col gap-3 p-0 ${className ?? ''}`}>
       {rows.map((row) => (
         <AeOperatorQueueItem key={row.id} row={row} maxFacts={maxFacts} />
       ))}
-    </List>
+    </ul>
   )
 
   if (!scroll) {
@@ -76,72 +88,53 @@ export function AeOperatorQueueList({
 function AeOperatorQueueItem({ row, maxFacts }: { row: AeOperatorQueueRow; maxFacts: number | undefined }) {
   const hasActions = row.href !== undefined || (row.actions !== undefined && row.actions.length > 0)
   const visibleFacts = maxFacts === undefined ? row.facts : row.facts?.slice(0, maxFacts)
-  const endContent = (
-    <div className="flex flex-wrap items-center gap-2">
-      {row.badges.map((badge) => (
-        <Badge
-          key={`${row.id}:${badge.label}`}
-          variant={toAstryxBadgeVariant(badge.variant)}
-          label={badge.label}
-        />
-      ))}
-    </div>
-  )
-  const description = (
-    <div className="grid gap-2">
-      {row.description === undefined ? null : <p className="text-sm leading-6 text-secondary">{row.description}</p>}
-      {row.body}
-      {visibleFacts === undefined || visibleFacts.length === 0 ? null : (
-        <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
-          {visibleFacts.map((fact) => (
-            <div key={`${row.id}:${fact.label}`}>
-              <dt className="font-medium text-secondary">{fact.label}</dt>
-              <dd className="break-words text-primary">{fact.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {hasActions ? (
-        <div className="mt-2 flex flex-wrap justify-start gap-2">
-          {row.href === undefined ? null : (
-            <Button href={row.href} label="Open" variant="secondary" size="sm" />
-          )}
-          {row.actions?.map((action) => (
-            <Button
-              key={`${row.id}:${action.label}`}
-              href={action.href}
-              label={action.label}
-              variant={toAstryxButtonVariant(action.variant)}
-              size="sm"
-            />
-          ))}
-        </div>
-      ) : null}
-      {row.footer}
-    </div>
-  )
 
   return (
-    <Item
-      as="li"
-      density="compact"
-      align="start"
-      label={<span className="break-words font-mono text-sm">{row.title}</span>}
-      description={description}
-      endContent={endContent}
-    />
+    <Item asChild variant="outline" className="grid gap-3 bg-card">
+      <li>
+        <ItemHeader className="items-start">
+          <ItemTitle>
+            <span className="break-words font-mono">{row.title}</span>
+          </ItemTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            {row.badges.map((badge) => (
+              <Badge key={`${row.id}:${badge.label}`} variant={badge.variant ?? 'outline'}>
+                {badge.label}
+              </Badge>
+            ))}
+          </div>
+        </ItemHeader>
+        <ItemContent className="gap-2">
+          {row.description === undefined ? null : <p className="text-sm leading-6 text-muted-foreground">{row.description}</p>}
+          {row.body}
+          {visibleFacts === undefined || visibleFacts.length === 0 ? null : (
+            <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
+              {visibleFacts.map((fact) => (
+                <div key={`${row.id}:${fact.label}`}>
+                  <dt className="font-medium text-muted-foreground">{fact.label}</dt>
+                  <dd className="break-words text-foreground">{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {hasActions ? (
+            <ItemActions className="mt-2 flex-wrap justify-start">
+              {row.href === undefined ? null : (
+                <Button asChild variant="secondary" size="sm">
+                  <a href={row.href}>Open</a>
+                </Button>
+              )}
+              {row.actions?.map((action) => (
+                <Button key={`${row.id}:${action.label}`} asChild variant={action.variant ?? 'secondary'} size="sm">
+                  <a href={action.href}>{action.label}</a>
+                </Button>
+              ))}
+            </ItemActions>
+          ) : null}
+          {row.footer}
+        </ItemContent>
+      </li>
+    </Item>
   )
 }
 
-function toAstryxBadgeVariant(variant: AeOperatorQueueBadge['variant']): NonNullable<ComponentProps<typeof Badge>['variant']> {
-  if (variant === 'destructive') return 'error'
-  if (variant === 'secondary') return 'info'
-  return 'neutral'
-}
-
-function toAstryxButtonVariant(variant: AeOperatorQueueAction['variant']): NonNullable<ComponentProps<typeof Button>['variant']> {
-  if (variant === 'primary') return 'primary'
-  if (variant === 'ghost' || variant === 'link') return 'ghost'
-  if (variant === 'destructive') return 'destructive'
-  return 'secondary'
-}

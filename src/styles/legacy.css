@@ -1,10 +1,10 @@
 /*
- * LEGACY DESIGN SYSTEM — being retired in favor of Astryx.
+ * LEGACY DESIGN SYSTEM — retained temporarily while surfaces move to shadcn/ui.
  *
  * Everything imported here belongs to the deprecated bespoke system
  * (retired Daylight Register tokens and handwritten surface CSS).
- * Migration agents delete entries here as surfaces move to Astryx;
- * the whole file (and its import in globals.css) is removed at the end.
+ * Migration removes entries as surfaces move to shadcn/ui; remove this file
+ * and its import in globals.css once no legacy styles remain.
  */
 @import "./tokens.css";
 @import "tw-animate-css";

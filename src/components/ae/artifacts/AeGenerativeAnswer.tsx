@@ -2,10 +2,9 @@ import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { CheckIcon, SearchIcon } from 'lucide-react'
 
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Text } from '@astryxdesign/core/Text'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 
 import {
   artifactsToMessageParts,
@@ -15,10 +14,12 @@ import {
 } from '@/modules/answer/public'
 import type { AnswerArtifact, AnswerCompareField, AnswerSource } from '@/modules/answer/public'
 import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
-import { AeKicker } from '@/components/ae/primitives/AeKicker'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeStreamingLabel } from '@/components/ae/chat/AeStreamingLabel'
 import { AeGenerativeMap } from './AeGenerativeMap'
+import { AeConsumerPlanResult } from '@/components/ae/plan/AeConsumerPlan'
+import { AeImportedClaims } from '@/components/ae/services/AeImportedClaims'
+import { appendThreadOrigin } from '@/lib/ui/append-thread-origin'
 import { cn } from '@/lib/utils'
 
 // Calm fade-only reveal. Slide-from-bottom on every streamed part stacks into
@@ -100,7 +101,7 @@ export function AeGenerativeAnswer({
         {headline.length > 0 ? (
           <p
             className={cn(
-              'min-w-0 flex-1 text-primary',
+              'min-w-0 flex-1 text-foreground',
               headlineSize,
               isFirstTurnProfile && REVEAL_ENTER,
             )}
@@ -110,22 +111,22 @@ export function AeGenerativeAnswer({
           </p>
         ) : (
           <p
-            className={cn('min-w-0 flex-1 text-secondary', headlineSize)}
+            className={cn('min-w-0 flex-1 text-muted-foreground', headlineSize)}
             {...(busy ? { 'aria-live': 'polite' as const } : {})}
-            aria-label="Finding listed businesses"
+            aria-label="Finding the right business"
           >
-            {busy ? <AeStreamingLabel as="span">Finding listed businesses</AeStreamingLabel> : 'Finding listed businesses'}
+            {busy ? <AeStreamingLabel as="span">Finding the right business</AeStreamingLabel> : 'Finding the right business'}
           </p>
         )}
 
         {phase === 'reconnecting' ? (
-          <span className="shrink-0 text-xs text-secondary" role="status">
+          <span className="shrink-0 text-xs text-muted-foreground" role="status">
             <AeStreamingLabel as="span">Reconnecting…</AeStreamingLabel>
           </span>
         ) : null}
 
         {busy && onStop !== undefined ? (
-          <Button label="Stop" type="button" variant="secondary" size="sm" onClick={onStop} />
+          <Button type="button" variant="secondary" size="sm" onClick={onStop}>Stop</Button>
         ) : null}
       </div>
 
@@ -161,8 +162,8 @@ export function AeGenerativeAnswer({
       {/* The construction record supports inspection without competing with the answer.
           It stays complete and reachable, but ordinary users do not need to read it first. */}
       {hasProviderEvidence ? (
-        <details className="group rounded-md border border-border bg-surface">
-          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+        <details className="group rounded-md border border-border bg-card">
+          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
             How AE checked this
           </summary>
           <div className="border-t border-border p-4">
@@ -226,8 +227,8 @@ function AeAnswerJourney({
       record: 'need read',
     },
     {
-      label: 'Check listings',
-      detail: 'Published business details are checked for this turn.',
+      label: 'Find the fit',
+      detail: 'AE checks what businesses publish for this ask.',
       record: 'published facts',
     },
     {
@@ -238,8 +239,8 @@ function AeAnswerJourney({
     {
       label: 'Hand off next step',
       detail: empty
-        ? 'AE offers a sharper route when no listed fit is clear.'
-        : 'Open a listing or send a qualified inquiry for owner review.',
+        ? 'List a business or sharpen the ask.'
+        : 'Choose a business or send a qualified inquiry for owner review.',
       record: 'handoff ready',
     },
   ] as const
@@ -253,7 +254,7 @@ function AeAnswerJourney({
     phase === 'streaming'
       ? 'AE is putting the answer record together as the answer arrives.'
       : empty
-        ? 'No clear published match yet; use the route below to sharpen the search.'
+        ? 'No listed match yet. List a business or sharpen the ask.'
         : 'AE reads, checks, compares, and routes. The business still confirms timing, quote, and availability.'
 
   // The handoff record is settled evidence, not live chrome. During streaming
@@ -266,8 +267,7 @@ function AeAnswerJourney({
 
   return (
     <Card
-      padding={4}
-      className={`${REVEAL_ENTER} grid gap-5 border border-border bg-surface`}
+      className={`${REVEAL_ENTER} grid gap-5 border border-border bg-card p-4`}
       aria-label="How this answer was put together"
       data-phase={phase}
     >
@@ -281,18 +281,18 @@ function AeAnswerJourney({
             loading="lazy"
           />
           <div className="grid min-w-0 gap-1">
-            <Badge variant="neutral" className="w-fit" label="How this was put together" />
-            <Text type="large" weight="semibold" color="primary" display="block">
+            <Badge variant="outline" className="w-fit">How this was put together</Badge>
+            <p className="text-lg font-semibold text-foreground">
               The handoff is a record.
-            </Text>
-            <Text color="secondary" className="max-w-[58ch] text-pretty" display="block">
+            </p>
+            <p className="max-w-[58ch] text-pretty text-muted-foreground">
               {guidance}
-            </Text>
+            </p>
           </div>
         </div>
-        <Text type="supporting" color="secondary" className="font-mono tabular-nums" display="block">
+        <p className="font-mono tabular-nums text-sm text-muted-foreground">
           {phase === 'complete' ? 'record ready' : 'handoff record'}
-        </Text>
+        </p>
       </div>
 
       <ol
@@ -304,9 +304,9 @@ function AeAnswerJourney({
           const state = getJourneyState({ index, activeIndex, completedIndex, phase })
           const nodeClassName = [
             'absolute -left-[1.85rem] top-0 inline-flex size-5 items-center justify-center rounded-full border font-mono text-2xs font-semibold tabular-nums sm:-top-[1.9rem] sm:left-0',
-            state === 'complete' ? 'border-accent bg-accent text-on-accent' : '',
-            state === 'active' ? 'border-accent bg-surface text-accent' : '',
-            state === 'pending' ? 'border-border bg-surface text-secondary' : '',
+            state === 'complete' ? 'border-brand bg-brand text-on-brand' : '',
+            state === 'active' ? 'border-brand bg-card text-brand' : '',
+            state === 'pending' ? 'border-border bg-card text-muted-foreground' : '',
             state === 'error' || state === 'stopped' ? 'border-red-ring bg-red-subtle text-red-vivid' : '',
           ].join(' ')
 
@@ -321,15 +321,9 @@ function AeAnswerJourney({
                 {state === 'complete' ? <CheckIcon className="size-3" /> : index + 1}
               </span>
               <span className="sr-only">{journeyStateLabel(state)}: </span>
-              <Text type="supporting" weight="semibold" color="primary" display="block">
-                {step.label}
-              </Text>
-              <Text type="supporting" color="secondary" className="text-pretty" display="block">
-                {step.detail}
-              </Text>
-              <Text type="supporting" color="secondary" className="font-mono text-2xs tabular-nums" display="block">
-                {step.record}
-              </Text>
+              <span className="block text-sm font-semibold text-foreground">{step.label}</span>
+              <span className="block text-pretty text-sm text-muted-foreground">{step.detail}</span>
+              <span className="block font-mono text-2xs tabular-nums text-muted-foreground">{step.record}</span>
             </li>
           )
         })}
@@ -422,18 +416,22 @@ function AnswerPartView({
   hasAnswerFirstSummary: boolean
 }) {
   switch (part.kind) {
+    case 'consumer-plan':
+      return <AeConsumerPlanResult result={part.plan} />
     case 'one-line':
       return null
     case 'selected-provider':
       return <SelectedProviderConfirmation provider={part.provider} threadId={threadId} />
     case 'provider-cards':
       return <ProviderCardsRail providers={part.providers} scroll={part.scroll === true} threadId={threadId} />
+    case 'imported-claims':
+      return <AeImportedClaims claims={part.claims} query={query} />
     case 'provider-compare-table':
       return hasAnswerFirstSummary ? (
-        <details className={`${REVEAL_ENTER} group rounded-lg border border-border bg-surface`}>
-          <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+        <details className={`${REVEAL_ENTER} group rounded-lg border border-border bg-card`}>
+          <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
             <span>See full comparison</span>
-            <span className="font-mono text-2xs text-secondary">{listingCountLabel(part.providers.length)}</span>
+            <span className="font-mono text-2xs text-muted-foreground">{listingCountLabel(part.providers.length)}</span>
           </summary>
           <div className="border-t border-border">
             <ProviderCompareTable
@@ -458,23 +456,23 @@ function AnswerPartView({
       return <AeGenerativeMap label={part.label} placeQuery={part.placeQuery} />
     case 'empty-state':
       return empty ? (
-        <div className={`${REVEAL_ENTER} rounded-md border border-border bg-surface p-4 text-sm text-primary`} role="status">
+        <div className={`${REVEAL_ENTER} rounded-md border border-border bg-card p-4 text-sm text-foreground`} role="status">
           <p>{part.text}</p>
         </div>
       ) : null
     case 'prose':
       return !empty && part.text.length > 0 ? (
-        <p className={`${REVEAL_ENTER} max-w-[68ch] text-pretty text-base leading-relaxed text-primary`} aria-live="off">
+        <p className={`${REVEAL_ENTER} max-w-[68ch] text-pretty text-base leading-relaxed text-foreground`} aria-live="off">
           {part.text}
         </p>
       ) : null
     case 'what-to-do-now':
       return !empty && part.text.length > 0 ? (
         part.compact === true ? (
-          <p className={`${REVEAL_ENTER} text-sm text-secondary`}>{part.text}</p>
+          <p className={`${REVEAL_ENTER} text-sm text-muted-foreground`}>{part.text}</p>
         ) : (
-          <p className={`${REVEAL_ENTER} grid gap-1 border-l-2 border-border-strong py-1 pl-3 text-base text-primary`}>
-            <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">What to do now</span>
+          <p className={`${REVEAL_ENTER} grid gap-1 border-l-2 border-border-strong py-1 pl-3 text-base text-foreground`}>
+            <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">What to do now</span>
             <span>{part.text}</span>
           </p>
         )
@@ -500,24 +498,24 @@ function SelectedProviderConfirmation({ provider, threadId }: { provider: Answer
 
   return (
     <section
-      className={`${REVEAL_ENTER} grid gap-3 rounded-md border border-border bg-surface p-4`}
+      className={`${REVEAL_ENTER} grid gap-3 rounded-md border border-border bg-card p-4`}
       aria-label="Selected business"
     >
       <header className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
         <div className="grid min-w-0 gap-0.5">
-          <AeKicker marker>Selected business</AeKicker>
-          <p className="font-heading text-base leading-snug text-primary">{provider.name}</p>
-          <p className="text-sm leading-snug text-secondary">
+          <p className="block text-sm font-medium text-muted-foreground">Selected business</p>
+          <p className="font-heading text-base leading-snug text-foreground">{provider.name}</p>
+          <p className="text-sm leading-snug text-muted-foreground">
             Choice {provider.citationIndex} {selectionScope} · {provider.category} ·{' '}
             {provider.serviceArea || provider.suburb}
           </p>
         </div>
-        <span className="inline-flex w-fit items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-secondary">
+        <span className="inline-flex w-fit items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground">
           <CheckIcon className="size-3" aria-hidden="true" />
-          {hasInquiryForm ? 'Inquiry form published' : 'Review listing first'}
+          {hasInquiryForm ? 'Inquiry form published' : 'Review business first'}
         </span>
       </header>
-      <p className="text-sm leading-relaxed text-primary">
+      <p className="text-sm leading-relaxed text-foreground">
         {hasInquiryForm
           ? [
               'AE can open this business\'s qualified inquiry form for owner review.',
@@ -525,19 +523,18 @@ function SelectedProviderConfirmation({ provider, threadId }: { provider: Answer
             ].join(' ')
           : [
               'This business does not publish an AE inquiry form yet.',
-              'Review the listing and use its published contact guidance.',
+              'Review the business page and use its published contact guidance.',
             ].join(' ')}
       </p>
       <div className="flex flex-wrap gap-2">
         {inquiryHref !== undefined ? (
-          <Button label="Open inquiry form" variant="primary" size="sm" href={inquiryHref} />
+          <Button asChild variant="default" size="sm">
+            <a href={inquiryHref}>Open inquiry form</a>
+          </Button>
         ) : null}
-        <Button
-          label="Review listing"
-          variant={hasInquiryForm ? 'secondary' : 'primary'}
-          size="sm"
-          href={detailHref}
-        />
+        <Button asChild variant={hasInquiryForm ? 'secondary' : 'default'} size="sm">
+          <a href={detailHref}>Review business</a>
+        </Button>
       </div>
     </section>
   )
@@ -552,21 +549,17 @@ function ProviderCardsRail({
   scroll: boolean
   threadId: string | undefined
 }) {
-  if (providers.length === 0) {
-    return null
-  }
-
   return (
     <section className={`${REVEAL_ENTER} grid gap-3`} aria-label="Business shortlist">
-      <header className="grid gap-1 rounded-md border border-border bg-surface px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <header className="grid gap-1 rounded-md border border-border bg-card px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="grid min-w-0 gap-0.5">
-          <AeKicker marker>Business shortlist</AeKicker>
-          <p className="text-sm font-medium text-primary">These are the listed businesses AE found for this request.</p>
-          <p className="text-xs leading-snug text-secondary">
-            Compare area, response, and next step before opening a listing or inquiry form.
+          <p className="block text-sm font-medium text-muted-foreground">Business shortlist</p>
+          <p className="text-sm font-medium text-foreground">These are the businesses AE found for this request.</p>
+          <p className="text-xs leading-snug text-muted-foreground">
+            Compare area, response, and next step before choosing a business or opening an inquiry form.
           </p>
         </div>
-        <span className="w-fit rounded-md border border-border bg-card px-2 py-1 font-mono text-2xs text-secondary">
+        <span className="w-fit rounded-md border border-border bg-card px-2 py-1 font-mono text-2xs text-muted-foreground">
           {listingCountLabel(providers.length)}
         </span>
       </header>
@@ -576,7 +569,7 @@ function ProviderCardsRail({
             ? 'flex snap-x snap-proximity gap-3 overflow-x-auto pb-1 [&>li]:w-[min(18rem,85vw)] [&>li]:shrink-0 [&>li]:snap-start'
             : 'grid gap-3 sm:grid-cols-2'
         }
-        aria-label="Listed businesses found for this answer"
+        aria-label="Businesses found for this answer"
       >
         {providers.map((source) => (
           <li key={source.slug}>
@@ -584,20 +577,11 @@ function ProviderCardsRail({
           </li>
         ))}
       </ul>
-      <p className="font-mono text-2xs text-secondary">
+      <p className="font-mono text-2xs text-muted-foreground">
         A person at the business still confirms timing, quote, and availability.
       </p>
     </section>
   )
-}
-
-function appendThreadOrigin(href: string, threadId: string | undefined): string {
-  if (threadId === undefined || threadId.length === 0) {
-    return href
-  }
-
-  const separator = href.includes('?') ? '&' : '?'
-  return `${href}${separator}from=thread&id=${encodeURIComponent(threadId)}`
 }
 
 const DEFAULT_COMPARE_FIELDS: readonly AnswerCompareField[] = ['area', 'response', 'availability', 'hours', 'trust', 'freshness', 'nextStep']
@@ -617,15 +601,15 @@ function ProviderCompareTable({
 
   return (
     <section
-      className={`${REVEAL_ENTER} grid gap-0 overflow-hidden rounded-lg border border-border bg-surface`}
+      className={`${REVEAL_ENTER} grid gap-0 overflow-hidden rounded-lg border border-border bg-card`}
       aria-label="Business comparison"
     >
       <header className="flex items-start justify-between gap-3 border-b border-border p-4">
         <div className="grid gap-1">
-          <AeKicker marker>Compare</AeKicker>
-          <p className="font-heading text-base text-primary">Published facts, side by side</p>
+          <p className="block text-sm font-medium text-muted-foreground">Compare</p>
+          <p className="font-heading text-base text-foreground">Published facts, side by side</p>
         </div>
-        <p className="shrink-0 font-mono text-2xs text-secondary">{listingCountLabel(providers.length)}</p>
+        <p className="shrink-0 font-mono text-2xs text-muted-foreground">{listingCountLabel(providers.length)}</p>
       </header>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[44rem] border-collapse text-sm">
@@ -634,7 +618,7 @@ function ProviderCompareTable({
             <tr>
               <th
                 scope="col"
-                className="sticky left-0 z-10 w-[13.5rem] border-b border-border bg-surface px-4 py-3 text-left font-mono text-2xs font-medium uppercase tracking-wider text-secondary"
+                className="sticky left-0 z-10 w-[13.5rem] border-b border-border bg-card px-4 py-3 text-left font-mono text-2xs font-medium uppercase tracking-wider text-muted-foreground"
               >
                 Business
               </th>
@@ -642,7 +626,7 @@ function ProviderCompareTable({
                 <th
                   key={field}
                   scope="col"
-                  className="border-b border-border px-4 py-3 text-left font-mono text-2xs font-medium uppercase tracking-wider text-secondary"
+                  className="border-b border-border px-4 py-3 text-left font-mono text-2xs font-medium uppercase tracking-wider text-muted-foreground"
                 >
                   {compareFieldLabel(field)}
                 </th>
@@ -673,18 +657,18 @@ function ProviderCompareRow({
 
   return (
     <tr>
-      <th scope="row" className="sticky left-0 z-10 border-t border-border bg-surface px-4 py-3 text-left align-top">
+      <th scope="row" className="sticky left-0 z-10 border-t border-border bg-card px-4 py-3 text-left align-top">
         <span className="grid gap-0.5">
-          <Link to="/$slug" params={{ slug: provider.slug }} search={detailSearch} className="font-medium text-primary underline-offset-4 hover:underline">
+          <Link to="/$slug" params={{ slug: provider.slug }} search={detailSearch} className="font-medium text-foreground underline-offset-4 hover:underline">
             {provider.name}
           </Link>
-          <span className="font-mono text-2xs text-secondary">{provider.category}</span>
+          <span className="font-mono text-2xs text-muted-foreground">{provider.category}</span>
         </span>
       </th>
       {fields.map((field) => (
         <td
           key={`${provider.slug}-${field}`}
-          className={`border-t border-border px-4 py-3 align-top tabular-nums text-secondary ${field === 'freshness' ? 'font-mono text-2xs tracking-wide' : ''}`}
+          className={`border-t border-border px-4 py-3 align-top tabular-nums text-muted-foreground ${field === 'freshness' ? 'font-mono text-2xs tracking-wide' : ''}`}
         >
           {compareFieldValue(provider, field)}
         </td>
@@ -711,19 +695,19 @@ function RecoveryPrompts({
 
   return (
     <section
-      className={`${REVEAL_ENTER} grid gap-3 rounded-lg border border-border bg-surface p-4`}
+      className={`${REVEAL_ENTER} grid gap-3 rounded-lg border border-border bg-card p-4`}
       aria-label={title ?? 'Try another search'}
     >
       <header className="flex items-center gap-2">
         <span
-          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-secondary"
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground"
           aria-hidden="true"
         >
           <SearchIcon className="size-4" />
         </span>
         <div className="grid gap-0.5">
-          <AeKicker marker>Refine search</AeKicker>
-          <p className="font-heading text-base text-primary">{title ?? 'Try a narrower query'}</p>
+          <p className="block text-sm font-medium text-muted-foreground">Refine search</p>
+          <p className="font-heading text-base text-foreground">{title ?? 'Try a narrower query'}</p>
         </div>
       </header>
       {prompts.length > 0 ? (
@@ -731,7 +715,7 @@ function RecoveryPrompts({
           {prompts.map((prompt) => (
             <li key={`${prompt.label}-${prompt.query}`}>
               <Link
-                className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-sm text-primary transition-colors motion-safe:duration-fast motion-safe:ease-standard hover:bg-muted motion-safe:active:scale-press"
+                className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-sm text-foreground transition-colors motion-safe:duration-fast motion-safe:ease-standard hover:bg-muted motion-safe:active:scale-press"
                 to="/"
                 search={{ q: prompt.query }}
               >
@@ -742,15 +726,15 @@ function RecoveryPrompts({
         </ul>
       ) : null}
       {links.length > 0 ? (
-        <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-secondary" aria-label="More ways to continue">
+        <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground" aria-label="More ways to continue">
           {links.map((link) => (
             <li key={link.href}>
               {link.href === '/claim' ? (
-                <Link className="underline-offset-4 hover:text-primary hover:underline" to="/claim">
+                <Link className="underline-offset-4 hover:text-foreground hover:underline" to="/claim">
                   {link.label}
                 </Link>
               ) : (
-                <Link className="underline-offset-4 hover:text-primary hover:underline" to="/registry" search={{ q: '', limit: 10 }}>
+                <Link className="underline-offset-4 hover:text-foreground hover:underline" to="/registry" search={{ q: '', limit: 10 }}>
                   {link.label}
                 </Link>
               )}
@@ -811,10 +795,10 @@ function compareFieldValue(provider: AnswerSource, field: AnswerCompareField): s
 
 function listingCountLabel(count: number): string {
   if (count === 1) {
-    return '1 listing'
+    return '1 business'
   }
   if (count <= 0) {
-    return 'published listings'
+    return 'businesses'
   }
-  return `${count} listings`
+  return `${count} businesses`
 }

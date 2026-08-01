@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { FileInput } from '@astryxdesign/core/FileInput'
+import { useId, useState } from 'react'
+
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
 
 export function AeFileUploadField({
   label,
@@ -14,16 +16,32 @@ export function AeFileUploadField({
   accept?: string
   multiple?: boolean
 }) {
-  const [files, setFiles] = useState<File | File[] | null>(null)
+  const id = useId()
+  const descriptionId = `${id}-description`
+  const [files, setFiles] = useState<readonly File[]>([])
 
   return (
-    <FileInput
-      label={label}
-      description={description}
-      {...(accept === undefined ? {} : { accept })}
-      isMultiple={multiple}
-      value={files}
-      onChange={setFiles}
-    />
+    <FieldGroup>
+      <Field>
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        <Input
+          id={id}
+          type="file"
+          multiple={multiple}
+          {...(accept === undefined ? {} : { accept })}
+          aria-describedby={descriptionId}
+          onChange={(event) => {
+            const selected = event.currentTarget.files
+            setFiles(selected === null ? [] : Array.from(selected))
+          }}
+        />
+        <FieldDescription id={descriptionId}>{description}</FieldDescription>
+        {files.length === 0 ? null : (
+          <p className="text-sm text-muted-foreground" role="status">
+            {files.map((file) => file.name).join(', ')}
+          </p>
+        )}
+      </Field>
+    </FieldGroup>
   )
 }

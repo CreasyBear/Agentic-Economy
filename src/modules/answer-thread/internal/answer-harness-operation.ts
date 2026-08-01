@@ -71,6 +71,7 @@ export type LiveAnswerHarnessOperation = {
   events: readonly HarnessRuntimeEvent[]
   start: () => void
   phase: <Result>(phase: HarnessRunPhase, work: () => Result | Promise<Result>) => Promise<Result>
+  recordModelRequest: (record: HarnessModelRequestRecord) => void
   evaluateGate: (gate: AnswerRunGateSummary, status?: AnswerTurnStatus) => Promise<void>
   persist: <Result>(work: () => Result | Promise<Result>) => Promise<Result>
   complete: (status?: HarnessRunStatus) => HarnessRunReport
@@ -97,6 +98,7 @@ export function createLiveAnswerHarnessOperation(
     get events() {
       return events
     },
+    recordModelRequest: (record) => recordObservedModelRequest(loop, record, input.now ?? Date.now),
     start: () => loop.startRun(),
     phase: (phase, work) => loop.phase(phase, work),
     evaluateGate: (gate, status) => evaluateAnswerGate(loop, gate, status ?? gateStatusFromSummary(gate)),

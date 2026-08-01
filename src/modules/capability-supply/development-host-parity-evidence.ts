@@ -288,12 +288,12 @@ export function evaluateHostMatrix(
         const rich = projectRichInvocationTask({
           invocationRef: host.correction.invocationRef,
           expectedInvocationVersion: host.correction.newVersion,
-          resolver: { resolve: () => JSON.parse(JSON.stringify(host.correction.projectionSnapshot)) },
+          resolver: { resolve: () => structuredClone(host.correction.projectionSnapshot) },
         })
         const structured = projectStructuredInvocationTask({
           invocationRef: host.correction.invocationRef,
           expectedInvocationVersion: host.correction.newVersion,
-          resolver: { resolve: () => JSON.parse(JSON.stringify(host.correction.projectionSnapshot)) },
+          resolver: { resolve: () => structuredClone(host.correction.projectionSnapshot) },
         })
         return host.correction.newVersion > host.correction.oldVersion
           && host.correction.oldAuthorityRef !== host.correction.newAuthorityRef

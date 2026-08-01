@@ -2,13 +2,14 @@ import { useRef, useState, type FormEvent, type RefObject } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { CopyXIcon, FileWarningIcon, StoreIcon } from 'lucide-react'
-import { Banner } from '@astryxdesign/core/Banner'
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Field } from '@astryxdesign/core/Field'
-import { FormLayout } from '@astryxdesign/core/FormLayout'
-import { Text } from '@astryxdesign/core/Text'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/lib/ui/toast'
 import { z } from 'zod'
 
@@ -86,6 +87,7 @@ function RemoveBusinessRoute() {
   const evidenceInvalid = error?.includes('Evidence') === true
   const contactEmailRef = useRef<HTMLInputElement>(null)
   const evidenceSummaryRef = useRef<HTMLTextAreaElement>(null)
+  const slugDescriptionId = 'slug-description'
   const contactDescriptionId = 'contactEmail-description'
   const contactErrorId = 'contactEmail-error'
   const evidenceDescriptionId = 'evidenceSummary-description'
@@ -140,68 +142,73 @@ function RemoveBusinessRoute() {
       <main className="mx-auto grid w-full max-w-5xl gap-10 px-4 pb-16 md:px-6">
         <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
           {correctionPaths.map(({ icon: Icon, label, title, body }) => (
-            <Card key={title} padding={5} className="grid h-full gap-1.5">
+            <Card key={title} className="grid h-full gap-1.5 p-5">
               <div className="flex items-center justify-between gap-3">
-                <Text type="large" weight="semibold" color="primary" className="flex items-center gap-2">
-                  <Icon className="size-4 text-primary" aria-hidden="true" /> {title}
-                </Text>
-                <Badge variant="neutral" label={label} />
+                <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                  <Icon className="size-4 text-foreground" aria-hidden="true" /> {title}
+                </p>
+                <Badge variant="secondary">{label}</Badge>
               </div>
-              <Text color="secondary" display="block">{body}</Text>
+              <p className="block text-muted-foreground">{body}</p>
             </Card>
           ))}
         </section>
 
         {!hydrated ? (
-          <div className="mx-auto w-full max-w-3xl text-sm text-secondary" aria-live="polite">Preparing correction form.</div>
+          <div className="mx-auto w-full max-w-3xl text-sm text-muted-foreground" aria-live="polite">Preparing correction form.</div>
         ) : (
         <form onSubmit={handleSubmit} className="mx-auto grid w-full max-w-3xl gap-6" noValidate>
           {error === undefined ? null : (
-            <Banner status="error" title="Request needs attention" description={error} />
+            <Alert variant="destructive">
+              <AlertTitle>Request needs attention</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
           {receipt === undefined ? null : (
-            <Banner status="success" title="Request recorded" description={receipt} />
+            <Alert>
+              <AlertTitle>Request recorded</AlertTitle>
+              <AlertDescription>{receipt}</AlertDescription>
+            </Alert>
           )}
-          <FormLayout>
-            <Field label="Page slug" inputID="slug" description="Shown in the page URL.">
-              <input
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="slug">Page slug</FieldLabel>
+              <Input
                 id="slug"
                 name="slug"
-                aria-label="Page slug"
                 value={value.slug}
                 disabled={pending}
-                className="min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"
+                aria-describedby={slugDescriptionId}
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value
                   setValue((current) => ({ ...current, slug: nextValue }))
                 }}
               />
+              <FieldDescription id={slugDescriptionId}>Shown in the page URL.</FieldDescription>
             </Field>
-            <Field
-              label="Your email"
-              inputID="contactEmail"
-              description="Used only to follow up."
-              descriptionID={contactDescriptionId}
-              {...(contactInvalid ? { status: { type: 'error' as const, message: error ?? '', messageID: contactErrorId } } : {})}
-            >
-              <input
+            <Field {...(contactInvalid ? { 'data-invalid': true } : {})}>
+              <FieldLabel htmlFor="contactEmail">Your email</FieldLabel>
+              <Input
                 id="contactEmail"
                 name="contactEmail"
                 type="email"
-                aria-label="Your email"
                 aria-describedby={contactDescribedBy}
                 aria-invalid={contactInvalid}
                 ref={contactEmailRef}
                 value={value.contactEmail}
                 disabled={pending}
-                className="min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value
                   setValue((current) => ({ ...current, contactEmail: nextValue }))
                 }}
               />
+              <FieldDescription id={contactDescriptionId}>Used only to follow up.</FieldDescription>
+              {contactInvalid ? (
+                <FieldError id={contactErrorId}>{error ?? ''}</FieldError>
+              ) : null}
             </Field>
-            <Field label="Reason" inputID="reasonCode">
+            <Field>
+              <FieldLabel htmlFor="reasonCode">Reason</FieldLabel>
               <AeSelectField
                 id="reasonCode"
                 name="reasonCode"
@@ -213,31 +220,32 @@ function RemoveBusinessRoute() {
                 }}
               />
             </Field>
-            <Field
-              label="What should change?"
-              inputID="evidenceSummary"
-              description="A short note is enough."
-              descriptionID={evidenceDescriptionId}
-              {...(evidenceInvalid ? { status: { type: 'error' as const, message: error ?? '', messageID: evidenceErrorId } } : {})}
-            >
-              <textarea
+            <Field {...(evidenceInvalid ? { 'data-invalid': true } : {})}>
+              <FieldLabel htmlFor="evidenceSummary">What should change?</FieldLabel>
+              <Textarea
                 id="evidenceSummary"
                 name="evidenceSummary"
-                aria-label="What should change?"
                 aria-describedby={evidenceDescribedBy}
                 aria-invalid={evidenceInvalid}
                 ref={evidenceSummaryRef}
                 value={value.evidenceSummary}
                 disabled={pending}
-                className="min-h-28 w-full resize-y rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"
+                className="min-h-28 resize-y"
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value
                   setValue((current) => ({ ...current, evidenceSummary: nextValue }))
                 }}
               />
+              <FieldDescription id={evidenceDescriptionId}>A short note is enough.</FieldDescription>
+              {evidenceInvalid ? (
+                <FieldError id={evidenceErrorId}>{error ?? ''}</FieldError>
+              ) : null}
             </Field>
-          </FormLayout>
-          <Button label="Send request" type="submit" variant="primary" isDisabled={pending} isLoading={pending} />
+          </FieldGroup>
+          <Button type="submit" disabled={pending} className="justify-self-start">
+            {pending ? <Spinner /> : null}
+            Send request
+          </Button>
         </form>
         )}
       </main>

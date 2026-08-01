@@ -1,5 +1,7 @@
+import type { ConsumerPlanResult } from '@/modules/customer-request/application/public'
 import type { AnswerArtifact, AnswerCompareField } from '../answer-schema'
 import type { AnswerSnapshot, AnswerSource } from '../answer-synthesizer'
+import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 import { resolveLayoutProfile, type AnswerLayoutProfile } from './answer-layout-profile'
 import {
   buildArtifactsFromSnapshot,
@@ -10,8 +12,10 @@ import {
 } from './snapshot-artifacts'
 
 export type AnswerMessagePart =
+  | { kind: 'consumer-plan'; plan: ConsumerPlanResult }
   | { kind: 'one-line'; text: string }
   | { kind: 'selected-provider'; provider: AnswerSource }
+  | { kind: 'imported-claims'; claims: readonly WebDiscoveryClaim[] }
   | { kind: 'provider-cards'; providers: AnswerSnapshot['providers']; scroll?: boolean }
   | {
       kind: 'provider-compare-table'
@@ -64,11 +68,17 @@ export function artifactsToMessageParts(
 
   for (const artifact of budgetedArtifacts) {
     switch (artifact.kind) {
+      case 'consumer-plan':
+        parts.push({ kind: 'consumer-plan', plan: artifact.plan })
+        break
       case 'one-line':
         parts.push({ kind: 'one-line', text: artifact.text })
         break
       case 'selected-provider':
         parts.push({ kind: 'selected-provider', provider: artifact.provider })
+        break
+      case 'imported-claims':
+        parts.push({ kind: 'imported-claims', claims: artifact.claims })
         break
       case 'provider-cards':
         parts.push({

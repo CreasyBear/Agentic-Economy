@@ -1,6 +1,6 @@
-import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { parseBoundedJson } from '@/modules/common/bounded-json'
 
 export type RouteRunIdentitySnapshot = Readonly<{
   runRef: string
@@ -105,11 +105,3 @@ export function routeDispatchIntegrityValid(dispatch: RouteDispatchIntegritySnap
     && dispatch.dispatchRef === `route-dispatch:v1:${digest}`
 }
 
-function parseBoundedJson(value: string): JsonValue | undefined {
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return isBoundedJsonValue(parsed) ? parsed : undefined
-  } catch {
-    return undefined
-  }
-}

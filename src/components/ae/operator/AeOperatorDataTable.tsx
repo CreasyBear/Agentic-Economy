@@ -10,18 +10,19 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { ArrowUpDownIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
-import { Button } from '@astryxdesign/core/Button'
+import { Button } from '@/components/ui/button'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
   TableCell,
+  TableHead,
   TableHeader,
-  TableHeaderCell,
   TableRow,
-} from '@astryxdesign/core/Table'
-import { TextInput } from '@astryxdesign/core/TextInput'
+} from '@/components/ui/table'
 
 type AeOperatorDataTableProps<TData> = {
   columns: ColumnDef<TData, unknown>[]
@@ -42,6 +43,7 @@ export function AeOperatorDataTable<TData>({
 }: AeOperatorDataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
+  const filterInputId = useId()
 
   const table = useReactTable({
     data: [...data],
@@ -62,25 +64,30 @@ export function AeOperatorDataTable<TData>({
   return (
     <div className="grid gap-3">
       {showFilter ? (
-        <TextInput
-          value={globalFilter}
-          onChange={setGlobalFilter}
-          placeholder={filterPlaceholder}
-          label={filterPlaceholder}
-          isLabelHidden
-          width="min(24rem, 100%)"
-        />
+        <Field>
+          <FieldLabel htmlFor={filterInputId} className="sr-only">
+            {filterPlaceholder}
+          </FieldLabel>
+          <Input
+            id={filterInputId}
+            value={globalFilter}
+            onChange={(event) => setGlobalFilter(event.currentTarget.value)}
+            placeholder={filterPlaceholder}
+            aria-label={filterPlaceholder}
+            className="w-full max-w-[24rem]"
+          />
+        </Field>
       ) : null}
       <div className="overflow-auto rounded-md border border-border" style={{ maxHeight }}>
-        <Table density="compact" dividers="rows" hasHover>
+        <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHeaderCell
+                  <TableHead
                     key={header.id}
                     scope="col"
-                    className="sticky top-0 z-10 bg-surface"
+                    className="sticky top-0 z-10 bg-card"
                     aria-sort={
                       !header.column.getCanSort()
                         ? undefined
@@ -92,7 +99,7 @@ export function AeOperatorDataTable<TData>({
                     }
                   >
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHeaderCell>
+                  </TableHead>
                 ))}
               </TableRow>
             ))}
@@ -100,7 +107,7 @@ export function AeOperatorDataTable<TData>({
           <TableBody>
             {table.getRowModel().rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-secondary">
+                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
                   {emptyMessage}
                 </TableCell>
               </TableRow>
@@ -130,12 +137,14 @@ export function AeOperatorSortableHeader({
   return (
     <Button
       type="button"
-      label={label}
       variant="ghost"
       size="sm"
       className="-ml-2 h-8 px-2"
       onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-      endContent={<ArrowUpDownIcon aria-hidden="true" className="size-3.5" />}
-    />
+      aria-label={`Sort by ${label}`}
+    >
+      <span>{label}</span>
+      <ArrowUpDownIcon aria-hidden="true" className="size-3.5" />
+    </Button>
   )
 }

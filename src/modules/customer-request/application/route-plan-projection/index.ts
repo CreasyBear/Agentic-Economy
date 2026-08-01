@@ -12,7 +12,6 @@ export {
   customerProgressState,
   isPartialRouteResult,
   isProviderReportedRouteFailure,
-  parseCustomerRouteResult,
   projectStoredRouteRun,
   type StoredRouteRunProjection,
 } from './project-run'

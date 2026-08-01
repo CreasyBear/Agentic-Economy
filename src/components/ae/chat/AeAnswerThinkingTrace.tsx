@@ -73,21 +73,17 @@ function AeAnswerReasoningCollapsible({ isStreaming, label, steps = EmptyThinkin
     <Reasoning className="mb-2" isStreaming={isStreaming}>
       <ReasoningTrigger
         className="font-mono text-xs"
-        getLabel={() =>
-          isStreaming ? (
-            <Shimmer as="span" className="text-secondary">
+        getThinkingMessage={(streaming) =>
+          streaming ? (
+            <Shimmer as="span" className="text-muted-foreground">
               {label}
             </Shimmer>
           ) : (
-            <span className="text-secondary">{label}</span>
+            <span className="text-muted-foreground">{label}</span>
           )
         }
       />
-      {detail.length > 0 ? (
-        <ReasoningContent>
-          <p>{detail}</p>
-        </ReasoningContent>
-      ) : null}
+      {detail.length > 0 ? <ReasoningContent>{detail}</ReasoningContent> : null}
     </Reasoning>
   )
 }

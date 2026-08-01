@@ -348,7 +348,11 @@ describe('answer harness operation persistence bridge', () => {
     }))
     const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       await streamAnswerTurn(
@@ -368,6 +372,16 @@ describe('answer harness operation persistence bridge', () => {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
     }
 
@@ -453,7 +467,11 @@ describe('answer harness operation persistence bridge', () => {
     }))
     const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       await streamAnswerTurn(
@@ -473,6 +491,16 @@ describe('answer harness operation persistence bridge', () => {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
     }
 

@@ -1,5 +1,6 @@
 import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
 import type { FollowUpIntent } from '@/modules/answer-thread/public'
+import { listedProvidersFromArtifacts } from './session-provider-context'
 
 export type TurnContextLineInput = {
   intent: FollowUpIntent
@@ -8,7 +9,10 @@ export type TurnContextLineInput = {
 }
 
 export function buildTurnContextLine(input: TurnContextLineInput): string | undefined {
-  const providerCount = countListedProvidersInArtifacts(input.artifacts)
+  const providers = listedProvidersFromArtifacts(input.artifacts)
+  const providersBySlug = new Map<string, AnswerSource>()
+  for (const provider of providers) providersBySlug.set(provider.slug, provider)
+  const providerCount = providersBySlug.size
   const providerLabel = formatProviderCount(providerCount)
 
   switch (input.intent) {
@@ -21,7 +25,7 @@ export function buildTurnContextLine(input: TurnContextLineInput): string | unde
         ? 'Comparing listed businesses from this thread.'
         : `Comparing ${providerLabel} from this thread.`
     case 'inquiry_handoff':
-      return buildInquiryHandoffContextLine(input.artifacts)
+      return buildInquiryHandoffContextLine([...providersBySlug.values()])
     case 'explain_boundary':
       return 'Checking the supported next step.'
     case 'unsupported':
@@ -32,25 +36,9 @@ export function buildTurnContextLine(input: TurnContextLineInput): string | unde
 }
 
 export function countListedProvidersInArtifacts(artifacts: readonly AnswerArtifact[]): number {
-  const providerSlugs = new Set<string>()
-
-  for (const artifact of artifacts) {
-    switch (artifact.kind) {
-      case 'selected-provider':
-        providerSlugs.add(artifact.provider.slug)
-        break
-      case 'provider-cards':
-      case 'provider-compare-table':
-        for (const provider of artifact.providers) {
-          providerSlugs.add(provider.slug)
-        }
-        break
-      default:
-        break
-    }
-  }
-
-  return providerSlugs.size
+  const providersBySlug = new Map<string, AnswerSource>()
+  for (const provider of listedProvidersFromArtifacts(artifacts)) providersBySlug.set(provider.slug, provider)
+  return providersBySlug.size
 }
 
 function formatProviderCount(count: number): string | undefined {
@@ -60,8 +48,7 @@ function formatProviderCount(count: number): string | undefined {
   return `${count} listed ${count === 1 ? 'business' : 'businesses'}`
 }
 
-function buildInquiryHandoffContextLine(artifacts: readonly AnswerArtifact[]): string {
-  const providers = listedProvidersInArtifacts(artifacts)
+function buildInquiryHandoffContextLine(providers: readonly AnswerSource[]): string {
   const firstProvider = providers[0]
   if (providers.length === 1 && firstProvider !== undefined) {
     return `Preparing the qualified inquiry next step for ${firstProvider.name}.`
@@ -72,24 +59,3 @@ function buildInquiryHandoffContextLine(artifacts: readonly AnswerArtifact[]): s
   return 'Preparing the qualified inquiry next step from this thread.'
 }
 
-function listedProvidersInArtifacts(artifacts: readonly AnswerArtifact[]): AnswerSource[] {
-  const providersBySlug = new Map<string, AnswerSource>()
-
-  for (const artifact of artifacts) {
-    switch (artifact.kind) {
-      case 'selected-provider':
-        providersBySlug.set(artifact.provider.slug, artifact.provider)
-        break
-      case 'provider-cards':
-      case 'provider-compare-table':
-        for (const provider of artifact.providers) {
-          providersBySlug.set(provider.slug, provider)
-        }
-        break
-      default:
-        break
-    }
-  }
-
-  return [...providersBySlug.values()]
-}

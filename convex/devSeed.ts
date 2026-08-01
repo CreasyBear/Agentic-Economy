@@ -13,7 +13,12 @@ import {
 import { persistDevSeedCatalogState } from './devSeedStore'
 import { runtimeDb } from './source_state'
 import { claimBusinessCommand } from './business'
-import { publishBusinessCatalogCommand, seedBusinessOfferingSupplyCommand } from './catalog'
+import {
+  deriveBusinessOfferingSupportFromCapabilitySupply,
+  publishBusinessCatalogCommand,
+  rebuildBusinessSupplyProjectionSnapshotCommand,
+  seedBusinessOfferingSupplyCommand,
+} from './catalog'
 import { seedDiscoveryManifestForBusinessCommand } from './discovery'
 import { registerCapabilityContractDocument } from './capabilityContractDocuments'
 import {
@@ -23,6 +28,7 @@ import {
 } from './capabilitySupply'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import type { CapabilityContractRef } from '@/modules/capability-contract/public'
+import type { OfferingPrice } from '@/modules/catalog/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { capabilityOfferingRegistrationHash } from '@/modules/capability-supply/public'
 import {
@@ -162,7 +168,17 @@ export const seedDevCatalog = internalMutation({
     }
     await retireSupersededSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 3_000)
     await retireSupersededSandboxRouteSupply(ctx.db, sandboxRouteRegistrations, seedStartedAt + 3_100)
-    await ctx.scheduler.runAfter(0, internal.devSeed.seedOfferingSupply, { cursor: null })
+    const firstOfferingSeed: {
+      processed: number
+      migrated: number
+      modes: { legacy: number; compare: number; offering: number }
+      errors: string[]
+      nextCursor: string | null
+      done: boolean
+    } = await ctx.runMutation(internal.devSeed.seedOfferingSupply, { cursor: null })
+    if (firstOfferingSeed.errors.length > 0) {
+      throw new Error(`dev_seed_offering_supply:${firstOfferingSeed.errors.join(',')}`)
+    }
     await ctx.scheduler.runAfter(0, internal.devSeed.seedDiscoveryManifests, { cursor: null })
     return {
       ...result,
@@ -205,8 +221,16 @@ export const seedOfferingSupply = internalMutation({
     let migrated = 0
     for (const business of page.page) {
       // Deterministic mode spread across businesses for full cutover-state variety.
+      // A business carrying a seeded price always requests 'offering': price is the
+      // one public fact the retained v1 service row cannot hold, so leaving a priced
+      // business in 'compare' or 'legacy' silently drops it and the catalog
+      // demonstrates no prices at all.
+      const pricingSummary = DEV_SEED_PRICING_BY_SLUG[business.slug]
+      const price = DEV_SEED_PRICE_BY_SLUG[business.slug]
       const bucket = [...business.slug].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 10
-      const requestedMode = bucket < 7 ? 'offering' : bucket < 9 ? 'compare' : 'legacy'
+      const requestedMode = pricingSummary !== undefined
+        ? 'offering'
+        : bucket < 7 ? 'offering' : bucket < 9 ? 'compare' : 'legacy'
       const result = await seedBusinessOfferingSupplyCommand(db, business._id, requestedMode, now)
       if (result.kind === 'error') {
         errors.push(`${business.slug}:${result.code}`)
@@ -214,13 +238,80 @@ export const seedOfferingSupply = internalMutation({
       }
       migrated += result.migrated
       modes[result.mode] += 1
+      // A price is the one public fact the retained v1 service row cannot hold,
+      // so the seeded catalog can only demonstrate it by writing the Offering
+      // revision directly. Only worth doing in 'offering' mode: 'compare' and
+      // 'legacy' serve the v1 adapter, which has nowhere to put a price.
+      if (pricingSummary !== undefined && result.mode === 'offering') {
+        const priced = await publishSeedOfferingPrice(ctx, business._id, pricingSummary, price, now)
+        if (priced.kind === 'error') errors.push(`${business.slug}:price_${priced.code}`)
+        else if (business.slug === 'adelaide-dental-clinic') {
+          const callable = await seedAdelaideCheckupAccessPath(ctx, business._id, now)
+          if (callable.kind === 'error') errors.push(`${business.slug}:callable_${callable.code}`)
+        }
+      }
     }
     if (!page.isDone) {
       await ctx.scheduler.runAfter(0, internal.devSeed.seedOfferingSupply, { cursor: page.continueCursor })
     }
+
     return { processed: page.page.length, migrated, modes, errors, nextCursor: page.isDone ? null : page.continueCursor, done: page.isDone }
   },
 })
+
+async function seedAdelaideCheckupAccessPath(
+  ctx: MutationCtx,
+  businessId: Id<'businesses'>,
+  now: number,
+): Promise<{ kind: 'ok' } | { kind: 'error'; code: string }> {
+  const offering = await ctx.db.query('businessOfferings')
+    .withIndex('by_businessId_and_status', (query) => query.eq('businessId', businessId).eq('status', 'published'))
+    .first()
+  if (offering === null) return { kind: 'error', code: 'offering_not_found' }
+  const revision = await ctx.db.query('businessOfferingRevisions')
+    .withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision))
+    .unique()
+  if (revision === null) return { kind: 'error', code: 'revision_not_found' }
+  if (revision.price?.kind !== 'fixed' || revision.price.amountMinor === undefined) {
+    return { kind: 'error', code: 'fixed_price_not_found' }
+  }
+  const siteUrl = process.env.AE_SITE_URL?.trim() || 'https://agentic-economy-phi.vercel.app'
+  const accessPathRef = 'access:adelaide-dental-clinic:callable'
+  const descriptor = {
+    kind: 'external_operation' as const,
+    name: revision.name,
+    summary: 'Quotes this published offering through the labelled sandbox provider.',
+    url: new URL('/api/sandbox/adelaide-dental-clinic/checkup-quote', siteUrl).href,
+    method: 'POST',
+    pricingSummary: revision.pricingSummary ?? 'Published fixed price.',
+    provenance: 'business_declared' as const,
+  }
+  const row = {
+    accessPathRef,
+    businessId,
+    offeringRef: offering.offeringRef,
+    offeringRevision: revision.revision,
+    offeringSourceHash: revision.sourceHash,
+    status: 'published' as const,
+    descriptor,
+    sourceHash: await canonicalDigest({ accessPathRef, descriptor }),
+    createdAt: now,
+    updatedAt: now,
+  }
+  const existing = await ctx.db.query('offeringAccessPaths')
+    .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', accessPathRef))
+    .unique()
+  if (existing === null) await ctx.db.insert('offeringAccessPaths', row)
+  else await ctx.db.patch(existing._id, row)
+  const db = runtimeDb(ctx.db)
+  const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand(
+    db,
+    businessId,
+    await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now),
+    now,
+  )
+  return rebuilt.kind === 'ok' ? { kind: 'ok' } : { kind: 'error', code: rebuilt.code }
+}
 
 export const seedDiscoveryManifests = internalMutation({
   args: { cursor: v.union(v.string(), v.null()) },
@@ -353,6 +444,71 @@ export const seedTestCapabilityPublication = internalMutation({
     return { publicationRef, credentialRef: binding.credentialRef }
   },
 })
+
+const DEV_SEED_PRICING_BY_SLUG: Readonly<Record<string, string>> = Object.fromEntries(
+  DEV_SEED_BUSINESS_FIXTURES.flatMap((fixture) => (
+    fixture.pricingSummary === undefined ? [] : [[fixture.requestedSlug, fixture.pricingSummary]]
+  )),
+)
+
+/**
+ * The comparable twin of each seeded `pricingSummary`, authored by hand against
+ * the sentence it sits beside. Nothing is parsed out of the prose at runtime:
+ * the two are independent published facts, and a fixture sentence with no entry
+ * here seeds prose only, exactly as it did before prices existed.
+ */
+const DEV_SEED_PRICE_BY_PRICING_SUMMARY: Readonly<Record<string, OfferingPrice>> = {
+  'Demo price — $180 call-out, quoted before work starts': { kind: 'fixed', currency: 'AUD', amountMinor: 18_000, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — $140 first hour, then $95 per hour': { kind: 'from', currency: 'AUD', amountMinor: 14_000, unit: 'hour', taxTreatment: 'inclusive' },
+  'Demo price — $95 check-up and clean': { kind: 'fixed', currency: 'AUD', amountMinor: 9_500, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — $350 first consultation': { kind: 'fixed', currency: 'AUD', amountMinor: 35_000, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — $55 per hour, 3 hour minimum': { kind: 'from', currency: 'AUD', amountMinor: 5_500, unit: 'hour', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 5,000–7,000 typical wedding investment': { kind: 'from', currency: 'AUD', amountMinor: 500_000, unit: 'day', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 250 per additional hour': { kind: 'from', currency: 'AUD', amountMinor: 25_000, unit: 'hour', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 1,800 wedding coverage package': { kind: 'fixed', currency: 'AUD', amountMinor: 180_000, unit: 'day', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 4,500 base funeral service': { kind: 'fixed', currency: 'AUD', amountMinor: 450_000, unit: 'job', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 4,200 base funeral service': { kind: 'fixed', currency: 'AUD', amountMinor: 420_000, unit: 'job', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 4,800 base funeral service': { kind: 'fixed', currency: 'AUD', amountMinor: 480_000, unit: 'job', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 150 check-up and clean': { kind: 'fixed', currency: 'AUD', amountMinor: 15_000, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 199 check-up, scale and clean': { kind: 'fixed', currency: 'AUD', amountMinor: 19_900, unit: 'visit', taxTreatment: 'inclusive' },
+  'Demo price — publicly observed / development mock — AUD 139 check-up and clean': { kind: 'fixed', currency: 'AUD', amountMinor: 13_900, unit: 'visit', taxTreatment: 'inclusive' },
+}
+
+export const DEV_SEED_PRICE_BY_SLUG: Readonly<Record<string, OfferingPrice>> = Object.fromEntries(
+  Object.entries(DEV_SEED_PRICING_BY_SLUG).flatMap(([slug, summary]) => {
+    const price = DEV_SEED_PRICE_BY_PRICING_SUMMARY[summary]
+    return price === undefined ? [] : [[slug, price]]
+  }),
+)
+
+async function publishSeedOfferingPrice(
+  ctx: MutationCtx,
+  businessId: Id<'businesses'>,
+  pricingSummary: string,
+  price: OfferingPrice | undefined,
+  now: number,
+): Promise<{ kind: 'ok' } | { kind: 'error'; code: string }> {
+  const offering = await ctx.db
+    .query('businessOfferings')
+    .withIndex('by_businessId_and_status', (query) => query.eq('businessId', businessId).eq('status', 'published'))
+    .first()
+  if (offering === null) return { kind: 'error', code: 'offering_not_found' }
+  const revision = await ctx.db
+    .query('businessOfferingRevisions')
+    .withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision))
+    .unique()
+  if (revision === null) return { kind: 'error', code: 'revision_not_found' }
+  // Prose and structured price publish together, so a revision carrying only the
+  // prose is not yet seeded — re-running has to finish the pair.
+  if (revision.pricingSummary === pricingSummary && (price === undefined || revision.price !== undefined)) return { kind: 'ok' }
+
+  await ctx.db.patch(revision._id, { pricingSummary, ...(price === undefined ? {} : { price }) })
+  const db = runtimeDb(ctx.db)
+  const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand(
+    db, businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now), now,
+  )
+  return rebuilt.kind === 'ok' ? { kind: 'ok' } : { kind: 'error', code: rebuilt.code }
+}
 
 function isSandboxFixture(fixture: DevSeedBusinessFixture): boolean {
   return fixture.requestedSlug.startsWith('sandbox-')

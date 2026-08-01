@@ -1,14 +1,13 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { FormLayout } from '@astryxdesign/core/FormLayout'
-import { Text } from '@astryxdesign/core/Text'
-import { TextInput } from '@astryxdesign/core/TextInput'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeInquiryComposer } from '@/components/ae/inquiries/AeInquiryComposer'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -78,8 +77,8 @@ export function GovernedSendReviewRows({ values }: { values: Readonly<Record<str
     <dl className="divide-y divide-border rounded-md border border-border">
       {GOVERNED_SEND_CANONICAL_FIELDS.map(({ key, label }) => (
         <div key={key} className="grid gap-1 px-4 py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4">
-          <dt><Text type="supporting" color="secondary" weight="semibold" display="block">{label}</Text></dt>
-          <dd><Text type="body" color="primary" display="block" className="break-words whitespace-pre-wrap">{values[key] ?? 'Not shared'}</Text></dd>
+          <dt><span className="block text-sm font-semibold text-muted-foreground">{label}</span></dt>
+          <dd><span className="block break-words whitespace-pre-wrap text-foreground">{values[key] ?? 'Not shared'}</span></dd>
         </div>
       ))}
     </dl>
@@ -199,56 +198,72 @@ function PublicInquiryRoute() {
         title="Confirm what will be sent"
         description="Review every detail below. Nothing is sent until you choose the action."
       />
-      <form onSubmit={handleSubmit} noValidate className="mx-auto grid w-full max-w-3xl gap-12 px-4 pb-16 md:px-6">
+      <div className="mx-auto grid w-full max-w-3xl gap-12 px-4 pb-16 md:px-6">
         <section className="grid gap-6" aria-labelledby="request-details-heading">
-          <Text id="request-details-heading" as="h2" type="large" weight="semibold" color="primary" display="block">Your request</Text>
-          <Card padding={5} className="grid gap-4">
-            <FormLayout>
-              <TextInput label="Name" description="Optional." htmlName="name" value={value.contact.name ?? ''} isDisabled={!hydrated || pending} onChange={(nextValue) => updateContact('name', nextValue)} />
-              <TextInput label="Email" description="Shared only for this business reply." htmlName="email" type="email" value={value.contact.email ?? ''} isDisabled={!hydrated || pending} {...(emailError === undefined ? {} : { status: { type: 'error' as const, message: emailError } })} onChange={(nextValue) => updateContact('email', nextValue)} />
-              <TextInput label="Phone" description="Shared only when entered." htmlName="phone" type={'tel' as 'text'} value={value.contact.phone ?? ''} isDisabled={!hydrated || pending} {...(phoneError === undefined ? {} : { status: { type: 'error' as const, message: phoneError } })} onChange={(nextValue) => updateContact('phone', nextValue)} />
-              <AeInquiryComposer label="What do you need?" description={`${value.body.length}/${readback.maxBodyLength} characters. Include where, when, and useful constraints.`} value={value.body} maxLength={readback.maxBodyLength} invalid={bodyError !== undefined} {...(bodyError === undefined ? {} : { errorMessage: bodyError })} disabled={!hydrated || pending} pending={pending} onChange={(body) => setValue((current) => ({ ...current, body }))} />
-            </FormLayout>
+          <h2 id="request-details-heading" className="text-lg font-semibold text-foreground">Your request</h2>
+          <Card className="grid gap-4 p-5">
+            <form onSubmit={handleSubmit} noValidate className="grid gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="inquiry-name">Name</Label>
+                <p id="inquiry-name-description" className="text-sm text-muted-foreground">Optional.</p>
+                <Input id="inquiry-name" name="name" value={value.contact.name ?? ''} disabled={!hydrated || pending} aria-describedby="inquiry-name-description" onChange={(event) => updateContact('name', event.currentTarget.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="inquiry-email">Email</Label>
+                <p id="inquiry-email-description" className="text-sm text-muted-foreground">Shared only for this business reply.</p>
+                <Input id="inquiry-email" name="email" type="email" value={value.contact.email ?? ''} disabled={!hydrated || pending} aria-describedby={emailError === undefined ? 'inquiry-email-description' : 'inquiry-email-description inquiry-email-error'} aria-invalid={emailError !== undefined} onChange={(event) => updateContact('email', event.currentTarget.value)} />
+                {emailError === undefined ? null : <p id="inquiry-email-error" role="alert" className="text-sm text-destructive">{emailError}</p>}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="inquiry-phone">Phone</Label>
+                <p id="inquiry-phone-description" className="text-sm text-muted-foreground">Shared only when entered.</p>
+                <Input id="inquiry-phone" name="phone" type="tel" value={value.contact.phone ?? ''} disabled={!hydrated || pending} aria-describedby={phoneError === undefined ? 'inquiry-phone-description' : 'inquiry-phone-description inquiry-phone-error'} aria-invalid={phoneError !== undefined} onChange={(event) => updateContact('phone', event.currentTarget.value)} />
+                {phoneError === undefined ? null : <p id="inquiry-phone-error" role="alert" className="text-sm text-destructive">{phoneError}</p>}
+              </div>
+            </form>
+            <AeInquiryComposer label="What do you need?" description={`${value.body.length}/${readback.maxBodyLength} characters. Include where, when, and useful constraints.`} value={value.body} maxLength={readback.maxBodyLength} invalid={bodyError !== undefined} {...(bodyError === undefined ? {} : { errorMessage: bodyError })} disabled={!hydrated || pending} pending={pending} onChange={(body) => setValue((current) => ({ ...current, body }))} />
           </Card>
         </section>
 
-        <section className="grid gap-6" aria-labelledby="exact-review-heading">
-          <div className="grid gap-2">
-            <Text id="exact-review-heading" as="h2" type="large" weight="semibold" color="primary" display="block">Review what will be sent</Text>
-            <Text color="secondary" display="block">These rows are the complete submitted snapshot, in order.</Text>
-          </div>
-          <GovernedSendReviewRows values={canonicalValues} />
-        </section>
+        <form onSubmit={handleSubmit} noValidate className="contents">
+          <section className="grid gap-6" aria-labelledby="exact-review-heading">
+            <div className="grid gap-2">
+              <h2 id="exact-review-heading" className="text-lg font-semibold text-foreground">Review what will be sent</h2>
+              <p className="text-muted-foreground">These rows are the complete submitted snapshot, in order.</p>
+            </div>
+            <GovernedSendReviewRows values={canonicalValues} />
+          </section>
 
-        <section className="grid gap-4" aria-labelledby="send-limits-heading">
-          <Text id="send-limits-heading" as="h2" type="large" weight="semibold" color="primary" display="block">Limits</Text>
-          <dl className="grid gap-3 rounded-md border border-border p-4">
-            <div className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]"><dt>Send limit</dt><dd>Once</dd></div>
-            <div className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]"><dt>Recipient</dt><dd>{readback.businessName} only</dd></div>
-          </dl>
-        </section>
+          <section className="grid gap-4" aria-labelledby="send-limits-heading">
+            <h2 id="send-limits-heading" className="text-lg font-semibold text-foreground">Limits</h2>
+            <dl className="grid gap-3 rounded-md border border-border p-4">
+              <div className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]"><dt>Send limit</dt><dd>Once</dd></div>
+              <div className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]"><dt>Recipient</dt><dd>{readback.businessName} only</dd></div>
+            </dl>
+          </section>
 
-        {result?.kind === 'error' ? <Card padding={4} className="grid gap-2" role="alert"><Text weight="semibold" color="primary" display="block">Not sent</Text><Text color="secondary" display="block">{result.reason}</Text></Card> : null}
+          {result?.kind === 'error' ? <Card className="grid gap-2 border-destructive/50 p-4" role="alert"><p className="font-semibold text-foreground">Not sent</p><p className="text-muted-foreground">{result.reason}</p></Card> : null}
 
-        <section className="grid gap-4" aria-labelledby="send-consequence-heading" aria-busy={pending}>
-          <Text id="send-consequence-heading" as="h2" type="large" weight="semibold" color="primary" display="block">Before you send</Text>
-          <Text as="p" color="primary" display="block">This is exactly what will be sent. It can't change after you approve it.</Text>
-          <Text as="p" color="primary" display="block">This sends your request once to {readback.businessName}.</Text>
-          <Text as="p" color="secondary" display="block">Price is confirmed by {readback.businessName} in their reply.</Text>
-          {noDeliverableChannel ? <Text as="p" color="secondary" display="block">If you close this page without saving your link, you may not be able to see the reply.</Text> : null}
-          {pending ? (
-            <Card padding={4} className="grid gap-2" aria-busy="true">
-              <Badge variant="neutral" label="Sending your request" />
-              <Text color="primary" display="block">Creating a written handoff record.</Text>
-              <Text color="secondary" display="block">Do not close or send again.</Text>
-            </Card>
-          ) : null}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Button label="Don't send" variant="secondary" href={origin?.backHref ?? `/${readback.slug}`} isDisabled={pending} />
-            <Button label={pending ? `Sending to ${readback.businessName}…` : `Send request to ${readback.businessName}`} variant="primary" type="submit" isDisabled={!hydrated || pending} aria-busy={pending} />
-          </div>
-        </section>
-      </form>
+          <section className="grid gap-4" aria-labelledby="send-consequence-heading" aria-busy={pending}>
+            <h2 id="send-consequence-heading" className="text-lg font-semibold text-foreground">Before you send</h2>
+            <p className="text-foreground">This is exactly what will be sent. It can't change after you approve it.</p>
+            <p className="text-foreground">This sends your request once to {readback.businessName}.</p>
+            <p className="text-muted-foreground">Price is confirmed by {readback.businessName} in their reply.</p>
+            {noDeliverableChannel ? <p className="text-muted-foreground">If you close this page without saving your link, you may not be able to see the reply.</p> : null}
+            {pending ? (
+              <Card className="grid gap-2 p-4" aria-busy="true">
+                <Badge variant="outline">Sending your request</Badge>
+                <p className="text-foreground">Creating a written handoff record.</p>
+                <p className="text-muted-foreground">Do not close or send again.</p>
+              </Card>
+            ) : null}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Button asChild variant="secondary" disabled={pending}><a href={origin?.backHref ?? `/${readback.slug}`}>Don't send</a></Button>
+              <Button variant="default" type="submit" disabled={!hydrated || pending} aria-busy={pending}>{pending ? `Sending to ${readback.businessName}…` : `Send request to ${readback.businessName}`}</Button>
+            </div>
+          </section>
+        </form>
+      </div>
     </AePublicShell>
   )
 }
@@ -269,11 +284,17 @@ function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRoute
   return (
     <AePublicShell>
       <main className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
-        <AeEmptyState
-          title="Not sent"
-          description="This request is not available to send right now."
-          action={<Button label="Back to business page" variant="secondary" href={`/${readback.slug}`} />}
-        />
+        <Empty className="border border-border bg-card p-5">
+          <EmptyHeader>
+            <EmptyTitle>Not sent</EmptyTitle>
+            <EmptyDescription>This request is not available to send right now.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild variant="secondary">
+              <a href={`/${readback.slug}`}>Back to business page</a>
+            </Button>
+          </EmptyContent>
+        </Empty>
       </main>
     </AePublicShell>
   )

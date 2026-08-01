@@ -2,11 +2,11 @@ import { useState } from 'react'
 import { UserProfile } from '@clerk/tanstack-react-start'
 import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { Banner } from '@astryxdesign/core/Banner'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Switch } from '@astryxdesign/core/Switch'
-import { Heading, Text } from '@astryxdesign/core/Text'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { Switch } from '@/components/ui/switch'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -52,12 +52,12 @@ function OwnerSettingsRoute() {
 
 function AccountSettingsSection() {
   return (
-    <Card padding={5} className="grid gap-4">
+    <Card className="grid gap-4 p-5">
       <SectionHeader
         title="Account"
         description="Update your Clerk profile, email addresses, security settings, and active sessions."
       />
-      <div className="overflow-hidden rounded-md border border-border bg-surface p-2">
+      <div className="overflow-hidden rounded-md border border-border bg-card p-2">
         <UserProfile />
       </div>
     </Card>
@@ -123,45 +123,47 @@ function NotificationSettingsSection({
   }
 
   return (
-    <Card padding={5} className="grid gap-4">
+    <Card className="grid gap-4 p-5">
       <SectionHeader
         title="Notifications"
         description="Choose whether AE emails you when a new written message is recorded for your business page."
       />
       {readback.kind === 'error' ? (
-        <Banner status="warning" title="Notification preferences need an owner record" description={readback.reason} />
+        <Alert>
+          <AlertTitle>Notification preferences need an owner record</AlertTitle>
+          <AlertDescription>{readback.reason}</AlertDescription>
+        </Alert>
       ) : null}
-      <div className="rounded-md border border-border bg-surface p-4">
+      <Field orientation="horizontal" data-disabled={pending || readback.kind === 'error'} className="rounded-md border border-border bg-card p-4">
+        <FieldContent>
+          <FieldLabel htmlFor="new-message-email">New message email</FieldLabel>
+          <FieldDescription>Email me when a customer sends a written message through AE. Your message list still keeps the record.</FieldDescription>
+        </FieldContent>
         <Switch
-          label="New message email"
-          description="Email me when a customer sends a written message through AE. Your message list still keeps the record."
-          value={enabled}
-          onChange={(checked) => void handleChange(checked)}
-          isDisabled={pending || readback.kind === 'error'}
-          isLoading={pending}
-          labelPosition="start"
-          labelSpacing="spread"
-          width="100%"
+          id="new-message-email"
+          checked={enabled}
+          onCheckedChange={(checked) => void handleChange(checked)}
+          disabled={pending || readback.kind === 'error'}
         />
-      </div>
-      {message === undefined ? null : <Text as="p" type="supporting" color="secondary">{message}</Text>}
-      {error === undefined ? null : <Text as="p" type="supporting" color="secondary">{error}</Text>}
+      </Field>
+      {message === undefined ? null : <p className="text-sm text-muted-foreground">{message}</p>}
+      {error === undefined ? null : <p role="alert" className="text-sm text-destructive">{error}</p>}
     </Card>
   )
 }
 
 function BusinessSettingsSection() {
   return (
-    <Card padding={5} className="grid gap-4">
+    <Card className="grid gap-4 p-5">
       <SectionHeader
         title="Business"
         description="Open the existing owner surfaces for page status, messages, and claim updates."
       />
       <div className="flex flex-wrap gap-3">
-        <Button href="/owner/status" variant="primary" label="Business page" />
-        <Button href="/owner/offerings" variant="secondary" label="Offerings" />
-        <Button href="/owner/inquiries" variant="secondary" label="Messages" />
-        <Button href="/claim" variant="secondary" label="List or claim a business" />
+        <Button asChild variant="default"><a href="/owner/status">Business page</a></Button>
+        <Button asChild variant="secondary"><a href="/owner/offerings">Offerings</a></Button>
+        <Button asChild variant="secondary"><a href="/owner/inquiries">Messages</a></Button>
+        <Button asChild variant="secondary"><a href="/claim">List or claim a business</a></Button>
       </div>
     </Card>
   )
@@ -170,8 +172,8 @@ function BusinessSettingsSection() {
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <div className="grid gap-1">
-      <Heading level={2}>{title}</Heading>
-      <Text as="p" type="body" color="secondary">{description}</Text>
+      <h2>{title}</h2>
+      <p className="text-muted-foreground">{description}</p>
     </div>
   )
 }

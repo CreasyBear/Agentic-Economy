@@ -110,7 +110,11 @@ describe('paid operation development surfaces', () => {
     expect(screen.getByText('Ready to inspect')).toBeTruthy()
     expect(screen.getByText(/Nothing has been sent to the provider/i)).toBeTruthy()
     expect(container.querySelector('main')?.className).toContain('w-full')
-    expect(container.innerHTML).not.toMatch(/animate-|transition-|motion-/)
+    // Motion must stay explicit: no keyframe animation, no blanket
+    // `transition-all`, no unconditional `motion-*` staging. A discrete colour
+    // or shadow transition on a control is not motion under WCAG 2.3.3, so the
+    // vendored primitives' hover feedback is allowed through.
+    expect(container.innerHTML).not.toMatch(/animate-|transition-all|motion-/)
 
     fireEvent.keyDown(action, { key: 'Enter' })
     fireEvent.click(action)

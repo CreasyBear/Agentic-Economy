@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Heading, Text } from '@astryxdesign/core/Text'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { timestampIso } from '@/lib/ui/format-time'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -36,9 +36,9 @@ function RequestProblemsRoute() {
     currentPath="/admin/request-problems"
   >
     {result.kind === 'denied'
-      ? <Card padding={5}><Text color="secondary">Active support access is required.</Text></Card>
+      ? <Card className="p-5"><p className="text-muted-foreground">Active support access is required.</p></Card>
       : result.rows.length === 0
-        ? <Card padding={5}><Text color="secondary">No reported Request problems need tracking.</Text></Card>
+        ? <Card className="p-5"><p className="text-muted-foreground">No reported Request problems need tracking.</p></Card>
         : <div className="grid gap-4">
           {result.rows.map((problem) => <SupportProblemCard key={problem.reportRef} problem={problem} />)}
         </div>}
@@ -103,17 +103,17 @@ function SupportProblemCard({ problem }: { problem: SupportProblemRow }) {
     }
   }
 
-  return <Card padding={5}>
+  return <Card className="p-5">
     <div className="grid gap-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-1">
-          <Heading level={2}>{problem.category.replaceAll('_', ' ')}</Heading>
-          <Text color="secondary">{problem.summary}</Text>
-          <Text type="supporting" color="secondary">
+          <h2>{problem.category.replaceAll('_', ' ')}</h2>
+          <p className="text-muted-foreground">{problem.summary}</p>
+          <p className="text-sm text-muted-foreground">
             {problem.business === undefined ? 'Business not named' : problem.business} · {problem.state.replaceAll('_', ' ')} · next: {problem.nextActor}
-          </Text>
+          </p>
         </div>
-        <Text type="supporting" color="secondary">Version {problem.version}</Text>
+        <p className="text-sm text-muted-foreground">Version {problem.version}</p>
       </div>
       <label htmlFor={`problem-state-${problem.reportRef}`} className="text-sm font-semibold">Next status</label>
       <select
@@ -135,59 +135,53 @@ function SupportProblemCard({ problem }: { problem: SupportProblemRow }) {
         required
         className="min-h-24 rounded-md border border-border bg-card p-3"
       />
-      <Text type="supporting" color="secondary">
+      <p className="text-sm text-muted-foreground">
         This records progress only. It does not assign fault, approve compensation, or authorize another business action.
-      </Text>
-      <Button
-        label={loadingRecord ? 'Loading record…' : record === undefined ? 'Inspect report record' : 'Hide report record'}
-        variant="secondary"
-        clickAction={() => void inspectRecord()}
-        isDisabled={loadingRecord}
-      />
-      {record === undefined ? null : <div className="grid gap-3 rounded-md border border-border bg-surface p-4">
+      </p>
+      <Button type="button" variant="secondary" onClick={() => void inspectRecord()} disabled={loadingRecord}>
+        {loadingRecord ? 'Loading record…' : record === undefined ? 'Inspect report record' : 'Hide report record'}
+      </Button>
+      {record === undefined ? null : <div className="grid gap-3 rounded-md border border-border bg-card p-4">
         <div className="grid gap-1">
-          <Text weight="semibold">Customer report record</Text>
-          <Text type="supporting" color="secondary">
+          <p className="font-semibold text-foreground">Customer report record</p>
+          <p className="text-sm text-muted-foreground">
             Step {record.affected.step}
             {record.affected.business === undefined ? '' : ` · ${record.affected.business}`}
             {' · '}
             {record.visibility === 'customer_and_ae_only'
               ? 'Customer and AE only'
               : 'Customer allowed sharing with the affected business'}
-          </Text>
+          </p>
         </div>
         <div>
-          <Text type="supporting" weight="semibold">Recorded evidence</Text>
+          <p className="text-sm font-semibold text-foreground">Recorded evidence</p>
           {record.evidence.length === 0
-            ? <Text type="supporting" color="secondary">No result evidence was attached.</Text>
-            : <ul className="mt-1 grid gap-1 text-sm text-secondary">
+            ? <p className="text-sm text-muted-foreground">No result evidence was attached.</p>
+            : <ul className="mt-1 grid gap-1 text-sm text-muted-foreground">
               {record.evidence.map((item) => <li key={item.receiptRef}>{item.label}</li>)}
             </ul>}
         </div>
         <div>
-          <Text type="supporting" weight="semibold">Customer-visible history</Text>
-          <ol className="mt-1 grid gap-2 text-sm text-secondary">
+          <p className="text-sm font-semibold text-foreground">Customer-visible history</p>
+          <ol className="mt-1 grid gap-2 text-sm text-muted-foreground">
             {record.history.map((item) => <li key={item.version}>
               {item.source === 'customer' ? 'Customer' : 'AE support'} · {item.state.replaceAll('_', ' ')} · {item.message}
             </li>)}
           </ol>
         </div>
         {record.reconstruction === undefined
-          ? <Text type="supporting" color="secondary">
+          ? <p className="text-sm text-muted-foreground">
               This older report predates the single-record Request reconstruction.
-            </Text>
+            </p>
           : <SupportProblemReconstruction reconstruction={record.reconstruction} />}
-        <Text type="supporting" color="secondary">
+        <p className="text-sm text-muted-foreground">
           Cause remains unknown and the report is not adjudicated. No decision authority is assigned.
-        </Text>
+        </p>
       </div>}
-      <Button
-        label={submitting ? 'Recording update…' : 'Record status update'}
-        variant="primary"
-        clickAction={() => void update()}
-        isDisabled={submitting || message.trim().length === 0}
-      />
-      {error === undefined ? null : <Text type="supporting" color="secondary">{error}</Text>}
+      <Button type="button" variant="default" onClick={() => void update()} disabled={submitting || message.trim().length === 0}>
+        {submitting ? 'Recording update…' : 'Record status update'}
+      </Button>
+      {error === undefined ? null : <p role="alert" className="text-sm text-destructive">{error}</p>}
     </div>
   </Card>
 }
@@ -199,38 +193,38 @@ export function SupportProblemReconstruction({
 }) {
   return <section aria-labelledby="support-request-reconstruction" className="grid gap-4 border-t border-border pt-4">
     <div className="grid gap-1">
-      <Heading level={3} id="support-request-reconstruction">Request reconstruction</Heading>
-      <Text type="supporting" color="secondary">
+      <h3 id="support-request-reconstruction">Request reconstruction</h3>
+      <p className="text-sm text-muted-foreground">
         One source record for what the customer asked, confirmed, shared, and can safely do next.
-      </Text>
+      </p>
     </div>
     <dl className="grid gap-3 text-sm">
       <div>
         <dt className="font-semibold">Customer request · revision {reconstruction.request.revision}</dt>
-        <dd className="text-secondary">{reconstruction.request.ordinaryRequest}</dd>
+        <dd className="text-muted-foreground">{reconstruction.request.ordinaryRequest}</dd>
       </div>
       <div>
         <dt className="font-semibold">Confirmed businesses</dt>
-        <dd className="text-secondary">{reconstruction.choice.businesses.join(' → ')}</dd>
+        <dd className="text-muted-foreground">{reconstruction.choice.businesses.join(' → ')}</dd>
         {reconstruction.choice.selectedBecause.map((reason) => (
-          <dd key={reason} className="text-secondary">{reason}</dd>
+          <dd key={reason} className="text-muted-foreground">{reason}</dd>
         ))}
       </div>
       <div>
         <dt className="font-semibold">Customer-confirmed limits · {reconstruction.authority.state}</dt>
-        <dd className="text-secondary">
+        <dd className="text-muted-foreground">
           {formatMoney(reconstruction.authority.spend.limit)} maximum ·{' '}
           {formatMoney(reconstruction.authority.spend.admitted)} admitted so far
         </dd>
-        <dd className="text-secondary">
-          Confirmed {formatTimestamp(reconstruction.choice.confirmedAt)} · valid until{' '}
-          {formatTimestamp(reconstruction.choice.validUntil)}
+        <dd className="text-muted-foreground">
+          Confirmed {timestampIso(reconstruction.choice.confirmedAt)} · valid until{' '}
+          {timestampIso(reconstruction.choice.validUntil)}
         </dd>
       </div>
       <div>
         <dt className="font-semibold">Information authority and release</dt>
         <dd>
-          <ul className="grid gap-1 text-secondary">
+          <ul className="grid gap-1 text-muted-foreground">
             {reconstruction.authority.dataSharing.map((sharing, index) => <li key={`${sharing.recipient}:${index}`}>
               {sharing.releaseState === 'authorized' ? 'Authorized' : 'Business step released'}
               {': '}
@@ -243,14 +237,14 @@ export function SupportProblemReconstruction({
       <div>
         <dt className="font-semibold">Business progress</dt>
         <dd>
-          <ol className="grid gap-1 text-secondary">
+          <ol className="grid gap-1 text-muted-foreground">
             {reconstruction.execution.steps.map((step) => <li key={step.step}>
               Step {step.step}: {step.business} · {customerLabel(step.state)}
               {step.evidence.length === 0 ? '' : ` · ${step.evidence.length} evidence receipt${step.evidence.length === 1 ? '' : 's'}`}
             </li>)}
           </ol>
         </dd>
-        <dd className="text-secondary">
+        <dd className="text-muted-foreground">
           {reconstruction.execution.completedSteps} of {reconstruction.execution.totalSteps} completed ·{' '}
           {reconstruction.execution.duplicateRisk === 'protected_by_required_idempotency'
             ? 'AE reuses the same recorded attempt instead of asking the business twice.'
@@ -260,7 +254,7 @@ export function SupportProblemReconstruction({
       <div>
         <dt className="font-semibold">Allowed effects</dt>
         <dd>
-          <ul className="grid gap-1 text-secondary">
+          <ul className="grid gap-1 text-muted-foreground">
             {reconstruction.authority.effects.map((effect, index) => <li key={`${effect.class}:${index}`}>
               {effect.releaseState === 'authorized' ? 'Authorized' : 'Business step released'}
               {': '}
@@ -271,7 +265,7 @@ export function SupportProblemReconstruction({
       </div>
       <div>
         <dt className="font-semibold">Next safe action</dt>
-        <dd className="text-secondary">
+        <dd className="text-muted-foreground">
           {reconstruction.recovery.nextActor === 'ae' ? 'AE support' : customerLabel(reconstruction.recovery.nextActor)}
           {' · '}
           {supportNextAction(reconstruction.recovery.nextAction)}
@@ -301,6 +295,3 @@ function supportNextAction(
   return 'No further customer action is required'
 }
 
-function formatTimestamp(value: number): string {
-  return new Date(value).toISOString()
-}

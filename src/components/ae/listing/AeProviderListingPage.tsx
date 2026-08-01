@@ -1,26 +1,25 @@
 import { ArrowLeftIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Divider } from '@astryxdesign/core/Divider'
-import { Grid } from '@astryxdesign/core/Grid'
-import { HStack, VStack } from '@astryxdesign/core/Stack'
-import { Heading, Text } from '@astryxdesign/core/Text'
-import { Token } from '@astryxdesign/core/Token'
+import { Link } from '@tanstack/react-router'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 
 import { AeGenerativeMap, AeOfficeMap } from '@/components/ae/artifacts/AeGenerativeMap'
 import { AeProtectedByAe } from '@/components/ae/artifacts/AeProtectedByAe'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
-import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
-import { RouterLink } from '@/components/astryx/RouterLink'
+import { plainLanguageCopy, type PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { appendThreadOrigin } from '@/lib/ui/append-thread-origin'
 import { buildProviderPresentation, type ProviderPresentation } from '@/lib/ui/provider-presentation'
+import { telUri } from '@/lib/ui/tel-uri'
 import { buildListingTrustProjection, NO_REPLY_HISTORY, type ListingTrustProjection, type ReplyPosture, type TrustFact } from '@/lib/ui/trust-projection'
 import { emitWave1JourneyEvent, getOrCreatePseudonymousJourneyId, type PseudonymousJourneyId } from '@/lib/ui/journey-events'
 import type { PublicRouteCapabilityContract, PublicRouteCatalogContract } from '@/modules/catalog/public'
-import type { PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
+import { projectPublicInquiryOfferingSupply, type PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
+
 
 export type AeProviderListingPageProps = {
   catalog: PublicRouteCatalogContract
@@ -46,7 +45,18 @@ export function AeProviderListingPage({
   const presentation = buildProviderPresentation(catalog)
   const trust = buildListingTrustProjection(catalog, inquiryAffordance.kind === 'available')
   const officeAddress = readOfficeAddress(catalog)
-  const inquiryHref = appendThreadOrigin(inquiryAffordance.kind === 'available' ? inquiryAffordance.href : '', backFrom, backThreadId)
+  const inquiryHref = backFrom === 'thread'
+    ? appendThreadOrigin(inquiryAffordance.kind === 'available' ? inquiryAffordance.href : '', backThreadId)
+    : inquiryAffordance.kind === 'available' ? inquiryAffordance.href : ''
+  // The offering supply read carries stored access-path copy. Admission is the
+  // only fact that says whether the inquiry route will accept a first contact,
+  // so the rendered paths are derived from it rather than from what was stored.
+  const supplyOfferings = supply === undefined
+    ? undefined
+    : projectPublicInquiryOfferingSupply(
+        supply.offerings,
+        inquiryAffordance.kind === 'available' ? inquiryHref : undefined,
+      )
   const [journeyIdentity, setJourneyIdentity] = useState<{ slug: string; id: PseudonymousJourneyId } | null>(null)
 
   useEffect(() => {
@@ -78,19 +88,20 @@ export function AeProviderListingPage({
         <div className="grid gap-8">
           <ListingPhotosSection catalog={catalog} presentation={presentation} />
 
-          {supply === undefined ? null : (
+          {supply === undefined || supplyOfferings === undefined ? null : (
             <AeOfferingSupplyList
-              offerings={supply.offerings}
+              offerings={supplyOfferings}
               disposition={supply.disposition}
               observedAt={supply.observedAt}
+              showTechnicalDetails={false}
             />
           )}
 
           {supply === undefined ? (
-            <Grid columns={{ minWidth: 300 }} gap={4}>
+            <div className="grid gap-4 md:grid-cols-2">
               <ReachOutStepsCard updatedAt={catalog.updatedAt} inquiryAvailable={inquiryAffordance.kind === 'available'} />
               <SourceStampCard updatedAt={catalog.updatedAt} />
-            </Grid>
+            </div>
           ) : <SourceStampCard updatedAt={catalog.updatedAt} />}
 
           {supply === undefined ? <CapabilityCardsSection catalog={catalog} inquiryAffordance={inquiryAffordance} inquiryHref={inquiryHref} /> : null}
@@ -99,42 +110,43 @@ export function AeProviderListingPage({
         </div>
 
         <aside className="grid content-start gap-6 lg:sticky lg:top-20" aria-label="Actions for this business">
-          {supply === undefined ? <Card padding={5}>
-            <VStack gap={4}>
-              <div>
-                <Text type="large" weight="semibold" color="primary" display="block">
-                  Your request
-                </Text>
-                <Text color="secondary" display="block">
-                  {replyPostureLabel(trust.replyPosture)}
-                </Text>
+          {supply === undefined ? (
+            <Card className="p-5">
+              <div className="grid gap-4">
+                <div>
+                  <h2 className="block text-lg font-semibold text-foreground">
+                    Your request
+                  </h2>
+                  <p className="block text-muted-foreground">
+                    {replyPostureLabel(trust.replyPosture)}
+                  </p>
+                </div>
+                {inquiryAffordance.kind === 'available' ? (
+                  <Button asChild variant="secondary" size="lg" className={peerActionClassName}>
+                    <a href={inquiryHref}>Ask this business</a>
+                  </Button>
+                ) : (
+                  <p className="block text-muted-foreground">This business hasn’t joined AE yet</p>
+                )}
+                <AeProtectedByAe />
               </div>
-              {inquiryAffordance.kind === 'available' ? (
-                <Button label="Ask this business" variant="secondary" size="lg" href={inquiryHref} className={peerActionClassName} />
-              ) : (
-                <Text color="secondary" display="block">This business hasn’t joined AE yet</Text>
-              )}
-              <AeProtectedByAe />
-            </VStack>
-          </Card> : null}
+            </Card>
+          ) : null}
 
-          <Card padding={5} className="bg-surface" aria-label="Details for your assistant">
-            <VStack gap={3}>
-              <div>
-                <Text type="large" weight="semibold" color="primary" display="block">
-                  For your assistant
-                </Text>
-                <Text type="supporting" color="secondary" display="block">
-                  Give your assistant everything on this page.
-                </Text>
-              </div>
+          <details className="border-t border-border pt-2">
+            <summary className="flex min-h-11 cursor-pointer items-center rounded-md px-2 text-sm font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2">
+              Page info
+            </summary>
+            <div className="grid gap-2 px-2 pb-2 pt-3">
+              <p className="block text-sm font-semibold text-muted-foreground">Data for AI assistants</p>
+              <p className="block text-sm text-muted-foreground">A machine-readable copy of this page.</p>
               <AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={catalog.name} />
-            </VStack>
-          </Card>
+            </div>
+          </details>
 
-          <RouterLink href="/privacy/remove-business" className="text-sm text-secondary underline-offset-4 hover:underline">
+          <Link to="/privacy/remove-business" className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
             Correct or remove this page
-          </RouterLink>
+          </Link>
         </aside>
       </div>
     </article>
@@ -158,6 +170,7 @@ export function ListingFirstScreen({
 }) {
   const [detailsCopied, setDetailsCopied] = useState(false)
   const phone = trust.phone.kind === 'published' ? trust.phone.value : undefined
+  const telDestination = phone === undefined ? undefined : telUri(phone)
   const publishedFacts = [trust.phone, trust.hours, trust.serviceArea].filter((fact) => fact.kind === 'published')
   function recordDirectCall() {
     if (pseudonymousJourneyId === null || pseudonymousJourneyId === undefined) {
@@ -189,21 +202,20 @@ export function ListingFirstScreen({
   }
 
   return (
-    <Card padding={6} className="overflow-hidden" aria-labelledby="provider-listing-title">
-      <VStack gap={5}>
-        <HStack vAlign="center" gap={2} wrap="wrap">
+    <Card className="overflow-hidden p-6" aria-labelledby="provider-listing-title">
+      <div className="grid gap-5">
+        <div className="flex flex-wrap items-center gap-2">
           <img src="/brand/logo/ae-seal.svg" alt="" className="size-6 shrink-0" />
-          <Text type="label" color="secondary" weight="semibold" className="font-mono text-accent">
-            Listed on Agentic Economy
-          </Text>
-        </HStack>
-
-        <VStack gap={2}>
-          <Heading id="provider-listing-title" level={1} className="text-balance text-4xl leading-none tracking-tight md:text-6xl">
+          <p className="font-mono text-sm font-semibold text-brand">
+            Business page for people and AI assistants
+          </p>
+        </div>
+        <div className="grid gap-2">
+          <h1 id="provider-listing-title" className="text-balance text-4xl leading-none font-semibold tracking-tight text-foreground md:text-6xl">
             {catalog.name}
-          </Heading>
-          <Text type="large" color="secondary" display="block">{catalog.category}</Text>
-        </VStack>
+          </h1>
+          <p className="block text-lg text-muted-foreground">{catalog.category}</p>
+        </div>
 
         {publishedFacts.length === 0 ? null : (
           <dl className="grid gap-3 sm:grid-cols-3" aria-label="Published business details">
@@ -213,55 +225,34 @@ export function ListingFirstScreen({
           </dl>
         )}
 
-        {/* The offerings section below states the actual ways to get started.
-            When it is present it owns that question outright, and this line
-            would otherwise claim no contact path is published on a page that
-            is already offering one. */}
         {offeringDetailMode ? null : (
-          <Text color="primary" display="block" className="max-w-3xl text-pretty">{trust.explainer}</Text>
+          <p className="block max-w-3xl text-pretty text-foreground">{trust.explainer}</p>
         )}
 
-        <VStack gap={2}>
-          {/* A business with no reply history is the ordinary case, not a fact
-              about this business. Naming it on every listing tells the reader
-              nothing and costs them a line. */}
-          {trust.replyPosture.kind === 'no_history' ? null : (
-            <Text type="supporting" color="secondary" weight="semibold" display="block">
-              {replyPostureLabel(trust.replyPosture)}
-            </Text>
-          )}
-          {phone === undefined ? null : (
-            <Text type="supporting" color="secondary" display="block">
-              Need someone now? <a className="underline underline-offset-4" href={`tel:${phone}`} onClick={recordDirectCall}>Call {phone}</a>
-            </Text>
-          )}
-        </VStack>
-
         <div className="grid gap-3 sm:flex sm:flex-wrap" role="group" aria-label="Actions for this business">
-          {phone === undefined ? null : (
-            <div data-peer-action="call" data-variant="secondary">
-              <Button label={`Call ${phone}`} variant="secondary" size="lg" href={`tel:${phone}`} className={peerActionClassName} onClick={recordDirectCall} />
+          {phone === undefined || telDestination === undefined ? null : (
+            <div data-peer-action="call" data-variant="primary">
+              <Button asChild variant="default" size="lg" className={peerActionClassName} onClick={recordDirectCall}>
+                <a href={telDestination}>Call now: {phone}</a>
+              </Button>
             </div>
           )}
           <div data-peer-action="copy-details" data-variant="secondary">
-            <Button
-              type="button"
-              label={detailsCopied ? 'Details copied' : 'Copy details'}
-              variant="secondary"
-              size="lg"
-              className={peerActionClassName}
-              onClick={copyDetails}
-            />
+            <Button type="button" variant="secondary" size="lg" className={peerActionClassName} onClick={() => void copyDetails()}>
+              {detailsCopied ? 'Details copied' : 'Copy details'}
+            </Button>
           </div>
           {offeringDetailMode ? null : inquiryAffordance.kind === 'available' ? (
             <div data-peer-action="ask" data-variant="secondary">
-              <Button label="Ask this business" variant="secondary" size="lg" href={inquiryHref} className={peerActionClassName} />
+              <Button asChild variant="secondary" size="lg" className={peerActionClassName}>
+                <a href={inquiryHref}>Ask this business</a>
+              </Button>
             </div>
           ) : (
-            <Text color="secondary" display="block">This business hasn’t joined AE yet</Text>
+            <p className="block text-muted-foreground">This business has not enabled messages here yet</p>
           )}
         </div>
-      </VStack>
+      </div>
     </Card>
   )
 }
@@ -278,8 +269,8 @@ function TrustFactRow({ label, fact }: { label: string; fact: TrustFact }) {
 
   return (
     <div className="grid min-w-0 gap-1">
-      <dt><Text type="supporting" color="secondary" weight="semibold">{label}</Text></dt>
-      <dd className="m-0 break-words"><Text color="primary">{fact.value}</Text></dd>
+      <dt className="text-sm font-semibold text-muted-foreground">{label}</dt>
+      <dd className="m-0 break-words text-foreground">{fact.value}</dd>
     </div>
   )
 }
@@ -308,44 +299,46 @@ function CapabilityCardsSection({
   const inquiryAvailable = inquiryAffordance.kind === 'available'
 
   return (
-    <Card padding={6} aria-labelledby="listing-capabilities">
-      <VStack gap={4}>
+    <Card className="p-6" aria-labelledby="listing-capabilities">
+      <div className="grid gap-4">
         <div>
-          <Text id="listing-capabilities" type="large" weight="semibold" color="primary" display="block">
-            What you can do here
-          </Text>
-          <Text type="supporting" color="secondary" display="block">
-            Each option goes to the business for review. The business confirms what happens next.
-          </Text>
+          <h2 id="listing-capabilities" className="block text-lg font-semibold text-foreground">
+            How to contact this business
+          </h2>
+          <p className="block text-sm text-muted-foreground">
+            Choose a contact option. The business reviews your message and confirms the price and timing.
+          </p>
         </div>
-        <Grid columns={{ minWidth: 260 }} gap={4}>
+        <div className="grid gap-4 lg:grid-cols-2">
           {capabilities.map((capability) => {
             const actionable = inquiryAvailable && capability.status === 'available'
             const presentation = capabilityCardPresentation(capability.kind, actionable)
             return (
-              <Card key={capability.kind} padding={5} className="grid h-full content-start gap-2 bg-surface">
-                <HStack vAlign="center" gap={2} wrap="wrap">
-                  <Text weight="semibold" color="primary">{presentation.label}</Text>
-                  <Badge label={capabilityStatusLabel(capability.status)} variant="neutral" />
-                </HStack>
-                <Text type="supporting" color="secondary" display="block">{presentation.body}</Text>
+              <Card key={capability.kind} className="grid h-full content-start gap-2 bg-card p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-foreground">{presentation.label}</p>
+                  <Badge variant="outline">{capabilityStatusLabel(capability.status)}</Badge>
+                </div>
+                <p className="block text-sm text-muted-foreground">{presentation.body}</p>
                 {capability.reason === undefined ? null : (
-                  <Text type="supporting" color="secondary" display="block">{capability.reason}</Text>
+                  <p className="block text-sm text-muted-foreground">{plainLanguageCopy(capability.reason)}</p>
                 )}
                 {actionable ? (
                   <div className="pt-1">
-                    <Button label="Send inquiry" variant="secondary" size="sm" href={inquiryHref} />
+                    <Button asChild variant="secondary" size="sm">
+                      <a href={inquiryHref}>Send a message</a>
+                    </Button>
                   </div>
                 ) : (
-                  <Text type="supporting" color="secondary" display="block">
-                    {inquiryAvailable ? 'Confirm this with the business first.' : 'No request path published yet.'}
-                  </Text>
+                  <p className="block text-sm text-muted-foreground">
+                    {inquiryAvailable ? 'Confirm the price and timing with the business first.' : 'No way to contact this business is listed yet.'}
+                  </p>
                 )}
               </Card>
             )
           })}
-        </Grid>
-      </VStack>
+        </div>
+      </div>
     </Card>
   )
 }
@@ -370,26 +363,26 @@ function capabilityCardPresentation(
   actionable: boolean,
 ): { label: string; body: string } {
   if (!actionable) {
-    return { label: capabilityLabel(kind), body: 'Ask the business directly about this request.' }
+    return { label: capabilityLabel(kind), body: 'Contact the business about this job.' }
   }
   switch (kind) {
     case 'phone_inquiry':
-      return { label: 'Send an inquiry', body: 'Describe the job in writing; it reaches the business for owner review.' }
+      return { label: 'Send a message', body: 'Describe the job in writing; the business reviews your message.' }
     case 'quote_request':
-      return { label: 'Request a quote', body: 'Ask for pricing on your job. The business replies with a quote.' }
+      return { label: 'Ask for a quote', body: 'Ask what the job costs. The business confirms the price and timing.' }
     case 'emergency_callout_interest':
-      return { label: 'Flag an urgent callout', body: 'Register urgent interest; the business confirms if they can attend.' }
+      return { label: 'Call about an urgent job', body: 'Tell the business what happened; it confirms whether it can help.' }
     case 'ae_hosted_discovery':
-      return { label: 'First contact via AE', body: 'Start a first-contact message the business reviews before replying.' }
+      return { label: 'Message this business', body: 'Send a message the business reviews before replying.' }
   }
 }
 
 function capabilityLabel(kind: PublicRouteCapabilityContract['kind']): string {
   switch (kind) {
-    case 'phone_inquiry': return 'Send an inquiry'
-    case 'quote_request': return 'Request a quote'
-    case 'emergency_callout_interest': return 'Flag an urgent callout'
-    case 'ae_hosted_discovery': return 'First contact via AE'
+    case 'phone_inquiry': return 'Send a message'
+    case 'quote_request': return 'Ask for a quote'
+    case 'emergency_callout_interest': return 'Call about an urgent job'
+    case 'ae_hosted_discovery': return 'Message this business'
   }
 }
 
@@ -408,26 +401,24 @@ function capabilityStatusLabel(status: PublicRouteCapabilityContract['status']):
 
 function SourceStampCard({ updatedAt }: { updatedAt: number }) {
   return (
-    <Card padding={5} aria-labelledby="listing-source-stamps">
-      <VStack gap={3}>
-        <div>
-          <Text id="listing-source-stamps" type="large" weight="semibold" color="primary" display="block">
-            Last updated
-          </Text>
-        </div>
+    <Card className="p-5" aria-labelledby="listing-source-stamps">
+      <div className="grid gap-3">
+        <h2 id="listing-source-stamps" className="block text-lg font-semibold text-foreground">
+          Last updated
+        </h2>
         <ul className="grid gap-2" aria-label="Last updated">
           <li><SourceStamp label="published details" updatedAt={updatedAt} /></li>
           <li><SourceStamp label="last checked" updatedAt={updatedAt} /></li>
         </ul>
-      </VStack>
+      </div>
     </Card>
   )
 }
 
 function SourceStamp({ label, updatedAt }: { label: string; updatedAt?: number }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs tabular-nums text-accent">
-      <span className="size-1.5 rounded-full bg-accent" aria-hidden="true" />
+    <span className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 font-mono text-xs tabular-nums text-brand">
+      <span className="size-1.5 rounded-full bg-brand" aria-hidden="true" />
       {label}
       {updatedAt === undefined ? null : (
         <>
@@ -454,24 +445,22 @@ function ReachOutStepsCard({ updatedAt, inquiryAvailable }: { updatedAt: number;
       reached: true,
     },
     {
-      title: inquiryAvailable ? 'Send inquiry' : 'Contact details needed',
+      title: inquiryAvailable ? 'Send a message' : 'Contact details needed',
       stamp: 'for owner review',
       note: inquiryAvailable
-        ? 'Your inquiry goes to the business for owner review.'
-        : 'The business needs to add a contact path first.',
-      reached: inquiryAvailable,
+        ? 'The business reviews your message and confirms the price and timing.'
+        : 'The business needs to add a contact route first.',
+      reached: false,
     },
   ] satisfies Array<{ title: string; stamp: string; note: string; reached: boolean }>
 
   return (
-    <Card padding={5} aria-labelledby="listing-reach-out-steps">
-      <VStack gap={3}>
-        <div>
-          <Text id="listing-reach-out-steps" type="large" weight="semibold" color="primary" display="block">
-            What happens when you reach out
-          </Text>
-        </div>
-        <ol className="grid gap-0" aria-label="What happens when you reach out">
+    <Card className="p-5" aria-labelledby="listing-reach-out-steps">
+      <div className="grid gap-3">
+        <h2 id="listing-reach-out-steps" className="block text-lg font-semibold text-foreground">
+          What happens when you contact this business
+        </h2>
+        <ol className="grid gap-0" aria-label="What happens when you contact this business">
           {steps.map((step, index) => {
             const hasNext = index < steps.length - 1
             const nextReached = steps[index + 1]?.reached === true
@@ -479,25 +468,21 @@ function ReachOutStepsCard({ updatedAt, inquiryAvailable }: { updatedAt: number;
             return (
               <li key={step.title} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
                 <span className="relative mt-1 flex justify-center" aria-hidden="true">
-                  <span className={`size-3 rounded-full border ${step.reached ? 'border-accent bg-accent' : 'border-border bg-surface'}`} />
-                  {hasNext ? <span className={`absolute top-3 h-[calc(100%+1rem)] w-px ${step.reached && nextReached ? 'bg-accent' : 'bg-border'}`} /> : null}
+                  <span className={`size-3 rounded-full border ${step.reached ? 'border-brand bg-brand' : 'border-border bg-card'}`} />
+                  {hasNext ? <span className={`absolute top-3 h-[calc(100%+1rem)] w-px ${step.reached && nextReached ? 'bg-brand' : 'bg-border'}`} /> : null}
                 </span>
                 <span className="grid gap-1">
-                  <Text type="supporting" weight="medium" color="primary" display="block">
-                    {step.title}
-                  </Text>
-                  <span className="font-mono text-xs tabular-nums text-secondary">
+                  <span className="text-sm font-medium text-foreground">{step.title}</span>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
                     {step.stamp} · <time dateTime={timestampIso(updatedAt)}>{formatTimestamp(updatedAt)}</time>
                   </span>
-                  <Text type="supporting" color="secondary" display="block">
-                    {step.note}
-                  </Text>
+                  <span className="text-sm text-muted-foreground">{step.note}</span>
                 </span>
               </li>
             )
           })}
         </ol>
-      </VStack>
+      </div>
     </Card>
   )
 }
@@ -512,81 +497,72 @@ function WhatTheyOfferCard({
   officeAddress: string | undefined
 }) {
   return (
-    <Card padding={6} className="grid gap-6" aria-labelledby="listing-offer-details">
-      <VStack gap={1}>
-        <Text id="listing-offer-details" type="large" weight="semibold" color="primary" display="block">
-          What they offer
-        </Text>
-        <Text type="supporting" color="secondary" display="block">
+    <Card className="grid gap-6 p-6" aria-labelledby="listing-offer-details">
+      <div className="grid gap-1">
+        <h2 id="listing-offer-details" className="block text-lg font-semibold text-foreground">
+          Services and prices
+        </h2>
+        <p className="block text-sm text-muted-foreground">
           Published by {catalog.name}.
-        </Text>
-      </VStack>
+        </p>
+      </div>
 
-      <VStack gap={3}>
-        <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">Where they work</span>
-        <Grid columns={{ minWidth: 240 }} gap={4}>
-          <VStack gap={1}>
-            <Text type="supporting" color="secondary" weight="medium" display="block">Service area</Text>
-            <Text color="primary" display="block" className="text-pretty">{presentation.serviceArea}</Text>
+      <div className="grid gap-3">
+        <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Where they work</span>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-1">
+            <p className="text-sm font-medium text-muted-foreground">Service area</p>
+            <p className="block text-pretty text-foreground">{presentation.serviceArea}</p>
             {officeAddress === undefined ? <AeGenerativeMap label={catalog.name} placeQuery={presentation.serviceArea} /> : null}
-          </VStack>
+          </div>
           {officeAddress !== undefined ? (
-            <VStack gap={1}>
-              <Text type="supporting" color="secondary" weight="medium" display="block">Office</Text>
-              <Text color="primary" display="block" className="text-pretty">{officeAddress}</Text>
+            <div className="grid gap-1">
+              <p className="text-sm font-medium text-muted-foreground">Office</p>
+              <p className="block text-pretty text-foreground">{officeAddress}</p>
               <AeOfficeMap address={officeAddress} businessName={catalog.name} />
-            </VStack>
+            </div>
           ) : null}
-        </Grid>
-      </VStack>
+        </div>
+      </div>
 
-      <Divider />
+      <Separator />
 
-      <VStack gap={3}>
-        <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">Services</span>
-        <Grid columns={{ minWidth: 240 }} gap={4}>
-          <VStack gap={1}>
-            <Text type="supporting" color="secondary" weight="medium" display="block">Primary service</Text>
-            <Text color="primary" display="block">{presentation.primaryServiceName ?? catalog.category}</Text>
-          </VStack>
+      <div className="grid gap-3">
+        <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Services</span>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-1">
+            <p className="text-sm font-medium text-muted-foreground">Service</p>
+            <p className="block text-foreground">{presentation.primaryServiceName ?? catalog.category}</p>
+          </div>
           {presentation.primaryServiceName !== undefined ? (
-            <VStack gap={1}>
-              <Text type="supporting" color="secondary" weight="medium" display="block">Hours</Text>
-              <Text color="primary" display="block" className="tabular-nums">{presentation.hoursLabel}</Text>
-            </VStack>
+            <div className="grid gap-1">
+              <p className="text-sm font-medium text-muted-foreground">Hours</p>
+              <p className="block tabular-nums text-foreground">{presentation.hoursLabel}</p>
+            </div>
           ) : null}
-        </Grid>
+        </div>
         {presentation.serviceChips.length > 0 ? (
           <ul className="flex flex-wrap gap-2">
             {presentation.serviceChips.map((service) => (
-              <li key={service.key}><Token size="sm" label={service.label} /></li>
+              <li key={service.key}><span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-foreground">{service.label}</span></li>
             ))}
           </ul>
         ) : null}
-      </VStack>
+      </div>
 
       {presentation.primaryServiceSummary !== undefined ? (
         <>
-          <Divider />
-          <VStack gap={3}>
-            <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">About</span>
-            <Text color="primary" display="block" className="max-w-3xl text-pretty">
+          <Separator />
+          <div className="grid gap-3">
+            <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">About</span>
+            <p className="block max-w-3xl text-pretty text-foreground">
               {presentation.primaryServiceSummary}
-            </Text>
-          </VStack>
+            </p>
+          </div>
         </>
       ) : null}
     </Card>
   )
-}
-
-function appendThreadOrigin(href: string, from: 'thread' | 'registry' | undefined, threadId: string | undefined): string {
-  if (from !== 'thread' || threadId === undefined || threadId.length === 0) {
-    return href
-  }
-
-  const separator = href.includes('?') ? '&' : '?'
-  return `${href}${separator}from=thread&id=${encodeURIComponent(threadId)}`
 }
 
 function ListingPhotosSection({ catalog, presentation }: { catalog: PublicRouteCatalogContract; presentation: ProviderPresentation }) {
@@ -620,14 +596,22 @@ function readOfficeAddress(catalog: PublicRouteCatalogContract): string | undefi
 }
 
 function ListingBackLink({ from, threadId }: { from?: 'thread' | 'registry'; threadId?: string }) {
-  const href = from === 'thread' && threadId !== undefined ? `/t/${encodeURIComponent(threadId)}` : from === 'registry' ? '/registry?q=&limit=10' : '/'
-  const label = from === 'thread' && threadId !== undefined ? 'Back to answer' : from === 'registry' ? 'Back to results' : 'Ask another'
-  return (
-    <RouterLink href={href} className="inline-flex min-h-11 items-center gap-2 text-sm text-secondary underline-offset-4 hover:underline">
+  const label = from === 'thread' && threadId !== undefined ? 'Back to answer' : from === 'registry' ? 'Back to results' : 'Find another business'
+  const className = 'inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground underline-offset-4 hover:underline'
+  const content = (
+    <>
       <ArrowLeftIcon aria-hidden="true" className="size-4" />
       {label}
-    </RouterLink>
+    </>
   )
+
+  if (from === 'thread' && threadId !== undefined) {
+    return <Link to="/t/$threadId" params={{ threadId }} className={className}>{content}</Link>
+  }
+  if (from === 'registry') {
+    return <Link to="/registry" search={{ q: '', limit: 10 }} className={className}>{content}</Link>
+  }
+  return <Link to="/" className={className}>{content}</Link>
 }
 
 function badgeVariantForTone(tone: string): 'neutral' | 'success' | 'warning' | 'error' {

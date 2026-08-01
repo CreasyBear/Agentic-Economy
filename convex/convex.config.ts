@@ -1,7 +1,9 @@
 import { defineApp } from 'convex/server'
 import { v } from 'convex/values'
+import workflow from '@convex-dev/workflow/convex.config'
+import workpool from '@convex-dev/workpool/convex.config'
 
-export default defineApp({
+const app = defineApp({
   env: {
     OPENROUTER_API_KEY: v.optional(v.string()),
     AE_CUSTOMER_REQUEST_MODEL: v.optional(v.string()),
@@ -12,3 +14,8 @@ export default defineApp({
     AE_ROUTE_CALL_SIGNING_KEY_ID: v.optional(v.string()),
   },
 })
+
+app.use(workflow)
+app.use(workpool)
+
+export default app

@@ -13,19 +13,21 @@ export type AnswerArtifactBudget = {
 const ANSWER_PROVIDER_CARD_LIMIT = 3
 const COMPARE_PROVIDER_LIMIT = 2
 
-const TEXT_ONLY_ARTIFACTS = ['one-line', 'prose', 'what-to-do-now'] as const
+const TEXT_ONLY_ARTIFACTS = ['one-line', 'prose', 'what-to-do-now', 'consumer-plan'] as const
 const ANSWER_ARTIFACTS = [
   'one-line',
   'provider-cards',
   'location-map',
   'prose',
+  'imported-claims',
   'what-to-do-now',
   'agent-json',
+  'consumer-plan',
 ] as const
-const COMPARE_ARTIFACTS = ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now'] as const
-const EMPTY_ARTIFACTS = ['one-line', 'prose', 'recovery-prompts', 'what-to-do-now', 'agent-json'] as const
-const FILTER_ARTIFACTS = ['one-line', 'provider-cards', 'what-to-do-now'] as const
-const HANDOFF_ARTIFACTS = ['one-line', 'selected-provider', 'what-to-do-now'] as const
+const COMPARE_ARTIFACTS = ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now', 'consumer-plan'] as const
+const EMPTY_ARTIFACTS = ['one-line', 'prose', 'imported-claims', 'recovery-prompts', 'what-to-do-now', 'agent-json', 'consumer-plan'] as const
+const FILTER_ARTIFACTS = ['one-line', 'provider-cards', 'what-to-do-now', 'consumer-plan'] as const
+const HANDOFF_ARTIFACTS = ['one-line', 'selected-provider', 'what-to-do-now', 'consumer-plan'] as const
 
 export function buildArtifactsFromSnapshot(
   snapshot: AnswerSnapshot,
@@ -80,6 +82,10 @@ export function buildArtifactsFromSnapshot(
   if (showSummary) {
     artifacts.push({ kind: 'prose', block: 'summary', text: snapshot.summary })
   }
+  if (snapshot.importedClaims !== undefined && snapshot.importedClaims.length > 0) {
+    artifacts.push({ kind: 'imported-claims', claims: snapshot.importedClaims.slice(0, 5) })
+  }
+
 
   if (profile === 'empty_state') {
     artifacts.push({
@@ -150,7 +156,7 @@ export function getDefaultArtifactBudgetForLayoutProfile(profile: AnswerLayoutPr
       return {
         layoutProfile: profile,
         allowedKinds: EMPTY_ARTIFACTS,
-        maxArtifactCount: 5,
+        maxArtifactCount: 6,
         maxProviderCards: 0,
       }
     case 'compare_pair':
@@ -245,6 +251,11 @@ function capArtifactForBudget(
             ...(artifact.fields === undefined ? {} : { fields: artifact.fields }),
           }
     }
+    case 'imported-claims':
+      return {
+        kind: 'imported-claims',
+        claims: artifact.claims.slice(0, 5),
+      }
     case 'one-line':
     case 'selected-provider':
     case 'recovery-prompts':

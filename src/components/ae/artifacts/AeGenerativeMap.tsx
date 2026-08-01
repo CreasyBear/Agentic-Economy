@@ -12,8 +12,8 @@ export function AeGenerativeMap({ label, placeQuery }: AeGenerativeMapProps) {
   const src = `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(placeQuery)}`
 
   return (
-    <figure className="overflow-hidden rounded-lg border border-border bg-surface">
-      <figcaption className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-secondary">
+    <figure className="overflow-hidden rounded-lg border border-border bg-card">
+      <figcaption className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-muted-foreground">
         Area for this query: {label}
       </figcaption>
       <iframe
@@ -43,8 +43,8 @@ export function AeOfficeMap({ address, businessName }: AeOfficeMapProps) {
   const src = `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(address)}`
 
   return (
-    <figure className="overflow-hidden rounded-lg border border-border bg-surface">
-      <figcaption className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-secondary">
+    <figure className="overflow-hidden rounded-lg border border-border bg-card">
+      <figcaption className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-muted-foreground">
         Office — {businessName}
       </figcaption>
       <iframe

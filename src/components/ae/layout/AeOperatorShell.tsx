@@ -2,22 +2,25 @@
 
 import { createContext, use, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AppShell } from '@astryxdesign/core/AppShell'
-import { Divider } from '@astryxdesign/core/Divider'
-import { Heading, Text } from '@astryxdesign/core/Text'
+import { Separator } from '@/components/ui/separator'
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from '@/components/ui/sidebar'
 
 import { AeOperatorBreadcrumbs } from '@/components/ae/layout/AeOperatorBreadcrumbs'
 import { AeOperatorCommandMenu } from '@/components/ae/layout/AeOperatorCommandMenu'
-import { AeOperatorSectionNav } from '@/components/ae/layout/AeOperatorSectionNav'
 import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
 import {
   resolveOperatorListCrumb,
-  resolveOperatorSection,
   type OperatorBreadcrumbItem,
   type OperatorNavBadges,
   type OperatorRole,
-  type OperatorSectionId,
 } from '@/lib/operator/navigation'
+
+
 
 export type OperatorDensity = 'compact' | 'comfortable'
 
@@ -47,7 +50,6 @@ export type AeOperatorShellProps = {
   mainContentId?: string
   breadcrumbs?: readonly OperatorBreadcrumbItem[]
   navBadges?: OperatorNavBadges
-  sectionId?: OperatorSectionId
   children: ReactNode
 }
 
@@ -72,7 +74,6 @@ function NestedOperatorShell({
   mainContentId,
   breadcrumbs,
   navBadges,
-  sectionId,
   children,
 }: AeOperatorShellProps & { parentShell: OperatorShellChromeRegistration }) {
   const chrome = useMemo<OperatorShellChrome>(
@@ -86,9 +87,8 @@ function NestedOperatorShell({
       ...(mainContentId === undefined ? {} : { mainContentId }),
       ...(breadcrumbs === undefined ? {} : { breadcrumbs }),
       ...(navBadges === undefined ? {} : { navBadges }),
-      ...(sectionId === undefined ? {} : { sectionId }),
     }),
-    [operatorRole, title, description, eyebrow, actions, currentPath, mainContentId, breadcrumbs, navBadges, sectionId],
+    [operatorRole, title, description, eyebrow, actions, currentPath, mainContentId, breadcrumbs, navBadges],
   )
 
   useLayoutEffect(() => {
@@ -97,6 +97,33 @@ function NestedOperatorShell({
   }, [chrome, parentShell])
 
   return <>{children}</>
+}
+
+function OperatorSidebarToggle() {
+  const { isMobile, open, openMobile } = useSidebar()
+  const expanded = isMobile ? openMobile : open
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const previousExpandedRef = useRef(expanded)
+  const previousIsMobileRef = useRef(isMobile)
+
+  useEffect(() => {
+    if (previousExpandedRef.current && !expanded && previousIsMobileRef.current === isMobile) {
+      triggerRef.current?.focus()
+    }
+    previousExpandedRef.current = expanded
+    previousIsMobileRef.current = isMobile
+  }, [expanded, isMobile])
+
+  return (
+    <SidebarTrigger
+      ref={triggerRef}
+      type="button"
+      aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+      aria-controls="operator-sidebar-navigation"
+      aria-expanded={expanded}
+      className="min-h-11 min-w-11"
+    />
+  )
 }
 
 function RootOperatorShell(props: AeOperatorShellProps) {
@@ -122,26 +149,22 @@ function RootOperatorShell(props: AeOperatorShellProps) {
     mainContentId,
     breadcrumbs: providedBreadcrumbs,
     navBadges,
-    sectionId,
   } = registeredChrome ?? props
   const { children } = props
   const titleId = useId()
   const descriptionId = useId()
-  const activeSection = sectionId ?? resolveOperatorSection(currentPath)
+  const resolvedMainContentId = mainContentId ?? 'operator-main-content'
   const density: OperatorDensity = operatorRole === 'owner' ? 'compact' : 'comfortable'
   const isCompact = density === 'compact'
   const shellRef = useRef<HTMLDivElement>(null)
-  const mainContentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (mainContentId === undefined) return
-
-    const mainContent = mainContentRef.current
+    const mainContent = document.getElementById(resolvedMainContentId)
     const skipLink = shellRef.current?.querySelector<HTMLAnchorElement>('[data-testid="skip-to-content"]')
     if (mainContent === null || skipLink === null || skipLink === undefined) return
 
     const previousHref = skipLink.getAttribute('href')
-    skipLink.setAttribute('href', `#${mainContentId}`)
+    skipLink.setAttribute('href', `#${resolvedMainContentId}`)
     const focusMainContent = () => {
       window.requestAnimationFrame(() => {
         mainContent.focus()
@@ -157,22 +180,20 @@ function RootOperatorShell(props: AeOperatorShellProps) {
         skipLink.setAttribute('href', previousHref)
       }
     }
-  }, [mainContentId])
+  }, [resolvedMainContentId])
 
   const breadcrumbs = useMemo<readonly OperatorBreadcrumbItem[]>(() => {
     const listCrumb = resolveOperatorListCrumb(operatorRole, currentPath)
     return providedBreadcrumbs ?? (listCrumb === undefined ? [] : [listCrumb, { label: title }])
   }, [currentPath, operatorRole, providedBreadcrumbs, title])
-  const sidebar =
-    isCompact ? undefined : (
-      <div className="hidden md:contents">
-        <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} navBadges={navBadges ?? {}} />
-      </div>
-    )
+  const sidebar = isCompact ? null : (
+    <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} navBadges={navBadges ?? {}} />
+  )
 
   const topNav = useMemo(
     () => (
-      <div className="flex h-14 items-center gap-3 px-4 md:px-6">
+      <div className="flex min-h-14 items-center gap-3 px-4 md:px-6">
+        {isCompact ? null : <OperatorSidebarToggle />}
         {breadcrumbs.length === 0 ? null : (
           <div className="hidden min-w-0 flex-1 md:block">
             <AeOperatorBreadcrumbs items={breadcrumbs} />
@@ -183,63 +204,47 @@ function RootOperatorShell(props: AeOperatorShellProps) {
         </div>
       </div>
     ),
-    [breadcrumbs, operatorRole],
+    [breadcrumbs, isCompact, operatorRole],
   )
 
   return (
     <OperatorDensityContext.Provider value={density}>
       <OperatorShellChromeContext.Provider value={registration}>
-        <AppShell
-          ref={shellRef}
-          height="auto"
-          contentPadding={0}
-          topNav={topNav}
-          {...(sidebar === undefined ? {} : { sideNav: sidebar })}
-        >
-          <div
-            ref={mainContentRef}
-            id={mainContentId}
-            tabIndex={mainContentId === undefined ? undefined : -1}
-            className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8"
-          >
-            {breadcrumbs.length === 0 ? null : (
-              <div className="md:hidden">
-                <AeOperatorBreadcrumbs items={breadcrumbs} />
-              </div>
-            )}
-
-            <section aria-labelledby={titleId} aria-describedby={descriptionId} className="grid gap-2">
-              {eyebrow ? (
-                <Text type="supporting" weight="medium" color="secondary" display="block">
-                  {eyebrow}
-                </Text>
-              ) : null}
-              <Heading id={titleId} level={1} textWrap="balance">
-                {title}
-              </Heading>
-              <Text id={descriptionId} type="body" color="secondary" display="block" textWrap="pretty">
-                {description}
-              </Text>
-              {actions ? <div className="flex flex-wrap items-center gap-3 pt-1">{actions}</div> : null}
-            </section>
-            <Divider variant="subtle" />
-
-            <div
-              className={
-                activeSection === undefined
-                  ? 'grid gap-6'
-                  : 'grid gap-6 lg:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)] lg:items-start'
-              }
+        <SidebarProvider>
+          <div ref={shellRef} className="flex min-h-dvh w-full bg-background">
+            <a
+              data-testid="skip-to-content"
+              href={`#${resolvedMainContentId}`}
+              className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-20 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground"
             >
-              {activeSection === undefined ? null : (
-                <aside className="rounded-md border border-border bg-card p-4 lg:sticky lg:top-20">
-                  <AeOperatorSectionNav sectionId={activeSection} currentPath={currentPath} />
-                </aside>
-              )}
-              <section className="grid min-w-0 gap-4">{children}</section>
+              Skip to content
+            </a>
+            {sidebar}
+            <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
+              <header role="banner" className="border-b border-border bg-card">
+                {topNav}
+              </header>
+              <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="min-h-0">
+                <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
+                  {breadcrumbs.length === 0 ? null : (
+                    <div className="md:hidden">
+                      <AeOperatorBreadcrumbs items={breadcrumbs} />
+                    </div>
+                  )}
+
+                  <section aria-labelledby={titleId} aria-describedby={descriptionId} className="grid gap-2">
+                    {eyebrow ? <p className="block text-sm font-medium text-muted-foreground">{eyebrow}</p> : null}
+                    <h1 id={titleId} className="text-3xl font-semibold tracking-tight text-balance text-foreground">{title}</h1>
+                    <p id={descriptionId} className="block text-pretty text-muted-foreground">{description}</p>
+                    {actions ? <div className="flex flex-wrap items-center gap-3 pt-1">{actions}</div> : null}
+                  </section>
+                  <Separator />
+                  <section className="grid min-w-0 gap-4">{children}</section>
+                </div>
+              </SidebarInset>
             </div>
           </div>
-        </AppShell>
+        </SidebarProvider>
       </OperatorShellChromeContext.Provider>
     </OperatorDensityContext.Provider>
   )

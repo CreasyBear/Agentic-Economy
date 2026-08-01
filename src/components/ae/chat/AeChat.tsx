@@ -2,12 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeftIcon, XIcon } from 'lucide-react'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { Button } from '@astryxdesign/core/Button'
-import { Dialog } from '@astryxdesign/core/Dialog'
-import { IconButton } from '@astryxdesign/core/IconButton'
-import { Text } from '@astryxdesign/core/Text'
+import { Button } from '@/components/ui/button'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 import {
@@ -439,22 +437,22 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     ? 'lg:grid-cols-[clamp(13.5rem,16vw,16.25rem)_minmax(0,1fr)]'
     : 'lg:grid-cols-[0rem_minmax(0,1fr)]'
   const shell = (
-    <div className={`grid h-full min-h-0 w-full bg-body motion-safe:transition-[grid-template-columns] motion-safe:duration-base motion-safe:ease-standard ${sidebarGridCols}`}>
+    <div className={`grid h-full min-h-0 w-full bg-background motion-safe:transition-[grid-template-columns] motion-safe:duration-base motion-safe:ease-standard ${sidebarGridCols}`}>
       <Dialog
-        id="ae-thread-mobile-sidebar"
-        isOpen={mobileSidebarOpen}
+        open={mobileSidebarOpen}
         onOpenChange={(isOpen) => {
           if (!isOpen) {
             closeMobileSidebar()
           }
         }}
-        variant="fullscreen"
-        purpose="info"
-        padding={0}
-        role="dialog"
-        aria-labelledby="ae-thread-mobile-sidebar-title"
-        className="lg:hidden"
       >
+        <DialogContent
+          id="ae-thread-mobile-sidebar"
+          role="dialog"
+          aria-labelledby="ae-thread-mobile-sidebar-title"
+          className="h-dvh w-dvw max-w-none rounded-none border-0 bg-transparent p-0 shadow-none lg:hidden"
+          showCloseButton={false}
+        >
         <div className="relative h-dvh w-dvw overflow-hidden">
           <button
             type="button"
@@ -463,22 +461,23 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             tabIndex={-1}
             onClick={closeMobileSidebar}
           />
-        <div className="absolute inset-y-0 left-0 flex w-80 max-w-full flex-col border-r border-border bg-body shadow-low">
+        <div className="absolute inset-y-0 left-0 flex w-80 max-w-full flex-col border-r border-border bg-background shadow-low">
             <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4">
-              <h2 id="ae-thread-mobile-sidebar-title" className="font-heading text-base font-semibold text-primary">
+              <DialogTitle id="ae-thread-mobile-sidebar-title" className="font-heading text-base font-semibold text-foreground">
                 Recent questions
-              </h2>
+              </DialogTitle>
+              <DialogDescription className="sr-only">Choose a recent question to reopen.</DialogDescription>
               <Button
-                label="Close recent questions"
                 type="button"
                 variant="ghost"
-                size="sm"
-                className="min-h-11"
-                icon={<XIcon aria-hidden="true" />}
-                isIconOnly
+                size="icon"
+                className="min-h-11 min-w-11"
+                aria-label="Close recent questions"
                 data-autofocus=""
                 onClick={closeMobileSidebar}
-              />
+              >
+                <XIcon aria-hidden="true" />
+              </Button>
             </div>
             <AeThreadSidebar
               threads={threads}
@@ -490,31 +489,36 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             />
           </div>
         </div>
+        </DialogContent>
       </Dialog>
       <AeThreadSidebar threads={threads} activeThreadId={routeThreadId} visible={sidebarVisible} onDelete={handleDeleteThread} />
-      <div className="flex h-full min-h-0 w-full flex-col bg-body lg:col-start-2">
+      <div className="flex h-full min-h-0 w-full flex-col bg-background lg:col-start-2">
         {showSidebarToggle ? (
           <div className={`flex min-h-10 items-center px-4 pt-2 md:px-6${showThreadChrome ? ' hidden lg:flex' : ''}`}>
-            <IconButton
-              label="Open recent questions"
+            <Button
+              type="button"
               variant="ghost"
-              size="sm"
-              className="min-h-11 text-secondary lg:hidden"
-              icon={<PanelLeftIcon aria-hidden="true" />}
+              size="icon"
+              className="min-h-11 min-w-11 text-muted-foreground lg:hidden"
+              aria-label="Open recent questions"
               onClick={openMobileSidebar}
               aria-controls="ae-thread-mobile-sidebar"
               aria-expanded={mobileSidebarOpen}
-            />
-            <IconButton
-              label={sidebarVisible ? 'Hide recent questions' : 'Show recent questions'}
+            >
+              <PanelLeftIcon aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
               variant="ghost"
-              size="sm"
-              className="hidden text-secondary lg:inline-flex"
-              icon={<PanelLeftIcon aria-hidden="true" />}
+              size="icon"
+              className="min-h-11 min-w-11 hidden text-muted-foreground lg:inline-flex"
+              aria-label={sidebarVisible ? 'Hide recent questions' : 'Show recent questions'}
               onClick={() => setSidebarManuallyOpen((value) => !value)}
               aria-controls="ae-thread-sidebar"
               aria-expanded={sidebarVisible}
-            />
+            >
+              <PanelLeftIcon aria-hidden="true" />
+            </Button>
           </div>
         ) : null}
         {showThreadChrome ? (
@@ -537,13 +541,17 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
           >
             {showThreadUnavailable ? (
               <div className="mx-auto my-12 w-full max-w-[36rem]">
-                <AeEmptyState
-                  title="Thread unavailable"
-                  description="This answer thread could not be found or loaded. Start a fresh search to keep going."
-                  action={
-                    <Button label="Start a new search" href="/" variant="secondary" size="sm" />
-                  }
-                />
+                <Empty className="border border-border bg-card p-5">
+                  <EmptyHeader>
+                    <EmptyTitle>Thread unavailable</EmptyTitle>
+                    <EmptyDescription>This answer thread could not be found or loaded. Start a fresh search to keep going.</EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent>
+                    <Button asChild variant="secondary" size="sm">
+                      <a href="/">Start a new search</a>
+                    </Button>
+                  </EmptyContent>
+                </Empty>
               </div>
             ) : null}
             {showSessionChrome ? (
@@ -566,14 +574,14 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             />
             {showThreadChrome ? (
               <div className="mx-auto w-full max-w-[56rem] px-4 pb-4 md:px-6" role="note" aria-label="Thread access and retention">
-                <Text type="supporting" color="secondary" display="block">
+                <p className="block text-sm text-muted-foreground">
                   This thread has no automatic expiry. Anyone with its link can open it; the creating browser can delete it from Recent questions.
-                </Text>
+                </p>
               </div>
             ) : null}
           </AeThreadScroller>
           {!showWelcome && (terminalShortlist === null || refinementComposerOpen) ? (
-            <div className="mx-auto w-full max-w-[56rem] flex-none bg-body px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
+            <div className="mx-auto w-full max-w-[56rem] flex-none bg-background px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
               <AeQueryPanel
                 onSubmit={handleSubmit}
                 busy={streamingBusy}
@@ -590,7 +598,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
           ) : null}
           {landingMode ? (
             <div
-              className={`absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-body px-4 py-12 md:px-6 motion-safe:transition-opacity motion-safe:duration-base motion-safe:ease-standard${!showWelcome ? ' pointer-events-none invisible opacity-0' : ''}`}
+              className={`absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-background px-4 py-12 md:px-6 motion-safe:transition-opacity motion-safe:duration-base motion-safe:ease-standard${!showWelcome ? ' pointer-events-none invisible opacity-0' : ''}`}
               aria-hidden={!showWelcome}
             >
               <div className="mx-auto flex w-full min-w-0 max-w-[44rem] flex-col gap-8">

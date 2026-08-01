@@ -1,20 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Collapsible } from '@astryxdesign/core/Collapsible'
-import { Link } from '@astryxdesign/core/Link'
-import { Heading, Text } from '@astryxdesign/core/Text'
-
-import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
-import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Textarea } from '@/components/ui/textarea'
+import { projectCustomerRequestDecisionRecords } from '@/modules/customer-request/application/public'
+import { CUSTOMER_REQUEST_HUMAN_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
+import { DIALOG_WELCOME } from '@/content/brand-copy'
 import {
   resolveReplacementCommandKey,
   type ReplacementCommandIdentity,
 } from '@/modules/customer-request/replacement-command-key'
 import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
+import { AeDecisionTrail } from '../plan/AeDecisionTrail'
 import { AeSupplyFacets, type SupplyFacet } from './AeSupplyFacets'
 import { RequestResult } from './panels'
 import { customerClarificationPrompt } from './panels/shared'
+import type {
+  CustomerRequestProjection,
+  CustomerRequestView,
+} from '@/modules/customer-request/customer-projection'
 import type {
   BrowserRequestIdentity,
   ConversationTurn,
@@ -128,7 +133,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
       const response = await fetchBrowserRequestWithInterpreterRecovery(endpoint, requestInit)
       const result: SubmitResponse = await response.json()
       if (!response.ok || !('kind' in result) || result.kind !== 'request') {
-        setState(errorState(response.status, 'AE could not start this request.'))
+        setState(errorState(response.status, 'AE could not start this request. Try again from the form above.'))
         return
       }
       setTurns([
@@ -142,7 +147,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
       setEditingRevision(undefined)
       setState({ kind: 'request', projection: result })
     } catch {
-      setState({ kind: 'error', message: 'AE could not be reached. Your request was not submitted.', authenticationRequired: false })
+      setState({ kind: 'error', message: 'AE could not be reached. Try submitting again.', authenticationRequired: false })
     } finally {
       submittingRef.current = false
     }
@@ -194,7 +199,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
       )
       const result: SubmitResponse = await response.json()
       if (!response.ok || !('kind' in result) || result.kind !== 'request') {
-        setState(errorState(response.status, 'AE could not record why this option does not work. Nothing was confirmed or shared.'))
+        setState(errorState(response.status, 'AE could not record why this option does not work. Your request is unchanged.'))
         return
       }
       setRouteFeedback('')
@@ -203,7 +208,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
     } catch {
       setState({
         kind: 'error',
-        message: 'AE could not be reached. The option remains unconfirmed and nothing was shared.',
+        message: 'AE could not be reached. Your request is unchanged. Try again.',
         authenticationRequired: false,
       })
     }
@@ -268,7 +273,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
         setState({ kind: 'conflict', projection, reason: result.reason })
       } else setState(errorState(response.status, 'AE could not prepare comparable options for this request.'))
     } catch {
-      setState({ kind: 'error', message: 'AE could not be reached. No option was selected or purchased.', authenticationRequired: false })
+      setState({ kind: 'error', message: 'AE could not be reached. No option was selected. Try again.', authenticationRequired: false })
     }
   }
 
@@ -289,12 +294,12 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
       })
       const result: SubmitResponse = await response.json()
       if (!response.ok || !('kind' in result) || result.kind !== 'request') {
-        setState(errorState(response.status, 'AE could not record that permission. Nothing was shared.'))
+        setState(errorState(response.status, 'AE could not record that permission. Try again.'))
         return
       }
       setState({ kind: 'request', projection: result })
     } catch {
-      setState({ kind: 'error', message: 'AE could not record that permission. Nothing was shared.', authenticationRequired: false })
+      setState({ kind: 'error', message: 'AE could not record that permission. Try again.', authenticationRequired: false })
     }
   }
 
@@ -376,30 +381,30 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
   return (
     <main className={`mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14 ${showStartHeader ? 'min-h-[calc(100dvh-9rem)] content-center' : 'content-start'}`}>
       {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-4 text-center">
-        <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">What do you need to make happen?</Heading>
-        <Text type="large" color="secondary" className="block">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.situation}</Text>
+        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">{DIALOG_WELCOME.heading}</h1>
+        <p className="block text-lg text-muted-foreground">{CUSTOMER_REQUEST_HUMAN_COMPREHENSION.situation}</p>
       </header> : null}
 
-      {showStartHeader && resumeOffer !== undefined ? <Card padding={4} className="mx-auto w-full max-w-3xl">
+      {showStartHeader && resumeOffer !== undefined ? <Card className="mx-auto w-full max-w-3xl p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <Text weight="semibold" className="block">You have a Request saved on this device.</Text>
+            <p className="block font-semibold">You have a Request saved on this device.</p>
             {resumeOffer.summary === undefined
               ? null
-              : <Text type="supporting" color="secondary" className="mt-1 block">{resumeOffer.summary}</Text>}
+              : <p className="mt-1 block text-sm text-muted-foreground">{resumeOffer.summary}</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button label="Pick it up" variant="secondary" clickAction={() => void resumeStoredRequest(resumeOffer)} />
-            <Button label="Discard" variant="ghost" clickAction={dismissResumeOffer} />
+            <Button type="button" variant="secondary" onClick={() => void resumeStoredRequest(resumeOffer)}>Pick it up</Button>
+            <Button type="button" variant="ghost" onClick={dismissResumeOffer}>Discard</Button>
           </div>
         </div>
       </Card> : null}
 
       {state.kind === 'request' && state.projection.recovery?.state === 'restored'
-        ? <Card padding={3} className="mx-auto w-full max-w-4xl" aria-live="polite">
-            <Text color="secondary">{state.projection.recovery.reason === 'choice_expired'
+        ? <Card className="mx-auto w-full max-w-4xl p-3" aria-live="polite">
+            <p className="text-muted-foreground">{state.projection.recovery.reason === 'choice_expired'
               ? 'AE restored this Request. The earlier choice expired, so no work was authorized or restarted.'
-              : 'AE restored the latest saved state for this Request. Checking it did not restart the work.'}</Text>
+              : 'AE restored the latest saved state for this Request. Checking it did not restart the work.'}</p>
           </Card>
         : null}
 
@@ -409,55 +414,60 @@ export function AeCustomerRequestWorkspace({ initialNeed = '', supplyFacets = []
             input does, so nothing competes with the one thing to do. */}
         <form
           onSubmit={(event) => { event.preventDefault(); void submit() }}
-          className="grid min-w-0 gap-3 rounded-2xl border border-border bg-card p-4 shadow-low transition-[border-color,box-shadow] duration-150 focus-within:border-accent focus-within:shadow-medium"
+          className="grid min-w-0 gap-3 rounded-2xl border border-border bg-card p-4 shadow-low transition-[border-color,box-shadow] duration-150 focus-within:border-brand focus-within:shadow-medium"
         >
-          <label className="sr-only" htmlFor="customer-need">What are you looking for?</label>
-          <textarea
-            id="customer-need"
-            value={need}
-            onChange={(event) => setNeed(event.target.value)}
-            rows={2}
-            maxLength={2_000}
-            required
-            placeholder="A burst pipe in Parramatta, someone today, under $500"
-            className="min-h-16 min-w-0 resize-none bg-transparent px-1 text-lg leading-relaxed text-primary outline-none placeholder:text-secondary"
-          />
-          <div className="flex items-center justify-end">
-            {/* Disabled keeps its outline so it still reads as the control that
-                is waiting on you. Ghosting a filled accent button composites it
-                to roughly 1.4:1 and reads as broken instead. */}
-            <button
-              type="submit"
-              disabled={need.trim().length === 0}
-              className="min-h-11 rounded-full border px-6 font-semibold transition-[background-color,border-color,color] duration-150 enabled:border-accent enabled:bg-accent enabled:text-on-accent enabled:hover:border-accent-strong enabled:hover:bg-accent-strong disabled:cursor-not-allowed disabled:border-border disabled:bg-transparent disabled:text-secondary"
-            >
-              Find options
-            </button>
-          </div>
+          <FieldGroup className="gap-3">
+            <Field>
+              <FieldLabel className="sr-only" htmlFor="customer-need">What are you looking for?</FieldLabel>
+              <Textarea
+                id="customer-need"
+                value={need}
+                onChange={(event) => setNeed(event.target.value)}
+                rows={2}
+                maxLength={2_000}
+                required
+                placeholder="A burst pipe in Parramatta, someone today, under $500"
+                className="min-h-16 min-w-0 resize-none"
+              />
+            </Field>
+            <Field orientation="horizontal" className="justify-end">
+              <Button type="submit" variant="default" disabled={need.trim().length === 0} className="min-h-11 rounded-full px-6">
+                Find options
+              </Button>
+            </Field>
+          </FieldGroup>
         </form>
         <AeSupplyFacets facets={supplyFacets} />
-        {editingRevision !== undefined ? <Text type="supporting" color="secondary" className="block">Editing revision {editingRevision} of this Request.</Text> : null}
+        {editingRevision !== undefined ? <p className="block text-sm text-muted-foreground">Editing revision {editingRevision} of this Request.</p> : null}
         {/* The terms stay reachable and complete, one click away, instead of
             forming a wall of qualifiers between the promise and the input. The
             trigger hugs its label; a full-width row strands the chevron. */}
         <div className="mx-auto max-w-md">
-          <Collapsible defaultIsOpen={false} trigger={<span className="text-sm font-semibold">How AE works</span>}>
-            <ul className="grid gap-2 pt-3 text-start">
-              {[
-                CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.examples,
-                CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.support,
-                CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.authority,
-                'AE asks for contact and payment details only when the option you picked needs them.',
-              ].map((line) => <li key={line}>
-                <Text type="supporting" color="secondary">{line}</Text>
-              </li>)}
-            </ul>
+          <Collapsible defaultOpen={false}>
+            <CollapsibleTrigger className="text-sm font-semibold">How AE works</CollapsibleTrigger>
+            <CollapsibleContent>
+              <ul className="grid gap-2 pt-3 text-start">
+                {[
+                  CUSTOMER_REQUEST_HUMAN_COMPREHENSION.examples,
+                  CUSTOMER_REQUEST_HUMAN_COMPREHENSION.support,
+                  CUSTOMER_REQUEST_HUMAN_COMPREHENSION.authority,
+                  'AE asks for details only when the option needs them.',
+                ].map((line) => <li key={line}>
+                  <p className="text-sm text-muted-foreground">{line}</p>
+                </li>)}
+              </ul>
+            </CollapsibleContent>
           </Collapsible>
         </div>
         {state.kind === 'error' ? <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} /> : null}
-      </section> : <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} />}
+      </section> : <><RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} reportRouteUnavailable={reportRouteUnavailable} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} routeFeedback={routeFeedback} setRouteFeedback={setRouteFeedback} turns={turns} /><RequestDecisionTrail state={state} /></>}
     </main>
   )
+}
+
+function RequestDecisionTrail({ state }: Readonly<{ state: WorkspaceState }>) {
+  if (!('projection' in state)) return null
+  return <AeDecisionTrail decisions={projectCustomerRequestDecisionRecords(state.projection)} />
 }
 
 function errorState(status: number, message: string): WorkspaceState { return { kind: 'error', message: status === 401 ? 'Sign in so AE can keep this request private and resumable.' : message, authenticationRequired: status === 401 } }

@@ -1,79 +1,54 @@
 ---
 name: ae-verification-gates
-description: Use to choose and interpret AE verification before yielding implementation or changing package scripts. Build a focused proof loop, preserve evidence levels, and distinguish changed-transition failures from unrelated suite failures.
+description: Use to choose and interpret verification for a changed AE transition. Prefer direct executable proof and preserve evidence boundaries.
 ---
 
 # AE verification
 
-Verification supports a decision about the changed transition. Plans, generated
-maps, checklists, issue state, and stored reports are orientation evidence, not
-runtime proof.
+> **North star:** Tell your AI what you need. It finds the right business, compares real options, gets your approval, and moves the work through to completion. Businesses publish what they do once, then earn whenever agents bring them work.
 
-## Loop
+**Hierarchy:** ambition → customer promise → executable journey → hidden controls → proof.
 
-1. State the behavior, failure mode, surface, and evidence class the change must
-   prove.
-   State whether the claim is vertical outcome completion, horizontal capability
-   reuse, or both. Each axis needs its own observable result.
-2. Run the narrowest test that exercises the changed transition. Include a
-   labelled mock/dev failure or recovery state when the behavior has one.
-3. Fix regressions caused by the change. If a broad suite fails elsewhere,
-   record the exact command, first failure, and why it is unrelated; continue
-   the authorized slice instead of entering an unbounded testing loop.
-4. Expand only across boundaries the change actually crosses.
-5. Inspect the artifact or readback the claim names. Report what is proven,
-   contradicted, and still unproven.
+## Fastest proof first
 
-The loop is complete only when every changed boundary has a matching executable
-check or a reproducible earliest blocker. Test counts and repeated reruns without
-a source change, demonstration, or concrete blocker are not progress.
+Read `.planning/PROJECT.md`, `UBIQUITOUS_LANGUAGE.md`, relevant ADRs, live
+source, and focused tests. If an optional `AGENTS.md` exists, consult it.
+State the changed behavior, failure mode, surface, intended effect, and
+evidence class. Run the narrowest executable journey through that transition
+first, inspect the named artifact or response, then expand only across
+boundaries actually crossed. Proof is feedback and readiness information, not
+permission to articulate the ambition.
 
-## Verification ladder
+Use the applicable minimum:
 
-| Changed boundary | Minimum executable check |
-|---|---|
-| TypeScript/domain transition | affected unit test, then `npm run typecheck` |
-| Convex schema/function | affected Convex/schema test, typecheck, then `npm run check:convex-codegen` when configured and authorized |
-| HTTP route or module wiring | affected integration test and direct response inspection |
-| Module/import ownership | `npm run test:imports` |
-| Public or assistant-visible copy | `npm run test:copy` and emitted-output inspection |
-| SEO/discovery output | `npm run test:seo` and serialized-output inspection |
-| UI structure or state | `npm run test:ui-contract` and the relevant `tests/e2e/` spec |
-| Cross-cutting source change | `npm run test:all` after focused checks |
-| Release candidate | `npm run test:release:source`, then the separately authorized hosted readback/smokes or `npm run test:release` |
+| Boundary | Direct check |
+| --- | --- |
+| TypeScript/domain | affected test, then typecheck |
+| Convex schema/function | affected test, typecheck, authorized codegen |
+| HTTP/module wiring | focused integration and response inspection |
+| Module ownership | import-boundary test |
+| Human/assistant copy | UI contract and rendered/serialized readback |
+| Discovery/SEO | SEO contract and serialized readback |
+| UI state | UI contract and relevant browser path |
+| Customer Request | focused journey or development smoke |
 
-Do not use the full suite as the first diagnostic. A package script proves only
-the commands it currently contains; inspect `package.json` before relying on it.
+Tests assert semantics, effects, authority, refusal, uncertainty, evidence, and
+recovery. They must not lock headlines or enforce universal negative slogans.
+Do not use a full suite as first diagnosis or create generated-report ceremony.
+Record an exact unrelated failure, if any, without turning it into a gate.
 
-## Evidence classes
+## Evidence boundaries
 
-- Static inspection proves source shape, not execution.
-- Unit/integration tests prove behavior under their declared fixtures.
-- Labelled mock or sandbox runs prove that development contract and inputs.
-- Local browser tests prove the named local journey.
-- Model evals prove performance against the declared evaluation set.
-- Hosted readback proves the named deployed revision, surface, identity, and
-  inputs.
-- Provider fulfilment evidence proves only the observed external attempt.
-- Customer research proves only the sampled workflow and value proposition.
+Static inspection proves source shape; unit/integration tests prove declared
+fixtures; labelled mock/sandbox runs prove development contracts; browser,
+hosted, provider, and customer evidence prove only their named observation.
+No class silently upgrades another. Keep evidence labels, receipts, and proof
+ceilings in internal reports, machine/admin output, or the decision that needs
+them—not in standing public hedging.
 
-No class silently upgrades another. A local or sandbox pass does not establish
-deployment, independent supply, real fulfilment, human parity, customer value,
-or production safety. An issue or ADR gate can remain externally unproven while
-authorized development implementation continues.
-
-For ADR-019 authority-mode work, the minimum development eval crosses one
-provider-published operation through the real Action Invocation seam.
-
-Prove no effect in `inspect_only`; exact use in `approve_each`; standing-use
-capacity in bounded modes; expiry, revocation, and generation fencing; atomic
-reservation and settlement; uncertainty holds; cancellation is honest; and
-every material widening steps up.
-
-This proves labelled development contract behavior only. It never proves
-current customer reachability or provider fulfilment.
-
-For a vertical claim, execute the decomposed customer loop through its outcome,
-including refusal, uncertainty, and recovery. For a horizontal claim, run the
-same capability contract through another conformant domain without a new host
-workflow or control plane.
+For consequential authority modes, directly prove no effect in `inspect_only`,
+exact use in `approve_each`, bounded capacity, expiry/revocation/generation
+fencing, atomic reservation and settlement, uncertainty holds, honest
+cancellation, and step-up on material widening. For vertical outcomes, execute
+the customer loop through refusal, uncertainty, and recovery; for horizontal
+capabilities, run the same contract through another conformant domain.

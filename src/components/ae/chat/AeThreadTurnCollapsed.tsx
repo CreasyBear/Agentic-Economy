@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { Button } from '@astryxdesign/core/Button'
+import { Button } from '@/components/ui/button'
 import { formatTurnQueryLabel } from '@/modules/answer-thread/public'
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
 import { Message, MessageContent } from '@/components/ai-elements/message'
@@ -26,12 +26,13 @@ export function AeThreadTurnCollapsed({ threadId, ...turn }: AeThreadTurnCollaps
           seq={turn.seq}
           actions={
             <Button
-              label="Collapse"
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => setExpanded(false)}
-            />
+            >
+              Collapse
+            </Button>
           }
         />
         <Message from="assistant" className={ANSWER_SECTION_CLASS}>
@@ -63,12 +64,12 @@ export function AeThreadTurnCollapsed({ threadId, ...turn }: AeThreadTurnCollaps
     <div className="flex flex-col gap-2">
       <button
         type="button"
-        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg border border-border bg-surface px-4 py-3 text-left transition-colors hover:border-border-strong"
+        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:border-border-strong"
         onClick={() => setExpanded(true)}
       >
-        <span className="col-start-1 font-heading text-sm font-semibold text-primary">{label.text}</span>
-        <span className="col-start-1 truncate text-sm text-secondary">{turn.oneLine}</span>
-        <span className="col-start-2 row-span-2 self-center font-mono text-xs uppercase tracking-wider text-secondary">Expand</span>
+        <span className="col-start-1 font-heading text-sm font-semibold text-foreground">{label.text}</span>
+        <span className="col-start-1 truncate text-sm text-muted-foreground">{turn.oneLine}</span>
+        <span className="col-start-2 row-span-2 self-center font-mono text-xs uppercase tracking-wider text-muted-foreground">Expand</span>
       </button>
     </div>
   )

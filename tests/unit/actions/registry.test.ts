@@ -4,6 +4,8 @@ import {
   describeActionForAgent,
   findAction,
   listActions,
+  listMcpActions,
+  mcpToolName,
 } from '@/modules/actions'
 
 describe('action registry', () => {
@@ -56,9 +58,41 @@ describe('action registry', () => {
     expect(action?.parameters.map((parameter) => parameter.name)).toEqual(['websiteUrl', 'abn'])
   })
 
-  it('exposes only registry search and detail to the internal answer thread', () => {
+  it('exposes the bounded read and quote actions to the internal answer thread', () => {
     const exposed = listActions().filter((action) => action.surfaces.includes('answerThread')).map((action) => action.id)
-    expect(exposed).toEqual(['registry.search', 'registry.detail'])
+    expect(exposed).toContain('registry.search')
+    expect(exposed).toContain('registry.detail')
+    expect(exposed).toContain('sandbox.checkup_quote')
+  })
+
+  it('exposes the bounded web discovery observation to the internal answer thread', () => {
+    const exposed = listActions().filter((action) => action.surfaces.includes('answerThread')).map((action) => action.id)
+    expect(exposed).toContain('web.discover')
+    const action = findAction('web.discover')
+    expect(action?.readOnly).toBe(true)
+    expect(action?.effect).toEqual({
+      class: 'observation',
+      reversible: true,
+      recipientKind: 'none',
+      dataClasses: ['query_text', 'location'],
+      spendExposure: 'none',
+      approval: 'none',
+    })
+    expect(action?.boundaries.join(' ')).toMatch(/not.*listed|not.*bookable|imported claims/i)
+    expect(action?.schema.safeParse({ query: 'funeral parlours in Parramatta' }).success).toBe(true)
+  })
+
+  it('exposes exactly the anonymous read-only tier to the MCP host', () => {
+    const exposed = listMcpActions()
+    expect(exposed.map((action) => action.id)).toEqual([
+      'registry.services_list', 'registry.services_search', 'registry.detail', 'sandbox.checkup_quote',
+    ])
+    for (const action of exposed) {
+      expect(action.readOnly).toBe(true)
+    }
+    expect(exposed.map((action) => mcpToolName(action))).toEqual([
+      'ae_registry_services_list', 'ae_registry_services_search', 'ae_registry_detail', 'ae_sandbox_checkup_quote',
+    ])
   })
 
   it('carries output validation schemas on every action', () => {
@@ -67,8 +101,30 @@ describe('action registry', () => {
     }
   })
 
-  it('accepts slug-addressed public catalog DTOs and rejects internal business identity', () => {
+  it('declares effect metadata on every registered action', () => {
+    for (const action of listActions()) {
+      expect(action.effect).toBeDefined()
+    }
+  })
+
+  it('keeps read-only actions non-consequential', () => {
+    for (const action of listActions().filter(({ readOnly }) => readOnly)) {
+      expect(['observation', 'comparison_quote']).toContain(action.effect.class)
+      expect(action.effect.approval).toBe('none')
+      expect(action.effect.spendExposure).toBe('none')
+    }
+  })
+
+  /**
+   * The Offering projection publishes `businessId` as a stable public
+   * reference, exactly as the UCP manifest already does, so it is no longer
+   * treated as leaked identity. Every other internal identifier must still be
+   * rejected by the strict output schema.
+   */
+  it('accepts the public Offering DTO and rejects internal identity beyond the published reference', () => {
     const business = {
+      schemaVersion: 'public-business-catalog-api:v2',
+      businessId: 'business:adelaide-emergency-plumbing',
       slug: 'adelaide-emergency-plumbing',
       name: 'Adelaide Emergency Plumbing',
       category: 'Emergency plumbing',
@@ -76,34 +132,35 @@ describe('action registry', () => {
       stateTerritory: 'SA',
       publicUrl: '/adelaide-emergency-plumbing',
       trustTier: 'claimed',
-      publicStatus: 'published' as const,
-      indexStatus: 'not_queued',
-      discoveryStatus: 'degraded',
-      schemaVersion: 'public-business-catalog-api:v1',
-      updatedAt: 1,
       photos: [] as Array<{ url: string; alt: string }>,
-      services: [
+      observedAt: 1,
+      disposition: 'current' as const,
+      offerings: [
         {
-          slug: 'emergency-pipe-repair',
+          offeringRef: 'legacy-offering:adelaide-emergency-plumbing:emergency-pipe-repair',
+          revision: 1,
           name: 'Emergency pipe repair',
           category: 'Emergency plumbing',
           summary: 'Urgent local plumbing.',
-          serviceArea: 'Adelaide and nearby suburbs',
-          hoursOrUnknown: 'Hours supplied by owner',
-          firstRequest: {
-            mode: 'inquiry_available',
-            publicDisclosure: 'Use the inquiry form for a first contact.',
-            publicChannel: 'public_business_contact',
-          },
-          status: 'published' as const,
-          capabilities: [{ kind: 'phone_inquiry', status: 'available' }],
+          serviceAreaSummary: 'Adelaide and nearby suburbs',
+          availabilitySummary: 'Hours supplied by owner',
+          accessPaths: [
+            {
+              accessPathRef: 'legacy-access:adelaide-emergency-plumbing:emergency-pipe-repair',
+              kind: 'human_request' as const,
+              channel: 'ae_inquiry' as const,
+              disclosure: 'Use the inquiry form for a first contact.',
+            },
+          ],
+          support: { integrated: false, aeSupportedAction: false },
         },
       ],
+      accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
     }
 
     const search = findAction('registry.search')!.outputSchema.safeParse({
       kind: 'ok',
-      schemaVersion: 'public-business-catalog-api:v1',
+      schemaVersion: 'public-business-catalog-api:v2',
       query: 'plumber',
       items: [business],
       pagination: { limit: 1, total: 1, hasMore: false },
@@ -112,16 +169,18 @@ describe('action registry', () => {
 
     const detail = findAction('registry.detail')!.outputSchema.safeParse({
       kind: 'found',
-      schemaVersion: 'public-business-catalog-api:v1',
+      schemaVersion: 'public-business-catalog-api:v2',
       business,
     })
     expect(detail.success).toBe(true)
 
-    expect(findAction('registry.detail')!.outputSchema.safeParse({
-      kind: 'found',
-      schemaVersion: 'public-business-catalog-api:v1',
-      business: { ...business, businessId: 'business:adelaide-emergency-plumbing' },
-    }).success).toBe(false)
+    for (const leaked of ['ownerId', 'sourceHash', 'serviceId', 'rawContactValue'] as const) {
+      expect(findAction('registry.detail')!.outputSchema.safeParse({
+        kind: 'found',
+        schemaVersion: 'public-business-catalog-api:v2',
+        business: { ...business, [leaked]: 'internal-value' },
+      }).success, leaked).toBe(false)
+    }
   })
 
   it('exposes schema metadata on agent-facing descriptors', () => {
@@ -129,6 +188,7 @@ describe('action registry', () => {
     expect(search.hasOutputSchema).toBe(true)
     expect(search.inputJsonSchema?.type).toBe('object')
     expect(search.outputJsonSchema?.type).toBe('object')
+    expect(search.effect).toEqual(findAction('registry.search')!.effect)
 
     const detail = describeActionForAgent(findAction('registry.detail')!)
     expect(detail.hasOutputSchema).toBe(true)
@@ -159,7 +219,10 @@ describe('action registry', () => {
     expect(detail?.readOnly).toBe(true)
     expect(detail?.surfaces).toContain('answerThread')
     expect(detail?.parameters.map((p) => p.name)).toContain('slug')
+    expect(findAction('registry.services_list')?.surfaces).not.toContain('answerThread')
+    expect(findAction('registry.services_search')?.surfaces).not.toContain('answerThread')
   })
+
 
   it('keeps the registry action descriptors free of internal architecture vocabulary', () => {
     const search = describeActionForAgent(findAction('registry.search')!)
@@ -226,5 +289,35 @@ describe('action registry', () => {
     expect(schema.safeParse({ ...baseInput, contact: { email: `${'a'.repeat(242)}@example.test` } }).success).toBe(false)
     expect(schema.safeParse({ ...baseInput, contact: { phone: '1'.repeat(32) } }).success).toBe(true)
     expect(schema.safeParse({ ...baseInput, contact: { phone: '1'.repeat(33) } }).success).toBe(false)
+  })
+
+  it('accepts a whole positive price ceiling and refuses a ceiling nobody can pay', () => {
+    const schema = findAction('registry.search')!.schema
+
+    expect(schema.safeParse({ query: 'plumber' }).success).toBe(true)
+    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: 25_000, hasPrice: true }).success).toBe(true)
+    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: 0 }).success).toBe(false)
+    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: -1 }).success).toBe(false)
+    expect(schema.safeParse({ query: 'plumber', maxPriceMinor: 250.5 }).success).toBe(false)
+    expect(schema.safeParse({ query: 'plumber', hasPrice: 'yes' }).success).toBe(false)
+  })
+
+  /**
+   * The filter is only safe to use if the descriptor says what it does to
+   * supply that quotes on request. An agent that assumes a budget removes
+   * unpriced options would read the narrowed page as the whole market.
+   */
+  it('tells an agent that a budget never removes quoted-on-request supply', () => {
+    const descriptor = describeActionForAgent(findAction('registry.search')!)
+    const parameters = descriptor.parameters.map((parameter) => parameter.name)
+
+    expect(parameters).toContain('maxPriceMinor')
+    expect(parameters).toContain('hasPrice')
+
+    const boundaries = descriptor.boundaries.join(' ')
+    expect(boundaries).toMatch(/maxPriceMinor/)
+    expect(boundaries).toMatch(/minor units/i)
+    expect(boundaries).toMatch(/quoted on request/i)
+    expect(boundaries).toMatch(/hasPrice/)
   })
 })

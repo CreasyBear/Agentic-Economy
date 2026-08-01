@@ -1,31 +1,9 @@
+import { EventSourceParserStream } from 'eventsource-parser/stream'
+
 import type { AnswerEvent } from '@/modules/answer/public'
 import type { AeSearchContext } from '@/modules/answer/search-context'
 
 export type AnswerStreamFrame = { seq: number; event: AnswerEvent }
-
-function parseAnswerSseBuffer(buffer: string): { frames: AnswerStreamFrame[]; rest: string } {
-  const frames: AnswerStreamFrame[] = []
-  const chunks = buffer.split('\n\n')
-  const rest = chunks.pop() ?? ''
-
-  for (const chunk of chunks) {
-    const line = chunk.trim()
-    if (!line.startsWith('data:')) {
-      continue
-    }
-    const payload = line.slice('data:'.length).trim()
-    if (payload.length === 0) {
-      continue
-    }
-    try {
-      frames.push(JSON.parse(payload) as AnswerStreamFrame)
-    } catch {
-      // Skip malformed frame.
-    }
-  }
-
-  return { frames, rest }
-}
 
 export type StreamAnswerResult = 'done' | 'aborted' | 'error' | 'rate_limited'
 
@@ -58,20 +36,15 @@ async function streamAnswerSse(input: {
       return input.signal?.aborted === true ? 'aborted' : 'error'
     }
 
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
+    const eventStream = response.body
+      .pipeThrough(new TextDecoderStream())
+      .pipeThrough(new EventSourceParserStream())
 
-    for (;;) {
-      const { value, done } = await reader.read()
-      if (done) {
-        break
-      }
-      buffer += decoder.decode(value, { stream: true })
-      const parsed = parseAnswerSseBuffer(buffer)
-      buffer = parsed.rest
-      for (const frame of parsed.frames) {
-        input.onFrame(frame)
+    for await (const message of eventStream) {
+      try {
+        input.onFrame(JSON.parse(message.data) as AnswerStreamFrame)
+      } catch {
+        // Skip malformed frame.
       }
     }
 

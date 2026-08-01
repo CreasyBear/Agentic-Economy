@@ -33,6 +33,41 @@ describe('capability supply transport adapter registry', () => {
     })
   })
 
+  it('admits the public credential sentinel only for HTTP JSON', () => {
+    const http = admitRegisteredTransport({
+      adapterId: 'http-json:v1',
+      endpointUrl: 'https://example.test/capability',
+      credentialRef: 'none',
+      continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
+      cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
+      config: { requestTimeoutMs: 5_000, method: 'POST' },
+    })
+    expect(http).toMatchObject({ kind: 'admitted', transport: { adapterId: 'http-json:v1' } })
+
+    expect(admitRegisteredTransport({
+      adapterId: 'mcp-jsonrpc:v1',
+      endpointUrl: 'https://example.test/mcp',
+      credentialRef: 'none',
+      continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
+      cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
+      config: { protocolVersion: '2025-06-18', toolName: 'lookup', requestTimeoutMs: 5_000 },
+    })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
+
+    expect(admitRegisteredTransport({
+      adapterId: 'x402-fetch:v2',
+      endpointUrl: 'https://example.test/paid',
+      credentialRef: 'none',
+      continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
+      cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
+      config: {
+        method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
+        currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+      },
+    })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
+  })
+
   it('admits closed GET query mappings but keeps cancellation and reconciliation POST-only', () => {
     const base = {
       adapterId: 'http-json:v1',

@@ -47,7 +47,6 @@ describe('POST /api/answer/turn empty-state queries', () => {
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
-    delete process.env.AE_ANSWER_SYNTHESIZER
     setAnswerThreadPortForTests(undefined)
   })
 
@@ -473,7 +472,6 @@ describe('POST /api/answer/turn empty-state queries', () => {
   })
 
   it('recovers a misspelled query through the tool-use agent choosing registry.search("parramatta")', async () => {
-    process.env.AE_ANSWER_SYNTHESIZER = 'tool-use'
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: {

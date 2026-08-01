@@ -1,8 +1,25 @@
+import {
+  generateText,
+  jsonSchema,
+  NoSuchToolError,
+  Output,
+  stepCountIs,
+  tool,
+  type LanguageModelUsage,
+  type ModelMessage,
+  type ProviderMetadata,
+  type Tool,
+  type ToolSet,
+} from 'ai'
 import { z } from 'zod'
 
 import type { AnyAction } from '@/modules/actions'
-import type { AnswerLlmConfig } from './llm-config'
-import { readAnswerLlmConfig } from './llm-config'
+import {
+  openRouterCostUsd,
+  openRouterGatewayConfig,
+  openRouterModel,
+  type OpenRouterGatewayConfig,
+} from '@/modules/model-gateway/public'
 import { runAnswerGate, type AnswerGateResult } from './answer-gate'
 import { collectAllowedSlugsFromToolResults } from './catalog-grounding'
 import { actionToOpenRouterTool } from './action-to-tool-spec'
@@ -34,56 +51,31 @@ import type { FollowUpIntent } from '@/modules/answer-thread/public'
 import type { HarnessModelRequestRecord, HarnessModelUsage, HarnessRunLoop } from '@/modules/harness/public'
 
 /**
- * The Phase 7 answer agent: an OpenRouter tool-calling loop over the AE read
- * toolset. This is the first tool-calling integration in the repo.
+ * The answer agent: a Vercel AI SDK tool-calling loop over the AE read
+ * toolset, routed through the shared OpenRouter model gateway.
  *
- * The model is given `registry.search` / `registry.detail` as tools. It emits
- * `tool_calls`; the server validates each call against the action's Zod schema,
- * runs it through `runAnswerToolCall` (which records the evidence), and feeds
- * the public-catalog result back as a `tool`-role message. After at most
- * `MAX_ROUNDS` rounds the model returns `AnswerProse` (oneLine / summary /
- * whatToDoNow). The server assembles `AnswerSource[]` and `allowedSlugs` from
- * the tool results - never from the model - and gates the prose against them.
+ * The model is given `registry.search` / `registry.detail` as tools. The SDK
+ * owns transport, tool-call encoding, and the multi-step loop; AE owns what
+ * matters here: `runAnswerToolCall` validates every call against the action's
+ * Zod schema and records it as evidence, and the tool budget is enforced in
+ * the tool itself so an over-budget call is a recorded refusal rather than a
+ * dropped one. After at most `MAX_ROUNDS` steps the model returns
+ * `AnswerProse` (oneLine / summary / whatToDoNow). The server assembles
+ * `AnswerSource[]` and `allowedSlugs` from the tool results - never from the
+ * model - and gates the prose against them.
  *
  * The registry stays literal. Misspelling recovery happens only when the model
  * chooses better `registry.search` arguments; the chosen input is persisted as
  * tool evidence. No hidden query-rewrite preprocessor runs.
  */
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MAX_ROUNDS = 4
 const DEFAULT_LIMIT = 3
-const ANSWER_PROSE_RESPONSE_FORMAT = {
-  type: 'json_schema',
-  json_schema: {
-    name: 'answer_prose',
-    strict: true,
-    schema: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        oneLine: {
-          type: 'string',
-          description: 'Short answer headline grounded only in supplied catalog facts.',
-        },
-        summary: {
-          type: 'string',
-          description: 'Concise explanation that stays inside Agentic Economy boundaries.',
-        },
-        whatToDoNow: {
-          type: 'string',
-          description: 'Bounded next action. Never imply booking, payment, dispatch, or live availability.',
-        },
-      },
-      required: ['oneLine', 'summary', 'whatToDoNow'],
-    },
-  },
-} as const
 
 export type AnswerToolUseAgentInput = {
   query: string
-  /** OpenRouter config; required when env-backed config is unavailable. */
-  config?: AnswerLlmConfig
+  /** OpenRouter gateway config; defaults to the environment-backed config. */
+  config?: OpenRouterGatewayConfig
   model?: string
   signal?: AbortSignal
   /** Frozen prior-turn providers, for filter_known / compare_known intents. */
@@ -122,8 +114,8 @@ export type AnswerToolUseAgentResult = {
 export async function runAnswerToolUseAgent(
   input: AnswerToolUseAgentInput,
 ): Promise<AnswerToolUseAgentResult> {
-  const config = input.config ?? readAnswerLlmConfig()
-  if (config === undefined) {
+  const config = input.config ?? openRouterGatewayConfig()
+  if (config.apiKey === undefined) {
     throw new AnswerToolUseAgentError('unavailable')
   }
 
@@ -211,24 +203,9 @@ function buildAgentResult(
 
 async function runRealToolUseAgent(
   input: AnswerToolUseAgentInput,
-  config: AnswerLlmConfig,
+  config: OpenRouterGatewayConfig,
 ): Promise<AnswerToolUseAgentResult> {
-  const readTools = input.disableTools ? [] : listAnswerModelToolActions()
-  const tools = readTools.map(actionToOpenRouterTool)
-
-  const messages: OpenRouterMessage[] = [
-    { role: 'system', content: buildToolUseAgentSystemPrompt() },
-    {
-      role: 'user',
-      content: buildToolUseAgentUserPrompt({
-        query: input.query,
-        ...(input.priorProviders === undefined ? {} : { priorProviders: input.priorProviders }),
-        ...(input.followUpIntent === undefined ? {} : { followUpIntent: input.followUpIntent }),
-        ...(input.searchContext === undefined ? {} : { searchContext: input.searchContext }),
-      }),
-    },
-  ]
-
+  const modelId = input.model ?? config.model
   const toolCalls: AnswerToolCallRecord[] = []
   const timings: AnswerTurnTimingEntry[] = []
   const modelRequests: HarnessModelRequestRecord[] = []
@@ -236,64 +213,27 @@ async function runRealToolUseAgent(
   const slugSeen = new Set<string>()
   const maxToolCalls = normalizeMaxToolCalls(input.maxToolCalls)
   let toolCallAttempts = 0
-  let seq = 0
-  for (let round = 0; round < MAX_ROUNDS; round += 1) {
-    const payload = await runOpenRouterModelRequest({
-      input,
-      config,
-      modelRequests,
-      timings,
-      timingName: 'model.openrouter_round',
-      timingMetadata: {
-        round,
-        tools: tools.length,
-      },
-      tools,
-      messages,
-    })
-    const assistantToolCalls = payload.choices?.[0]?.message?.tool_calls ?? []
-    updateLastModelStopReason(modelRequests, assistantToolCalls.length > 0 ? 'tool_calls' : 'stop')
-    updateLastModelTiming(timings, {
-      round,
-      tools: tools.length,
-    })
+  let toolSeq = 0
+  let toolBudgetExhausted = false
 
-    const assistantMessage = payload.choices?.[0]?.message
-    if (assistantMessage === undefined) {
-      throw new AnswerToolUseAgentError('no_response')
-    }
-
-    if (input.disableTools === true && assistantToolCalls.length > 0) {
-      throw new AnswerToolUseAgentError('tool_unavailable')
-    }
-    if (assistantToolCalls.length === 0) {
-      const prose = parseProse(assistantMessage.content)
-      if (prose === undefined) {
-        throw new AnswerToolUseAgentError('prose_failed')
-      }
-      return buildAgentResult(input, prose, toolCalls, providers, timings, modelRequests)
-    }
-
-    messages.push({ role: 'assistant', content: assistantMessage.content ?? '', tool_calls: assistantToolCalls })
-
-    for (const call of assistantToolCalls) {
-      const toolId = call.function?.name ?? ''
-      const parsedInput = applySearchContextToRegistrySearchInput(
-        input,
+  // The SDK dispatches an assistant message's tool calls concurrently. AE's
+  // budget, evidence order, and `seq` are all positional, so calls are drained
+  // one at a time in the order the model emitted them.
+  let toolQueue: Promise<void> = Promise.resolve()
+  const runToolCall = (toolId: string, rawInput: unknown, toolCallId: string): Promise<string> => {
+    const run = toolQueue.then(async () => {
+      const callInput = {
         toolId,
-        parseToolInput(call.function?.arguments),
-      )
-      const toolInput = {
-        toolId,
-        input: parsedInput,
+        input: applySearchContextToRegistrySearchInput(input, toolId, rawInput),
         turnId: 'pending',
-        seq,
+        seq: toolSeq,
         ...(input.harnessLoop === undefined ? {} : { harnessLoop: input.harnessLoop }),
       }
       const result = toolCallAttempts >= maxToolCalls
-        ? refuseAnswerToolCall(toolInput, 'budget_exceeded', call.id)
-        : await runAnswerToolCall(toolInput)
+        ? refuseAnswerToolCall(callInput, 'budget_exceeded', toolCallId)
+        : await runAnswerToolCall(callInput)
       toolCallAttempts += 1
+      toolBudgetExhausted = toolCallAttempts >= maxToolCalls
       toolCalls.push(result.record)
       appendTimings(timings, result.timings, {
         phase: 'agent_tool',
@@ -301,128 +241,232 @@ async function runRealToolUseAgent(
         toolSeq: result.record.seq,
       })
       appendProvidersFromToolResult(providers, slugSeen, result.providers)
-      seq += 1
-      messages.push({
-        role: 'tool',
-        tool_call_id: call.id ?? result.record.toolCallId,
-        content: safeToolResultJsonForPrompt(result.resultJson),
-      })
-    }
-    if (toolCallAttempts >= maxToolCalls) {
-      updateLastModelTiming(timings, { toolBudgetExhausted: true, maxToolCalls })
-      break
-    }
+      toolSeq += 1
+      return safeToolResultJsonForPrompt(result.resultJson)
+    })
+    toolQueue = run.then(() => undefined, () => undefined)
+    return run
   }
 
-  // Exhausted rounds: request a final prose-only completion.
-  const finalPayload = await runOpenRouterModelRequest({
-    input,
-    config,
-    modelRequests,
-    timings,
-    timingName: 'model.openrouter_final_prose',
-    timingMetadata: {
-      tools: 0,
-    },
-    tools: [],
-    messages: [
-      ...messages,
-      {
-        role: 'user',
-        content:
-          'Stop calling tools. Return AnswerProse JSON now: {"oneLine","summary","whatToDoNow"}.',
-      },
-    ],
+  const tools = buildAnswerAgentTools(runToolCall)
+
+  const recordStep = (timingName: string, extraMetadata: Record<string, string | number | boolean | null>) =>
+    (step: AnswerAgentStep): void => {
+      const seq = modelRequests.length
+      const resolvedModel = step.response.modelId ?? modelId
+      const usage = harnessUsage(step.usage)
+      const costUsd = openRouterCostUsd(step.providerMetadata)
+      recordModelRequest(input, modelRequests, {
+        seq,
+        provider: 'openrouter',
+        model: resolvedModel,
+        status: 'ok',
+        startedAt: step.response.timestamp.getTime(),
+        endedAt: step.response.timestamp.getTime() + step.performance.responseTimeMs,
+        durationMs: step.performance.responseTimeMs,
+        stopReason: step.rawFinishReason ?? step.finishReason,
+        ...(step.response.id === undefined ? {} : { responseId: step.response.id }),
+        ...(usage === undefined ? {} : { usage }),
+        ...(costUsd === undefined ? { costUnavailableReason: 'price_table_missing' } : { costUsd }),
+      })
+      timings.push(timingEntry(timingName, step.performance.responseTimeMs, {
+        ...extraMetadata,
+        provider: 'openrouter',
+        model: resolvedModel,
+      }))
+    }
+
+  const userPrompt = buildToolUseAgentUserPrompt({
+    query: input.query,
+    ...(input.priorProviders === undefined ? {} : { priorProviders: input.priorProviders }),
+    ...(input.followUpIntent === undefined ? {} : { followUpIntent: input.followUpIntent }),
+    ...(input.searchContext === undefined ? {} : { searchContext: input.searchContext }),
   })
+
+  /**
+   * The prose request withholds the toolset entirely and pins a strict
+   * `AnswerProse` schema, so the model cannot reach the catalogue again and
+   * cannot answer in free text.
+   */
+  const requestProse = (
+    prompt: { prompt: string } | { messages: ModelMessage[] },
+    timingName: string,
+  ) => runGuardedModelCall(input, modelId, () => generateText({
+    model: openRouterModel(config, modelId, { structuredOutputs: true }),
+    system: buildToolUseAgentSystemPrompt(),
+    ...prompt,
+    output: Output.object({ schema: AnswerProseSchema, name: 'answer_prose' }),
+    temperature: 0.2,
+    maxRetries: 0,
+    onStepFinish: recordStep(timingName, { tools: 0 }),
+    ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+  }))
+
+  // filter_known / compare_known reuse frozen prior evidence, so the turn is a
+  // single prose request that never exposes the catalogue toolset at all.
+  if (input.disableTools === true) {
+    const frozen = await requestProse({ prompt: userPrompt }, 'model.openrouter_round')
+    if (frozen.toolCalls.length > 0) {
+      throw new AnswerToolUseAgentError('tool_unavailable')
+    }
+    const frozenProse = frozen.output ?? parseProse(frozen.text)
+    if (frozenProse === undefined) {
+      throw new AnswerToolUseAgentError('prose_failed')
+    }
+    return buildAgentResult(input, frozenProse, toolCalls, providers, timings, modelRequests)
+  }
+
+  const toolPhase = await runGuardedModelCall(input, modelId, () => generateText({
+    model: openRouterModel(config, modelId),
+    system: buildToolUseAgentSystemPrompt(),
+    prompt: userPrompt,
+    tools,
+    temperature: 0.2,
+    maxRetries: 0,
+    // Stop as soon as the tool budget is spent: the final prose is a separate,
+    // schema-constrained request rather than another tool-capable round.
+    stopWhen: [stepCountIs(MAX_ROUNDS), () => toolBudgetExhausted],
+    onStepFinish: recordStep('model.openrouter_round', { tools: Object.keys(tools).length }),
+    ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+  }))
+  if (toolBudgetExhausted) {
+    updateLastModelTiming(timings, { toolBudgetExhausted: true, maxToolCalls })
+  }
+
+  const directProse = parseProse(toolPhase.text)
+  if (directProse !== undefined) {
+    return buildAgentResult(input, directProse, toolCalls, providers, timings, modelRequests)
+  }
+
+  const prosePhase = await requestProse(
+    {
+      messages: [
+        ...toolPhase.response.messages,
+        {
+          role: 'user',
+          content:
+            'Stop calling tools. Return AnswerProse JSON now: {"oneLine","summary","whatToDoNow"}.',
+        },
+      ],
+    },
+    'model.openrouter_final_prose',
+  )
   updateLastModelStopReason(modelRequests, 'final_prose')
-  const prose = parseProse(finalPayload.choices?.[0]?.message?.content)
+  const prose = prosePhase.output ?? parseProse(prosePhase.text)
   if (prose === undefined) {
     throw new AnswerToolUseAgentError('prose_failed')
   }
   return buildAgentResult(input, prose, toolCalls, providers, timings, modelRequests)
 }
 
-async function runOpenRouterModelRequest(input: {
-  input: AnswerToolUseAgentInput
-  config: AnswerLlmConfig
-  modelRequests: HarnessModelRequestRecord[]
-  timings: AnswerTurnTimingEntry[]
-  timingName: string
-  timingMetadata: Record<string, string | number | boolean | null>
-  tools: readonly ReturnType<typeof actionToOpenRouterTool>[]
-  messages: readonly OpenRouterMessage[]
-}): Promise<OpenRouterResponse> {
-  const startedAt = Date.now()
-  const model = input.input.model ?? input.config.model
-  const seq = input.modelRequests.length
+type AnswerAgentStep = Readonly<{
+  finishReason: string
+  rawFinishReason: string | undefined
+  usage: LanguageModelUsage
+  performance: Readonly<{ responseTimeMs: number }>
+  response: Readonly<{ id?: string | undefined; modelId?: string | undefined; timestamp: Date }>
+  providerMetadata: ProviderMetadata | undefined
+}>
 
+/**
+ * The AE read toolset, projected onto AI SDK tools.
+ *
+ * Input validation deliberately always succeeds here: `runAnswerToolCall` is
+ * the single validator, and it records a refusal or error as tool evidence
+ * rather than throwing. Letting the SDK reject a malformed call would abort
+ * the turn and lose that record.
+ */
+function buildAnswerAgentTools(
+  runToolCall: (toolId: string, rawInput: unknown, toolCallId: string) => Promise<string>,
+): ToolSet {
+  const tools: Record<string, Tool> = {}
+  for (const action of listAnswerModelToolActions()) {
+    const spec = actionToOpenRouterTool(action)
+    tools[action.id] = tool({
+      description: spec.function.description,
+      inputSchema: jsonSchema<unknown>(
+        {
+          type: 'object',
+          properties: Object.fromEntries(
+            Object.entries(spec.function.parameters.properties).map(([name, property]) => [
+              name,
+              {
+                type: property.type,
+                description: property.description,
+                ...(property.enum === undefined ? {} : { enum: [...property.enum] }),
+              },
+            ]),
+          ),
+          required: [...spec.function.parameters.required],
+        },
+        { validate: (value: unknown) => ({ success: true, value }) },
+      ),
+      execute: (rawInput: unknown, options: { toolCallId: string }) =>
+        runToolCall(action.id, rawInput, options.toolCallId),
+    })
+  }
+  return tools
+}
+
+/**
+ * Runs one model interaction under the turn's harness guards when the caller
+ * owns a live loop, and records a failed request otherwise.
+ */
+async function runGuardedModelCall<T>(
+  input: AnswerToolUseAgentInput,
+  modelId: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  const startedAt = Date.now()
   try {
-    const request = () => postChatCompletion({
-      config: input.config,
-      model,
-      tools: input.tools,
-      messages: input.messages,
-      ...(input.input.signal === undefined ? {} : { signal: input.input.signal }),
-    })
-    const payload = input.input.harnessLoop === undefined
-      ? await request()
-      : await input.input.harnessLoop.runModel<OpenRouterResponse>({
-          seq,
-          provider: 'openrouter',
-          model,
-          summarize: (response) => {
-            const usage = usageFromOpenRouterResponse(response)
-            const stopReason = response.choices?.[0]?.finish_reason
-            return {
-              seq,
-              ...(stopReason === undefined ? {} : { stopReason }),
-              ...(response.id === undefined ? {} : { responseId: response.id }),
-              ...(usage === undefined ? {} : { usage }),
-              ...costAccountingFromOpenRouterResponse(response),
-            }
-          },
-          summarizeError: (error) => ({
-            seq,
-            costUnavailableReason: 'request_failed',
-            ...(isAnswerToolUseAgentError(error) ? { stopReason: error.code } : {}),
-          }),
-        }, request)
-    const durationMs = Date.now() - startedAt
-    const usage = usageFromOpenRouterResponse(payload)
-    recordModelRequest(input.input, input.modelRequests, {
-      seq,
-      provider: 'openrouter',
-      model: payload.model ?? model,
-      status: 'ok',
-      startedAt,
-      endedAt: startedAt + durationMs,
-      durationMs,
-      ...(payload.choices?.[0]?.finish_reason === undefined ? {} : { stopReason: payload.choices[0].finish_reason }),
-      ...(payload.id === undefined ? {} : { responseId: payload.id }),
-      ...(usage === undefined ? {} : { usage }),
-      ...costAccountingFromOpenRouterResponse(payload),
-    })
-    input.timings.push(timingEntry(input.timingName, durationMs, {
-      ...input.timingMetadata,
-      provider: 'openrouter',
-      model: payload.model ?? model,
-    }))
-    return payload
+    return input.harnessLoop === undefined
+      ? await work()
+      : await input.harnessLoop.runModel<T>({ seq: 0, provider: 'openrouter', model: modelId }, work)
   } catch (error) {
     const durationMs = Date.now() - startedAt
-    recordModelRequest(input.input, input.modelRequests, {
-      seq,
+    const agentError = toAgentError(error)
+    recordModelRequest(input, [], {
+      seq: 0,
       provider: 'openrouter',
-      model,
+      model: modelId,
       status: 'error',
       startedAt,
       endedAt: startedAt + durationMs,
       durationMs,
-      errorCode: isAnswerToolUseAgentError(error) ? error.code : 'request_failed',
+      errorCode: agentError.code,
       costUnavailableReason: 'request_failed',
     })
-    throw error
+    throw agentError
   }
+}
+
+/**
+ * A model asking for a tool that is not on the turn's toolset is a boundary
+ * refusal, not a transport failure, so it keeps its own code.
+ */
+function toAgentError(error: unknown): AnswerToolUseAgentError {
+  if (isAnswerToolUseAgentError(error)) {
+    return error
+  }
+  if (NoSuchToolError.isInstance(error)) {
+    return new AnswerToolUseAgentError('tool_unavailable', { cause: error })
+  }
+  return new AnswerToolUseAgentError('request_failed', { cause: error })
+}
+
+function harnessUsage(usage: LanguageModelUsage): HarnessModelUsage | undefined {
+  const mapped: HarnessModelUsage = {
+    ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
+    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
+    ...(usage.inputTokenDetails.cacheReadTokens === undefined
+      ? {}
+      : { cachedInputTokens: usage.inputTokenDetails.cacheReadTokens }),
+    ...(usage.outputTokenDetails.reasoningTokens === undefined
+      ? {}
+      : { reasoningOutputTokens: usage.outputTokenDetails.reasoningTokens }),
+    ...(usage.totalTokens === undefined ? {} : { totalTokens: usage.totalTokens }),
+  }
+  return Object.keys(mapped).length === 0 ? undefined : mapped
 }
 
 function recordModelRequest(
@@ -538,101 +582,6 @@ function appendProvidersFromToolResult(
   }
 }
 
-type OpenRouterMessage = {
-  role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string
-  tool_calls?: readonly OpenRouterToolCall[]
-  tool_call_id?: string
-}
-
-type OpenRouterToolCall = {
-  id?: string
-  type?: string
-  function?: { name?: string; arguments?: string }
-}
-
-type OpenRouterChoice = {
-  finish_reason?: string
-  message?: {
-    content?: string
-    tool_calls?: readonly OpenRouterToolCall[]
-  }
-}
-
-type OpenRouterResponse = {
-  id?: string
-  model?: string
-  choices?: readonly OpenRouterChoice[]
-  usage?: {
-    prompt_tokens?: number
-    completion_tokens?: number
-    total_tokens?: number
-    cost?: number
-    prompt_tokens_details?: {
-      cached_tokens?: number
-    }
-    completion_tokens_details?: {
-      reasoning_tokens?: number
-    }
-  }
-}
-
-async function postChatCompletion(input: {
-  config: AnswerLlmConfig
-  model?: string
-  tools: readonly ReturnType<typeof actionToOpenRouterTool>[]
-  messages: readonly OpenRouterMessage[]
-  signal?: AbortSignal
-}): Promise<OpenRouterResponse> {
-  const response = await fetch(`${input.config.apiBaseUrl ?? OPENROUTER_URL}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${input.config.apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.AE_SITE_URL ?? process.env.SITE_URL ?? 'http://127.0.0.1:3000',
-      'X-Title': 'Agentic Economy',
-    },
-    body: JSON.stringify({
-      model: input.model ?? input.config.model,
-      messages: input.messages,
-      ...(input.tools.length === 0
-        ? { tool_choice: 'none', response_format: ANSWER_PROSE_RESPONSE_FORMAT }
-        : { tools: input.tools, tool_choice: 'auto', parallel_tool_calls: false }),
-      temperature: 0.2,
-    }),
-    ...(input.signal === undefined ? {} : { signal: input.signal }),
-  })
-
-  if (!response.ok) {
-    throw new AnswerToolUseAgentError('request_failed')
-  }
-  return (await response.json()) as OpenRouterResponse
-}
-
-function usageFromOpenRouterResponse(payload: OpenRouterResponse): HarnessModelUsage | undefined {
-  const usage = payload.usage
-  if (usage === undefined) {
-    return undefined
-  }
-  return {
-    ...(usage.prompt_tokens === undefined ? {} : { inputTokens: usage.prompt_tokens }),
-    ...(usage.completion_tokens === undefined ? {} : { outputTokens: usage.completion_tokens }),
-    ...(usage.prompt_tokens_details?.cached_tokens === undefined ? {} : { cachedInputTokens: usage.prompt_tokens_details.cached_tokens }),
-    ...(usage.completion_tokens_details?.reasoning_tokens === undefined ? {} : { reasoningOutputTokens: usage.completion_tokens_details.reasoning_tokens }),
-    ...(usage.total_tokens === undefined ? {} : { totalTokens: usage.total_tokens }),
-  }
-}
-
-function costAccountingFromOpenRouterResponse(payload: OpenRouterResponse): Pick<
-  HarnessModelRequestRecord,
-  'costUsd' | 'costUnavailableReason'
-> {
-  const cost = payload.usage?.cost
-  if (typeof cost === 'number' && Number.isFinite(cost)) {
-    return { costUsd: cost }
-  }
-  return { costUnavailableReason: 'price_table_missing' }
-}
 
 function parseProse(content: string | undefined): AnswerProse | undefined {
   if (content === undefined || content.trim().length === 0) {
@@ -830,8 +779,8 @@ function buildAgentJsonQueryForSearchContext(
 
 export class AnswerToolUseAgentError extends Error {
   readonly code: string
-  constructor(code: string) {
-    super(`answer_tool_use_${code}`)
+  constructor(code: string, options?: ErrorOptions) {
+    super(`answer_tool_use_${code}`, options)
     this.name = 'AnswerToolUseAgentError'
     this.code = code
   }

@@ -13,10 +13,12 @@ import {
   routeMandateDigest,
   verifyRouteMandate,
   type RouteMandate,
+} from '@/modules/customer-request/route-mandate'
+import {
   evaluateStandingRouteAuthority,
   standingRoutePolicyDigest,
   type StandingRoutePolicy,
-} from '@/modules/customer-request/public'
+} from '@/modules/customer-request/standing-route-authority'
 
 describe('RouteMandate', () => {
   it('authorizes one exact low-risk route and refuses route widening under the same standing policy', () => {

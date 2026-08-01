@@ -6,10 +6,9 @@ import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
 import { AeOperatorQueueList, type AeOperatorQueueRow } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Banner } from '@astryxdesign/core/Banner'
-import { Card } from '@astryxdesign/core/Card'
-import { Text } from '@astryxdesign/core/Text'
-import { Tab, TabList } from '@astryxdesign/core/TabList'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Card } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import {
@@ -68,16 +67,15 @@ function AdminInquiriesRoute() {
 
 function OperatorAccess({ readback }: { readback: InquiryOperatorReconstructionServerResult }) {
   return (
-    <Banner
-      status={readback.kind === 'denied' ? 'error' : 'success'}
-      icon={readback.kind === 'denied' ? <ShieldAlertIcon aria-hidden="true" className="size-4" /> : <ShieldCheckIcon aria-hidden="true" className="size-4" />}
-      title={readback.kind === 'denied' ? 'Access denied' : 'Reconstruction available'}
-      description={
-        readback.kind === 'denied'
+    <Alert variant={readback.kind === 'denied' ? 'destructive' : 'default'}>
+      {readback.kind === 'denied' ? <ShieldAlertIcon aria-hidden="true" /> : <ShieldCheckIcon aria-hidden="true" />}
+      <AlertTitle>{readback.kind === 'denied' ? 'Access denied' : 'Reconstruction available'}</AlertTitle>
+      <AlertDescription>
+        {readback.kind === 'denied'
           ? `${readback.publicMessage} HTTP ${readback.httpStatus}.`
-          : `Source-backed inquiry reconstruction is available to ${readback.actorRef}. HTTP ${readback.httpStatus}.`
-      }
-    />
+          : `Source-backed inquiry reconstruction is available to ${readback.actorRef}. HTTP ${readback.httpStatus}.`}
+      </AlertDescription>
+    </Alert>
   )
 }
 
@@ -116,10 +114,10 @@ function FilterPanel({ search }: { search: AdminInquirySearch }) {
 
 function DeniedReadback({ readback }: { readback: Extract<InquiryOperatorReconstructionServerResult, { kind: 'denied' }> }) {
   return (
-    <Card padding={5}>
+    <Card className="p-5">
       <div className="grid gap-1.5">
-        <Text as="div" type="large" weight="semibold" color="primary" display="block">Private rows withheld</Text>
-        <Text as="div" type="supporting" color="secondary" display="block">Denied inquiry reconstruction reads return no source rows.</Text>
+        <p className="text-lg font-semibold text-foreground">Private rows withheld</p>
+        <p className="text-sm text-muted-foreground">Denied inquiry reconstruction reads return no source rows.</p>
       </div>
       <div className="grid gap-4">
         <AeOperatorFactGrid
@@ -153,10 +151,10 @@ function AllowedReadback({ readback }: { readback: Extract<InquiryOperatorRecons
 
   return (
     <>
-      <Card padding={5}>
+      <Card className="p-5">
         <div className="grid gap-1.5">
-          <Text as="div" type="large" weight="semibold" color="primary" display="block">Source summary</Text>
-          <Text as="div" type="supporting" color="secondary" display="block">Counts are derived from inquiry, notification, audit, funnel, and operation refs.</Text>
+          <p className="text-lg font-semibold text-foreground">Source summary</p>
+          <p className="text-sm text-muted-foreground">Counts are derived from inquiry, notification, audit, funnel, and operation refs.</p>
         </div>
         <div className="grid gap-4">
           <AeOperatorFactGrid
@@ -172,19 +170,23 @@ function AllowedReadback({ readback }: { readback: Extract<InquiryOperatorRecons
         </div>
       </Card>
       {readback.rows.length === 0 ? (
-        <Card padding={5}>
+        <Card className="p-5">
           <div className="grid gap-1.5">
-            <Text as="div" type="large" weight="semibold" color="primary" display="block">No inquiry rows</Text>
-            <Text as="div" type="supporting" color="secondary" display="block">No source-owned inquiry path matches the current filters.</Text>
+            <p className="text-lg font-semibold text-foreground">No inquiry rows</p>
+            <p className="text-sm text-muted-foreground">No source-owned inquiry path matches the current filters.</p>
           </div>
         </Card>
       ) : (
         <div className="grid gap-4">
-          <TabList value={filter} onChange={(value) => setFilter(value as typeof filter)} hasDivider aria-label="Filter inquiry reconstruction rows">
-            <Tab value="all" label={`All (${readback.rows.length})`} />
-            <Tab value="attention" label={`Needs attention (${readback.summary.needsRepair})`} />
-            <Tab value="terminal" label={`Terminal (${readback.summary.terminal})`} />
-          </TabList>
+          <Tabs value={filter} onValueChange={(value) => {
+            if (value === 'all' || value === 'attention' || value === 'terminal') setFilter(value)
+          }}>
+            <TabsList aria-label="Filter inquiry reconstruction rows">
+              <TabsTrigger value="all">All ({readback.rows.length})</TabsTrigger>
+              <TabsTrigger value="attention">Needs attention ({readback.summary.needsRepair})</TabsTrigger>
+              <TabsTrigger value="terminal">Terminal ({readback.summary.terminal})</TabsTrigger>
+            </TabsList>
+          </Tabs>
           <AeOperatorQueueList
             rows={queueRows}
             scroll
@@ -233,9 +235,9 @@ function toInquiryQueueRow(row: InquiryOperatorReconstructionRow): AeOperatorQue
 function RefSection<T>({ title, refs, renderRef }: { title: string; refs: readonly T[]; renderRef: (ref: T) => string }) {
   return (
     <section className="grid gap-2">
-      <h2 className="text-sm font-semibold text-primary">{title}</h2>
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       {refs.length === 0 ? (
-        <p className="text-sm text-secondary">No refs recorded.</p>
+        <p className="text-sm text-muted-foreground">No refs recorded.</p>
       ) : (
         <AeOperatorFactGrid
           facts={refs.map((ref, index) => ({ label: `${title} ${index + 1}`, value: renderRef(ref) }))}

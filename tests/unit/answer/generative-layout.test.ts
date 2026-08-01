@@ -339,6 +339,35 @@ describe('buildArtifactsFromSnapshot artifact budgets', () => {
     expect(artifacts.map((artifact) => artifact.kind)).toContain('recovery-prompts')
   })
 
+  it('renders web discovery as a separate imported-claims artifact with citation provenance', () => {
+    const artifacts = buildArtifactsFromSnapshot({
+      query: 'funeral parlours in Parramatta',
+      oneLine: 'No listed businesses match yet.',
+      providers: [],
+      importedClaims: [{
+        businessName: 'Example Funerals',
+        suburb: 'Parramatta',
+        phone: '02 0000 0000',
+        sourceUrl: 'https://example.test/funerals',
+      }],
+      summary: 'No listed businesses match this request yet.',
+      nextStep: 'Review nearby providers.',
+      agentJsonUrl: '/api/businesses/search?q=funeral',
+      layoutProfile: 'empty_state',
+    })
+
+    expect(artifacts).toContainEqual({
+      kind: 'imported-claims',
+      claims: [{
+        businessName: 'Example Funerals',
+        suburb: 'Parramatta',
+        phone: '02 0000 0000',
+        sourceUrl: 'https://example.test/funerals',
+      }],
+    })
+    expect(artifacts.map((artifact) => artifact.kind)).not.toContain('provider-cards')
+  })
+
   it('keeps boundary turns to answer text and next step', () => {
     const artifacts = buildArtifactsFromSnapshot({
       query: 'can you book a plumber for me',

@@ -1,12 +1,18 @@
 import type { BusinessRecord } from '@/modules/business/public'
 import type {
+  PublicAccessPath,
   PublicBusinessPageRouteReadbackResult,
+  PublicOfferingSupplyProjection,
   PublicRouteCapabilityContract,
   PublicRouteCatalogContract,
   PublicRouteServiceContract,
 } from '@/modules/catalog/public'
 import type { OperationKey, CorrelationId } from '@/modules/common/ids'
-import { PUBLIC_INQUIRY_UNAVAILABLE_REASON } from '@/modules/inquiries/public-copy'
+import {
+  PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+  PUBLIC_PHONE_CHANNEL_DISCLOSURE,
+  PUBLIC_WEBSITE_CHANNEL_DISCLOSURE,
+} from '@/modules/inquiries/public-copy'
 import {
   createEmptyInquirySourceState,
   evaluateR1TargetAdmission,
@@ -458,35 +464,67 @@ export function projectPublicInquiryAvailability(
 ): PublicRouteCatalogContract {
   const sourceConsistentCatalog = projectSourceConsistentInquiryAvailability(catalog)
   if (admission?.admitted === true) return sourceConsistentCatalog
+  if (selectPublicInquiryTarget(sourceConsistentCatalog) === undefined) return sourceConsistentCatalog
 
-  const target = selectPublicInquiryTarget(sourceConsistentCatalog)
-  if (target === undefined) return sourceConsistentCatalog
-
+  // No admitted target means the inquiry route refuses this business outright.
+  // Withdrawing only the one target the page happened to select would leave a
+  // second service still telling the reader to send a first request.
   return {
     ...sourceConsistentCatalog,
-    services: sourceConsistentCatalog.services.map((service) => {
-      if (service.serviceId !== target.serviceId) return service
-      return {
-        ...service,
-        firstRequest: {
-          mode: 'not_available_yet',
-          publicDisclosure: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
-          publicChannel: 'not_available',
-          noContactReason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
-          rawContactExcluded: true,
-        },
-        capabilities: service.capabilities.map((capability) =>
-          capability.kind === target.capabilityKind
-            ? {
-                ...capability,
-                status: 'unavailable' as const,
-                reason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
-                firstRequest: unavailablePublicFirstRequest(),
-              }
-            : capability),
-      }
-    }),
+    services: sourceConsistentCatalog.services.map((service) => ({
+      ...service,
+      ...(describesFirstContact(service.firstRequest) ? { firstRequest: unavailablePublicFirstRequest() } : {}),
+      capabilities: service.capabilities.map((capability) =>
+        describesFirstContact(capability.firstRequest)
+          ? {
+              ...capability,
+              status: 'unavailable' as const,
+              reason: PUBLIC_INQUIRY_UNAVAILABLE_REASON,
+              firstRequest: unavailablePublicFirstRequest(),
+            }
+          : capability),
+    })),
   }
+}
+
+/**
+ * Offering supply as the business page should render it.
+ *
+ * `inquiryHref` is the reachable inquiry destination, or `undefined` when the
+ * inquiry route would refuse. Refused means the AE path is withdrawn rather
+ * than shown without a destination, and the human channels that remain are
+ * described by their own channel instead of the stored first-contact copy.
+ * Admitted means the AE path carries the destination, so the sentence the
+ * reader is given and the link they can click are the same fact.
+ */
+export function projectPublicInquiryOfferingSupply(
+  offerings: readonly PublicOfferingSupplyProjection[],
+  inquiryHref: string | undefined,
+): readonly PublicOfferingSupplyProjection[] {
+  return offerings.map((offering) => ({
+    ...offering,
+    accessPaths: offering.accessPaths.flatMap((path): readonly PublicAccessPath[] => {
+      const descriptor = path.descriptor
+      if (descriptor.kind !== 'human_request') return [path]
+      if (descriptor.channel === 'ae_inquiry') {
+        return inquiryHref === undefined ? [] : [{ ...path, descriptor: { ...descriptor, url: inquiryHref } }]
+      }
+      if (inquiryHref !== undefined) return [path]
+      return [{
+        ...path,
+        descriptor: {
+          ...descriptor,
+          disclosure: descriptor.channel === 'phone'
+            ? PUBLIC_PHONE_CHANNEL_DISCLOSURE
+            : PUBLIC_WEBSITE_CHANNEL_DISCLOSURE,
+        },
+      }]
+    }),
+  }))
+}
+
+function describesFirstContact(firstRequest: PublicRouteServiceContract['firstRequest']): boolean {
+  return firstRequest.mode !== 'not_available_yet' && firstRequest.publicChannel === 'public_business_contact'
 }
 
 function projectSourceConsistentInquiryAvailability(
@@ -495,11 +533,9 @@ function projectSourceConsistentInquiryAvailability(
   return {
     ...catalog,
     services: catalog.services.map((service) => {
-      const servicePublishesRequestPath = service.firstRequest.mode !== 'not_available_yet'
-        && service.firstRequest.publicChannel === 'public_business_contact'
+      const servicePublishesRequestPath = describesFirstContact(service.firstRequest)
       const capabilities = service.capabilities.map((capability) => {
-        const capabilityPublishesRequestPath = capability.firstRequest.mode !== 'not_available_yet'
-          && capability.firstRequest.publicChannel === 'public_business_contact'
+        const capabilityPublishesRequestPath = describesFirstContact(capability.firstRequest)
         if (capability.status !== 'available' || (servicePublishesRequestPath && capabilityPublishesRequestPath)) {
           return capability
         }
@@ -511,9 +547,7 @@ function projectSourceConsistentInquiryAvailability(
         }
       })
       const hasAvailableCapability = capabilities.some((capability) => (
-        capability.status === 'available'
-        && capability.firstRequest.mode !== 'not_available_yet'
-        && capability.firstRequest.publicChannel === 'public_business_contact'
+        capability.status === 'available' && describesFirstContact(capability.firstRequest)
       ))
       return {
         ...service,

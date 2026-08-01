@@ -1,7 +1,8 @@
-import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
+import type { AnswerSource } from '@/modules/answer/public'
 import type { FollowUpIntent, PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
 import {
   activeSelectedProviderForTurns,
+  listedProvidersFromArtifacts,
   providerHasInquiryPath,
   selectedProviderFromArtifacts,
 } from './session-provider-context'
@@ -37,7 +38,7 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
   const latestProviders = listedProvidersFromArtifacts(latestTurn.artifacts)
   const selectedProvider = activeSelectedProviderForTurns(completedTurns)
   const currentSelectedProvider = selectedProviderFromArtifacts(latestTurn.artifacts)
-  const inquiryReadyCount = providers.filter((provider) => hasInquiryPath(provider)).length
+  const inquiryReadyCount = providers.filter(providerHasInquiryPath).length
   const liveTurn = input.liveTurn ?? null
 
   // No listings and nothing selected: the context card would just repeat "no
@@ -201,26 +202,6 @@ function listedProvidersFromTurns(turns: readonly PublicThreadTurn[]): AnswerSou
   return [...providersBySlug.values()]
 }
 
-function listedProvidersFromArtifacts(artifacts: readonly AnswerArtifact[]): AnswerSource[] {
-  const providers: AnswerSource[] = []
-
-  for (const artifact of artifacts) {
-    switch (artifact.kind) {
-      case 'selected-provider':
-        providers.push(artifact.provider)
-        break
-      case 'provider-cards':
-      case 'provider-compare-table':
-        providers.push(...artifact.providers)
-        break
-      default:
-        break
-    }
-  }
-
-  return providers
-}
-
 function currentAnswerLabel(turn: PublicThreadTurn): string {
   const selectedProvider = selectedProviderFromArtifacts(turn.artifacts)
   if (selectedProvider !== undefined) {
@@ -258,6 +239,3 @@ function inquiryReadinessLabel(count: number): string {
   return `${count} listed ${count === 1 ? 'business publishes' : 'businesses publish'} an inquiry path`
 }
 
-function hasInquiryPath(provider: AnswerSource): boolean {
-  return provider.inquiryUrl !== undefined && provider.inquiryUrl.length > 0
-}

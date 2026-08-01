@@ -1,4 +1,5 @@
-import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
+import { type JsonValue } from '@/modules/capability-contract/public'
+import { parseBoundedJson } from '@/modules/common/bounded-json'
 import {
   projectCustomerActionStatus,
   projectCustomerCriteria,
@@ -32,14 +33,6 @@ export type StoredRouteRunProjection = Readonly<{
   updatedAt: number
 }>
 
-export function parseCustomerRouteResult(resultJson: string): JsonValue | undefined {
-  try {
-    const parsed: unknown = JSON.parse(resultJson)
-    return isBoundedJsonValue(parsed) ? parsed : undefined
-  } catch {
-    return undefined
-  }
-}
 
 export function isProviderReportedRouteFailure(result: JsonValue): boolean {
   return typeof result === 'object' && result !== null && 'reason' in result
@@ -81,7 +74,7 @@ export function projectStoredRouteRun(
   run: StoredRouteRunProjection,
 ): CustomerRequestActionResult {
   const criteria = projectCustomerCriteria(aggregate.evaluation.criteria)
-  const result = run.resultJson === undefined ? undefined : parseCustomerRouteResult(run.resultJson)
+  const result = run.resultJson === undefined ? undefined : parseBoundedJson(run.resultJson)
   if ((run.state === 'completed' || run.state === 'failed' || run.state === 'outcome_unknown')
     && run.businesses === undefined) {
     return projectNeedsAttention({

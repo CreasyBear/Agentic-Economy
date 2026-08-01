@@ -1514,8 +1514,8 @@ describe('server notification provider seam', () => {
     expect(calls).toHaveLength(0)
   })
 
-  it('verifies Resend Svix signatures and normalizes redacted webhook metadata', () => {
-    const verified = verifyResendWebhook({
+  it('verifies Resend Svix signatures and normalizes redacted webhook metadata', async () => {
+    const verified = await verifyResendWebhook({
       rawBody,
       headers: signedResendHeaders(secret, rawBody, svixId, svixTimestamp),
       secret,
@@ -1533,26 +1533,27 @@ describe('server notification provider seam', () => {
     expect(verified.redactedPayloadJson).not.toContain('Private subject')
   })
 
-  it('rejects missing, stale, and invalid Resend webhook signatures', () => {
-    expect(() => verifyResendWebhook({ rawBody, headers: new Headers(), secret, now })).toThrow(
-      expect.objectContaining({ code: 'missing_resend_signature_headers', status: 400 })
-    )
-    expect(() =>
+  it('rejects missing, stale, and invalid Resend webhook signatures', async () => {
+    await expect(verifyResendWebhook({ rawBody, headers: new Headers(), secret, now })).rejects.toMatchObject({
+      code: 'missing_resend_signature_headers',
+      status: 400,
+    })
+    await expect(
       verifyResendWebhook({
         rawBody,
         headers: signedResendHeaders(secret, rawBody, svixId, String(Math.floor((now - 10 * 60 * 1000) / 1000))),
         secret,
         now,
       })
-    ).toThrow(expect.objectContaining({ code: 'stale_resend_signature', status: 401 }))
-    expect(() =>
+    ).rejects.toMatchObject({ code: 'stale_resend_signature', status: 401 })
+    await expect(
       verifyResendWebhook({
         rawBody,
         headers: signedResendHeaders(secret, rawBody.replace('delivered', 'bounced'), svixId, svixTimestamp),
         secret,
         now,
       })
-    ).toThrow(expect.objectContaining({ code: 'invalid_resend_signature', status: 401 }))
+    ).rejects.toMatchObject({ code: 'invalid_resend_signature', status: 401 })
   })
 
   it('verifies the Resend route before forwarding redacted metadata to Convex', async () => {

@@ -68,8 +68,8 @@ export function buildInquiryHandoffSummary(resolution: InquiryHandoffResolution)
       ].join(' ')
     case 'no_provider':
       return [
-        'AE needs a listed business before it can route a qualified inquiry.',
-        'Search for a service and place, then choose a business that publishes an inquiry path.',
+        'No listed business is in this thread yet.',
+        'Search a service and area, or carry a short brief to a provider before opening an inquiry.',
       ].join(' ')
   }
 }
@@ -83,7 +83,7 @@ export function buildInquiryHandoffNextStep(resolution: InquiryHandoffResolution
     case 'choose_provider':
       return 'Use Open inquiry form from the listed businesses in this answer, or name the business you want to contact.'
     case 'no_provider':
-      return 'Ask for a service and place first, then send a qualified inquiry when a listed business publishes that path.'
+      return 'Search nearby, then choose a listed business that publishes an inquiry path—or review a provider and use its published contact guidance.'
   }
 }
 

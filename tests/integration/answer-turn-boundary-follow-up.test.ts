@@ -235,4 +235,70 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       }
     }
   }, 15_000)
+  it('keeps the dental need while refining a natural Adelaide location follow-up', async () => {
+    const store = createAnswerThreadTestStore()
+    installAnswerThreadTestPort(store)
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'The Adelaide dental option remains in view.',
+        summary:
+          'The Adelaide listing publishes general dental care. The business confirms timing, price, availability, and the work.',
+        whatToDoNow: 'Open the Adelaide listing and review its published quote path.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
+    const previousSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
+    delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+
+    let threadId = ''
+    try {
+      const first = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie: SESSION_COOKIE },
+          body: JSON.stringify({ query: 'My tooth hurts and I need a dentist near Adelaide this week' }),
+        }),
+      )
+      const firstFrames = parseStream(await first.text())
+      const firstComplete = firstFrames.at(-1)?.event
+      if (firstComplete?.type !== 'complete') throw new Error('expected first complete event')
+      expect(firstComplete.answer.providers.map((provider) => provider.slug)).toEqual(['adelaide-dental-clinic'])
+
+      const threadEvent = firstFrames.find((frame) => frame.event.type === 'thread')?.event
+      if (threadEvent?.type !== 'thread') throw new Error('expected thread event')
+      threadId = threadEvent.threadId
+
+      const followUp = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie: SESSION_COOKIE },
+          body: JSON.stringify({ threadId, query: 'Only show options near Adelaide' }),
+        }),
+      )
+      const followUpFrames = parseStream(await followUp.text())
+      const complete = followUpFrames.at(-1)?.event
+      expect(complete?.type).toBe('complete')
+      if (complete?.type !== 'complete') throw new Error('expected follow-up complete event')
+      expect(complete.answer.providers.map((provider) => provider.slug)).toEqual(['adelaide-dental-clinic'])
+      expect(complete.answer.oneLine).toContain('Adelaide')
+      expect(server.requests).toHaveLength(0)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      else process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      if (previousSeed === undefined) delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+      else process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousSeed
+      if (previousConvexUrl === undefined) delete process.env.CONVEX_URL
+      else process.env.CONVEX_URL = previousConvexUrl
+      if (previousPublicConvexUrl === undefined) delete process.env.VITE_CONVEX_URL
+      else process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+    }
+  }, 15_000)
 })

@@ -4,7 +4,7 @@
 **Scope:** `/` chat shell, `GET /api/answer`, optional gated LLM prose, artifact rendering, share links.  
 **Non-scope:** owner/admin surfaces, agent-tools write path (`inquiry.submit`), Phase 6 business-action guardrails, discovery manifest generation (`AI-SPEC.md`).
 
-**Related:** `PRODUCT.md`, `AGENTS.md`, `AI-SPEC.md`, `.ui-craft/surfaces/chat.md`, `src/modules/answer/`.
+**Related:** `.planning/PROJECT.md`, `.planning/BRAND.md`, `AI-SPEC.md`, `src/modules/answer/`. (Former `PRODUCT.md`/`AGENTS.md` references removed 2026-08-01 — those documents are archived.)
 
 ---
 
@@ -566,4 +566,4 @@ Malformed LLM JSON → deterministic fallback (preferred) or `error` with `copyI
 
 ---
 
-*Authority for answer synthesis. When this doc and `AI-SPEC.md` overlap on injection, both apply. When this doc and `.ui-craft/surfaces/chat.md` disagree on IA, this doc wins for API/contracts; chat.md wins for visual composition until merged.*
+*Authority for answer synthesis. When this doc and `AI-SPEC.md` overlap on injection, both apply.*

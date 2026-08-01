@@ -1,19 +1,27 @@
 /// <reference types="vite/client" />
 import { ClerkProvider } from '@clerk/tanstack-react-start'
-import { HeadContent, Outlet, Scripts, createRootRoute, useRouterState } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
-import { Theme } from '@astryxdesign/core/theme'
-import { LinkProvider } from '@astryxdesign/core/Link'
-import { LayerProvider } from '@astryxdesign/core/Layer'
-import { neutralTheme } from '@astryxdesign/theme-neutral/built'
+import { HeadContent, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
+import { useEffect, type ReactNode } from 'react'
+import { Toaster } from 'sonner'
 
-import { RouterLink } from '@/components/astryx/RouterLink'
-import { RouteProgressBar } from '@/components/astryx/RouteProgressBar'
+
+import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
 
 import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
-import { AeToaster } from '@/components/ae/feedback/AeToaster'
-import { AeObservabilityBoot } from '@/components/ae/layout/AeObservabilityBoot'
+import { bootClientObservability } from '@/lib/observability/boot-client-observability'
 import appCss from '../styles/globals.css?url'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
+import { HOME } from '@/content/brand-copy'
+
+function AeObservabilityBoot() {
+  const router = useRouter()
+
+  useEffect(() => {
+    bootClientObservability(router)
+  }, [router])
+
+  return null
+}
 
 export const Route = createRootRoute({
   head: () => ({
@@ -23,7 +31,7 @@ export const Route = createRootRoute({
       { title: 'Agentic Economy' },
       {
         name: 'description',
-        content: 'Ask for a local service. Compare published business details, then contact the business when inquiry is available.',
+        content: HOME.metaDescription,
       },
     ],
     links: [
@@ -45,7 +53,7 @@ function RootComponent() {
 
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const content = usesClerkBypass() || !requiresClerkProvider(pathname) ? children : <ClerkProvider>{children}</ClerkProvider>
+  const content = isLocalE2EAuthBypassEnabled() || !requiresClerkProvider(pathname) ? children : <ClerkProvider>{children}</ClerkProvider>
 
   return (
     <html lang="en">
@@ -53,16 +61,16 @@ function RootDocument({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <Theme theme={neutralTheme} mode="light">
-          <LinkProvider component={RouterLink}>
-            <LayerProvider>
-              <RouteProgressBar />
-              <AeObservabilityBoot />
-              <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
-              <AeToaster />
-            </LayerProvider>
-          </LinkProvider>
-        </Theme>
+        <RouteProgressBar />
+        <AeObservabilityBoot />
+        <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
+        <Toaster
+          ref={(node) => {
+            node?.setAttribute('aria-live', 'off')
+          }}
+          duration={6000}
+          visibleToasts={5}
+        />
         <Scripts />
       </body>
     </html>
@@ -73,19 +81,4 @@ function requiresClerkProvider(pathname: string): boolean {
   return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin') || pathname.startsWith('/claim')
 }
 
-// Client-side mirror of the canonical server check in
-// src/lib/server/local-e2e-bypass.ts (isLocalE2EAuthBypassEnabled). Kept
-// separate because this file is client-rendered and must not import a
-// server-only module.
-function usesClerkBypass(): boolean {
-  if (import.meta.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E !== 'true') {
-    return false
-  }
-
-  if (import.meta.env.PROD) {
-    throw new Error('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E cannot be enabled in production builds.')
-  }
-
-  return true
-}
 

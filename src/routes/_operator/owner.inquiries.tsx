@@ -1,5 +1,5 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
-import { Banner } from '@astryxdesign/core/Banner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 import { AeInquiryInboxPanel } from '@/components/ae/inquiries/AeInquiryInboxPanel'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
@@ -85,11 +85,10 @@ function OwnerInquiriesRoute() {
     >
       <div className="grid gap-6">
         {readback.error === undefined ? null : (
-          <Banner
-            status="error"
-            title="Owner inbox needs sign-in"
-            description={readback.error.reason}
-          />
+          <Alert variant="destructive">
+            <AlertTitle>Owner inbox needs sign-in</AlertTitle>
+            <AlertDescription>{readback.error.reason}</AlertDescription>
+          </Alert>
         )}
         <OwnerInquiryList inbox={readback.inbox} />
       </div>

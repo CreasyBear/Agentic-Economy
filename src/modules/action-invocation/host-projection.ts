@@ -111,9 +111,7 @@ function resolveSemantics(input: Readonly<{
   expectedInvocationVersion: number
   resolver: InvocationProjectionResolver
 }>): InvocationTaskSemantics {
-  const snapshot = JSON.parse(JSON.stringify(
-    input.resolver.resolve(input.invocationRef),
-  )) as {
+  const snapshot = JSON.parse(JSON.stringify(input.resolver.resolve(input.invocationRef))) as {
     operations?: any[]
     controls: any[]
     inputWork?: any[]

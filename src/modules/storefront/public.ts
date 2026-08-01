@@ -18,11 +18,17 @@ export type {
   StorefrontImportResult,
 } from './internal/import-draft'
 
-export { enrichBusinessFromWebSearch } from './internal/business-enrichment'
+export {
+  discoverBusinessesFromWebSearch,
+  enrichBusinessFromWebSearch,
+} from './internal/business-enrichment'
 
 export type {
   BusinessEnrichmentFetch,
   BusinessEnrichmentInput,
   BusinessEnrichmentOptions,
   BusinessEnrichmentResult,
+  WebDiscoveryClaim,
+  WebDiscoveryInput,
+  WebDiscoveryResult,
 } from './internal/business-enrichment'

@@ -240,6 +240,10 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
         schema: z.object({ operationKey: z.string(), target: z.object({}) }),
         parameters: [],
         readOnly: false,
+        effect: {
+          class: 'external_state_change', reversible: false, recipientKind: 'provider_system',
+          dataClasses: [], spendExposure: 'none', approval: 'approve_each',
+        },
         surfaces: [],
         outputSchema: z.object({ kind: z.string(), release: z.string() }),
         invocationContract: {

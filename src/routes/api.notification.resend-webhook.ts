@@ -62,7 +62,7 @@ export async function handleResendWebhookRequest(
 ): Promise<Response> {
   try {
     const env = options.env ?? process.env
-    const verified = verifyResendWebhook({
+    const verified = await verifyResendWebhook({
       rawBody: await request.text(),
       headers: request.headers,
       secret: readResendWebhookSecret(env),

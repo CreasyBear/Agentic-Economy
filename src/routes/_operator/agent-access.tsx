@@ -1,93 +1,126 @@
-import { useState } from 'react'
-import { Banner } from '@astryxdesign/core/Banner'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { TextInput } from '@astryxdesign/core/TextInput'
-import { Heading, Text } from '@astryxdesign/core/Text'
+import { useCallback, useEffect, useState } from 'react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { createFileRoute } from '@tanstack/react-router'
-import { useServerFn } from '@tanstack/react-start'
+import { createServerFn, useServerFn } from '@tanstack/react-start'
 
+import { AeAgentOperatorConsole, type AgentOperatorKeyReadback } from '@/components/ae/console/AeAgentOperatorConsole'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { issueCustomerRequestAgentKeyServer, revokeCustomerRequestAgentKeyServer } from '@/modules/customer-request/agent-access.functions'
-import type { CustomerRequestAgentKeyResult } from '@/modules/customer-request/agent-access'
+import { createConvexMoneyQueryPort, MoneyQueryError } from '@/lib/server/money-query'
+import { listCreditActivity, readCreditAccount, readKeyUsage, type MoneyQueryPort } from '@/modules/money/public'
+import { listCustomerRequestAgentKeysServer, revokeCustomerRequestAgentKeyServer } from '@/modules/customer-request/agent-access.functions'
+import type { CustomerRequestAgentKeyInventoryItem } from '@/modules/customer-request/agent-access'
+
+export type AgentAccessConsoleReadback = readonly AgentOperatorKeyReadback[]
+
+export const readAgentAccessConsoleServer = createServerFn({ method: 'GET' })
+  .handler(async () => loadAgentAccessConsoleReadback())
+
+export async function loadAgentAccessConsoleReadback(): Promise<AgentAccessConsoleReadback> {
+  const keys = await listCustomerRequestAgentKeysServer()
+  return await readAgentAccessMoneyReadback(keys, createConvexMoneyQueryPort())
+}
+
+export async function readAgentAccessMoneyReadback(
+  keys: readonly CustomerRequestAgentKeyInventoryItem[],
+  port: MoneyQueryPort,
+): Promise<AgentAccessConsoleReadback> {
+  return await Promise.all(keys.map(async (key) => {
+    const principalId = `clerk_api_key:${key.keyId}`
+    try {
+      const [account, activity, usage] = await Promise.all([
+        readCreditAccount({ port, query: { principalId, currency: 'USD' } }),
+        listCreditActivity({ port, query: { principalId, credentialId: key.keyId, currency: 'USD', limit: 50 } }),
+        readKeyUsage({ port, query: { principalId, credentialId: key.keyId, limit: 50 } }),
+      ])
+      return { key, principalId, account, activity: activity.items, ...(usage.items[0] === undefined ? {} : { usage: usage.items[0] }), dataState: 'source' as const }
+    } catch (error) {
+      const dataState = error instanceof MoneyQueryError && error.code === 'billing_identity_missing' ? 'empty' as const : 'unavailable' as const
+      return { key, principalId, activity: [], dataState }
+    }
+  }))
+}
 
 export const Route = createFileRoute('/_operator/agent-access')({
   ...operatorRouteOptions,
   head: () => ({ meta: [
-    { title: 'Set up your AI | Agentic Economy' },
+    { title: 'Assistant access | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
   component: AgentAccessRoute,
 })
 
 function AgentAccessRoute() {
-  const issueKey = useServerFn(issueCustomerRequestAgentKeyServer)
+  const readConsole = useServerFn(readAgentAccessConsoleServer)
+  const localE2E = isLocalE2EAuthBypassEnabled()
   const revokeKey = useServerFn(revokeCustomerRequestAgentKeyServer)
-  const [name, setName] = useState('My assistant')
-  const [idempotencyKey] = useState(() => crypto.randomUUID())
-  const [result, setResult] = useState<CustomerRequestAgentKeyResult>()
-  const [pending, setPending] = useState(false)
-  const [revoking, setRevoking] = useState(false)
-  const [revocationError, setRevocationError] = useState<string>()
-  const [copied, setCopied] = useState(false)
+  const [items, setItems] = useState<AgentAccessConsoleReadback>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>()
+  const [revoking, setRevoking] = useState<string>()
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setPending(true)
+  const load = useCallback(async () => {
+    setLoading(true)
     try {
-      setResult(await issueKey({ data: { name, idempotencyKey } }))
+      setItems(await readConsole())
+      setError(undefined)
+    } catch {
+      setError('Your assistant access and balance are temporarily unavailable.')
     } finally {
-      setPending(false)
+      setLoading(false)
     }
-  }
+  }, [readConsole])
 
-  async function revoke() {
-    if (result === undefined || result.kind === 'error') return
-    setRevoking(true)
-    setRevocationError(undefined)
+  useEffect(() => {
+    if (localE2E) {
+      setItems([])
+      setError(undefined)
+      setLoading(false)
+      return
+    }
+    void load()
+  }, [load, localE2E])
+
+  async function revoke(keyId: string) {
+    setRevoking(keyId)
     try {
-      const revoked = await revokeKey({ data: { keyId: result.keyId } })
-      if (revoked.kind === 'revoked' || revoked.kind === 'already_revoked') setResult(undefined)
-      else if (revoked.kind === 'error') setRevocationError(
-        revoked.retryable ? 'The key could not be revoked. Try again.' : 'This key is no longer available to this account.',
-      )
+      const result = await revokeKey({ data: { keyId } })
+      if (result.kind === 'revoked' || result.kind === 'already_revoked') await load()
+      else if (result.kind === 'error') setError(result.retryable ? 'Access could not be revoked. Try again.' : 'This access is no longer available to this account.')
     } finally {
-      setRevoking(false)
+      setRevoking(undefined)
     }
-  }
-
-  async function copySecret() {
-    if (result === undefined || result.kind === 'error') return
-    await navigator.clipboard.writeText(result.secret)
-    setCopied(true)
   }
 
   return (
-    <AeOperatorShell operatorRole="owner" title="Set up your AI" description="Create one short-lived key so your AI can use your Customer Requests." currentPath="/agent-access">
-      <div className="grid max-w-3xl gap-6">
-        <Card padding={5} className="grid gap-4">
-          <Heading level={2}>Create a seven-day key</Heading>
-          <Text color="secondary">The key can create and continue your Customer Requests. It cannot change its own access or act outside the choices and limits AE shows you.</Text>
-          <form className="grid gap-4" onSubmit={submit}>
-            <TextInput label="Assistant name" value={name} onChange={setName} isRequired />
-            <Button type="submit" label={pending ? 'Creating key…' : 'Create key'} variant="primary" isDisabled={pending || name.trim().length === 0 || (result !== undefined && result.kind !== 'error')} />
-          </form>
-        </Card>
-        {result?.kind === 'error' ? (
-          <Banner status="error" title="Key was not created" description={result.retryable ? 'Try again. The same setup attempt will not create a duplicate key.' : 'Sign in again and check the assistant name.'} />
-        ) : result === undefined ? null : (
-          <Card padding={5} className="grid gap-4">
-            <Heading level={2}>Copy this key now</Heading>
-            <Text color="secondary">Give it only to the AI you named. It expires in seven days and the same setup attempt returns this key instead of creating another.</Text>
-            <code className="break-all rounded-md border border-border bg-surface p-3 text-sm">{result.secret}</code>
-            <Button label={copied ? 'Key copied' : 'Copy key'} variant="primary" onClick={copySecret} />
-            <Text type="supporting" color="secondary">Key reference: {result.keyId}</Text>
-            <Button label={revoking ? 'Revoking…' : 'Revoke this key'} variant="secondary" onClick={revoke} isDisabled={revoking} />
-            {revocationError === undefined ? null : <Banner status="error" title="Key was not revoked" description={revocationError} />}
-          </Card>
-        )}
-      </div>
+    <AeOperatorShell
+      operatorRole="owner"
+      title="Assistant access"
+      description="Connect and manage your AI: review permission, usage, credit, and access."
+      currentPath="/agent-access"
+      eyebrow="YOUR ASSISTANT"
+    >
+      {localE2E ? (
+        <div className="grid gap-3">
+          <Alert>
+            <AlertTitle>Local preview — no assistant is connected</AlertTitle>
+            <AlertDescription>This browser journey does not sign in, create access, or authorize work. Browse the public demo to explore the customer experience.</AlertDescription>
+            <Button asChild variant="secondary" className="mt-2 min-h-11"><a href="/">Browse public demo</a></Button>
+          </Alert>
+        </div>
+      ) : null}
+      {error === undefined ? null : (
+        <Alert variant="destructive">
+          <AlertTitle>Assistant access unavailable</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+          <Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>{loading ? 'Trying again…' : 'Try again'}</Button>
+        </Alert>
+      )}
+      {error === undefined ? (
+        <AeAgentOperatorConsole items={items} loading={loading} onRevoke={(keyId) => void revoke(keyId)} {...(revoking === undefined ? {} : { revokingKeyId: revoking })} />
+      ) : null}
     </AeOperatorShell>
   )
 }

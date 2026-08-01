@@ -1,0 +1,16 @@
+node_modules
+.git
+.output
+.vinxi
+.tanstack
+.vercel
+.convex
+coverage
+playwright-report
+test-results
+output
+outputs
+.codex
+.claude
+.agents
+.planning/research/.cache

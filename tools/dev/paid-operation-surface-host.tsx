@@ -2,7 +2,6 @@
 
 import { useRef, useState } from 'react'
 
-import { Text } from '@astryxdesign/core/Text'
 
 import { AePaidOperationCard } from '../../src/components/ae/action-invocation/AePaidOperationCard'
 import type {
@@ -116,18 +115,18 @@ export function AePaidOperationDevelopmentSurface({
       data-development-only="true"
     >
       <header className="grid gap-2">
-        <Text as="h1" type="large" weight="semibold" color="primary" display="block">
+        <h1 className="block text-lg font-semibold text-foreground">
           Local development paid operation
-        </Text>
-        <Text color="secondary" display="block">
+        </h1>
+        <p className="block text-muted-foreground">
           Labelled local mechanism demonstration. No provider fulfilment, deployment, or customer-value claim.
-        </Text>
+        </p>
       </header>
 
       <p
         ref={statusRef}
         tabIndex={-1}
-        className="rounded-md border border-border bg-surface p-3 text-sm text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="rounded-md border border-border bg-card p-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2"
         role="status"
         aria-live="polite"
         aria-atomic="true"
@@ -153,9 +152,9 @@ export function AePaidOperationDevelopmentSurface({
             </div>
           )}
 
-      <Text type="supporting" color="secondary" display="block">
+      <p className="block text-sm text-muted-foreground">
         Human comprehension boundary: {PAID_OPERATION_DEVELOPMENT_SURFACE.humanComprehension}
-      </Text>
+      </p>
     </main>
   )
 }

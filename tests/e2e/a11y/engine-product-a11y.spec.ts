@@ -19,7 +19,7 @@ test.describe('engine product accessibility', () => {
     const skip = page.getByRole('link', { name: 'Skip to content' })
     await expect(skip).toBeFocused()
     await skip.press('Enter')
-    await expect(page.locator('#astryx-app-shell-main')).toBeFocused()
+    await expect(page.locator('#ae-app-shell-main')).toBeFocused()
     await expect(page.getByRole('heading', { level: 1, name: 'What do you need to make happen?' })).toBeVisible()
     await expect(page.getByLabel('What are you looking for?')).toBeVisible()
   })

@@ -6,6 +6,20 @@ import type { ReactNode } from 'react'
 import type { PublicThreadProjection } from '@/modules/answer-thread/public'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+// Resolved locally rather than via `dom-accessibility-api`, whose types are
+// unreachable through its package `exports` map under this repo's resolution.
+function computeAccessibleDescription(element: Element): string {
+  const ids = element.getAttribute('aria-describedby')?.trim()
+  if (ids === undefined || ids.length === 0) {
+    return ''
+  }
+  return ids
+    .split(/\s+/)
+    .map((id) => element.ownerDocument.getElementById(id)?.textContent?.trim() ?? '')
+    .filter((text) => text.length > 0)
+    .join(' ')
+}
+
 const testState = vi.hoisted(() => {
   const state = {
     navigateCalls: [] as unknown[],
@@ -106,7 +120,10 @@ describe('AeChat route promotion', () => {
     expect(screen.queryByRole('searchbox', { name: 'What do you need done?' })).not.toBeNull()
 
     await submitQuery('businesses in Perth')
-    expect(screen.queryByRole('searchbox', { name: 'What do you need done?' })).toBeNull()
+    // The welcome composer is now unexposed after promotion; this previously passed only because its accessible name varied.
+    expect(screen.getAllByRole('searchbox')).toHaveLength(1)
+    const refinementComposer = screen.getByRole('searchbox', { name: 'What do you need done?' })
+    expect(computeAccessibleDescription(refinementComposer)).toContain('Checking published business details')
     expect(screen.queryByTestId('live-turn')).not.toBeNull()
 
     await act(async () => {
@@ -128,7 +145,8 @@ describe('AeChat route promotion', () => {
         replace: true,
       },
     ])
-    expect(screen.queryByRole('searchbox', { name: 'What do you need done?' })).toBeNull()
+    expect(screen.getAllByRole('searchbox')).toHaveLength(1)
+    expect(screen.getByRole('searchbox', { name: 'What do you need done?' })).not.toBeNull()
     expect(screen.queryByTestId('live-turn')).not.toBeNull()
   })
 
@@ -389,7 +407,8 @@ describe('AeChat route promotion', () => {
 })
 
 async function submitQuery(query: string, placeholder = 'What do you need done?') {
-  const input = screen.getByRole('searchbox', { name: placeholder }) as HTMLTextAreaElement
+  const input = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
+  expect(computeAccessibleDescription(input)).toContain(placeholder)
   await waitFor(() => {
     expect(input.disabled).toBe(false)
   })
@@ -398,7 +417,8 @@ async function submitQuery(query: string, placeholder = 'What do you need done?'
 }
 
 function expectComposerCopy(placeholder: string, loopHint: string) {
-  expect(screen.getByRole('searchbox', { name: placeholder })).toBeTruthy()
+  const input = screen.getByRole('searchbox', { name: 'What do you need done?' })
+  expect(computeAccessibleDescription(input)).toContain(placeholder)
   expect(screen.getByText(loopHint)).toBeTruthy()
 }
 

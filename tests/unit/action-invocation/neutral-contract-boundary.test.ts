@@ -51,6 +51,10 @@ describe('neutral Action Invocation contract boundary', () => {
       outputSchema: z.strictObject({ kind: z.literal('domain_result') }),
       parameters: [],
       readOnly: true,
+      effect: {
+        class: 'observation', reversible: true, recipientKind: 'none',
+        dataClasses: [], spendExposure: 'none', approval: 'none',
+      },
       surfaces: [],
       invocationContract: {
         version: 'development.neutralBoundary:v1',

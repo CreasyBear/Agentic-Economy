@@ -1,8 +1,27 @@
 import { useRef, useState } from 'react'
-import { Button } from '@astryxdesign/core/Button'
-import { Heading, Text } from '@astryxdesign/core/Text'
-import { Selector } from '@astryxdesign/core/Selector'
-import { TextInput } from '@astryxdesign/core/TextInput'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 import type {
   CustomerRequestConnectedAssistantsResult,
@@ -10,18 +29,13 @@ import type {
   CustomerRequestRepeatPermissionResult,
 } from '@/modules/customer-request/agent-contract'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
+import { formatMoney, formatOptionTime } from './panels/shared/format'
 
 type CustomerRoute = NonNullable<CustomerRequestView['decision']>['routes'][number]
 type ConnectedAssistant = Extract<
   CustomerRequestConnectedAssistantsResult,
   { kind: 'connected_assistants' }
 >['assistants'][number]
-
-const optionTimeFormatter = new Intl.DateTimeFormat('en-AU', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
-const moneyFormatters = new Map<string, Intl.NumberFormat>()
 
 export function CustomerRequestRepeatPermissionControl({
   projection,
@@ -160,108 +174,130 @@ export function CustomerRequestRepeatPermissionControl({
   }
 
   if (!expanded) {
-    return <Button label="Allow repeat use" variant="secondary" clickAction={() => void open()} />
+    return <Button type="button" variant="secondary" onClick={() => void open()}>Allow repeat use</Button>
   }
 
   const selectedAssistant = assistants.find((assistant) => assistant.assistantRef === assistantRef)
   if (receipt !== undefined) {
-    return <div className="basis-full rounded-md border border-border bg-surface p-4" aria-live="polite">
-      <div className="grid gap-3">
-        <Heading level={3}>Repeat permission {receipt.status === 'active' ? 'active' : 'withdrawn'}</Heading>
-        <Text>{selectedAssistant?.label ?? 'The connected assistant'} may confirm this exact choice up to {receipt.limits.occurrences} times.</Text>
-        <Text color="secondary">Total ceiling {receipt.limits.cumulativeSpend.currency} {minorUnitsToInput(
+    return <Card className="basis-full p-4" aria-live="polite">
+      <CardHeader className="p-0">
+        <CardTitle>Repeat permission {receipt.status === 'active' ? 'active' : 'withdrawn'}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 p-0">
+        <p>{selectedAssistant?.label ?? 'The connected assistant'} may confirm this exact choice up to {receipt.limits.occurrences} times.</p>
+        <p className="text-muted-foreground">Total ceiling {receipt.limits.cumulativeSpend.currency} {minorUnitsToInput(
           receipt.limits.cumulativeSpend.amountMinor,
-        )}. Expires {formatOptionTime(receipt.validUntil)}.</Text>
-        <Text color="secondary">If this choice changes or a limit is reached, AE will ask you to confirm again.</Text>
+        )}. Expires {formatOptionTime(receipt.validUntil)}.</p>
+        <p className="text-muted-foreground">If this choice changes or a limit is reached, AE will ask you to confirm again.</p>
         {receipt.status === 'active'
           ? <>
-              <Text weight="semibold">Nothing has started. Each permitted use creates a confirmation before work can begin.</Text>
+              <p className="font-semibold">Nothing has started. Each permitted use creates a confirmation before work can begin.</p>
               <Button
-                label={loading ? 'Withdrawing…' : 'Withdraw repeat permission'}
+                type="button"
                 variant="secondary"
-                isDisabled={loading}
-                clickAction={() => void withdraw()}
-              />
+                disabled={loading}
+                onClick={() => void withdraw()}
+              >
+                {loading ? 'Withdrawing…' : 'Withdraw repeat permission'}
+              </Button>
             </>
-          : <Text weight="semibold">The assistant cannot use this permission again.</Text>}
-        {error === undefined ? null : <Text className="text-danger">{error}</Text>}
-      </div>
-    </div>
+          : <p className="font-semibold">The assistant cannot use this permission again.</p>}
+        {error === undefined ? null : <p className="text-destructive">{error}</p>}
+      </CardContent>
+    </Card>
   }
 
-  return <div className="basis-full rounded-md border border-border bg-surface p-4" aria-live="polite">
-    <div className="grid gap-4">
-      <div className="grid gap-1">
-        <Heading level={3}>Set limits for repeat use</Heading>
-        <Text color="secondary">Nothing starts when you create this permission. The assistant can only confirm this exact current choice within the limits below.</Text>
-      </div>
+  return <Card className="basis-full p-4" aria-live="polite">
+    <CardHeader className="p-0">
+      <CardTitle>Set limits for repeat use</CardTitle>
+      <CardDescription>Nothing starts when you create this permission. The assistant can only confirm this exact current choice within the limits below.</CardDescription>
+    </CardHeader>
+    <CardContent className="grid gap-4 p-0">
       {loading && assistants.length === 0
-        ? <Text color="secondary">Loading connected assistants…</Text>
+        ? <p className="text-muted-foreground">Loading connected assistants…</p>
         : assistants.length === 0
-          ? <Text color="secondary">No eligible assistant is connected to this Request yet.</Text>
+          ? <p className="text-muted-foreground">No eligible assistant is connected to this Request yet.</p>
           : <>
-              <Selector
-                label="Connected assistant"
-                value={assistantRef}
-                options={assistants.map((assistant) => ({
-                  value: assistant.assistantRef,
-                  label: assistant.label,
-                }))}
-                isDisabled={loading}
-                onChange={(value) => setAssistantRef(value ?? '')}
-              />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="grid gap-1 text-sm font-semibold">
-                  Maximum uses
-                  <input
-                    className="min-h-11 rounded-md border border-border bg-canvas px-3 py-2 font-normal"
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    step={1}
-                    value={occurrences}
-                    disabled={loading}
-                    onChange={(event) => setOccurrences(event.target.value)}
-                  />
-                </label>
-                <TextInput
-                  label="Total spending ceiling"
-                  htmlName="repeat-permission-total-ceiling"
-                  value={totalCeiling}
-                  isDisabled={loading}
-                  onChange={setTotalCeiling}
-                  {...(maximumCost.kind === 'known'
-                    ? { description: `Enter the total in ${maximumCost.currency}.` }
-                    : {})}
-                />
-              </div>
-              <Selector
-                label="Permission expires"
-                value={expiryChoice}
-                options={[
-                  { value: 'one_hour', label: 'In one hour, or when this choice expires' },
-                  { value: 'one_day', label: 'In 24 hours, or when this choice expires' },
-                  { value: 'choice_expiry', label: 'When this choice expires' },
-                ]}
-                isDisabled={loading}
-                onChange={(value) => setExpiryChoice(value ?? 'choice_expiry')}
-              />
-              <Text type="supporting" color="secondary">One use can cost at most {maximumCost.kind === 'known'
+              <FieldGroup className="grid gap-4">
+                <Field data-disabled={loading}>
+                  <FieldLabel htmlFor="repeat-permission-assistant">Connected assistant</FieldLabel>
+                  <Select value={assistantRef} onValueChange={setAssistantRef} disabled={loading}>
+                    <SelectTrigger id="repeat-permission-assistant" className="min-h-11 w-full">
+                      <SelectValue placeholder="Connected assistant" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {assistants.map((assistant) => <SelectItem key={assistant.assistantRef} value={assistant.assistantRef}>{assistant.label}</SelectItem>)}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <FieldGroup className="grid grid-cols-2 gap-4">
+                  <Field data-disabled={loading}>
+                    <FieldLabel htmlFor="repeat-permission-occurrences">Maximum uses</FieldLabel>
+                    <Input
+                      id="repeat-permission-occurrences"
+                      className="min-h-11 rounded-md border border-border bg-canvas px-3 py-2 font-normal"
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      value={occurrences}
+                      disabled={loading}
+                      onChange={(event) => setOccurrences(event.target.value)}
+                    />
+                  </Field>
+                  <Field data-disabled={loading}>
+                    <FieldLabel htmlFor="repeat-permission-total-ceiling">Total spending ceiling</FieldLabel>
+                    <Input
+                      id="repeat-permission-total-ceiling"
+                      name="repeat-permission-total-ceiling"
+                      value={totalCeiling}
+                      disabled={loading}
+                      onChange={(event) => setTotalCeiling(event.target.value)}
+                      {...(maximumCost.kind === 'known'
+                        ? { 'aria-describedby': 'repeat-permission-total-ceiling-description' }
+                        : {})}
+                    />
+                    {maximumCost.kind === 'known'
+                      ? <FieldDescription id="repeat-permission-total-ceiling-description">Enter the total in {maximumCost.currency}.</FieldDescription>
+                      : null}
+                  </Field>
+                </FieldGroup>
+                <Field data-disabled={loading}>
+                  <FieldLabel htmlFor="repeat-permission-expiry">Permission expires</FieldLabel>
+                  <Select value={expiryChoice} onValueChange={setExpiryChoice} disabled={loading}>
+                    <SelectTrigger id="repeat-permission-expiry" className="min-h-11 w-full">
+                      <SelectValue placeholder="Permission expires" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="one_hour">In one hour, or when this choice expires</SelectItem>
+                        <SelectItem value="one_day">In 24 hours, or when this choice expires</SelectItem>
+                        <SelectItem value="choice_expiry">When this choice expires</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </FieldGroup>
+              <p className="text-sm text-muted-foreground">One use can cost at most {maximumCost.kind === 'known'
                 ? formatMoney(maximumCost.currency, maximumCost.amountMinor)
-                : 'an amount that still needs confirmation'}.</Text>
-              <div className="flex flex-wrap gap-3">
+                : 'an amount that still needs confirmation'}.</p>
+              <Field orientation="horizontal" className="flex flex-wrap gap-3">
                 <Button
-                  label={loading ? 'Creating…' : 'Create repeat permission'}
-                  variant="primary"
-                  isDisabled={loading}
-                  clickAction={() => void allow()}
-                />
-                <Button label="Cancel" variant="ghost" isDisabled={loading} clickAction={() => setExpanded(false)} />
-              </div>
+                  type="button"
+                  variant="default"
+                  disabled={loading}
+                  onClick={() => void allow()}
+                >
+                  {loading ? 'Creating…' : 'Create repeat permission'}
+                </Button>
+                <Button type="button" variant="ghost" disabled={loading} onClick={() => setExpanded(false)}>Cancel</Button>
+              </Field>
             </>}
-      {error === undefined ? null : <Text className="text-danger">{error}</Text>}
-    </div>
-  </div>
+      {error === undefined ? null : <p className="text-destructive">{error}</p>}
+    </CardContent>
+  </Card>
 }
 
 function minorUnitsToInput(amountMinor: number): string {
@@ -289,15 +325,4 @@ function repeatPermissionError(result: CustomerRequestRepeatPermissionResult): s
   return 'AE could not change repeat permission. The existing Request is unchanged.'
 }
 
-function formatMoney(currency: string, amountMinor: number): string {
-  let formatter = moneyFormatters.get(currency)
-  if (formatter === undefined) {
-    formatter = new Intl.NumberFormat('en-AU', { style: 'currency', currency })
-    moneyFormatters.set(currency, formatter)
-  }
-  return formatter.format(amountMinor / 100)
-}
 
-function formatOptionTime(value: number): string {
-  return optionTimeFormatter.format(new Date(value))
-}

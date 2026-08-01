@@ -1,3 +1,11 @@
+import { APICallError, generateText, NoContentGeneratedError, RetryError } from 'ai'
+
+import {
+  openRouterModel,
+  openRouterProvider,
+  type OpenRouterGatewayConfig,
+} from '@/modules/model-gateway/public'
+
 import type { CustomerRequestInterpretationTransport } from './interpreter'
 import type { CustomerRequestSemanticInterpretationTransport } from './semantic-interpreter'
 
@@ -11,8 +19,6 @@ type OpenRouterConfiguration = Readonly<{
 }>
 
 const MAX_OPENROUTER_REQUEST_BYTES = 1_000_000
-const TRANSIENT_PROVIDER_STATUSES = new Set([408, 429, 500, 502, 503, 504])
-const MAX_PROVIDER_ATTEMPTS = 2
 const DEFAULT_PROVIDER_ATTEMPT_TIMEOUT_MS = 20_000
 
 export function createOpenRouterCustomerRequestTransport(config: OpenRouterConfiguration): CustomerRequestInterpretationTransport {
@@ -41,102 +47,78 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
     throw new Error('customer_request_interpreter_configuration_invalid')
   }
   const attemptTimeoutMs = config.attemptTimeoutMs ?? DEFAULT_PROVIDER_ATTEMPT_TIMEOUT_MS
+  const gatewayConfig: OpenRouterGatewayConfig = {
+    apiKey: config.apiKey,
+    model: config.model,
+    ...(config.siteUrl === undefined ? {} : { siteUrl: config.siteUrl }),
+  }
   return Object.freeze({
     generateJson: async ({ systemInstruction, payload, signal, responseSchema }) => {
-      const requestBody = JSON.stringify({
-        model: config.model,
-        messages: [
-          { role: 'system', content: systemInstruction },
-          { role: 'user', content: JSON.stringify(payload) },
-        ],
-        response_format: responseSchema === undefined
-          ? { type: 'json_object' }
-          : { type: 'json_schema', json_schema: responseSchema },
-        ...(config.reasoningEffort === undefined
-          ? { temperature: 0 }
-          : { reasoning: { effort: config.reasoningEffort, exclude: true } }),
-        ...(config.maximumCompletionTokens === undefined
-          ? {}
-          : { max_completion_tokens: config.maximumCompletionTokens }),
-      })
-      if (new TextEncoder().encode(requestBody).byteLength > MAX_OPENROUTER_REQUEST_BYTES) {
+      const serializedPayload = JSON.stringify(payload) ?? ''
+      const serializedInput = JSON.stringify({ systemInstruction, payload: serializedPayload })
+      if (new TextEncoder().encode(serializedInput).byteLength > MAX_OPENROUTER_REQUEST_BYTES) {
         throw new Error('customer_request_interpretation_request_too_large')
       }
-      for (let attempt = 1; attempt <= MAX_PROVIDER_ATTEMPTS; attempt += 1) {
-        const attemptController = new AbortController()
-        const propagateParentAbort = () => attemptController.abort(signal.reason)
-        if (signal.aborted) propagateParentAbort()
-        else signal.addEventListener('abort', propagateParentAbort, { once: true })
-        const attemptTimeout = setTimeout(() => {
-          attemptController.abort(new Error('customer_request_interpretation_provider_timeout'))
-        }, attemptTimeoutMs)
-        let response: Response
-        try {
-          response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${config.apiKey}`,
-              'Content-Type': 'application/json',
-              'HTTP-Referer': config.siteUrl ?? 'https://agentic-economy-phi.vercel.app',
-              'X-Title': 'Agentic Economy',
-            },
-            body: requestBody,
-            signal: attemptController.signal,
-          })
-        } catch (error) {
-          if (signal.aborted) throw error
-          if (!attemptController.signal.aborted || attempt === MAX_PROVIDER_ATTEMPTS) {
-            throw attemptController.signal.reason instanceof Error
-              ? attemptController.signal.reason
-              : error
-          }
-          continue
-        } finally {
-          clearTimeout(attemptTimeout)
-          signal.removeEventListener('abort', propagateParentAbort)
+      const attemptTimeoutSignal = AbortSignal.timeout(attemptTimeoutMs)
+      const abortSignal = AbortSignal.any([signal, attemptTimeoutSignal])
+      const model = openRouterModel(gatewayConfig, config.model, {
+        ...(responseSchema === undefined
+          ? { jsonObjectResponse: true }
+          : { jsonSchemaResponse: responseSchema }),
+        ...(config.reasoningEffort === undefined ? {} : { reasoningEffort: config.reasoningEffort }),
+      })
+      const result = await generateText({
+        ...(config.maximumCompletionTokens === undefined
+          ? {}
+          : { maxOutputTokens: config.maximumCompletionTokens }),
+        maxRetries: 1,
+        model,
+        ...(config.reasoningEffort === undefined ? { temperature: 0 } : {}),
+        system: systemInstruction,
+        prompt: serializedPayload,
+        abortSignal,
+      }).catch((error: unknown) => {
+        if (signal.aborted) throw error
+        if (attemptTimeoutSignal.aborted
+          || (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError'))) {
+          throw new Error('customer_request_interpretation_provider_timeout')
         }
-        if (!response.ok) {
-          if (attempt < MAX_PROVIDER_ATTEMPTS && !signal.aborted
-            && TRANSIENT_PROVIDER_STATUSES.has(response.status)) continue
-          throw new Error(`customer_request_interpretation_provider_${response.status}`)
+        const providerError = APICallError.isInstance(error)
+          ? error
+          : RetryError.isInstance(error) && APICallError.isInstance(error.lastError)
+            ? error.lastError
+            : undefined
+        // A 200 that the SDK could not turn into content is an unusable answer,
+        // not a transport failure, so it joins the empty-completion path.
+        if (
+          NoContentGeneratedError.isInstance(error)
+          || (RetryError.isInstance(error) && NoContentGeneratedError.isInstance(error.lastError))
+          || providerError?.statusCode === 200
+        ) {
+          throw invalidProviderResponse(config.model, undefined)
         }
-        const body: unknown = await response.json()
-        const content = extractContent(body)
-        if (content === undefined) {
-          // Surface WHY the provider returned no content (commonly finish_reason 'length'
-          // when the completion budget is exhausted) without logging model output.
-          console.error(
-            'customer_request_interpretation_provider_invalid',
-            config.model,
-            extractFinishReason(body) ?? 'unknown_finish_reason',
-          )
-          throw new Error('customer_request_interpretation_provider_invalid')
+        if (providerError?.statusCode !== undefined) {
+          throw new Error(`customer_request_interpretation_provider_${providerError.statusCode}`)
         }
-        return { content }
+        throw new Error('customer_request_interpretation_provider_unavailable')
+      })
+      if (result.text.length === 0) {
+        throw invalidProviderResponse(config.model, result.finishReason)
       }
-      throw new Error('customer_request_interpretation_provider_unavailable')
+      return { content: result.text }
     },
   })
 }
 
-function extractContent(value: unknown): string | undefined {
-  if (!isRecord(value) || !Array.isArray(value.choices)) return undefined
-  const first: unknown = value.choices[0]
-  if (!isRecord(first) || !isRecord(first.message)) return undefined
-  return typeof first.message.content === 'string' ? first.message.content : undefined
-}
-
-function extractFinishReason(value: unknown): string | undefined {
-  if (!isRecord(value) || !Array.isArray(value.choices)) {
-    return isRecord(value) && isRecord(value.error) && typeof value.error.message === 'string'
-      ? `provider_error:${value.error.message}`
-      : undefined
-  }
-  const first: unknown = value.choices[0]
-  if (!isRecord(first)) return undefined
-  return typeof first.finish_reason === 'string' ? first.finish_reason : undefined
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+/**
+ * Surfaces WHY the provider produced nothing usable (commonly `length`, when
+ * the completion budget is exhausted) without ever logging model output.
+ */
+function invalidProviderResponse(model: string, finishReason: string | undefined): Error {
+  console.error(
+    'customer_request_interpretation_provider_invalid',
+    model,
+    finishReason ?? 'unknown_finish_reason',
+  )
+  return new Error('customer_request_interpretation_provider_invalid')
 }

@@ -1,6 +1,7 @@
 import { stableHash } from '@/modules/common/stable-hash'
 import type { AccessPathRef, BusinessId, OfferingRef, SourceHash } from '@/modules/common/ids'
 
+import { normalizeOfferingPrice, type OfferingPrice, type OfferingPriceInput } from './offering-price'
 import {
   validateOfferingAccessPath,
   type BusinessOfferingRecord,
@@ -36,7 +37,16 @@ export type OfferingFactsInput = Readonly<{
   serviceAreaSummary?: string
   availabilitySummary?: string
   pricingSummary?: string
+  /**
+   * The comparable twin of `pricingSummary`, published independently of it.
+   * Accepted loosely and normalized on the way in, so a caller that gets the
+   * shape wrong loses only the price.
+   */
+  price?: OfferingPriceInput
 }>
+
+/** What actually lands in a revision: a price survives only if it normalized. */
+type ValidatedOfferingFacts = Omit<OfferingFactsInput, 'price'> & Readonly<{ price?: OfferingPrice }>
 
 export type OfferingSourceErrorCode =
   | 'unauthenticated'
@@ -213,16 +223,21 @@ function authorize(state: OfferingSourceState, authority: Authority): OfferingSo
   }
 }
 
-function validateFacts(input: OfferingFactsInput): OfferingFactsInput | undefined {
+function validateFacts(input: OfferingFactsInput): ValidatedOfferingFacts | undefined {
   const clean = (value: string | undefined, maximum: number) => value?.replaceAll(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maximum)
   const serviceAreaSummary = clean(input.serviceAreaSummary, 500)
   const availabilitySummary = clean(input.availabilitySummary, 500)
   const pricingSummary = clean(input.pricingSummary, 500)
+  // An inconsistent price is dropped, never fatal. The rest of the Offering is
+  // still publishable, and refusing the whole write would make a mistyped
+  // amount cost the business its listing.
+  const price = normalizeOfferingPrice(input.price)
   const facts = {
     name: clean(input.name, 160) ?? '', category: clean(input.category, 120) ?? '', summary: clean(input.summary, 1_000) ?? '',
     ...(serviceAreaSummary ? { serviceAreaSummary } : {}),
     ...(availabilitySummary ? { availabilitySummary } : {}),
     ...(pricingSummary ? { pricingSummary } : {}),
+    ...(price === undefined ? {} : { price }),
   }
   return facts.name && facts.category && facts.summary ? facts : undefined
 }

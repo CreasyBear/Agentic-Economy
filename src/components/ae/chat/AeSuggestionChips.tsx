@@ -46,8 +46,7 @@ export function AeAnswerSuggestions({
 
   return (
     <Suggestions
-      aria-label={ariaLabel}
-      wrap
+      {...(ariaLabel === undefined ? {} : { 'aria-label': ariaLabel })}
     >
       {items.map((item) => (
         <Suggestion
@@ -96,10 +95,10 @@ export function AeFollowUpChips({ turn, onSelect, contextPlacement = 'current' }
   const summary = followUpSummary(turn, chips, contextPlacement)
 
   return (
-    <section className="grid gap-3 rounded-md border border-border bg-surface p-3" aria-label="Continue this thread">
+    <section className="grid gap-3 rounded-md border border-border bg-card p-3" aria-label="Continue this thread">
       <div className="grid gap-0.5">
-        <p className="font-heading text-sm text-primary">Continue with these listings</p>
-        <p className="text-xs leading-snug text-secondary">{summary}</p>
+        <p className="font-heading text-sm text-foreground">Continue with these listings</p>
+        <p className="text-xs leading-snug text-muted-foreground">{summary}</p>
       </div>
       <AeAnswerSuggestions
         variant="follow-up"

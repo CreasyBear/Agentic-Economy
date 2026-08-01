@@ -75,6 +75,14 @@ export const executeDevelopmentProviderOperationAction = defineAction({
     { name: 'operationKey', type: 'string', description: 'Stable idempotency meaning for this exact effect.', required: true },
   ],
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: false,
+    recipientKind: 'provider_system',
+    dataClasses: ['contact'],
+    spendExposure: 'none',
+    approval: 'mandate_eligible',
+  },
   surfaces: [],
   outputSchema: developmentProviderOperationOutputSchema,
   invocationContract: {
@@ -248,6 +256,14 @@ export const cancelDevelopmentProviderOperationAction = defineAction({
     { name: 'operationKey', type: 'string', description: 'Stable cancellation operation identity.', required: true },
   ],
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: false,
+    recipientKind: 'provider_system',
+    dataClasses: ['query_text'],
+    spendExposure: 'none',
+    approval: 'mandate_eligible',
+  },
   surfaces: [],
   outputSchema: developmentProviderOperationCancellationOutputSchema,
   invocationContract: {

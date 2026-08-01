@@ -1,15 +1,17 @@
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import { AlertTriangleIcon, CheckCircle2Icon, InboxIcon, MailOpenIcon, ReplyIcon, SearchIcon, XIcon } from 'lucide-react'
-import { Badge, type BadgeProps } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Item } from '@astryxdesign/core/Item'
-import { Tab, TabList } from '@astryxdesign/core/TabList'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { InquiryNotificationStatus, OwnerInboxBucket, OwnerInboxInquiryProjection, OwnerInboxReadback } from '@/modules/inquiries/public'
 
 type InboxFilter = 'all' | OwnerInboxBucket | 'delivery_attention'
+type InboxBadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline'
 
 export type AeInquiryInboxPanelProps = {
   inbox: OwnerInboxReadback
@@ -31,10 +33,12 @@ export function AeInquiryInboxPanel({ inbox }: AeInquiryInboxPanelProps) {
 
   if (inbox.empty) {
     return (
-      <AeEmptyState
-        title="No messages yet"
-        description="Published services with contact handling will appear here after a customer submits a message."
-      />
+      <Empty className="border border-border bg-card p-5">
+        <EmptyHeader>
+          <EmptyTitle>No messages yet</EmptyTitle>
+          <EmptyDescription>Published services with contact handling will appear here after a customer submits a message.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
@@ -70,45 +74,60 @@ export function AeInquiryInboxPanel({ inbox }: AeInquiryInboxPanelProps) {
           tone={deliveryAttentionCount > 0 ? 'warning' : 'quiet'}
         />
       </div>
-      <div className="flex min-h-11 items-center gap-2 rounded-md border border-border bg-card px-3">
-        <SearchIcon aria-hidden="true" className="size-4 text-secondary" />
-        <label htmlFor={searchId} className="sr-only">
-          Search inquiries
-        </label>
-        <input
-          id={searchId}
-          name="inquirySearch"
-          type="search"
-          value={query}
-          placeholder="Search inquiries"
-          className="min-w-0 flex-1 bg-transparent text-sm text-primary outline-none placeholder:text-secondary"
-          onChange={(event) => setQuery(event.currentTarget.value)}
-        />
-        {query.trim().length === 0 ? null : (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            isIconOnly
-            label="Clear search"
-            icon={<XIcon aria-hidden="true" />}
-            onClick={() => setQuery('')}
+      <FieldGroup>
+        <Field orientation="horizontal" className="min-h-11 items-center gap-2 rounded-md border border-border bg-card px-3">
+          <SearchIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+          <FieldLabel htmlFor={searchId} className="sr-only">
+            Search inquiries
+          </FieldLabel>
+          <Input
+            id={searchId}
+            name="inquirySearch"
+            type="search"
+            value={query}
+            placeholder="Search inquiries"
+            className="min-w-0 flex-1 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+            onChange={(event) => setQuery(event.currentTarget.value)}
           />
-        )}
-      </div>
-      <TabList value={filter} onChange={(value) => setFilter(value as InboxFilter)} aria-label="Filter messages by status">
-        <Tab value="all" label={`All (${inbox.inquiries.length})`} />
-        <Tab value="unread" label={`Unread (${inbox.buckets.unread})`} />
-        <Tab value="needs_reply" label={`Needs reply (${inbox.buckets.needs_reply})`} />
-        <Tab value="delivery_attention" label={`Delivery (${deliveryAttentionCount})`} />
-        <Tab value="resolved" label={`Resolved (${inbox.buckets.resolved})`} />
-      </TabList>
+          {query.trim().length === 0 ? null : (
+            <Button
+              type="button"
+              size="icon"
+              variant="secondary"
+              aria-label="Clear search"
+              onClick={() => setQuery('')}
+            >
+              <XIcon aria-hidden="true" />
+            </Button>
+          )}
+        </Field>
+      </FieldGroup>
+      <ToggleGroup
+        type="single"
+        value={filter}
+        variant="outline"
+        aria-label="Filter messages by status"
+        className="max-w-full flex-wrap justify-start"
+        onValueChange={(value) => {
+          if (value !== '' && isInboxFilter(value)) {
+            setFilter(value)
+          }
+        }}
+      >
+        <ToggleGroupItem value="all">All ({inbox.inquiries.length})</ToggleGroupItem>
+        <ToggleGroupItem value="unread">Unread ({inbox.buckets.unread})</ToggleGroupItem>
+        <ToggleGroupItem value="needs_reply">Needs reply ({inbox.buckets.needs_reply})</ToggleGroupItem>
+        <ToggleGroupItem value="delivery_attention">Delivery ({deliveryAttentionCount})</ToggleGroupItem>
+        <ToggleGroupItem value="resolved">Resolved ({inbox.buckets.resolved})</ToggleGroupItem>
+      </ToggleGroup>
       <div>
         {filtered.length === 0 ? (
-          <AeEmptyState
-            title="No matching inquiries"
-            description="Try another filter or search term to see a different part of the queue."
-          />
+          <Empty className="border border-border bg-card p-5">
+            <EmptyHeader>
+              <EmptyTitle>No matching inquiries</EmptyTitle>
+              <EmptyDescription>Try another filter or search term to see a different part of the queue.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <div className="grid gap-3">
             {filtered.map((inquiry) => (
@@ -133,19 +152,19 @@ function InboxStat({
   tone: 'active' | 'warning' | 'quiet'
 }) {
   const toneClass =
-    tone === 'warning'
-      ? 'border-border bg-muted/50 text-primary'
-      : tone === 'active'
-        ? 'border-primary/20 bg-muted/50 text-primary'
-        : 'border-border bg-card text-secondary'
+    tone === 'active'
+      ? 'border-brand bg-card text-foreground'
+      : tone === 'warning'
+        ? 'border-border bg-card text-foreground'
+        : 'border-border bg-card text-muted-foreground'
 
   return (
     <div className={`grid min-h-24 content-between rounded-md border p-3 ${toneClass}`}>
       <div className="flex items-center justify-between gap-2 text-xs">
         <span>{label}</span>
-        <span className="text-secondary">{icon}</span>
+        <span className="text-muted-foreground">{icon}</span>
       </div>
-      <span className="text-2xl font-semibold tabular-nums text-primary">{value}</span>
+      <span className="text-2xl font-semibold tabular-nums text-foreground">{value}</span>
     </div>
   )
 }
@@ -154,48 +173,37 @@ function AeInquiryInboxRow({ inquiry }: { inquiry: OwnerInboxInquiryProjection }
   const href = `/owner/inquiries/${encodeURIComponent(inquiry.threadId)}`
   const needsDeliveryAttention = deliveryNeedsAttention(inquiry.notificationStatus)
 
-  const labels = (
-    <div className="grid gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span>{inquiry.serviceName}</span>
-        <Badge
-          variant={bucketVariant(inquiry.bucket)}
-          label={bucketLabel(inquiry.bucket)}
-        />
-        <Badge variant={notificationVariant(inquiry.notificationStatus)} label={inquiry.notificationLabel} />
-        {inquiry.origin === undefined ? null : <Badge variant="info" label={inquiry.origin.label} />}
-        {needsDeliveryAttention ? <Badge variant="warning" label="Delivery attention" /> : null}
-      </div>
-      <p className="line-clamp-2 text-sm text-primary">{inquiry.preview}</p>
-      {inquiry.origin === undefined ? null : (
-        <p className="text-xs leading-snug text-secondary">
-          Chat answer context: review the listed facts and limits before replying.
-        </p>
-      )}
-    </div>
-  )
-
-  const metadata = (
-    <div className="flex flex-wrap gap-2 text-xs text-secondary">
-      <span>{nextActionLabel(inquiry)}</span>
-      <span>{inquiry.messageCount} messages</span>
-      <span>{inquiry.status}</span>
-      <time dateTime={timestampIso(inquiry.updatedAt)} data-numeric>
-        {formatTimestamp(inquiry.updatedAt)}
-      </time>
-    </div>
-  )
-
   return (
-    <Item
-      href={href}
-      density="spacious"
-      align="start"
-      label={labels}
-      description={inquiry.businessName}
-      endContent={metadata}
-    />
+    <a href={href} className="grid gap-3 rounded-md border border-border bg-card p-4 text-foreground">
+      <div className="grid gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span>{inquiry.serviceName}</span>
+          <Badge variant={bucketVariant(inquiry.bucket)}>{bucketLabel(inquiry.bucket)}</Badge>
+          <Badge variant={notificationVariant(inquiry.notificationStatus)}>{inquiry.notificationLabel}</Badge>
+          {inquiry.origin === undefined ? null : <Badge variant="secondary">{inquiry.origin.label}</Badge>}
+          {needsDeliveryAttention ? <Badge variant="secondary">Delivery attention</Badge> : null}
+        </div>
+        <p className="line-clamp-2 text-sm text-foreground">{inquiry.preview}</p>
+        {inquiry.origin === undefined ? null : (
+          <p className="text-xs leading-snug text-muted-foreground">
+            Chat answer context: review the listed facts and limits before replying.
+          </p>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <span>{nextActionLabel(inquiry)}</span>
+        <span>{inquiry.messageCount} messages</span>
+        <span>{inquiry.status}</span>
+        <time dateTime={timestampIso(inquiry.updatedAt)} data-numeric>
+          {formatTimestamp(inquiry.updatedAt)}
+        </time>
+      </div>
+    </a>
   )
+}
+
+function isInboxFilter(value: string): value is InboxFilter {
+  return value === 'all' || value === 'unread' || value === 'needs_reply' || value === 'delivery_attention' || value === 'resolved'
 }
 
 function inquiryMatchesFilter(inquiry: OwnerInboxInquiryProjection, filter: InboxFilter): boolean {
@@ -269,14 +277,14 @@ function bucketLabel(bucket: OwnerInboxBucket): string {
   }
 }
 
-function bucketVariant(bucket: OwnerInboxBucket): NonNullable<BadgeProps['variant']> {
+function bucketVariant(bucket: OwnerInboxBucket): InboxBadgeVariant {
   switch (bucket) {
     case 'unread':
-      return 'neutral'
+      return 'outline'
     case 'needs_reply':
-      return 'warning'
+      return 'secondary'
     case 'resolved':
-      return 'info'
+      return 'secondary'
   }
 }
 
@@ -294,15 +302,15 @@ function nextActionLabel(inquiry: OwnerInboxInquiryProjection): string {
   }
 }
 
-function notificationVariant(status: InquiryNotificationStatus): NonNullable<BadgeProps['variant']> {
+function notificationVariant(status: InquiryNotificationStatus): InboxBadgeVariant {
   switch (status) {
     case 'queued':
-      return 'neutral'
+      return 'outline'
     case 'sent':
-      return 'info'
+      return 'secondary'
     case 'failed':
-      return 'error'
+      return 'destructive'
     case 'held':
-      return 'warning'
+      return 'secondary'
   }
 }

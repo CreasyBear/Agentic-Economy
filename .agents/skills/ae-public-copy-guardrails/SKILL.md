@@ -1,66 +1,57 @@
 ---
 name: ae-public-copy-guardrails
-description: Use for public human copy, assistant-visible action descriptors, discovery files, metadata, and machine-readable AE claims. Keep wording aligned with current source, intended-surface readback, and the safe action boundary.
+description: Use for public human copy, assistant-visible action descriptors, discovery files, metadata, and machine-readable AE claims. Keep wording aligned with current source and the safe action boundary.
 ---
 
 # AE public copy
 
-Read the current-state, brand, product-rule, and banned-framing sections of
-`PRODUCT.md`, plus the copy rules in `AGENTS.md`. Inspect the implementation and
-the emitted human or machine surface before writing. Target requirements are not
-public feature claims.
+> **North star:** Tell your AI what you need. It finds the right business, compares real options, gets your approval, and moves the work through to completion. Businesses publish what they do once, then earn whenever agents bring them work.
 
-## Loop
+**Hierarchy:** ambition → customer promise → executable journey → hidden controls → proof.
 
-1. Identify the audience, intended surface, operation, and strongest available
-   evidence: source/local, sandbox/dev, hosted readback, provider fulfilment, or
-   customer value.
-2. Write the current action in ordinary nouns and verbs. Lead with the person's
-   need or useful next step; state a limitation once where it changes the
-   decision.
-   State responsibility positively: who confirms, commits, pays, acts, or owns
-   the next step. Do not make incapability the page headline or repeat a
-   disclaimer across answer, card, composer, and footer.
-3. Compare human copy, action `summary` and `boundaries`, agent JSON, discovery
-   output, metadata, and refusal behavior that describe the same operation.
-4. Run `npm run test:copy`; add `npm run test:seo` for discovery, metadata,
-   `llms.txt`, sitemap, robots, or structured-data changes. Inspect the actual
-   rendered or serialized output because a string scan is not readback proof.
+## Ground truth
 
-The loop is complete only when every changed public and assistant-visible
-projection agrees, every claim has matching evidence at that surface, and the
-earliest unproven boundary is explicit.
+Read `.planning/PROJECT.md`, `UBIQUITOUS_LANGUAGE.md`, relevant ADRs, and the
+live source and intended surface. If an optional `AGENTS.md` or design guide is
+present, consult it; never treat an absent historical document as a gate.
+Separate the destination promise from what the current adapter can execute and
+what its evidence proves.
 
-## Product and evidence language
+Name the audience, surface, operation, responsibility, and decision-relevant
+evidence. Gaps are engineering work, not reasons to weaken the destination.
 
-State AE's destination confidently: it decomposes objectives into useful tasks
-and composes those tasks into completed outcomes. Horizontal capabilities recur
-across domains; verticals supply domain meaning, providers, risks, and evidence.
+## Human copy
 
-State current reachability only where it affects the action in front of the
-person. On today's public discovery surface, lead with reading, comparing, and
-the supported next action. For inquiry, say the business reviews the request and
-confirms timing, price, availability, and the work.
+Lead with the customer's task, useful result, and next action. State who
+reviews, confirms, pays, acts, or owns the next commitment. Sell the outcome
+confidently; do not put qualification in the headline or body. Put one
+limitation, uncertainty, refusal, or recovery instruction at the exact
+decision/effect where it changes what the person should do.
 
-Do not enforce truth with a mandatory negative slogan such as “AE does not
-book.” A copy gate must detect action overclaims and require a clear
-responsibility boundary. It must not require defensive wording.
+Keep protocol, custody, routing, and evidence machinery out of human copy
+unless a protected diagnostic or builder surface needs it. Translate state into
+ordinary customer language. Never use a repeated blanket disclaimer as a truth
+mechanism.
 
-Use `verified` only with a named current standard and its evidence reference;
-otherwise use `checked`, `supplied`, `published`, `last checked`, or `needs
-confirmation`.
+## Machine and action copy
 
-Keep these internal terms out of public human copy: `source-owned`, `readback`,
-`manifest`, `capability`, `gateway`, `operator`, `MCP`, `OpenAPI`, `callable`,
-`autonomous`, `agent-native`, `DTO`, and `fixture`. Builder and protected
-diagnostic surfaces may use precise technical language when it is necessary and
-does not imply unsupported availability.
+Machine descriptors use exact current routes, action IDs, schemas, effects,
+authority, evidence class, replay behavior, and recovery. Registration or a
+listing is discovery inventory, not proof of reachable supply. A receipt proves
+the named receipt event, not fulfilment; a published listing proves published
+facts, not availability. Use `verified` only with a named standard and
+reference. `KNOWN`, `UNKNOWN`, `UNAVAILABLE`, and `NEXT_STEP` belong to
+machine/admin output, not ordinary human pages.
 
-`KNOWN`, `UNKNOWN`, `UNAVAILABLE`, and `NEXT_STEP` are reserved for JSON,
-`llms.txt`, agent payloads, and owner/admin surfaces. Human pages communicate
-the same honesty in ordinary language.
+Action `summary` names the observable result. `boundaries` state responsibility,
+approval, unsupported effects, failure behavior, and safe continuation once at
+the decision point. Keep human and machine projections semantically aligned
+without leaking private fields or inventing effects.
 
-Action summaries state the observable result. `boundaries` state responsibility,
-approval, unsupported effects, failure behavior, and fallback once, at the
-decision point. Registration or a business page is discovery inventory, not
-proof of routeable supply.
+## Verification
+
+Inspect rendered or serialized output, not only source strings. Use the
+narrowest focused check for the changed transition, then the relevant UI/SEO
+contract check when that boundary changed. Tests assert responsibility,
+effects, refusal, uncertainty, evidence, and recovery—not frozen phrases or
+universal negative slogans.

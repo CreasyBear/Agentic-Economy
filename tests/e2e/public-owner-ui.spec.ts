@@ -2,7 +2,8 @@ import { mkdirSync } from 'node:fs'
 
 import { expect, test, type Page } from '@playwright/test'
 import { LOCAL_E2E_BUSINESS_FIXTURES } from '../../src/lib/dev/local-e2e-business-fixtures'
-import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '../../src/modules/customer-request/public-comprehension'
+import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '../../src/modules/customer-request/public-comprehension'
+import { DIALOG_WELCOME } from '../../src/content/brand-copy'
 
 const demoBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.requestedSlug === 'plumbing-demo')
 if (demoBusiness === undefined) {
@@ -25,57 +26,67 @@ test.describe('public owner routes', () => {
   test('home exposes the public landing story and claim path', async ({ page }, testInfo) => {
     await page.goto('/')
 
-    await expect(page.getByRole('heading', { name: 'What do you need to make happen?' })).toBeVisible()
-    await expect(page.getByLabel('What are you looking for?')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Find options' })).toBeDisabled()
-    for (const statement of CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES) {
-      await expect(page.getByText(statement, { exact: true })).toBeVisible()
-    }
-    await expect(page.getByText('Your agent knows who to call.')).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: DIALOG_WELCOME.heading })).toBeVisible()
+    await expect(page.getByLabel('What do you need done?')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'See my options' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Activity' })).toHaveCount(0)
-    const agentSetup = page.getByRole('link', { name: 'Use AE with your AI' })
-    await expect(agentSetup).toHaveAttribute('href', '/for-agents')
-    await agentSetup.click()
-    await expect(page).toHaveURL('/for-agents')
-    await expect(page.getByRole('heading', { name: 'Use AE with your AI' })).toBeVisible()
-    await expect(page.getByText('Sign in to create a seven-day key for one assistant.')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Create an API key' })).toHaveAttribute('href', '/agent-access')
+    await page.getByLabel('What do you need done?').fill('Emergency plumbing in Parramatta')
+    await page.getByRole('button', { name: 'See my options' }).click()
+    await expect(page).toHaveURL(/\/\?q=Emergency(?:\+|%20)plumbing(?:\+|%20)in(?:\+|%20)Parramatta/u)
+    await expect(page.getByRole('heading', { name: /options|plan/i })).toBeVisible()
     await page.goto('/')
 
     if (testInfo.project.name.includes('compact')) {
       const menuButton = page.getByRole('button', { name: 'Open public menu' })
-      const compactClaimLink = page.getByRole('link', { name: 'Claim your business page' })
+      const compactClaimLink = page.getByRole('link', { name: 'List your business' })
       await expect(async () => {
         if (!(await compactClaimLink.isVisible())) await menuButton.click()
         await expect(compactClaimLink).toBeVisible()
       }).toPass({ timeout: 15_000 })
     }
     await expect(async () => {
-      const claimLink = page.getByRole('link', { name: 'Claim your business page' })
+      const claimLink = page.getByRole('link', { name: 'List your business' })
       await expect(claimLink).toBeVisible()
       await claimLink.click()
       await expect(page).toHaveURL('/claim')
     }).toPass({ timeout: 20_000 })
-    await expect(page.getByRole('heading', { name: 'Publish a page customers can understand.' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Get your business found — and quoted — by AI assistants and the people they work for.' })).toBeVisible()
+    await expect(page.getByText('Sign in first — then you’ll add your services and prices and publish your page.')).toBeVisible()
     await expect(page.getByText('You review every public detail before anything appears.')).toBeVisible()
     await expect(page.getByText('You confirm availability, price, and every request before work begins.')).toBeVisible()
+    const preparation = page.locator('section[aria-labelledby="claim-before-you-start"]')
+    await expect(preparation.getByText('Your business facts:', { exact: false })).toBeVisible()
+    await expect(preparation.getByText('The services you offer:', { exact: false })).toBeVisible()
+    await expect(preparation.getByText('Your prices:', { exact: false })).toBeVisible()
+    await expect(await preparation.evaluate((node) => {
+      const input = document.querySelector('input[name="claim-business-name"]')
+      return input !== null && Boolean(node.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING)
+    })).toBe(true)
+    await expect(page.getByRole('link', { name: 'Sign in to start' })).toHaveCSS('min-height', '44px')
+    await expect(page.getByRole('button', { name: 'Find my business' })).toHaveCSS('min-height', '44px')
+    await expect(page.getByRole('button', { name: 'Build my page from the web' })).toHaveCSS('min-height', '44px')
+    await expect(page.getByRole('link', { name: /start fresh/i })).toHaveCSS('min-height', '44px')
+    await expect(page.getByLabel('Search your business name').locator('..')).toHaveCSS('min-height', '44px')
     await expect(page.getByRole('link', { name: 'Sign in to start' })).toHaveAttribute('href', '/claim/form')
     await assertPublicLanguage(page)
   })
 
-  test('human and agent entries state the same current boundary and next decisions', async ({ page }) => {
+  test('human and agent entries keep their own projections and current boundary', async ({ page }) => {
     await page.goto('/')
     const assistantIndex = await page.request.get('/llms.txt')
 
     expect(assistantIndex.ok()).toBe(true)
     const assistantText = await assistantIndex.text()
-    for (const statement of CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES) {
-      await expect(page.getByText(statement, { exact: true })).toBeVisible()
+    for (const statement of CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES) {
       expect(assistantText).toContain(statement)
     }
+    await expect(page.getByRole('heading', { name: DIALOG_WELCOME.heading })).toBeVisible()
+    const humanText = await page.locator('body').innerText()
+    for (const statement of CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES) {
+      expect(humanText).not.toContain(statement)
+    }
 
-    await expect(page.getByRole('button', { name: 'Find options' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Use AE with your AI' })).toHaveAttribute('href', '/for-agents')
+    await expect(page.getByRole('button', { name: 'See my options' })).toBeVisible()
     expect(assistantText).toContain('Human entry=')
     expect(assistantText).toContain('/api/v1/requests')
     expect(assistantText).toContain('auth=Bearer AE API key with customer_requests:create')
@@ -137,13 +148,14 @@ test.describe('public owner routes', () => {
     }).toPass({ timeout: 15_000 })
   })
 
-  test('agent access explains the bounded key before creation', async ({ page }) => {
+  test('agent access shows the assistant controls and revocation boundary', async ({ page }) => {
     await page.goto('/agent-access', { waitUntil: 'networkidle' })
-    await expect(page.getByRole('heading', { name: 'Set up your AI' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Create a seven-day key' })).toBeVisible()
-    await expect(page.getByText('It cannot change its own access or act outside the choices and limits AE shows you.')).toBeVisible()
-    await expect(page.getByLabel('Assistant name')).toHaveValue('My assistant')
-    await expect(page.getByRole('button', { name: 'Create key' })).toBeEnabled()
+    await expect(page.getByRole('heading', { name: 'Assistant access', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Check your balance' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Review recent activity' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Manage assistant access' })).toBeVisible()
+    const body = await page.locator('body').innerText()
+    expect(body).not.toMatch(/clerk_api_key:|ownerId|businessId|serviceId|sourceHash|rawContact/i)
   })
 
   test('claim form remains usable when first request state changes', async ({ page }) => {
@@ -244,7 +256,11 @@ test.describe('public owner routes', () => {
     await expect(page.getByText('What happens when you reach out', { exact: true })).toBeVisible()
     await expect(page.getByText('Owner has not supplied public contact instructions.')).toBeVisible()
     await expect(page.getByRole('link', { name: /correct or remove this page/i })).toBeVisible()
-    await expect(page.getByText('Get as agent JSON')).toBeVisible()
+    const pageInfo = page.getByText('Page info', { exact: true }).first()
+    await expect(pageInfo).toBeVisible()
+    await expect(page.getByText('Data for AI assistants')).not.toBeVisible()
+    await pageInfo.click()
+    await expect(page.getByText('Data for AI assistants')).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
     expect(bodyText).not.toMatch(/ownerId|adminId|clerk|actor|trust tier|public status/i)

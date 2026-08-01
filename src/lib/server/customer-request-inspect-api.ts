@@ -1,6 +1,7 @@
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import { customerRequestInspectResultSchema } from '@/modules/customer-request/agent-contract'
+import { response } from '@/lib/server/no-store-response'
 
 export type InspectResult = CustomerRequestView | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'request_not_found' }>
 const inspectAction = sourceAction<Record<string, unknown>, InspectResult>('customerRequestApplication:resume')
@@ -20,6 +21,3 @@ export async function handleCustomerRequestGet(requestRef: string, options: Hand
   }
 }
 
-function response(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}

@@ -1,22 +1,23 @@
-import { useRef, useState, type FormEvent, type RefObject } from 'react'
+import { useRef, useState, type RefObject } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { CircleCheckIcon } from 'lucide-react'
-import { Badge, type BadgeProps } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Text } from '@astryxdesign/core/Text'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Spinner } from '@/components/ui/spinner'
 
+import { Conversation, ConversationContent } from '@/components/ai-elements/conversation'
+import { Message, MessageContent } from '@/components/ai-elements/message'
 import { toast } from '@/lib/ui/toast'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeInquiryOriginCard } from '@/components/ae/inquiries/AeInquiryOriginCard'
-import { AeInquiryMessage } from '@/components/ae/inquiries/AeInquiryMessage'
-import { AeInquiryThreadScroll } from '@/components/ae/inquiries/AeInquiryThreadScroll'
 import { AeOwnerReplyComposer } from '@/components/ae/inquiries/AeOwnerReplyComposer'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { formatTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 import type { OwnerId } from '@/modules/common/ids'
 import {
@@ -38,6 +39,7 @@ import {
   type OwnerInboxNotificationProjection,
   type OwnerInquiryDetailReadback,
 } from '@/modules/inquiries/public'
+
 
 export type OwnerInquiryThreadRouteInput = {
   state?: InquirySourceState
@@ -161,9 +163,7 @@ function OwnerInquiryThreadRoute() {
     }
   }
 
-  async function handleReply(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
+  async function handleReply() {
     if (readback.kind !== 'available') {
       return
     }
@@ -244,7 +244,7 @@ function OwnerInquiryThreadRoute() {
         description={readback.reason}
         currentPath={detailPath}
       >
-        <Button label="Back to inbox" href="/owner/inquiries" />
+        <Button asChild variant="default"><a href="/owner/inquiries">Back to inbox</a></Button>
       </AeOperatorShell>
     )
   }
@@ -312,33 +312,55 @@ function ownerServerThreadToRouteReadback(result: OwnerInquiryThreadServerResult
 
 function ThreadMessages({ detail }: { detail: OwnerInquiryDetailReadback }) {
   return (
-    <Card padding={3}>
+    <Card className="p-3">
       <div className="grid gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={detail.inquiry.bucket === 'resolved' ? 'info' : 'neutral'} label={detail.inquiry.bucket.replace('_', ' ')} />
-          <Badge variant={notificationVariant(detail.inquiry.notificationStatus)} label={detail.inquiry.notificationLabel} />
+          <Badge variant={detail.inquiry.bucket === 'resolved' ? 'secondary' : 'outline'}>{detail.inquiry.bucket.replace('_', ' ')}</Badge>
+          <Badge variant={notificationVariant(detail.inquiry.notificationStatus)}>{detail.inquiry.notificationLabel}</Badge>
         </div>
-        <Text as="h2" type="large" weight="semibold">
-          Thread messages
-        </Text>
-        <Text as="p" type="supporting">
-          {detail.inquiry.preview}
-        </Text>
+        <h2 className="text-lg font-semibold text-foreground">Thread messages</h2>
+        <p className="text-sm text-muted-foreground">{detail.inquiry.preview}</p>
       </div>
       <div className="mt-4 grid gap-4">
-        <AeInquiryThreadScroll>
-          {detail.messages.map((message) => (
-            <AeInquiryMessage key={message.messageId} message={message} />
-          ))}
-        </AeInquiryThreadScroll>
+        <Conversation className="max-h-[min(32rem,60vh)] overflow-auto pr-3">
+          <ConversationContent className="grid gap-3 p-0 pb-1">
+            {detail.messages.map((message) => {
+              const isOwner = message.sender === 'owner'
+              const senderLabel = isOwner ? 'Owner' : 'Customer'
+              const sender = isOwner ? 'user' : 'assistant'
+              return (
+                <Message key={message.messageId} from={sender} className="grid max-w-full gap-2">
+                  <div className="flex items-start gap-2">
+                    <Avatar size="sm" aria-label={senderLabel}>
+                      <AvatarFallback>{senderLabel.slice(0, 1)}</AvatarFallback>
+                    </Avatar>
+                    <div className="grid min-w-0 gap-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <span className="text-sm font-medium text-foreground">{senderLabel}</span>
+                        <span className="text-xs text-muted-foreground">
+                          <time dateTime={timestampIso(message.createdAt)} data-numeric>
+                            {formatTimestamp(message.createdAt)}
+                          </time>
+                        </span>
+                      </div>
+                      <MessageContent className="rounded-md border border-border bg-card px-3 py-2 text-foreground">
+                        {message.body}
+                      </MessageContent>
+                    </div>
+                  </div>
+                </Message>
+              )
+            })}
+          </ConversationContent>
+        </Conversation>
         {detail.inquiry.status === 'closed' ? (
           <>
-            <div className="flex items-center gap-2 text-sm text-secondary" role="status">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
               <span className="h-px flex-1 bg-border" aria-hidden="true" />
               <span>Thread closed</span>
               <span className="h-px flex-1 bg-border" aria-hidden="true" />
             </div>
-            <Button label="Back to inbox" href="/owner/inquiries" variant="secondary" size="sm" className="justify-self-start" />
+            <Button asChild variant="secondary" size="sm" className="justify-self-start"><a href="/owner/inquiries">Back to inbox</a></Button>
           </>
         ) : null}
         <AeOperatorFactGrid
@@ -376,7 +398,7 @@ function OwnerReplyControls({
   onBodyChange: (value: string) => void
   onClose: () => Promise<boolean>
   onMarkRead: () => void
-  onReply: (event: FormEvent<HTMLFormElement>) => void
+  onReply: () => void | Promise<void>
 }) {
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
   const replyInvalid = replyAttempted && body.trim().length === 0
@@ -389,21 +411,19 @@ function OwnerReplyControls({
   }
 
   function submitReply() {
-    replyFieldRef.current?.form?.requestSubmit()
+    void onReply()
   }
 
   return (
-    <Card padding={3}>
+    <Card className="p-3">
       <div className="grid gap-1.5">
-        <Text as="h2" type="large" weight="semibold">
-          Owner controls
-        </Text>
-        <Text as="p" type="supporting">
+        <h2 className="text-lg font-semibold text-foreground">Owner controls</h2>
+        <p className="text-sm text-muted-foreground">
           Replies notify the customer through the saved contact path. They do not confirm booking, payment, or dispatch.
-        </Text>
+        </p>
       </div>
       <div className="mt-4">
-        <form onSubmit={onReply} className="grid gap-4" noValidate>
+        <div className="grid gap-4">
           <AeOwnerReplyComposer
             value={body}
             invalid={replyInvalid}
@@ -416,30 +436,32 @@ function OwnerReplyControls({
           <div className="flex flex-wrap gap-3">
             <Button
               type="button"
-              label="Mark read"
               variant="secondary"
-              icon={pendingAction === 'read' ? undefined : <CircleCheckIcon aria-hidden="true" />}
-              isLoading={pendingAction === 'read'}
-              isDisabled={!canMarkRead || pendingAction !== undefined}
+              disabled={!canMarkRead || pendingAction !== undefined}
               onClick={onMarkRead}
-            />
-            <Button
-              type="submit"
-              label="Reply"
-              isLoading={pendingAction === 'reply'}
-              isDisabled={!canReply || pendingAction !== undefined}
-            />
+            >
+              {pendingAction === 'read' ? <Spinner data-icon="inline-start" /> : <CircleCheckIcon data-icon="inline-start" aria-hidden="true" />}
+              Mark read
+            </Button>
             <Button
               type="button"
-              label="Close inquiry"
+              disabled={!canReply || pendingAction !== undefined}
+              onClick={() => void onReply()}
+            >
+              {pendingAction === 'reply' ? <Spinner data-icon="inline-start" /> : null}
+              Reply
+            </Button>
+            <Button
+              type="button"
               variant="secondary"
-              icon={pendingAction === 'close' ? undefined : <CircleCheckIcon aria-hidden="true" />}
-              isLoading={pendingAction === 'close'}
-              isDisabled={!canClose || pendingAction !== undefined}
+              disabled={!canClose || pendingAction !== undefined}
               onClick={() => setCloseConfirmOpen(true)}
-            />
+            >
+              {pendingAction === 'close' ? <Spinner data-icon="inline-start" /> : <CircleCheckIcon data-icon="inline-start" aria-hidden="true" />}
+              Close inquiry
+            </Button>
           </div>
-        </form>
+        </div>
         <AeConfirmDialog
           open={closeConfirmOpen}
           onOpenChange={setCloseConfirmOpen}
@@ -456,26 +478,22 @@ function OwnerReplyControls({
 
 function DeliveryReadback({ notifications }: { notifications: readonly OwnerInboxNotificationProjection[] }) {
   return (
-    <Card padding={3}>
+    <Card className="p-3">
       <div className="grid gap-1.5">
-        <Text as="h2" type="large" weight="semibold">
-          Delivery status
-        </Text>
-        <Text as="p" type="supporting">
+        <h2 className="text-lg font-semibold text-foreground">Delivery status</h2>
+        <p className="text-sm text-muted-foreground">
           Notification state never replaces the saved inquiry message.
-        </Text>
+        </p>
       </div>
       <div className="mt-4 grid gap-3">
         {notifications.length === 0 ? (
-          <Text as="p" type="supporting">
-            No delivery status recorded.
-          </Text>
+          <p className="text-sm text-muted-foreground">No delivery status recorded.</p>
         ) : (
           notifications.map((notification) => (
             <div key={notification.notificationId} className="grid gap-2 rounded-lg bg-muted/40 p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={notificationVariant(notification.status)} label={notification.label} />
-                <span className="text-xs text-secondary">{notification.recipientRole}</span>
+                <Badge variant={notificationVariant(notification.status)}>{notification.label}</Badge>
+                <span className="text-xs text-muted-foreground">{notification.recipientRole}</span>
               </div>
               <AeOperatorFactGrid
                 columns={2}
@@ -494,14 +512,10 @@ function DeliveryReadback({ notifications }: { notifications: readonly OwnerInbo
 
 function InquiryNextStep({ detail }: { detail: OwnerInquiryDetailReadback }) {
   return (
-    <Card padding={3}>
+    <Card className="p-3">
       <div className="grid gap-1.5">
-        <Text as="h2" type="large" weight="semibold">
-          Next step
-        </Text>
-        <Text as="p" type="supporting">
-          {nextStepCopy(detail)}
-        </Text>
+        <h2 className="text-lg font-semibold text-foreground">Next step</h2>
+        <p className="text-sm text-muted-foreground">{nextStepCopy(detail)}</p>
       </div>
     </Card>
   )
@@ -524,16 +538,15 @@ function nextStepCopy(detail: OwnerInquiryDetailReadback): string {
   }
 }
 
-function notificationVariant(status: InquiryNotificationStatus): NonNullable<BadgeProps['variant']> {
+function notificationVariant(status: InquiryNotificationStatus): 'outline' | 'secondary' | 'destructive' {
   switch (status) {
     case 'queued':
-      return 'neutral'
+      return 'outline'
     case 'sent':
-      return 'info'
+      return 'secondary'
     case 'failed':
-      return 'error'
     case 'held':
-      return 'warning'
+      return 'destructive'
   }
 }
 

@@ -10,8 +10,9 @@ import type { CustomerRequestView } from '@/modules/customer-request/customer-pr
  * has to stay scannable. These cases lock the three visibility tiers in place:
  * the facts needed to decide stay immediate, the commitment detail stays
  * expanded, and registered background detail stays reachable but out of the
- * way. Astryx Collapsible keeps collapsed content mounted, so every assertion
- * here is about visibility, never about absence.
+ * way. RouteDisclosure keeps collapsed content mounted while toggling
+ * `aria-expanded`, so every assertion here inspects disclosure state rather
+ * than absence.
  */
 
 const noop = () => undefined
@@ -108,10 +109,10 @@ describe('route review keeps one decision immediate', () => {
 })
 
 /**
- * Astryx Collapsible expresses collapsed state through `aria-expanded` on the
- * trigger and a StyleX class on the region it controls. jsdom applies no
- * stylesheet, so the honest assertion is the ARIA contract: is this text inside
- * a region whose trigger is currently collapsed?
+ * RouteDisclosure exposes collapsed state via `aria-expanded` on the trigger
+ * and `aria-controls` pointing to its mounted region. jsdom applies no
+ * stylesheet, so the honest assertion is the ARIA relationship: is this text
+ * inside a region whose trigger is currently collapsed?
  */
 function insideCollapsedRegion(element: HTMLElement): boolean {
   const regionIds = new Set(

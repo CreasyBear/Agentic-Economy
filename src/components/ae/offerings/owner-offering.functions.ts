@@ -3,10 +3,18 @@ import { z } from 'zod'
 
 import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
+import {
+  OfferingPriceKindValues,
+  OfferingPriceTaxTreatmentValues,
+  OfferingPriceUnitValues,
+  normalizeOfferingPrice,
+} from '@/modules/catalog/public'
 import type {
   BusinessOfferingRecord,
   BusinessOfferingRevisionRecord,
   OfferingAccessPathRecord,
+  OfferingPrice,
+  OfferingPriceInput,
 } from '@/modules/catalog/public'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import { publishGateRefusal } from './AeOwnerOfferings'
@@ -64,6 +72,20 @@ const accessDescriptorSchema = z.discriminatedUnion('kind', [
   }),
 ])
 
+/**
+ * The comparable price exactly as the client normalized it. The shape is
+ * checked here; `normalizeOfferingPrice` is still re-run on the way through, so
+ * a payload that skipped the editor cannot publish an inconsistent price.
+ */
+const offeringPriceSchema = z.object({
+  kind: z.enum(OfferingPriceKindValues),
+  currency: z.string().regex(/^[A-Z]{3}$/u),
+  amountMinor: z.number().int().nonnegative().optional(),
+  maximumAmountMinor: z.number().int().nonnegative().optional(),
+  unit: z.enum(OfferingPriceUnitValues).optional(),
+  taxTreatment: z.enum(OfferingPriceTaxTreatmentValues),
+})
+
 const editorSchema = z.object({
   requestKey: z.string().min(8).max(200),
   businessId: z.string().min(1),
@@ -71,6 +93,7 @@ const editorSchema = z.object({
     offeringRef: z.string().optional(), expectedRevision: z.number().int().nonnegative(),
     name: z.string(), category: z.string(), summary: z.string(),
     serviceAreaSummary: z.string(), availabilitySummary: z.string(), pricingSummary: z.string(),
+    price: offeringPriceSchema.optional(),
     status: z.enum(['draft', 'published', 'paused', 'retired']),
     accessPaths: z.array(z.object({ accessPathRef: z.string().optional(), status: z.enum(['draft', 'published', 'withdrawn']), descriptor: accessDescriptorSchema })).max(20),
   }),
@@ -83,13 +106,13 @@ const changeStatusMutation = sourceMutation<SourceWriteArgs & { offeringRef: str
 const upsertPathMutation = sourceMutation<SourceWriteArgs & { offeringRef: string; accessPathRef: string; expectedRevision: number; status: 'draft' | 'published'; descriptor: OwnerOfferingEditorValue['accessPaths'][number]['descriptor'] }, OfferingCommandResult>('catalog:upsertOfferingAccessPath')
 const withdrawPathMutation = sourceMutation<SourceWriteArgs & { accessPathRef: string; expectedRevision: number }, OfferingCommandResult>('catalog:withdrawOfferingAccessPath')
 
-type OfferingFacts = Readonly<{ name: string; category: string; summary: string; serviceAreaSummary?: string; availabilitySummary?: string; pricingSummary?: string }>
+type OfferingFacts = Readonly<{ name: string; category: string; summary: string; serviceAreaSummary?: string; availabilitySummary?: string; pricingSummary?: string; price?: OfferingPrice }>
 
 export const readOwnerOfferingSupplyServer = createServerFn().handler(async (): Promise<OwnerOfferingSupplyReadResult> => {
   try {
     return await callSourceQuery(readSupplyQuery, {})
   } catch (error) {
-    return { kind: 'error', code: 'source_unavailable', reason: error instanceof Error ? error.message : 'Offering source is unavailable.' }
+    return { kind: 'error', code: 'source_unavailable', reason: error instanceof Error ? error.message : 'Service source is unavailable.' }
   }
 })
 
@@ -110,7 +133,7 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
     const currentRevision = first.currentRevision ?? Math.max(1, value.expectedRevision + (value.offeringRef === undefined ? 0 : 1))
     const completedSteps: string[] = ['details']
     const status = await write(context, data.businessId, data.requestKey, 'status', (source) => callSourceMutation(changeStatusMutation, { ...source, offeringRef, expectedRevision: currentRevision, status: value.status }))
-    if (status.kind === 'error') return partialRefusal(`Offering details were saved, but its public state was not changed: ${status.reason}`, offeringRef, currentRevision, completedSteps)
+    if (status.kind === 'error') return partialRefusal(`Service details were saved, but its public state was not changed: ${status.reason}`, offeringRef, currentRevision, completedSteps)
     completedSteps.push('public_state')
 
     for (const [index, path] of value.accessPaths.entries()) {
@@ -120,13 +143,13 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
           ? { kind: 'ok' as const, code: 'not_persisted' }
           : await write(context, data.businessId, data.requestKey, `withdraw-${index}`, (source) => callSourceMutation(withdrawPathMutation, { ...source, accessPathRef, expectedRevision: currentRevision }))
         : await write(context, data.businessId, data.requestKey, `path-${index}`, (source) => callSourceMutation(upsertPathMutation, { ...source, offeringRef, accessPathRef, expectedRevision: currentRevision, status: path.status as 'draft' | 'published', descriptor: path.descriptor }))
-      if (pathResult.kind === 'error') return partialRefusal(`Offering details were saved, but one way to get started was not: ${pathResult.reason}`, offeringRef, currentRevision, completedSteps)
+      if (pathResult.kind === 'error') return partialRefusal(`Service details were saved, but one way to start the service was not: ${pathResult.reason}`, offeringRef, currentRevision, completedSteps)
       completedSteps.push(`access_path_${index}`)
     }
 
     return {
       kind: 'saved',
-      message: 'Your Offering and its ways to get started were saved.',
+      message: 'Your service and its contact routes were saved.',
       value: { ...value, offeringRef: offeringRef as never, expectedRevision: currentRevision },
     }
   })
@@ -144,18 +167,19 @@ async function write(
     const sourceWrite = await sourceWriteAdmissionFromContext({ context, scope: 'catalog_publish', operationKey, correlationId })
     return await execute({ businessId, operationKey, correlationId, sourceWrite })
   } catch (error) {
-    return { kind: 'error', code: 'source_unavailable', reason: error instanceof Error ? error.message : 'Offering source is unavailable.' }
+    return { kind: 'error', code: 'source_unavailable', reason: error instanceof Error ? error.message : 'Service source is unavailable.' }
   }
 }
 
 function compactFacts(value: OwnerOfferingEditorValue): OfferingFacts {
   return {
-    name: value.name.trim().length === 0 ? 'Untitled offering' : value.name,
+    name: value.name.trim().length === 0 ? 'Untitled service' : value.name,
     category: value.category,
     summary: value.summary,
     ...(value.serviceAreaSummary.trim() === '' ? {} : { serviceAreaSummary: value.serviceAreaSummary }),
     ...(value.availabilitySummary.trim() === '' ? {} : { availabilitySummary: value.availabilitySummary }),
     ...(value.pricingSummary.trim() === '' ? {} : { pricingSummary: value.pricingSummary }),
+    ...(value.price === undefined ? {} : { price: value.price }),
   }
 }
 
@@ -169,6 +193,7 @@ function normalizeEditorValue(value: z.infer<typeof editorSchema>['value']): Own
     serviceAreaSummary: value.serviceAreaSummary,
     availabilitySummary: value.availabilitySummary,
     pricingSummary: value.pricingSummary,
+    price: value.price === undefined ? undefined : normalizeOfferingPrice(toOfferingPriceInput(value.price)),
     status: value.status,
     accessPaths: value.accessPaths.map((path) => ({
       ...(path.accessPathRef === undefined ? {} : { accessPathRef: path.accessPathRef }),
@@ -178,8 +203,20 @@ function normalizeEditorValue(value: z.infer<typeof editorSchema>['value']): Own
   }
 }
 
+/** Zod optionals arrive as `T | undefined`; the price contract wants absence. */
+function toOfferingPriceInput(price: z.infer<typeof offeringPriceSchema>): OfferingPriceInput {
+  return {
+    kind: price.kind,
+    currency: price.currency,
+    taxTreatment: price.taxTreatment,
+    ...(price.amountMinor === undefined ? {} : { amountMinor: price.amountMinor }),
+    ...(price.maximumAmountMinor === undefined ? {} : { maximumAmountMinor: price.maximumAmountMinor }),
+    ...(price.unit === undefined ? {} : { unit: price.unit }),
+  }
+}
+
 function toSaveError(result: Extract<OfferingCommandResult, { kind: 'error' }>): OwnerOfferingSaveResult {
-  if (result.code === 'revision_conflict') return { kind: 'revision_conflict', message: 'Reload the latest Offering before saving your changes.' }
+  if (result.code === 'revision_conflict') return { kind: 'revision_conflict', message: 'Reload the latest service before saving your changes.' }
   if (result.code === 'invalid_offering' || result.code === 'invalid_access_path' || result.code === 'limit_exceeded') return { kind: 'invalid', message: result.reason }
   return { kind: 'refused', message: result.reason }
 }

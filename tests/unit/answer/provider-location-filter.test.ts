@@ -28,6 +28,10 @@ const provider = (overrides: Partial<AnswerSource> = {}): AnswerSource => ({
 })
 
 describe('provider location filtering', () => {
+  it('extracts explicit places before trailing timing language', () => {
+    expect(extractRequestedLocation('My tooth hurts and I need a dentist near Adelaide this week')).toBe('Adelaide')
+  })
+
   it('extracts trailing suburb intent without treating service words as places', () => {
     expect(extractRequestedLocation('Emergency plumber Brunswick')).toBe('Brunswick')
     expect(extractRequestedLocation('Brunswick emergency plumber')).toBe('Brunswick')

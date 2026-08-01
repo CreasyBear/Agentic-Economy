@@ -4,6 +4,7 @@ import {
   projectRequestEvaluation,
   projectRouteConfirmed,
 } from '@/modules/customer-request/customer-projection'
+import { DETERMINISTIC_TOKEN_MATCH_INTERPRETER_ID } from '@/modules/customer-request/semantic-interpreter'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import type { CustomerRequestActionResult } from '../action-result'
@@ -19,6 +20,9 @@ export function projectStoredAggregate(
     outcome: aggregate.outcome,
     actionCount: aggregate.plan.actions.length,
     reportedOptionFailure: (aggregate.snapshot.routeExclusions?.length ?? 0) > 0,
+    ...(aggregate.plan.interpreterId === DETERMINISTIC_TOKEN_MATCH_INTERPRETER_ID
+      ? { interpretationBasis: 'keyword_match' as const }
+      : {}),
     ...(routeGenerationRef === undefined ? {} : { routeGenerationRef }),
   })
 }

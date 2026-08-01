@@ -14,9 +14,17 @@ const accessKeysByThreadId = new Map<string, string>()
 const privateRecordAccessStoragePrefix = 'ae.privateRecordAccess.'
 let privateRecordTelemetryBlocked = false
 
-export type BrowserLocationLike = Pick<Location, 'pathname' | 'search' | 'hash'>
-export type BrowserHistoryLike = Pick<History, 'state' | 'replaceState'>
-export type BrowserSessionStorageLike = Pick<Storage, 'getItem' | 'setItem'>
+/**
+ * Declared structurally rather than via `Pick<Location, …>`. Convex functions
+ * reach this module and their tsconfig has no DOM lib, so depending on ambient
+ * browser types breaks `convex dev`/`deploy` for the entire function graph.
+ */
+export type BrowserLocationLike = Readonly<{ pathname: string; search: string; hash: string }>
+export type BrowserHistoryLike = { state: unknown; replaceState: (state: unknown, unused: string, url?: string | null) => void }
+export type BrowserSessionStorageLike = {
+  getItem: (key: string) => string | null
+  setItem: (key: string, value: string) => void
+}
 
 export function encodePrivateRecordFragment(accessKey: string): string {
   const parameters = new URLSearchParams({ access: accessKey })
@@ -82,7 +90,7 @@ export function isTelemetryAllowedForCurrentRoute(): boolean {
   return !privateRecordTelemetryBlocked
 }
 
-export function safeTelemetryPath(location: Pick<Location, 'pathname'>): string {
+export function safeTelemetryPath(location: Readonly<{ pathname: string }>): string {
   const pathname = location.pathname.trim()
   return pathname.startsWith('/') ? pathname : '/'
 }
@@ -133,13 +141,16 @@ function privateRecordAccessStorageKey(threadId: string): string {
 }
 
 function browserSessionStorage(): BrowserSessionStorageLike | undefined {
-  if (typeof window === 'undefined') return undefined
+  // `globalThis` keeps this readable in a runtime with no DOM lib, which every
+  // Convex function importing this module has.
+  const host = globalThis as { sessionStorage?: BrowserSessionStorageLike }
   try {
-    return window.sessionStorage
+    return host.sessionStorage
   } catch {
     return undefined
   }
 }
+
 function privateRecordThreadId(pathname: string): string | undefined {
   const match = /^\/(?:t|i)\/([^/]+)$/.exec(pathname)
   if (match === null) return undefined

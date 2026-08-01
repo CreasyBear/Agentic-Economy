@@ -32,6 +32,26 @@ export function selectedProviderFromArtifacts(artifacts: readonly AnswerArtifact
   return undefined
 }
 
+export function listedProvidersFromArtifacts(artifacts: readonly AnswerArtifact[]): AnswerSource[] {
+  const providers: AnswerSource[] = []
+
+  for (const artifact of artifacts) {
+    switch (artifact.kind) {
+      case 'selected-provider':
+        providers.push(artifact.provider)
+        break
+      case 'provider-cards':
+      case 'provider-compare-table':
+        providers.push(...artifact.providers)
+        break
+      default:
+        break
+    }
+  }
+
+  return providers
+}
+
 function hasProviderContext(artifacts: readonly AnswerArtifact[]): boolean {
   return artifacts.some((artifact) => {
     switch (artifact.kind) {

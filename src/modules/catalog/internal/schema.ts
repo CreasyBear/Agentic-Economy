@@ -14,6 +14,21 @@ import {
   ServiceCapabilityStatusValues,
 } from '@/modules/catalog/public'
 
+import {
+  OfferingPriceKindValues,
+  OfferingPriceTaxTreatmentValues,
+  OfferingPriceUnitValues,
+} from './offering-price'
+
+/** Additive and optional: existing revisions stay valid without a price. */
+const offeringPrice = v.object({
+  kind: literalUnion(OfferingPriceKindValues),
+  currency: v.string(),
+  amountMinor: v.optional(v.number()),
+  maximumAmountMinor: v.optional(v.number()),
+  unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+  taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+})
 
 const humanRequestAccessPath = v.object({
   kind: v.literal('human_request'),
@@ -60,6 +75,7 @@ export const catalogTables = {
     serviceAreaSummary: v.optional(v.string()),
     availabilitySummary: v.optional(v.string()),
     pricingSummary: v.optional(v.string()),
+    price: v.optional(offeringPrice),
     sourceHash: v.string(),
     createdAt: v.number(),
   })

@@ -1,8 +1,6 @@
 import { useState } from 'react'
 
-import { Button } from '@astryxdesign/core/Button'
-import { Heading } from '@astryxdesign/core/Heading'
-import { Text } from '@astryxdesign/core/Text'
+import { Button } from '@/components/ui/button'
 
 import { emitWave1JourneyEvent, getOrCreatePseudonymousJourneyId } from '@/lib/ui/journey-events'
 import { shortlistSemanticRevision } from '@/lib/ui/shortlist-export'
@@ -39,20 +37,24 @@ export function AeShortlistTerminal({
   const semanticRevision = shortlistSemanticRevision(revision, providers)
   const urgentContact = urgentBusiness !== undefined && urgentPhone !== undefined && urgentCallHref !== undefined
     ? (
-        <div className="grid gap-3 rounded-md border border-border bg-body p-4" aria-label="Call first option">
+        <div className="grid gap-3 rounded-md border border-border bg-background p-4" aria-label="Call first option">
           <div className="grid gap-1">
-            <Text type="large" weight="semibold" color="primary" display="block">{urgentBusiness.name}</Text>
+            <p className="block text-lg font-semibold text-foreground">{urgentBusiness.name}</p>
           </div>
-          <Button label={`Call ${urgentPhone}`} variant="primary" className="min-h-11 justify-self-start" href={urgentCallHref} />
+          <Button asChild variant="default" className="min-h-11 justify-self-start">
+            <a href={urgentCallHref}>Call {urgentPhone}</a>
+          </Button>
         </div>
       )
     : null
   if (closed) {
     return (
-      <section className="grid gap-3 rounded-lg border border-border bg-surface p-4" aria-labelledby="shortlist-closed-heading">
-        <Heading id="shortlist-closed-heading" level={2} className="text-xl font-semibold">Shortlist closed</Heading>
-        <Text color="secondary" role="status">Nothing was sent.</Text>
-        <Button label="Return home" variant="secondary" className="min-h-11 justify-self-start" href="/" />
+      <section className="grid gap-3 rounded-lg border border-border bg-card p-4" aria-labelledby="shortlist-closed-heading">
+        <h2 id="shortlist-closed-heading" className="text-xl font-semibold text-foreground">Shortlist closed</h2>
+        <p className="text-muted-foreground" role="status">Nothing was sent.</p>
+        <Button asChild variant="secondary" className="min-h-11 justify-self-start">
+          <a href="/">Return home</a>
+        </Button>
       </section>
     )
   }
@@ -72,37 +74,40 @@ export function AeShortlistTerminal({
   }
 
   return (
-    <section className="grid gap-4 rounded-lg border border-border bg-surface p-4" aria-labelledby="shortlist-terminal-heading">
+    <section className="grid gap-4 rounded-lg border border-border bg-card p-4" aria-labelledby="shortlist-terminal-heading">
       {urgentContact}
       <div className="grid gap-1">
-        <Heading id="shortlist-terminal-heading" level={2} className="text-xl font-semibold">
+        <h2 id="shortlist-terminal-heading" className="text-xl font-semibold text-foreground">
           Your shortlist is ready
-        </Heading>
-        <Text color="secondary">
+        </h2>
+        <p className="text-muted-foreground">
           {timing === 'today'
             ? 'For today, listings with a published contact path appear first. Phone details are shown only when published.'
             : 'Compare the listed facts, then open a business page when you are ready.'}
-        </Text>
+        </p>
       </div>
       <div className="flex flex-col gap-2 min-[376px]:flex-row min-[376px]:flex-wrap" aria-label="Shortlist actions">
         <Button
-          label="Change criteria"
           type="button"
           variant="secondary"
           className="min-h-11"
-          isDisabled={onChangeCriteria === undefined}
+          disabled={onChangeCriteria === undefined}
           {...(onChangeCriteria === undefined ? {} : { onClick: onChangeCriteria })}
-        />
-        <Button label="Open" variant="secondary" className="min-h-11" href={firstBusiness?.detailUrl ?? '/registry'} />
-        <Button label="Copy" type="button" variant="secondary" className="min-h-11" isDisabled={providers.length === 0} onClick={openExportPreview} />
+        >
+          Change criteria
+        </Button>
+        <Button asChild variant="secondary" className="min-h-11">
+          <a href={firstBusiness?.detailUrl ?? '/registry'}>Open</a>
+        </Button>
+        <Button type="button" variant="secondary" className="min-h-11" disabled={providers.length === 0} onClick={openExportPreview}>Copy</Button>
         {callHref === undefined
-          ? <Button label="Call" type="button" variant="secondary" className="min-h-11" isDisabled />
-          : <Button label={`Call ${publishedPhone}`} variant="secondary" className="min-h-11" href={callHref} />}
-        <Button label="Close" type="button" variant="ghost" className="min-h-11" onClick={() => setClosed(true)} />
+          ? <Button type="button" variant="secondary" className="min-h-11" disabled>Call</Button>
+          : <Button asChild variant="secondary" className="min-h-11"><a href={callHref}>Call {publishedPhone}</a></Button>}
+        <Button type="button" variant="ghost" className="min-h-11" onClick={() => setClosed(true)}>Close</Button>
       </div>
       {callHref === undefined
-        ? <Text type="supporting" color="secondary">Open the listing for its published contact options.</Text>
-        : <Text type="supporting" color="secondary">Calls go directly to the published business number.</Text>}
+        ? <p className="block text-sm text-muted-foreground">Open the listing for its published contact options.</p>
+        : <p className="block text-sm text-muted-foreground">Calls go directly to the published business number.</p>}
       <AeExportPreview
         isOpen={exportPreviewOpen}
         onOpenChange={setExportPreviewOpen}

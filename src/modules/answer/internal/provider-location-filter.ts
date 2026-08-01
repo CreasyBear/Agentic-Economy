@@ -69,6 +69,9 @@ const SERVICE_WORDS = new Set([
   'water',
   'which',
   'with',
+  'this',
+  'week',
+  'weeks',
 ])
 
 const STATE_WORDS = new Set(['act', 'nsw', 'nt', 'qld', 'sa', 'tas', 'vic', 'wa'])

@@ -3,19 +3,17 @@ import { Outlet, createFileRoute, useLocation, useNavigate, useSearch } from '@t
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { ArrowRightIcon } from 'lucide-react'
-import { Banner } from '@astryxdesign/core/Banner'
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Field } from '@astryxdesign/core/Field'
-import { FormLayout } from '@astryxdesign/core/FormLayout'
-import { Text } from '@astryxdesign/core/Text'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
 import { AeClaimFormSection } from '@/components/ae/forms/AeClaimFormSection'
-import { AeCheckboxField } from '@/components/ae/forms/AeCheckboxField'
 import { AeFileUploadField } from '@/components/ae/forms/AeFileUploadField'
-import { AeRadioCardGroup } from '@/components/ae/forms/AeRadioCardGroup'
 import { AeRangeField } from '@/components/ae/forms/AeRangeField'
 import { AeReviewBlock } from '@/components/ae/forms/AeReviewBlock'
+import { AeCheckboxField } from '@/components/ae/forms/AeCheckboxField'
+import { AeRadioCardGroup } from '@/components/ae/forms/AeRadioCardGroup'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeActionButton } from '@/components/ae/motion/AeActionButton'
@@ -41,6 +39,7 @@ import { validatePublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 import type { PublicOwnerClaimField, PublicOwnerClaimFlowInput, PublicOwnerClaimValidationError } from '@/modules/catalog/public'
 import type { StorefrontImportDraft } from '@/modules/storefront/public'
 import { useClientMounted } from '@/hooks/use-client-mounted'
+
 
 type FieldConfig = {
   field: TextClaimField
@@ -221,10 +220,12 @@ export const searchClaimableBusinessesServer = createServerFn()
 /** Prefill carried from the find step. It never overrides a stored draft. */
 const prefillFields = ['businessName', 'category', 'suburb', 'stateTerritory', 'requestedSlug'] as const
 
-type ClaimSearchParams = Partial<Record<(typeof prefillFields)[number], string>>
+type ClaimSearchParams = Partial<Record<(typeof prefillFields)[number], string>> & { source?: 'supply' }
 
 function readClaimPrefill(search: Record<string, unknown>): ClaimSearchParams {
   const prefill: ClaimSearchParams = {}
+  const source = search.source
+  if (source === 'supply') prefill.source = source
   for (const field of prefillFields) {
     const value = search[field]
     if (typeof value !== 'string') continue
@@ -243,7 +244,7 @@ const identityFields = [
   },
   {
     field: 'category',
-    label: 'Business category',
+    label: 'Trade or service type',
     description: 'Example: Emergency plumbing.',
     control: 'input',
   },
@@ -261,7 +262,7 @@ const identityFields = [
   },
   {
     field: 'requestedSlug',
-    label: 'Public page slug',
+    label: 'Public page address',
     description: 'Lowercase words separated by hyphens.',
     control: 'input',
   },
@@ -273,8 +274,8 @@ const identityFields = [
   },
   {
     field: 'sourceLabel',
-    label: 'Detail note',
-    description: 'Describe where these public details came from.',
+    label: 'Where these facts came from',
+    description: 'Name the website, sign, or person that supplied these details.',
     control: 'input',
   },
 ] as const satisfies readonly FieldConfig[]
@@ -283,19 +284,19 @@ const serviceFields = [
   {
     field: 'serviceName',
     label: 'Service name',
-    description: 'Name one service customers need to understand.',
+    description: 'Name the job customers ask for, such as emergency pipe repair.',
     control: 'input',
   },
   {
     field: 'serviceCategory',
-    label: 'Service category',
-    description: 'Keep this close to the business category.',
+    label: 'Service type',
+    description: 'Use the same trade or service type as above.',
     control: 'input',
   },
   {
     field: 'serviceSummary',
     label: 'Service summary',
-    description: 'One clear public sentence about the service.',
+    description: 'Say what the customer gets and when the service helps them.',
     control: 'textarea',
   },
   {
@@ -307,7 +308,7 @@ const serviceFields = [
   {
     field: 'hoursOrUnknown',
     label: 'Hours (or say if not sure)',
-    description: 'Use owner-supplied hours or say if you are not sure.',
+    description: 'Write the hours customers can expect, or say if you are not sure.',
     control: 'input',
   },
   {
@@ -321,18 +322,18 @@ const serviceFields = [
 const firstRequestModeOptions = [
   {
     value: 'not_available_yet',
-    label: 'No request path published',
-    description: 'Use this when customers should view details but contact another way.',
+    label: 'No contact route yet',
+    description: 'Use this when people should read your details but cannot contact you yet.',
   },
   {
     value: 'inquiry_available',
-    label: 'Qualified inquiry is available',
-    description: 'AE may send a first-contact message for owner review.',
+    label: 'People can ask a question',
+    description: 'Let people send a first message for you to review.',
   },
   {
     value: 'quote_request_available',
-    label: 'Quote request instructions supplied',
-    description: 'Show public instructions and keep price and timing with the business.',
+    label: 'People can ask for a quote',
+    description: 'Show how to request a quote. You confirm the price and timing.',
   },
 ] as const
 
@@ -340,8 +341,8 @@ export const Route = createFileRoute('/claim')({
   validateSearch: (search: Record<string, unknown>): ClaimSearchParams => readClaimPrefill(search),
   head: () => ({
     meta: [
-      { title: 'Get your business found | Agentic Economy' },
-      { name: 'description', content: 'Claim a free service page so people and assistants can understand and compare the public facts you supply.' },
+      { title: 'Get your business found — and quoted — by AI assistants | Agentic Economy' },
+      { name: 'description', content: 'Help AI assistants find your business, answer with your price, and show people exactly how to contact you.' },
       { name: 'robots', content: 'index,follow' },
     ],
   }),
@@ -352,46 +353,57 @@ function ClaimRoute() {
   const location = useLocation()
   const navigate = useNavigate()
   const searchBusinesses = useServerFn(searchClaimableBusinessesServer)
+  const source = Route.useSearch().source
 
   if (location.pathname !== '/claim') return <Outlet />
 
   return (
     <AePublicShell>
-      <AePageHeader
-        eyebrow="For businesses"
-        title="Publish a page customers can understand."
-        description="Show what your business does, where you work, and the supported next step using facts you supply."
-        actions={<Button label="Sign in to start" variant="primary" href="/claim/form" />}
-      />
+      <header className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-8 md:px-6 md:py-10">
+        <div className="grid max-w-5xl gap-3">
+          <h1 className="max-w-4xl text-4xl leading-tight tracking-tight md:text-5xl">
+            Get your business found — and quoted — by AI assistants and the people they work for.
+          </h1>
+          <p className="block max-w-3xl text-lg text-muted-foreground">
+            When people ask their AI, your business is found and can answer with your real services and prices. You review every message before you confirm availability, price, and timing.
+          </p>
+        </div>
+        <div className="grid max-w-md gap-1">
+          <Button asChild variant="default" className="min-h-11 w-full sm:w-auto"><a href={source === 'supply' ? '/claim/form?source=supply' : '/claim/form'}>List your business</a></Button>
+          <p className="block text-sm text-muted-foreground">
+            Sign in first — then you’ll add your services and prices and publish your page.
+          </p>
+        </div>
+      </header>
+      <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-6 md:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] md:px-6">
+        <section aria-labelledby="claim-before-you-start" className="grid content-start gap-3 border-y border-border py-4">
+          <h2 id="claim-before-you-start" className="text-lg font-semibold text-foreground">
+            What people get when they ask their AI
+          </h2>
+          <ul className="m-0 grid list-none divide-y divide-border p-0 text-foreground">
+            <li className="grid gap-0.5 py-3 first:pt-1"><strong>Your business facts:</strong><span className="text-muted-foreground">People asking their AI can find the name, trade, suburb, and phone number you publish.</span></li>
+            <li className="grid gap-0.5 py-3"><strong>The services you offer:</strong><span className="text-muted-foreground">People can see the jobs you do, suburbs you cover, and hours you answer.</span></li>
+            <li className="grid gap-0.5 py-3"><strong>Your prices:</strong><span className="text-muted-foreground">Answers use your real price and its unit, or tell people when you quote first.</span></li>
+            <li className="grid gap-0.5 py-3"><strong>Messages to review:</strong><span className="text-muted-foreground">People can send a first message for you to review before you confirm the work.</span></li>
+            <li className="grid gap-0.5 py-3 last:pb-1"><strong>Customer next step:</strong><span className="text-muted-foreground">Choose the phone, website, or message route people can use now.</span></li>
+          </ul>
+        </section>
+        <section aria-labelledby="claim-control-title" className="grid content-start gap-3 rounded-lg border border-border bg-card p-5">
+          <h2 id="claim-control-title" className="text-lg font-semibold text-foreground">You stay in control</h2>
+          <p className="block text-muted-foreground">You review every public detail before anything appears.</p>
+          <p className="block text-muted-foreground">You confirm availability, price, and every request before work begins.</p>
+          <p className="block text-muted-foreground">Change a detail any time. Nothing starts until you confirm the request.</p>
+        </section>
+      </main>
       <section aria-label="Find your business" className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-6 md:px-6">
         <AeFindMyBusiness
           search={async (query) => await searchBusinesses({ data: { query } })}
           onBuildFromWeb={(businessName) => {
             writeClaimEnrichIntent({ businessName })
-            void navigate({ to: '/claim/form' })
+            void navigate({ to: '/claim/form', ...(source === 'supply' ? { search: { source: 'supply' } } : {}) })
           }}
         />
       </section>
-      <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)] md:px-6">
-        <section aria-labelledby="claim-before-you-start" className="grid content-start gap-4">
-          <Text id="claim-before-you-start" type="large" weight="semibold" display="block">
-            What you’ll prepare
-          </Text>
-          <ul className="grid gap-3 text-primary">
-            <li><strong>Business details:</strong> the public name, category, location, and an optional phone number.</li>
-            <li><strong>One clear service:</strong> what it covers, where it is offered, and the hours you can honestly publish.</li>
-            <li><strong>The next step:</strong> whether customers can send a written request now or should use another contact path.</li>
-            <li><strong>A source note:</strong> where the public details came from so you can review them before publishing.</li>
-          </ul>
-        </section>
-        <Card padding={5} className="grid content-start gap-3">
-          <Text type="large" weight="semibold" display="block">You stay in control</Text>
-          <Text color="secondary" display="block">You review every public detail before anything appears.</Text>
-          <Text color="secondary" display="block">You choose whether to publish a phone number or accept a written first contact.</Text>
-          <Text color="secondary" display="block">You confirm availability, price, and every request before work begins.</Text>
-          <Text type="supporting" color="secondary" display="block">Claiming is free. Sign-in protects changes to the business page.</Text>
-        </Card>
-      </main>
     </AePublicShell>
   )
 }
@@ -529,10 +541,10 @@ export function ClaimFormRoute() {
     setErrors([])
     setPending(true)
     try {
-      const result = await submitClaim({ data: nextValue })
+      const result = await submitClaim({ data: { ...nextValue, ...(prefill.source === undefined ? {} : { source: prefill.source }) } })
       if (result.kind === 'ok') {
         clearStoredClaimDraft()
-        await navigate({ to: '/claim/success', search: { slug: result.catalog.slug } })
+        await navigate({ to: '/claim/success', search: { slug: result.catalog.slug, ...(prefill.source === undefined ? {} : { source: prefill.source }) } })
         return
       }
 
@@ -547,28 +559,30 @@ export function ClaimFormRoute() {
     <AePublicShell>
       <AePageHeader
         eyebrow="For businesses"
-        title="Get your business found."
-        description="Publish the service facts you choose. People and assistants can read the same page; a written contact path appears only when it is ready."
+        title="Get your business found — and quoted — by AI assistants and the people they work for."
+        description="When people ask their AI, your business is found and can answer with your real services and prices. You review every message before you confirm availability, price, and timing."
       />
       {!hydrated ? (
-        <div className="mx-auto w-full max-w-6xl px-4 pb-16 text-sm text-secondary md:px-6" aria-live="polite">
-          Preparing claim form.
+        <div className="mx-auto w-full max-w-6xl px-4 pb-16 text-sm text-muted-foreground md:px-6" aria-live="polite">
+          Preparing your business page form.
         </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
         {message === undefined ? null : (
-          <Banner status="error" title="Publish did not complete" description={message} />
+          <Alert variant="destructive">
+            <AlertTitle>Your page was not published</AlertTitle>
+            <AlertDescription>{message}</AlertDescription>
+          </Alert>
         )}
-        <Card padding={5} className="grid gap-1.5 bg-accent text-on-accent">
-          <Text type="large" weight="semibold" display="block" className="text-on-accent">Free to claim. No lead fees.</Text>
-          <Text display="block" className="text-on-accent/85">You own the page, choose what appears, and set how customers reach you.</Text>
+        <Card className="grid gap-1.5 bg-brand p-5 text-on-brand">
+          <p className="block text-lg font-semibold text-on-brand">Free to claim. No lead fees.</p>
+          <p className="block text-on-brand/85">You choose the facts, price, and contact route people see. Nothing publishes until you confirm it.</p>
         </Card>
         {enrichMessage === undefined ? null : (
-          <Banner
-            status={enrichPending ? 'info' : importDraftResult === undefined ? 'warning' : 'success'}
-            title={enrichPending ? 'Gathering your public details' : importDraftResult === undefined ? 'We could not draft your page' : 'Details gathered for review'}
-            description={enrichMessage}
-          />
+          <Alert variant={!enrichPending && importDraftResult === undefined ? 'destructive' : 'default'}>
+            <AlertTitle>{enrichPending ? 'Gathering your public details' : importDraftResult === undefined ? 'We could not draft your page' : 'Details gathered for review'}</AlertTitle>
+            <AlertDescription>{enrichMessage}</AlertDescription>
+          </Alert>
         )}
         <ImportDraftSection
           websiteUrl={importWebsiteUrl}
@@ -578,8 +592,8 @@ export function ClaimFormRoute() {
           onWebsiteUrlChange={setImportWebsiteUrl}
           onImport={handleImportDraft}
         />
-        <AeClaimFormSection title="Business identity" description="This is how customers recognize the business.">
-          <FormLayout>
+        <AeClaimFormSection title="Business identity" description="Enter the name, trade, and place customers use to find you.">
+          <div className="grid gap-4">
             {identityFields.map((field) => (
               <ClaimTextField
                 key={field.field}
@@ -590,10 +604,10 @@ export function ClaimFormRoute() {
                 disabled={pending}
               />
             ))}
-          </FormLayout>
+          </div>
         </AeClaimFormSection>
-        <AeClaimFormSection title="Service details" description="Add one service people can understand quickly.">
-          <FormLayout>
+        <AeClaimFormSection title="Service details" description="Name one job customers ask you to do, such as emergency pipe repair.">
+          <div className="grid gap-4">
             {serviceFields.map((field) => (
               <ClaimTextField
                 key={field.field}
@@ -615,17 +629,13 @@ export function ClaimFormRoute() {
               description="Preview files while preparing the claim. Use the Photo URL field for the image that should publish."
               accept="image/*,.pdf"
             />
-          </FormLayout>
+          </div>
         </AeClaimFormSection>
-        <AeClaimFormSection title="First request" description="Say what this page can show today.">
-          <FormLayout>
-            <Field
-              label="First request"
-              inputID="firstRequestMode"
-              description="Choose unavailable if you do not want a contact path on the page yet."
-              descriptionID="firstRequestMode-description"
-              {...(firstRequestModeInvalid ? { status: { type: 'error' as const, message: firstRequestModeError, messageID: 'firstRequestMode-error' } } : {})}
-            >
+        <AeClaimFormSection title="First customer request" description="Tell people whether they can call, ask a question, or ask for a quote today.">
+          <div className="grid gap-4">
+            <fieldset className="grid gap-2">
+              <legend className="text-sm font-medium text-foreground">First customer request</legend>
+              <p id="firstRequestMode-description" className="text-sm text-muted-foreground">Choose no contact route if people should only read your details for now.</p>
               <AeRadioCardGroup
                 name="firstRequestMode"
                 value={value.firstRequestMode}
@@ -637,11 +647,12 @@ export function ClaimFormRoute() {
                   dispatchDraft({ type: 'edit_first_request_mode', value: toFirstRequestMode(nextValue) })
                 }}
               />
-            </Field>
+              {firstRequestModeInvalid ? <p id="firstRequestMode-error" className="text-sm text-destructive">{firstRequestModeError}</p> : null}
+            </fieldset>
             <ClaimTextField
               config={{
                 field: 'publicDisclosure',
-                label: 'Public first-request note',
+                label: 'What people should know before asking',
                 description: 'This note appears on the public service page.',
                 control: 'textarea',
               }}
@@ -653,8 +664,8 @@ export function ClaimFormRoute() {
             <ClaimTextField
               config={{
                 field: 'noContactReason',
-                label: 'Unavailable reason',
-                description: 'Required when no request path is published.',
+                label: 'Why people cannot contact you yet',
+                description: 'Required when no contact route is published.',
                 control: 'textarea',
               }}
               value={value}
@@ -665,8 +676,8 @@ export function ClaimFormRoute() {
             <ClaimTextField
               config={{
                 field: 'ownerMessage',
-                label: 'Owner message',
-                description: 'Optional context. Avoid private contact details here.',
+                label: 'Message from the business',
+                description: 'Add context customers need. Do not put private contact details here.',
                 control: 'textarea',
               }}
               value={value}
@@ -674,7 +685,7 @@ export function ClaimFormRoute() {
               updateTextField={updateTextField}
               disabled={pending}
             />
-          </FormLayout>
+          </div>
         </AeClaimFormSection>
         <AeReviewBlock value={value} />
         <AeCheckboxField
@@ -692,7 +703,7 @@ export function ClaimFormRoute() {
             leadingIcon={<ArrowRightIcon />}
             disabled={pending || !factsConfirmed}
           >
-            Publish service page
+            Publish my service page
           </AeActionButton>
           {previewButton(value.requestedSlug)}
         </div>
@@ -718,28 +729,24 @@ function ImportDraftSection({
   onImport: () => void
 }) {
   const websiteDescriptionId = 'storefront-import-url-description'
-  const inputClassName = 'min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50'
+  const inputClassName = 'min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary disabled:opacity-50'
 
   return (
     <AeClaimFormSection
       title="Fastest way: paste your website"
-      description="We read your site into a draft, then you review and edit every public detail below before publishing. Prefer to type it yourself? The fields below are always open."
+      description="We read your site into a draft, then you review and edit every public detail before publishing. Prefer to type it yourself? The fields below are always open."
     >
       <div className="grid gap-4">
         {message === undefined ? null : (
-          <Banner
-            status={draft === undefined ? 'error' : 'success'}
-            title={draft === undefined ? 'Draft import needs attention' : 'Draft imported for review'}
-            description={message}
-          />
+          <Alert variant={draft === undefined ? 'destructive' : 'default'}>
+            <AlertTitle>{draft === undefined ? 'Draft import needs attention' : 'Draft imported for review'}</AlertTitle>
+            <AlertDescription>{message}</AlertDescription>
+          </Alert>
         )}
-        <FormLayout>
-          <Field
-            label="Business website URL"
-            inputID="storefront-import-url"
-            description="We read title, description, service, and contact cues into an unpublished draft."
-            descriptionID={websiteDescriptionId}
-          >
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="storefront-import-url">Business website URL</Label>
+            <p id={websiteDescriptionId} className="text-sm text-muted-foreground">We read the title, services, phone, and other public details into an unpublished draft.</p>
             <input
               id="storefront-import-url"
               name="storefront-import-url"
@@ -751,19 +758,20 @@ function ImportDraftSection({
               className={inputClassName}
               onChange={(event) => onWebsiteUrlChange(event.currentTarget.value)}
             />
-          </Field>
-        </FormLayout>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            label={pending ? 'Importing draft' : 'Import draft'}
-            type="button"
-            variant="secondary"
-            isDisabled={pending || websiteUrl.trim().length === 0}
-            onClick={onImport}
-          />
-          <Text type="supporting" color="secondary">
-            The draft stays unpublished until you confirm the reviewed form.
-          </Text>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending || websiteUrl.trim().length === 0}
+              onClick={onImport}
+            >
+              {pending ? 'Importing draft' : 'Import draft'}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              The draft stays unpublished until you confirm the reviewed form.
+            </p>
+          </div>
         </div>
         {draft === undefined ? null : <ImportedDraftReview draft={draft} />}
       </div>
@@ -773,33 +781,32 @@ function ImportDraftSection({
 
 function ImportedDraftReview({ draft }: { draft: StorefrontImportDraft }) {
   return (
-    <Card padding={4} className="grid gap-4">
+    <Card className="grid gap-4 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-1">
-          <Text type="large" weight="semibold" color="primary" display="block">Review imported draft</Text>
-          <Text type="supporting" color="secondary" display="block">Review and adjust the imported details before you publish.</Text>
+          <p className="block text-lg font-semibold text-foreground">Review imported draft</p>
+          <p className="block text-sm text-muted-foreground">Review and adjust the imported details before you publish.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="neutral" label={draft.source.label} />
-          <Badge variant="warning" label={draft.source.confirmation} />
+          <Badge variant="outline">{draft.source.label}</Badge>
+          <Badge variant="secondary">{draft.source.confirmation}</Badge>
         </div>
       </div>
       <dl className="grid gap-3 sm:grid-cols-2">
         {draft.facts.map((fact) => (
-          <div key={`${fact.field}:${fact.value}`} className="rounded-md border border-border bg-surface p-3">
-            <dt className="flex flex-wrap items-center gap-2 text-sm font-medium text-primary">
+          <div key={`${fact.field}:${fact.value}`} className="rounded-md border border-border bg-card p-3">
+            <dt className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
               <span>{fact.label}</span>
-              <Badge variant="neutral" label={fact.sourceLabel} />
-              <Badge variant="warning" label={fact.confirmation} />
+              <Badge variant="outline">{fact.sourceLabel}</Badge>
+              <Badge variant="secondary">{fact.confirmation}</Badge>
             </dt>
-            <dd className="mt-1 break-words text-sm text-secondary">{fact.value}</dd>
+            <dd className="mt-1 break-words text-sm text-muted-foreground">{fact.value}</dd>
           </div>
         ))}
       </dl>
     </Card>
   )
 }
-
 function ResponseTimeField({
   value,
   errorByField,
@@ -844,13 +851,8 @@ function ClaimTextField({
   const invalid = error !== undefined
   const descriptionId = `${config.field}-description`
   const errorId = `${config.field}-error`
-  const describedBy = [
-    config.description === undefined ? undefined : descriptionId,
-    invalid ? errorId : undefined,
-  ].filter(Boolean).join(' ') || undefined
-  const status = error === undefined ? undefined : { type: 'error' as const, message: error, messageID: errorId }
-
-  const inputClassName = 'min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50'
+  const describedBy = [descriptionId, invalid ? errorId : undefined].filter(Boolean).join(' ') || undefined
+  const inputClassName = 'min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary disabled:opacity-50'
 
   const fieldInput = config.control === 'textarea' ? (
     <textarea
@@ -862,10 +864,7 @@ function ClaimTextField({
       aria-describedby={describedBy}
       aria-invalid={invalid}
       className={`${inputClassName} min-h-28 resize-y`}
-      onChange={(event) => {
-        const nextValue = event.currentTarget.value
-        updateTextField(config.field, nextValue)
-      }}
+      onChange={(event) => updateTextField(config.field, event.currentTarget.value)}
     />
   ) : (
     <input
@@ -884,18 +883,13 @@ function ClaimTextField({
     />
   )
 
-  if (status === undefined) {
-    return (
-      <Field key={config.field} label={config.label} inputID={config.field} description={config.description} descriptionID={descriptionId}>
-        {fieldInput}
-      </Field>
-    )
-  }
-
   return (
-    <Field key={config.field} label={config.label} inputID={config.field} description={config.description} descriptionID={descriptionId} status={status}>
+    <div className="grid gap-2">
+      <Label htmlFor={config.field}>{config.label}</Label>
+      <p id={descriptionId} className="text-sm text-muted-foreground">{config.description}</p>
       {fieldInput}
-    </Field>
+      {error === undefined ? null : <p id={errorId} role="alert" className="text-sm text-destructive">{error}</p>}
+    </div>
   )
 }
 
@@ -921,8 +915,8 @@ function toFirstRequestMode(value: string): PublicOwnerClaimFlowInput['firstRequ
 function previewButton(requestedSlug: string) {
   const slug = requestedSlug.trim()
   if (slug.length === 0) {
-    return <Button label="Preview public page" type="button" variant="secondary" isDisabled />
+    return <Button type="button" variant="secondary" disabled>Preview public page</Button>
   }
 
-  return <Button label="Preview public page" variant="secondary" href={`/${slug}`} />
+  return <Button asChild variant="secondary"><a href={`/${slug}`}>Preview public page</a></Button>
 }

@@ -1,5 +1,6 @@
 import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
 import type { NeedTiming } from '@/modules/answer/search-context'
+import { listedProvidersFromArtifacts } from './session-provider-context'
 
 export type ShortlistTerminal = {
   providers: readonly AnswerSource[]
@@ -13,7 +14,10 @@ export function settledShortlistFromArtifacts(
   const shortlistArtifacts = artifacts.filter(
     (artifact) => artifact.kind === 'provider-cards' || artifact.kind === 'provider-compare-table',
   )
-  const providers = providersFromArtifacts(shortlistArtifacts)
+  const listedProviders = listedProvidersFromArtifacts(shortlistArtifacts)
+  const providersBySlug = new Map<string, AnswerSource>()
+  for (const provider of listedProviders) providersBySlug.set(provider.slug, provider)
+  const providers = [...providersBySlug.values()]
   if (providers.length === 0) return null
   return { providers: orderProviders(providers, timing), timing }
 }
@@ -34,16 +38,6 @@ export function orderShortlistArtifacts(
 export function directCallHref(provider: AnswerSource | undefined): string | undefined {
   const dialNumber = provider?.publishedPhone?.replace(/[^+\d]/g, '')
   return dialNumber !== undefined && /\d{6,}/.test(dialNumber) ? `tel:${dialNumber}` : undefined
-}
-
-function providersFromArtifacts(artifacts: readonly AnswerArtifact[]): readonly AnswerSource[] {
-  const bySlug = new Map<string, AnswerSource>()
-  for (const artifact of artifacts) {
-    if (artifact.kind === 'provider-cards' || artifact.kind === 'provider-compare-table') {
-      for (const provider of artifact.providers) bySlug.set(provider.slug, provider)
-    }
-  }
-  return [...bySlug.values()]
 }
 
 function orderProviders(providers: readonly AnswerSource[], timing: NeedTiming | undefined): readonly AnswerSource[] {

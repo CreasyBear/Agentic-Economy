@@ -14,6 +14,10 @@ describe('registered action contract compatibility', () => {
       outputSchema: z.object({ kind: z.literal('ok') }),
       parameters: [],
       readOnly: false,
+      effect: {
+        class: 'external_state_change', reversible: false, recipientKind: 'none',
+        dataClasses: [], spendExposure: 'none', approval: 'approve_each',
+      },
       surfaces: [],
       run: async () => ({ kind: 'ok' as const }),
     })
@@ -41,6 +45,10 @@ describe('registered action contract compatibility', () => {
       outputSchema: z.object({ kind: z.literal('ok') }),
       parameters: [],
       readOnly: true,
+      effect: {
+        class: 'observation', reversible: true, recipientKind: 'none',
+        dataClasses: [], spendExposure: 'none', approval: 'none',
+      },
       surfaces: [],
       invocationContract: {
         version: '2026-07-19',

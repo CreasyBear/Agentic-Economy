@@ -9,11 +9,10 @@ import {
   StoreIcon,
 } from 'lucide-react'
 import { useState } from 'react'
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Collapsible } from '@astryxdesign/core/Collapsible'
-import { Text } from '@astryxdesign/core/Text'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -75,39 +74,39 @@ function TermsRoute() {
       <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
         <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
           {canDoItems.map(({ icon: Icon, title, body }) => (
-            <Card key={title} padding={5} className="grid h-full gap-1.5">
+            <Card key={title} className="grid h-full gap-1.5 p-5">
               <div className="flex items-center justify-between gap-3">
-                <Text type="large" weight="semibold" color="primary" className="flex items-center gap-2">
-                  <Icon className="size-4 text-primary" aria-hidden="true" /> {title}
-                </Text>
-                <Badge variant="neutral" label="AE" />
+                <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                  <Icon className="size-4 text-foreground" aria-hidden="true" /> {title}
+                </p>
+                <Badge variant="outline">AE</Badge>
               </div>
-              <Text color="secondary" display="block">{body}</Text>
+              <p className="block text-muted-foreground">{body}</p>
             </Card>
           ))}
         </section>
 
         <section className="grid gap-5 border-t border-border pt-8 md:grid-cols-[0.72fr_1.28fr]">
           <div className="grid content-start gap-2">
-            <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
+            <h2 className="text-3xl font-semibold text-foreground">
               Keep expectations clear.
-            </Text>
+            </h2>
           </div>
           <TermsAccordion />
         </section>
 
         <section className="flex flex-col gap-4 border-t border-border pt-8 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
-            <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
+            <h2 className="text-3xl font-semibold text-foreground">
               Start with what you need.
-            </Text>
-            <Text as="p" color="secondary" display="block" className="mt-2">
+            </h2>
+            <p className="mt-2 text-muted-foreground">
               Ask a question, browse services, or fix a business page.
-            </Text>
+            </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button label="Ask a question" variant="primary" href="/" />
-            <Button label="Fix a page" variant="secondary" href="/privacy/remove-business" endContent={<ArrowRightIcon aria-hidden="true" />} />
+            <Button asChild variant="default"><a href="/">Ask a question</a></Button>
+            <Button asChild variant="secondary"><a href="/privacy/remove-business">Fix a page <ArrowRightIcon aria-hidden="true" /></a></Button>
           </div>
         </section>
       </main>
@@ -127,16 +126,18 @@ function TermsAccordion() {
           <Collapsible
             key={title}
             className="rounded-sm border bg-card"
-            isOpen={isOpen}
+            open={isOpen}
             onOpenChange={(nextOpen) => setOpenItem(nextOpen ? title : '')}
-            trigger={(
-              <span className="flex min-h-12 items-center gap-3 text-left">
-                <Icon className="size-4 shrink-0 text-primary" aria-hidden="true" />
-                <Text type="large" weight="medium" color="primary">{title}</Text>
-              </span>
-            )}
           >
-            <Text as="p" color="secondary" display="block" className="px-4 pb-4 pl-11">{body}</Text>
+            <CollapsibleTrigger asChild>
+              <button type="button" className="flex min-h-12 w-full items-center gap-3 px-4 text-left">
+                <Icon className="size-4 shrink-0 text-foreground" aria-hidden="true" />
+                <span className="text-lg font-medium text-foreground">{title}</span>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <p className="block px-4 pb-4 pl-11 text-muted-foreground">{body}</p>
+            </CollapsibleContent>
           </Collapsible>
         )
       })}

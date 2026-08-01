@@ -2,9 +2,11 @@ import type {
   CompileCustomerRequestResult,
   CustomerReportedRouteExclusion,
 } from '@/modules/customer-request/compiler'
-import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
+import { projectNeedsAttention, projectNoCurrentBusiness } from '@/modules/customer-request/customer-projection'
 import type { CustomerRequestAmendment, CustomerRequestSemanticProposal } from '@/modules/customer-request/semantic-interpreter'
 
+import { recordCapabilityDepthObservation, type CapabilityLiquidityWritePort } from '@/modules/capability-supply/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { CustomerRequestActionResult } from '../action-result'
 import {
   compileCommit,
@@ -19,7 +21,7 @@ import {
   interpreterFailureCode,
   type InterpreterEnvironment,
 } from './interpreter'
-import type { CompileCommitInput, RequestGraph } from './types'
+import type { CompileCommitInput, RequestGraph, RequestGraphUnavailable } from './types'
 
 export type InterpretCompileCommitInput = Readonly<{
   commandKey: string
@@ -46,8 +48,9 @@ export type InterpretCompileCommitPorts = CompileCommitPorts & Readonly<{
     requestId: string
     principalId: string
   }>) => Promise<CustomerRequestActionResult | undefined>
-  loadRequestGraph: (networkId: string) => Promise<RequestGraph | Readonly<{ kind: 'unavailable' }>>
+  loadRequestGraph: (networkId: string) => Promise<RequestGraph | RequestGraphUnavailable>
   logInterpretationFailure?: (code: string) => void
+  liquidityPort?: CapabilityLiquidityWritePort
 }>
 
 export type ProposeThenCompileInterpreter = Readonly<{
@@ -56,6 +59,7 @@ export type ProposeThenCompileInterpreter = Readonly<{
     customerJob: string
     amendment?: CustomerRequestAmendment
     capabilities: RequestGraph['descriptors']
+    finalAttempt?: boolean
   }>) => Promise<CustomerRequestSemanticProposal>
 }>
 
@@ -76,6 +80,8 @@ export async function proposeThenCompile(
     amendment?: CustomerRequestAmendment
     priorFacts: CompileCommitInput['priorFacts']
     graph: RequestGraph
+    /** False only while the caller still intends to ask the interpreter again. */
+    finalAttempt: boolean
     compileBase: Omit<
       CompileCommitInput,
       'proposal' | 'interpreterId' | 'graph' | 'intent' | 'priorFacts' | 'compiledResult'
@@ -89,6 +95,7 @@ export async function proposeThenCompile(
       customerJob: input.intent,
       ...(input.amendment === undefined ? {} : { amendment: input.amendment }),
       capabilities: input.graph.descriptors,
+      finalAttempt: input.finalAttempt,
     })
   } catch (error) {
     return { kind: 'propose_failed', error }
@@ -98,7 +105,9 @@ export async function proposeThenCompile(
     intent: proposal.canonicalCustomerJob ?? input.intent,
     priorFacts: input.priorFacts,
     proposal,
-    interpreterId: interpreter.interpreterId,
+    // A composite interpreter names the leg that actually answered; fall back to the interpreter's
+    // own identity only when it did not delegate.
+    interpreterId: proposal.interpreterId ?? interpreter.interpreterId,
     graph: input.graph,
   }
   const preview = compileProposal(compilationInput)
@@ -116,14 +125,33 @@ export async function interpretCompileCommit(
   const replay = await ports.replayCommittedCommand(input)
   if (replay !== undefined) return replay
   const interpreter = createConfiguredRequestInterpreter(interpreterEnv)
-  if (interpreter === undefined) {
-    return input.durableShell === true
-      ? durableSubmissionShellView(input.requestId)
-      : { kind: 'refused', reason: 'interpreter_unavailable' }
-  }
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const graph = await ports.loadRequestGraph(input.networkId)
+    if (ports.liquidityPort !== undefined) {
+      const firstBinding = graph.kind === 'available' ? graph.bindings[0] : undefined
+      const businessId = firstBinding?.businessId ?? `network:${input.networkId}`
+      const offeringRef = firstBinding?.offeringId ?? `network:${input.networkId}`
+      const publicationRef = firstBinding?.publicationRef
+      const taskDigest = canonicalDigest({ intent: input.intent })
+      const eligibleDepth = graph.kind === 'available' ? graph.bindings.length : 0
+      await recordCapabilityDepthObservation({
+        businessId, offeringRef,
+        ...(publicationRef === undefined ? {} : { publicationRef }),
+        taskDigest, eligibleDepth,
+        ...(eligibleDepth === 0 ? { zeroReason: graph.kind === 'unavailable' && graph.reason === 'no_routeable_supply' ? 'no_routeable_supply' as const : 'readiness_unavailable' as const } : {}),
+        observedAt: input.now,
+        evidenceRefs: [graph.kind === 'available' ? graph.registrySnapshotDigest : `graph:${graph.reason}`],
+        environment: 'development',
+      }, ports.liquidityPort)
+    }
     if (graph.kind !== 'available') {
+      // A retry cannot register a business. Saying "try again" here is the permanent-condition
+      // dead end F2 named, so an empty routeable graph gets the outcome that is actually true.
+      if (graph.reason === 'no_routeable_supply' && input.durableShell === true) {
+        return projectNoCurrentBusiness({
+          requestRef: input.requestId, revision: input.expectedRevision,
+        })
+      }
       return input.durableShell === true
         ? durableSubmissionShellView(input.requestId)
         : { kind: 'refused', reason: 'capabilities_unavailable' }
@@ -138,6 +166,7 @@ export async function interpretCompileCommit(
       ...(input.amendment === undefined ? {} : { amendment: input.amendment }),
       priorFacts,
       graph,
+      finalAttempt: attempt === 1,
       compileBase: {
         commandKey: input.commandKey,
         commandDigest: input.commandDigest,

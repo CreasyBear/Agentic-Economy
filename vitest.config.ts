@@ -7,7 +7,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx', 'convex/**/*.test.ts'],
-    setupFiles: ['./tests/setup/web-storage.ts'],
+    setupFiles: [
+      './tests/setup/web-storage.ts',
+      './tests/setup/no-search-gap-writes.ts',
+    ],
     globals: false,
     watch: false,
   },

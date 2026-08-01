@@ -1,3 +1,6 @@
+import type { ActionResult } from '@/modules/common/action'
+import type { InMemoryControlSnapshot } from './contracts'
+
 export {
   createInMemoryActionInvocationTracer,
 } from './in-memory'
@@ -19,7 +22,11 @@ export type {
   X402PaymentReconciliationEvidenceMaterial,
   X402PaymentReconciliationEvidenceVerifier,
 } from './x402-payment-reconciliation-evidence'
-export { roundTripControlSnapshot } from './snapshot'
+export function roundTripControlSnapshot<Input, Result extends ActionResult>(
+  snapshot: InMemoryControlSnapshot<Input, Result>,
+): InMemoryControlSnapshot<Input, Result> {
+  return JSON.parse(JSON.stringify(snapshot)) as InMemoryControlSnapshot<Input, Result>
+}
 export {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
@@ -61,10 +68,6 @@ export {
   DevelopmentProcessInterruption,
   createDevelopmentInvocationApplication,
 } from './application-service'
-export {
-  createRequestOwnedDevelopmentHost,
-  createStandaloneAgentDevelopmentHost,
-} from './hosts/development-hosts'
 export {
   readDevelopmentHostSnapshot,
   verifyDevelopmentHostReadReceipt,
@@ -129,7 +132,7 @@ export type {
   DevelopmentHostReadReceipt,
   DevelopmentHostSemanticRead,
 } from './development-host-read'
-export type { ActionInvocationHostSeam } from './host-seam'
+export type { DevelopmentInvocationHost as DevelopmentActionInvocationHostSeam } from './application-service'
 export type {
   InvocationProjectionResolver,
   InvocationTaskSemantics,

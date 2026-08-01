@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { quoteStandardCheckup } from '@/modules/sandbox-supply/checkup-quote'
+import { sandboxCheckupQuoteAction } from '@/modules/sandbox-supply/sandbox-supply.actions'
+
 import { jsonResponse } from './api.businesses'
 
 export const Route = createFileRoute('/api/sandbox/$slug/checkup-quote')({
@@ -11,10 +12,14 @@ export const Route = createFileRoute('/api/sandbox/$slug/checkup-quote')({
   },
 })
 
-export function handleSandboxCheckupQuoteRequest(slug: string): Response {
-  const result = quoteStandardCheckup({ slug, requestedAt: Date.now() })
+export async function handleSandboxCheckupQuoteRequest(slug: string): Promise<Response> {
+  const result = await sandboxCheckupQuoteAction.run({
+    data: sandboxCheckupQuoteAction.schema.parse({ slug }),
+    context: { caller: 'http' },
+  })
   if (result.kind === 'refused') {
-    return jsonResponse({ kind: 'refused', reason: result.reason }, { status: 404 })
+    return jsonResponse({ kind: 'refused', reason: result.code }, { status: 404 })
   }
   return jsonResponse(result.quote)
 }
+

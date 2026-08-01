@@ -1,113 +1,78 @@
-import { BookOpenIcon, ChevronDownIcon } from 'lucide-react'
-import type { ComponentProps } from 'react'
+"use client";
 
 import {
-  AeCollapsible as Collapsible,
-  AeCollapsibleContent as CollapsibleContent,
-  AeCollapsibleTrigger as CollapsibleTrigger,
-} from '@/components/ae/primitives/AeCollapsible'
-import { RouterLink } from '@/components/astryx/RouterLink'
-import { cn } from '@/lib/utils'
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
+import { BookIcon, ChevronDownIcon } from "lucide-react";
+import type { ComponentProps } from "react";
 
-export type SourcesProps = ComponentProps<typeof Collapsible>
+// AE: upstream types SourcesProps as ComponentProps<'div'> but renders a Collapsible; widened so defaultOpen is expressible.
+export type SourcesProps = ComponentProps<typeof Collapsible>;
 
-export function Sources({ className, ...props }: SourcesProps) {
-  return (
-    <Collapsible
-      data-slot="ai-sources"
-      className={cn('not-prose text-xs text-secondary', className)}
-      {...props}
-    />
-  )
-}
+export const Sources = ({ className, ...props }: SourcesProps) => (
+  <Collapsible
+    className={cn("not-prose mb-4 text-primary text-xs", className)}
+    {...props}
+  />
+);
 
 export type SourcesTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {
-  count: number
-}
+  count: number;
+};
 
-export function SourcesTrigger({
+export const SourcesTrigger = ({
   className,
   count,
   children,
   ...props
-}: SourcesTriggerProps) {
-  return (
-    <CollapsibleTrigger
-      className={cn(
-        'group/ai-sources-trigger flex items-center gap-2 rounded-sm text-xs font-medium text-secondary transition-colors hover:text-primary',
-        className,
-      )}
-      {...props}
-    >
-      {children ?? (
-        <>
-          <span>{count === 1 ? '1 published source' : `${count} published sources`}</span>
-          <ChevronDownIcon
-            data-icon="inline-end"
-            className="transition-transform group-data-[state=open]/ai-sources-trigger:rotate-180"
-            aria-hidden="true"
-          />
-        </>
-      )}
-    </CollapsibleTrigger>
-  )
-}
+}: SourcesTriggerProps) => (
+  <CollapsibleTrigger
+    className={cn("flex items-center gap-2", className)}
+    {...props}
+  >
+    {children ?? (
+      <>
+        <p className="font-medium">Used {count} sources</p>
+        <ChevronDownIcon className="h-4 w-4" />
+      </>
+    )}
+  </CollapsibleTrigger>
+);
 
-export type SourcesContentProps = ComponentProps<typeof CollapsibleContent>
+export type SourcesContentProps = ComponentProps<typeof CollapsibleContent>;
 
-export function SourcesContent({ className, ...props }: SourcesContentProps) {
-  return (
-    <CollapsibleContent
-      className={cn(
-        'mt-2 flex w-full flex-col gap-2 text-secondary outline-none motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-200',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
+export const SourcesContent = ({
+  className,
+  ...props
+}: SourcesContentProps) => (
+  <CollapsibleContent
+    className={cn(
+      "mt-3 flex w-fit flex-col gap-2",
+      "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+      className
+    )}
+    {...props}
+  />
+);
 
-export type SourceProps = ComponentProps<'a'>
+export type SourceProps = ComponentProps<"a">;
 
-export function Source({ className, href, title, children, ...props }: SourceProps) {
-  const external = typeof href === 'string' && /^https?:\/\//i.test(href)
-  const appRoute = isInternalAppHref(href)
-  const content = children ?? (
-    <>
-      <BookOpenIcon data-icon="inline-start" aria-hidden="true" />
-      <span className="truncate font-medium">{title ?? href}</span>
-    </>
-  )
-  const sourceClassName = cn(
-    'flex min-w-0 items-center gap-2 rounded-sm border border-border bg-card px-3 py-2 text-primary transition-colors hover:border-border-strong hover:bg-muted',
-    className,
-  )
-
-  if (appRoute) {
-    return (
-      <RouterLink className={sourceClassName} href={href} {...props}>
-        {content}
-      </RouterLink>
-    )
-  }
-
-  return (
-    <a
-      className={sourceClassName}
-      href={href}
-      {...(external ? { rel: 'noreferrer', target: '_blank' } : {})}
-      {...props}
-    >
-      {content}
-    </a>
-  )
-}
-
-function isInternalAppHref(href: SourceProps['href']): href is string {
-  if (typeof href !== 'string' || !href.startsWith('/') || href.startsWith('//')) {
-    return false
-  }
-
-  const [pathname = ''] = href.split(/[?#]/, 1)
-  return pathname !== '/llms.txt' && pathname !== '/robots.txt' && pathname !== '/sitemap.xml' && pathname !== '/api' && !pathname.startsWith('/api/')
-}
+export const Source = ({ href, title, children, ...props }: SourceProps) => (
+  <a
+    className="flex items-center gap-2"
+    href={href}
+    rel="noreferrer"
+    target="_blank"
+    {...props}
+  >
+    {children ?? (
+      <>
+        <BookIcon className="h-4 w-4" />
+        <span className="block font-medium">{title}</span>
+      </>
+    )}
+  </a>
+);

@@ -6,6 +6,7 @@ import {
   customerRequestAgentResultSchema,
   customerRequestRouteConfirmationInputSchema,
 } from '@/modules/customer-request/agent-contract'
+import { response } from '@/lib/server/no-store-response'
 
 export type ConfirmationResult = CustomerRequestProjection | Readonly<{
   kind: 'refused'
@@ -44,6 +45,3 @@ export async function handleCustomerRequestConfirmationPost(
   }
 }
 
-function response(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}

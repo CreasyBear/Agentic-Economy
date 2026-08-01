@@ -1,4 +1,7 @@
+import { parseArgs as parseNodeArgs } from 'node:util'
+
 export type CliOptions = {
+
   baseUrl: string
   json: boolean
   help: boolean
@@ -16,59 +19,34 @@ export type ParsedArgs = {
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:3000'
 
-const valueFlags: Record<string, keyof CliOptions> = {
-  '--base-url': 'baseUrl',
-  '--location': 'location',
-  '--mode': 'mode',
-  '--suburb': 'suburb',
-}
-
 export function parseArgs(argv: readonly string[]): ParsedArgs {
-  const positionals: string[] = []
+  const parsed = parseNodeArgs({
+    args: argv,
+    options: {
+      'base-url': { type: 'string' },
+      json: { type: 'boolean' },
+      'allow-write': { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+      location: { type: 'string' },
+      mode: { type: 'string' },
+      suburb: { type: 'string' },
+    },
+    allowPositionals: true,
+  })
+  const baseUrl = parsed.values['base-url'] === undefined
+    ? process.env.AE_CLI_BASE_URL?.trim() || DEFAULT_BASE_URL
+    : parsed.values['base-url'].replace(/\/+$/u, '')
   const options: CliOptions = {
-    baseUrl: process.env.AE_CLI_BASE_URL?.trim() || DEFAULT_BASE_URL,
-    json: false,
-    help: false,
-    allowWrite: false,
+    baseUrl,
+    json: parsed.values.json ?? false,
+    help: parsed.values.help ?? false,
+    allowWrite: parsed.values['allow-write'] ?? false,
+    ...(parsed.values.location === undefined ? {} : { location: parsed.values.location }),
+    ...(parsed.values.mode === undefined ? {} : { mode: parsed.values.mode }),
+    ...(parsed.values.suburb === undefined ? {} : { suburb: parsed.values.suburb }),
   }
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index] ?? ''
-    if (token === '--json') {
-      options.json = true
-      continue
-    }
-    if (token === '--help' || token === '-h') {
-      options.help = true
-      continue
-    }
-    if (token === '--allow-write') {
-      options.allowWrite = true
-      continue
-    }
-
-    const [flag, inlineValue] = token.startsWith('--') && token.includes('=')
-      ? [token.slice(0, token.indexOf('=')), token.slice(token.indexOf('=') + 1)]
-      : [token, undefined]
-
-    const key = valueFlags[flag]
-    if (key !== undefined) {
-      const value = inlineValue ?? argv[index + 1]
-      if (inlineValue === undefined) index += 1
-      if (value !== undefined) {
-        if (key === 'baseUrl') options.baseUrl = value.replace(/\/+$/u, '')
-        else if (key === 'location') options.location = value
-        else if (key === 'mode') options.mode = value
-        else if (key === 'suburb') options.suburb = value
-      }
-      continue
-    }
-
-    positionals.push(token)
-  }
-
-  const [command, ...rest] = positionals
-  return { ...(command === undefined ? {} : { command }), positionals: rest, options }
+  const [command, ...positionals] = parsed.positionals
+  return { ...(command === undefined ? {} : { command }), positionals, options }
 }
 
 export function printUsage(): void {

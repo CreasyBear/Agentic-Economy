@@ -8,11 +8,10 @@ import {
   StoreIcon,
 } from 'lucide-react'
 import { useState } from 'react'
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Tab, TabList } from '@astryxdesign/core/TabList'
-import { Text } from '@astryxdesign/core/Text'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -93,53 +92,55 @@ function PrivacyRoute() {
       <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
         <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
           {detailCards.map(({ icon: CardIcon, label, title, body }) => (
-            <Card key={title} padding={5} className="grid h-full gap-1.5">
+            <Card key={title} className="grid h-full gap-1.5 p-5">
               <div className="flex items-center justify-between gap-3">
-                <Text type="large" weight="semibold" color="primary" className="flex items-center gap-2">
-                  <CardIcon className="size-4 text-primary" aria-hidden="true" /> {title}
-                </Text>
-                <Badge variant="neutral" label={label} />
+                <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                  <CardIcon className="size-4 text-foreground" aria-hidden="true" /> {title}
+                </p>
+                <Badge variant="outline">{label}</Badge>
               </div>
-              <Text color="secondary" display="block">{body}</Text>
+              <p className="block text-muted-foreground">{body}</p>
             </Card>
           ))}
         </section>
 
         <section className="grid gap-5 border-t border-border pt-8 md:grid-cols-[0.72fr_1.28fr]">
           <div className="grid content-start gap-2">
-            <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
+            <h2 className="text-3xl font-semibold text-foreground">
               What happens where.
-            </Text>
+            </h2>
           </div>
           <div className="grid gap-3">
-            <TabList value={selectedMoment} onChange={setSelectedMoment} layout="fill" aria-label="Privacy moments">
-              {moments.map(({ value, label }) => (
-                <Tab key={value} value={value} label={label} />
-              ))}
-            </TabList>
-            <Card padding={5} className="grid gap-4">
-              <Text type="large" weight="semibold" color="primary" className="flex items-center gap-2">
-                <Icon className="size-4 text-primary" aria-hidden="true" /> {moment.title}
-              </Text>
-              <ul className="grid gap-3 text-sm leading-6 text-secondary">
-                {moment.points.map((point) => (
-                  <li key={point}>{point}</li>
+            <Tabs value={selectedMoment} onValueChange={setSelectedMoment}>
+              <TabsList aria-label="Privacy moments" className="w-full">
+                {moments.map(({ value, label }) => (
+                  <TabsTrigger key={value} value={value} className="flex-1">{label}</TabsTrigger>
                 ))}
-              </ul>
-            </Card>
+              </TabsList>
+              <Card className="grid gap-4 p-5">
+                <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                  <Icon className="size-4 text-foreground" aria-hidden="true" /> {moment.title}
+                </p>
+                <ul className="grid gap-3 text-sm leading-6 text-muted-foreground">
+                  {moment.points.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+              </Card>
+            </Tabs>
           </div>
         </section>
 
         <section className="flex flex-col gap-4 border-t border-border pt-8 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
-            <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
+            <h2 className="text-3xl font-semibold text-foreground">
               Need a page fixed?
-            </Text>
-            <Text as="p" color="secondary" display="block" className="mt-2">
+            </h2>
+            <p className="mt-2 text-muted-foreground">
               Send the page slug and what should change.
-            </Text>
+            </p>
           </div>
-          <Button label="Open corrections" variant="secondary" href="/privacy/remove-business" endContent={<ArrowRightIcon aria-hidden="true" />} />
+          <Button asChild variant="secondary"><a href="/privacy/remove-business">Open corrections <ArrowRightIcon aria-hidden="true" /></a></Button>
         </section>
       </main>
     </AePublicShell>

@@ -5,6 +5,7 @@ import { customerRequestAgentResultSchema, customerRequestSubmitInputSchema } fr
 import {
   sensitiveCustomerRequestRefusal,
 } from '@/modules/customer-request/sensitive-input-admission'
+import { response } from '@/lib/server/no-store-response'
 
 const bodySchema = customerRequestSubmitInputSchema
 
@@ -44,6 +45,3 @@ export async function handleCustomerRequestPost(request: Request, options: Handl
   }
 }
 
-function response(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}

@@ -32,6 +32,7 @@ export type DynamicPublishedSourceRow = Readonly<{
   prepared?: PreparedInvocation
   observedResolution: ActionInvocationView<DynamicPublishedInvocationResult>['observedResolution']
   resultIdentity?: Readonly<{ sourceResultRef: string; resultDigest: string }>
+  moneyCharge?: Readonly<{ transactionRef: string; chargeState: 'free_tier' | 'paid'; amountMinor: number; currency: string; priceDigest: string }>
 }>
 
 export type DynamicPublishedSharedOutcome = Readonly<{

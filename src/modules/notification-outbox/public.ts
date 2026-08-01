@@ -7,6 +7,10 @@ import {
   readNotificationDispatchReadback as readNotificationDispatchReadbackImpl,
   retryNotificationDispatch as retryNotificationDispatchImpl,
 } from './internal/commands'
+import {
+  readDispatchId as readDispatchIdImpl,
+  requireDispatchAuthorization as requireDispatchAuthorizationImpl,
+} from './internal/dispatch-request'
 
 export type {
   DispatchNotificationOutboxCommand,
@@ -41,6 +45,7 @@ export type {
   NotificationWebhookEventStatus,
 } from './internal/schema'
 export type { NotificationOutboxSourceStatePorts } from './internal/source-state-ports'
+export { MAX_NOTIFICATION_DISPATCH_BODY_BYTES } from './internal/dispatch-request'
 export {
   defaultNotificationOperatorControls,
   NotificationAttemptStatusValues,
@@ -58,3 +63,5 @@ export const ingestNotificationWebhook = ingestNotificationWebhookImpl
 export const readNotificationDispatchReadback = readNotificationDispatchReadbackImpl
 export const retryNotificationDispatch = retryNotificationDispatchImpl
 export const markNotificationNoRepair = markNotificationNoRepairImpl
+export const requireDispatchAuthorization = requireDispatchAuthorizationImpl
+export const readDispatchId = readDispatchIdImpl

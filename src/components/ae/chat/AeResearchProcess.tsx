@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { AlertCircleIcon, CheckIcon, Loader2Icon, SquareIcon, type LucideIcon } from 'lucide-react'
+import { forwardRef, useState } from 'react'
+import { AlertCircleIcon, CheckIcon, Loader2Icon, SquareIcon, type LucideIcon, type LucideProps } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 import {
   ChainOfThought,
@@ -17,18 +18,22 @@ export type AeResearchProcessProps = {
   query?: string | undefined
 }
 
+const RunningStepIcon = forwardRef<SVGSVGElement, LucideProps>(({ className, ...props }, ref) => (
+  <Loader2Icon {...props} ref={ref} className={cn('motion-safe:animate-spin', className)} />
+))
+
 const STEP_ICON: Record<AnswerWorkStep['status'], LucideIcon> = {
-  running: Loader2Icon,
+  running: RunningStepIcon,
   error: AlertCircleIcon,
   stopped: SquareIcon,
   complete: CheckIcon,
   skipped: CheckIcon,
 }
 
-const STEP_STATUS: Record<AnswerWorkStep['status'], 'complete' | 'active' | 'error'> = {
+const STEP_STATUS: Record<AnswerWorkStep['status'], 'complete' | 'active' | 'pending'> = {
   running: 'active',
-  error: 'error',
-  stopped: 'error',
+  error: 'pending',
+  stopped: 'pending',
   complete: 'complete',
   skipped: 'complete',
 }
@@ -58,20 +63,20 @@ export function AeResearchProcess({ isStreaming, steps, checkSummary, query }: A
 
   return (
     <ChainOfThought
-      className="rounded-md border border-border bg-surface p-3"
+      className="rounded-md border border-border bg-card p-3"
       open={open}
       onOpenChange={setManagedOpen}
     >
       <ChainOfThoughtHeader>
         <span className="grid min-w-0 gap-0.5">
-          <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">
+          <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
             How AE checked this
           </span>
-          <span className="truncate text-xs text-secondary">{statusLabel}</span>
+          <span className="truncate text-xs text-muted-foreground">{statusLabel}</span>
         </span>
       </ChainOfThoughtHeader>
       <ChainOfThoughtContent>
-        <p className="text-xs leading-snug text-secondary">Public checks and listed facts, not private reasoning.</p>
+        <p className="text-xs leading-snug text-muted-foreground">Public checks and listed facts, not private reasoning.</p>
         {checkSummary === undefined ? null : (
           <dl className="grid gap-2 rounded-md border border-border bg-card p-2 sm:grid-cols-3" aria-label="Answer check summary">
             <CheckSummaryFact label="Searches" value={String(checkSummary.catalogSearches)} />
@@ -91,25 +96,34 @@ export function AeResearchProcess({ isStreaming, steps, checkSummary, query }: A
               const summary = step.summary?.trim()
               const showSummary = summary !== undefined && summary.length > 0 && summary !== step.title
               const stepLabel = workStepLabel(step, queryContext)
+              const accessibleStepLabel = step.status === 'error' ? `${stepLabel} (failed)` : stepLabel
+              const description =
+                step.status === 'error'
+                  ? summary !== undefined && summary.length > 0
+                    ? `Failed: ${summary}`
+                    : 'Failed'
+                  : showSummary
+                    ? summary
+                    : undefined
 
               return (
                 <li key={step.id}>
                   <ChainOfThoughtStep
                     icon={STEP_ICON[step.status]}
                     status={STEP_STATUS[step.status]}
-                    spinning={step.status === 'running'}
-                    connector={index < steps.length - 1}
+                    aria-label={accessibleStepLabel}
                     label={stepLabel}
-                    {...(showSummary ? { description: summary } : {})}
+                    {...(step.status === 'error' ? { className: 'text-destructive' } : {})}
+                    {...(description === undefined ? {} : { description })}
                   >
                     {detailRows.length > 0 ? (
                       <dl className="grid gap-1 pt-1">
                         {detailRows.map((row) => (
                           <div key={`${step.id}-${row.label}`} className="grid gap-0.5 sm:grid-cols-[7rem_minmax(0,1fr)]">
-                            <dt className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">
+                            <dt className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
                               {row.label}
                             </dt>
-                            <dd className="min-w-0 break-words text-xs leading-snug text-secondary">{row.value}</dd>
+                            <dd className="min-w-0 break-words text-xs leading-snug text-muted-foreground">{row.value}</dd>
                           </div>
                         ))}
                       </dl>
@@ -128,8 +142,8 @@ export function AeResearchProcess({ isStreaming, steps, checkSummary, query }: A
 function CheckSummaryFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-0.5">
-      <dt className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">{label}</dt>
-      <dd className="text-sm font-medium leading-snug text-primary">{value}</dd>
+      <dt className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium leading-snug text-foreground">{value}</dd>
     </div>
   )
 }

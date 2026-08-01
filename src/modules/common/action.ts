@@ -23,7 +23,7 @@ import { z } from 'zod'
  * bundler tree-shakes bare side-effect imports.
  */
 
-export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'answerThread' | 'cli'
+export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'answerThread' | 'cli' | 'mcp'
 
 export type ActionSourceWriteRequest = {
   method: string
@@ -132,6 +132,23 @@ export type ActionRetryClass =
   | 'reconcile_before_retry'
   | 'legacy_unspecified'
 
+export type ActionEffectClass =
+  | 'observation'
+  | 'comparison_quote'
+  | 'disclosure'
+  | 'commitment'
+  | 'payment'
+  | 'external_state_change'
+
+export type ActionEffectMetadata = Readonly<{
+  class: ActionEffectClass
+  reversible: boolean
+  recipientKind: 'none' | 'business' | 'customer' | 'provider_system'
+  dataClasses: readonly string[]
+  spendExposure: 'none' | 'bounded' | 'unbounded'
+  approval: 'none' | 'approve_each' | 'mandate_eligible'
+}>
+
 export type ActionInvocationContract = Readonly<{
   /** Immutable version of the action's invocation semantics, not the application version. */
   version: string
@@ -189,6 +206,7 @@ export type ActionDefinition<
   readonly schema: z.ZodType<Input>
   readonly parameters: readonly ActionParameter[]
   readonly readOnly: boolean
+  readonly effect: ActionEffectMetadata
   readonly surfaces: readonly ActionSurface[]
   readonly outputSchema: z.ZodType<Result>
   /**
@@ -249,6 +267,7 @@ export type AgentToolDescriptor = {
   summary: string
   boundaries: readonly string[]
   readOnly: boolean
+  effect: ActionEffectMetadata
   parameters: readonly ActionParameter[]
   inputJsonSchema?: JSONSchema
   outputJsonSchema?: JSONSchema
@@ -265,6 +284,7 @@ export function describeActionForAgent(action: AnyAction): AgentToolDescriptor {
     summary: action.summary,
     boundaries: action.boundaries,
     readOnly: action.readOnly,
+    effect: action.effect,
     parameters: action.parameters,
     ...(inputJsonSchema === undefined ? {} : { inputJsonSchema }),
     ...(outputJsonSchema === undefined ? {} : { outputJsonSchema }),

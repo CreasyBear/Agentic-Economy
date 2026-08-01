@@ -60,6 +60,8 @@ export async function startOpenRouterContractServer(
 
   const address = server.address() as AddressInfo
   const endpointUrl = `http://127.0.0.1:${address.port}/api/v1/chat/completions`
+  // The AI SDK provider appends `/chat/completions` to its configured base URL.
+  const baseUrl = `http://127.0.0.1:${address.port}/api/v1`
   return {
     endpointUrl,
     requests,
@@ -67,7 +69,7 @@ export async function startOpenRouterContractServer(
       const previousApiKey = process.env.OPENROUTER_API_KEY
       const previousApiBaseUrl = process.env.AE_OPENROUTER_API_BASE_URL
       process.env.OPENROUTER_API_KEY = 'test-key'
-      process.env.AE_OPENROUTER_API_BASE_URL = endpointUrl
+      process.env.AE_OPENROUTER_API_BASE_URL = baseUrl
       return () => {
         restoreEnv('OPENROUTER_API_KEY', previousApiKey)
         restoreEnv('AE_OPENROUTER_API_BASE_URL', previousApiBaseUrl)
@@ -90,6 +92,7 @@ export function openRouterToolResponse(
       {
         finish_reason: 'tool_calls',
         message: {
+          role: 'assistant',
           content: '',
           tool_calls: toolCalls.map((toolCall, index) => ({
             id: toolCall.id ?? `call-${index + 1}`,
@@ -116,6 +119,7 @@ export function openRouterProseResponse(
       {
         finish_reason: 'stop',
         message: {
+          role: 'assistant',
           content: JSON.stringify(prose),
         },
       },

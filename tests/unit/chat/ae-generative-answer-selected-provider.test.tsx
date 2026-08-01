@@ -29,7 +29,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
       },
     ]
 
-    render(
+    renderWithRouter(
       <AeGenerativeAnswer
         artifacts={artifacts}
         query="plumber Parramatta"
@@ -42,7 +42,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
     const shortlist = screen.getByRole('region', { name: 'Business shortlist' })
     const summary = screen.getByText('The business handles timing, price, and availability.')
 
-    expect(shortlist.contains(screen.getByText('These are the listed businesses AE found for this request.'))).toBe(true)
+    expect(shortlist.contains(screen.getByText('These are the businesses AE found for this request.'))).toBe(true)
     expect(shortlist.contains(screen.getByText('Ask this business'))).toBe(true)
     expect(summary.compareDocumentPosition(shortlist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.getByText('How AE checked this').closest('details')?.open).toBe(false)
@@ -77,7 +77,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
     expect(screen.getByText('Open inquiry form').closest('a')?.getAttribute('href')).toBe(
       '/demo-plumbing/inquiry?from=thread&id=thread-123',
     )
-    expect(screen.getByText('Review listing').closest('a')?.getAttribute('href')).toBe(
+    expect(screen.getByText('Review business').closest('a')?.getAttribute('href')).toBe(
       '/demo-plumbing?from=thread&id=thread-123',
     )
   })

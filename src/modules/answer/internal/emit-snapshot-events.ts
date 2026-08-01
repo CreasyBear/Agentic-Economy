@@ -1,4 +1,3 @@
-import { splitSentences } from './text-utils'
 import type { AnswerArtifact } from '../answer-schema'
 import {
   resolveLayoutProfile,
@@ -82,8 +81,10 @@ export async function* emitSnapshotEvents(
   }
   yield { type: 'next-step', nextStep: snapshot.nextStep }
   await progressivePause(pauseMs)
-
-  for (const delta of splitSentences(snapshot.summary)) {
+  for (const delta of snapshot.summary
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)) {
     yield { type: 'summary-delta', delta }
     await progressivePause(pauseMs)
   }

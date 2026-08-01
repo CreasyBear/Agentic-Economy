@@ -1,24 +1,29 @@
+import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import { getPublicBusinessCatalog } from '@/modules/catalog/public'
 import type { PublicCatalogContract } from '@/modules/catalog/public'
 import type { BuildDiscoveryFileOptions, DiscoveryFileBuildResult, DiscoverySourceState } from '@/modules/discovery/public'
-import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
+import {
+  CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES,
+} from '@/modules/customer-request/public-comprehension'
 import {
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
+  CUSTOMER_REQUEST_AGENT_SCOPE,
+  CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES,
   CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES,
   CUSTOMER_REQUEST_STATE_VALUES,
 } from '@/modules/customer-request/agent-contract'
 import { readCatalogHealth } from '@/modules/registry/public'
 import { readDiscoveryHealth } from './manifest-attempts'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
-import { safePublicText } from './ucp-manifest'
 
 const staticSitemapPaths = ['/', '/claim', '/registry', '/for-agents', '/privacy/remove-business'] as const
-const publicSurfacePaths = [
+export const DiscoveryPublicSurfacePaths = [
   '/',
   '/claim',
   '/registry',
   '/for-agents',
   '/privacy/remove-business',
+  '/.well-known/ucp',
   '/api/businesses',
   '/api/businesses/search?q=',
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path,
@@ -41,6 +46,23 @@ const allowedCrawlerAgents = [
   'anthropic-ai',
 ] as const
 
+/** One sentence, one place: listing endpoints publish facts, Customer Requests
+ * are the only public path that can compare, confirm, and start an option.
+ * Every assistant-facing surface quotes this identically. */
+export const DiscoveryListingBoundaryLine =
+  'Listing endpoints publish business facts; they do not select or execute routes. A Customer Request is the only public path that can compare, confirm, and start a registered option.'
+
+function servicesApiLines(): readonly string[] {
+  return [
+    '## Services API',
+
+    '- GET /api/v1/services: ONE PAGE; fields `summary`, `pricingSummary`, `price`.',
+    '- GET /api/v1/services/search?q={query}; follow `pagination.nextCursor` while `pagination.hasMore`.',
+    '- Provenance `business_declared`/`publicly_observed`; quote response carries provenance `ae_sandbox_provider`; open sandbox.',
+    '- Example: POST /api/sandbox/adelaide-dental-clinic/checkup-quote: priced, time-bounded quote JSON.',
+  ]
+}
+
 export function buildLlmsTxt(
   state: DiscoverySourceState,
   options: BuildDiscoveryFileOptions
@@ -48,7 +70,7 @@ export function buildLlmsTxt(
   const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
   const catalogs = readEligibleCatalogs(state)
   const urls = [
-    ...publicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
+    ...DiscoveryPublicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
     ...catalogs.flatMap((catalog) => [
       `${canonicalBaseUrl}/${catalog.slug}`,
       `${canonicalBaseUrl}/${catalog.slug}/ucp`,
@@ -63,22 +85,27 @@ export function buildLlmsTxt(
     '# Agentic Economy',
     '',
     'Customer journey:',
-    ...CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES.map((line) => `- ${line}`),
+    ...CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES.map((line) => `- ${line}`),
     `- Human entry=${canonicalBaseUrl}/`,
     '',
     'Public surfaces:',
-    ...publicSurfacePaths.map((path) => `- ${canonicalBaseUrl}${path}`),
+    ...DiscoveryPublicSurfacePaths.map((path) => `- ${canonicalBaseUrl}${path}`),
+    '',
+    ...servicesApiLines(),
     '',
     'Assistant setup:',
     `- ${canonicalBaseUrl}/SKILL.md`,
-    '',
+    `- MCP: ${canonicalBaseUrl}/mcp`,
     'Customer Request API:',
     `- schema=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}`,
     `- submit=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}`,
-    '- continue=follow exactly one matching navigation.actions relation from the latest response',
-    `- relations=${CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES.join(' | ')}`,
-    '- auth=Bearer AE API key with customer_requests:create',
+    `- device_authorization=${canonicalBaseUrl}/oauth/device_authorization`,
+    `- token=${canonicalBaseUrl}/oauth/token`,
+    `- human_approval=${canonicalBaseUrl}/agent-access/authorize?user_code=...`,
+    `- auth=Bearer ${CUSTOMER_REQUEST_AGENT_SCOPE} plus exactly one mode: ${CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.join(', ')}`,
+    `- protected_resource_metadata=${canonicalBaseUrl}/.well-known/oauth-protected-resource`,
     `- lifecycle=${CUSTOMER_REQUEST_STATE_VALUES.join(' | ')}`,
+    `- navigation.actions=${CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES.join(' | ')}`,
     '',
     'Request recipe:',
     `1. Read ${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}, then POST a natural-language request to ${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path} with one opaque requestRef.`,
@@ -93,7 +120,7 @@ export function buildLlmsTxt(
     ...(catalogLines.length === 0 ? ['- none'] : catalogLines),
     '',
     'Listing boundary:',
-    '- Listing endpoints publish business facts; they do not select or execute routes. A Customer Request is the only public path that can compare, confirm, and start a registered option.',
+    `- ${DiscoveryListingBoundaryLine}`,
     '',
     'Privacy and correction:',
     `- ${canonicalBaseUrl}/privacy/remove-business`,
@@ -103,73 +130,99 @@ export function buildLlmsTxt(
   return { body, urls }
 }
 
+/** How many business lines the index samples, and the byte ceiling the whole
+ * document stays under. The index is a front door, not a catalog dump: an agent
+ * reader that truncates loses the entry contract before it reaches it, so the
+ * full set moves to `/api/businesses` and only a bounded sample stays inline.
+ * The byte ceiling binds first, which keeps the document small for long slugs
+ * as well as for large catalogs. */
+const offeringLlmsSampleLimit = 12
+const offeringLlmsByteCeiling = 4096
+
 /** Durable Offering-based assistant index. It intentionally publishes only
- * business identity, public routes, and Offering names from the shared safe
- * projection; access-path internals and support diagnostics never enter it. */
+ * business identity, public routes, and a bounded sample from the shared safe
+ * projection; access-path internals and support diagnostics never enter it.
+ * `urls` stays complete for sitemap and route-parity consumers even though the
+ * body samples. */
 export function buildOfferingLlmsTxt(
   businesses: readonly PublicBusinessCatalogApiV2Dto[],
   options: BuildDiscoveryFileOptions,
 ): DiscoveryFileBuildResult {
   const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
   const urls = [
-    ...publicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
+    ...DiscoveryPublicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
     ...businesses.flatMap((business) => [
       `${canonicalBaseUrl}/${business.slug}`,
       `${canonicalBaseUrl}/${business.slug}/ucp`,
       `${canonicalBaseUrl}/api/businesses/${business.slug}`,
     ]),
   ]
-  const catalogLines = businesses.map((business) => {
-    const offeringNames = business.offerings
-      .map((offering) => oneLineSafeText(offering.name))
-      .filter((name) => name.length > 0)
-    return `- slug=${business.slug} publicUrl=${canonicalBaseUrl}/${business.slug} ucpUrl=${canonicalBaseUrl}/${business.slug}/ucp apiUrl=${canonicalBaseUrl}/api/businesses/${business.slug} offerings=${offeringNames.length === 0 ? 'none' : offeringNames.join(' | ')}`
-  })
-  const body = [
+  const beforeSample = [
     '# Agentic Economy',
     '',
     'Customer journey:',
-    ...CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES.map((line) => `- ${line}`),
+    `- ${CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES[0]}`,
+    `- ${CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES[1]}`,
+    `- ${CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES[3]}`,
     `- Human entry=${canonicalBaseUrl}/`,
     '',
     'Public surfaces:',
-    ...publicSurfacePaths.map((path) => `- ${canonicalBaseUrl}${path}`),
+    `- origin=${canonicalBaseUrl}`,
+    ...DiscoveryPublicSurfacePaths.map((path) => `- ${path}`),
+    '',
+    ...servicesApiLines(),
     '',
     'Assistant setup:',
     `- ${canonicalBaseUrl}/SKILL.md`,
+    `- MCP: ${canonicalBaseUrl}/mcp`,
+    '',
+    'Start here (no key needed):',
+    `- ${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${canonicalBaseUrl}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}`,
+    `- auth=${ANSWER_THREAD_AGENT_ENTRYPOINT.authentication}; no key and no credential are required`,
+    `- body=${JSON.stringify(ANSWER_THREAD_AGENT_ENTRYPOINT.body)}`,
+    `- response=${ANSWER_THREAD_AGENT_ENTRYPOINT.responseMediaType}`,
+    `- boundary=${ANSWER_THREAD_AGENT_ENTRYPOINT.boundary}`,
     '',
     'Customer Request API:',
     `- schema=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}`,
     `- submit=${canonicalBaseUrl}${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}`,
-    '- continue=follow exactly one matching navigation.actions relation from the latest response',
-    `- relations=${CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES.join(' | ')}`,
-    '- auth=Bearer AE API key with customer_requests:create',
-    `- lifecycle=${CUSTOMER_REQUEST_STATE_VALUES.join(' | ')}`,
-    '',
+    `- device_authorization=${canonicalBaseUrl}/oauth/device_authorization`,
+    `- auth=Bearer AE API key with customer_requests:create, issued to a signed-in account at ${canonicalBaseUrl}/agent-access`,
+    `- token=${canonicalBaseUrl}/oauth/token`,
+    `- human_approval=${canonicalBaseUrl}/agent-access/authorize?user_code=...`,
+    `- auth=Bearer ${CUSTOMER_REQUEST_AGENT_SCOPE} plus exactly one mode: ${CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES.join(', ')}`,
+    '- escalate=take this path only when the customer wants to confirm and start an option',
     'Request recipe:',
-    `1. Read ${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath}, then POST a natural-language request to ${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path} with one opaque requestRef.`,
-    '2. Continue only through the method, href, and input template advertised by one matching navigation.actions relation.',
-    '3. Never construct a later path, sequence, business, step, limit, recipient, purpose, effect, or authority field.',
-    '4. Stop if a needed relation is missing, duplicated, changes origin, crosses into another Request, or asks for authority AE did not display.',
-    '5. Show routes_ready options without inferring a choice. If the customer changes what matters, follow change_request and review the new revision before confirmation.',
-    '6. Follow confirm_option only after explicit approval; confirmation does not start work.',
-    '7. Resume the same Request using advertised relations. Never create a replacement or retry an outcome_unknown effect.',
+    `- ${canonicalBaseUrl}/SKILL.md carries the full procedure: relation-following, stop rules, and confirmation.`,
     '',
     'Business entries:',
-    ...(catalogLines.length === 0 ? ['- none'] : catalogLines),
+  ]
+  const afterSample = [
+    `- full list=${canonicalBaseUrl}/api/businesses search=${canonicalBaseUrl}/api/businesses/search?q=`,
+    `- total=${businesses.length}; the lines above are a sample, not the catalog`,
     '',
     'Listing boundary:',
-    '- Listing endpoints publish business facts; they do not select or execute routes. A Customer Request is the only public path that can compare, confirm, and start a registered option.',
+    `- ${DiscoveryListingBoundaryLine}`,
     '',
     'Privacy and correction:',
     `- ${canonicalBaseUrl}/privacy/remove-business`,
     '',
-  ].join('\n')
+  ]
+  const encoder = new TextEncoder()
+  const framingBytes = encoder.encode([...beforeSample, ...afterSample].join('\n')).length
+  const sample: string[] = []
+  let sampleBytes = 0
+  for (const business of businesses.slice(0, offeringLlmsSampleLimit)) {
+    const line = `- slug=${business.slug} url=${canonicalBaseUrl}/${business.slug}`
+    const cost = encoder.encode(line).length + 1
+    /** One entry always survives the ceiling: an entries section that names no
+     * entry would misreport a catalog that has them. */
+    if (sample.length > 0 && framingBytes + sampleBytes + cost > offeringLlmsByteCeiling) break
+    sampleBytes += cost
+    sample.push(line)
+  }
+  const body = [...beforeSample, ...(sample.length === 0 ? ['- none'] : sample), ...afterSample].join('\n')
   return { body, urls }
-}
-
-function oneLineSafeText(value: string): string {
-  return safePublicText(value).replace(/\s+/gu, ' ').trim()
 }
 
 export function buildSitemapXml(

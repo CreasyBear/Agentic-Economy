@@ -25,6 +25,7 @@ export function offeringApiDtoToSupplyView(dto: PublicBusinessCatalogApiV2Dto): 
         ...(item.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: item.serviceAreaSummary }),
         ...(item.availabilitySummary === undefined ? {} : { availabilitySummary: item.availabilitySummary }),
         ...(item.pricingSummary === undefined ? {} : { pricingSummary: item.pricingSummary }),
+        ...(item.price === undefined ? {} : { price: item.price }),
       },
       accessPaths: item.accessPaths.map((path) => ({
         accessPathRef: path.accessPathRef as never,
@@ -61,6 +62,20 @@ export function offeringApiDtoToSupplyView(dto: PublicBusinessCatalogApiV2Dto): 
   }
 }
 
+export function plainLanguageCopy(value: string): string {
+  return value
+    .replace(/\bpublished offering\b/giu, 'published service')
+    .replace(/\b(?:labelled\s+)?sandbox provider\b/giu, 'demo provider')
+    .replace(/\bsandbox\b/giu, 'demo')
+    .replace(/\bofferings?\b/giu, 'service')
+    .replace(/\bcapabilities?\b/giu, 'service options')
+    .replace(/\bprovenance\b/giu, 'source')
+    .replace(/\bendpoint\b/giu, 'web address')
+    .replace(/\bslugs?\b/giu, 'page address')
+    .replace(/\brevisions?\b/giu, 'version')
+}
+
+
 export type OfferingAccessPresentation = Readonly<{
   accessPathRef: string
   label: string
@@ -78,7 +93,7 @@ export function presentOfferingAccessPath(path: PublicAccessPath): OfferingAcces
     return {
       accessPathRef: path.accessPathRef,
       label: humanChannelLabel(descriptor.channel),
-      detail: descriptor.disclosure,
+      detail: plainLanguageCopy(descriptor.disclosure),
       ...(descriptor.url === undefined ? {} : { href: descriptor.url }),
       external: false,
     }
@@ -87,8 +102,8 @@ export function presentOfferingAccessPath(path: PublicAccessPath): OfferingAcces
   const technical = externalOperationTechnicalFacts(descriptor)
   return {
     accessPathRef: path.accessPathRef,
-    label: descriptor.name,
-    detail: descriptor.summary,
+    label: plainLanguageCopy(descriptor.name),
+    detail: plainLanguageCopy(descriptor.summary),
     href: descriptor.documentationUrl ?? descriptor.url,
     external: true,
     provenance: descriptor.provenance === 'business_declared'
@@ -104,20 +119,20 @@ export function offeringSupportCopy(
 ): Readonly<{ label: string; detail: string }> | undefined {
   if (support.routeable) {
     return {
-      label: 'AE can carry out this action',
+      label: 'An AI assistant can start this service',
       detail: support.validUntil === undefined
-        ? 'This action is currently available through AE.'
-        : `Available through AE until ${formatPublicDate(support.validUntil)}.`,
+        ? 'An assistant can send this request now.'
+        : `An assistant can send this request until ${formatPublicDate(support.validUntil)}.`,
     }
   }
   if (!support.integrated) {
     return undefined
   }
   return {
-    label: 'AE support is not available right now',
+    label: 'An AI assistant cannot start this service right now',
     detail: support.observedAt === undefined
-      ? 'Use one of the published ways to get started instead.'
-      : `Last checked ${formatPublicDate(support.observedAt)}. Use one of the published ways to get started instead.`,
+      ? 'Use the phone or website listed above instead.'
+      : `Last checked ${formatPublicDate(support.observedAt)}. Use the phone or website listed above instead.`,
   }
 }
 
@@ -125,7 +140,7 @@ function humanChannelLabel(channel: 'phone' | 'website' | 'ae_inquiry'): string 
   switch (channel) {
     case 'phone': return 'Call'
     case 'website': return 'Website'
-    case 'ae_inquiry': return 'Ask through AE'
+    case 'ae_inquiry': return 'Send a message'
   }
 }
 
@@ -134,7 +149,7 @@ function externalOperationTechnicalFacts(
 ): ReadonlyArray<Readonly<{ label: string; value: string }>> {
   return [
     ...(descriptor.method === undefined ? [] : [{ label: 'Method', value: descriptor.method }]),
-    { label: 'Endpoint', value: descriptor.url },
+    { label: 'Web address', value: descriptor.url },
     ...(descriptor.interfaceDescription === undefined
       ? []
       : [{ label: 'Interface description', value: descriptor.interfaceDescription.format }]),

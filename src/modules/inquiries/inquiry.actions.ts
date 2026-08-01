@@ -211,6 +211,14 @@ export const submitInquiryAction = defineAction({
   outputSchema: publicInquirySubmitOutputSchema,
   parameters: submitParameters,
   readOnly: false,
+  effect: {
+    class: 'disclosure',
+    reversible: false,
+    recipientKind: 'business',
+    dataClasses: ['contact', 'query_text'],
+    spendExposure: 'none',
+    approval: 'mandate_eligible',
+  },
   surfaces: ['agentJson'],
   invocationContract: {
     version: 'inquiry.submit:v1',
@@ -287,6 +295,14 @@ export const readCustomerRecordAction = defineAction({
   outputSchema: customerRecordOutputSchema,
   parameters: readCustomerRecordParameters,
   readOnly: true,
+  effect: {
+    class: 'observation',
+    reversible: true,
+    recipientKind: 'none',
+    dataClasses: [],
+    spendExposure: 'none',
+    approval: 'none',
+  },
   surfaces: ['http', 'agentJson'],
   run: async ({ data }) => readCustomerRecordThroughSource(data),
 })

@@ -22,6 +22,7 @@ import {
   validatePublicOwnerClaimFlowInput as validatePublicOwnerClaimFlowInputImpl,
 } from './internal/owner-public-flow'
 import type {
+  PublicBusinessPageNotFoundReason,
   PublicBusinessPageReadbackResult,
   PublicOwnerClaimField,
   PublicOwnerClaimFlowInput,
@@ -46,6 +47,22 @@ export {
   buildPublicOfferingSupplyProjection,
   validateOfferingAccessPath,
 } from './internal/offering-supply'
+
+export {
+  OfferingPriceKindValues,
+  OfferingPriceTaxTreatmentValues,
+  OfferingPriceUnitValues,
+  formatOfferingPrice,
+  normalizeOfferingPrice,
+  offeringPriceCeilingMinor,
+} from './internal/offering-price'
+export type {
+  OfferingPrice,
+  OfferingPriceInput,
+  OfferingPriceKind,
+  OfferingPriceTaxTreatment,
+  OfferingPriceUnit,
+} from './internal/offering-price'
 
 export type {
   BuildPublicOfferingSupplyProjectionResult,
@@ -176,6 +193,7 @@ export const getPublicBusinessPageReadback = getPublicBusinessPageReadbackImpl
 export const buildPublicOwnerStatusReadback = buildPublicOwnerStatusReadbackImpl
 
 export type {
+  PublicBusinessPageNotFoundReason,
   PublicBusinessPageReadbackResult,
   PublicOwnerClaimField,
   PublicOwnerClaimFlowInput,
@@ -203,7 +221,7 @@ export type PublicOwnerStatusRouteReadback = Omit<PublicOwnerStatusReadback, 'ca
 
 export type PublicOwnerStatusRouteReadbackResult =
   | { kind: 'available'; readback: PublicOwnerStatusRouteReadback }
-  | { kind: 'not_found'; reason: 'not_public' }
+  | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
   | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
 
 export type PublicOwnerClaimFlowRouteResult =

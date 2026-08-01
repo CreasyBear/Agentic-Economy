@@ -1,4 +1,4 @@
-import { parseCustomerRouteResult } from '../route-plan-projection'
+import { parseBoundedJson } from '@/modules/common/bounded-json'
 import type {
   ExportRouteEvidenceInput,
   ExportRouteEvidenceResult,
@@ -22,7 +22,7 @@ export async function exportRouteEvidence(
   }
   const result = exported.resultJson === undefined
     ? undefined
-    : parseCustomerRouteResult(exported.resultJson)
+    : parseBoundedJson(exported.resultJson)
   return {
     kind: 'evidence' as const,
     requestRef: input.requestRef,

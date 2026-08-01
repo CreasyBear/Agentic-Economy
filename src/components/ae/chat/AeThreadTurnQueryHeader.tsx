@@ -18,7 +18,7 @@ export function AeThreadTurnQueryHeader({ query, intent, seq, actions }: AeThrea
     <header className="flex justify-end">
       <Message from="user" className="max-w-[min(36rem,92%)]">
         <MessageContent>
-          <p className="font-heading text-base font-semibold text-primary">{label.text}</p>
+          <p className="font-heading text-base font-semibold text-foreground">{label.text}</p>
           {actions}
         </MessageContent>
       </Message>

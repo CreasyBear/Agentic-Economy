@@ -1,23 +1,33 @@
 # Planning manifest
 
-**Rebaselined:** 2026-07-20
+**Rebaselined:** 2026-07-25
 
 ## Authority order
 
 1. live source and executable behavior for what exists;
-2. `PRODUCT.md` for product destination and maturity;
-3. `DESIGN.md` for human-interface direction;
-4. accepted ADRs for durable architecture;
-5. `.planning/PROJECT.md`, `ROADMAP.md`, `REQUIREMENTS.md` and `STATE.md`;
-6. the current phase and active scope.
+2. accepted ADRs for durable architecture;
+3. `.planning/PROJECT.md` for product destination and maturity;
+4. `ROADMAP.md`, `REQUIREMENTS.md` and `STATE.md`;
+5. the current phase and active scope.
+
+`PRODUCT.md` and `DESIGN.md` were removed from the repository on 2026-07-25
+(`ba263c10`, recoverable at `8dbef716`). Nothing in the active corpus may cite
+them as authority. `PROJECT.md` now owns the product destination;
+`UBIQUITOUS_LANGUAGE.md` owns domain vocabulary; interface direction lives with
+the Astryx component usage in source.
+
+`AGENTS.md` was removed in the same commit but has since been re-created and is
+the operating contract every agent reads on entering this repository. It is
+present on disk and is currently untracked; it restates the authority order
+above rather than competing with it.
 
 Proposed ADRs, research, issues, mocks and tests are evidence under evaluation,
 not product authority.
 
 ## Current program
 
-- `PROJECT.md` — protocol/kernel → product charter;
-- `ROADMAP.md` — current three-phase sequence;
+- `PROJECT.md` — product charter and destination;
+- `ROADMAP.md` — current phase sequence;
 - `REQUIREMENTS.md` — Phase 3 acceptance baseline;
 - `STATE.md` — current frontier and claim ceiling;
 - `adr/ADR-009...` — accepted Action Invocation architecture;
@@ -42,10 +52,10 @@ not product authority.
 
 ## Archive
 
-The former marketplace/bootstrap charter, roadmap, requirements, state and
-scopes are under
-`archive/pre-product-conversion-rebaseline-20260720/`.
+Three field-study and Phase 1/2 completion scopes are retained under
+`archive/pre-product-conversion-rebaseline-20260720/scopes/`. The former
+marketplace/bootstrap charter, roadmap, requirements and state were deleted on
+2026-07-29; they remain recoverable in git history.
 
-Pre-hardening ADR-009/010 plans and wording remain under
-`archive/adr-009-010-pre-hardening/`. Gate 10 implementation provenance remains
-under `archive/adr-010-gate-10/`.
+Pre-hardening ADR-009/010 histories remain under
+`archive/adr-009-010-pre-hardening/adrs/`.

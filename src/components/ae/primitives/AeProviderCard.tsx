@@ -1,15 +1,15 @@
 import { useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { MapPin } from 'lucide-react'
 
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Text } from '@astryxdesign/core/Text'
-import { Token } from '@astryxdesign/core/Token'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
-import { RouterLink } from '@/components/astryx/RouterLink'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
+import { appendThreadOrigin } from '@/lib/ui/append-thread-origin'
 import { pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
+import { telUri } from '@/lib/ui/tel-uri'
 import { capabilityStatusToAeStatus, firstRequestModeLabel } from '@/lib/ui/status-presentation'
 import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicRouteServiceContract } from '@/modules/catalog/public'
@@ -34,59 +34,56 @@ function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; thre
   const area = source.serviceArea || source.suburb
   const badgeVariant = badgeVariantForTone(pillToneForAvailabilityLabel(source.availabilityLabel))
   const detailHref = appendThreadOrigin(source.detailUrl, threadId)
+  const detailSearch = threadId === undefined ? {} : { from: 'thread' as const, id: threadId }
   const grounding = answerCardGrounding(source)
 
   return (
     <Card
-      padding={4}
       className="group relative grid gap-4 shadow-low motion-safe:transition motion-safe:duration-base motion-safe:ease-standard hover:shadow-med motion-safe:hover:lift"
       data-variant="answer"
       id={`source-${source.citationIndex}`}
       aria-labelledby={`source-${source.citationIndex}-name`}
     >
-      <div className="flex items-start gap-3">
-        <Badge label={`#${source.citationIndex}`} variant="neutral" />
+      <CardHeader className="flex items-start gap-3 p-4">
+        <Badge variant="secondary">#{source.citationIndex}</Badge>
         <div className="min-w-0 flex-1">
-          <Text
-            id={`source-${source.citationIndex}-name`}
-            type="large"
-            weight="semibold"
-            color="primary"
-            display="block"
-          >
-            <RouterLink href={detailHref} className="text-primary underline-offset-4 hover:underline">{source.name}</RouterLink>
-          </Text>
-          <Text type="supporting" color="secondary" display="block">{source.category}</Text>
-          {grounding === undefined ? null : <Text type="supporting" color="secondary" display="block">{grounding}</Text>}
-          <Text type="supporting" color="secondary" display="block">Choice {source.citationIndex} in this answer</Text>
+          <CardTitle>
+            <h2 id={`source-${source.citationIndex}-name`} className="text-lg font-semibold text-foreground">
+              {source.detailUrl.startsWith('/') && !source.detailUrl.startsWith('//') ? (
+                <Link to="/$slug" params={{ slug: source.slug }} search={detailSearch} className="text-foreground underline-offset-4 hover:underline">
+                  {source.name}
+                </Link>
+              ) : (
+                <a href={detailHref} className="text-foreground underline-offset-4 hover:underline">{source.name}</a>
+              )}
+            </h2>
+          </CardTitle>
+          <p className="block text-sm text-muted-foreground">{source.category}</p>
+          {grounding === undefined ? null : <p className="block text-sm text-muted-foreground">{grounding}</p>}
+          <p className="block text-sm text-muted-foreground">Choice {source.citationIndex} in this answer</p>
         </div>
-        <Badge label={source.availabilityLabel} variant={badgeVariant} />
-      </div>
-      <ProviderFacts
-        facts={[
-          { term: 'Location', description: [source.suburb, source.stateTerritory].filter(Boolean).join(', ') || undefined },
-          { term: 'Service area', description: area || undefined },
-          { term: 'Hours', description: source.hoursLabel },
-          ...(source.freshnessLabel !== undefined && source.freshnessLabel.length > 0
-            ? [{ term: 'Updated', description: source.freshnessLabel }]
-            : []),
-        ]}
-      />
-      <TokenList labels={source.services.slice(0, 4).map((service) => service.name)} />
-      <div className="flex flex-wrap gap-2">
-        <Button label="Ask this business" variant="secondary" size="sm" className="min-h-11" href={detailHref} />
-      </div>
+        <Badge variant={badgeVariant}>{source.availabilityLabel}</Badge>
+      </CardHeader>
+      <CardContent className="grid gap-4 p-4 pt-0">
+        <ProviderFacts
+          facts={[
+            { term: 'Location', description: [source.suburb, source.stateTerritory].filter(Boolean).join(', ') || undefined },
+            { term: 'Service area', description: area || undefined },
+            { term: 'Hours', description: source.hoursLabel },
+            ...(source.freshnessLabel !== undefined && source.freshnessLabel.length > 0
+              ? [{ term: 'Updated', description: source.freshnessLabel }]
+              : []),
+          ]}
+        />
+        <TokenList labels={source.services.slice(0, 4).map((service) => service.name)} />
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="secondary" size="sm" className="min-h-11">
+            <a href={detailHref}>Ask this business</a>
+          </Button>
+        </div>
+      </CardContent>
     </Card>
   )
-}
-
-function appendThreadOrigin(href: string, threadId: string | undefined): string {
-  if (threadId === undefined || threadId.length === 0) {
-    return href
-  }
-
-  const separator = href.includes('?') ? '&' : '?'
-  return `${href}${separator}from=thread&id=${encodeURIComponent(threadId)}`
 }
 
 function answerCardGrounding(source: AnswerSource): string | undefined {
@@ -103,11 +100,11 @@ function answerCardGrounding(source: AnswerSource): string | undefined {
   return facts.length === 0 ? undefined : facts.join(' · ')
 }
 
-
 function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogApiV2Dto; onView?: () => void }) {
   const [copied, setCopied] = useState(false)
   const location = [item.suburb.trim(), item.stateTerritory.trim()].filter(Boolean).join(', ')
   const phone = item.publishedPhone?.trim() ?? ''
+  const telDestination = telUri(phone)
   const offeringNames = item.offerings.slice(0, 2).map((offering) => offering.name)
   const price = offeringPrice(item)
   const badges = capabilityBadges(item)
@@ -133,73 +130,52 @@ function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogA
 
   return (
     <Card
-      padding={4}
       className="grid h-full content-start gap-3"
       data-variant="registry"
       aria-labelledby={`registry-card-${item.slug}`}
     >
-      <div className="grid gap-1">
-        <Text type="supporting" color="secondary" display="block">{item.category}</Text>
-        <Text id={`registry-card-${item.slug}`} type="large" weight="semibold" color="primary" display="block">{item.name}</Text>
+      <CardHeader className="grid gap-1 p-4">
+        <p className="block text-sm text-muted-foreground">{item.category}</p>
+        <CardTitle>
+          <h2 id={`registry-card-${item.slug}`} className="text-lg font-semibold text-foreground">{item.name}</h2>
+        </CardTitle>
         {location.length === 0 ? null : (
           <span className="flex items-center gap-1">
-            <MapPin aria-hidden="true" className="size-3.5 shrink-0 text-secondary" strokeWidth={1.75} />
-            <Text type="supporting" color="secondary">{location}</Text>
+            <MapPin aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+            <span className="text-sm text-muted-foreground">{location}</span>
           </span>
         )}
-      </div>
-
-      <TokenList labels={offeringNames} ariaLabel="Published services" />
-
-      {/* Price is the decision fact. It leads, at the weight of the name, the
-          way a nightly rate does on a listing card. */}
-      {price === undefined ? null : (
-        <Text type="large" weight="semibold" color="primary" display="block">{price}</Text>
-      )}
-
-      {/* Badge only what is exceptional. Every business can be contacted, so
-          "contact available" on every card is noise, not information. */}
-      {badges.length === 0 ? null : (
-        <ul className="flex flex-wrap gap-2" aria-label="What this business supports">
-          {badges.map((badge) => <li key={badge}><Badge label={badge} variant="success" /></li>)}
-        </ul>
-      )}
-
-      {/* One destination leads. Three equal buttons made every card a menu and
-          wrapped to a second row whenever a phone number was published, so the
-          grid lost its baseline. Calling is the alternative; copying is a tool. */}
-      <div className="mt-auto grid gap-2 border-t border-border pt-4" aria-label="Research actions">
-        <Button
-          label="View business"
-          variant="primary"
-          href={`/${item.slug}?from=registry`}
-          className="min-h-11 w-full"
-          aria-label={`View ${item.name}`}
-          {...(onView === undefined ? {} : { onClick: onView })}
-        />
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          {phone.length === 0 ? null : (
-            <Button label={`Call ${phone}`} variant="ghost" size="sm" href={`tel:${phone.replace(/[^+\d]/g, '')}`} className="min-h-11" />
-          )}
-          <Button
-            label={copied ? 'Details copied' : 'Copy details'}
-            variant="ghost"
-            size="sm"
-            type="button"
-            className="min-h-11"
-            onClick={() => { void copyDetails() }}
-          />
+      </CardHeader>
+      <CardContent className="grid gap-3 p-4 pt-0">
+        <TokenList labels={offeringNames} ariaLabel="Published services" />
+        {price === undefined ? null : <p className="text-lg font-semibold text-foreground">{price}</p>}
+        {badges.length === 0 ? null : (
+          <ul className="flex flex-wrap gap-2" aria-label="What this business supports">
+            {badges.map((badge) => <li key={badge}><Badge variant="secondary">{badge}</Badge></li>)}
+          </ul>
+        )}
+      </CardContent>
+      <CardFooter className="mt-auto grid gap-2 border-t border-border p-4">
+        <div aria-label="Research actions" className="grid gap-2">
+          <Button asChild variant="default" className="min-h-11 w-full" {...(onView === undefined ? {} : { onClick: onView })}>
+            <a href={`/${item.slug}?from=registry`} aria-label={`View ${item.name}`}>View business</a>
+          </Button>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {telDestination === undefined ? null : (
+              <Button asChild variant="ghost" size="sm" className="min-h-11">
+                <a href={telDestination}>Call {phone}</a>
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" type="button" className="min-h-11" onClick={() => { void copyDetails() }}>
+              {copied ? 'Details copied' : 'Copy details'}
+            </Button>
+          </div>
         </div>
-      </div>
+      </CardFooter>
     </Card>
   )
 }
 
-/**
- * A published price outranks everything else on the card, so it is worth
- * looking for in both places supply can declare it: on the offering itself,
- * and on the access path that actually quotes it.
- */
 function offeringPrice(item: PublicBusinessCatalogApiV2Dto): string | undefined {
   for (const offering of item.offerings) {
     const summary = offering.pricingSummary?.trim()
@@ -224,7 +200,7 @@ function capabilityBadges(item: PublicBusinessCatalogApiV2Dto): readonly string[
     return ['AE can complete this']
   }
   if (item.accessSummary.externalOperation) {
-    return ['Answers instantly']
+    return ['Online request published']
   }
   return []
 }
@@ -233,38 +209,37 @@ function AeProviderCardCapability({ service }: { service: PublicRouteServiceCont
   const serviceTitleId = `ae-service-${service.serviceId}`
 
   return (
-    <Card padding={4} className="grid gap-4" data-variant="capability" aria-labelledby={serviceTitleId}>
-      <div>
-        <Text id={serviceTitleId} type="large" weight="semibold" color="primary" display="block">{service.name}</Text>
-        <Text color="secondary" display="block">{service.summary}</Text>
-      </div>
-      <ProviderFacts
-        facts={[
-          { term: 'Service area', description: service.serviceArea },
-          { term: 'Hours', description: service.hoursOrUnknown },
-          { term: 'First request', description: firstRequestModeLabel(service.firstRequest.mode) },
-          { term: 'Public note', description: service.firstRequest.publicDisclosure },
-        ]}
-      />
-      <ul className="flex flex-wrap gap-2">
-        {service.capabilities.map((capability) => (
-          <li key={`${capability.serviceId}:${capability.kind}`}>
-            <AeStatusBadge status={capabilityStatusToAeStatus(capability.status)} />
-          </li>
-        ))}
-      </ul>
-      <Text type="supporting" color="secondary" display="block" role="note">
-        The business publishes these details and confirms each request.
-      </Text>
+    <Card className="grid gap-4" data-variant="capability" aria-labelledby={serviceTitleId}>
+      <CardHeader className="grid gap-1 p-4">
+        <CardTitle>
+          <h2 id={serviceTitleId} className="text-lg font-semibold text-foreground">{service.name}</h2>
+        </CardTitle>
+        <p className="block text-muted-foreground">{service.summary}</p>
+      </CardHeader>
+      <CardContent className="grid gap-4 p-4 pt-0">
+        <ProviderFacts
+          facts={[
+            { term: 'Service area', description: service.serviceArea },
+            { term: 'Hours', description: service.hoursOrUnknown },
+            { term: 'First request', description: firstRequestModeLabel(service.firstRequest.mode) },
+            { term: 'Public note', description: service.firstRequest.publicDisclosure },
+          ]}
+        />
+        <ul className="flex flex-wrap gap-2">
+          {service.capabilities.map((capability) => (
+            <li key={`${capability.serviceId}:${capability.kind}`}>
+              <AeStatusBadge status={capabilityStatusToAeStatus(capability.status)} />
+            </li>
+          ))}
+        </ul>
+        <p className="block text-sm text-muted-foreground" role="note">
+          The business publishes these details and confirms each request.
+        </p>
+      </CardContent>
     </Card>
   )
 }
 
-/**
- * Facts read as content, not containers. Boxing each fact inside a Card gives
- * every listing four nested cards and makes a simple listing look like a form,
- * so separation comes from a rule and whitespace instead.
- */
 function ProviderFacts({ facts }: { facts: Array<{ term: string; description: string | undefined }> }) {
   const present = facts.filter((fact) => fact.description !== undefined && fact.description.trim().length > 0)
   if (present.length === 0) {
@@ -275,8 +250,8 @@ function ProviderFacts({ facts }: { facts: Array<{ term: string; description: st
     <dl className="grid gap-x-6 gap-y-3 border-t border-border pt-3 sm:grid-cols-2">
       {present.map((fact) => (
         <div key={fact.term}>
-          <dt><Text type="supporting" color="secondary" display="block">{fact.term}</Text></dt>
-          <dd className="mt-0.5"><Text type="supporting" color="primary" weight="medium" display="block">{fact.description}</Text></dd>
+          <dt><span className="block text-sm text-muted-foreground">{fact.term}</span></dt>
+          <dd className="mt-0.5"><span className="block text-sm font-medium text-foreground">{fact.description}</span></dd>
         </div>
       ))}
     </dl>
@@ -291,15 +266,14 @@ function TokenList({ labels, ariaLabel = 'Listed services' }: { labels: readonly
   return (
     <ul className="flex flex-wrap gap-2" aria-label={ariaLabel}>
       {labels.map((label) => (
-        <li key={label}><Token size="sm" label={label} /></li>
+        <li key={label}><Badge variant="outline">{label}</Badge></li>
       ))}
     </ul>
   )
 }
 
-function badgeVariantForTone(tone: string): 'neutral' | 'success' | 'warning' | 'error' {
-  if (tone === 'available' || tone === 'success') return 'success'
-  if (tone === 'limited' || tone === 'warning') return 'warning'
-  if (tone === 'unavailable' || tone === 'error') return 'error'
-  return 'neutral'
+function badgeVariantForTone(tone: string): 'outline' | 'secondary' | 'destructive' {
+  if (tone === 'available' || tone === 'success') return 'secondary'
+  if (tone === 'unavailable' || tone === 'error') return 'destructive'
+  return 'outline'
 }

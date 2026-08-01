@@ -1,10 +1,11 @@
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Heading, Text } from '@astryxdesign/core/Text'
-import { Skeleton } from '@astryxdesign/core/Skeleton'
-import { Collapsible } from '@astryxdesign/core/Collapsible'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
-import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
+import { CUSTOMER_REQUEST_HUMAN_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
 import { CustomerRequestRepeatPermissionControl } from '../../CustomerRequestRepeatPermissionControl'
 import type { ConversationTurn, CustomerRoute } from '../../workspace-types'
 import {
@@ -30,6 +31,7 @@ import {
   RouteDisclosureDetails,
   SharingDetail,
   SharingSummary,
+  RouteDisclosure,
 } from './route-disclosure'
 import { RequestRecordLinks } from '../records'
 
@@ -51,33 +53,33 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
     <Conversation turns={turns} />
     <WorkingUnderstanding projection={projection} correct={edit} />
     <header className="grid gap-2">
-      <Text className="text-sm font-semibold text-accent">Ways forward</Text>
-      <Heading level={2} className="text-3xl">{decision.outcome.summary}</Heading>
-      <Text color="secondary" className="block">{decision.outcome.kind === 'routes_expired'
+      <p className="text-sm font-semibold text-brand">Ways forward</p>
+      <h2 className="text-3xl font-semibold">{decision.outcome.summary}</h2>
+      <p className="block text-muted-foreground">{decision.outcome.kind === 'routes_expired'
         ? 'Your Request is preserved. Check again to rebuild the available ways forward from current business information.'
-        : 'Compare cost, who is involved, what you share, and what happens if something goes wrong.'}</Text>
+        : 'Compare cost, who is involved, what you share, and what happens if something goes wrong.'}</p>
       {/* The comparison summary restates the count in the heading and adds the
           not-a-recommendation boundary. Keep the exact string, demote the weight
           so it reads as a qualifier instead of a second headline. */}
-      <Text type="supporting" color="secondary" className="block">{decision.comparison.summary}</Text>
+      <p className="block text-sm text-muted-foreground">{decision.comparison.summary}</p>
     </header>
-    {recommendation === undefined ? null : <Card padding={4}>
-      <Text weight="semibold">Why AE recommends this way</Text>
-      <ul className="mt-2 grid gap-1 text-sm text-secondary">
+    {recommendation === undefined ? null : <Card className="p-4">
+      <p className="font-semibold">Why AE recommends this way</p>
+      <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
         {recommendation.reasons.map((reason) => <li key={reason}>{reason}</li>)}
       </ul>
-      <Text type="supporting" weight="semibold" className="mt-3">Tradeoffs checked</Text>
-      <ul className="mt-1 grid gap-1 text-sm text-secondary">
+      <p className="mt-3 text-sm font-semibold">Tradeoffs checked</p>
+      <ul className="mt-1 grid gap-1 text-sm text-muted-foreground">
         {recommendation.tradeoffs.map((tradeoff) => <li key={tradeoff}>{tradeoff}</li>)}
       </ul>
       {recommendation.commercialInfluence === 'disclosed'
         ? <div className="mt-3 grid gap-1">
-          <Text color="secondary">
+          <p className="text-muted-foreground">
             Commercial relationships did not change eligibility, inclusion, or order.
-          </Text>
+          </p>
           {recommendedRoute?.comparison.commercialInfluence.status === 'disclosed'
             ? recommendedRoute.comparison.commercialInfluence.summaries.map((summary) => (
-              <Text key={summary} type="supporting" color="secondary">{summary}</Text>
+              <p key={summary} className="text-sm text-muted-foreground">{summary}</p>
             ))
             : null}
         </div>
@@ -87,10 +89,10 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
       ? <DecisionChanges changes={decision.changes.items} routes={decision.routes} />
       : null}
     <div className="grid gap-4">
-      {decision.routes.map((route, index) => <Card key={route.routeRef} padding={5}>
+      {decision.routes.map((route, index) => <Card key={route.routeRef} className="p-5">
         <article className="grid gap-5">
           <div className="grid gap-1">
-            <Text type="supporting" color="secondary">
+            <p className="text-sm text-muted-foreground">
               {route.availability === 'expired'
                 ? 'Expired way forward'
                 : recommendation?.routeRef === route.routeRef
@@ -100,12 +102,12 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
                     : recommendation === undefined
                       ? `Current way forward ${index + 1}`
                       : `Other way forward ${index + 1}`}
-            </Text>
-            <Heading level={3}>{route.result.summary}</Heading>
-            <Text color="secondary">Through {businessList(route.businesses.map(({ name }) => name))}</Text>
-            {route.result.deliverables.length === 0 ? null : <Text type="supporting" color="secondary">
+            </p>
+            <h3 className="text-xl font-semibold">{route.result.summary}</h3>
+            <p className="text-muted-foreground">Through {businessList(route.businesses.map(({ name }) => name))}</p>
+            {route.result.deliverables.length === 0 ? null : <p className="text-sm text-muted-foreground">
               Expected result: {route.result.deliverables.join(', ')}
-            </Text>}
+            </p>}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Fact label="Cost">
@@ -120,21 +122,21 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
             </Fact>
           </div>
           <FactBlock label="Why it fits">
-            <Text color="secondary">{route.comparison.hardConstraints === 'satisfied'
-              ? 'It covers the requested result and every constraint AE could verify.'
-              : 'The registered steps can return the stated result. AE has not independently verified every detail in your Request.'}</Text>
+            <p className="text-muted-foreground">{route.comparison.hardConstraints === 'satisfied'
+              ? 'It covers the requested result and the details AE could verify.'
+              : 'The businesses can return the stated result. Some details in your request still need confirmation.'}</p>
           </FactBlock>
           {/* Consequence before housekeeping: what leaves and what cannot be undone
               lead, and the routine declarations follow in the same row. */}
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-            <span className="font-semibold text-primary">{route.dataUse.recipientCount} information {route.dataUse.recipientCount === 1 ? 'recipient' : 'recipients'}</span>
-            <span className="font-semibold text-primary">{route.comparison.irreversibleEffectCount} irreversible {route.comparison.irreversibleEffectCount === 1 ? 'effect' : 'effects'}</span>
-            <span className="text-secondary">{route.comparison.recovery === 'retry_safe' ? 'Safe retry after confirmed failure' : 'Check required before retry'}</span>
-            <span className="text-secondary">{route.comparison.duration === 'not_declared' ? 'Timing not declared' : route.comparison.duration}</span>
+            <span className="font-semibold text-foreground">{route.dataUse.recipientCount} information {route.dataUse.recipientCount === 1 ? 'recipient' : 'recipients'}</span>
+            <span className="font-semibold text-foreground">{route.comparison.irreversibleEffectCount} irreversible {route.comparison.irreversibleEffectCount === 1 ? 'effect' : 'effects'}</span>
+            <span className="text-muted-foreground">{route.comparison.recovery === 'retry_safe' ? 'Safe retry after confirmed failure' : 'Check required before retry'}</span>
+            <span className="text-muted-foreground">{route.comparison.duration === 'not_declared' ? 'Timing not declared' : route.comparison.duration}</span>
           </div>
           <RouteImportantDetails route={route} />
-          <Collapsible defaultIsOpen={false} trigger={<span className="text-base font-semibold">How it works</span>}>
-            <ol className="mt-3 grid gap-3 text-sm text-secondary">
+          <RouteDisclosure defaultIsOpen={false} trigger={<span className="text-base font-semibold">How it works</span>}>
+            <ol className="mt-3 grid gap-3 text-sm text-muted-foreground">
               {(route.steps ?? []).map((step) => <li key={step.step}>
                 <strong>Step {step.step}: {step.business.name}.</strong>{' '}
                 {step.after.length === 0
@@ -142,32 +144,29 @@ export function RouteDecisionCard({ projection, turns, review, check, edit, rest
                   : `${step.business.name} will follow ${step.after.length === 1 ? `step ${step.after[0]}` : `steps ${step.after.join(', ')}`}.`}
               </li>)}
             </ol>
-          </Collapsible>
+          </RouteDisclosure>
           {/* Natural width so the action reads as a control, not a banner. */}
           <div className="justify-self-start">
             {route.availability === 'current' && route.maximumTotalCost.kind === 'known'
-              ? <Button label="Review this option" variant="primary" clickAction={() => review(route.routeRef)} />
-              : <Button label="Check current options" variant="secondary" clickAction={() => void check()} />}
+              ? <Button type="button" variant="default" onClick={() => review(route.routeRef)}>Review this option</Button>
+              : <Button type="button" variant="secondary" onClick={() => void check()}>Check current options</Button>}
           </div>
         </article>
       </Card>)}
     </div>
-    <Card padding={4}>
-      <Text color="secondary" className="block">Nothing is authorized or shared until you confirm a choice.</Text>
-      {/* The sandbox boundary names which businesses these examples use. That
-          is a claim about the supply, not a disclaimer about AE, so it stays
-          while the repeated reassurance above it does not. */}
-      <Text type="supporting" color="secondary" className="mt-2 block">{CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.sandboxBoundary}</Text>
+    <Card className="p-4">
+      <p className="block text-muted-foreground">You decide before AE shares details or starts work.</p>
+      <p className="mt-2 block text-sm text-muted-foreground">{CUSTOMER_REQUEST_HUMAN_COMPREHENSION.sandboxBoundary}</p>
     </Card>
     <RecoveryActions edit={edit} restart={restart} />
   </section>
 }
 function RouteImportantDetails({ route }: { route: CustomerRoute }) {
-  return <Collapsible defaultIsOpen={false} trigger={<span className="text-base font-semibold">Important details</span>}>
+  return <RouteDisclosure defaultIsOpen={false} trigger={<span className="text-base font-semibold">Important details</span>}>
     <div className="mt-4 grid gap-5">
       <RouteDisclosureDetails route={route} />
     </div>
-  </Collapsible>
+  </RouteDisclosure>
 }
 function repeatPermissionEligible(route: CustomerRoute): boolean {
   return route.availability === 'current'
@@ -193,32 +192,29 @@ export function RouteReviewCard({ projection, routeRef, turns, confirm, reportUn
 }) {
   const route = projection.decision?.routes.find((candidate) => candidate.routeRef === routeRef)
   const actions = projection.decision?.actions
-  if (route === undefined || actions === undefined) return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite">
+  if (route === undefined || actions === undefined) return <Card className="mx-auto w-full max-w-4xl p-5" aria-live="polite">
     <div className="grid gap-4">
-      <Heading level={2}>This choice is no longer available.</Heading>
-      <Text color="secondary">Return to the current options before deciding. Nothing was confirmed or shared.</Text>
-      <Button label="Return to options" variant="primary" clickAction={decline} />
+      <h2 className="text-2xl font-semibold">This choice is no longer available.</h2>
+      <p className="text-muted-foreground">Return to the current options before deciding. Your choice was not confirmed.</p>
+      <Button type="button" variant="default" onClick={decline}>Return to options</Button>
     </div>
   </Card>
   return <section className="mx-auto grid w-full max-w-4xl gap-6" aria-live="polite">
     <Conversation turns={turns} />
     <WorkingUnderstanding projection={projection} correct={edit} />
     <header className="grid gap-2">
-      <Text className="text-sm font-semibold text-accent">Your choice</Text>
-      <Heading level={2} className="text-3xl">Review before you confirm</Heading>
+      <p className="text-sm font-semibold text-brand">Your choice</p>
+      <h2 className="text-3xl font-semibold">Review before you confirm</h2>
     </header>
-    <Card padding={5}>
+    <Card className="p-5">
       <div className="grid gap-6">
-        {/* Immediate: the four facts a person needs to decide, nothing else. */}
         <div className="grid gap-1">
-          <Heading level={3}>{route.result.summary}</Heading>
-          <Text color="secondary">Through {businessList(route.businesses.map(({ name }) => name))}</Text>
-          {route.result.deliverables.length === 0 ? null : <Text type="supporting" color="secondary">Expected result: {route.result.deliverables.join(', ')}</Text>}
+          <h3 className="text-xl font-semibold">{route.result.summary}</h3>
+          <p className="text-muted-foreground">Through {businessList(route.businesses.map(({ name }) => name))}</p>
+          {route.result.deliverables.length === 0 ? null : <p className="text-sm text-muted-foreground">Expected result: {route.result.deliverables.join(', ')}</p>}
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Fact label="Cost">
-            {/* The qualifier rides on the value: a price ceiling must never read
-                as a fixed price, including when the value is read on its own. */}
             <FactValue tone={route.maximumTotalCost.kind === 'known' ? 'material' : 'unresolved'}>
               {route.maximumTotalCost.kind === 'known'
                 ? `Maximum ${formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor)}`
@@ -232,62 +228,63 @@ export function RouteReviewCard({ projection, routeRef, turns, confirm, reportUn
             <SharingSummary route={route} />
           </Fact>
         </div>
-
-        {/* The one decision. Confirming is the dominant action on this surface.
-            It sits at its natural width so it reads as a control, not a banner. */}
-        <div className="grid justify-items-start gap-3 border-t border-border pt-6">
-          <Button label="Confirm this choice" variant="primary" clickAction={confirm} />
-          <Text type="supporting" color="secondary" className="block">
-            Confirming gives AE permission for this exact choice and maximum cost. It does not start work or share information yet.
-          </Text>
+        <div className="grid justify-items-start gap-3 pt-6">
+          <Separator />
+          <Button type="button" variant="default" onClick={() => void confirm()}>Confirm this choice</Button>
+          <p className="block text-sm text-muted-foreground">
+            Confirming gives AE permission for this exact choice and maximum cost. AE will ask before sharing information or starting work.
+          </p>
           <div className="flex flex-wrap items-center gap-4">
             {repeatPermissionEligible(route)
               ? <CustomerRequestRepeatPermissionControl projection={projection} route={route} />
               : null}
-            <Button label="Change this Request" variant="ghost" clickAction={edit} />
-            <Button label="Decline this choice" variant="ghost" clickAction={decline} />
+            <Button type="button" variant="ghost" onClick={edit}>Change this Request</Button>
+            <Button type="button" variant="ghost" onClick={decline}>Decline this choice</Button>
           </div>
         </div>
-
-        {/* Expanded: what confirming commits you to. */}
-        <div className="grid gap-5 border-t border-border pt-6">
+        <div className="grid gap-5 pt-6">
+          <Separator />
           <SharingDetail route={route} emptyLabel="Nothing is shared." />
           <EffectsDetail route={route} label="What starting changes" />
           <CancellationDetail route={route} />
-          <Text type="supporting" color="secondary">{actions.start.summary}</Text>
+          <p className="text-sm text-muted-foreground">{actions.start.summary}</p>
         </div>
-
-        {/* On demand: everything else AE registered about this route. */}
-        <div className="border-t border-border pt-6">
+        <div className="pt-6">
+          <Separator />
           <FullRouteDisclosure route={route} subject="choice" />
         </div>
-
-        {/* On demand: the escape hatch, closed until asked for. */}
-        <div className="border-t border-border pt-6">
-          <Collapsible
+        <div className="pt-6">
+          <Separator />
+          <RouteDisclosure
             defaultIsOpen={false}
             trigger={<span className="text-base font-semibold">This option does not work?</span>}
           >
-            <div className="grid gap-3 pt-4">
-              <Text color="secondary">Tell AE what makes this exact option unsuitable. AE will keep this Request and look for a different current option. Nothing will be confirmed or shared.</Text>
-              <label htmlFor="route-feedback" className="text-sm font-semibold">Why does this option not work?</label>
-              <textarea
-                id="route-feedback"
-                value={routeFeedback}
-                onChange={(event) => setRouteFeedback(event.target.value)}
-                rows={3}
-                maxLength={2_000}
-                required
-                className="min-h-20 resize-y rounded-md border border-border bg-card px-3 py-2 text-primary outline-none focus:ring-2 focus:ring-accent"
-              />
-              <Button
-                label="Find another option"
-                variant="secondary"
-                isDisabled={routeFeedback.trim().length === 0}
-                clickAction={() => void reportUnavailable()}
-              />
-            </div>
-          </Collapsible>
+            <FieldGroup className="gap-3 pt-4">
+              <p className="text-muted-foreground">Tell AE what makes this exact option unsuitable. Your request stays here while AE looks for a different current option.</p>
+              <Field>
+                <FieldLabel htmlFor="route-feedback">Why does this option not work?</FieldLabel>
+                <Textarea
+                  id="route-feedback"
+                  value={routeFeedback}
+                  onChange={(event) => setRouteFeedback(event.target.value)}
+                  rows={3}
+                  maxLength={2_000}
+                  required
+                  className="min-h-20 resize-y"
+                />
+              </Field>
+              <Field orientation="horizontal">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={routeFeedback.trim().length === 0}
+                  onClick={() => void reportUnavailable()}
+                >
+                  Find another option
+                </Button>
+              </Field>
+            </FieldGroup>
+          </RouteDisclosure>
         </div>
       </div>
     </Card>
@@ -306,26 +303,25 @@ export function RouteConfirmationCard({ projection, turns, start, edit, restart 
   return <section className="mx-auto grid w-full max-w-4xl gap-6" aria-live="polite">
     <Conversation turns={turns} />
     <WorkingUnderstanding projection={projection} correct={edit} />
-    <Card padding={5}>
+    <Card className="p-5">
       <div className="grid gap-5">
         <div className="grid gap-2">
-          <Text className="text-sm font-semibold text-accent">Choice confirmed</Text>
-          <Heading level={2}>{route.result.summary}</Heading>
-          <Text color="secondary">Through {businessList(route.businesses.map(({ name }) => name))}. Nothing has started yet.</Text>
+          <p className="text-sm font-semibold text-brand">Choice confirmed</p>
+          <h2 className="text-2xl font-semibold">{route.result.summary}</h2>
+          <p className="text-muted-foreground">Through {businessList(route.businesses.map(({ name }) => name))}. Nothing has started yet.</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div><Text type="supporting" weight="semibold">Maximum cost</Text><Text type="large" weight="semibold">{route.maximumTotalCost.kind === 'known' ? formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor) : 'Not confirmed'}</Text></div>
-          <div><Text type="supporting" weight="semibold">Confirmed until</Text><Text color="secondary">{formatOptionTime(confirmation.validUntil)}</Text></div>
+          <div><p className="text-sm font-semibold">Confirmed until</p><p className="text-muted-foreground">{formatOptionTime(confirmation.validUntil)}</p></div>
         </div>
-        <div><Text weight="semibold">Information recipients</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>{recipient.name} — {recipient.purposes.map(readableLabel).join(', ')}. Fields: {recipient.fields.map(({ label, classification }) => `${label} (${classification})`).join(', ')}</li>)}</ul></div>
-        <div><Text weight="semibold">What changes</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>{effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}</li>)}</ul></div>
-        <div><Text weight="semibold">Evidence expected</Text><Text color="secondary" className="mt-1">{route.evidence.map(({ label }) => label).join(', ') || 'No completion evidence is declared.'}</Text></div>
-        <div><Text weight="semibold">What still needs confirmation</Text><Text color="secondary" className="mt-1">{route.uncertainty.length === 0 ? 'No uncertainty is declared for this choice.' : route.uncertainty.map(uncertaintyLabel).join(', ')}</Text></div>
-        <div><Text weight="semibold">Fallback</Text><Text color="secondary" className="mt-1">{route.fallback.available ? `${route.fallback.alternatives.length} alternative ${route.fallback.alternatives.length === 1 ? 'way is' : 'ways are'} available before work starts.` : 'No alternative way is currently declared.'}</Text></div>
-        <div><Text weight="semibold">Cancellation</Text><Text color="secondary" className="mt-1">{route.cancellation.summary}</Text></div>
-        <div><Text weight="semibold">Recovery by step</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.recovery.map((recovery) => <li key={recovery.step}>Step {recovery.step}, {recovery.businessName}: {recovery.posture === 'retry_safe' ? 'AE can safely retry after a confirmed failure.' : 'AE must check what happened before any retry.'}</li>)}</ul></div>
-        <Text type="supporting" color="secondary">Confirmation code {confirmation.confirmationRef}</Text>
-        <Button label="Start now" variant="primary" clickAction={start} />
+        <div><p className="font-semibold">Information recipients</p><ul className="mt-2 grid gap-1 text-sm text-muted-foreground">{route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>{recipient.name} — {recipient.purposes.map(readableLabel).join(', ')}. Fields: {recipient.fields.map(({ label, classification }) => `${label} (${classification})`).join(', ')}</li>)}</ul></div>
+        <div><p className="font-semibold">What changes</p><ul className="mt-2 grid gap-1 text-sm text-muted-foreground">{route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>{effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}</li>)}</ul></div>
+        <div><p className="font-semibold">Evidence expected</p><p className="mt-1 text-muted-foreground">{route.evidence.map(({ label }) => label).join(', ') || 'No completion evidence is declared.'}</p></div>
+        <div><p className="font-semibold">What still needs confirmation</p><p className="mt-1 text-muted-foreground">{route.uncertainty.length === 0 ? 'No uncertainty is declared for this choice.' : route.uncertainty.map(uncertaintyLabel).join(', ')}</p></div>
+        <div><p className="font-semibold">Fallback</p><p className="mt-1 text-muted-foreground">{route.fallback.available ? `${route.fallback.alternatives.length} alternative ${route.fallback.alternatives.length === 1 ? 'way is' : 'ways are'} available before work starts.` : 'No alternative way is currently declared.'}</p></div>
+        <div><p className="font-semibold">Cancellation</p><p className="mt-1 text-muted-foreground">{route.cancellation.summary}</p></div>
+        <div><p className="font-semibold">Recovery by step</p><ul className="mt-2 grid gap-1 text-sm text-muted-foreground">{route.recovery.map((recovery) => <li key={recovery.step}>Step {recovery.step}, {recovery.businessName}: {recovery.posture === 'retry_safe' ? 'AE can safely retry after a confirmed failure.' : 'AE must check what happened before any retry.'}</li>)}</ul></div>
+        <p className="text-sm text-muted-foreground">Confirmation code {confirmation.confirmationRef}</p>
+        <Button type="button" variant="default" onClick={() => void start()}>Start now</Button>
       </div>
     </Card>
     <RecoveryActions edit={edit} restart={restart} />
@@ -355,32 +351,32 @@ export function RouteProgressCard({ projection, turns, refresh, cancel, edit, re
   return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite">
     <Conversation turns={turns} />
     <WorkingUnderstanding projection={projection} correct={edit} />
-    <Card padding={5}>
+    <Card className="p-5">
       <div className="grid gap-4">
-        <Text className="text-sm font-semibold text-accent">In progress</Text>
-        <Heading level={2}>{projection.summary}</Heading>
-        <Text weight="semibold">Step {progress.current.step} of {progress.total}</Text>
-        <Text color="secondary">{stateLabel}</Text>
-        {projection.activity === undefined ? null : <Text weight="semibold">
+        <p className="text-sm font-semibold text-brand">In progress</p>
+        <h2 className="text-2xl font-semibold">{projection.summary}</h2>
+        <p className="font-semibold">Step {progress.current.step} of {progress.total}</p>
+        <p className="text-muted-foreground">{stateLabel}</p>
+        {projection.activity === undefined ? null : <p className="font-semibold">
           {activityResponsibility(projection.activity.actor, projection.activity.certainty)}
-        </Text>}
-        <Text type="supporting" color="secondary">{progress.completed} of {progress.total} steps completed. Rechecking will not send the work again.</Text>
-        {progress.dependencies === undefined ? null : <div className="grid gap-2 rounded-md border border-border bg-surface p-4">
+        </p>}
+        <p className="text-sm text-muted-foreground">{progress.completed} of {progress.total} steps completed. Rechecking will not send the work again.</p>
+        {progress.dependencies === undefined ? null : <div className="grid gap-2 rounded-md border border-border bg-card p-4">
           {progress.dependencies.completed.map(({ step, business }) => (
-            <Text key={`completed:${step}`} type="supporting" color="secondary">Completed: {business}</Text>
+            <p key={`completed:${step}`} className="text-sm text-muted-foreground">Completed: {business}</p>
           ))}
           {progress.dependencies.blocked.map(({ step, business, waitingForBusiness }) => (
-            <Text key={`blocked:${step}`} type="supporting" color="secondary">
+            <p key={`blocked:${step}`} className="text-sm text-muted-foreground">
               Waiting: {business}, after {waitingForBusiness}
-            </Text>
+            </p>
           ))}
         </div>}
-        <Text type="supporting" color="secondary">AE is acting only within the choice you confirmed.</Text>
+        <p className="text-sm text-muted-foreground">AE is acting only within the choice you confirmed.</p>
         {cancellationMessage(projection.activity?.cancellation)}
         <div className="flex flex-wrap gap-3">
-          <Button label="Check progress" variant="primary" clickAction={refresh} />
+          <Button type="button" variant="default" onClick={() => void refresh()}>Check progress</Button>
           {cancellationAvailable(projection.activity?.cancellation)
-            ? <Button label="Stop before the next step" variant="secondary" clickAction={cancel} />
+            ? <Button type="button" variant="secondary" onClick={() => void cancel()}>Stop before the next step</Button>
             : null}
         </div>
         <RequestRecordLinks requestRef={projection.requestRef} />
@@ -399,70 +395,70 @@ function cancellationMessage(
   cancellation: NonNullable<CustomerRequestView['activity']>['cancellation'] | undefined,
 ) {
   if (typeof cancellation === 'object' && cancellation.state === 'available') {
-    return <Text type="supporting" color="secondary">
+    return <p className="text-sm text-muted-foreground">
       AE will not release the next business step before {new Date(cancellation.releaseMayStartAt).toISOString()}.
-    </Text>
+    </p>
   }
   if (typeof cancellation === 'object' && cancellation.state === 'pending') {
     return <div className="grid gap-1">
-      <Text type="supporting" color="secondary">
+      <p className="text-sm text-muted-foreground">
         AE sent one stop request to the business. The business has not confirmed the outcome yet.
-      </Text>
-      <Text type="supporting" color="secondary">
+      </p>
+      <p className="text-sm text-muted-foreground">
         Sent at {new Date(cancellation.requestedAt).toISOString()}. Check again after {new Date(cancellation.nextCheckAt).toISOString()}.
         {' '}AE will not send the stop request twice.
-      </Text>
+      </p>
     </div>
   }
   if (typeof cancellation === 'object' && cancellation.state === 'unknown') {
     return <div className="grid gap-1">
-      <Text type="supporting" color="secondary">
+      <p className="text-sm text-muted-foreground">
         AE cannot yet confirm whether the business received or accepted the stop request.
-      </Text>
-      <Text type="supporting" color="secondary">
+      </p>
+      <p className="text-sm text-muted-foreground">
         Sent at {new Date(cancellation.requestedAt).toISOString()}; uncertainty recorded at {new Date(cancellation.observedAt).toISOString()}.
         {' '}AE will not repeat it while the outcome is unknown. Check again after {new Date(cancellation.nextCheckAt).toISOString()}.
-      </Text>
+      </p>
     </div>
   }
   if (typeof cancellation === 'object' && cancellation.state === 'rejected') {
     return <div className="grid gap-1">
-      <Text type="supporting" color="secondary">
+      <p className="text-sm text-muted-foreground">
         The business declined the stop request. The current work may continue.
-      </Text>
-      <Text type="supporting" color="secondary">
+      </p>
+      <p className="text-sm text-muted-foreground">
         AE sent the stop request at {new Date(cancellation.requestedAt).toISOString()}.
-      </Text>
-      <Text type="supporting" color="secondary">
+      </p>
+      <p className="text-sm text-muted-foreground">
         The business response was recorded at {new Date(cancellation.observedAt).toISOString()}; AE will not send the stop request twice.
-      </Text>
+      </p>
     </div>
   }
   if (typeof cancellation !== 'object' || cancellation.state !== 'not_available'
     || cancellation.reason !== 'business_step_released') return null
   return <div className="grid gap-1">
-    <Text type="supporting" color="secondary">
+    <p className="text-sm text-muted-foreground">
       {cancellation.requestedAt === undefined
         ? 'This business step has started, so AE can no longer stop it before release.'
         : 'You asked AE to stop, but the business step had already started.'}
-    </Text>
-    <Text type="supporting" color="secondary">
+    </p>
+    <p className="text-sm text-muted-foreground">
       The business step was released at {new Date(cancellation.changedAt).toISOString()}.
-    </Text>
-    {cancellation.requestedAt === undefined ? null : <Text type="supporting" color="secondary">
+    </p>
+    {cancellation.requestedAt === undefined ? null : <p className="text-sm text-muted-foreground">
       AE recorded your stop request at {new Date(cancellation.requestedAt).toISOString()}.
-    </Text>}
+    </p>}
   </div>
 }
 export function ConfirmationLoadingCard() {
-  return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite" aria-busy="true">
+  return <Card className="mx-auto w-full max-w-4xl p-5" aria-live="polite" aria-busy="true">
     <div className="grid gap-5">
-      <Skeleton height="1rem" width="8rem" index={0} />
-      <Skeleton height="2.25rem" width="72%" index={1} />
-      <Skeleton height="1rem" width="55%" index={2} />
-      <div className="grid gap-4 sm:grid-cols-2"><Skeleton height="4rem" width="100%" index={3} /><Skeleton height="4rem" width="100%" index={4} /></div>
-      <Skeleton height="7rem" width="100%" index={5} />
-      <Text color="secondary">Confirming your choice. Nothing is being purchased, booked, or started.</Text>
+      <Skeleton className="h-4 w-32" />
+      <Skeleton className="h-9 w-[72%]" />
+      <Skeleton className="h-4 w-[55%]" />
+      <div className="grid gap-4 sm:grid-cols-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>
+      <Skeleton className="h-28 w-full" />
+      <p className="text-muted-foreground">Confirming your choice. Work has not started.</p>
     </div>
   </Card>
 }
@@ -477,10 +473,10 @@ function DecisionChanges({ changes, routes }: {
       resultNames.set(result.resultRef, result.summary)
     }
   }
-  return <Card padding={4}>
+  return <Card className="p-4">
     <div className="grid gap-2">
-      <Heading level={3}>What changed</Heading>
-      <ul className="grid gap-1 text-sm text-secondary">
+      <h3 className="text-xl font-semibold">What changed</h3>
+      <ul className="grid gap-1 text-sm text-muted-foreground">
         {changes.map((change) => <li key={change.kind}>{decisionChangeLabel(change, resultNames)}</li>)}
       </ul>
     </div>

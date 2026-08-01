@@ -1,6 +1,5 @@
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Heading, Text } from '@astryxdesign/core/Text'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import type { ConversationTurn } from '../../workspace-types'
 import {
@@ -48,42 +47,42 @@ export function ActionStatusCard({ projection, turns, refresh, edit, restart }: 
   return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite">
     <Conversation turns={turns} />
     <WorkingUnderstanding projection={projection} correct={edit} />
-    <Card padding={5}>
+    <Card className="p-5">
       <div className="grid gap-4">
-        <Text className="text-sm font-semibold text-accent">
+        <p className="text-sm font-semibold text-brand">
           {unknown ? 'Still confirming' : failed ? 'Could not be completed' : 'Completed'}
-        </Text>
-        <Heading level={2}>{projection.summary}</Heading>
-        <Text color="secondary">{explanation}</Text>
-        {projection.activity === undefined ? null : <Text weight="semibold">
+        </p>
+        <h2 className="text-2xl font-semibold">{projection.summary}</h2>
+        <p className="text-muted-foreground">{explanation}</p>
+        {projection.activity === undefined ? null : <p className="font-semibold">
           {activityResponsibility(projection.activity.actor, projection.activity.certainty)}
-        </Text>}
-        {projection.businesses === undefined ? null : <Text color="secondary">
+        </p>}
+        {projection.businesses === undefined ? null : <p className="text-muted-foreground">
           Through {businessList(projection.businesses.map(({ name }) => name))}
-        </Text>}
-        {projection.progress === undefined || projection.progress.completed === 0 ? null : <div className="rounded-md border border-border bg-surface p-4">
-          <Text weight="semibold">{projection.progress.completed} of {projection.progress.total} business steps completed.</Text>
-          <Text type="supporting" color="secondary" className="mt-1">{unknown
+        </p>}
+        {projection.progress === undefined || projection.progress.completed === 0 ? null : <div className="rounded-md border border-border bg-card p-4">
+          <p className="font-semibold">{projection.progress.completed} of {projection.progress.total} business steps completed.</p>
+          <p className="mt-1 text-sm text-muted-foreground">{unknown
             ? 'AE will not repeat the step whose result is still being confirmed.'
-            : 'Completed steps remain recorded and will not be repeated automatically.'}</Text>
+            : 'Completed steps remain recorded and will not be repeated automatically.'}</p>
         </div>}
-        {action.result === undefined || notSent ? null : <div className="rounded-md border border-border bg-surface p-4">
-          <Text type="supporting" weight="semibold">{partialResult ? 'Partial result received' : 'Business result'}</Text>
-          <Text color="secondary" className="mt-1">{readableResult(action.result)}</Text>
-          {partialResult ? <Text type="supporting" color="secondary" className="mt-1">
+        {action.result === undefined || notSent ? null : <div className="rounded-md border border-border bg-card p-4">
+          <p className="text-sm font-semibold">{partialResult ? 'Partial result received' : 'Business result'}</p>
+          <p className="mt-1 text-muted-foreground">{readableResult(action.result)}</p>
+          {partialResult ? <p className="mt-1 text-sm text-muted-foreground">
             This is preserved evidence, not a completed result.
-          </Text> : null}
+          </p> : null}
         </div>}
-        <Text type="supporting" color="secondary">
+        <p className="text-sm text-muted-foreground">
           Last checked {new Date(action.observedAt).toLocaleString()}
-        </Text>
-        {projection.activity?.nextCheckAt === undefined ? null : <Text type="supporting" color="secondary">
+        </p>
+        {projection.activity?.nextCheckAt === undefined ? null : <p className="text-sm text-muted-foreground">
           Check again after {new Date(projection.activity.nextCheckAt).toLocaleString()}.
-        </Text>}
-        {unknown ? <Button label="Check again" variant="primary" clickAction={refresh} /> : null}
+        </p>}
+        {unknown ? <Button type="button" variant="default" onClick={() => void refresh()}>Check again</Button> : null}
         <RequestRecordLinks requestRef={projection.requestRef} />
         {unknown
-          ? <Text weight="semibold">Wait for confirmation before changing or starting this Request again.</Text>
+          ? <p className="font-semibold">Wait for confirmation before changing or starting this Request again.</p>
           : <RecoveryActions edit={edit} restart={restart} />}
       </div>
     </Card>
@@ -99,13 +98,13 @@ export function CancelledStatusCard({ projection, turns, edit, restart }: {
   return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite">
     <Conversation turns={turns} />
     <WorkingUnderstanding projection={projection} correct={edit} />
-    <Card padding={5}>
+    <Card className="p-5">
       <div className="grid gap-4">
-        <Text className="text-sm font-semibold text-accent">Stopped</Text>
-        <Heading level={2}>{projection.summary}</Heading>
+        <p className="text-sm font-semibold text-brand">Stopped</p>
+        <h2 className="text-2xl font-semibold">{projection.summary}</h2>
         {progress === undefined ? null : <>
-          <Text weight="semibold">{progress.completed} of {progress.total} business steps completed.</Text>
-          <Text color="secondary">Step {progress.current.step} did not begin. Completed work remains recorded and will not be repeated automatically.</Text>
+          <p className="font-semibold">{progress.completed} of {progress.total} business steps completed.</p>
+          <p className="text-muted-foreground">Step {progress.current.step} did not begin. Completed work remains recorded and will not be repeated automatically.</p>
         </>}
         <RequestRecordLinks requestRef={projection.requestRef} />
         <RecoveryActions edit={edit} restart={restart} />

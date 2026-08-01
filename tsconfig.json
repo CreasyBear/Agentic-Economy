@@ -40,5 +40,5 @@
     "vitest.config.ts",
     "playwright.config.ts"
   ],
-  "exclude": ["node_modules", "dist", "convex/_generated", "src/future-phases"]
+  "exclude": ["node_modules", "dist", "convex/_generated"]
 }

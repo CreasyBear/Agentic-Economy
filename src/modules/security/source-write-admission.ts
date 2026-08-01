@@ -3,6 +3,7 @@ import { hmac } from '@noble/hashes/hmac'
 import { sha256 } from '@noble/hashes/sha2'
 import { bytesToHex } from '@noble/hashes/utils'
 
+import { constantTimeStringEqual } from '@/lib/server/constant-time'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 export const SourceWriteAdmissionScopeValues = [
@@ -232,7 +233,7 @@ export function verifySourceWriteAdmission(input: {
   }
 
   const expectedSignature = sourceWriteSignature(verificationKey.secret, input.admission)
-  if (!safeEqualHex(input.admission.signature, expectedSignature)) {
+  if (!constantTimeStringEqual(input.admission.signature, expectedSignature)) {
     return { kind: 'rejected', reason: 'invalid_source_write_signature' }
   }
 
@@ -430,7 +431,7 @@ function assertNotProviderSecret(secret: string, env: Env, envName: string): voi
   const providerSecretNames = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'AUTUMN_SECRET_KEY', 'AUTUMN_WEBHOOK_SECRET']
   for (const providerName of providerSecretNames) {
     const providerSecret = readEnv(env, providerName)
-    if (providerSecret !== undefined && safeEqualString(secret, providerSecret)) {
+    if (providerSecret !== undefined && constantTimeStringEqual(secret, providerSecret)) {
       throw new SourceWriteAdmissionError(
         'source_write_provider_secret_reuse',
         `${envName} must be independent of ${providerName}.`
@@ -473,19 +474,6 @@ function randomNonce(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
   return bytesToHex(bytes)
-}
-
-function safeEqualHex(left: string, right: string): boolean {
-  return safeEqualString(left, right)
-}
-
-function safeEqualString(left: string, right: string): boolean {
-  const maxLength = Math.max(left.length, right.length)
-  let diff = left.length ^ right.length
-  for (let index = 0; index < maxLength; index += 1) {
-    diff |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0)
-  }
-  return diff === 0
 }
 
 function base64UrlNoPadding(bytes: Uint8Array): string {

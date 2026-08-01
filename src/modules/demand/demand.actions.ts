@@ -65,6 +65,14 @@ export const demandCaptureAction = defineAction({
   outputSchema: demandCaptureOutputSchema,
   parameters: demandCaptureParameters,
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: false,
+    recipientKind: 'none',
+    dataClasses: ['query_text', 'location'],
+    spendExposure: 'none',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http'],
   run: async ({ data }) => captureDemandSignalThroughSource(data),
 })

@@ -1,4 +1,3 @@
-import { Text } from '@astryxdesign/core/Text'
 
 export function AeProtectedByAe() {
   return (
@@ -9,9 +8,9 @@ export function AeProtectedByAe() {
       >
         AE
       </span>
-      <Text type="supporting" color="secondary">
+      <p className="text-sm text-muted-foreground">
         Listed on Agentic Economy. The business handles timing, price, and availability.
-      </Text>
+      </p>
     </div>
   )
 }

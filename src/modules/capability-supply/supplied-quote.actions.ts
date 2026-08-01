@@ -148,6 +148,14 @@ export const collectSuppliedCandidateQuoteAction = defineAction({
   outputSchema: suppliedCandidateQuoteOutputSchema,
   parameters,
   readOnly: false,
+  effect: {
+    class: 'comparison_quote',
+    reversible: true,
+    recipientKind: 'provider_system',
+    dataClasses: ['service_reference', 'constraints'],
+    spendExposure: 'none',
+    approval: 'mandate_eligible',
+  },
   surfaces: [],
   invocationContract: {
     version: 'supply.collectDevelopmentQuote:v1',

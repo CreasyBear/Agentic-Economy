@@ -91,6 +91,12 @@ describe('registry search documents', () => {
       }),
     ).toMatchObject({ key: 'perth', source: 'input' })
   })
+  it('extracts a place before trailing timing language', () => {
+    expect(resolveRegistrySearchLocation({
+      query: 'My tooth hurts and I need a dentist near Adelaide this week',
+    })).toMatchObject({ key: 'adelaide', source: 'query' })
+  })
+
 })
 
 function catalog(

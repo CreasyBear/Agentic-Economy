@@ -24,6 +24,7 @@ import type * as capabilitySupplyWriterPorts from "../capabilitySupplyWriterPort
 import type * as catalog from "../catalog.js";
 import type * as catalogSupplyProjection from "../catalogSupplyProjection.js";
 import type * as crons from "../crons.js";
+import type * as customerRequestAgentOAuth from "../customerRequestAgentOAuth.js";
 import type * as customerRequestApplication from "../customerRequestApplication.js";
 import type * as customerRequestAuthorizePreparationPorts from "../customerRequestAuthorizePreparationPorts.js";
 import type * as customerRequestCompareResumePorts from "../customerRequestCompareResumePorts.js";
@@ -62,6 +63,7 @@ import type * as demand from "../demand.js";
 import type * as devSeed from "../devSeed.js";
 import type * as devSeedStore from "../devSeedStore.js";
 import type * as discovery from "../discovery.js";
+import type * as enginePlans from "../enginePlans.js";
 import type * as harnessSessions from "../harnessSessions.js";
 import type * as http from "../http.js";
 import type * as inquiries from "../inquiries.js";
@@ -73,15 +75,19 @@ import type * as inquirySourceStateLoad from "../inquirySourceStateLoad.js";
 import type * as inquirySourceStateMappers from "../inquirySourceStateMappers.js";
 import type * as inquirySourceStatePersist from "../inquirySourceStatePersist.js";
 import type * as inquirySourceStatePorts from "../inquirySourceStatePorts.js";
+import type * as moneyLedger from "../moneyLedger.js";
+import type * as moneyStripe from "../moneyStripe.js";
 import type * as notificationOutbox from "../notificationOutbox.js";
 import type * as notificationOutboxOperatorPorts from "../notificationOutboxOperatorPorts.js";
 import type * as notificationOutboxPersistence from "../notificationOutboxPersistence.js";
 import type * as notificationOutboxSourceState from "../notificationOutboxSourceState.js";
 import type * as notificationOutboxSourceStatePorts from "../notificationOutboxSourceStatePorts.js";
 import type * as observability from "../observability.js";
+import type * as projectSpine from "../projectSpine.js";
 import type * as registry from "../registry.js";
 import type * as routingKernelV1History from "../routingKernelV1History.js";
 import type * as sandboxAcceptanceSupply from "../sandboxAcceptanceSupply.js";
+import type * as searchGap from "../searchGap.js";
 import type * as security from "../security.js";
 import type * as settings from "../settings.js";
 import type * as sourceWriteAdmission from "../sourceWriteAdmission.js";
@@ -110,6 +116,7 @@ declare const fullApi: ApiFromModules<{
   catalog: typeof catalog;
   catalogSupplyProjection: typeof catalogSupplyProjection;
   crons: typeof crons;
+  customerRequestAgentOAuth: typeof customerRequestAgentOAuth;
   customerRequestApplication: typeof customerRequestApplication;
   customerRequestAuthorizePreparationPorts: typeof customerRequestAuthorizePreparationPorts;
   customerRequestCompareResumePorts: typeof customerRequestCompareResumePorts;
@@ -148,6 +155,7 @@ declare const fullApi: ApiFromModules<{
   devSeed: typeof devSeed;
   devSeedStore: typeof devSeedStore;
   discovery: typeof discovery;
+  enginePlans: typeof enginePlans;
   harnessSessions: typeof harnessSessions;
   http: typeof http;
   inquiries: typeof inquiries;
@@ -159,15 +167,19 @@ declare const fullApi: ApiFromModules<{
   inquirySourceStateMappers: typeof inquirySourceStateMappers;
   inquirySourceStatePersist: typeof inquirySourceStatePersist;
   inquirySourceStatePorts: typeof inquirySourceStatePorts;
+  moneyLedger: typeof moneyLedger;
+  moneyStripe: typeof moneyStripe;
   notificationOutbox: typeof notificationOutbox;
   notificationOutboxOperatorPorts: typeof notificationOutboxOperatorPorts;
   notificationOutboxPersistence: typeof notificationOutboxPersistence;
   notificationOutboxSourceState: typeof notificationOutboxSourceState;
   notificationOutboxSourceStatePorts: typeof notificationOutboxSourceStatePorts;
   observability: typeof observability;
+  projectSpine: typeof projectSpine;
   registry: typeof registry;
   routingKernelV1History: typeof routingKernelV1History;
   sandboxAcceptanceSupply: typeof sandboxAcceptanceSupply;
+  searchGap: typeof searchGap;
   security: typeof security;
   settings: typeof settings;
   sourceWriteAdmission: typeof sourceWriteAdmission;
@@ -200,4 +212,7 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
+  workpool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"workpool">;
+};

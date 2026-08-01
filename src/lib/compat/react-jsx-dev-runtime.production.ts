@@ -1,10 +1,10 @@
 /**
  * Production stand-in for `react/jsx-dev-runtime`.
  *
- * `@astryxdesign/core@0.1.5` ships a development build: 185 of its dist files
- * import `react/jsx-dev-runtime` and call `jsxDEV(...)`. Under Vite's dev
- * server React resolves that specifier through the `development` export
- * condition, `jsxDEV` exists, and everything works.
+ * A legacy UI dependency ships development bundles that import
+ * `react/jsx-dev-runtime` and call `jsxDEV(...)`. Under Vite's dev server
+ * React resolves that specifier through the `development` export condition,
+ * `jsxDEV` exists, and everything works.
  *
  * A production build resolves the same specifier through the `production`
  * condition, which lands on `react-jsx-dev-runtime.production.js`. That file
@@ -27,7 +27,7 @@
  * `vite.config.ts` aliases `react/jsx-dev-runtime` here for `build` only, so
  * the dev server keeps React's real development runtime and its warnings.
  *
- * Delete this file and the alias once Astryx publishes a production build.
+ * Keep this shim while the production build still needs the alias.
  */
 import { Fragment, jsx, jsxs } from 'react/jsx-runtime'
 

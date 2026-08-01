@@ -2,7 +2,7 @@
 
 **Status:** active implementation authority
 **Decision owner:** Founder
-**Rebaselined:** 2026-07-21
+**Rebaselined:** 2026-07-25
 
 ## Product
 
@@ -10,9 +10,21 @@ Agentic Economy is an execution product for agentic commerce. It helps a
 person's agent discover viable businesses, decide within granted authority and
 carry registered work through external effects, evidence and recovery.
 
-`PRODUCT.md` owns the destination and maturity boundary. `DESIGN.md` owns the
-human-interface direction. Live source and executable behavior decide what
-exists now.
+**Promise:** your agent knows who to call — and can get the work done.
+
+AE is not an inquiry product, directory, lead marketplace, generic tool
+registry or chat wrapper. Discovery and qualified inquiry are entry points,
+not the category or the ceiling.
+
+The recurring movements are ask, understand, choose, authorize, act and follow.
+They are not a mandatory funnel: a provider-supported task can start and finish
+as one standalone action, and a larger outcome can compile into a Customer
+Request that coordinates several actions.
+
+`UBIQUITOUS_LANGUAGE.md` owns domain vocabulary. Live source and executable
+behavior decide what exists now. This charter owns the destination; the former
+`PRODUCT.md` and `DESIGN.md` were removed on 2026-07-25 and are no longer
+authority.
 
 ## Current program
 
@@ -20,7 +32,8 @@ exists now.
 Phase 1 — Action Invocation foundation                 complete
 Phase 2 — One action plane across human/agent hosts    accepted_narrowed
 Phase 3 — Paid-operation product conversion            complete in declared evidence classes
-Phase 4 — Business Account and routeable supply         planning accepted; implementation pending
+Phase 4 — Business Account and routeable supply        planning accepted; implementation pending
+Phase 5 — Public Offering decision loop                source landed on main
 ```
 
 ADR-009 and ADR-010 establish the control plane. ADR-019 establishes the
@@ -35,23 +48,36 @@ account or supply platform.
 
 ADR-024 owns Business Account/customer-management meaning. ADR-025 owns the
 separation of AE account Commercial truth, operation payment, Usage, telemetry
-and future payouts. Founder-accepted Phase 5 supersedes the earlier
-quote-to-close wording: it owns a public, no-login, entirely `inspect_only`
-Offering decision loop. Quote/request/inquiry, close/start and real-customer
-operating proof are explicitly deferred beyond Phase 5.
+and future payouts. ADR-026 owns the one-business supply graph.
+
+Phase 5 was accepted as a public, no-login, entirely `inspect_only` Offering
+decision loop, superseding the earlier quote-to-close wording. On 2026-07-25
+that narrowing was deliberately widened: catalog supply can now express a
+callable, priced capability, and `/api/sandbox/$slug/checkup-quote` serves it
+to agents and people against labelled sandbox supply (`b342afa7`, `c6f871fd`).
+Real-customer operating proof, independently operated supply and close/start
+remain deferred.
 
 ## Current evidence
 
-Exact source revision `13158022c7462a7fdae346b548f0ea272a87cefe` is the
-clean-checkout evidence revision for the Phase 1/2 control plane. It establishes
-labelled local development behavior only. No hosted autonomous execution,
-independent provider fulfilment, customer value or production-safety claim
+`main` at `b1b105b1` is the current evidence revision. `tsc --noEmit` is clean
+and `npm run test:unit` reports 2431 passed / 6 failed across 341 files. The
+Phase 5 Offering supply graph, the callable priced capability on catalog and
+registry surfaces, and the answer-first consumer surfaces are integrated there.
+
+On 2026-07-25 the owner removed the public-claim ceiling: the `contract-scans`
+banned-copy register, the `claims-register`, `phase1-banned-copy`,
+`pm05-trust-language-gate` and `discovery-overclaim` suites, and the answer
+standing-caveat and overclaim gates are deleted (`cfebb919`, `2cb10448`,
+`97b978b3`). Public copy is now an owner judgement, not a machine-enforced
+ceiling. Evidence classes still apply to internal claims: current proof is
+source plus focused local tests. No hosted autonomous execution, independently
+operated provider fulfilment, customer value or production-safety claim
 follows.
 
 Phase 4 planning is mapped against Phase 3D source revision
-`63a451f43edea453d0a1a8d8502504433acf76fb`, tree
-`16fee2f5321d7917f7f0bccd5d59e3d6a018be64`. That revision supplies the
-current human/agent paid-action handoff seam; it does not contain the planned
+`63a451f43edea453d0a1a8d8502504433acf76fb`. That revision supplies the
+human/agent paid-action handoff seam; it does not contain the planned
 Business Account, Commercial, Usage or routeable-supply operating loop.
 
 Historical marketplace/bootstrap planning, field-study material and the Phase

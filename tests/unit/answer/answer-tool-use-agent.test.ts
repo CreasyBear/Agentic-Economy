@@ -62,6 +62,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
           {
             finish_reason: 'tool_calls',
             message: {
+              role: 'assistant',
               content: '',
               tool_calls: [
                 {
@@ -90,6 +91,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
           {
             finish_reason: 'stop',
             message: {
+              role: 'assistant',
               content: JSON.stringify({
                 oneLine: 'One listed business matches this need.',
                 summary:
@@ -103,12 +105,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     ])
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
-        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
 
       expect(result.gate.ok).toBe(true)
@@ -174,6 +180,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+      }
       await server.close()
     }
 
@@ -182,14 +198,17 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     expect(requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
       'registry.search',
       'registry.detail',
+      'sandbox.checkup_quote',
+      'web.discover',
     ])
     expect(requests[0]?.tool_choice).toBe('auto')
-    expect(requests[0]?.parallel_tool_calls).toBe(false)
     expect(requests[0]?.tools?.map((tool) => tool.function.name)).not.toContain(
       'inquiry.submit',
     )
+    // The prose request withholds the toolset outright, which is stronger than
+    // the `tool_choice: 'none'` hint the previous hand-rolled transport sent.
     expect(requests[1]?.tools).toBeUndefined()
-    expect(requests[1]?.tool_choice).toBe('none')
+    expect(requests[1]?.response_format?.type).toBe('json_schema')
 
     const toolMessage = requests[1]?.messages.find((message) => message.role === 'tool')
     expect(toolMessage?.tool_call_id).toBe('call-search-1')
@@ -214,7 +233,9 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         model: 'test-model',
         choices: [
           {
+            finish_reason: 'tool_calls',
             message: {
+              role: 'assistant',
               content: '',
               tool_calls: [
                 {
@@ -237,14 +258,13 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         runAnswerToolUseAgent({
           query: 'compare the first two',
           disableTools: true,
-          config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+          config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
           onModelRequest: (record) => modelRequests.push(record),
         }),
       ).rejects.toMatchObject({ code: 'tool_unavailable' })
 
       const requests = server.requests
       expect(requests[0]?.tools).toBeUndefined()
-      expect(requests[0]?.tool_choice).toBe('none')
       expect(requests[0]?.response_format?.type).toBe('json_schema')
       expect(requests[0]?.response_format?.json_schema?.strict).toBe(true)
       expect(modelRequests).toEqual([
@@ -268,12 +288,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       prose: matchingProviderProse(),
     }))
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
-        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       expect(result.providers.map((provider) => provider.slug)).toContain(
         'parramatta-emergency-plumbing',
@@ -305,6 +329,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+      }
       await server.close()
     }
   })
@@ -315,12 +349,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       prose: matchingProviderProse(),
     }))
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
-        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       const input = JSON.parse(result.toolCalls[0]!.inputJson)
       expect(input.query).toBe('parramatta')
@@ -331,6 +369,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
       await server.close()
     }
@@ -345,13 +393,17 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       prose: matchingProviderProse(),
     }))
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
         maxToolCalls: 1,
-        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
 
       expect(result.providers.map((provider) => provider.slug)).toContain(
@@ -387,6 +439,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+      }
       await server.close()
     }
 
@@ -394,10 +456,11 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     expect(server.requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
       'registry.search',
       'registry.detail',
+      'sandbox.checkup_quote',
+      'web.discover',
     ])
     expect(server.requests[0]?.tool_choice).toBe('auto')
     expect(server.requests[1]?.tools).toBeUndefined()
-    expect(server.requests[1]?.tool_choice).toBe('none')
     expect(server.requests[1]?.response_format?.type).toBe('json_schema')
     expect(server.requests[1]?.messages.at(-1)?.content).toContain('Stop calling tools')
 
@@ -423,13 +486,17 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       },
     }))
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolUseAgent({
         query: 'emergency plumber',
         searchContext: DEFAULT_AE_SEARCH_CONTEXT,
-        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       const input = JSON.parse(result.toolCalls[0]!.inputJson)
       expect(input).toMatchObject({
@@ -444,6 +511,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
       await server.close()
     }
@@ -460,12 +537,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       },
     }))
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolUseAgent({
         query: 'no-such-suburb',
-        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       expect(result.providers).toEqual([])
       // The prose itself passed copy guards (no epistemic vocab), but the
@@ -478,6 +559,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
       await server.close()
     }
@@ -493,12 +584,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       },
     }))
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
-        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       expect(result.providers).toEqual([])
       expect(result.toolCalls).toEqual([])
@@ -509,6 +604,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
       await server.close()
     }
@@ -524,7 +629,11 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       },
     }))
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const priorProvider = {
@@ -552,20 +661,30 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         priorAllowedSlugs: ['parramatta-emergency-plumbing'],
         followUpIntent: 'filter_known',
         disableTools: true,
-        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+        config: { apiKey: 'test-key', model: 'test-model', baseUrl: server.baseUrl },
       })
       expect(result.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',
       ])
       expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
       expect(result.toolCalls).toEqual([])
-      expect(server.requests[0]?.tool_choice).toBe('none')
+      expect(server.requests[0]?.tools).toBeUndefined()
       expect(result.gate.ok).toBe(true)
     } finally {
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
       await server.close()
     }
@@ -633,6 +752,7 @@ function toolResponse(toolCalls: readonly { toolId: string; input: unknown; id?:
       {
         finish_reason: 'tool_calls',
         message: {
+          role: 'assistant',
           content: '',
           tool_calls: toolCalls.map((toolCall, index) => ({
             id: toolCall.id ?? `call-${index + 1}`,
@@ -656,6 +776,7 @@ function proseResponse(prose: OpenRouterProsePlan): unknown {
       {
         finish_reason: 'stop',
         message: {
+          role: 'assistant',
           content: JSON.stringify(prose),
         },
       },
@@ -686,6 +807,7 @@ async function startOpenRouterServer(responses: readonly unknown[]) {
   const address = server.address() as AddressInfo
   return {
     endpointUrl: `http://127.0.0.1:${address.port}/api/v1/chat/completions`,
+    baseUrl: `http://127.0.0.1:${address.port}/api/v1`,
     requests,
     close: () => new Promise<void>((resolve, reject) => {
       server.close((error) => error === undefined ? resolve() : reject(error))

@@ -10,7 +10,7 @@ import {
 } from '@/lib/server/customer-request-confirmation-api'
 import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
 import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
-import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import type {
   CustomerRequestEvidenceResult,
   CustomerRequestConnectedAssistantsResult,
@@ -18,7 +18,10 @@ import type {
   CustomerRequestProblemStatusChange,
   CustomerRequestRepeatPermissionResult,
 } from '@/modules/customer-request/agent-contract'
-import { CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE } from '@/modules/customer-request/agent-contract'
+import {
+  customerRequestScopeForMode,
+  type CustomerRequestAuthorityMode,
+} from '@/modules/customer-request/agent-contract'
 import {
   handleCustomerRequestCancelPost,
   handleCustomerRequestRunPost,
@@ -35,6 +38,7 @@ import {
   handleCustomerRequestProblemPost,
   handleCustomerRequestProblemReplyPost,
 } from '@/lib/server/customer-request-recovery-api'
+import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import { withCustomerRequestAgentNavigation } from '@/modules/customer-request/agent-navigation'
 
 type HandlerOptions = Readonly<{
@@ -50,13 +54,12 @@ type AgentActionResult = SubmitResult | FactsResult | MessageResult | CustomerOp
   | CustomerRequestConnectedAssistantsResult
 
 export async function handleAgentCustomerRequestPost(request: Request, options: HandlerOptions = {}): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await withCustomerRequestAgentNavigation(await handleCustomerRequestPost(request, {
-    submit: async (args) => await callAsAgent('customerRequestApplication:submit', 'submit', {
-      ...args, delegatedAgentId: admitted.principal.principalId,
-    }, admitted.principal, options),
-  }))
+  return await withCustomerRequestAgentAuth(options, undefined, async (principal) =>
+    withCustomerRequestAgentNavigation(await handleCustomerRequestPost(request, {
+      submit: async (args) => await callAsAgent('customerRequestApplication:submit', 'submit', {
+        ...args, delegatedAgentId: principal.principalId,
+      }, principal, options),
+    })))
 }
 
 export async function handleAgentCustomerRequestFactsPost(
@@ -64,11 +67,10 @@ export async function handleAgentCustomerRequestFactsPost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await withCustomerRequestAgentNavigation(await handleCustomerRequestFactsPost(request, requestRef, {
-    provideFacts: async (args) => await callAsAgent<FactsResult>('customerRequestApplication:provideFacts', 'facts', args, admitted.principal, options),
-  }))
+  return await withCustomerRequestAgentAuth(options, undefined, async (principal) =>
+    withCustomerRequestAgentNavigation(await handleCustomerRequestFactsPost(request, requestRef, {
+      provideFacts: async (args) => await callAsAgent<FactsResult>('customerRequestApplication:provideFacts', 'facts', args, principal, options),
+    })))
 }
 
 export async function handleAgentCustomerRequestMessagePost(
@@ -76,11 +78,10 @@ export async function handleAgentCustomerRequestMessagePost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await withCustomerRequestAgentNavigation(await handleCustomerRequestMessagePost(request, requestRef, {
-    refine: async (args) => await callAsAgent<MessageResult>('customerRequestApplication:refine', 'refine', args, admitted.principal, options),
-  }))
+  return await withCustomerRequestAgentAuth(options, undefined, async (principal) =>
+    withCustomerRequestAgentNavigation(await handleCustomerRequestMessagePost(request, requestRef, {
+      refine: async (args) => await callAsAgent<MessageResult>('customerRequestApplication:refine', 'refine', args, principal, options),
+    })))
 }
 
 export async function handleAgentCustomerOptionsPost(
@@ -88,11 +89,10 @@ export async function handleAgentCustomerOptionsPost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await withCustomerRequestAgentNavigation(await handleCustomerOptionsPost(request, requestRef, {
-    compare: async (args) => await callAsAgent<CustomerOptionsProjection>('customerRequestApplication:compare', 'compare', args, admitted.principal, options),
-  }))
+  return await withCustomerRequestAgentAuth(options, undefined, async (principal) =>
+    withCustomerRequestAgentNavigation(await handleCustomerOptionsPost(request, requestRef, {
+      compare: async (args) => await callAsAgent<CustomerOptionsProjection>('customerRequestApplication:compare', 'compare', args, principal, options),
+    })))
 }
 
 export async function handleAgentCustomerRequestConfirmationPost(
@@ -100,13 +100,12 @@ export async function handleAgentCustomerRequestConfirmationPost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await withCustomerRequestAgentNavigation(await handleCustomerRequestConfirmationPost(request, requestRef, {
-    confirm: async (args) => await callAsAgent<ConfirmationResult>(
-      'customerRequestApplication:confirmRoute', 'confirm', args, admitted.principal, options,
-    ),
-  }))
+  return await withCustomerRequestAgentAuth(options, 'approve_each', async (principal) =>
+    withCustomerRequestAgentNavigation(await handleCustomerRequestConfirmationPost(request, requestRef, {
+      confirm: async (args) => await callAsAgent<ConfirmationResult>(
+        'customerRequestApplication:confirmRoute', 'confirm', args, principal, options,
+      ),
+    })))
 }
 
 export async function handleAgentCustomerRequestRunPost(
@@ -114,11 +113,10 @@ export async function handleAgentCustomerRequestRunPost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await withCustomerRequestAgentNavigation(await handleCustomerRequestRunPost(request, requestRef, {
-    run: async (args) => await callAsAgent('customerRequestApplication:runRoute', 'run', args, admitted.principal, options),
-  }))
+  return await withCustomerRequestAgentAuth(options, 'approve_each', async (principal) =>
+    withCustomerRequestAgentNavigation(await handleCustomerRequestRunPost(request, requestRef, {
+      run: async (args) => await callAsAgent('customerRequestApplication:runRoute', 'run', args, principal, options),
+    })))
 }
 
 export async function handleAgentCustomerRequestRepeatPermissionAllowPost(
@@ -126,22 +124,16 @@ export async function handleAgentCustomerRequestRepeatPermissionAllowPost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({
-    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
-  })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  if (!admitted.principal.scopes.includes(CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE)) {
-    return refusal('scope_required', 403)
-  }
-  return await handleCustomerRequestRepeatPermissionAllowPost(request, requestRef, {
-    allow: async (args) => await callAsAgent<CustomerRequestRepeatPermissionResult>(
-      'customerRequestApplication:allowRepeatRoute',
-      'allow_repeat',
-      args,
-      admitted.principal,
-      options,
-    ),
-  })
+  return await withCustomerRequestAgentAuth(options, 'bounded_mandate', (principal) =>
+    handleCustomerRequestRepeatPermissionAllowPost(request, requestRef, {
+      allow: async (args) => await callAsAgent<CustomerRequestRepeatPermissionResult>(
+        'customerRequestApplication:allowRepeatRoute',
+        'allow_repeat',
+        args,
+        principal,
+        options,
+      ),
+    }))
 }
 
 export async function handleAgentCustomerRequestRepeatPermissionsGet(
@@ -149,22 +141,16 @@ export async function handleAgentCustomerRequestRepeatPermissionsGet(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({
-    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
-  })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  if (!admitted.principal.scopes.includes(CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE)) {
-    return refusal('scope_required', 403)
-  }
-  return await handleCustomerRequestConnectedAssistantsGet(request, requestRef, {
-    list: async (args) => await callAsAgent<CustomerRequestConnectedAssistantsResult>(
-      'customerRequestApplication:listRepeatPermissionAssistants',
-      'inspect_repeat',
-      args,
-      admitted.principal,
-      options,
-    ),
-  })
+  return await withCustomerRequestAgentAuth(options, 'bounded_mandate', (principal) =>
+    handleCustomerRequestConnectedAssistantsGet(request, requestRef, {
+      list: async (args) => await callAsAgent<CustomerRequestConnectedAssistantsResult>(
+        'customerRequestApplication:listRepeatPermissionAssistants',
+        'inspect_repeat',
+        args,
+        principal,
+        options,
+      ),
+    }))
 }
 
 export async function handleAgentCustomerRequestRepeatPermissionUsePost(
@@ -173,24 +159,18 @@ export async function handleAgentCustomerRequestRepeatPermissionUsePost(
   permissionRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({
-    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
-  })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  if (!admitted.principal.scopes.includes(CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE)) {
-    return refusal('scope_required', 403)
-  }
-  return await withCustomerRequestAgentNavigation(
-    await handleCustomerRequestRepeatPermissionUsePost(request, requestRef, permissionRef, {
-      use: async (args) => await callAsAgent(
-        'customerRequestApplication:useRepeatRoute',
-        'use_repeat',
-        args,
-        admitted.principal,
-        options,
-      ),
-    }),
-  )
+  return await withCustomerRequestAgentAuth(options, 'bounded_mandate', async (principal) =>
+    withCustomerRequestAgentNavigation(
+      await handleCustomerRequestRepeatPermissionUsePost(request, requestRef, permissionRef, {
+        use: async (args) => await callAsAgent(
+          'customerRequestApplication:useRepeatRoute',
+          'use_repeat',
+          args,
+          principal,
+          options,
+        ),
+      }),
+    ))
 }
 
 export async function handleAgentCustomerRequestRepeatPermissionGet(
@@ -199,22 +179,16 @@ export async function handleAgentCustomerRequestRepeatPermissionGet(
   permissionRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({
-    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
-  })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  if (!admitted.principal.scopes.includes(CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE)) {
-    return refusal('scope_required', 403)
-  }
-  return await handleCustomerRequestRepeatPermissionGet(request, requestRef, permissionRef, {
-    inspect: async (args) => await callAsAgent<CustomerRequestRepeatPermissionResult>(
-      'customerRequestApplication:inspectRepeatRoute',
-      'inspect_repeat',
-      args,
-      admitted.principal,
-      options,
-    ),
-  })
+  return await withCustomerRequestAgentAuth(options, 'bounded_mandate', (principal) =>
+    handleCustomerRequestRepeatPermissionGet(request, requestRef, permissionRef, {
+      inspect: async (args) => await callAsAgent<CustomerRequestRepeatPermissionResult>(
+        'customerRequestApplication:inspectRepeatRoute',
+        'inspect_repeat',
+        args,
+        principal,
+        options,
+      ),
+    }))
 }
 
 export async function handleAgentCustomerRequestRepeatPermissionWithdrawPost(
@@ -223,22 +197,16 @@ export async function handleAgentCustomerRequestRepeatPermissionWithdrawPost(
   permissionRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({
-    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
-  })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  if (!admitted.principal.scopes.includes(CUSTOMER_REQUEST_STANDING_AUTHORITY_SCOPE)) {
-    return refusal('scope_required', 403)
-  }
-  return await handleCustomerRequestRepeatPermissionWithdrawPost(request, requestRef, permissionRef, {
-    withdraw: async (args) => await callAsAgent<CustomerRequestRepeatPermissionResult>(
-      'customerRequestApplication:revokeRepeatRoute',
-      'revoke_repeat',
-      args,
-      admitted.principal,
-      options,
-    ),
-  })
+  return await withCustomerRequestAgentAuth(options, 'bounded_mandate', (principal) =>
+    handleCustomerRequestRepeatPermissionWithdrawPost(request, requestRef, permissionRef, {
+      withdraw: async (args) => await callAsAgent<CustomerRequestRepeatPermissionResult>(
+        'customerRequestApplication:revokeRepeatRoute',
+        'revoke_repeat',
+        args,
+        principal,
+        options,
+      ),
+    }))
 }
 
 export async function handleAgentCustomerRequestCancelPost(
@@ -246,11 +214,10 @@ export async function handleAgentCustomerRequestCancelPost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await withCustomerRequestAgentNavigation(await handleCustomerRequestCancelPost(request, requestRef, {
-    cancel: async (args) => await callAsAgent('customerRequestApplication:cancelRoute', 'cancel', args, admitted.principal, options),
-  }))
+  return await withCustomerRequestAgentAuth(options, undefined, async (principal) =>
+    withCustomerRequestAgentNavigation(await handleCustomerRequestCancelPost(request, requestRef, {
+      cancel: async (args) => await callAsAgent('customerRequestApplication:cancelRoute', 'cancel', args, principal, options),
+    })))
 }
 
 export async function handleAgentCustomerRequestProblemPost(
@@ -258,11 +225,10 @@ export async function handleAgentCustomerRequestProblemPost(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await handleCustomerRequestProblemPost(request, requestRef, {
-    report: async (args) => await callAsAgent('customerRequestApplication:reportRouteProblem', 'report', args, admitted.principal, options),
-  })
+  return await withCustomerRequestAgentAuth(options, undefined, (principal) =>
+    handleCustomerRequestProblemPost(request, requestRef, {
+      report: async (args) => await callAsAgent('customerRequestApplication:reportRouteProblem', 'report', args, principal, options),
+    }))
 }
 
 export async function handleAgentCustomerRequestProblemReplyPost(
@@ -271,19 +237,16 @@ export async function handleAgentCustomerRequestProblemReplyPost(
   reportRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({
-    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
-  })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await handleCustomerRequestProblemReplyPost(request, requestRef, reportRef, {
-    reply: async (args) => await callAsAgent(
-      'customerRequestApplication:replyRouteProblem',
-      'reply',
-      args,
-      admitted.principal,
-      options,
-    ),
-  })
+  return await withCustomerRequestAgentAuth(options, undefined, (principal) =>
+    handleCustomerRequestProblemReplyPost(request, requestRef, reportRef, {
+      reply: async (args) => await callAsAgent(
+        'customerRequestApplication:replyRouteProblem',
+        'reply',
+        args,
+        principal,
+        options,
+      ),
+    }))
 }
 
 export async function handleAgentCustomerRequestEvidenceGet(
@@ -291,21 +254,31 @@ export async function handleAgentCustomerRequestEvidenceGet(
   requestRef: string,
   options: HandlerOptions = {},
 ): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await handleCustomerRequestEvidenceGet(request, requestRef, {
-    inspect: async (args) => await callAsAgent('customerRequestApplication:exportRouteEvidence', 'evidence', args, admitted.principal, options),
-  })
+  return await withCustomerRequestAgentAuth(options, undefined, (principal) =>
+    handleCustomerRequestEvidenceGet(request, requestRef, {
+      inspect: async (args) => await callAsAgent('customerRequestApplication:exportRouteEvidence', 'evidence', args, principal, options),
+    }))
 }
 
 export async function handleAgentCustomerRequestGet(requestRef: string, options: HandlerOptions = {}): Promise<Response> {
-  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
-  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
-  return await withCustomerRequestAgentNavigation(await handleCustomerRequestGet(requestRef, {
-    inspect: async (args) => await callAsAgent<InspectResult>('customerRequestApplication:resume', 'resume', args, admitted.principal, options),
-  }))
+  return await withCustomerRequestAgentAuth(options, undefined, async (principal) =>
+    withCustomerRequestAgentNavigation(await handleCustomerRequestGet(requestRef, {
+      inspect: async (args) => await callAsAgent<InspectResult>('customerRequestApplication:resume', 'resume', args, principal, options),
+    })))
 }
 
+async function withCustomerRequestAgentAuth(
+  options: HandlerOptions,
+  requiredMode: CustomerRequestAuthorityMode | undefined,
+  handler: (principal: CustomerRequestAgentPrincipal) => Promise<Response>,
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({
+    ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+    ...(requiredMode === undefined ? {} : { requiredMode }),
+  })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status, requiredMode)
+  return await handler(admitted.principal)
+}
 async function callAsAgent<Result = SubmitResult>(
   name: string,
   operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'reply'
@@ -323,7 +296,9 @@ async function callAsAgent<Result = SubmitResult>(
   if (options.callAction !== undefined) return await options.callAction(name, args) as Result
   return await callPublicSourceAction(sourceAction<Record<string, unknown>, Result>(name), args)
 }
-
-function refusal(reason: string, status: 401 | 403): Response {
-  return Response.json({ kind: 'refused', reason }, { status, headers: { 'Cache-Control': 'no-store' } })
+function refusal(reason: string, status: 401 | 403, requiredMode?: CustomerRequestAuthorityMode): Response {
+  const base = typeof process.env.SITE_URL === 'string' && process.env.SITE_URL.length > 0 ? process.env.SITE_URL : 'https://ae.example'
+  const challenge = requiredMode === undefined ? bearerChallenge(base) : bearerChallenge(base, customerRequestScopeForMode(requiredMode))
+  const headers = new Headers({ 'Cache-Control': 'no-store', Vary: 'Authorization', 'WWW-Authenticate': challenge })
+  return Response.json({ kind: 'refused', reason }, { status, headers })
 }

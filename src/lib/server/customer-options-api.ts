@@ -2,6 +2,7 @@ import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
 import { customerRequestAgentResultSchema, customerRequestOptionsInputSchema } from '@/modules/customer-request/agent-contract'
+import { response } from '@/lib/server/no-store-response'
 
 const bodySchema = customerRequestOptionsInputSchema
 const compareAction = sourceAction<Record<string, unknown>, CustomerOptionsProjection>('customerRequestApplication:compare')
@@ -29,6 +30,3 @@ export async function handleCustomerOptionsPost(request: Request, requestRef: st
   }
 }
 
-function response(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}

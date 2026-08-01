@@ -5,50 +5,55 @@
 
 ## Prime directive
 
-Build the smallest production-grade system that proves the Phase 1 spine.
+Build toward the north star: tell an AI what is needed, find the right
+business, compare options, obtain approval, and carry work to completion;
+businesses publish once and earn when agents bring work.
 
-```text
-claim -> publish -> public business service catalog page -> registry/search -> discovery -> operator health
-```
+**Hierarchy:** ambition → customer promise → executable journey → hidden
+controls → proof.
 
-If a change does not strengthen that spine or an authority spec, cut it.
+Treat `.planning/PROJECT.md` as destination authority, live source as current
+behavior, `UBIQUITOUS_LANGUAGE.md` as vocabulary, and relevant ADRs as seam
+contracts. A capability gap is implementation work. Cut anything that adds no
+customer journey, source-owned control, or proof.
 
-## Required skills/modes
+## Required skills and seams
 
-| Work | Required skill/mode | Gate it creates |
-|---|---|---|
-| Any implementation | `/ponytail full` | Delete/simplify first. No future abstractions. |
-| Module/interface design | `codebase-design` | Deep module, small interface, tests through seam. |
-| TanStack routes/server functions | TanStack Start/Router project skills | Routes are adapters; input validators; DTO/result unions. |
-| Convex schema/functions | Convex project rules | Source-owned state, auth-derived actors, codegen. |
-| Clerk auth | `clerk-tanstack-patterns` | Clerk UX + Convex authority, no request owner IDs. |
-| Payments | `stripe-best-practices` | Reject in Phase 1; future Billing/Checkout/Connect discipline. |
-| UI/product surfaces | `accessibility`, `shadcn`, `impeccable`, `make-interfaces-feel-better`, `/taste` for public storytelling only | Design framework, official component source, harden/audit/polish gates, mobile/keyboard/focus/error/loading/empty states. |
-| Review | `/mattpocock-review` | Standards and Spec axes separate. |
-| Security | `cso` lens | Threat model, source-owned admin, audit, redaction. |
-| SEO/AEO | `seo-audit`, `ai-seo` | Crawl/schema/robots/llms gates. |
-| GTM | `launch`, `marketing-plan` | Launch stages, claims register, channel attribution. |
+Use the smallest relevant skill and existing source seam:
+
+| Boundary | Required discipline |
+|---|---|
+| Action/module | registered action, module owner, thin host, focused contract test |
+| Identity/authority | principal-bound exact consequence, expiry, revocation, refusal |
+| Payment/effect | server custody, ceiling, attempt, idempotency, reconciliation |
+| Convex | module-owned schema, bounded reads, auth-derived identity, codegen |
+| Human/machine surface | customer outcome in human copy; exact descriptors in machine output |
+| Verification | fastest executable transition, direct response/readback |
+
+Optional local guidance is consulted only when the file exists.
 
 ## Theatre detector
 
-Reject prose/code that claims:
+Reject claims without their semantic proof:
 
-- production-ready without named gates,
-- trusted without source owner and trust tier,
-- agent-native without manifest contract and route behavior,
-- payment-ready without provider readback/idempotency/receipt/reversal,
-- marketplace before supply/demand mechanics,
-- AI without a user flow,
-- later without phase and non-goal,
-- source-mined without ledger row.
+- production readiness without named executable gates;
+- trust without a source owner, trust tier, and evidence;
+- callable or payment capability without the actual adapter, authority, and
+  intended-surface behavior;
+- customer value without the named workflow and supply evidence.
 
-Docs must be one of: invariant, interface, state machine, failure mode, acceptance gate, runbook, decision record.
+Documents should state an invariant, interface, state machine, failure mode,
+acceptance gate, runbook, or decision record. Do not turn them into repeated
+checklists.
+
+
 
 ## Source authority
 
-- `PROJECT.md` owns state variants, module interfaces, and durable model.
-- Domain specs own specialized gates: `SECURITY-SPEC.md`, `AI-SPEC.md`, `SEO-AEO-SPEC.md`, `GTM-READINESS.md`, `SOURCE-MINING.md`.
-- This file defines engineering process and enforceable standards.
+- `.planning/PROJECT.md` owns state variants, module interfaces, and durable
+  model.
+- Domain specs own specialized gates when present; this file defines engineering
+  process and enforceable standards.
 - Do not restate variants differently. Link to the owner.
 
 ## TypeScript hard spec
@@ -213,23 +218,16 @@ Rules:
 
 ## UCP/discovery standard
 
-Follow `AI-SPEC.md`.
+Follow `AI-SPEC.md`. Every public projection uses source-owned allowlists,
+bounded work, suppression, exact route/schema behavior, and the appropriate
+cache/no-store policy. Machine descriptors may name callable, payment, MCP,
+OpenAPI, or UCP-shaped surfaces when live source and intended-surface tests
+provide them; they state actual effects, authority, evidence, replay, and
+recovery. A route or registration alone is not proof of reachable supply.
 
-Banned in Phase 1 runtime/public outputs:
-
-```text
-payment_handlers
-paymentRequired=true or payment-required flow claims
-MCP tool catalog
-OpenAPI services
-API keys
-agent-callable
-standard merchant-origin /.well-known/ucp claim
-```
-
-Approved public DTOs may include `callable: false` and `paymentRequired: false` only as explicit negative capability flags. Tests must fail if either is true or described as a live action/payment surface.
-
-Every advertised URL must route-test or be omitted.
+Every advertised URL and public JSON route resolves in a focused check or is
+omitted. Human pages lead with the customer task and next action; any boundary
+appears at the decision it changes.
 
 ## SEO/AEO standard
 
@@ -248,71 +246,52 @@ Follow `GTM-READINESS.md`.
 - Marketing assets use claims register.
 - Broad launch waits until activation/index/discovery/copy gates are green.
 
-## Import/source-mining gates
+## Import and source-mining gates
 
-`test:imports` / `test:source-mining` must fail on:
+`test:imports` / `test:source-mining` protect ownership and leakage:
 
-- banned future-surface directories,
-- route importing provider SDKs,
-- route importing module private implementation,
-- module importing route,
-- module importing another module private file,
-- runtime importing `.planning`,
-- phase-numbered runtime names,
-- backup path imports,
-- Stripe/x402/wallet/payment identifiers in Phase 1 core/discovery code.
+- routes do not import provider SDKs or module private implementation;
+- modules do not import routes or another module's private files;
+- runtime does not import `.planning`, phase-numbered runtime names, or backup
+  paths;
+- provider credentials and effect adapters stay behind registered source-owned
+  seams.
 
-Allowed mentions in `.planning` future-gate docs and tests that assert absence.
+Technical vocabulary is not a violation. The check is architecture and
+reachability—not a universal word ban.
 
-## Testing standards
+## Testing standard
 
-Required scripts by Phase 1 close:
-
-```text
-npm run typecheck
-npm run check:convex-codegen
-npm run test:unit
-npm run test:integration
-npm run test:e2e
-npm run test:a11y
-npm run test:copy
-npm run test:imports
-npm run test:source-mining
-npm run test:types
-npm run test:ts-standards
-npm run test:seo
-npm run build
-```
-
-Deployment/readback gate before public launch:
+Run the narrowest check for the changed transition, then expand only over
+boundaries it crosses:
 
 ```text
-Vercel preview/live route HTTP smoke
-Convex deployment/codegen readback
-Clerk middleware/session readback
-/claim
-/{slug}
-/{slug}/ucp
-/llms.txt
-/sitemap.xml
-/robots.txt
-/admin/* 401/403 for non-admin
-cache/content-type/CORS headers for discovery routes
+domain/action: affected unit or integration test
+HTTP/host: focused response inspection
+Convex schema/function: focused test, typecheck, authorized codegen
+module ownership: test:imports
+human/assistant copy: test:ui-contract and rendered readback
+discovery/SEO: test:seo and serialized readback
+journey: focused Customer Request/development smoke
 ```
 
-## PR review checklist
+Do not use a broad suite as first diagnosis. Tests assert behavior, effects,
+authority, refusal, uncertainty, evidence, and recovery; they do not freeze
+marketing prose. Static plans, generated maps, and reports orient the work but
+do not prove runtime behavior.
 
-Every PR states:
+Inspect a named deployed revision only when the task requires hosted evidence.
+Record the exact command and earliest failure; unrelated failures are not a
+repository-wide gate.
 
-1. Spine link strengthened.
-2. Source-mined backup files and ledger rows.
-3. Module owner.
-4. State/result/audit variants changed and dispatch points updated.
-5. Idempotency key behavior.
-6. Audit events written.
-7. Projection/readback/repair behavior.
-8. Security boundary touched.
-9. Copy/discovery/SEO/GTM claims affected.
-10. Commands run and exact result.
+## Review record
 
-Reject if any answer is missing for non-trivial code.
+Every non-trivial change records only:
+
+1. source owner and boundary touched;
+2. state/effect/authority/idempotency/recovery behavior changed;
+3. projection/readback or repair behavior;
+4. focused commands and exact result.
+
+Review stops when the changed seam is proven or its earliest reproducible
+blocker is recorded.

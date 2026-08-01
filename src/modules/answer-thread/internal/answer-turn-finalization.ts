@@ -382,6 +382,9 @@ function buildFrozenEvidence(
 ): FrozenTurnEvidence {
   return {
     providers: snapshot.providers,
+    ...(snapshot.importedClaims === undefined || snapshot.importedClaims.length === 0
+      ? {}
+      : { importedClaims: snapshot.importedClaims }),
     allowedSlugs: [...allowedSlugs],
     agentJsonUrl: snapshot.agentJsonUrl,
     ...(searchContext === undefined ? {} : { searchContext }),

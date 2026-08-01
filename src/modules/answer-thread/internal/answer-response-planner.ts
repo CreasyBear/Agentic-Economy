@@ -111,7 +111,11 @@ export function planAnswerTurn(input: {
   const contextLocation = aeSearchContextLocationQuery(input.searchContext)
   const hasUsableLocation = requestedLocation !== undefined || contextLocation !== undefined
 
-  if (!serviceSignal && (isBroadLocalBrowseQuery(query) || isLocatorOnlyBrowseQuery(query))) {
+  if (!serviceSignal && (
+    isBroadLocalBrowseQuery(query)
+    || isLocatorOnlyBrowseQuery(query)
+    || /^(?:can\s+you\s+)?help\s+me[.!?]?$|^i\s+need\s+(?:a\s+)?service[.!?]?$|^(?:i\s+)?need\s+help[.!?]?$/i.test(query)
+  )) {
     const locationLabel = requestedLocation ?? aeSearchContextLocationLabel(input.searchContext)
     return buildClarifyResponsePlan({
       reason: 'missing_service',
@@ -165,7 +169,19 @@ function buildAnswerResponsePlan(): Extract<AnswerResponsePlan, { mode: 'answer'
 }
 
 export function hasAnswerServiceSignal(query: string): boolean {
-  return /\b(?:accountant|accounting|aged care|cleaner|cleaning|dentist|dental|electrician|electrical|family lawyer|hvac|lawyer|locksmith|math tutor|plumber|plumbing|repair|repairs|tutor|tutoring)\b/i.test(query)
+  return /\b(?:accountant|accounting|aged care|cleaner|cleaning|dentist|dental|electrician|electrical|family lawyer|hvac|lawyer|locksmith|math tutor|photographer|plumber|plumbing|repair|repairs|tutor|tutoring)\b/i.test(query)
+}
+
+export function isDeterministicExactSearch(input: {
+  query: string
+  priorTurnsCount: number
+  searchContext: AeSearchContext | undefined
+}, responsePlan: AnswerResponsePlan): boolean {
+  if (responsePlan.mode !== 'answer' || input.priorTurnsCount !== 0 || !hasAnswerServiceSignal(input.query)) {
+    return false
+  }
+  return extractAnswerRequestedLocation(input.query) !== undefined
+    || aeSearchContextLocationQuery(input.searchContext) !== undefined
 }
 
 function buildClarificationSnapshot(input: {
@@ -174,13 +190,13 @@ function buildClarificationSnapshot(input: {
   locationLabel?: string
 }): AnswerSnapshot {
   if (input.reason === 'missing_service') {
-    const place = input.locationLabel === undefined ? 'that area' : input.locationLabel
+    const place = input.locationLabel === undefined ? 'your area' : input.locationLabel
     return {
       query: input.query,
-      oneLine: `What kind of service do you need in ${place}?`,
+      oneLine: 'What do you need help with?',
       providers: [],
-      summary: 'I can compare listed businesses once I know the service type and area that matter.',
-      nextStep: 'Search with a service and place, for example “emergency plumber in Perth”.',
+      summary: 'Tell me the service or task you want to get done, and I’ll search listed businesses.',
+      nextStep: `Reply with the service or task; I’ll keep ${place} in the search.`,
       agentJsonUrl: buildAgentJsonUrl(input.query, ANSWER_SEARCH_PROVIDER_LIMIT),
       layoutProfile: 'clarification',
     }
@@ -215,6 +231,10 @@ function extractAnswerRequestedLocation(query: string): string | undefined {
     normalized === 'there'
   ) {
     return undefined
+  }
+
+  if (normalized === 'paramatta' || normalized === 'paramata') {
+    return 'Parramatta'
   }
 
   return location

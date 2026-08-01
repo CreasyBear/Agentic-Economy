@@ -1,5 +1,5 @@
 import { Shimmer } from '@/components/ai-elements/shimmer'
-import { useMessageScrollerScrollable } from './AeThreadMessageScroller'
+import { useStickToBottomContext } from 'use-stick-to-bottom'
 
 export type AeStreamingLabelProps = {
   children: string
@@ -8,11 +8,11 @@ export type AeStreamingLabelProps = {
   duration?: number
 }
 
-/** Astryx-era shimmer for in-progress copy. */
+/** Shimmer label for in-progress copy. */
 export function AeStreamingLabel({
   children,
   as = 'span',
-  className = 'text-secondary',
+  className = 'text-muted-foreground',
   duration = 2,
 }: AeStreamingLabelProps) {
   return (
@@ -28,14 +28,15 @@ export type AeThreadStreamingIndicatorProps = {
 
 /** Principle 8: show when a response is still streaming out of view. */
 export function AeThreadStreamingIndicator({ streaming }: AeThreadStreamingIndicatorProps) {
-  const scrollable = useMessageScrollerScrollable()
+  // Conversation exposes the live-edge state rather than a scroll element.
+  const { isAtBottom } = useStickToBottomContext()
 
-  if (!streaming || scrollable.end) {
+  if (!streaming || isAtBottom) {
     return null
   }
 
   return (
-    <p className="pointer-events-none absolute bottom-24 left-1/2 z-20 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-lg border border-border bg-surface px-3 py-1 font-mono text-xs text-secondary" role="status" aria-live="polite">
+    <p className="pointer-events-none absolute bottom-24 left-1/2 z-20 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-lg border border-border bg-card px-3 py-1 font-mono text-xs text-muted-foreground" role="status" aria-live="polite">
       <AeStreamingLabel as="span">Answer still streaming below.</AeStreamingLabel>
     </p>
   )

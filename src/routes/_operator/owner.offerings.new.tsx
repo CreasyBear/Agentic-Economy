@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useRef } from 'react'
-import { Banner } from '@astryxdesign/core/Banner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeOwnerOfferingEditor, emptyOwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings'
@@ -12,12 +12,14 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/offerings/new')({
   ...operatorRouteOptions,
+  validateSearch: (search: Record<string, unknown>): Readonly<{ next?: 'supply' }> => search.next === 'supply' ? { next: 'supply' } : {},
   loader: () => readOwnerOfferingSupplyServer(),
   head: () => ({ meta: [{ title: 'Add an Offering | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: NewOwnerOfferingRoute,
 })
 
 function NewOwnerOfferingRoute() {
+  const search = Route.useSearch()
   const result = Route.useLoaderData()
   const save = useServerFn(saveOwnerOfferingServer)
   const navigate = useNavigate()
@@ -26,7 +28,7 @@ function NewOwnerOfferingRoute() {
 
   return (
     <AeOperatorShell operatorRole="owner" title="Add an Offering" description="Start with what you provide. A contact path can be added now or later." currentPath="/owner/offerings" breadcrumbs={[{ label: 'Offerings', href: '/owner/offerings' }, { label: 'Add' }]}>
-      {result.kind !== 'available' ? <Banner status="error" title="Offering editor unavailable" description="Claimed owner access is required before an Offering can be saved." /> : (
+      {result.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Offering editor unavailable</AlertTitle><AlertDescription>Claimed owner access is required before an Offering can be saved.</AlertDescription></Alert> : (
         <AeOwnerOfferingEditor
           initialValue={emptyOwnerOfferingEditorValue}
           draftKey={result.businessId}
@@ -35,8 +37,9 @@ function NewOwnerOfferingRoute() {
             requestKeyRef.current ??= crypto.randomUUID()
             const saved = await save({ data: { businessId: result.businessId, requestKey: requestKeyRef.current, value } })
             if (saved.kind === 'saved' && saved.value.offeringRef !== undefined) {
-              requestKeyRef.current = undefined
-              void navigate({ to: '/owner/offerings/$offeringRef', params: { offeringRef: saved.value.offeringRef } })
+              void navigate(search.next === 'supply'
+                ? { to: '/owner/supply/$offeringRef', params: { offeringRef: saved.value.offeringRef } }
+                : { to: '/owner/offerings/$offeringRef', params: { offeringRef: saved.value.offeringRef } })
             }
             return saved
           }}

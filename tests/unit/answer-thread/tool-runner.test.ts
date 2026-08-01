@@ -16,7 +16,11 @@ afterEach(() => {
 describe('runAnswerToolCall', () => {
   it('runs registry.search and records a complete tool-call with slugs and a stable hash', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolCall({
@@ -46,6 +50,16 @@ describe('runAnswerToolCall', () => {
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+      }
     }
   })
 
@@ -63,7 +77,11 @@ describe('runAnswerToolCall', () => {
     expectedSlug,
   }) => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolCall({
@@ -81,12 +99,26 @@ describe('runAnswerToolCall', () => {
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+      }
     }
   })
 
   it('returns no provider for a plumbing query naming an uncovered suburb', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolCall({
@@ -104,12 +136,26 @@ describe('runAnswerToolCall', () => {
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+      }
     }
   })
 
   it('keeps the registry literal: a misspelled suburb yields an empty complete result', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await runAnswerToolCall({
@@ -130,6 +176,16 @@ describe('runAnswerToolCall', () => {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
     }
   })
@@ -178,7 +234,11 @@ describe('runAnswerToolCall', () => {
 
   it('runs registry.detail and records a found business, or an empty complete result for not_found', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const found = await runAnswerToolCall({
@@ -207,6 +267,16 @@ describe('runAnswerToolCall', () => {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
       }
     }
   })

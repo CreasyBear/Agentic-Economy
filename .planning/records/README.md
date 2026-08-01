@@ -2,8 +2,8 @@
 
 This directory is the durable record for project decisions, research
 provenance, unresolved questions, evidence owners, and review dates. It does
-not replace `PROJECT.md`, `STATE.md`, `REQUIREMENTS.md`, `PRODUCT.md`,
-`DESIGN.md`, source, tests, or hosted evidence.
+not replace `PROJECT.md`, `STATE.md`, `REQUIREMENTS.md`, source, tests, or
+hosted evidence.
 
 This is record keeping, not a strategy workspace. It answers:
 
@@ -31,17 +31,18 @@ This is record keeping, not a strategy workspace. It answers:
 When documents disagree, use this order:
 
 1. Production source and executable evidence decide what exists now.
-2. `PRODUCT.md` decides the current evidenced state and target product contract.
-3. `DESIGN.md` decides human-surface language and interaction principles.
-4. `AGENTS.md` decides always-on operating and claim boundaries.
-5. Accepted ADRs decide expensive-to-reverse product and engineering choices.
-6. [`PROJECT-RECORDS.md`](./PROJECT-RECORDS.md) records project decisions, hypotheses,
+2. `PROJECT.md` decides the current evidenced state and target product contract.
+3. Accepted ADRs decide expensive-to-reverse product and engineering choices.
+4. [`PROJECT-RECORDS.md`](./PROJECT-RECORDS.md) records project decisions, hypotheses,
    research status, owners, and review dates.
-7. Research informs decisions. It does not become authority by accumulation.
+5. Research informs decisions. It does not become authority by accumulation.
+
+`PRODUCT.md`, `DESIGN.md` and `AGENTS.md` were removed on 2026-07-25
+(`ba263c10`, recoverable at `8dbef716`). Do not cite them.
 
 Planning documents never promote a target behavior into the current product.
 That requires source plus executable evidence through the intended surface and
-an explicit update to `PRODUCT.md`.
+an explicit update to `PROJECT.md`.
 
 ## The lifecycle
 
@@ -69,9 +70,8 @@ Skipping a step does not make the later state true. In particular:
 
 | Class | Location | Purpose | May decide |
 |---|---|---|---|
-| Product authority | `PRODUCT.md` | Current evidence and target contract | Product truth and maturity |
-| Interface authority | `DESIGN.md` | Human-facing product and language | UI and public-language rules |
-| Operating rules | `AGENTS.md` | Always-on assistant constraints | How work is performed |
+| Product authority | `.planning/PROJECT.md` | Current evidence and target contract | Product truth and maturity |
+| Domain vocabulary | `UBIQUITOUS_LANGUAGE.md` | Canonical term meanings | What a term does and does not mean |
 | ADR | `.planning/adr/` | Expensive-to-reverse decision and rationale | The named decision only |
 | Project record | `.planning/records/PROJECT-RECORDS.md` | Status, ownership, links, review | What is accepted, proposed, stale, or superseded |
 | Research | `.planning/research/` | Evidence and analysis | Nothing until adopted |
@@ -153,7 +153,7 @@ and how the options compare.
 - Review GTM hypotheses after each meaningful business or caller cohort.
 - Review accepted decisions only when their trigger fires or contradicting
   evidence appears.
-- Review current-product claims at every public release using `PRODUCT.md` and
+- Review current-product claims at every public release using `PROJECT.md` and
   intended-surface evidence.
 
 The owner performs the review. Agents may prepare evidence and propose status

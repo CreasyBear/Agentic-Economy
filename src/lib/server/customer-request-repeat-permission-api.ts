@@ -19,6 +19,7 @@ import {
   type CustomerRequestConnectedAssistantsResult,
   type CustomerRequestRepeatPermissionResult,
 } from '@/modules/customer-request/agent-contract'
+import { response } from '@/lib/server/no-store-response'
 
 type AllowOptions = Readonly<{
   allow?: (args: Record<string, unknown>) => Promise<CustomerRequestRepeatPermissionResult>
@@ -185,6 +186,3 @@ function validRef(value: string, maximum: number): boolean {
   return value.trim().length > 0 && value.length <= maximum
 }
 
-function response(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}

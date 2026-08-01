@@ -2,6 +2,8 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
@@ -14,11 +16,14 @@ describe('AeProviderCard answer variant', () => {
   })
 
   it('keeps the answer action on the listing when an inquiry URL is published', () => {
-    render(<AeProviderCard variant="answer" source={provider({ citationIndex: 2 })} threadId="thread-abc" />)
+    renderWithRouter(<AeProviderCard variant="answer" source={provider({ citationIndex: 2 })} threadId="thread-abc" />)
 
     expect(screen.getByText('Choice 2 in this answer')).toBeTruthy()
     expect(screen.queryByText('No reply history yet')).toBeNull()
     expect(screen.getByRole('link', { name: 'Ask this business' }).getAttribute('href')).toBe(
+      '/demo-plumbing?from=thread&id=thread-abc',
+    )
+    expect(screen.getByRole('link', { name: 'Demo Plumbing' }).getAttribute('href')).toBe(
       '/demo-plumbing?from=thread&id=thread-abc',
     )
     expect(
@@ -97,6 +102,8 @@ function registryBusiness(): PublicBusinessCatalogApiV2Dto {
     suburb: 'Joondalup',
     stateTerritory: 'WA',
     publicUrl: '/demo-plumbing',
+    trustTier: 'claimed',
+    photos: [],
     observedAt: 1_700_000_000_000,
     disposition: 'current',
     offerings: [{
@@ -115,4 +122,12 @@ function registryBusiness(): PublicBusinessCatalogApiV2Dto {
       aeSupportedAction: false,
     },
   }
+}
+
+function renderWithRouter(ui: ReactElement) {
+  const rootRoute = createRootRoute()
+  const slugRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug' })
+  const routeTree = rootRoute.addChildren([slugRoute])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }

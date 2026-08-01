@@ -1,5 +1,4 @@
 import type { PublishedOperation } from '@/modules/capability-supply/public'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { ActionInvocationOrigin, InvocationActor } from './contracts'
@@ -76,9 +75,6 @@ export function mergeUserInput(input: Readonly<{
   return { ...input.current.knownInput, ...input.answers }
 }
 
-export function inputWorkCommandDigest(value: StableHashValue): string {
-  return canonicalDigest(value)
-}
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

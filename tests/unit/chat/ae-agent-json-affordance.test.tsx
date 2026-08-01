@@ -57,21 +57,21 @@ describe('AeAgentJsonAffordance', () => {
 
     render(<AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={executedQuery} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Get as agent JSON' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Data for AI assistants' }))
 
     expect(fetchPayload).toHaveBeenCalledOnce()
     expect(fetchPayload).toHaveBeenCalledWith(agentJsonUrl)
     expect(writeText).not.toHaveBeenCalled()
 
-    const dialog = screen.getByRole('dialog', { name: 'What gets copied' })
-    const payloadPreview = await within(dialog).findByLabelText('Agent JSON payload')
+    const dialog = screen.getByRole('dialog', { name: 'Data for AI assistants' })
+    const payloadPreview = await within(dialog).findByLabelText('Assistant data')
     const previewText = payloadPreview.textContent
 
     expect(within(dialog).getByText('Fields: query, providers, resultCount, evidence')).toBeTruthy()
     expect(previewText).toBe(JSON.stringify(previewedPayload, null, 2))
     expect(writeText).not.toHaveBeenCalled()
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm and copy JSON' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm and copy data' }))
 
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
     expect(writeText).toHaveBeenCalledWith(previewText)

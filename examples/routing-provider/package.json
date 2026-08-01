@@ -1,6 +1,0 @@
-{
-  "name": "ae-routing-conformance-provider",
-  "private": true,
-  "type": "module",
-  "engines": { "node": "22.x" }
-}

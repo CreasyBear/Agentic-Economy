@@ -4,6 +4,7 @@ import type {
 } from '@/modules/capability-supply/public'
 import { materializeRuntimePublishedOperation } from '@/modules/capability-supply/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import type {
   ActionInvocationOrigin,
@@ -16,7 +17,6 @@ import { dynamicPublishedOperationSlot, type DynamicPublishedSourcePort } from '
 import type { DevelopmentDurableState } from './internal/development-durable-port'
 import type { DurableActionInvocationPort } from './internal/durable-contracts'
 import {
-  inputWorkCommandDigest,
   inspectUserInputContract,
   mergeUserInput,
   missingUserInput,
@@ -80,7 +80,7 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
         missingFields, askedFields: missingFields, updatedAt: now,
       }
       const commandMaterial = { kind: 'begin', row } as unknown as StableHashValue
-      const commandDigest = inputWorkCommandDigest(commandMaterial)
+      const commandDigest = canonicalDigest(commandMaterial)
       const commandId = `${invocationRef}:create:begin_information`
       const result = input.durablePort.transact({
         commandId, commandDigest, expectedInvocationVersion: null,
@@ -140,7 +140,7 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
         })
         input.history.push({
           invocationRef: current.invocationRef, invocationVersion: view.invocationVersion,
-          kind: 'prepare', commandDigest: inputWorkCommandDigest({
+          kind: 'prepare', commandDigest: canonicalDigest({
             invocationRef: current.invocationRef, knownInput,
           }), recordedAt: now,
         })
@@ -151,7 +151,7 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
         askedFields: [...new Set([...current.askedFields, ...missingFields])], updatedAt: now,
       }
       const commandMaterial = { kind: 'answer', current: current.invocationVersion, next }
-      const commandDigest = inputWorkCommandDigest(commandMaterial as unknown as StableHashValue)
+      const commandDigest = canonicalDigest(commandMaterial as unknown as StableHashValue)
       const control = input.durableState.controls.get(current.invocationRef)
       if (control === undefined) throw new Error('invocation_control_not_found')
       const commandId = `${current.invocationRef}:${current.invocationVersion}:answer_information`
@@ -228,7 +228,7 @@ export function createDynamicPublishedInputApplication(input: Readonly<{
           invocationRef: view.invocationRef,
           invocationVersion: next.invocationVersion,
           kind: 'correct',
-          commandDigest: inputWorkCommandDigest({
+          commandDigest: canonicalDigest({
             invocationRef: view.invocationRef,
             priorVersion: view.invocationVersion,
             knownInput: value,

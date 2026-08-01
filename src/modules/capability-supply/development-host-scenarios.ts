@@ -4,8 +4,6 @@ import {
   DevelopmentProcessInterruption,
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
-  createRequestOwnedDevelopmentHost,
-  createStandaloneAgentDevelopmentHost,
   createDevelopmentInvocationApplication,
   loadDynamicPublishedAdapterSnapshot,
   materialDigest,
@@ -673,17 +671,14 @@ function createHost(
   actor: InvocationActor,
   commands: DevelopmentHostSourceCommands,
 ): DevelopmentInvocationHost {
+  const application = createDevelopmentInvocationApplication({ adapter, sourceCommands: commands })
   return hostKind === 'request_owned_human'
-    ? createRequestOwnedDevelopmentHost({
-      application: createDevelopmentInvocationApplication({ adapter, sourceCommands: commands }),
-        actor,
-        requestRef: 'request:host-parity-existing',
-        revision: 7,
-    })
-    : createStandaloneAgentDevelopmentHost({
-      application: createDevelopmentInvocationApplication({ adapter, sourceCommands: commands }),
+    ? application.bindRequestOwned({
       actor,
+      requestRef: 'request:host-parity-existing',
+      revision: 7,
     })
+    : application.bindStandalone({ actor })
 }
 
 function sourceCommands(

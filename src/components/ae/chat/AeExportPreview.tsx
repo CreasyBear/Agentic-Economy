@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { Button } from '@astryxdesign/core/Button'
-import { Dialog } from '@astryxdesign/core/Dialog'
-import { Heading } from '@astryxdesign/core/Heading'
-import { Text } from '@astryxdesign/core/Text'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 import { AeCheckboxField } from '@/components/ae/forms/AeCheckboxField'
 import {
@@ -98,26 +101,24 @@ export function AeExportPreview({
   }
 
   return (
-    <Dialog
-      id="ae-shortlist-export-preview"
-      isOpen={isOpen}
-      onOpenChange={onOpenChange}
-      purpose="form"
-      width="min(44rem, calc(100vw - 2rem))"
-      maxHeight="calc(100dvh - 2rem)"
-      role="dialog"
-      aria-labelledby="ae-export-preview-heading"
-      className="print:static print:max-h-none print:w-full print:shadow-none"
-    >
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent
+        id="ae-shortlist-export-preview"
+        role="dialog"
+        aria-labelledby="ae-export-preview-heading"
+        className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none overflow-y-auto print:static print:max-h-none print:w-full print:shadow-none"
+        showCloseButton={false}
+        onPointerDownOutside={(event) => event.preventDefault()}
+      >
       <div className="grid gap-5" data-export-preview="">
         <div className="grid gap-1 print:hidden">
-          <Heading id="ae-export-preview-heading" level={2} className="text-xl font-semibold">
+          <DialogTitle id="ae-export-preview-heading" className="text-xl font-semibold">
             Export preview
-          </Heading>
-          <Text color="secondary">Review and select every field before anything is copied or printed.</Text>
+          </DialogTitle>
+          <DialogDescription>Review and select every field before anything is copied or printed.</DialogDescription>
         </div>
 
-        <div className="grid gap-2 rounded-md border border-border bg-surface p-3 print:hidden">
+        <div className="grid gap-2 rounded-md border border-border bg-card p-3 print:hidden">
           <AeCheckboxField
             id="sanitized-share"
             label="Sanitized share"
@@ -130,14 +131,14 @@ export function AeExportPreview({
 
         {current ? null : (
           <div role="alert" className="grid gap-2 rounded-md border border-warning bg-warning-subtle p-3 print:hidden">
-            <Text weight="semibold">This preview is out of date.</Text>
-            <Text color="secondary">The shortlist changed after this preview opened. Refresh it before copying or printing.</Text>
-            <Button label="Refresh export preview" type="button" variant="secondary" className="min-h-11 justify-self-start" onClick={refreshPreview} />
+            <p className="font-semibold text-foreground">This preview is out of date.</p>
+            <p className="text-muted-foreground">The shortlist changed after this preview opened. Refresh it before copying or printing.</p>
+            <Button type="button" variant="secondary" className="min-h-11 justify-self-start" onClick={refreshPreview}>Refresh export preview</Button>
           </div>
         )}
 
         <fieldset className="grid gap-3 print:hidden" disabled={!current}>
-          <legend className="mb-1 font-heading text-base font-semibold text-primary">Included fields</legend>
+          <legend className="mb-1 font-heading text-base font-semibold text-foreground">Included fields</legend>
           {preview.fields.map((field) => (
             <AeCheckboxField
               key={field.id}
@@ -153,20 +154,21 @@ export function AeExportPreview({
 
         <pre
           aria-label="Export preview text"
-          className="whitespace-pre-wrap break-words rounded-md border border-border bg-body p-4 font-mono text-sm tabular-nums text-primary"
+          className="whitespace-pre-wrap break-words rounded-md border border-border bg-background p-4 font-mono text-sm tabular-nums text-foreground"
         >{preview.text}</pre>
 
         <div className="flex flex-col-reverse gap-2 min-[376px]:flex-row min-[376px]:justify-end print:hidden">
-          <Button label="Cancel" type="button" variant="ghost" className="min-h-11" onClick={() => onOpenChange(false)} />
-          <Button label="Print" type="button" variant="secondary" className="min-h-11" isDisabled={!current} onClick={printSummary} />
-          <Button label="Copy summary" type="button" variant="primary" className="min-h-11" isDisabled={!current} onClick={() => void copySummary()} />
+          <Button type="button" variant="ghost" className="min-h-11" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" variant="secondary" className="min-h-11" disabled={!current} onClick={printSummary}>Print</Button>
+          <Button type="button" variant="default" className="min-h-11" disabled={!current} onClick={() => void copySummary()}>Copy summary</Button>
         </div>
         {artifactStatus === 'idle' ? null : (
-          <Text type="supporting" color="secondary" role="status" className="print:hidden">
+          <p className="block text-sm text-muted-foreground print:hidden" role="status">
             {artifactStatus === 'copied' ? 'Summary copied.' : 'The summary could not be copied.'}
-          </Text>
+          </p>
         )}
       </div>
+      </DialogContent>
     </Dialog>
   )
 }

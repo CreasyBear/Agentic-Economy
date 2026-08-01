@@ -1,13 +1,8 @@
 import { useId, useState, type ReactNode } from 'react'
-import { Badge } from '@astryxdesign/core/Badge'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Divider } from '@astryxdesign/core/Divider'
-import { HStack, VStack } from '@astryxdesign/core/Stack'
-import { Heading, Text } from '@astryxdesign/core/Text'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import {
-  BanknoteIcon,
-  BotIcon,
   CalendarClockIcon,
   Code2Icon,
   Globe2Icon,
@@ -16,142 +11,165 @@ import {
   PhoneIcon,
 } from 'lucide-react'
 
-import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
-import { offeringSupportCopy, presentOfferingAccessPath } from './offering-presentation'
+import { formatOfferingPrice, type PublicOfferingSupplyProjection } from '@/modules/catalog/public'
+import { offeringSupportCopy, plainLanguageCopy, presentOfferingAccessPath } from './offering-presentation'
 
 export type AeOfferingSupplyListProps = Readonly<{
   offerings: readonly PublicOfferingSupplyProjection[]
   disposition?: 'current' | 'partial' | 'stale'
   observedAt?: number
+  showTechnicalDetails?: boolean
 }>
 
-export function AeOfferingSupplyList({ offerings, disposition = 'current', observedAt }: AeOfferingSupplyListProps) {
+export function AeOfferingSupplyList({ offerings, disposition = 'current', observedAt, showTechnicalDetails = true }: AeOfferingSupplyListProps) {
   return (
-    <section aria-labelledby="business-offerings-title" className="grid gap-5">
-      {/* One label, not four. The eyebrow restated the heading, the helper text
-          explained how to use a list, and the badge counted rows the reader can
-          already see. */}
-      <div className="border-b border-border pb-5">
-        <Heading id="business-offerings-title" level={2}>What this business offers</Heading>
+    <section aria-labelledby="business-offerings-title" className="grid gap-4">
+      <div className="flex items-end justify-between gap-4 border-b border-border pb-3">
+        <div className="grid gap-1">
+          <h2 id="business-offerings-title" className="text-xl font-semibold text-foreground">Services and prices</h2>
+          <p className="block text-sm text-muted-foreground">See what this business does, what it costs, and how to start.</p>
+        </div>
+        {offerings.length === 0 ? null : <p className="shrink-0 text-sm text-muted-foreground">{offerings.length} {offerings.length === 1 ? 'service' : 'services'} listed</p>}
       </div>
 
       {disposition === 'current' ? null : (
-        <Card padding={4} className="border border-border bg-muted/40" role="status">
-          <Text weight="semibold" color="primary" display="block">
-            {disposition === 'partial' ? 'Some published details are still updating' : 'These are the last safely published details'}
-          </Text>
-          <Text type="supporting" color="secondary" display="block">
-            {observedAt === undefined ? 'Check back before relying on availability.' : `Last updated ${new Date(observedAt).toLocaleDateString('en-AU')}.`}
-          </Text>
+        <Card className="border border-border bg-muted/40 p-4" role="status">
+          <p className="block font-semibold text-foreground">
+            {disposition === 'partial' ? 'Some listed details are still updating' : 'These are the last safely listed details'}
+          </p>
+          <p className="block text-sm text-muted-foreground">
+            {observedAt === undefined ? 'Check before relying on the price or availability.' : `Last updated ${new Date(observedAt).toLocaleDateString('en-AU')}.`}
+          </p>
         </Card>
       )}
 
       {offerings.length === 0 ? (
-        <Card padding={5}>
-          <VStack gap={2}>
-            <Text weight="semibold" color="primary" display="block">No offerings are published yet</Text>
-            <Text color="secondary" display="block">
-              The business page remains available while the business prepares what it offers.
-            </Text>
-          </VStack>
+        <Card className="p-5">
+          <div className="grid gap-2">
+            <p className="block font-semibold text-foreground">No services are published yet</p>
+            <p className="block text-muted-foreground">
+              The business page remains available while the business prepares its services.
+            </p>
+          </div>
         </Card>
       ) : (
         <div className="grid gap-4">
-          {offerings.map((offering) => <OfferingCard key={offering.offering.offeringRef} offering={offering} />)}
+          {offerings.map((offering) => <OfferingCard key={offering.offering.offeringRef} offering={offering} showTechnicalDetails={showTechnicalDetails} />)}
         </div>
       )}
     </section>
   )
 }
-
-function OfferingCard({ offering }: { offering: PublicOfferingSupplyProjection }) {
+function OfferingCard({ offering, showTechnicalDetails }: { offering: PublicOfferingSupplyProjection; showTechnicalDetails: boolean }) {
   const support = offeringSupportCopy(offering.support)
+  const publishedPrice = offering.offering.price === undefined
+    ? undefined
+    : formatOfferingPrice(offering.offering.price)
+
   return (
-    <Card padding={0} className="grid min-w-0 overflow-hidden border border-border shadow-low" aria-labelledby={`offering-${offering.offering.offeringRef}`}>
-      <div className="h-1.5 bg-accent" aria-hidden="true" />
-      <div className="grid gap-5 p-5 sm:p-6">
-      <div className="grid gap-2">
-        <Text type="supporting" weight="semibold" color="secondary" display="block">{offering.offering.category.toUpperCase()}</Text>
-        <HStack gap={2} vAlign="center" wrap="wrap">
-          <Heading id={`offering-${offering.offering.offeringRef}`} level={3}>{offering.offering.name}</Heading>
-        </HStack>
-        <Text color="primary" display="block" className="max-w-3xl text-pretty text-base leading-relaxed">{offering.offering.summary}</Text>
-        <dl className="grid gap-2 pt-2 text-sm sm:grid-cols-3">
-          {offering.offering.serviceAreaSummary === undefined ? null : <OptionalFact icon={<MapPinIcon aria-hidden="true" />} label="Service area" value={offering.offering.serviceAreaSummary} />}
-          {offering.offering.availabilitySummary === undefined ? null : <OptionalFact icon={<CalendarClockIcon aria-hidden="true" />} label="Availability" value={offering.offering.availabilitySummary} />}
-          {offering.offering.pricingSummary === undefined ? null : <OptionalFact icon={<BanknoteIcon aria-hidden="true" />} label="Pricing" value={offering.offering.pricingSummary} />}
-        </dl>
+    <Card className="grid min-w-0 gap-5 border border-border p-5" aria-labelledby={`offering-${offering.offering.offeringRef}`}>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
+        <div className="grid min-w-0 gap-1">
+          <h3 id={`offering-${offering.offering.offeringRef}`} className="text-lg font-semibold text-foreground">{plainLanguageCopy(offering.offering.name)}</h3>
+          <p className="block text-sm text-muted-foreground">{offering.offering.category}</p>
+        </div>
+        {publishedPrice === undefined && offering.offering.pricingSummary === undefined ? null : (
+          <div className="max-w-48 text-right">
+            <p className="block text-sm text-muted-foreground">Price</p>
+            <p className="block font-semibold text-foreground">
+              {publishedPrice ?? plainLanguageCopy(offering.offering.pricingSummary ?? '')}
+            </p>
+            {publishedPrice === undefined || offering.offering.pricingSummary === undefined ? null : (
+              <p className="block text-sm text-muted-foreground">{plainLanguageCopy(offering.offering.pricingSummary)}</p>
+            )}
+          </div>
+        )}
       </div>
 
-      <Divider />
-      <div className="grid gap-3">
-        <Text as="div" role="heading" aria-level={4} weight="semibold" color="primary" display="block">Ways to get started</Text>
+      <p className="block max-w-3xl text-pretty text-foreground">
+        {plainLanguageCopy(offering.offering.summary)}
+      </p>
+
+      {offering.offering.serviceAreaSummary === undefined && offering.offering.availabilitySummary === undefined ? null : (
+        <dl className="grid gap-3 border-t border-border pt-4 text-sm sm:grid-cols-2">
+          {offering.offering.serviceAreaSummary === undefined ? null : <OptionalFact icon={<MapPinIcon aria-hidden="true" />} label="Service area" value={offering.offering.serviceAreaSummary} />}
+          {offering.offering.availabilitySummary === undefined ? null : <OptionalFact icon={<CalendarClockIcon aria-hidden="true" />} label="Availability" value={offering.offering.availabilitySummary} />}
+        </dl>
+      )}
+
+      <div className="grid gap-2 border-t border-border pt-4">
+        <h4 className="block font-semibold text-foreground">How to start this service</h4>
+        <p className="block text-sm text-muted-foreground">For a quote, the business reviews your request and confirms the price and timing.</p>
         {offering.accessPaths.length === 0 ? (
-          <Text color="secondary" display="block">No way to get started has been published for this offering.</Text>
+          <p className="block text-muted-foreground">No phone, website, or message route is listed for this service.</p>
         ) : (
-          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
-            {offering.accessPaths.map((path) => <AccessPathItem key={path.accessPathRef} path={path} />)}
+          <ul className="m-0 grid list-none divide-y divide-border p-0">
+            {offering.accessPaths.map((path) => <AccessPathItem key={path.accessPathRef} path={path} showTechnicalDetails={showTechnicalDetails} />)}
           </ul>
         )}
       </div>
 
       {support === undefined ? null : (
-        <div className="flex gap-3 rounded-lg border border-border-emphasized bg-muted/60 p-4">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent"><BotIcon className="size-4" aria-hidden="true" /></span>
-          <div className="grid gap-0.5">
-            <Text weight="semibold" color="primary" display="block">{support.label}</Text>
-            <Text type="supporting" color="secondary" display="block">{support.detail}</Text>
-          </div>
+        <div className="grid gap-0.5 border-t border-border pt-4">
+          <p className="block text-sm font-semibold text-muted-foreground">{support.label}</p>
+          <p className="block text-sm text-muted-foreground">{support.detail}</p>
         </div>
       )}
-      </div>
     </Card>
   )
 }
 
 function OptionalFact({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
-  return <div className="grid gap-2 rounded-lg bg-muted/45 p-3"><dt className="flex items-center gap-2 font-medium text-secondary"><span className="text-accent [&>svg]:size-4">{icon}</span>{label}</dt><dd className="m-0 break-words text-primary">{value}</dd></div>
+  return (
+    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
+      <span className="row-span-2 mt-0.5 text-muted-foreground [&>svg]:size-4">{icon}</span>
+      <dt className="font-medium text-muted-foreground">{label}</dt>
+      <dd className="m-0 break-words text-foreground">{value}</dd>
+    </div>
+  )
 }
 
-function AccessPathItem({ path }: { path: PublicOfferingSupplyProjection['accessPaths'][number] }) {
+function AccessPathItem({ path, showTechnicalDetails }: { path: PublicOfferingSupplyProjection['accessPaths'][number]; showTechnicalDetails: boolean }) {
   const detailsId = useId()
   const [expanded, setExpanded] = useState(false)
   const presentation = presentOfferingAccessPath(path)
   return (
-    <li className="group grid min-w-0 content-start gap-3 rounded-lg border border-border bg-card p-4 transition-[border-color,box-shadow,transform] duration-base ease-standard motion-reduce:transition-none hover:border-border-emphasized hover:shadow-low">
+    <li className="grid min-w-0 gap-3 py-4 first:pt-1 last:pb-0">
       <div className="flex items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-accent">{accessIcon(path.descriptor.kind === 'external_operation' ? 'external_operation' : path.descriptor.channel)}</span>
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">{accessIcon(path.descriptor.kind === 'external_operation' ? 'external_operation' : path.descriptor.channel)}</span>
         <div className="grid min-w-0 gap-1">
-          <HStack gap={2} vAlign="center" wrap="wrap">
-            <Text weight="semibold" color="primary">{presentation.label}</Text>
-        {presentation.provenance === undefined ? null : <Badge label={presentation.provenance} variant="neutral" />}
-          </HStack>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-semibold text-foreground">{presentation.label}</p>
+            {presentation.provenance === undefined ? null : <Badge variant="outline">{presentation.provenance}</Badge>}
+          </div>
           {presentation.price === undefined ? null : (
-            <Text weight="semibold" color="primary" display="block">{presentation.price}</Text>
+            <p className="block font-semibold text-foreground">{presentation.price}</p>
           )}
-          <Text type="supporting" color="secondary" display="block">{presentation.detail}</Text>
+          <p className="block text-sm text-muted-foreground">{presentation.detail}</p>
         </div>
       </div>
       {presentation.href === undefined ? null : (
-        <Button href={presentation.href} label={presentation.external ? 'View published details' : presentation.label} variant="secondary" size="sm" className="min-h-11 w-full sm:w-auto" />
+        <Button asChild variant="secondary" size="sm" className="min-h-11 w-full sm:w-auto">
+          <a href={presentation.href}>{presentation.external ? 'Open website' : presentation.label}</a>
+        </Button>
       )}
-      {presentation.technical === undefined ? null : (
+      {presentation.technical === undefined || !showTechnicalDetails ? null : (
         <div className="grid gap-2">
           <button
             type="button"
-            className="min-h-11 justify-self-start text-sm font-semibold text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="min-h-11 justify-self-start text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
             aria-expanded={expanded}
             aria-controls={detailsId}
             onClick={() => setExpanded((current) => !current)}
           >
-            {expanded ? 'Hide technical details' : 'Show technical details'}
+            {expanded ? 'Hide page information' : 'More page information'}
           </button>
           {expanded ? (
-            <dl id={detailsId} className="grid min-w-0 gap-2 text-sm">
+            <dl id={detailsId} className="grid min-w-0 gap-2 border-l border-border pl-4 text-sm">
               {presentation.technical.map((fact) => (
                 <div key={fact.label} className="grid min-w-0 gap-1">
-                  <dt className="text-secondary">{fact.label}</dt>
-                  <dd className="m-0 break-all text-primary">{fact.value}</dd>
+                  <dt className="text-muted-foreground">{fact.label}</dt>
+                  <dd className="m-0 break-all text-foreground">{fact.value}</dd>
                 </div>
               ))}
             </dl>

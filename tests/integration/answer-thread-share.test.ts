@@ -17,7 +17,6 @@ describe('public thread share route', () => {
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY
     delete process.env.AE_OPENROUTER_API_BASE_URL
-    delete process.env.AE_ANSWER_SYNTHESIZER
   })
 
   it('loads the public projection and OG tags without auth', async () => {

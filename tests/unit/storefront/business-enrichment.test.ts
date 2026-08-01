@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { enrichBusinessFromWebSearch } from '@/modules/storefront/public'
-import { readAnswerLlmConfig } from '@/modules/answer/internal/llm-config'
+import { discoverBusinessesFromWebSearch, enrichBusinessFromWebSearch } from '@/modules/storefront/public'
+import { openRouterGatewayConfig } from '@/modules/model-gateway/public'
 
 const config = { apiKey: 'test-key', model: 'test/model' }
 
@@ -10,7 +10,9 @@ function completionResponse(content: string, citations: readonly string[] = []):
     JSON.stringify({
       choices: [
         {
+          finish_reason: 'stop',
           message: {
+            role: 'assistant',
             content,
             annotations: citations.map((url) => ({ type: 'url_citation', url_citation: { url } })),
           },
@@ -28,9 +30,9 @@ describe('business enrichment from a web search', () => {
   })
 
   it('reports unavailable rather than failing when no model is configured', async () => {
-    expect(readAnswerLlmConfig()).toBeUndefined()
+    expect(openRouterGatewayConfig().apiKey).toBeUndefined()
 
-    const result = await enrichBusinessFromWebSearch({ businessName: 'Joondalup Emergency Plumbing' }, readAnswerLlmConfig())
+    const result = await enrichBusinessFromWebSearch({ businessName: 'Joondalup Emergency Plumbing' }, openRouterGatewayConfig())
 
     expect(result).toEqual({ kind: 'unavailable', reason: 'llm_not_configured' })
   })
@@ -99,6 +101,46 @@ describe('business enrichment from a web search', () => {
     const result = await enrichBusinessFromWebSearch({ businessName: 'A' }, config, { fetch: fetchMock })
 
     expect(result).toMatchObject({ kind: 'error', code: 'enrichment_no_facts', retryable: false })
+  })
+
+  it('discovers imported claims with citation provenance in one web search', async () => {
+    const fetchMock = vi.fn(async () =>
+      completionResponse(
+        JSON.stringify({
+          businesses: [{
+            businessName: 'Parramatta Funeral Home',
+            suburb: 'Parramatta',
+            phone: '02 0000 0000',
+            websiteUrl: 'https://funeral.example',
+            sourceUrl: 'https://directory.example/parramatta-funeral',
+          }, {
+            businessName: 'Invented Funeral Home',
+            suburb: 'Parramatta',
+            sourceUrl: 'https://invented.example',
+          }],
+        }),
+        ['https://directory.example/parramatta-funeral'],
+      ),
+    )
+
+    const result = await discoverBusinessesFromWebSearch(
+      { query: 'funeral parlours in Parramatta', location: 'Parramatta' },
+      config,
+      { fetch: fetchMock },
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({
+      kind: 'found',
+      query: 'funeral parlours in Parramatta',
+      claims: [{
+        businessName: 'Parramatta Funeral Home',
+        suburb: 'Parramatta',
+        phone: '02 0000 0000',
+        websiteUrl: 'https://funeral.example',
+        sourceUrl: 'https://directory.example/parramatta-funeral',
+      }],
+    })
   })
 
   it('never throws a provider error at the caller', async () => {

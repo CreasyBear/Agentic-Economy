@@ -41,13 +41,13 @@ export function AeQueryPanel({
         busy={busy}
         examples={examples}
         focusOnMount={focusOnMount}
-        {...(placeholder === undefined ? {} : { placeholder, inputLabel: placeholder })}
+        {...(placeholder === undefined ? {} : { placeholder })}
       />
       {loopHint !== undefined && loopHint.length > 0 ? (
-        <p className="font-mono text-xs leading-snug text-secondary">{loopHint}</p>
+        <p className="font-mono text-xs leading-snug text-muted-foreground">{loopHint}</p>
       ) : null}
       {showExamples ? (
-        <p className="font-mono text-xs leading-snug text-secondary">Cited answers from published business details.</p>
+        <p className="font-mono text-xs leading-snug text-muted-foreground">Cited answers from published business details.</p>
       ) : null}
     </div>
   )

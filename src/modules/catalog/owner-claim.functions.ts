@@ -23,6 +23,7 @@ import { readCurrentOwnerTargetAdmissionThroughSource } from '@/modules/inquirie
 import { selectOwnerAdmissionTarget } from '@/modules/inquiries/route-readbacks'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import type {
+  PublicBusinessPageNotFoundReason,
   PublicBusinessPageRouteReadbackResult,
   PublicBusinessPageReadbackResult,
   PublicCatalogContract,
@@ -54,15 +55,16 @@ const ownerClaimInputSchema = z.object({
   firstRequestMode: z.enum(['inquiry_available', 'quote_request_available', 'not_available_yet']),
   publicDisclosure: z.string(),
   noContactReason: z.string(),
+  source: z.literal('supply').optional(),
 })
-
 const ownerStatusInputSchema = z.object({
   slug: z.string().optional(),
+  source: z.literal('supply').optional(),
 })
 
 type ClaimSuccessPageResult =
   | { kind: 'available'; catalog: PublicRouteCatalogContract }
-  | { kind: 'not_found'; reason: 'not_public' }
+  | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
   | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
 
 const publicPageInputSchema = z.object({
@@ -139,16 +141,9 @@ type PublishCatalogResult =
 
 type PublicCatalogReadResult =
   | { kind: 'available'; catalog: PublicCatalogContract }
-  | { kind: 'not_found'; reason: 'not_public' }
+  | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
 
 type Env = Record<string, string | undefined>
-
-export type OwnerCatalogSourcePort = {
-  claim: (args: ClaimBusinessArgs) => Promise<ClaimBusinessResult>
-  publish: (args: PublishCatalogArgs) => Promise<PublishCatalogResult>
-  readCurrentOwnerCatalog: () => Promise<PublicCatalogReadResult>
-  readPublicCatalogBySlug: (args: { slug: string }) => Promise<PublicCatalogReadResult>
-}
 
 const claimBusinessMutation = sourceMutation<ClaimBusinessArgs, ClaimBusinessResult>('business:claimBusiness')
 const publishCatalogMutation = sourceMutation<PublishCatalogArgs, PublishCatalogResult>('catalog:publishBusinessCatalog')
@@ -186,8 +181,7 @@ async function submitOwnerClaimThroughSource(
     const claimCorrelationId = `claim:${operationSuffix}`
     const publishOperationKey = `publish:${operationSuffix}`
     const publishCorrelationId = `publish:${operationSuffix}`
-    const source = ownerCatalogSourcePort()
-    const claim = await source.claim({
+    const claim = await callSourceMutation(claimBusinessMutation, {
       name: input.businessName,
       category: input.category,
       suburb: input.suburb,
@@ -216,7 +210,7 @@ async function submitOwnerClaimThroughSource(
       }
     }
 
-    const publish = await source.publish({
+    const publish = await callSourceMutation(publishCatalogMutation, {
       claimId: claim.claim.claimId,
       services: [toServiceCatalogArgs(input)],
       origin,
@@ -266,8 +260,8 @@ export async function readOwnerStatusThroughSource(slug: string | undefined): Pr
 
   try {
     const result = readsCurrentOwner
-      ? await ownerCatalogSourcePort().readCurrentOwnerCatalog()
-      : await ownerCatalogSourcePort().readPublicCatalogBySlug({ slug })
+      ? await callSourceQuery(currentOwnerCatalogQuery, {})
+      : await callPublicSourceQuery(publicCatalogBySlugQuery, { slug })
 
     return result.kind === 'available'
       ? { kind: 'available', readback: await buildOwnerStatusRouteReadback(buildPublicOwnerStatusReadback(result.catalog)) }
@@ -295,10 +289,10 @@ async function readPublicBusinessPageThroughSource(slug: string): Promise<Public
     return redactPublicBusinessPageReadback(getLocalE2ePublicBusinessPageReadback(slug))
   }
 
-  const result = await ownerCatalogSourcePort().readPublicCatalogBySlug({ slug })
+  const result = await callPublicSourceQuery(publicCatalogBySlugQuery, { slug })
   return result.kind === 'available'
     ? { kind: 'available', catalog: redactCatalogSourceHashes(result.catalog) }
-    : { kind: 'not_found', reason: 'not_public' }
+    : { kind: 'not_found', reason: result.reason }
 }
 
 async function redactOwnerClaimResult(result: PublicOwnerClaimFlowResult): Promise<PublicOwnerClaimFlowRouteResult> {
@@ -393,15 +387,6 @@ function toServiceCatalogArgs(input: PublicOwnerClaimFlowInput): PublishCatalogA
             publicDisclosure: input.publicDisclosure,
             publicChannel: input.firstRequestMode === 'quote_request_available' ? 'ae_status_only' : 'public_business_contact',
           },
-  }
-}
-
-function ownerCatalogSourcePort(): OwnerCatalogSourcePort {
-  return {
-    claim: (args) => callSourceMutation(claimBusinessMutation, args),
-    publish: (args) => callSourceMutation(publishCatalogMutation, args),
-    readCurrentOwnerCatalog: () => callSourceQuery(currentOwnerCatalogQuery, {}),
-    readPublicCatalogBySlug: (args) => callPublicSourceQuery(publicCatalogBySlugQuery, args),
   }
 }
 

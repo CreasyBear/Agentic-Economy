@@ -7,11 +7,15 @@ describe('customer Request agent authentication', () => {
     const verifyKeyState = async () => ({
       id: 'ak_123', subject: 'user_123', revoked: false, expired: false, scopes: ['customer_requests:create'],
     })
-    await expect(authenticateCustomerRequestAgent({ authenticate: async () => ({
-      isAuthenticated: true, tokenType: 'api_key', id: 'ak_123', subject: 'user_123', userId: 'user_123', orgId: null,
-      scopes: ['customer_requests:create'],
-    }), verifyKeyState })).resolves.toEqual({ kind: 'authenticated', principal: {
-      principalId: 'clerk_api_key:ak_123', ownerId: 'user_123', credentialId: 'ak_123', scopes: ['customer_requests:create'],
+    await expect(authenticateCustomerRequestAgent({
+      authenticate: async () => ({
+        isAuthenticated: true, tokenType: 'api_key', id: 'ak_123', subject: 'user_123', userId: 'user_123', orgId: null,
+        scopes: ['customer_requests:create'],
+      }),
+      verifyKeyState,
+    })).resolves.toEqual({ kind: 'authenticated', principal: {
+      principalId: 'clerk_api_key:ak_123', ownerId: 'user_123', credentialId: 'ak_123',
+      scopes: ['customer_requests:create'], authorityMode: 'inspect_only',
     } })
   })
 
@@ -40,5 +44,15 @@ describe('customer Request agent authentication', () => {
     await expect(authenticateCustomerRequestAgent({ authenticate: async () => ({
       isAuthenticated: true, tokenType: 'api_key', id: 'ak_123', subject: 'user_123', scopes: [],
     }) })).resolves.toEqual({ kind: 'refused', status: 403, reason: 'scope_required' })
+  })
+  it('maps legacy create-only keys to inspect and refuses mode widening', async () => {
+    const authenticate = async () => ({
+      isAuthenticated: true, tokenType: 'api_key' as const, id: 'ak_123', subject: 'user_123',
+      userId: 'user_123', orgId: null, scopes: ['customer_requests:create'],
+    })
+    await expect(authenticateCustomerRequestAgent({ authenticate, requiredMode: 'approve_each' }))
+      .resolves.toEqual({ kind: 'refused', status: 403, reason: 'scope_required' })
+    await expect(authenticateCustomerRequestAgent({ authenticate }))
+      .resolves.toMatchObject({ kind: 'authenticated', principal: { authorityMode: 'inspect_only' } })
   })
 })

@@ -29,6 +29,21 @@ export {
   materializePublishedOperation,
   materializeRuntimePublishedOperation,
 } from './published-operation'
+export {
+  createMemoryCapabilityLiquidityPort,
+  recordCapabilityCallObservation,
+  recordCapabilityDepthObservation,
+} from './internal/liquidity'
+export type {
+  CapabilityCallEvent,
+  CapabilityCallEventKind,
+  CapabilityCallObservationInput,
+  CapabilityDepthObservationInput,
+  CapabilityLiquidityWritePort,
+  LiquidityEnvironment,
+  LiquidityOutcome,
+  LiquidityZeroReason,
+} from './internal/liquidity'
 export type {
   PublishedOperation,
   PublishedOperationUsageObservation,

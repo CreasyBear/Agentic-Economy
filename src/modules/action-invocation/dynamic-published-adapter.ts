@@ -8,6 +8,11 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { ActionContext } from '@/modules/common/action'
 
+import {
+  pricingConfigDigest,
+  type MoneyInvocationPort,
+  type PricingConfig,
+} from '@/modules/money/public'
 import type {
   ActionInvocationOrigin,
   ActionInvocationView,
@@ -22,6 +27,7 @@ import {
   buildDynamicPublishedInput,
   createDynamicPublishedAction,
   dynamicPublishedSourceDigest,
+  executableFixedPrice,
   type DynamicPublishedInvocationInput,
   type DynamicPublishedInvocationResult,
 } from './dynamic-published-contract'
@@ -215,6 +221,8 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
   paymentAttemptPort?: X402PaymentAttemptPort
   paymentAuthorizationEvents?: readonly X402PaymentAuthorizationEvent[]
   verifyPaymentReconciliationEvidence?: X402PaymentReconciliationEvidenceVerifier
+  moneyPort?: MoneyInvocationPort
+  pricingConfig?: PricingConfig
 }>): DynamicPublishedActionInvocationAdapter {
   const descriptor = materializeRuntimePublishedOperation(input.operation)
   const durableState = input.durableState ?? createDevelopmentDurableState<DynamicPublishedInvocationResult>()
@@ -227,6 +235,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
       attempt,
     ]),
   )
+  const moneyCharges = new Map<string, Readonly<{ transactionRef: string; principalId: string; chargeState: 'free_tier' | 'paid'; amountMinor: number; currency: string; priceDigest: string }>>()
   const paymentAttemptPort = input.paymentAttemptPort
     ?? createInMemoryX402PaymentAttemptPort(
       input.paymentAttempts,
@@ -346,6 +355,62 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         semanticBaseKey: row.semanticBaseKey,
         semanticIdentityDigest: row.semanticIdentityDigest,
       })
+      if (input.moneyPort !== undefined) {
+        const principalRef = durableState.controls.get(execution.invocationRef)?.control.owner.principalRef
+        if (principalRef === undefined || principalRef.length === 0) {
+          return {
+            kind: 'published_operation_refused',
+            sourceDisposition: 'refused',
+            operationId: input.operation.operationId,
+            operationVersion: descriptor.version,
+            requestDigest: value.operationKey,
+            failureCode: 'billing_identity_missing',
+          }
+        }
+        const fixedPrice = executableFixedPrice(input.operation)
+        const pricingConfig = input.pricingConfig ?? {
+          version: 'pricing:v1' as const,
+          unit: 'call' as const,
+          currency: fixedPrice.currency,
+          paidAmountMinor: fixedPrice.amountMinor,
+        }
+        const existingCharge = row.moneyCharge
+        const charge = existingCharge === undefined
+          ? await input.moneyPort.authorizeInvocationCharge({
+              principalId: principalRef,
+              operationKey: value.operationKey,
+              invocationRef: execution.invocationRef,
+              attemptRef: execution.attemptRef,
+              effectGeneration: execution.effectGeneration,
+              capabilityContractDigest: input.operation.identity.contractDigest,
+              businessId: input.operation.identity.businessId,
+              offeringRef: input.operation.identity.offeringId,
+              pricingConfig,
+              priceDigest: pricingConfigDigest(pricingConfig),
+              authorityMaximumSpend: fixedPrice,
+            })
+          : { kind: 'accepted' as const, chargeState: existingCharge.chargeState, currency: existingCharge.currency, amountMinor: existingCharge.amountMinor, priceDigest: existingCharge.priceDigest, transactionRef: existingCharge.transactionRef }
+        if (charge.kind === 'refused') {
+          return {
+            kind: 'published_operation_refused',
+            sourceDisposition: 'refused',
+            operationId: input.operation.operationId,
+            operationVersion: descriptor.version,
+            requestDigest: value.operationKey,
+            failureCode: charge.code,
+          }
+        }
+        const moneyCharge = {
+          transactionRef: charge.transactionRef ?? `free:${execution.invocationRef}:${execution.effectGeneration}`,
+          principalId: principalRef,
+          chargeState: charge.chargeState,
+          amountMinor: charge.amountMinor,
+          currency: charge.currency,
+          priceDigest: charge.priceDigest,
+        }
+        moneyCharges.set(key, moneyCharge)
+        input.source.write({ ...row, moneyCharge })
+      }
       preparedTransports.set(key, preparation.prepared)
       return undefined
     },
@@ -372,17 +437,43 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
         || prepared.effectGeneration !== token.effectGeneration) {
         throw new Error('published_operation_transport_not_prepared')
       }
-      const result = await executeDynamicPublishedTransport({
-        operation: input.operation,
-        descriptor,
-        prepared,
-        runtime: input.runtime,
-        paymentAttempts,
-        paymentAttemptPort,
-        paymentAuthorizationEvents,
-        now: input.now,
-      })
-      return result
+      const charge = moneyCharges.get(key)
+      try {
+        const result = await executeDynamicPublishedTransport({
+          operation: input.operation,
+          descriptor,
+          prepared,
+          runtime: input.runtime,
+          paymentAttempts,
+          paymentAttemptPort,
+          paymentAuthorizationEvents,
+          now: input.now,
+        })
+        if (result.kind === 'published_operation_refused' && charge !== undefined && charge.chargeState === 'paid') {
+          await input.moneyPort?.refundCharge?.({
+            transactionRef: charge.transactionRef,
+            principalId: charge.principalId,
+            invocationRef: execution.invocationRef,
+            attemptRef: execution.attemptRef,
+            effectGeneration: execution.effectGeneration,
+          })
+        }
+        return result
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ''
+        const unknown = message.startsWith('published_operation_outcome_unknown:')
+          || message.startsWith('published_operation_payment_reconciliation_required:')
+        if (unknown && charge !== undefined) {
+          await input.moneyPort?.markChargeOutcomeUnknown?.({
+            transactionRef: charge.transactionRef,
+            principalId: charge.principalId,
+            invocationRef: execution.invocationRef,
+            attemptRef: execution.attemptRef,
+            effectGeneration: execution.effectGeneration,
+          })
+        }
+        throw error
+      }
     },
   })
   const resumeInvocationRef = input.durableState === undefined

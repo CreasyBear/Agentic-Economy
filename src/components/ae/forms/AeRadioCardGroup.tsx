@@ -24,8 +24,8 @@ export function AeRadioCardGroup({ value, options, disabled = false, name, 'aria
               onChange={() => onValueChange(option.value)}
             />
             <span className="grid gap-1">
-              <span className="font-medium text-primary">{option.label}</span>
-              {option.description === undefined ? null : <span className="text-secondary">{option.description}</span>}
+              <span className="font-medium text-foreground">{option.label}</span>
+              {option.description === undefined ? null : <span className="text-muted-foreground">{option.description}</span>}
             </span>
           </label>
         )

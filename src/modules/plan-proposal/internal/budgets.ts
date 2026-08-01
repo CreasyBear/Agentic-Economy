@@ -1,0 +1,8 @@
+export const MAX_ACTIONS_PER_TURN = 4
+export const MAX_MODEL_CALLS_PER_TURN = MAX_ACTIONS_PER_TURN + 2
+export const TURN_COST_CEILING_USD = 0.06
+export const WORST_CASE_MODEL_CALL_RESERVE_USD = TURN_COST_CEILING_USD / MAX_MODEL_CALLS_PER_TURN
+
+export const ROLE_TIMEOUT_MS = {
+  proposal: 25_000,
+} as const

@@ -1,3 +1,5 @@
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+
 export type AeOperatorFact = {
   label: string
   value: string | number
@@ -19,12 +21,16 @@ export function AeOperatorFactGrid({ facts, columns = 3 }: AeOperatorFactGridPro
   return (
     <dl className={`grid gap-3 ${columnClass}`}>
       {facts.map((fact) => (
-        <div key={fact.label} className="rounded-md border border-border bg-muted/30 p-3">
-          <dt className="text-xs font-medium uppercase tracking-normal text-secondary">{fact.label}</dt>
-          <dd className="mt-1 break-words text-sm font-medium text-primary" data-numeric>
-            {fact.value}
-          </dd>
-        </div>
+        <Card key={fact.label} className="gap-2 py-4">
+          <CardHeader className="gap-1 px-4">
+            <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{fact.label}</dt>
+          </CardHeader>
+          <CardContent className="px-4">
+            <dd className="break-words text-sm font-medium text-foreground" data-numeric>
+              {fact.value}
+            </dd>
+          </CardContent>
+        </Card>
       ))}
     </dl>
   )

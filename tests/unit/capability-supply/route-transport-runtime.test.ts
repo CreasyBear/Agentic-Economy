@@ -222,6 +222,36 @@ describe('registered route transport runtime', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('routes a public HTTP binding without resolving or sending a credential', async () => {
+    const resolveCredential = vi.fn(() => 'must-not-be-used')
+    const fetch: RouteTransportFetch = vi.fn(async (_url, init) => {
+      expect(init?.headers).not.toHaveProperty('Authorization')
+      expect(init?.headers).toMatchObject({
+        'Idempotency-Key': authority.operationKeyDigest,
+        'AE-Call-Key-Id': authority.callIdentity.keyId,
+      })
+      return Response.json({ serviceReference: 'service:public-123' })
+    })
+
+    const observed = await invokeRegisteredRouteTransport(invocation({
+      binding: registeredBinding(
+        'http-json:v1', 'https://provider.example/run', 'none',
+        { method: 'POST', requestTimeoutMs: 5_000 },
+      ),
+    }), {
+      send: fetch,
+      resolveCredential,
+      createX402PaymentSignature: async () => undefined,
+    })
+
+    expect(observed).toMatchObject({
+      transport: 'http', disposition: 'succeeded', releaseStarted: true,
+      outputJson: JSON.stringify({ serviceReference: 'service:public-123' }),
+    })
+    expect(resolveCredential).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
   it('uses only the registered GET query mapping and never accepts caller transport fields', async () => {
     const config = {
       method: 'GET' as const,

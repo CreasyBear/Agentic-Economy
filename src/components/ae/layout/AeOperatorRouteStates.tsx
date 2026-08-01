@@ -1,8 +1,8 @@
 import { useLocation } from '@tanstack/react-router'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Banner } from '@astryxdesign/core/Banner'
-import { Skeleton } from '@astryxdesign/core/Skeleton'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Skeleton } from '@/components/ui/skeleton'
 import { operatorRoleForPath } from '@/lib/operator/navigation'
 
 /**
@@ -17,14 +17,14 @@ export function OperatorRoutePending() {
   return (
     <AeOperatorShell
       operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
-      title="Loading"
-      description="Fetching the latest state for this page."
+      title="Getting things ready"
+      description="Loading the latest details so you can continue."
       currentPath={pathname}
     >
       <div className="grid gap-3">
-        <Skeleton height="6rem" width="100%" index={0} />
-        <Skeleton height="6rem" width="100%" index={1} />
-        <Skeleton height="6rem" width="100%" index={2} />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-24 w-full" />
       </div>
     </AeOperatorShell>
   )
@@ -37,15 +37,14 @@ export function OperatorRouteError({ error }: { error: unknown }) {
   return (
     <AeOperatorShell
       operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
-      title="Page error"
-      description="Something went wrong loading this page."
+      title="This page is unavailable"
+      description="We could not load the latest details. Try again."
       currentPath={pathname}
     >
-      <Banner
-        status="error"
-        title="Unable to load this page"
-        description={message}
-      />
+      <Alert variant="destructive">
+        <AlertTitle>Unable to load this page</AlertTitle>
+        <AlertDescription>{message}</AlertDescription>
+      </Alert>
     </AeOperatorShell>
   )
 }

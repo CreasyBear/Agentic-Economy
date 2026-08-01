@@ -13,11 +13,17 @@ import {
 } from '@/modules/customer-request/semantic-interpreter'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import {
+  customerRequestAuthorityModeForScopes,
+  customerRequestModeAllows,
+  type CustomerRequestAuthorityMode,
+} from '@/modules/customer-request/agent-contract'
+import {
   exportRouteEvidence as exportRouteEvidenceApplication,
   exportRouteProblemForSupport as exportRouteProblemForSupportApplication,
   interpretCompileCommit as interpretCompileCommitApplication,
   listRouteProblemsForSupport as listRouteProblemsForSupportApplication,
   loadRequestGraph as loadRequestGraphApplication,
+  previewCustomerRequest as previewCustomerRequestApplication,
   allowStandingRoute,
   authorizePreparation as authorizePreparationApplication,
   confirmCustomerRoute,
@@ -43,7 +49,9 @@ import {
   type CustomerRequestActionResult,
   type EligibleSupplyResult,
   type ExactContractResult,
+  type PreviewCustomerRequestResult,
   type RequestGraph,
+  type RequestGraphUnavailable,
 } from '@/modules/customer-request/application/public'
 
 import { internal } from './_generated/api'
@@ -444,6 +452,7 @@ const customerView = v.object({
     businessContactedForThisRevision: v.literal(false),
     nextStep: v.object({ kind: v.literal('change_request'), summary: v.string() }),
   })),
+  interpretationBasis: v.optional(v.literal('keyword_match')),
   preparationRef: v.optional(v.string()),
   clarification: v.optional(v.union(
     v.object({ kind: v.literal('intent_direction'), prompt: v.string(), answerKind: v.literal('natural_language') }),
@@ -598,6 +607,78 @@ const repeatPermissionAssistantsResult = v.union(
   }),
   v.object({ kind: v.literal('refused'), reason: refusedReason }),
 )
+const previewDestination = v.object({ label: v.string(), request: v.string() })
+const previewStep = v.object({
+  step: v.number(),
+  title: v.string(),
+  purpose: v.string(),
+  dependsOn: v.array(v.number()),
+  offeringRefs: v.array(v.string()),
+})
+const previewResult = v.union(
+  v.object({
+    kind: v.literal('preview'),
+    destination: previewDestination,
+    steps: v.array(previewStep),
+    expiresAt: v.number(),
+    authority: v.literal('inspect_only'),
+  }),
+  v.object({
+    kind: v.literal('needs_information'),
+    prompt: v.string(),
+    destination: previewDestination,
+  }),
+  v.object({
+    kind: v.literal('unavailable'),
+    reason: v.union(
+      v.literal('no_current_supply'),
+      v.literal('preview_unavailable'),
+      v.literal('options_changed'),
+    ),
+    destination: previewDestination,
+  }),
+)
+
+function writablePreviewResult(result: PreviewCustomerRequestResult): Infer<typeof previewResult> {
+  if (result.kind === 'preview') {
+    return {
+      kind: 'preview',
+      destination: { ...result.destination },
+      steps: result.steps.map((step) => ({
+        step: step.step,
+        title: step.title,
+        purpose: step.purpose,
+        dependsOn: [...step.dependsOn],
+        offeringRefs: [...step.offeringRefs],
+      })),
+      expiresAt: result.expiresAt,
+      authority: result.authority,
+    }
+  }
+  if (result.kind === 'needs_information') {
+    return { kind: result.kind, prompt: result.prompt, destination: { ...result.destination } }
+  }
+  return { kind: result.kind, reason: result.reason, destination: { ...result.destination } }
+}
+
+export const preview = action({
+  args: { customerJob: v.string(), network: v.string() },
+  returns: previewResult,
+  handler: async (ctx, args) => {
+    const result = await previewCustomerRequestApplication(
+      { customerJob: args.customerJob, network: args.network },
+      { loadRequestGraph: (network) => loadRequestGraph(ctx, network) },
+      {
+        maximumDescriptorBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
+        ...(env.OPENROUTER_API_KEY === undefined ? {} : { openRouterApiKey: env.OPENROUTER_API_KEY }),
+        ...(env.AE_CUSTOMER_REQUEST_MODEL === undefined ? {} : { modelName: env.AE_CUSTOMER_REQUEST_MODEL }),
+        ...(env.AE_SITE_URL === undefined ? {} : { siteUrl: env.AE_SITE_URL }),
+      },
+    )
+    return writablePreviewResult(result)
+  },
+})
+
 type RepeatPermissionAssistantsResult = Infer<typeof repeatPermissionAssistantsResult>
 export const submit = action({
   args: {
@@ -1640,10 +1721,13 @@ async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
   return result === undefined ? undefined : toActionResult(result) as ActionResult
 }
 
-async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<RequestGraph | Readonly<{ kind: 'unavailable' }>> {
+async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<RequestGraph | RequestGraphUnavailable> {
   return await loadRequestGraphApplication(networkId, {
+    // Routeable, not merely integrated: commitAggregate validates the recorded plan against
+    // `listRouteable`, so planning over a wider set guarantees `context_stale` at commit and
+    // hands the customer a retry that can never succeed.
     listEligible: async (id) => await ctx.runQuery(
-      internal.capabilitySupply.listEligible, { networkId: id, limit: 64 },
+      internal.capabilitySupply.listRouteable, { networkId: id, limit: 64 },
     ) as EligibleSupplyResult,
     getActiveExact: async (contractRef) => await ctx.runQuery(
       internal.capabilityContractDocuments.getActiveExactInternal, contractRef,
@@ -1709,6 +1793,9 @@ async function resolveRequestCaller(
   const key = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
   if (assertion === undefined || key === undefined || key.length < 32
     || !assertion.scopes.includes('customer_requests:create')) return undefined
+  const authorityMode = customerRequestAuthorityModeForScopes(assertion.scopes)
+  const requiredMode = serviceOperationRequiredMode(operation)
+  if (authorityMode === undefined || !customerRequestModeAllows(authorityMode, requiredMode)) return undefined
   const verified = await verifyCustomerRequestServiceAssertion({ key, operation, command: command as never, assertion })
   if (!verified) return undefined
   const clerkIssuer = env.CLERK_JWT_ISSUER_DOMAIN?.trim()
@@ -1741,6 +1828,14 @@ async function resolveRequestCaller(
     delegatedAgentId: assertion.principalId,
     ownerId: assertion.ownerId,
   }
+}
+
+function serviceOperationRequiredMode(operation: Parameters<typeof resolveRequestCaller>[1]): CustomerRequestAuthorityMode {
+  if (operation === 'confirm' || operation === 'run' || operation === 'authorize') return 'approve_each'
+  if (operation === 'allow_repeat' || operation === 'use_repeat' || operation === 'inspect_repeat' || operation === 'revoke_repeat') {
+    return 'bounded_mandate'
+  }
+  return 'inspect_only'
 }
 
 function namespacedKey(principalId: string, operation: string, requestRef: string, callerKey: string): string {

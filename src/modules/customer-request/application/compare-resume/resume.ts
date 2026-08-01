@@ -1,4 +1,4 @@
-import { projectNeedsAttention } from '@/modules/customer-request/customer-projection'
+import { projectNeedsAttention, projectNoCurrentBusiness } from '@/modules/customer-request/customer-projection'
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
 
 import type { CustomerRequestActionResult } from '../action-result'
@@ -30,9 +30,14 @@ export async function resumeCustomerRequest(
       requestId: input.requestRef,
       principalId: input.principalId,
     })
-    return shell.kind === 'found'
-      ? durableSubmissionShellView(shell.shell.requestId)
-      : { kind: 'refused', reason: 'request_not_found' }
+    if (shell.kind !== 'found') return { kind: 'refused', reason: 'request_not_found' }
+    // A shell means the Request was saved but never compiled. Offering "try again" is only
+    // truthful if AE has something to plan over now, so the answer is re-derived from current
+    // supply rather than repeating whatever failed at submission time.
+    const graph = await ports.loadRequestGraph(shell.shell.networkId)
+    return graph.kind === 'unavailable' && graph.reason === 'no_routeable_supply'
+      ? projectNoCurrentBusiness({ requestRef: shell.shell.requestId, revision: 0 })
+      : durableSubmissionShellView(shell.shell.requestId)
   }
   if (current.aggregate.snapshot.principalId !== input.principalId) {
     return { kind: 'refused', reason: 'request_not_found' }

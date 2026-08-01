@@ -38,6 +38,24 @@ describe('follow-up compact prose', () => {
   })
 })
 
+describe('named option compact prose', () => {
+  it('leads with the named option and its published decision details', () => {
+    const prose = buildCompactFollowUpProse({
+      displayQuery: 'dentist Adelaide',
+      providers: [provider({
+        name: 'Adelaide Dental Clinic',
+        suburb: 'Adelaide',
+        pricingSummary: 'From $120',
+        availabilitySummary: 'Appointments this week',
+      })],
+    })
+
+    expect(prose.oneLine).toBe(
+      'Adelaide Dental Clinic — in Adelaide · Price: From $120 · Published availability: Appointments this week.',
+    )
+  })
+})
+
 describe('compact snapshot artifacts', () => {
   it('omits map, summary, agent json, and trust strip on follow-up turns', () => {
     const artifacts = buildArtifactsFromSnapshot({

@@ -21,6 +21,10 @@ describe('harness action tool adapter', () => {
       outputSchema: z.object({ kind: z.literal('ok'), total: z.number().int() }),
       parameters: [],
       readOnly: true,
+      effect: {
+        class: 'observation', reversible: true, recipientKind: 'none',
+        dataClasses: [], spendExposure: 'none', approval: 'none',
+      },
       surfaces: ['answerThread'],
       run: async ({ data }) => ({ kind: 'ok', total: data.limit ?? 1 }),
     })
@@ -68,6 +72,10 @@ describe('harness action tool adapter', () => {
       outputSchema: z.object({ kind: z.literal('ok'), receiptId: z.string() }),
       parameters: [],
       readOnly: false,
+      effect: {
+        class: 'disclosure', reversible: false, recipientKind: 'business',
+        dataClasses: ['query_text'], spendExposure: 'none', approval: 'approve_each',
+      },
       surfaces: ['answerThread'],
       run: async () => ({ kind: 'ok', receiptId: 'receipt-1' }),
     })

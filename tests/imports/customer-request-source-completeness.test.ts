@@ -241,8 +241,8 @@ describe('CustomerRequest source completeness', () => {
       expect(fixtureDiscovery, `fixture discovery missing ${marker}`).toContain(marker)
       expect(durableDiscovery, `durable discovery missing ${marker}`).toContain(marker)
     }
-    expect(fixtureDiscovery).toContain('CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES')
-    expect(durableDiscovery).toContain('CUSTOMER_REQUEST_PUBLIC_COMPREHENSION_LINES')
+    expect(fixtureDiscovery).toContain('CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES')
+    expect(durableDiscovery).toContain('CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES')
     for (const source of [fixtureDiscovery, durableDiscovery]) {
       expect(source).toContain('CUSTOMER_REQUEST_AGENT_ENTRYPOINT')
       expect(source).toContain('CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES')
@@ -252,8 +252,9 @@ describe('CustomerRequest source completeness', () => {
       expect(requestSchema, `Request schema missing ${marker}`).toContain(marker)
     }
     expect(publicComprehension).toContain('labelled AE sandbox businesses')
-    expect(publicComprehension).toContain('Starting it is a separate step you control')
-    expect(`${fixtureDiscovery}\n${durableDiscovery}`).not.toMatch(/Advanced routing kernel:|\.well-known\/ae-routing|\/v1\/route|\/mcp/)
+    expect(publicComprehension).toContain('separateApprovalBeforeStart')
+    // `/mcp` is the current MCP host endpoint (T6), no longer retired routing-v1 vocabulary.
+    expect(`${fixtureDiscovery}\n${durableDiscovery}`).not.toMatch(/Advanced routing kernel:|\.well-known\/ae-routing|\/v1\/route/)
   })
 
   it('binds hosted proof to the platform-owned revision after source gates', () => {

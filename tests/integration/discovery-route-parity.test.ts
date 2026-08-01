@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 
-import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
-import {
-  createEmptyCatalogSourceState,
-  getPublicBusinessCatalog,
-  getPublicBusinessPageReadback,
-  publishBusinessCatalog,
-} from '@/modules/catalog/public'
+import { getPublicBusinessCatalog, getPublicBusinessPageReadback } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
   buildLlmsTxt,
@@ -21,29 +16,56 @@ import {
   listPublicBusinessCatalog,
   searchPublicBusinessCatalog,
 } from '@/modules/registry/public'
-import { handleBusinessDetailRequest } from '@/routes/api.businesses.$slug'
-import {
-  handleListBusinessesRequest,
-} from '@/routes/api.businesses'
-import {
-  handleSearchBusinessesRequest,
-} from '@/routes/api.businesses.search'
+import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
+import { handleDurableListBusinessesRequest } from '@/routes/api.businesses'
+import { handleDurableSearchBusinessesRequest } from '@/routes/api.businesses.search'
 import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
+import { handleSiteDiscoveryManifestRequest } from '@/routes/[.]well-known/ucp'
 import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
 import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
 import { handleDeveloperDiscoveryFixturesRequest } from '@/routes/api.discovery.fixtures'
+import { handleCustomerRequestContractSchemaGet } from '@/routes/api.v1.requests.schema'
 import { handleAgentCustomerRequestPost } from '@/lib/server/customer-request-agent-api'
-
+import { createDurablePublishedDiscoveryState } from '../fixtures/discovery-published-state'
 
 beforeEach(() => {
+  // `.env.development.local` sets a machine-specific canonical host, which
+  // otherwise leaks into every generated discovery artifact and makes this
+  // parity assertion depend on whose laptop is running it.
+  vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://ae.example')
   vi.stubEnv('AE_CANONICAL_HOST_ALLOWLIST', 'ae.example')
 })
 
 afterEach(() => {
   vi.unstubAllEnvs()
 })
+/**
+ * Every case here asserts parity between advertised discovery output and the
+ * routes that serve it. The durable route handlers reach the configured source
+ * first, so without pinning the explicit local catalog these assert against
+ * whatever a shared deployment currently holds.
+ */
 describe('discovery route parity', () => {
+  let restoreLocalBypass: (() => void) | undefined
+
+  beforeEach(() => {
+    const previous = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    restoreLocalBypass = () => {
+      if (previous === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+        return
+      }
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previous
+    }
+  })
+
+  afterEach(() => {
+    restoreLocalBypass?.()
+    restoreLocalBypass = undefined
+  })
+
   it('tracks one durable catalog and suppression across public page, registry projections, UCP, llms, and sitemap', async () => {
     const state = createDurablePublishedDiscoveryState({
       businessName: 'Fremantle Heat Pump Repairs',
@@ -51,6 +73,7 @@ describe('discovery route parity', () => {
       serviceName: 'Heat pump diagnostics',
       serviceQuery: 'heat pump fremantle',
       suburb: 'Fremantle',
+      idPrefix: 'discovery-parity-test',
     })
 
     const page = getPublicBusinessCatalog(state, {
@@ -206,24 +229,28 @@ describe('discovery route parity', () => {
       throw new Error('Expected llms API URLs to be present.')
     }
 
-    const listBody = await handleListBusinessesRequest(new Request(listUrl)).json()
-    const searchBody = await handleSearchBusinessesRequest(new Request(searchUrl)).json()
-    const detailBody = await handleBusinessDetailRequest('parramatta-emergency-plumbing').json()
+    const listBody = await (await handleDurableListBusinessesRequest(new Request(listUrl))).json()
+    const searchBody = await (await handleDurableSearchBusinessesRequest(new Request(searchUrl))).json()
+    const detailBody = await (await handleDurableBusinessDetailRequest('parramatta-emergency-plumbing')).json()
 
+    // The contract under test is parity: every slug llms.txt advertises must
+    // be served by the list route on the same schema. Which other businesses
+    // the catalog holds is not this test's business.
     expect(listBody).toMatchObject({
       kind: 'ok',
-      schemaVersion: 'public-business-catalog-api:v1',
-      items: [{ slug: 'parramatta-emergency-plumbing' }],
+      schemaVersion: 'public-business-catalog-api:v2',
     })
+    const listPage = z.object({ items: z.array(z.object({ slug: z.string() })) }).parse(listBody)
+    expect(listPage.items.map((item) => item.slug)).toContain('parramatta-emergency-plumbing')
     expect(searchBody).toMatchObject({
       kind: 'ok',
-      schemaVersion: 'public-business-catalog-api:v1',
+      schemaVersion: 'public-business-catalog-api:v2',
       query: '',
       items: [],
     })
     expect(detailBody).toMatchObject({
       kind: 'found',
-      schemaVersion: 'public-business-catalog-api:v1',
+      schemaVersion: 'public-business-catalog-api:v2',
       business: { slug: 'parramatta-emergency-plumbing' },
     })
   })
@@ -237,8 +264,12 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
     return true
   }
 
-  if (path === '/claim' || path === '/registry' || path === '/privacy/remove-business') {
+  if (path === '/claim' || path === '/registry' || path === '/for-agents' || path === '/privacy/remove-business') {
     return true
+  }
+
+  if (path === '/api/v1/requests/schema') {
+    return handleCustomerRequestContractSchemaGet().status === 200
   }
 
   if (path === '/llms.txt') {
@@ -253,12 +284,16 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
     return handleRobotsTxtRequest(new Request(url)).status === 200
   }
 
+  if (path === '/.well-known/ucp') {
+    return handleSiteDiscoveryManifestRequest(new Request(url)).status === 200
+  }
+
   if (path === '/api/businesses') {
-    return handleListBusinessesRequest(new Request(url)).status === 200
+    return (await handleDurableListBusinessesRequest(new Request(url))).status === 200
   }
 
   if (path === '/api/businesses/search') {
-    return handleSearchBusinessesRequest(new Request(url)).status === 200
+    return (await handleDurableSearchBusinessesRequest(new Request(url))).status === 200
   }
 
   if (path === '/api/v1/requests') {
@@ -270,7 +305,7 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
 
   const detailMatch = /^\/api\/businesses\/([^/]+)$/u.exec(path)
   if (detailMatch?.[1] !== undefined) {
-    return handleBusinessDetailRequest(detailMatch[1]).status === 200
+    return (await handleDurableBusinessDetailRequest(detailMatch[1])).status === 200
   }
 
   const ucpMatch = /^\/([^/]+)\/ucp$/u.exec(path)
@@ -296,104 +331,7 @@ function uniqueUrls(urls: readonly string[]): readonly string[] {
 }
 
 
-function createDurablePublishedDiscoveryState(input: {
-  businessName: string
-  requestedSlug: string
-  serviceName: string
-  serviceQuery: string
-  suburb: string
-}): DiscoverySourceState {
-  const state = emptyDiscoverySourceState()
-  const claim = claimBusiness(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: `owner:${input.requestedSlug}`,
-      displayName: input.businessName,
-    },
-    facts: {
-      name: input.businessName,
-      category: 'Heat pump repair',
-      suburb: input.suburb,
-      stateTerritory: 'WA',
-      requestedSlug: input.requestedSlug,
-      ownerMessage: 'Owner supplied durable source facts.',
-      sourceRefs: [
-        {
-          label: `${input.businessName} service card`,
-          evidenceRef: `private:evidence:${input.requestedSlug}`,
-          sourceHash: brandNonEmpty(`hash:source:${input.requestedSlug}`, 'SourceHash'),
-        },
-      ],
-    },
-    security: {
-      csrf: matchingCsrf('claim'),
-      rateLimit: {
-        scope: 'claim_submit',
-        key: `discovery:${input.requestedSlug}`,
-        now: 10_000,
-        limit: 5,
-        windowMs: 60_000,
-      },
-    },
-    operationKey: operationKey(`claim:${input.requestedSlug}`),
-    correlationId: correlationId(`claim:${input.requestedSlug}`),
-    now: 10_000,
-  })
 
-  if (claim.kind === 'error') {
-    throw new Error(`Expected durable claim fixture to publish: ${claim.reason}`)
-  }
-
-  const publish = publishBusinessCatalog(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: `owner:${input.requestedSlug}`,
-      displayName: input.businessName,
-    },
-    claimId: claim.claim.claimId,
-    services: [
-      {
-        name: input.serviceName,
-        category: 'Heat pump repair',
-        summary: `${input.serviceName} for ${input.suburb} homes.`,
-        serviceArea: `${input.serviceQuery} and nearby suburbs`,
-        hoursOrUnknown: 'Weekdays by appointment',
-        firstRequest: {
-          mode: 'not_available_yet',
-          publicChannel: 'not_available',
-          publicDisclosure: 'This business has not published a request path.',
-          noContactReason: 'Owner has not supplied public contact instructions.',
-        },
-      },
-    ],
-    security: { csrf: matchingCsrf('publish') },
-    operationKey: operationKey(`publish:${input.requestedSlug}`),
-    correlationId: correlationId(`publish:${input.requestedSlug}`),
-    now: 11_000,
-  })
-
-  if (publish.kind === 'error') {
-    throw new Error(`Expected durable publish fixture to publish: ${publish.reason}`)
-  }
-
-  return state
-}
-
-function emptyDiscoverySourceState(): DiscoverySourceState {
-  return {
-    ...createEmptyBusinessSourceState(),
-    ...createEmptyCatalogSourceState(),
-    operationKeys: [],
-    auditEvents: [],
-    registryProjectionItems: [],
-    registryProjectionAttempts: [],
-    discoveryManifestAttempts: [],
-    indexStatus: [],
-    suppressionRules: [],
-    discoveryManifests: [],
-    invalidationIntents: [],
-  }
-}
 
 function suppressFirstBusiness(state: DiscoverySourceState): void {
   const business = state.businesses.at(0)
@@ -418,20 +356,4 @@ function suppressFirstBusiness(state: DiscoverySourceState): void {
     beforePublicStatus: 'published',
     beforeClaimStatus: 'published',
   })
-}
-
-function matchingCsrf(key: string) {
-  return {
-    csrfToken: `csrf-${key}`,
-    csrfCookie: `csrf-${key}`,
-    allowedOrigins: ['https://ae.example'],
-  }
-}
-
-function operationKey(value: string) {
-  return brandNonEmpty(`op:discovery-parity-test:${value}`, 'OperationKey')
-}
-
-function correlationId(value: string) {
-  return brandNonEmpty(`corr:discovery-parity-test:${value}`, 'CorrelationId')
 }

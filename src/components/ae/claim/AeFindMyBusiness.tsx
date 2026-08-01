@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Text } from '@astryxdesign/core/Text'
-import { TextInput } from '@astryxdesign/core/TextInput'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { SearchIcon } from 'lucide-react'
 
 export type FoundBusiness = Readonly<{
@@ -90,69 +90,77 @@ export function AeFindMyBusiness({
   const trimmedQuery = query.trim()
 
   return (
-    <Card padding={5} className="grid gap-4">
-      <div className="grid gap-1">
-        <Text type="large" weight="semibold" color="primary" display="block">
-          Start with your business name
-        </Text>
-        <Text color="secondary" display="block">
-          If your business already has a page, start from it. If not, we can draft one from what is public about you.
-        </Text>
-      </div>
+    <Card className="p-0">
+      <CardHeader>
+        <CardTitle>Find your business</CardTitle>
+        <CardDescription>
+          Search by the name customers use. If you already have a page, we prefill it. If not, start with your website or enter the facts yourself.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <form onSubmit={(event) => void handleSearch(event)} noValidate>
+          <FieldGroup className="grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <Field>
+              <FieldLabel htmlFor="claim-business-name">Your business name</FieldLabel>
+              <InputGroup>
+                <InputGroupInput
+                  id="claim-business-name"
+                  name="claim-business-name"
+                  value={query}
+                  onChange={(event) => setQuery(event.currentTarget.value)}
+                  placeholder="Joondalup Emergency Plumbing"
+                  disabled={pending}
+                />
+                <InputGroupAddon align="inline-start">
+                  <SearchIcon aria-hidden="true" />
+                </InputGroupAddon>
+              </InputGroup>
+              <FieldDescription>Use the name customers recognise.</FieldDescription>
+            </Field>
+            <Button type="submit" variant="default" className="min-h-11" disabled={pending || trimmedQuery.length === 0}>
+              {pending ? 'Searching' : 'Find my business'}
+            </Button>
+          </FieldGroup>
+        </form>
 
-      <form onSubmit={(event) => void handleSearch(event)} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-        <TextInput
-          label="Search your business name"
-          htmlName="claim-business-name"
-          value={query}
-          onChange={setQuery}
-          placeholder="Joondalup Emergency Plumbing"
-          startIcon={<SearchIcon aria-hidden="true" />}
-          size="lg"
-        />
-        <Button
-          label={pending ? 'Searching' : 'Find my business'}
-          variant="primary"
-          type="submit"
-          isDisabled={pending || trimmedQuery.length === 0}
-        />
-      </form>
+        {searched && results.length > 0 ? (
+          <div className="grid gap-3" aria-label="Matching businesses">
+            {results.map((business) => (
+              <Card key={business.slug} className="p-0">
+                <CardContent className="grid gap-2 p-4">
+                  <p className="font-semibold text-foreground">{business.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {[business.category, business.suburb, business.stateTerritory].filter((part) => part.length > 0).join(' · ')}
+                  </p>
+                  <div>
+                    <Button asChild variant="secondary" className="min-h-11">
+                      <a href={claimFormHrefFor(business)}>This is my business</a>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : null}
 
-      {searched && results.length > 0 ? (
-        <div className="grid gap-3" aria-label="Matching businesses">
-          {results.map((business) => (
-            <Card key={business.slug} padding={4} className="grid gap-2">
-              <Text weight="semibold" color="primary" display="block">{business.name}</Text>
-              <Text type="supporting" color="secondary" display="block">
-                {[business.category, business.suburb, business.stateTerritory].filter((part) => part.length > 0).join(' · ')}
-              </Text>
-              <div>
-                <Button label="This is my business" variant="secondary" href={claimFormHrefFor(business)} />
-              </div>
-            </Card>
-          ))}
+        {searched && results.length === 0 ? (
+          <p className="text-muted-foreground">
+            We couldn&apos;t find that name. Start with your website or enter the facts yourself.
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="secondary" type="button" className="min-h-11" disabled={trimmedQuery.length === 0} onClick={() => onBuildFromWeb(trimmedQuery)}>
+            Start with my website
+          </Button>
+          <Button asChild variant="ghost" className="min-h-11">
+            <a href="/claim/form">My business is not listed. Start fresh.</a>
+          </Button>
         </div>
-      ) : null}
-
-      {searched && results.length === 0 ? (
-        <Text color="secondary" display="block">
-          No match. Start fresh and we will build your page.
-        </Text>
-      ) : null}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          label="Build my page from the web"
-          variant="secondary"
-          type="button"
-          isDisabled={trimmedQuery.length === 0}
-          onClick={() => onBuildFromWeb(trimmedQuery)}
-        />
-        <Button label="My business is not listed. Start fresh." variant="ghost" href="/claim/form" />
-      </div>
-      <Text type="supporting" color="secondary" display="block">
-        Anything we gather is unconfirmed until you review it. Nothing publishes until you submit.
-      </Text>
+        <p className="text-sm text-muted-foreground">
+          Anything we gather is unconfirmed until you review it. Nothing publishes until you submit.
+        </p>
+      </CardContent>
     </Card>
   )
 }

@@ -1,6 +1,7 @@
 import { CopyIcon } from 'lucide-react'
 import { useState } from 'react'
-import { Button, type ButtonProps } from '@astryxdesign/core/Button'
+
+import { Button } from '@/components/ui/button'
 
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 
@@ -14,21 +15,21 @@ type AeCopyPublicUrlButtonProps = {
   size?: AeCopyPublicUrlButtonSize
 }
 
-const buttonVariantMap = {
-  default: 'primary',
-  outline: 'secondary',
+const buttonVariantMap: Record<AeCopyPublicUrlButtonVariant, 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive' | 'link'> = {
+  default: 'default',
+  outline: 'outline',
   secondary: 'secondary',
   ghost: 'ghost',
   destructive: 'destructive',
-  link: 'ghost',
-} satisfies Record<AeCopyPublicUrlButtonVariant, NonNullable<ButtonProps['variant']>>
+  link: 'link',
+}
 
-const buttonSizeMap = {
-  default: 'md',
+const buttonSizeMap: Record<AeCopyPublicUrlButtonSize, 'default' | 'sm' | 'lg' | 'icon'> = {
+  default: 'default',
   sm: 'sm',
   lg: 'lg',
-  icon: 'md',
-} satisfies Record<AeCopyPublicUrlButtonSize, NonNullable<ButtonProps['size']>>
+  icon: 'icon',
+}
 
 export function AeCopyPublicUrlButton({
   slug,
@@ -38,6 +39,7 @@ export function AeCopyPublicUrlButton({
 }: AeCopyPublicUrlButtonProps) {
   const [copied, setCopied] = useState(false)
   const publicPath = `/${slug}`
+  const label = copied ? 'Copied public URL' : 'Copy public URL'
 
   async function handleCopy() {
     const origin = typeof window === 'undefined' ? 'https://ae.example' : window.location.origin
@@ -60,11 +62,13 @@ export function AeCopyPublicUrlButton({
   return (
     <Button
       type="button"
-      label={copied ? 'Copied public URL' : 'Copy public URL'}
       variant={buttonVariantMap[variant]}
       size={buttonSizeMap[size]}
-      icon={<CopyIcon aria-hidden="true" />}
+      aria-label={label}
       onClick={handleCopy}
-    />
+    >
+      <CopyIcon data-icon="inline-start" aria-hidden="true" />
+      {size === 'icon' ? <span className="sr-only">{label}</span> : label}
+    </Button>
   )
 }

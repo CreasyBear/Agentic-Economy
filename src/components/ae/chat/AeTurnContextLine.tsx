@@ -28,11 +28,11 @@ export function AeTurnContextLine({ intent, seq, artifacts }: AeTurnContextLineP
 
   return (
     <div
-      className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-md border border-border bg-muted px-3 py-2 text-xs leading-snug text-secondary"
+      className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-md border border-border bg-muted px-3 py-2 text-xs leading-snug text-muted-foreground"
       data-intent={intent}
       aria-label="Turn context"
     >
-      <Icon className="mt-px size-3.5 text-secondary" aria-hidden="true" />
+      <Icon className="mt-px size-3.5 text-muted-foreground" aria-hidden="true" />
       <span>{line}</span>
     </div>
   )

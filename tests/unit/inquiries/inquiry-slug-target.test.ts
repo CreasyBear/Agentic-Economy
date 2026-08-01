@@ -25,7 +25,11 @@ describe('inquiry.submit slug target resolution', () => {
 
   it('returns inquiry_target_not_found for an unknown business slug through the explicit local source path', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await submitPublicInquiryThroughSource({
@@ -47,12 +51,18 @@ describe('inquiry.submit slug target resolution', () => {
       })
     } finally {
       restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalRegistry)
+      restoreEnv('CONVEX_URL', previousConvexUrl)
+      restoreEnv('VITE_CONVEX_URL', previousPublicConvexUrl)
     }
   })
 
   it('returns inquiry_target_not_found when the service slug is not on the published business', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
 
     try {
       const result = await submitPublicInquiryThroughSource({
@@ -74,6 +84,8 @@ describe('inquiry.submit slug target resolution', () => {
       })
     } finally {
       restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalRegistry)
+      restoreEnv('CONVEX_URL', previousConvexUrl)
+      restoreEnv('VITE_CONVEX_URL', previousPublicConvexUrl)
     }
   })
 

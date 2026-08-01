@@ -14,8 +14,10 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as HelpRouteImport } from './routes/help'
+import { Route as ForProvidersRouteImport } from './routes/for-providers'
 import { Route as ForAgentsRouteImport } from './routes/for-agents'
 import { Route as EngineRouteImport } from './routes/engine'
 import { Route as ClaimRouteImport } from './routes/claim'
@@ -29,17 +31,26 @@ import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as QAnswerIdRouteImport } from './routes/q.$answerId'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
+import { Route as OauthTokenRouteImport } from './routes/oauth.token'
+import { Route as OauthRegisterRouteImport } from './routes/oauth.register'
+import { Route as OauthDevice_authorizationRouteImport } from './routes/oauth.device_authorization'
+import { Route as OauthAuthorizeRouteImport } from './routes/oauth.authorize'
 import { Route as IThreadIdRouteImport } from './routes/i.$threadId'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
 import { Route as ClaimFormRouteImport } from './routes/claim.form'
 import { Route as ApiRequestsRouteImport } from './routes/api.requests'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as OperatorAgentAccessRouteImport } from './routes/_operator/agent-access'
+import { Route as DotwellKnownUcpRouteImport } from './routes/[.]well-known/ucp'
+import { Route as DotwellKnownOauthProtectedResourceRouteImport } from './routes/[.]well-known/oauth-protected-resource'
+import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './routes/[.]well-known/oauth-authorization-server'
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
+import { Route as ApiV1ServicesRouteImport } from './routes/api.v1.services'
 import { Route as ApiV1RequestsRouteImport } from './routes/api.v1.requests'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
+import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
 import { Route as ApiStorefrontEnrichRouteImport } from './routes/api.storefront.enrich'
 import { Route as ApiSandboxCapabilityRouteImport } from './routes/api.sandbox.capability'
@@ -51,23 +62,30 @@ import { Route as ApiNotificationNovuDispatchRouteImport } from './routes/api.no
 import { Route as ApiDiscoverySchemaRouteImport } from './routes/api.discovery.schema'
 import { Route as ApiDiscoveryFixturesRouteImport } from './routes/api.discovery.fixtures'
 import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
+import { Route as ApiDemoProviderQuoteRouteImport } from './routes/api.demo-provider.quote'
+import { Route as ApiDemoProviderHealthRouteImport } from './routes/api.demo-provider.health'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as ApiAnswerTurnRouteImport } from './routes/api.answer.turn'
 import { Route as ApiAnswerThreadsRouteImport } from './routes/api.answer.threads'
 import { Route as ApiAnswerFollowUpChipsRouteImport } from './routes/api.answer.follow-up-chips'
 import { Route as ApiAnswerEvalStatusRouteImport } from './routes/api.answer.eval-status'
+import { Route as OperatorOwnerSupplyRouteImport } from './routes/_operator/owner.supply'
 import { Route as OperatorOwnerStatusRouteImport } from './routes/_operator/owner.status'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOfferingsRouteImport } from './routes/_operator/owner.offerings'
 import { Route as OperatorOwnerInquiriesRouteImport } from './routes/_operator/owner.inquiries'
 import { Route as OperatorDevelopersDiscoveryRouteImport } from './routes/_operator/developers.discovery'
+import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
+import { Route as OperatorAdminSearchGapsRouteImport } from './routes/_operator/admin.search-gaps'
 import { Route as OperatorAdminRunsRouteImport } from './routes/_operator/admin.runs'
 import { Route as OperatorAdminRequestProblemsRouteImport } from './routes/_operator/admin.request-problems'
 import { Route as OperatorAdminInquiriesRouteImport } from './routes/_operator/admin.inquiries'
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
 import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
+import { Route as SlugToolsToolIdRouteImport } from './routes/$slug.tools.$toolId'
+import { Route as ApiV1ServicesSearchRouteImport } from './routes/api.v1.services.search'
 import { Route as ApiV1RequestsSchemaRouteImport } from './routes/api.v1.requests.schema'
 import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.requests.$requestRef'
 import { Route as ApiSandboxProvidersWorkflowRouteImport } from './routes/api.sandbox.providers.workflow'
@@ -85,11 +103,13 @@ import { Route as ApiRequestsRequestRefConfirmationRouteImport } from './routes/
 import { Route as ApiRequestsRequestRefCancellationRouteImport } from './routes/api.requests.$requestRef.cancellation'
 import { Route as ApiRequestsRequestRefAuthorizationRouteImport } from './routes/api.requests.$requestRef.authorization'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
+import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
 import { Route as OperatorOwnerRequestProblemsReportRefRouteImport } from './routes/_operator/owner.request-problems.$reportRef'
 import { Route as OperatorOwnerOfferingsNewRouteImport } from './routes/_operator/owner.offerings.new'
 import { Route as OperatorOwnerOfferingsOfferingRefRouteImport } from './routes/_operator/owner.offerings.$offeringRef'
 import { Route as OperatorOwnerInquiriesThreadIdRouteImport } from './routes/_operator/owner.inquiries.$threadId'
 import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/admin.runs.$turnId'
+import { Route as SlugToolsToolIdPrepareRouteImport } from './routes/$slug.tools.$toolId.prepare'
 import { Route as ApiV1RequestsRequestRefRunRouteImport } from './routes/api.v1.requests.$requestRef.run'
 import { Route as ApiV1RequestsRequestRefRepeatPermissionsRouteImport } from './routes/api.v1.requests.$requestRef.repeat-permissions'
 import { Route as ApiV1RequestsRequestRefProblemsRouteImport } from './routes/api.v1.requests.$requestRef.problems'
@@ -133,6 +153,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   id: '/llms.txt',
   path: '/llms.txt',
@@ -141,6 +166,11 @@ const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
 const HelpRoute = HelpRouteImport.update({
   id: '/help',
   path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForProvidersRoute = ForProvidersRouteImport.update({
+  id: '/for-providers',
+  path: '/for-providers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForAgentsRoute = ForAgentsRouteImport.update({
@@ -207,6 +237,27 @@ const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
   path: '/remove-business',
   getParentRoute: () => PrivacyRoute,
 } as any)
+const OauthTokenRoute = OauthTokenRouteImport.update({
+  id: '/oauth/token',
+  path: '/oauth/token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OauthRegisterRoute = OauthRegisterRouteImport.update({
+  id: '/oauth/register',
+  path: '/oauth/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OauthDevice_authorizationRoute =
+  OauthDevice_authorizationRouteImport.update({
+    id: '/oauth/device_authorization',
+    path: '/oauth/device_authorization',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const OauthAuthorizeRoute = OauthAuthorizeRouteImport.update({
+  id: '/oauth/authorize',
+  path: '/oauth/authorize',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IThreadIdRoute = IThreadIdRouteImport.update({
   id: '/i/$threadId',
   path: '/i/$threadId',
@@ -237,6 +288,23 @@ const OperatorAgentAccessRoute = OperatorAgentAccessRouteImport.update({
   path: '/agent-access',
   getParentRoute: () => OperatorRoute,
 } as any)
+const DotwellKnownUcpRoute = DotwellKnownUcpRouteImport.update({
+  id: '/.well-known/ucp',
+  path: '/.well-known/ucp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotwellKnownOauthProtectedResourceRoute =
+  DotwellKnownOauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DotwellKnownOauthAuthorizationServerRoute =
+  DotwellKnownOauthAuthorizationServerRouteImport.update({
+    id: '/.well-known/oauth-authorization-server',
+    path: '/.well-known/oauth-authorization-server',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DotwellKnownHttpMessageSignaturesDirectoryRoute =
   DotwellKnownHttpMessageSignaturesDirectoryRouteImport.update({
     id: '/.well-known/http-message-signatures-directory',
@@ -253,6 +321,11 @@ const SlugInquiryRoute = SlugInquiryRouteImport.update({
   path: '/inquiry',
   getParentRoute: () => SlugRoute,
 } as any)
+const ApiV1ServicesRoute = ApiV1ServicesRouteImport.update({
+  id: '/api/v1/services',
+  path: '/api/v1/services',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1RequestsRoute = ApiV1RequestsRouteImport.update({
   id: '/api/v1/requests',
   path: '/api/v1/requests',
@@ -261,6 +334,11 @@ const ApiV1RequestsRoute = ApiV1RequestsRouteImport.update({
 const ApiV1ReleaseRoute = ApiV1ReleaseRouteImport.update({
   id: '/api/v1/release',
   path: '/api/v1/release',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
+  id: '/api/stripe/webhook',
+  path: '/api/stripe/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiStorefrontImportDraftRoute =
@@ -322,6 +400,16 @@ const ApiDiscoveryExamplesRoute = ApiDiscoveryExamplesRouteImport.update({
   path: '/api/discovery/examples',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDemoProviderQuoteRoute = ApiDemoProviderQuoteRouteImport.update({
+  id: '/api/demo-provider/quote',
+  path: '/api/demo-provider/quote',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDemoProviderHealthRoute = ApiDemoProviderHealthRouteImport.update({
+  id: '/api/demo-provider/health',
+  path: '/api/demo-provider/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBusinessesSearchRoute = ApiBusinessesSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -352,6 +440,11 @@ const ApiAnswerEvalStatusRoute = ApiAnswerEvalStatusRouteImport.update({
   path: '/api/answer/eval-status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OperatorOwnerSupplyRoute = OperatorOwnerSupplyRouteImport.update({
+  id: '/owner/supply',
+  path: '/owner/supply',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorOwnerStatusRoute = OperatorOwnerStatusRouteImport.update({
   id: '/owner/status',
   path: '/owner/status',
@@ -378,6 +471,17 @@ const OperatorDevelopersDiscoveryRoute =
     path: '/developers/discovery',
     getParentRoute: () => OperatorRoute,
   } as any)
+const OperatorAgentAccessAuthorizeRoute =
+  OperatorAgentAccessAuthorizeRouteImport.update({
+    id: '/authorize',
+    path: '/authorize',
+    getParentRoute: () => OperatorAgentAccessRoute,
+  } as any)
+const OperatorAdminSearchGapsRoute = OperatorAdminSearchGapsRouteImport.update({
+  id: '/admin/search-gaps',
+  path: '/admin/search-gaps',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorAdminRunsRoute = OperatorAdminRunsRouteImport.update({
   id: '/admin/runs',
   path: '/admin/runs',
@@ -411,6 +515,16 @@ const OperatorAdminAuditEventsRoute =
     path: '/admin/audit-events',
     getParentRoute: () => OperatorRoute,
   } as any)
+const SlugToolsToolIdRoute = SlugToolsToolIdRouteImport.update({
+  id: '/tools/$toolId',
+  path: '/tools/$toolId',
+  getParentRoute: () => SlugRoute,
+} as any)
+const ApiV1ServicesSearchRoute = ApiV1ServicesSearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => ApiV1ServicesRoute,
+} as any)
 const ApiV1RequestsSchemaRoute = ApiV1RequestsSchemaRouteImport.update({
   id: '/schema',
   path: '/schema',
@@ -511,6 +625,12 @@ const ApiAnswerThreadsThreadIdRoute =
     path: '/$threadId',
     getParentRoute: () => ApiAnswerThreadsRoute,
   } as any)
+const OperatorOwnerSupplyOfferingRefRoute =
+  OperatorOwnerSupplyOfferingRefRouteImport.update({
+    id: '/$offeringRef',
+    path: '/$offeringRef',
+    getParentRoute: () => OperatorOwnerSupplyRoute,
+  } as any)
 const OperatorOwnerRequestProblemsReportRefRoute =
   OperatorOwnerRequestProblemsReportRefRouteImport.update({
     id: '/owner/request-problems/$reportRef',
@@ -539,6 +659,11 @@ const OperatorAdminRunsTurnIdRoute = OperatorAdminRunsTurnIdRouteImport.update({
   id: '/$turnId',
   path: '/$turnId',
   getParentRoute: () => OperatorAdminRunsRoute,
+} as any)
+const SlugToolsToolIdPrepareRoute = SlugToolsToolIdPrepareRouteImport.update({
+  id: '/prepare',
+  path: '/prepare',
+  getParentRoute: () => SlugToolsToolIdRoute,
 } as any)
 const ApiV1RequestsRequestRefRunRoute =
   ApiV1RequestsRequestRefRunRouteImport.update({
@@ -659,8 +784,10 @@ export interface FileRoutesByFullPath {
   '/claim': typeof ClaimRouteWithChildren
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
+  '/for-providers': typeof ForProvidersRoute
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/mcp': typeof McpRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
@@ -669,34 +796,47 @@ export interface FileRoutesByFullPath {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
-  '/agent-access': typeof OperatorAgentAccessRoute
+  '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
+  '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
+  '/.well-known/ucp': typeof DotwellKnownUcpRoute
+  '/agent-access': typeof OperatorAgentAccessRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/form': typeof ClaimFormRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
+  '/oauth/authorize': typeof OauthAuthorizeRoute
+  '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
+  '/oauth/register': typeof OauthRegisterRoute
+  '/oauth/token': typeof OauthTokenRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
+  '/$slug/tools/$toolId': typeof SlugToolsToolIdRouteWithChildren
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/claims': typeof OperatorAdminClaimsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/admin/inquiries': typeof OperatorAdminInquiriesRoute
   '/admin/request-problems': typeof OperatorAdminRequestProblemsRoute
   '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
+  '/admin/search-gaps': typeof OperatorAdminSearchGapsRoute
+  '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
+  '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
   '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
   '/api/answer/turn': typeof ApiAnswerTurnRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/demo-provider/health': typeof ApiDemoProviderHealthRoute
+  '/api/demo-provider/quote': typeof ApiDemoProviderQuoteRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
@@ -708,13 +848,17 @@ export interface FileRoutesByFullPath {
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
+  '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
+  '/$slug/tools/$toolId/prepare': typeof SlugToolsToolIdPrepareRoute
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
+  '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
@@ -732,6 +876,7 @@ export interface FileRoutesByFullPath {
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
+  '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -758,8 +903,10 @@ export interface FileRoutesByTo {
   '/claim': typeof ClaimRouteWithChildren
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
+  '/for-providers': typeof ForProvidersRoute
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/mcp': typeof McpRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
@@ -768,34 +915,47 @@ export interface FileRoutesByTo {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
-  '/agent-access': typeof OperatorAgentAccessRoute
+  '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
+  '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
+  '/.well-known/ucp': typeof DotwellKnownUcpRoute
+  '/agent-access': typeof OperatorAgentAccessRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/form': typeof ClaimFormRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
+  '/oauth/authorize': typeof OauthAuthorizeRoute
+  '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
+  '/oauth/register': typeof OauthRegisterRoute
+  '/oauth/token': typeof OauthTokenRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
+  '/$slug/tools/$toolId': typeof SlugToolsToolIdRouteWithChildren
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/claims': typeof OperatorAdminClaimsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/admin/inquiries': typeof OperatorAdminInquiriesRoute
   '/admin/request-problems': typeof OperatorAdminRequestProblemsRoute
   '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
+  '/admin/search-gaps': typeof OperatorAdminSearchGapsRoute
+  '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
+  '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
   '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
   '/api/answer/turn': typeof ApiAnswerTurnRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/demo-provider/health': typeof ApiDemoProviderHealthRoute
+  '/api/demo-provider/quote': typeof ApiDemoProviderQuoteRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
@@ -807,13 +967,17 @@ export interface FileRoutesByTo {
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
+  '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
+  '/$slug/tools/$toolId/prepare': typeof SlugToolsToolIdPrepareRoute
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
+  '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
@@ -831,6 +995,7 @@ export interface FileRoutesByTo {
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
+  '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -859,8 +1024,10 @@ export interface FileRoutesById {
   '/claim': typeof ClaimRouteWithChildren
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
+  '/for-providers': typeof ForProvidersRoute
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/mcp': typeof McpRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
@@ -869,34 +1036,47 @@ export interface FileRoutesById {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
-  '/_operator/agent-access': typeof OperatorAgentAccessRoute
+  '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
+  '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
+  '/.well-known/ucp': typeof DotwellKnownUcpRoute
+  '/_operator/agent-access': typeof OperatorAgentAccessRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/form': typeof ClaimFormRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
+  '/oauth/authorize': typeof OauthAuthorizeRoute
+  '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
+  '/oauth/register': typeof OauthRegisterRoute
+  '/oauth/token': typeof OauthTokenRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
+  '/$slug/tools/$toolId': typeof SlugToolsToolIdRouteWithChildren
   '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/_operator/admin/claims': typeof OperatorAdminClaimsRoute
   '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/_operator/admin/inquiries': typeof OperatorAdminInquiriesRoute
   '/_operator/admin/request-problems': typeof OperatorAdminRequestProblemsRoute
   '/_operator/admin/runs': typeof OperatorAdminRunsRouteWithChildren
+  '/_operator/admin/search-gaps': typeof OperatorAdminSearchGapsRoute
+  '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/_operator/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/_operator/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
   '/_operator/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
   '/_operator/owner/status': typeof OperatorOwnerStatusRoute
+  '/_operator/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
   '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
   '/api/answer/turn': typeof ApiAnswerTurnRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/demo-provider/health': typeof ApiDemoProviderHealthRoute
+  '/api/demo-provider/quote': typeof ApiDemoProviderQuoteRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
@@ -908,13 +1088,17 @@ export interface FileRoutesById {
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
+  '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
+  '/$slug/tools/$toolId/prepare': typeof SlugToolsToolIdPrepareRoute
   '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/_operator/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/_operator/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/_operator/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
+  '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
@@ -932,6 +1116,7 @@ export interface FileRoutesById {
   '/api/sandbox/providers/workflow': typeof ApiSandboxProvidersWorkflowRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
+  '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
   '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -960,8 +1145,10 @@ export interface FileRouteTypes {
     | '/claim'
     | '/engine'
     | '/for-agents'
+    | '/for-providers'
     | '/help'
     | '/llms.txt'
+    | '/mcp'
     | '/privacy'
     | '/registry'
     | '/robots.txt'
@@ -970,34 +1157,47 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
+    | '/.well-known/oauth-authorization-server'
+    | '/.well-known/oauth-protected-resource'
+    | '/.well-known/ucp'
     | '/agent-access'
     | '/api/businesses'
     | '/api/requests'
     | '/claim/form'
     | '/claim/success'
     | '/i/$threadId'
+    | '/oauth/authorize'
+    | '/oauth/device_authorization'
+    | '/oauth/register'
+    | '/oauth/token'
     | '/privacy/remove-business'
     | '/q/$answerId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
+    | '/$slug/tools/$toolId'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
     | '/admin/inquiries'
     | '/admin/request-problems'
     | '/admin/runs'
+    | '/admin/search-gaps'
+    | '/agent-access/authorize'
     | '/developers/discovery'
     | '/owner/inquiries'
     | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
+    | '/owner/supply'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
     | '/api/answer/threads'
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/demo-provider/health'
+    | '/api/demo-provider/quote'
     | '/api/discovery/examples'
     | '/api/discovery/fixtures'
     | '/api/discovery/schema'
@@ -1009,13 +1209,17 @@ export interface FileRouteTypes {
     | '/api/sandbox/capability'
     | '/api/storefront/enrich'
     | '/api/storefront/import-draft'
+    | '/api/stripe/webhook'
     | '/api/v1/release'
     | '/api/v1/requests'
+    | '/api/v1/services'
+    | '/$slug/tools/$toolId/prepare'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
     | '/owner/request-problems/$reportRef'
+    | '/owner/supply/$offeringRef'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/cancellation'
@@ -1033,6 +1237,7 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/workflow'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
+    | '/api/v1/services/search'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1059,8 +1264,10 @@ export interface FileRouteTypes {
     | '/claim'
     | '/engine'
     | '/for-agents'
+    | '/for-providers'
     | '/help'
     | '/llms.txt'
+    | '/mcp'
     | '/privacy'
     | '/registry'
     | '/robots.txt'
@@ -1069,34 +1276,47 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
+    | '/.well-known/oauth-authorization-server'
+    | '/.well-known/oauth-protected-resource'
+    | '/.well-known/ucp'
     | '/agent-access'
     | '/api/businesses'
     | '/api/requests'
     | '/claim/form'
     | '/claim/success'
     | '/i/$threadId'
+    | '/oauth/authorize'
+    | '/oauth/device_authorization'
+    | '/oauth/register'
+    | '/oauth/token'
     | '/privacy/remove-business'
     | '/q/$answerId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
+    | '/$slug/tools/$toolId'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
     | '/admin/inquiries'
     | '/admin/request-problems'
     | '/admin/runs'
+    | '/admin/search-gaps'
+    | '/agent-access/authorize'
     | '/developers/discovery'
     | '/owner/inquiries'
     | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
+    | '/owner/supply'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
     | '/api/answer/threads'
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/demo-provider/health'
+    | '/api/demo-provider/quote'
     | '/api/discovery/examples'
     | '/api/discovery/fixtures'
     | '/api/discovery/schema'
@@ -1108,13 +1328,17 @@ export interface FileRouteTypes {
     | '/api/sandbox/capability'
     | '/api/storefront/enrich'
     | '/api/storefront/import-draft'
+    | '/api/stripe/webhook'
     | '/api/v1/release'
     | '/api/v1/requests'
+    | '/api/v1/services'
+    | '/$slug/tools/$toolId/prepare'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
     | '/owner/request-problems/$reportRef'
+    | '/owner/supply/$offeringRef'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/cancellation'
@@ -1132,6 +1356,7 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/workflow'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
+    | '/api/v1/services/search'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1159,8 +1384,10 @@ export interface FileRouteTypes {
     | '/claim'
     | '/engine'
     | '/for-agents'
+    | '/for-providers'
     | '/help'
     | '/llms.txt'
+    | '/mcp'
     | '/privacy'
     | '/registry'
     | '/robots.txt'
@@ -1169,34 +1396,47 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
+    | '/.well-known/oauth-authorization-server'
+    | '/.well-known/oauth-protected-resource'
+    | '/.well-known/ucp'
     | '/_operator/agent-access'
     | '/api/businesses'
     | '/api/requests'
     | '/claim/form'
     | '/claim/success'
     | '/i/$threadId'
+    | '/oauth/authorize'
+    | '/oauth/device_authorization'
+    | '/oauth/register'
+    | '/oauth/token'
     | '/privacy/remove-business'
     | '/q/$answerId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
+    | '/$slug/tools/$toolId'
     | '/_operator/admin/audit-events'
     | '/_operator/admin/claims'
     | '/_operator/admin/index-health'
     | '/_operator/admin/inquiries'
     | '/_operator/admin/request-problems'
     | '/_operator/admin/runs'
+    | '/_operator/admin/search-gaps'
+    | '/_operator/agent-access/authorize'
     | '/_operator/developers/discovery'
     | '/_operator/owner/inquiries'
     | '/_operator/owner/offerings'
     | '/_operator/owner/settings'
     | '/_operator/owner/status'
+    | '/_operator/owner/supply'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
     | '/api/answer/threads'
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/demo-provider/health'
+    | '/api/demo-provider/quote'
     | '/api/discovery/examples'
     | '/api/discovery/fixtures'
     | '/api/discovery/schema'
@@ -1208,13 +1448,17 @@ export interface FileRouteTypes {
     | '/api/sandbox/capability'
     | '/api/storefront/enrich'
     | '/api/storefront/import-draft'
+    | '/api/stripe/webhook'
     | '/api/v1/release'
     | '/api/v1/requests'
+    | '/api/v1/services'
+    | '/$slug/tools/$toolId/prepare'
     | '/_operator/admin/runs/$turnId'
     | '/_operator/owner/inquiries/$threadId'
     | '/_operator/owner/offerings/$offeringRef'
     | '/_operator/owner/offerings/new'
     | '/_operator/owner/request-problems/$reportRef'
+    | '/_operator/owner/supply/$offeringRef'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/cancellation'
@@ -1232,6 +1476,7 @@ export interface FileRouteTypes {
     | '/api/sandbox/providers/workflow'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
+    | '/api/v1/services/search'
     | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -1260,17 +1505,26 @@ export interface RootRouteChildren {
   ClaimRoute: typeof ClaimRouteWithChildren
   EngineRoute: typeof EngineRoute
   ForAgentsRoute: typeof ForAgentsRoute
+  ForProvidersRoute: typeof ForProvidersRoute
   HelpRoute: typeof HelpRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
+  McpRoute: typeof McpRoute
   PrivacyRoute: typeof PrivacyRouteWithChildren
   RegistryRoute: typeof RegistryRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
   DotwellKnownHttpMessageSignaturesDirectoryRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
+  DotwellKnownOauthAuthorizationServerRoute: typeof DotwellKnownOauthAuthorizationServerRoute
+  DotwellKnownOauthProtectedResourceRoute: typeof DotwellKnownOauthProtectedResourceRoute
+  DotwellKnownUcpRoute: typeof DotwellKnownUcpRoute
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   ApiRequestsRoute: typeof ApiRequestsRouteWithChildren
   IThreadIdRoute: typeof IThreadIdRoute
+  OauthAuthorizeRoute: typeof OauthAuthorizeRoute
+  OauthDevice_authorizationRoute: typeof OauthDevice_authorizationRoute
+  OauthRegisterRoute: typeof OauthRegisterRoute
+  OauthTokenRoute: typeof OauthTokenRoute
   QAnswerIdRoute: typeof QAnswerIdRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
@@ -1279,6 +1533,8 @@ export interface RootRouteChildren {
   ApiAnswerFollowUpChipsRoute: typeof ApiAnswerFollowUpChipsRoute
   ApiAnswerThreadsRoute: typeof ApiAnswerThreadsRouteWithChildren
   ApiAnswerTurnRoute: typeof ApiAnswerTurnRoute
+  ApiDemoProviderHealthRoute: typeof ApiDemoProviderHealthRoute
+  ApiDemoProviderQuoteRoute: typeof ApiDemoProviderQuoteRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoveryFixturesRoute: typeof ApiDiscoveryFixturesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
@@ -1289,8 +1545,10 @@ export interface RootRouteChildren {
   ApiSandboxCapabilityRoute: typeof ApiSandboxCapabilityRoute
   ApiStorefrontEnrichRoute: typeof ApiStorefrontEnrichRoute
   ApiStorefrontImportDraftRoute: typeof ApiStorefrontImportDraftRoute
+  ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1RequestsRoute: typeof ApiV1RequestsRouteWithChildren
+  ApiV1ServicesRoute: typeof ApiV1ServicesRouteWithChildren
   ApiSandboxSlugCheckupQuoteRoute: typeof ApiSandboxSlugCheckupQuoteRoute
   ApiSandboxProvidersRouteQuoterRoute: typeof ApiSandboxProvidersRouteQuoterRoute
   ApiSandboxProvidersRouteResolverRoute: typeof ApiSandboxProvidersRouteResolverRoute
@@ -1334,6 +1592,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/llms.txt': {
       id: '/llms.txt'
       path: '/llms.txt'
@@ -1346,6 +1611,13 @@ declare module '@tanstack/react-router' {
       path: '/help'
       fullPath: '/help'
       preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/for-providers': {
+      id: '/for-providers'
+      path: '/for-providers'
+      fullPath: '/for-providers'
+      preLoaderRoute: typeof ForProvidersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/for-agents': {
@@ -1439,6 +1711,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRemoveBusinessRouteImport
       parentRoute: typeof PrivacyRoute
     }
+    '/oauth/token': {
+      id: '/oauth/token'
+      path: '/oauth/token'
+      fullPath: '/oauth/token'
+      preLoaderRoute: typeof OauthTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/register': {
+      id: '/oauth/register'
+      path: '/oauth/register'
+      fullPath: '/oauth/register'
+      preLoaderRoute: typeof OauthRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/device_authorization': {
+      id: '/oauth/device_authorization'
+      path: '/oauth/device_authorization'
+      fullPath: '/oauth/device_authorization'
+      preLoaderRoute: typeof OauthDevice_authorizationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/authorize': {
+      id: '/oauth/authorize'
+      path: '/oauth/authorize'
+      fullPath: '/oauth/authorize'
+      preLoaderRoute: typeof OauthAuthorizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/i/$threadId': {
       id: '/i/$threadId'
       path: '/i/$threadId'
@@ -1481,6 +1781,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAgentAccessRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/.well-known/ucp': {
+      id: '/.well-known/ucp'
+      path: '/.well-known/ucp'
+      fullPath: '/.well-known/ucp'
+      preLoaderRoute: typeof DotwellKnownUcpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof DotwellKnownOauthProtectedResourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-authorization-server': {
+      id: '/.well-known/oauth-authorization-server'
+      path: '/.well-known/oauth-authorization-server'
+      fullPath: '/.well-known/oauth-authorization-server'
+      preLoaderRoute: typeof DotwellKnownOauthAuthorizationServerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/.well-known/http-message-signatures-directory': {
       id: '/.well-known/http-message-signatures-directory'
       path: '/.well-known/http-message-signatures-directory'
@@ -1502,6 +1823,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SlugInquiryRouteImport
       parentRoute: typeof SlugRoute
     }
+    '/api/v1/services': {
+      id: '/api/v1/services'
+      path: '/api/v1/services'
+      fullPath: '/api/v1/services'
+      preLoaderRoute: typeof ApiV1ServicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/requests': {
       id: '/api/v1/requests'
       path: '/api/v1/requests'
@@ -1514,6 +1842,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/release'
       fullPath: '/api/v1/release'
       preLoaderRoute: typeof ApiV1ReleaseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/stripe/webhook': {
+      id: '/api/stripe/webhook'
+      path: '/api/stripe/webhook'
+      fullPath: '/api/stripe/webhook'
+      preLoaderRoute: typeof ApiStripeWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/storefront/import-draft': {
@@ -1593,6 +1928,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDiscoveryExamplesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/demo-provider/quote': {
+      id: '/api/demo-provider/quote'
+      path: '/api/demo-provider/quote'
+      fullPath: '/api/demo-provider/quote'
+      preLoaderRoute: typeof ApiDemoProviderQuoteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/demo-provider/health': {
+      id: '/api/demo-provider/health'
+      path: '/api/demo-provider/health'
+      fullPath: '/api/demo-provider/health'
+      preLoaderRoute: typeof ApiDemoProviderHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/businesses/search': {
       id: '/api/businesses/search'
       path: '/search'
@@ -1635,6 +1984,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAnswerEvalStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_operator/owner/supply': {
+      id: '/_operator/owner/supply'
+      path: '/owner/supply'
+      fullPath: '/owner/supply'
+      preLoaderRoute: typeof OperatorOwnerSupplyRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/_operator/owner/status': {
       id: '/_operator/owner/status'
       path: '/owner/status'
@@ -1668,6 +2024,20 @@ declare module '@tanstack/react-router' {
       path: '/developers/discovery'
       fullPath: '/developers/discovery'
       preLoaderRoute: typeof OperatorDevelopersDiscoveryRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/agent-access/authorize': {
+      id: '/_operator/agent-access/authorize'
+      path: '/authorize'
+      fullPath: '/agent-access/authorize'
+      preLoaderRoute: typeof OperatorAgentAccessAuthorizeRouteImport
+      parentRoute: typeof OperatorAgentAccessRoute
+    }
+    '/_operator/admin/search-gaps': {
+      id: '/_operator/admin/search-gaps'
+      path: '/admin/search-gaps'
+      fullPath: '/admin/search-gaps'
+      preLoaderRoute: typeof OperatorAdminSearchGapsRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/_operator/admin/runs': {
@@ -1711,6 +2081,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/audit-events'
       preLoaderRoute: typeof OperatorAdminAuditEventsRouteImport
       parentRoute: typeof OperatorRoute
+    }
+    '/$slug/tools/$toolId': {
+      id: '/$slug/tools/$toolId'
+      path: '/tools/$toolId'
+      fullPath: '/$slug/tools/$toolId'
+      preLoaderRoute: typeof SlugToolsToolIdRouteImport
+      parentRoute: typeof SlugRoute
+    }
+    '/api/v1/services/search': {
+      id: '/api/v1/services/search'
+      path: '/search'
+      fullPath: '/api/v1/services/search'
+      preLoaderRoute: typeof ApiV1ServicesSearchRouteImport
+      parentRoute: typeof ApiV1ServicesRoute
     }
     '/api/v1/requests/schema': {
       id: '/api/v1/requests/schema'
@@ -1831,6 +2215,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAnswerThreadsThreadIdRouteImport
       parentRoute: typeof ApiAnswerThreadsRoute
     }
+    '/_operator/owner/supply/$offeringRef': {
+      id: '/_operator/owner/supply/$offeringRef'
+      path: '/$offeringRef'
+      fullPath: '/owner/supply/$offeringRef'
+      preLoaderRoute: typeof OperatorOwnerSupplyOfferingRefRouteImport
+      parentRoute: typeof OperatorOwnerSupplyRoute
+    }
     '/_operator/owner/request-problems/$reportRef': {
       id: '/_operator/owner/request-problems/$reportRef'
       path: '/owner/request-problems/$reportRef'
@@ -1865,6 +2256,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/runs/$turnId'
       preLoaderRoute: typeof OperatorAdminRunsTurnIdRouteImport
       parentRoute: typeof OperatorAdminRunsRoute
+    }
+    '/$slug/tools/$toolId/prepare': {
+      id: '/$slug/tools/$toolId/prepare'
+      path: '/prepare'
+      fullPath: '/$slug/tools/$toolId/prepare'
+      preLoaderRoute: typeof SlugToolsToolIdPrepareRouteImport
+      parentRoute: typeof SlugToolsToolIdRoute
     }
     '/api/v1/requests/$requestRef/run': {
       id: '/api/v1/requests/$requestRef/run'
@@ -1988,17 +2386,42 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface SlugToolsToolIdRouteChildren {
+  SlugToolsToolIdPrepareRoute: typeof SlugToolsToolIdPrepareRoute
+}
+
+const SlugToolsToolIdRouteChildren: SlugToolsToolIdRouteChildren = {
+  SlugToolsToolIdPrepareRoute: SlugToolsToolIdPrepareRoute,
+}
+
+const SlugToolsToolIdRouteWithChildren = SlugToolsToolIdRoute._addFileChildren(
+  SlugToolsToolIdRouteChildren,
+)
+
 interface SlugRouteChildren {
   SlugInquiryRoute: typeof SlugInquiryRoute
   SlugUcpRoute: typeof SlugUcpRoute
+  SlugToolsToolIdRoute: typeof SlugToolsToolIdRouteWithChildren
 }
 
 const SlugRouteChildren: SlugRouteChildren = {
   SlugInquiryRoute: SlugInquiryRoute,
   SlugUcpRoute: SlugUcpRoute,
+  SlugToolsToolIdRoute: SlugToolsToolIdRouteWithChildren,
 }
 
 const SlugRouteWithChildren = SlugRoute._addFileChildren(SlugRouteChildren)
+
+interface OperatorAgentAccessRouteChildren {
+  OperatorAgentAccessAuthorizeRoute: typeof OperatorAgentAccessAuthorizeRoute
+}
+
+const OperatorAgentAccessRouteChildren: OperatorAgentAccessRouteChildren = {
+  OperatorAgentAccessAuthorizeRoute: OperatorAgentAccessAuthorizeRoute,
+}
+
+const OperatorAgentAccessRouteWithChildren =
+  OperatorAgentAccessRoute._addFileChildren(OperatorAgentAccessRouteChildren)
 
 interface OperatorAdminRunsRouteChildren {
   OperatorAdminRunsTurnIdRoute: typeof OperatorAdminRunsTurnIdRoute
@@ -2042,35 +2465,50 @@ const OperatorOwnerOfferingsRouteWithChildren =
     OperatorOwnerOfferingsRouteChildren,
   )
 
+interface OperatorOwnerSupplyRouteChildren {
+  OperatorOwnerSupplyOfferingRefRoute: typeof OperatorOwnerSupplyOfferingRefRoute
+}
+
+const OperatorOwnerSupplyRouteChildren: OperatorOwnerSupplyRouteChildren = {
+  OperatorOwnerSupplyOfferingRefRoute: OperatorOwnerSupplyOfferingRefRoute,
+}
+
+const OperatorOwnerSupplyRouteWithChildren =
+  OperatorOwnerSupplyRoute._addFileChildren(OperatorOwnerSupplyRouteChildren)
+
 interface OperatorRouteChildren {
-  OperatorAgentAccessRoute: typeof OperatorAgentAccessRoute
+  OperatorAgentAccessRoute: typeof OperatorAgentAccessRouteWithChildren
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
   OperatorAdminClaimsRoute: typeof OperatorAdminClaimsRoute
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
   OperatorAdminInquiriesRoute: typeof OperatorAdminInquiriesRoute
   OperatorAdminRequestProblemsRoute: typeof OperatorAdminRequestProblemsRoute
   OperatorAdminRunsRoute: typeof OperatorAdminRunsRouteWithChildren
+  OperatorAdminSearchGapsRoute: typeof OperatorAdminSearchGapsRoute
   OperatorDevelopersDiscoveryRoute: typeof OperatorDevelopersDiscoveryRoute
   OperatorOwnerInquiriesRoute: typeof OperatorOwnerInquiriesRouteWithChildren
   OperatorOwnerOfferingsRoute: typeof OperatorOwnerOfferingsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
   OperatorOwnerStatusRoute: typeof OperatorOwnerStatusRoute
+  OperatorOwnerSupplyRoute: typeof OperatorOwnerSupplyRouteWithChildren
   OperatorOwnerRequestProblemsReportRefRoute: typeof OperatorOwnerRequestProblemsReportRefRoute
 }
 
 const OperatorRouteChildren: OperatorRouteChildren = {
-  OperatorAgentAccessRoute: OperatorAgentAccessRoute,
+  OperatorAgentAccessRoute: OperatorAgentAccessRouteWithChildren,
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
   OperatorAdminClaimsRoute: OperatorAdminClaimsRoute,
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
   OperatorAdminInquiriesRoute: OperatorAdminInquiriesRoute,
   OperatorAdminRequestProblemsRoute: OperatorAdminRequestProblemsRoute,
   OperatorAdminRunsRoute: OperatorAdminRunsRouteWithChildren,
+  OperatorAdminSearchGapsRoute: OperatorAdminSearchGapsRoute,
   OperatorDevelopersDiscoveryRoute: OperatorDevelopersDiscoveryRoute,
   OperatorOwnerInquiriesRoute: OperatorOwnerInquiriesRouteWithChildren,
   OperatorOwnerOfferingsRoute: OperatorOwnerOfferingsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
   OperatorOwnerStatusRoute: OperatorOwnerStatusRoute,
+  OperatorOwnerSupplyRoute: OperatorOwnerSupplyRouteWithChildren,
   OperatorOwnerRequestProblemsReportRefRoute:
     OperatorOwnerRequestProblemsReportRefRoute,
 }
@@ -2319,6 +2757,18 @@ const ApiV1RequestsRouteWithChildren = ApiV1RequestsRoute._addFileChildren(
   ApiV1RequestsRouteChildren,
 )
 
+interface ApiV1ServicesRouteChildren {
+  ApiV1ServicesSearchRoute: typeof ApiV1ServicesSearchRoute
+}
+
+const ApiV1ServicesRouteChildren: ApiV1ServicesRouteChildren = {
+  ApiV1ServicesSearchRoute: ApiV1ServicesSearchRoute,
+}
+
+const ApiV1ServicesRouteWithChildren = ApiV1ServicesRoute._addFileChildren(
+  ApiV1ServicesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRouteWithChildren,
@@ -2328,8 +2778,10 @@ const rootRouteChildren: RootRouteChildren = {
   ClaimRoute: ClaimRouteWithChildren,
   EngineRoute: EngineRoute,
   ForAgentsRoute: ForAgentsRoute,
+  ForProvidersRoute: ForProvidersRoute,
   HelpRoute: HelpRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
+  McpRoute: McpRoute,
   PrivacyRoute: PrivacyRouteWithChildren,
   RegistryRoute: RegistryRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
@@ -2337,9 +2789,18 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   DotwellKnownHttpMessageSignaturesDirectoryRoute:
     DotwellKnownHttpMessageSignaturesDirectoryRoute,
+  DotwellKnownOauthAuthorizationServerRoute:
+    DotwellKnownOauthAuthorizationServerRoute,
+  DotwellKnownOauthProtectedResourceRoute:
+    DotwellKnownOauthProtectedResourceRoute,
+  DotwellKnownUcpRoute: DotwellKnownUcpRoute,
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   ApiRequestsRoute: ApiRequestsRouteWithChildren,
   IThreadIdRoute: IThreadIdRoute,
+  OauthAuthorizeRoute: OauthAuthorizeRoute,
+  OauthDevice_authorizationRoute: OauthDevice_authorizationRoute,
+  OauthRegisterRoute: OauthRegisterRoute,
+  OauthTokenRoute: OauthTokenRoute,
   QAnswerIdRoute: QAnswerIdRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
@@ -2348,6 +2809,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAnswerFollowUpChipsRoute: ApiAnswerFollowUpChipsRoute,
   ApiAnswerThreadsRoute: ApiAnswerThreadsRouteWithChildren,
   ApiAnswerTurnRoute: ApiAnswerTurnRoute,
+  ApiDemoProviderHealthRoute: ApiDemoProviderHealthRoute,
+  ApiDemoProviderQuoteRoute: ApiDemoProviderQuoteRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoveryFixturesRoute: ApiDiscoveryFixturesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,
@@ -2358,8 +2821,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSandboxCapabilityRoute: ApiSandboxCapabilityRoute,
   ApiStorefrontEnrichRoute: ApiStorefrontEnrichRoute,
   ApiStorefrontImportDraftRoute: ApiStorefrontImportDraftRoute,
+  ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1RequestsRoute: ApiV1RequestsRouteWithChildren,
+  ApiV1ServicesRoute: ApiV1ServicesRouteWithChildren,
   ApiSandboxSlugCheckupQuoteRoute: ApiSandboxSlugCheckupQuoteRoute,
   ApiSandboxProvidersRouteQuoterRoute: ApiSandboxProvidersRouteQuoterRoute,
   ApiSandboxProvidersRouteResolverRoute: ApiSandboxProvidersRouteResolverRoute,

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { PUBLIC_CREDENTIAL_REF } from './transport-adapters'
+
 const HEALTHY_TTL_MS = 5 * 60_000
 const UNHEALTHY_TTL_MS = 60_000
 const MAX_RESPONSE_BYTES = 64 * 1024
@@ -52,8 +54,15 @@ export async function runCapabilityReadinessProbe(
   dependencies: CapabilityProbeDependencies,
 ): Promise<CapabilityProbeObservation> {
   const now = (dependencies.now ?? Date.now)()
-  const credential = await dependencies.resolveCredential(target.credentialRef)
-  if (credential === undefined || credential.trim() === '') {
+  const publicCredential = target.adapterId === 'http-json:v1'
+    && target.credentialRef === PUBLIC_CREDENTIAL_REF
+  const credentialEvidence = publicCredential
+    ? 'probe:credential_not_required'
+    : 'probe:credential_resolved'
+  const credential = publicCredential
+    ? undefined
+    : await dependencies.resolveCredential(target.credentialRef)
+  if (!publicCredential && (credential === undefined || credential.trim() === '')) {
     return unhealthy(now, 'unavailable', 'credential_unavailable', ['probe:credential_unavailable'])
   }
   let endpoint: URL
@@ -62,20 +71,20 @@ export async function runCapabilityReadinessProbe(
     endpoint = new URL(target.endpointUrl)
     request = probeRequest(target, endpoint, credential)
   } catch {
-    return unhealthy(now, 'ready', 'target_not_public', ['probe:credential_resolved', 'probe:target_not_public'])
+    return unhealthy(now, 'ready', 'target_not_public', [credentialEvidence, 'probe:target_not_public'])
   }
   if (!await dependencies.validateTarget(endpoint)) {
-    return unhealthy(now, 'ready', 'target_not_public', ['probe:credential_resolved', 'probe:target_not_public'])
+    return unhealthy(now, 'ready', 'target_not_public', [credentialEvidence, 'probe:target_not_public'])
   }
   let response: Response
   try {
     response = await dependencies.send(request)
   } catch {
     return unhealthy(now, 'ready', 'transport_unreachable', [
-      'probe:credential_resolved', 'probe:target_public', 'probe:transport_unreachable',
+      credentialEvidence, 'probe:target_public', 'probe:transport_unreachable',
     ])
   }
-  const baseEvidence = ['probe:credential_resolved', 'probe:target_public']
+  const baseEvidence = [credentialEvidence, 'probe:target_public']
   if (response.headers.get('X-AE-Probe-Outcome') === 'response_too_large') {
     return unhealthy(now, 'ready', 'response_too_large', [...baseEvidence, 'probe:response_too_large'])
   }
@@ -113,7 +122,7 @@ export async function runCapabilityReadinessProbe(
   return healthy(now, baseEvidence, 'probe:http_2xx')
 }
 
-function probeRequest(target: CapabilityProbeTarget, endpoint: URL, credential: string): Request {
+function probeRequest(target: CapabilityProbeTarget, endpoint: URL, credential: string | undefined): Request {
   const probeKind = target.probeKind ?? (target.adapterId === 'mcp-jsonrpc:v1' ? 'mcp' : 'ae_quote')
   const body = probeKind === 'mcp'
     ? { jsonrpc: '2.0', id: 'ae-readiness-probe', method: 'tools/list', params: {} }
@@ -124,7 +133,10 @@ function probeRequest(target: CapabilityProbeTarget, endpoint: URL, credential: 
   return new Request(endpoint, {
     method: probeKind === 'openapi_http' || probeKind === 'x402' ? 'HEAD' : 'POST',
     redirect: 'manual', signal: AbortSignal.timeout(10_000),
-    headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: {
+      ...(credential === undefined ? {} : { Authorization: `Bearer ${credential}` }),
+      'Content-Type': 'application/json', Accept: 'application/json',
+    },
     ...(probeKind === 'openapi_http' || probeKind === 'x402' ? {} : { body: JSON.stringify(body) }),
   })
 }

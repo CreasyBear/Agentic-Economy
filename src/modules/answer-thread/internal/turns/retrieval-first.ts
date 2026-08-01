@@ -14,6 +14,8 @@ import {
   hasAnswerServiceSignal,
   type AnswerResponsePlan,
 } from '../answer-response-planner'
+import type { WebDiscoveryClaim } from '@/modules/storefront/public'
+import { webDiscoverAction } from '@/modules/storefront/storefront.actions'
 import { finalizeAnswerTurnSnapshot } from '../answer-turn-safety'
 import { runAnswerToolCall } from '../tool-runner'
 import { safeWorkLogUserText } from '../public-worklog'
@@ -110,17 +112,18 @@ async function streamRetrievalFirstTurn(
   }
 
   emitReadAndCompareSteps(ctx.workLog, result.providers)
-
   if (result.providers.length === 0) {
     if (!shouldReturnDeterministicEmptyState(ctx.query, searchInput)) {
       return { snapshot: undefined, toolCalls: [result.record], allowedSlugs: result.allowedSlugs, errorCopyId: undefined, gate: undefined }
     }
 
+    const importedClaims = await discoverImportedClaims(ctx, searchInput)
     const snapshot = withFollowUpLayout(
       buildDeterministicEmptySnapshot({
         query: ctx.query,
         searchInput,
         searchContext: ctx.searchContext,
+        ...(importedClaims.length === 0 ? {} : { importedClaims }),
       }),
       ctx.priorTurnsCount,
       ctx.intent,
@@ -207,8 +210,8 @@ function buildRetrievalFirstSnapshot(input: {
 
   return {
     query: input.query,
-    oneLine: count === 1
-      ? `1 listed business matches${placeSuffix}.`
+    oneLine: count === 1 && providers[0] !== undefined
+      ? buildListedOptionOneLine(providers[0])
       : `${count} listed businesses match${placeSuffix}.`,
     providers,
     summary: count === 1
@@ -223,10 +226,25 @@ function buildRetrievalFirstSnapshot(input: {
   }
 }
 
+function buildListedOptionOneLine(provider: AnswerSource): string {
+  const suburb = provider.suburb.trim()
+  const price = provider.pricingSummary?.trim()
+  const availability = provider.availabilitySummary?.trim()
+  const details = [
+    suburb.length === 0 ? undefined : `in ${suburb}`,
+    price === undefined || price.length === 0 ? undefined : `Price: ${price}`,
+    availability === undefined || availability.length === 0 ? undefined : `Published availability: ${availability}`,
+  ].filter((detail): detail is string => detail !== undefined)
+  return details.length === 0
+    ? `${provider.name}.`
+    : `${provider.name} — ${details.join(' · ')}.`
+}
+
 function buildDeterministicEmptySnapshot(input: {
   query: string
   searchInput: AnswerRegistrySearchInput
   searchContext: AeSearchContext | undefined
+  importedClaims?: readonly WebDiscoveryClaim[]
 }): AnswerSnapshot {
   const place = input.searchInput.location ?? extractRequestedLocation(input.query)
   const placeSuffix = place === undefined ? '' : ` for ${place}`
@@ -235,6 +253,7 @@ function buildDeterministicEmptySnapshot(input: {
     query: input.query,
     oneLine: `No listed businesses match "${input.query}" yet.`,
     providers: [],
+    ...(input.importedClaims === undefined ? {} : { importedClaims: input.importedClaims }),
     summary: place === undefined
       ? 'No listed businesses publish matching coverage yet.'
       : `No listed businesses publish coverage${placeSuffix} yet.`,
@@ -246,6 +265,57 @@ function buildDeterministicEmptySnapshot(input: {
     ),
   }
 }
+async function discoverImportedClaims(
+  ctx: TurnPathContext,
+  searchInput: AnswerRegistrySearchInput,
+): Promise<readonly WebDiscoveryClaim[]> {
+  const startedAt = Date.now()
+  ctx.workLog.emit({
+    id: 'search.web.discovery',
+    phase: 'search',
+    status: 'running',
+    title: 'Checking the web for unlisted businesses',
+    summary: 'AE has no listed match, so it is checking one web source for real local providers.',
+    detailRows: [{ label: 'Search words', value: safeWorkLogUserText(ctx.query) }],
+    startedAtMs: startedAt,
+  })
+  let result: Awaited<ReturnType<typeof webDiscoverAction.run>>
+  try {
+    result = await webDiscoverAction.run({
+      data: webDiscoverAction.schema.parse({
+        query: ctx.query,
+        ...(searchInput.location === undefined ? {} : { location: searchInput.location }),
+      }),
+      context: { caller: 'answerThread' },
+    })
+  } catch {
+    ctx.workLog.emit({
+      id: 'search.web.discovery',
+      phase: 'search',
+      status: 'error',
+      title: 'Checking the web for unlisted businesses',
+      summary: 'The web discovery check did not complete.',
+      startedAtMs: startedAt,
+      completedAtMs: Date.now(),
+    })
+    return []
+  }
+  const claims = result.kind === 'found' ? result.claims : []
+  ctx.workLog.emit({
+    id: 'search.web.discovery',
+    phase: 'search',
+    status: 'complete',
+    title: 'Checking the web for unlisted businesses',
+    summary: claims.length === 0
+      ? 'No additional web businesses were found for this request.'
+      : `${claims.length} real business${claims.length === 1 ? '' : 'es'} found on the web, separate from AE listings.`,
+    detailRows: [{ label: 'Imported claims', value: String(claims.length) }],
+    startedAtMs: startedAt,
+    completedAtMs: Date.now(),
+  })
+  return claims
+}
+
 
 function shouldReturnDeterministicEmptyState(
   query: string,

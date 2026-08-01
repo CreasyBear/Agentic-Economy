@@ -1,12 +1,10 @@
 /*
- * AE style entry: Astryx design system + Tailwind 4 utility glue.
+ * AE style entry: semantic tokens + Tailwind 4 utility glue.
  *
  * Layer cascade (low → high priority):
- *   reset        Astryx reset
+ *   reset        (reserved)
  *   theme        Tailwind theme variables
  *   base         Tailwind preflight
- *   astryx-base  Astryx component styles
- *   astryx-theme theme-neutral token overrides
  *   components   (reserved)
  *   utilities    Tailwind utilities
  *
@@ -14,46 +12,34 @@
  * winning for its own class names until each surface migrates, then the
  * import below is deleted along with the files it pulls in.
  */
-@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
+@layer reset, theme, base, components, utilities;
 
 @import "./legacy.css";
 
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/preflight.css" layer(base);
-@import "@astryxdesign/core/reset.css";
-@import "@astryxdesign/core/astryx.css";
-@import "@astryxdesign/theme-neutral/theme.css";
-@import "@astryxdesign/core/tailwind-theme.css";
 @import "tailwindcss/utilities.css" layer(utilities);
 
 @source not "../../.planning";
 
 /*
- * Break a self-referential font-weight cycle.
- *
- * The Astryx Tailwind bridge emits this, unlayered, into `:root, :host`:
- *   font-weight-semibold: var(font-weight-semibold)
- * (and the same for normal, medium, and bold, each with the leading dashes).
- * A custom property defined as itself is cyclic, so CSS resolves it to the
- * guaranteed-invalid value.
- *
- * theme-neutral does define the real numbers, but inside a cascade layer, and
- * an unlayered declaration beats every layered one. The cycle therefore won,
- * all 22 theme rules of the form
- *   font-weight: var(text-heading-1-weight)
- * resolved to nothing, and every role on every page fell back to the
- * inherited 400: a 60px h1 and a 12px caption differed in size and colour but
- * never in weight, which is why the type read flat.
- *
- * This block must stay UNLAYERED and must stay after the imports above so it
- * is the last unlayered declaration and wins. Delete it once the bridge stops
- * aliasing these tokens to themselves.
+ * Keep concrete font-weight aliases available for the app's semantic type
+ * roles. These declarations stay unlayered and after the imports so they win
+ * over layered theme values consistently.
  */
 :root {
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
+  --sidebar: hsl(0 0% 98%);
+  --sidebar-foreground: hsl(240 5.3% 26.1%);
+  --sidebar-primary: hsl(240 5.9% 10%);
+  --sidebar-primary-foreground: hsl(0 0% 98%);
+  --sidebar-accent: hsl(240 4.8% 95.9%);
+  --sidebar-accent-foreground: hsl(240 5.9% 10%);
+  --sidebar-border: hsl(220 13% 91%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 
 /*
@@ -62,13 +48,40 @@
 @custom-variant dark (&:is(body[data-ae-surface="register"] *));
 
 /*
- * Tailwind compatibility mappings for legacy semantic utility names.
- * Keys owned by the Astryx bridge (tailwind-theme.css) are intentionally
- * absent: --color-{accent,border,card,muted,popover,primary,secondary},
- * --font-{sans,heading}, --radius-{sm,md,lg,xl}. Old surfaces relying on
- * those resolve to Astryx neutral values during the migration window.
+ * Tailwind semantic utility mappings.
+ *
+ * These bind Tailwind's colour utilities to the AE tokens defined in
+ * tokens.css. shadcn/ui primitives and AI SDK Elements are written against
+ * exactly this vocabulary (`bg-background`, `border-border`, `bg-primary`,
+ * ...), so binding it to `--ae-*` is what makes unmodified upstream
+ * components render in AE's brand rather than shadcn's default slate.
+ *
+ * The seven keys below (accent, border, card, muted, popover, primary,
+ * secondary) are owned by AE in this mapping, so one vocabulary describes the
+ * whole product.
  */
 @theme inline {
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-popover: var(--popover);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+
+  /*
+   * AE's eucalyptus brand, named explicitly.
+   *
+   * shadcn spends `accent` on subtle hover surfaces, while AE had been using
+   * it for the eucalyptus brand mark. Those are different jobs, so the brand
+   * gets its own name and `accent` is left to mean what every vendored
+   * component in src/components/ui expects. Divergence lives here, in AE code,
+   * so the upstream registry stays re-pullable.
+   */
+  --color-brand: var(--ae-brand);
+  --color-brand-strong: var(--ae-brand-strong);
+  --color-brand-muted: var(--ae-brand-muted);
+  --color-on-brand: var(--ae-on-brand);
   --font-display: var(--font-family-heading, ui-sans-serif, system-ui, -apple-system, sans-serif);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -146,83 +159,64 @@
   translate: var(--tw-translate-x) var(--tw-translate-y);
 }
 
+/*
+ * Motion, elevation and type scale.
+ *
+ * These motion, elevation and type-scale tokens are global so utilities and
+ * components share one current source.
+ * Colour is deliberately NOT redefined here: `tokens.css` owns it.
+ */
+:root {
+  /* Functional motion: quick confirmation, not decorative staging. */
+  --motion-duration-fast: 120ms;
+  --motion-duration-base: 200ms;
+  --motion-duration-slow: 300ms;
+  --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-lift: 2px;
+  --motion-press-scale: 0.98;
+  --duration-fast: var(--motion-duration-fast);
+  --duration-base: var(--motion-duration-base);
+  --duration-slow: var(--motion-duration-slow);
+  --ease-standard: var(--motion-ease-standard);
+  --ease-emphasized: var(--motion-ease-emphasized);
+  --spacing-lift: var(--motion-lift);
+  --scale-press: var(--motion-press-scale);
 
-@layer astryx-theme {
-  @scope ([data-astryx-theme="neutral"]) to ([data-astryx-theme]) {
-    :scope {
-      /* AE marketplace palette: chroma tints toward eucalyptus hue, not warmth. Astryx semantic token overrides. */
-      --color-background-body: #F5F7F4;    /* eucalyptus-tinted off-white page ground */
-      --color-background-surface: #FCFDFC; /* near-white raised panels */
-      --color-background-card: #FFFFFF;    /* white cards so imagery and facts pop */
-      --color-background-popover: #FFFFFF;
-      --color-background-muted: #E7EBE5;   /* eucalyptus-tinted quiet fills and chips */
+  /* Soft elevation: cards lift off the page, no pure-black depth. */
+  --shadow-low: 0 1px 2px oklch(0.21 0.012 250 / 0.05), 0 1px 3px oklch(0.21 0.012 250 / 0.06);
+  --shadow-med: 0 4px 14px oklch(0.21 0.012 250 / 0.08), 0 2px 6px oklch(0.21 0.012 250 / 0.06);
+  --shadow-high: 0 12px 32px oklch(0.21 0.012 250 / 0.12), 0 6px 14px oklch(0.21 0.012 250 / 0.08);
+  --shadow-inset-hover: inset 0 0 0 1.5px oklch(0.40 0.045 150 / 0.30);
+  --shadow-inset-selected: inset 0 0 0 2px oklch(0.40 0.045 150 / 0.46);
+}
 
-      --color-text-primary: #20261F;       /* friendly warm charcoal */
-      --color-text-secondary: #5C625A;     /* warm slate */
-      --color-text-disabled: #8AA396;      /* sage, disabled/muted marks only, never body text */
+:where(h1, h2, h3) {
+  text-wrap: balance;
+}
 
-      --color-border: #E2E6E0;             /* eucalyptus-tinted soft light rule */
-      --color-border-emphasized: #8AA396;  /* sage hairline accent */
-      --color-skeleton: var(--color-background-muted);
+:where(h1) {
+  font-size: clamp(2.5rem, 6vw, 4.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
 
-      --color-accent: #40614F;             /* eucalyptus, the single accent */
-      --color-text-accent: #40614F;        /* accent text, links, kickers */
-      --color-icon-accent: #40614F;
-      --color-accent-strong: #35523F;      /* hover/pressed eucalyptus for accent surfaces */
-      --color-on-accent: #FDFDFB;          /* near-white on eucalyptus, passes AA */
-      --color-accent-muted: #E8EFE9;       /* soft eucalyptus wash for active/selected fills */
-
-      /* Soft inviting rounding (marketplace warmth, not strict record) */
-      --radius-inner: 8px;
-      --radius-element: 10px;
-      --radius-container: 14px;
-      --radius-page: 16px;
-      --radius-chat: 14px;
-
-      /* Soft warm elevation: cards lift off the page, no pure-black depth */
-      --shadow-low: 0 1px 2px rgb(32 38 31 / 0.05), 0 1px 3px rgb(32 38 31 / 0.06);
-      --shadow-med: 0 4px 14px rgb(32 38 31 / 0.08), 0 2px 6px rgb(32 38 31 / 0.06);
-      --shadow-high: 0 12px 32px rgb(32 38 31 / 0.12), 0 6px 14px rgb(32 38 31 / 0.08);
-      --shadow-inset-hover: inset 0 0 0 1.5px oklch(46.14% 0.0486 159.87 / 0.30);
-      --shadow-inset-selected: inset 0 0 0 2px oklch(46.14% 0.0486 159.87 / 0.46);
-
-      /* Functional motion: quick confirmation, not decorative staging */
-      --motion-duration-fast: 120ms;
-      --motion-duration-base: 200ms;
-      --motion-duration-slow: 300ms;
-      --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
-      --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
-      --motion-lift: 2px;
-      --motion-press-scale: 0.98;
-      --duration-fast: var(--motion-duration-fast);
-      --duration-base: var(--motion-duration-base);
-      --duration-slow: var(--motion-duration-slow);
-      --ease-standard: var(--motion-ease-standard);
-      --ease-emphasized: var(--motion-ease-emphasized);
-      --spacing-lift: var(--motion-lift);
-      --scale-press: var(--motion-press-scale);
-    }
-
-    :where(h1, h2, h3) {
-      text-wrap: balance;
-    }
-
-    :where(h1) {
-      font-size: clamp(2.5rem, 6vw, 4.25rem);
-      line-height: 1.05;
-      letter-spacing: -0.02em;
-    }
-
-    :where(h2) {
-      font-size: clamp(2rem, 4vw, 2.5rem);
-      line-height: 1.12;
-      letter-spacing: -0.02em;
-    }
-
-    :where(p) {
-      font-size: 1rem;
-      line-height: 1.6;
-    }
-  }
+:where(h2) {
+  font-size: clamp(2rem, 4vw, 2.5rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+/*
+ ---break---
+ */
+.dark {
+  --sidebar: hsl(240 5.9% 10%);
+  --sidebar-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-primary: hsl(224.3 76.3% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(240 3.7% 15.9%);
+  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-border: hsl(240 3.7% 15.9%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 

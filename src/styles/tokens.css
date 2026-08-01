@@ -1,7 +1,7 @@
 /*
  * Agentic Economy legacy token shim.
- * Retiring aliases for surfaces not yet re-skinned onto Astryx. New UI must use
- * Astryx theme-neutral tokens through @astryxdesign/core/tailwind-theme.css.
+ * Retiring aliases for surfaces not yet migrated. New UI must use
+ * shadcn/ui semantic tokens defined below and bound in globals.css.
  */
 :root {
   color-scheme: light;
@@ -11,7 +11,7 @@
   --ae-font-mono: var(--font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
   --ae-font-body: var(--ae-font-sans);
 
-  /* Legacy compatibility palette; retired as new surfaces move to Astryx. */
+  /* Legacy compatibility palette; retained for old surfaces during migration. */
   --ae-bg: oklch(0.935 0.005 95);            /* paper #ECEAE1 */
   --ae-fg: oklch(0.21 0.012 250);            /* ink #14161A, cool near-black */
   --ae-muted-fg: oklch(0.50 0.012 130);      /* muted #6B6E63, sage grey */
@@ -34,11 +34,21 @@
   --ae-oxide: var(--ae-danger);
   --ae-info: oklch(0.42 0.07 250);           /* slate #345A7A */
 
-  /* Radii — 4px panels/cards/objects, 6px buttons, 999px status pills only (DESIGN.md §17) */
+  /* Radii — 4px panels/cards/objects, 6px buttons, 999px status pills only */
   --ae-radius-sm: 4px;
   --ae-radius-md: 6px;
   --ae-radius-lg: 4px;
   --ae-radius-pill: 999px;
+
+  /*
+   * Eucalyptus brand mark. Named `brand`, not `accent`: shadcn/ui reserves
+   * `accent` for subtle hover surfaces, and overloading one name with two jobs
+   * is what made body text render as a surface colour.
+   */
+  --ae-brand: var(--ae-success);
+  --ae-brand-strong: oklch(0.35 0.045 150);
+  --ae-brand-muted: oklch(0.94 0.022 150);
+  --ae-on-brand: var(--ae-public-command-text);
 
   /* Shadows — rare and soft; hairline rules carry hierarchy */
   --ae-shadow-raised: 0 1px 2px oklch(0.21 0.012 250 / 0.04);

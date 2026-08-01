@@ -14,7 +14,7 @@ import {
   customerRequestRouteConfirmationInputSchema,
   customerRequestSubmitInputSchema,
 } from '@/modules/customer-request/agent-contract'
-import { CUSTOMER_REQUEST_PUBLIC_COMPREHENSION } from '@/modules/customer-request/public-comprehension'
+import { CUSTOMER_REQUEST_MACHINE_BOUNDARY } from '@/modules/customer-request/public-comprehension'
 
 export const CUSTOMER_REQUEST_CONTRACT_SCHEMA_VERSION = 'customer-request-contract:v1' as const
 
@@ -51,7 +51,7 @@ export function buildCustomerRequestContractSchema() {
     },
     operations,
     resultSchema: z.toJSONSchema(customerRequestAgentResultSchema, { io: 'output' }),
-    claimBoundary: CUSTOMER_REQUEST_PUBLIC_COMPREHENSION.sandboxBoundary,
+    claimBoundary: CUSTOMER_REQUEST_MACHINE_BOUNDARY,
   }
 }
 

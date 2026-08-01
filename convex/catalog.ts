@@ -1,4 +1,4 @@
-import { mutationGeneric, queryGeneric } from 'convex/server'
+import { mutationGeneric, queryGeneric, type IndexRange, type UserIdentity } from 'convex/server'
 import { v } from 'convex/values'
 
 import { readActiveAdminMembership, resolveBusinessActor } from './authz'
@@ -20,6 +20,9 @@ import {
   decideCatalogSupplyCutover,
   migrateLegacyServiceToOffering,
   legacyOfferingParityMatches,
+  OfferingPriceKindValues,
+  OfferingPriceTaxTreatmentValues,
+  OfferingPriceUnitValues,
   planLegacyOfferingMigrationBatch,
   reviseOfferingInState,
   upsertAccessPathInState,
@@ -31,7 +34,11 @@ import {
 } from '../src/modules/catalog/public'
 import { requireAdminAuthority } from '../src/modules/security/public'
 import type { AccessPathRef, BusinessId, OfferingRef } from '../src/modules/common/ids'
-import type { BusinessServiceRecord, ServiceCapabilityRecord, ServiceCatalogInput, ValidatedServiceCatalogInput } from '../src/modules/catalog/public'
+import type { BusinessOfferingRevisionRecord, BusinessServiceRecord, OfferingPrice, ServiceCapabilityRecord, ServiceCatalogInput, ValidatedServiceCatalogInput } from '../src/modules/catalog/public'
+import { literalUnion } from '../src/modules/common/convex-literals'
+
+/** Chainable equality builder for a compound index, which schema-less `mutationGeneric` cannot type. */
+type CompoundIndexEq = IndexRange & { eq: (field: string, value: unknown) => CompoundIndexEq }
 
 const firstRequestArg = v.object({
   mode: v.union(v.literal('inquiry_available'), v.literal('quote_request_available'), v.literal('not_available_yet')),
@@ -50,9 +57,19 @@ const serviceArg = v.object({
   firstRequest: firstRequestArg,
 })
 
+/** Mirrors `businessOfferingRevisions.price` exactly; optional and additive. */
+const offeringPriceArg = v.object({
+  kind: literalUnion(OfferingPriceKindValues),
+  currency: v.string(),
+  amountMinor: v.optional(v.number()),
+  maximumAmountMinor: v.optional(v.number()),
+  unit: v.optional(literalUnion(OfferingPriceUnitValues)),
+  taxTreatment: literalUnion(OfferingPriceTaxTreatmentValues),
+})
 const offeringFactsArg = v.object({
   name: v.string(), category: v.string(), summary: v.string(),
   serviceAreaSummary: v.optional(v.string()), availabilitySummary: v.optional(v.string()), pricingSummary: v.optional(v.string()),
+  price: v.optional(offeringPriceArg),
 })
 const humanAccessPathArg = v.object({ kind: v.literal('human_request'), channel: v.union(v.literal('phone'), v.literal('website'), v.literal('ae_inquiry')), disclosure: v.string(), url: v.optional(v.string()) })
 const externalAccessPathArg = v.object({
@@ -130,7 +147,7 @@ const publicCatalogReadbackResult = v.union(
   }),
   v.object({
     kind: v.literal('not_found'),
-    reason: v.literal('not_public'),
+    reason: v.union(v.literal('not_public'), v.literal('no_such_business')),
   })
 )
 
@@ -506,9 +523,8 @@ async function runOfferingSourceMutation(
 export const retryBusinessSupplyProjection = mutationGeneric({
   args: { businessId: v.id('businesses') }, returns: v.any(),
   handler: async (ctx, args) => {
-    const denied = await requireCatalogSupplyAdmin(ctx)
-    if (denied) return denied
-    const db = runtimeDb(ctx.db)
+    const db = await requireCatalogSupplyAdmin(ctx)
+    if ('kind' in db) return db
     return rebuildBusinessSupplyProjectionSnapshotCommand(db, args.businessId, await deriveBusinessOfferingSupportFromCapabilitySupply(db, args.businessId, Date.now()), Date.now())
   },
 })
@@ -516,15 +532,15 @@ export const retryBusinessSupplyProjection = mutationGeneric({
 export const migrateLegacyOfferingBatch = mutationGeneric({
   args: { businessId: v.id('businesses'), cursor: v.union(v.string(), v.null()) }, returns: v.any(),
   handler: async (ctx, args) => {
-    const denied = await requireCatalogSupplyAdmin(ctx)
-    if (denied) return denied
-    const db = runtimeDb(ctx.db)
+    const db = await requireCatalogSupplyAdmin(ctx)
+    if ('kind' in db) return db
     const page = await ctx.db.query('businessServices')
       .withIndex('by_business_status', (q) => q.eq('businessId', args.businessId))
       .paginate({ cursor: args.cursor, numItems: 50 })
     const services = page.page
     const capabilityPages = await Promise.all(services.map((service) => ctx.db.query('serviceCapabilities')
-      .withIndex('by_business_service_status', (q) => (q as any).eq('businessId', args.businessId).eq('serviceId', service._id))
+      // `mutationGeneric` has no schema, so the compound-index chain is unexpressible; assert the shape it does have.
+      .withIndex('by_business_service_status', (q) => (q as unknown as CompoundIndexEq).eq('businessId', args.businessId).eq('serviceId', service._id))
       .take(21)))
     if (capabilityPages.some((rows) => rows.length > 20)) return { kind: 'error' as const, code: 'migration_capability_limit_exceeded' as const }
     const capabilities = capabilityPages.flat()
@@ -548,9 +564,8 @@ export const changeCatalogSupplyCutover = mutationGeneric({
   args: { businessId: v.id('businesses'), requested: v.union(v.literal('legacy'), v.literal('compare'), v.literal('offering')) },
   returns: v.any(),
   handler: async (ctx, args) => {
-    const denied = await requireCatalogSupplyAdmin(ctx)
-    if (denied) return denied
-    const db = runtimeDb(ctx.db)
+    const db = await requireCatalogSupplyAdmin(ctx)
+    if ('kind' in db) return db
     const currentRow = await db.query('catalogSupplyCutovers').withIndex('by_businessId', (q) => q.eq('businessId', args.businessId)).unique()
     const current = currentRow === null ? 'legacy' : cutoverMode(currentRow)
     const parity = await computeCatalogMigrationParity(db, args.businessId)
@@ -568,11 +583,12 @@ export const changeCatalogSupplyCutover = mutationGeneric({
   },
 })
 
-async function requireCatalogSupplyAdmin(ctx: { db: object; auth: { getUserIdentity: () => Promise<import('convex/server').UserIdentity | null> } }) {
+async function requireCatalogSupplyAdmin(ctx: { db: object; auth: { getUserIdentity: () => Promise<UserIdentity | null> } }) {
   const identity = await ctx.auth.getUserIdentity()
-  const membership = identity === null ? undefined : await readActiveAdminMembership(runtimeDb(ctx.db), identity)
+  const db = runtimeDb(ctx.db)
+  const membership = identity === null ? undefined : await readActiveAdminMembership(db, identity)
   const authority = requireAdminAuthority(membership, 'set_operator_control')
-  return authority.kind === 'allowed' ? undefined : { kind: 'error' as const, code: 'admin_denied' as const, reason: authority.reason }
+  return authority.kind === 'allowed' ? db : { kind: 'error' as const, code: 'admin_denied' as const, reason: authority.reason }
 }
 
 async function operatorControlEnabled(db: RuntimeDb, key: string, now: number): Promise<boolean> {
@@ -601,11 +617,26 @@ function toServiceCapabilityRecord(row: RuntimeDocument): ServiceCapabilityRecor
   }
 }
 
+/**
+ * The v1 service `sourceHash` does not cover every fact the mirror copies, so
+ * drift has to be read off the mirrored fields themselves.
+ */
+const LEGACY_MIRRORED_REVISION_FIELDS = ['name', 'category', 'summary', 'serviceAreaSummary', 'availabilitySummary', 'sourceHash'] as const
+
 async function persistOfferingMigration(db: RuntimeDb, migration: ReturnType<typeof migrateLegacyServiceToOffering>, existingCrosswalk: RuntimeDocument | null, now: number) {
   const existingOffering = await db.query('businessOfferings').withIndex('by_offeringRef', (q) => q.eq('offeringRef', migration.offering.offeringRef)).unique()
   if (existingOffering === null) await db.insert('businessOfferings', migration.offering)
   const existingRevision = await db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (q) => q.eq('offeringRef', migration.revision.offeringRef).eq('revision', migration.revision.revision)).unique()
-  if (existingRevision === null) await db.insert('businessOfferingRevisions', migration.revision)
+  if (existingRevision === null) {
+    await db.insert('businessOfferingRevisions', migration.revision)
+  } else if (LEGACY_MIRRORED_REVISION_FIELDS.some((field) => stringField(existingRevision, field) !== (migration.revision[field] ?? ''))) {
+    // Revision 1 is a mirror of the v1 service row, not owner-authored history.
+    // When the v1 row changes, leaving the mirror stale makes parity mismatch
+    // forever with no repair path, silently demoting the business to `compare`.
+    // Patching (not replacing) refreshes the mirrored facts and keeps natively
+    // published ones like `pricingSummary`, which the v1 row cannot express.
+    await db.patch(existingRevision._id, migration.revision)
+  }
   for (const path of migration.accessPaths) {
     const existingPath = await db.query('offeringAccessPaths').withIndex('by_accessPathRef', (q) => q.eq('accessPathRef', path.accessPathRef)).unique()
     if (existingPath === null) await db.insert('offeringAccessPaths', path)
@@ -649,11 +680,18 @@ async function computeCatalogMigrationParity(db: RuntimeDb, businessId: string):
     // Parity asserts the legacy contract is still projected faithfully; it must not cap
     // native expressiveness. Access paths authored natively (a capability the legacy
     // inquiry model cannot represent) are additive and excluded from the comparison,
-    // so adding one can never block cutover.
+    // so adding one can never block cutover. `pricingSummary` and its structured
+    // twin `price` are the same case in field form: the v1 service row has no price
+    // column at all, so a published price can only ever be native, and comparing
+    // either would demote the business to `compare` — where the legacy projection
+    // serves, and the price disappears from the catalog.
     const legacyPathRefs = new Set(expected.accessPaths.map((item) => item.accessPathRef))
+    const persistedRevision = persisted.revisions.find((item) => item.offeringRef === expected.offering.offeringRef && item.revision === expected.revision.revision)
     const observed = {
       offering: persisted.offerings.find((item) => item.offeringRef === expected.offering.offeringRef)!,
-      revision: persisted.revisions.find((item) => item.offeringRef === expected.offering.offeringRef && item.revision === expected.revision.revision)!,
+      revision: (persistedRevision === undefined
+        ? undefined
+        : withoutNativeOnlyFacts(persistedRevision))!,
       accessPaths: persisted.accessPaths.filter((item) => (
         item.offeringRef === expected.offering.offeringRef && legacyPathRefs.has(item.accessPathRef)
       )),
@@ -664,6 +702,18 @@ async function computeCatalogMigrationParity(db: RuntimeDb, businessId: string):
   const expectedDigest = stableHash(expectedItems as never)
   const observedDigest = matched ? stableHash(observedItems as never) : stableHash({ observedItems, mismatch: true } as never)
   return { expectedDigest, observedDigest, matched: matched && expectedDigest === observedDigest }
+}
+
+/**
+ * Strips the facts the retained v1 service row cannot hold — a published price,
+ * in both its prose and its structured form — so a natively published Offering
+ * never reads as legacy drift.
+ */
+export function withoutNativeOnlyFacts(revision: BusinessOfferingRevisionRecord): BusinessOfferingRevisionRecord {
+  const { pricingSummary, price, ...legacyExpressible } = revision
+  void pricingSummary
+  void price
+  return legacyExpressible
 }
 
 /**
@@ -718,7 +768,7 @@ async function loadOfferingSourceState(db: RuntimeDb, businessId: string, actorR
   ])
   return {
     offerings: offerings.map((row) => ({ offeringRef: stringField(row, 'offeringRef') as OfferingRef, businessId: stringField(row, 'businessId') as BusinessId, currentRevision: numberField(row, 'currentRevision'), status: offeringStatus(row), createdAt: numberField(row, 'createdAt'), updatedAt: numberField(row, 'updatedAt') })),
-    revisions: revisions.map((row) => ({ offeringRef: stringField(row, 'offeringRef') as OfferingRef, businessId: stringField(row, 'businessId') as BusinessId, revision: numberField(row, 'revision'), name: stringField(row, 'name'), category: stringField(row, 'category'), summary: stringField(row, 'summary'), ...(optionalStringField(row, 'serviceAreaSummary') ? { serviceAreaSummary: stringField(row, 'serviceAreaSummary') } : {}), ...(optionalStringField(row, 'availabilitySummary') ? { availabilitySummary: stringField(row, 'availabilitySummary') } : {}), ...(optionalStringField(row, 'pricingSummary') ? { pricingSummary: stringField(row, 'pricingSummary') } : {}), sourceHash: stringField(row, 'sourceHash') as never, createdAt: numberField(row, 'createdAt') })),
+    revisions: revisions.map((row) => ({ offeringRef: stringField(row, 'offeringRef') as OfferingRef, businessId: stringField(row, 'businessId') as BusinessId, revision: numberField(row, 'revision'), name: stringField(row, 'name'), category: stringField(row, 'category'), summary: stringField(row, 'summary'), ...(optionalStringField(row, 'serviceAreaSummary') ? { serviceAreaSummary: stringField(row, 'serviceAreaSummary') } : {}), ...(optionalStringField(row, 'availabilitySummary') ? { availabilitySummary: stringField(row, 'availabilitySummary') } : {}), ...(optionalStringField(row, 'pricingSummary') ? { pricingSummary: stringField(row, 'pricingSummary') } : {}), ...(row.price === undefined ? {} : { price: row.price as OfferingPrice }), sourceHash: stringField(row, 'sourceHash') as never, createdAt: numberField(row, 'createdAt') })),
     accessPaths: accessPaths.map((row) => ({ accessPathRef: stringField(row, 'accessPathRef') as AccessPathRef, businessId: stringField(row, 'businessId') as BusinessId, offeringRef: stringField(row, 'offeringRef') as OfferingRef, offeringRevision: numberField(row, 'offeringRevision'), offeringSourceHash: stringField(row, 'offeringSourceHash') as never, status: accessPathStatus(row), descriptor: row.descriptor as OfferingAccessPathDescriptor, sourceHash: stringField(row, 'sourceHash') as never, createdAt: numberField(row, 'createdAt'), updatedAt: numberField(row, 'updatedAt') })),
     operations: operations.filter((row) => stringField(row, 'scope') === 'catalog_offering').map((row) => ({ actorRef: stringField(row, 'actorRef'), operationName: stringField(row, 'operationName'), operationKey: stringField(row, 'key'), requestHash: stringField(row, 'requestHash') as never, resultRef: stringArrayField(row, 'effectRefs')[0] ?? '' })),
   }
@@ -784,7 +834,7 @@ export const getPublicBusinessCatalogBySlug = queryGeneric({
       .withIndex('by_slug', (query) => query.eq('slug', normalizeSlug(args.slug)))
       .unique()
     if (business === null) {
-      return catalogReadNotFound()
+      return catalogReadNotFound('no_such_business')
     }
 
     const catalog = await publicCatalogForBusiness(db, business._id)
@@ -1194,8 +1244,8 @@ async function publicCatalogForBusiness(db: RuntimeDb, businessId: string): Prom
   }
 }
 
-function catalogReadNotFound() {
-  return { kind: 'not_found' as const, reason: 'not_public' as const }
+function catalogReadNotFound(reason: 'not_public' | 'no_such_business' = 'not_public') {
+  return { kind: 'not_found' as const, reason }
 }
 
 function toPublicService(service: RuntimeDocument, capabilities: readonly RuntimeDocument[]): PublicService {

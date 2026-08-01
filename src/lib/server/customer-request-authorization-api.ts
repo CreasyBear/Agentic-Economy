@@ -2,6 +2,7 @@ import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import { customerRequestAgentResultSchema, customerRequestAuthorizationInputSchema } from '@/modules/customer-request/agent-contract'
+import { response } from '@/lib/server/no-store-response'
 
 const bodySchema = customerRequestAuthorizationInputSchema
 type AuthorizationResult = CustomerRequestView
@@ -37,6 +38,3 @@ export async function handleCustomerRequestAuthorizationPost(
   }
 }
 
-function response(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}

@@ -4,6 +4,7 @@ import type { AnswerArtifact } from '@/modules/answer/answer-schema'
 import type { AnswerSource, AnswerWorkStep } from '@/modules/answer/answer-synthesizer'
 import type { AnswerLayoutProfile } from '@/modules/answer/layout-profile'
 import type { HarnessRunReport } from '@/modules/harness/public'
+import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 import {
   AeSearchContextSchema,
   type AeSearchContext,
@@ -25,8 +26,7 @@ export type AnswerTurnStatus = (typeof AnswerTurnStatusValues)[number]
 
 export const AnswerToolCallStatusValues = ['complete', 'error', 'refused'] as const
 export type AnswerToolCallStatus = (typeof AnswerToolCallStatusValues)[number]
-
-export const AnswerToolIdValues = ['registry.search', 'registry.detail'] as const
+export const AnswerToolIdValues = ['registry.search', 'registry.detail', 'sandbox.checkup_quote', 'web.discover'] as const
 export type AnswerToolId = (typeof AnswerToolIdValues)[number]
 
 export const AnswerThreadSharePolicyValues = ['public', 'unlisted'] as const
@@ -203,10 +203,10 @@ export const answerTurnRequestSchema = z.object({
 
 export type FrozenTurnEvidence = {
   providers: readonly AnswerSource[]
+  importedClaims?: readonly WebDiscoveryClaim[]
   allowedSlugs: readonly string[]
   agentJsonUrl: string
   searchContext?: AeSearchContext
-  /** Tool-call evidence persisted per turn; absent on legacy frozen turns. */
   toolCalls?: readonly AnswerToolCallRecord[]
   /** Internal timing trace for answer quality/performance audits. */
   timings?: readonly AnswerTurnTimingEntry[]

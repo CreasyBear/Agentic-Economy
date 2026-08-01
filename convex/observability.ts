@@ -432,9 +432,6 @@ async function upsertOwnerActivationStateRow(db: RuntimeDb, state: OwnerActivati
   await db.patch(existing._id, state)
 }
 
-/** @deprecated Use recordOwnerActivationEvent. Funnel events are stored in PostHog. */
-export const recordPublicFunnelEvent = recordOwnerActivationEvent
-
 export const readAdminOwnerActivationSummary = queryGeneric({
   args: {},
   returns: v.object({
@@ -465,21 +462,6 @@ export const readAdminOwnerActivationSummary = queryGeneric({
       totalTracked: rows.length,
     }
   },
-})
-
-/** @deprecated Funnel counts now live in PostHog. */
-export const readAdminFunnelSummary = queryGeneric({
-  args: {},
-  returns: v.object({
-    rows: v.array(v.object({
-      eventType: v.string(),
-      source: v.string(),
-      stage: v.string(),
-      count: v.number(),
-    })),
-    totalEvents: v.number(),
-  }),
-  handler: async () => ({ rows: [], totalEvents: 0 }),
 })
 
 function operatorControlState(source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>): OperatorControlSourceState {

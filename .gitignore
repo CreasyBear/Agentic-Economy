@@ -13,7 +13,6 @@ test-results/
 coverage/
 output/
 outputs/
-.ui-craft/
 .codex/
 .react-doctor/
 graphify-out/
@@ -37,9 +36,10 @@ graphify-out/
 # clerk configuration (can include secrets)
 /.clerk/
 .vercel
-examples/agent-experience/.local/
 .gstack/
 
 # gsd drift-check scratch artifacts and research response cache
 /ae-phase4-founder-*.json.tsv
 .planning/research/.cache/
+
+eval/parity/results.tsv

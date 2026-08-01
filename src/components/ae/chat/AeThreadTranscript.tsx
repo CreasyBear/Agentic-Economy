@@ -1,5 +1,3 @@
-import { MessageScrollerItem } from './AeThreadMessageScroller'
-import { Text } from '@astryxdesign/core/Text'
 import type { AeSearchContext } from '@/modules/answer/search-context'
 import type { FollowUpIntent, PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
 import { AeThreadTurnCollapsed } from './AeThreadTurnCollapsed'
@@ -69,10 +67,10 @@ export function AeThreadTranscript({
         } : null
 
         return (
-          <MessageScrollerItem
+          <div
             key={turnKey}
-            messageId={turn.turnId}
-            scrollAnchor={anchorThisTurn}
+            data-message-id={turn.turnId}
+            {...(anchorThisTurn ? { 'data-scroll-anchor': 'true' } : {})}
           >
             <div className="flex flex-col gap-2">
               {terminalProps?.timing === 'today' ? <AeShortlistTerminal {...terminalProps} /> : null}
@@ -87,7 +85,7 @@ export function AeThreadTranscript({
               )}
               {terminalProps !== null && terminalProps.timing !== 'today' ? <AeShortlistTerminal {...terminalProps} /> : showsTerminal ? null : isLastCompleted && liveTurn === null ? (
                 <>
-                  {isNoMatchTurn(turn) ? <Text color="secondary" role="status">Nothing was sent.</Text> : null}
+                  {isNoMatchTurn(turn) ? <p className="text-muted-foreground" role="status">Nothing was sent.</p> : null}
                   <AeFollowUpChips
                     turn={followUpContext?.turn ?? turn}
                     contextPlacement={followUpContext?.contextPlacement ?? 'current'}
@@ -96,15 +94,15 @@ export function AeThreadTranscript({
                 </>
               ) : null}
             </div>
-          </MessageScrollerItem>
+          </div>
         )
       })}
 
       {liveTurn !== null ? (
-        <MessageScrollerItem
+        <div
           key={`live-${liveTurn.generation}`}
-          messageId={`live-${liveTurn.generation}`}
-          scrollAnchor
+          data-message-id={`live-${liveTurn.generation}`}
+          data-scroll-anchor="true"
         >
           <div className="flex flex-col gap-2">
             <AeThreadTurnStreamSection
@@ -120,7 +118,7 @@ export function AeThreadTranscript({
               {...(onRetry === undefined ? {} : { onRetry: () => onRetry(liveTurn.query) })}
             />
           </div>
-        </MessageScrollerItem>
+        </div>
       ) : null}
     </>
   )

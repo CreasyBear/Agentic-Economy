@@ -4,7 +4,9 @@ import type {
   OfferingRef,
   SourceHash,
 } from '@/modules/common/ids'
+import type { TrustTier } from '@/modules/business/public'
 import { stableHash } from '@/modules/common/stable-hash'
+import type { OfferingPrice } from './offering-price'
 
 export const BusinessOfferingStatusValues = ['draft', 'published', 'paused', 'retired'] as const
 export type BusinessOfferingStatus = (typeof BusinessOfferingStatusValues)[number]
@@ -45,6 +47,7 @@ export type BusinessOfferingRevisionRecord = Readonly<{
   serviceAreaSummary?: string
   availabilitySummary?: string
   pricingSummary?: string
+  price?: OfferingPrice
   sourceHash: SourceHash
   createdAt: number
 }>
@@ -110,6 +113,7 @@ export type BusinessOfferingProjection = Readonly<{
   serviceAreaSummary?: string
   availabilitySummary?: string
   pricingSummary?: string
+  price?: OfferingPrice
 }>
 
 export type PublicOfferingSupplyProjection = Readonly<{
@@ -118,6 +122,12 @@ export type PublicOfferingSupplyProjection = Readonly<{
   support: OfferingSupportProjection
 }>
 
+/**
+ * Business-level identity facts. `trustTier`, `photos` and
+ * `responseTimeMinutes` live here because the Offering projection is the only
+ * public supply projection: anything a decision surface needs must be
+ * reachable from it, or that surface is forced back onto a second projection.
+ */
 export type PublicBusinessProfile = Readonly<{
   businessId: BusinessId
   slug: string
@@ -128,6 +138,9 @@ export type PublicBusinessProfile = Readonly<{
   publishedPhone?: string
   postcode?: string
   publicUrl: string
+  trustTier: TrustTier
+  responseTimeMinutes?: number
+  photos?: readonly Readonly<{ url: string; alt: string }>[]
 }>
 
 export type BusinessSupplyProjection = Readonly<{
@@ -201,6 +214,7 @@ export function buildPublicOfferingSupplyProjection(input: Readonly<{
     ...(input.revision.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: input.revision.serviceAreaSummary }),
     ...(input.revision.availabilitySummary === undefined ? {} : { availabilitySummary: input.revision.availabilitySummary }),
     ...(input.revision.pricingSummary === undefined ? {} : { pricingSummary: input.revision.pricingSummary }),
+    ...(input.revision.price === undefined ? {} : { price: input.revision.price }),
   }
 
   return {

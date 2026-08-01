@@ -1,4 +1,10 @@
+import { APICallError, generateText, RetryError } from 'ai'
 import { z } from 'zod'
+
+import {
+  openRouterModel,
+  type OpenRouterGatewayConfig,
+} from '@/modules/model-gateway/public'
 
 import {
   StorefrontEnrichmentSourceLabel,
@@ -8,7 +14,7 @@ import {
   type StorefrontImportedFactField,
 } from './import-draft'
 
-import type { AnswerLlmConfig } from '@/modules/answer/internal/llm-config'
+
 import type { PublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 
 /**
@@ -37,6 +43,31 @@ export type BusinessEnrichmentResult =
       reason: string
     }
 
+export type WebDiscoveryInput = {
+  query: string
+  location?: string | undefined
+}
+
+export type WebDiscoveryClaim = {
+  businessName: string
+  suburb: string
+  phone?: string
+  websiteUrl?: string
+  serviceSummary?: string
+  sourceUrl: string
+}
+
+export type WebDiscoveryResult =
+  | { kind: 'found'; query: string; claims: readonly WebDiscoveryClaim[] }
+  | { kind: 'none'; query: string; reason: 'no_matches' }
+  | { kind: 'unavailable'; reason: 'llm_not_configured' }
+  | {
+      kind: 'error'
+      code: 'discovery_failed'
+      retryable: boolean
+      reason: string
+    }
+
 export type BusinessEnrichmentFetch = (
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -47,10 +78,8 @@ export type BusinessEnrichmentOptions = {
   timeoutMs?: number
 }
 
-const OPENROUTER_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MAX_ENRICHMENT_REQUEST_BYTES = 1_000_000
 const MAX_ENRICHMENT_ATTEMPTS = 2
-const TRANSIENT_PROVIDER_STATUSES: Record<number, true> = { 408: true, 429: true, 500: true, 502: true, 503: true, 504: true }
 const DEFAULT_ENRICHMENT_TIMEOUT_MS = 20_000
 const WEB_SEARCH_MAX_RESULTS = 5
 
@@ -60,6 +89,27 @@ const ENRICHMENT_SYSTEM_INSTRUCTION = [
   'Omit any key you cannot ground in a search result. Never invent phone numbers, hours, prices, or credentials.',
   'Values are short plain text. serviceSummary is one sentence.',
 ].join(' ')
+
+const DISCOVERY_SYSTEM_INSTRUCTION = [
+  'Find real Australian local businesses using web search results and return only businesses supported by those results.',
+  'Return one JSON object with a businesses array. Each item must include businessName, suburb, and sourceUrl; sourceUrl must copy the exact supporting web-search citation URL for that business. It may also include phone, websiteUrl, and serviceSummary.',
+  'Include a claim, phone number, or website only when it appears in that same cited search evidence. Never invent details, availability, prices, credentials, or AE listing status.',
+  'Use the business suburb exactly as grounded by its cited result. Return at most five distinct businesses.',
+  'If no suitable business exists in the requested place, widen to the nearest real Australian specialists and keep their actual suburb; do not imply they are local.',
+].join(' ')
+
+const discoveryFieldSchema = z.object({
+  businesses: z.array(z.object({
+    businessName: z.string().optional(),
+    suburb: z.string().optional(),
+    phone: z.string().optional(),
+    websiteUrl: z.string().optional(),
+    serviceSummary: z.string().optional(),
+    sourceUrl: z.string().optional(),
+  })).max(WEB_SEARCH_MAX_RESULTS),
+})
+
+type DiscoveryFields = z.infer<typeof discoveryFieldSchema>
 
 const enrichmentFieldSchema = z.object({
   businessName: z.string().optional(),
@@ -116,14 +166,15 @@ const emptyClaimProfile: PublicOwnerClaimFlowInput = {
 
 export async function enrichBusinessFromWebSearch(
   input: BusinessEnrichmentInput,
-  config: AnswerLlmConfig | undefined,
+  config: OpenRouterGatewayConfig | undefined,
   options: BusinessEnrichmentOptions = {},
 ): Promise<BusinessEnrichmentResult> {
-  if (config === undefined || config.apiKey.trim().length === 0 || config.model.trim().length === 0) {
+  if (config?.apiKey === undefined || config.apiKey.trim().length === 0 || config.model.trim().length === 0) {
     return { kind: 'unavailable', reason: 'llm_not_configured' }
   }
 
   const businessName = input.businessName.trim()
+  const suburb = input.suburb?.trim()
   if (businessName.length === 0) {
     return {
       kind: 'error',
@@ -133,26 +184,18 @@ export async function enrichBusinessFromWebSearch(
     }
   }
 
-  const suburb = input.suburb?.trim()
-  const requestBody = JSON.stringify({
-    model: config.model,
-    plugins: [{ id: 'web', max_results: WEB_SEARCH_MAX_RESULTS }],
-    response_format: { type: 'json_object' },
-    temperature: 0,
-    messages: [
-      { role: 'system', content: ENRICHMENT_SYSTEM_INSTRUCTION },
-      {
-        role: 'user',
-        content: `Draft public profile facts for the Australian local business named "${businessName}" in ${suburb === undefined || suburb.length === 0 ? 'Australia' : suburb}.`,
-      },
-    ],
-  })
+  const prompt = `Draft public profile facts for the Australian local business named "${businessName}" in ${suburb === undefined || suburb.length === 0 ? 'Australia' : suburb}.`
 
-  if (new TextEncoder().encode(requestBody).byteLength > MAX_ENRICHMENT_REQUEST_BYTES) {
+  if (new TextEncoder().encode(ENRICHMENT_SYSTEM_INSTRUCTION + prompt).byteLength > MAX_ENRICHMENT_REQUEST_BYTES) {
     return enrichmentFailed('The enrichment request was too large to send.')
   }
 
-  const completion = await requestCompletion(requestBody, config, options)
+  const completion = await requestCompletion(
+    { system: ENRICHMENT_SYSTEM_INSTRUCTION, prompt },
+    config,
+    options,
+    enrichmentFailed,
+  )
   if (completion.kind !== 'ok') {
     return completion.result
   }
@@ -164,71 +207,135 @@ export async function enrichBusinessFromWebSearch(
 
   return buildEnrichmentDraft(fields, completion.citations, businessName)
 }
-
-type CompletionOutcome =
-  | { kind: 'ok'; content: string; citations: readonly string[] }
-  | { kind: 'failed'; result: BusinessEnrichmentResult }
-
-async function requestCompletion(
-  requestBody: string,
-  config: AnswerLlmConfig,
-  options: BusinessEnrichmentOptions,
-): Promise<CompletionOutcome> {
-  const doFetch = options.fetch ?? fetch
-  const timeoutMs = options.timeoutMs ?? DEFAULT_ENRICHMENT_TIMEOUT_MS
-  const endpoint = config.apiBaseUrl === undefined
-    ? OPENROUTER_COMPLETIONS_URL
-    : `${config.apiBaseUrl.replace(/\/+$/u, '')}/chat/completions`
-
-  for (let attempt = 1; attempt <= MAX_ENRICHMENT_ATTEMPTS; attempt += 1) {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(new Error('enrichment_timeout')), timeoutMs)
-    let response: Response
-    try {
-      response = await doFetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json',
-          'X-Title': 'Agentic Economy',
-        },
-        body: requestBody,
-        signal: controller.signal,
-      })
-    } catch {
-      if (attempt < MAX_ENRICHMENT_ATTEMPTS) continue
-      return {
-        kind: 'failed',
-        result: enrichmentFailed('The details service did not respond. Try again.'),
-      }
-    } finally {
-      clearTimeout(timeout)
-    }
-
-    if (!response.ok) {
-      if (attempt < MAX_ENRICHMENT_ATTEMPTS && TRANSIENT_PROVIDER_STATUSES[response.status] === true) continue
-      return {
-        kind: 'failed',
-        result: enrichmentFailed(`The details service refused the request (${response.status}).`),
-      }
-    }
-
-    let body: unknown
-    try {
-      body = await response.json()
-    } catch {
-      return { kind: 'failed', result: enrichmentFailed('The details service returned an unreadable response.') }
-    }
-
-    const content = readMessageContent(body)
-    if (content === undefined) {
-      return { kind: 'failed', result: enrichmentFailed('The details service returned no content.') }
-    }
-
-    return { kind: 'ok', content, citations: readCitationUrls(body) }
+export async function discoverBusinessesFromWebSearch(
+  input: WebDiscoveryInput,
+  config: OpenRouterGatewayConfig | undefined,
+  options: BusinessEnrichmentOptions = {},
+): Promise<WebDiscoveryResult> {
+  if (config?.apiKey === undefined || config.apiKey.trim().length === 0 || config.model.trim().length === 0) {
+    return { kind: 'unavailable', reason: 'llm_not_configured' }
   }
 
-  return { kind: 'failed', result: enrichmentFailed('The details service was unavailable.') }
+  const query = input.query.trim()
+  if (query.length === 0) {
+    return { kind: 'none', query, reason: 'no_matches' }
+  }
+
+  const location = input.location?.trim()
+  const prompt = `Find real Australian businesses for "${query}"${location === undefined || location.length === 0 ? '' : ` near ${location}`}.`
+
+  if (new TextEncoder().encode(DISCOVERY_SYSTEM_INSTRUCTION + prompt).byteLength > MAX_ENRICHMENT_REQUEST_BYTES) {
+    return discoveryFailed('The discovery request was too large to send.')
+  }
+
+  const completion = await requestCompletion(
+    { system: DISCOVERY_SYSTEM_INSTRUCTION, prompt },
+    config,
+    options,
+    discoveryFailed,
+  )
+  if (completion.kind !== 'ok') {
+    return completion.result
+  }
+
+  const fields = parseDiscoveryFields(completion.content)
+  if (fields === undefined || fields.businesses.length === 0 || completion.citations.length === 0) {
+    return { kind: 'none', query, reason: 'no_matches' }
+  }
+
+  const claims = fields.businesses.flatMap((business) => {
+    const businessName = business.businessName?.trim()
+    const suburb = business.suburb?.trim()
+    const sourceUrl = business.sourceUrl?.trim()
+    if (businessName === undefined || businessName.length === 0 || suburb === undefined || suburb.length === 0
+      || sourceUrl === undefined || !completion.citations.includes(sourceUrl)) {
+      return []
+    }
+    return [{
+      businessName,
+      suburb,
+      sourceUrl,
+      ...(business.phone === undefined || business.phone.trim().length === 0 ? {} : { phone: business.phone.trim() }),
+      ...(business.websiteUrl === undefined || business.websiteUrl.trim().length === 0 ? {} : { websiteUrl: business.websiteUrl.trim() }),
+      ...(business.serviceSummary === undefined || business.serviceSummary.trim().length === 0 ? {} : { serviceSummary: business.serviceSummary.trim() }),
+    }]
+  })
+
+  return claims.length === 0
+    ? { kind: 'none', query, reason: 'no_matches' }
+    : { kind: 'found', query, claims }
+}
+
+type CompletionOutcome<Result extends BusinessEnrichmentResult | WebDiscoveryResult> =
+  | { kind: 'ok'; content: string; citations: readonly string[] }
+  | { kind: 'failed'; result: Result }
+
+async function requestCompletion<Result extends BusinessEnrichmentResult | WebDiscoveryResult>(
+  request: Readonly<{ system: string; prompt: string }>,
+  config: OpenRouterGatewayConfig,
+  options: BusinessEnrichmentOptions,
+  failure: (reason: string) => Result,
+): Promise<CompletionOutcome<Result>> {
+  const timeoutSignal = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_ENRICHMENT_TIMEOUT_MS)
+  try {
+    const result = await generateText({
+      model: openRouterModel(config, config.model, {
+        jsonObjectResponse: true,
+        webSearchMaxResults: WEB_SEARCH_MAX_RESULTS,
+        ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      }),
+      // One retry, so a transient provider status still gets two attempts.
+      maxRetries: MAX_ENRICHMENT_ATTEMPTS - 1,
+      temperature: 0,
+      system: request.system,
+      prompt: request.prompt,
+      abortSignal: timeoutSignal,
+    })
+    if (result.text.length === 0) {
+      return { kind: 'failed', result: failure('The details service returned no content.') }
+    }
+    // OpenRouter's web plugin returns its citations as URL sources; a claim is
+    // only admissible when one of them backs it.
+    const citations: string[] = []
+    for (const source of result.sources) {
+      if (source.sourceType === 'url' && source.url.trim().length > 0 && !citations.includes(source.url)) {
+        citations.push(source.url)
+      }
+    }
+    return { kind: 'ok', content: result.text, citations }
+  } catch (error) {
+    return { kind: 'failed', result: failure(enrichmentFailureReason(error, timeoutSignal)) }
+  }
+}
+
+function enrichmentFailureReason(error: unknown, timeoutSignal: AbortSignal): string {
+  if (timeoutSignal.aborted
+    || (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError'))) {
+    return 'The details service did not respond. Try again.'
+  }
+  const providerError = APICallError.isInstance(error)
+    ? error
+    : RetryError.isInstance(error) && APICallError.isInstance(error.lastError)
+      ? error.lastError
+      : undefined
+  if (providerError === undefined) {
+    return 'The details service was unavailable.'
+  }
+  return providerError.statusCode === undefined || providerError.statusCode === 200
+    ? 'The details service returned an unreadable response.'
+    : `The details service refused the request (${providerError.statusCode}).`
+}
+
+function parseDiscoveryFields(content: string): DiscoveryFields | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(content)
+  } catch {
+    return undefined
+  }
+
+  const result = discoveryFieldSchema.safeParse(parsed)
+  return result.success ? result.data : undefined
 }
 
 function parseEnrichmentFields(content: string): EnrichmentFields | undefined {
@@ -331,36 +438,11 @@ function safeHost(value: string): string | undefined {
   }
 }
 
-function readMessageContent(value: unknown): string | undefined {
-  if (!isRecord(value) || !Array.isArray(value.choices)) return undefined
-  const first: unknown = value.choices[0]
-  if (!isRecord(first) || !isRecord(first.message)) return undefined
-  return typeof first.message.content === 'string' ? first.message.content : undefined
-}
-
-function readCitationUrls(value: unknown): readonly string[] {
-  if (!isRecord(value) || !Array.isArray(value.choices)) return []
-  const first: unknown = value.choices[0]
-  if (!isRecord(first) || !isRecord(first.message)) return []
-  const annotations: unknown = first.message.annotations
-  if (!Array.isArray(annotations)) return []
-
-  const urls: string[] = []
-  for (const annotation of annotations) {
-    if (!isRecord(annotation)) continue
-    const citation: unknown = annotation.url_citation
-    if (!isRecord(citation)) continue
-    const url: unknown = citation.url
-    if (typeof url === 'string' && url.trim().length > 0 && !urls.includes(url)) urls.push(url)
-  }
-
-  return urls
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function enrichmentFailed(reason: string): BusinessEnrichmentResult {
   return { kind: 'error', code: 'enrichment_failed', retryable: true, reason }
+}
+
+function discoveryFailed(reason: string): WebDiscoveryResult {
+  return { kind: 'error', code: 'discovery_failed', retryable: true, reason }
 }

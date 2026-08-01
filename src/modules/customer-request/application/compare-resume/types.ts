@@ -4,7 +4,7 @@ import type {
 import type { CustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import type { CustomerRequestActionResult } from '../action-result'
 import type { ProposeThenCompileInterpreter } from '../interpret-compile'
-import type { RequestGraph } from '../interpret-compile/types'
+import type { RequestGraph, RequestGraphUnavailable } from '../interpret-compile/types'
 import type {
   PreparationEgressPorts,
   PreparationMutationResult,
@@ -144,7 +144,7 @@ export type CompareResumePorts = PreparationEgressPorts & Readonly<{
     requestId: string
     principalId: string
   }>) => Promise<Readonly<
-    | { kind: 'found'; shell: Readonly<{ requestId: string }> }
+    | { kind: 'found'; shell: Readonly<{ requestId: string; networkId: string }> }
     | { kind: 'not_found' }
   >>
   getCurrentRouteRun: (input: Readonly<{
@@ -196,7 +196,7 @@ export type CompareResumePorts = PreparationEgressPorts & Readonly<{
   }>) => Promise<PreparationMutationResult>
   loadRequestGraph: (
     networkId: string,
-  ) => Promise<RequestGraph | Readonly<{ kind: 'unavailable' }>>
+  ) => Promise<RequestGraph | RequestGraphUnavailable>
   getRoutePlanGenerationRefreshReplay: (input: Readonly<{
     commandKey: string
     commandDigest: string

@@ -1,6 +1,4 @@
 import { useId, type ReactNode } from 'react'
-import { Heading, Text } from '@astryxdesign/core/Text'
-import { VStack } from '@astryxdesign/core/Stack'
 
 type AePageHeaderDensity = 'public' | 'operator'
 
@@ -24,22 +22,20 @@ export function AePageHeader({ eyebrow, title, description, actions, density = '
 
   return (
     <section aria-labelledby={titleId} aria-describedby={descriptionId} className={containerClassByDensity[density]}>
-      <VStack gap={isPublic ? 6 : 3}>
+      <div className={`flex flex-col ${isPublic ? 'gap-6' : 'gap-3'}`}>
         <div className="grid max-w-4xl gap-2">
           {eyebrow ? (
-            <Text type="supporting" weight="medium" color="secondary" display="block">
-              {eyebrow}
-            </Text>
+            <p className="block text-sm font-medium text-muted-foreground">{eyebrow}</p>
           ) : null}
-          <Heading id={titleId} level={1} {...(isPublic ? { type: 'display-2' as const } : {})} textWrap="balance">
+          <h1 id={titleId} className={`font-semibold tracking-tight text-balance text-foreground${isPublic ? ' text-5xl md:text-7xl' : ' text-3xl'}`}>
             {title}
-          </Heading>
-          <Text id={descriptionId} type={isPublic ? 'large' : 'body'} color="secondary" display="block" textWrap="pretty">
+          </h1>
+          <p id={descriptionId} className={`block text-pretty text-muted-foreground${isPublic ? ' text-lg' : ''}`}>
             {description}
-          </Text>
+          </p>
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
-      </VStack>
+      </div>
     </section>
   )
 }

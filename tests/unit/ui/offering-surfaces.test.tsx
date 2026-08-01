@@ -26,23 +26,25 @@ Object.defineProperty(window, 'matchMedia', {
 afterEach(cleanup)
 
 describe('Offering market surfaces', () => {
-  it('keeps a profile useful when no Offerings are published', () => {
+  it('keeps a profile useful when no services are published', () => {
     render(<AeOfferingSupplyList offerings={[]} />)
-    expect(screen.getByRole('heading', { name: 'What this business offers' })).toBeTruthy()
-    expect(screen.getByText('No offerings are published yet')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Services and prices' })).toBeTruthy()
+    expect(screen.getByText('No services are published yet')).toBeTruthy()
   })
 
-  it('separates declared endpoint provenance from earned AE support', () => {
+  it('separates declared request source from earned assistant support', () => {
     render(<AeOfferingSupplyList offerings={[projectionFixture()]} />)
 
     expect(screen.getByRole('heading', { name: 'Blockchain data query' })).toBeTruthy()
-    expect(screen.getByText('Ways to get started')).toBeTruthy()
+    expect(screen.getByText('How to start this service')).toBeTruthy()
+    expect(screen.getByText('Quotes this published service through the demo provider.')).toBeTruthy()
     expect(screen.getByText('Published by the business')).toBeTruthy()
-    expect(screen.getByText('AE can carry out this action')).toBeTruthy()
+    expect(screen.getByText('AUD 42 per item incl. tax')).toBeTruthy()
+    expect(screen.getByText('An AI assistant can start this service')).toBeTruthy()
     expect(screen.queryByText(/verified/i)).toBeNull()
     expect(screen.queryByText('POST')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Show technical details' }))
+    fireEvent.click(screen.getByRole('button', { name: 'More page information' }))
     expect(screen.getByText('POST')).toBeTruthy()
     expect(screen.getByText('https://example.com/api/query')).toBeTruthy()
   })
@@ -54,15 +56,15 @@ describe('Offering market surfaces', () => {
     expect(screen.queryByText(/routeable|binding|capability/i)).toBeNull()
   })
 
-  it('uses the first two Offerings and compact access summary in registry cards', () => {
+  it('uses the first two services and compact access summary in registry cards', () => {
     render(<AeProviderCard variant="registry" item={{ ...v2BusinessFixture(), offerings: [
       ...v2BusinessFixture().offerings,
-      { offeringRef: 'offering:second', revision: 1, name: 'Second Offering', category: 'Data', summary: 'Second.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
-      { offeringRef: 'offering:third', revision: 1, name: 'Hidden third Offering', category: 'Data', summary: 'Third.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
+      { offeringRef: 'offering:second', revision: 1, name: 'Second service', category: 'Data', summary: 'Second.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
+      { offeringRef: 'offering:third', revision: 1, name: 'Hidden third service', category: 'Data', summary: 'Third.', accessPaths: [], support: { integrated: false, aeSupportedAction: false } },
     ] }} />)
     expect(screen.getByLabelText('Published services').textContent).toContain('Data lookup')
-    expect(screen.getByLabelText('Published services').textContent).toContain('Second Offering')
-    expect(screen.queryByText('Hidden third Offering')).toBeNull()
+    expect(screen.getByLabelText('Published services').textContent).toContain('Second service')
+    expect(screen.queryByText('Hidden third service')).toBeNull()
     // Every business can be contacted, so contactability is not a badge.
     expect(screen.queryByText('Contact available')).toBeNull()
   })
@@ -70,62 +72,60 @@ describe('Offering market surfaces', () => {
   it('keeps a profile-only business visible in the v2 registry card', () => {
     render(<AeProviderCard variant="registry" item={{ ...v2BusinessFixture(), offerings: [], accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false } }} />)
     expect(screen.getByText('V2 Business')).toBeTruthy()
-    expect(screen.queryByText('No Offerings published yet')).toBeNull()
-    expect(screen.queryByText('No contact or endpoint published yet')).toBeNull()
+    expect(screen.queryByText('No services published yet')).toBeNull()
+    expect(screen.queryByText('No contact or request published yet')).toBeNull()
   })
 
   it('shows last-safe public facts when projection freshness degrades', () => {
     render(<AeOfferingSupplyList offerings={[projectionFixture()]} disposition="stale" observedAt={1_900_000_000_000} />)
-    expect(screen.getByText('These are the last safely published details')).toBeTruthy()
+    expect(screen.getByText('These are the last safely listed details')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Blockchain data query' })).toBeTruthy()
   })
 
-  it('teaches the owner the first useful action without requiring an access path', () => {
+  it('teaches the owner the first useful action without requiring a contact route', () => {
     render(<AeOwnerOfferingsList offerings={[]} />)
     expect(screen.getByRole('heading', { name: 'Show people what you do' })).toBeTruthy()
-    expect(screen.getByLabelText('Offering summary').textContent).toContain('Published')
-    expect(screen.getByRole('heading', { name: 'Add your first Offering' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Add an Offering' }).getAttribute('href')).toBe('/owner/offerings/new')
+    expect(screen.getByLabelText('Service summary').textContent).toContain('Published')
+    expect(screen.getByRole('heading', { name: 'Add your first service' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Add a service' }).getAttribute('href')).toBe('/owner/offerings/new')
   })
 
-  it('renders compact owner Offering rows and an explicit projection-pending recovery', () => {
+  it('renders compact owner service rows and an explicit page-update recovery', () => {
     const projection = projectionFixture()
     render(<AeOwnerOfferingsList offerings={[toOwnerOfferingSummary(projection)]} projectionState="projection_pending" onRetryProjection={vi.fn()} />)
-    expect(screen.getByText('Public details are still updating')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Retry publishing' })).toBeTruthy()
+    expect(screen.getByText('Your public page is still updating')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try publishing again' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Edit' })).toBeTruthy()
   })
-
-  it('uses progressive disclosure for endpoint fields and blocks duplicate saves', async () => {
+  it('uses progressive disclosure for request fields and blocks duplicate saves', async () => {
     let resolveSave: ((value: unknown) => void) | undefined
     const onSave = vi.fn(() => new Promise((resolve) => { resolveSave = resolve }))
     render(<AeOwnerOfferingEditor initialValue={{ ...emptyOwnerOfferingEditorValue, name: 'Data query', category: 'Data', summary: 'Query indexed data.' }} onSave={onSave as never} />)
 
-    expect(screen.getByLabelText('Offering setup').textContent).toContain('Describe it')
-    expect(screen.getByLabelText('Offering setup').textContent).toContain('Add ways to begin')
-    expect(screen.getByLabelText('Offering setup').textContent).toContain('Publish')
-    expect(screen.queryByLabelText('Endpoint URL')).toBeNull()
-    fireEvent.click(screen.getByRole('combobox', { name: 'Add a way to get started' }))
-    fireEvent.click(screen.getByRole('option', { name: 'API or agent endpoint' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add endpoint details' }))
-    expect(screen.getByLabelText('Endpoint URL')).toBeTruthy()
-
+    expect(screen.getByLabelText('Service setup').textContent).toContain('Describe it')
+    expect(screen.getByLabelText('Service setup').textContent).toContain('Add ways to begin')
+    expect(screen.getByLabelText('Service setup').textContent).toContain('Publish')
+    expect(screen.queryByLabelText('Request URL')).toBeNull()
+    fireEvent.click(screen.getByRole('combobox', { name: 'Add a contact route' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Assistant request' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add request details' }))
+    expect(screen.getByLabelText('Request URL')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Data query updated' } })
     const save = screen.getByRole('button', { name: 'Save draft' })
     fireEvent.click(save)
     fireEvent.click(save)
     expect(onSave).toHaveBeenCalledTimes(1)
     resolveSave?.({ kind: 'saved', value: { ...emptyOwnerOfferingEditorValue, name: 'Data query updated', category: 'Data', summary: 'Query indexed data.' }, message: 'Saved.' })
-    await waitFor(() => expect(screen.getByText('Offering saved')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Service saved')).toBeTruthy())
   })
 
   it('requires an HTTPS website address and retains it in the human access descriptor', () => {
     const onSave = vi.fn(async (value) => ({ kind: 'saved' as const, value, message: 'Saved.' }))
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
 
-    fireEvent.click(screen.getByRole('combobox', { name: 'Add a way to get started' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Add a contact route' }))
     fireEvent.click(screen.getByRole('option', { name: 'Website' }))
-    fireEvent.change(screen.getByLabelText('Published instructions'), { target: { value: 'Start your request online.' } })
+    fireEvent.change(screen.getByLabelText('Instructions for customers'), { target: { value: 'Start your request online.' } })
     fireEvent.change(screen.getByLabelText('Website URL'), { target: { value: 'javascript:alert(1)' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add this way' }))
 
@@ -179,13 +179,14 @@ function projectionFixture(): PublicOfferingSupplyProjection {
       category: 'Data',
       summary: 'Query indexed blockchain data.',
       pricingSummary: 'Usage based',
+      price: { kind: 'fixed', currency: 'AUD', amountMinor: 4200, unit: 'item', taxTreatment: 'inclusive' },
     },
     accessPaths: [{
       accessPathRef: brandNonEmpty('access:blockchain-query', 'AccessPathRef'),
       descriptor: {
         kind: 'external_operation',
         name: 'GraphQL endpoint',
-        summary: 'Run a GraphQL query against a published index.',
+        summary: 'Quotes this published offering through the labelled sandbox provider.',
         url: 'https://example.com/api/query',
         method: 'POST',
         documentationUrl: 'https://example.com/docs',
@@ -199,7 +200,7 @@ function projectionFixture(): PublicOfferingSupplyProjection {
 function v2BusinessFixture() {
   return {
     schemaVersion: 'public-business-catalog-api:v2' as const,
-    businessId: 'business:v2', slug: 'v2-business', name: 'V2 Business', category: 'Data', suburb: 'Perth', stateTerritory: 'WA', publicUrl: '/v2-business', observedAt: 1, disposition: 'current' as const,
+    businessId: 'business:v2', slug: 'v2-business', name: 'V2 Business', category: 'Data', suburb: 'Perth', stateTerritory: 'WA', publicUrl: '/v2-business', trustTier: 'claimed' as const, photos: [], observedAt: 1, disposition: 'current' as const,
     offerings: [{ offeringRef: 'offering:v2', revision: 1, name: 'Data lookup', category: 'Data', summary: 'Look up public data.', accessPaths: [{ accessPathRef: 'access:v2:web', kind: 'human_request' as const, channel: 'website' as const, disclosure: 'Start on the business website.', url: 'https://example.com/start' }], support: { integrated: false, aeSupportedAction: false } }],
     accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
   }

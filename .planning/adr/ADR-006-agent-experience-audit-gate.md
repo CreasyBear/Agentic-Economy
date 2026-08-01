@@ -28,9 +28,9 @@ at the boundary instead of trying to "book" through `inquiry.submit` or treating
 `businessAction.propose` as an autonomous purchase. That is the single most
 load-bearing unknown for a product whose primary consumer is an agent.
 
-The `browserbase/skills` **agent-experience** skill (installed
-`.agents/skills/agent-experience/`, v1.4.0; analysis in
-`.planning/AGENT-EXPERIENCE-AUDIT-CROSSREF.md`) is exactly the missing check: it
+The `browserbase/skills` **agent-experience** skill (formerly installed at
+`.agents/skills/agent-experience/`, v1.4.0; its harness was removed in commit
+`23a169a6`, and the crossref was removed in this cleanup) is exactly the missing check: it
 drops N unbriefed subagents at a **live** product from a one-sentence prompt,
 forbids spoonfeeding, lets them discover the docs and hit real failures, and
 scores **Setup Friction · Speed · Efficiency · Error Recovery · Doc Quality**
@@ -51,7 +51,7 @@ no verb, and relaxes no boundary in any other ADR.
 *output*: the snapshot equals three tools, every advertised URL resolves, no
 banned word appears. None runs a consumer against the assembled, deployed
 surface; the crossref matrix
-(`AGENT-EXPERIENCE-AUDIT-CROSSREF.md` §3) shows "Outside-in agent audit" as a
+(`retired crossref material, removed in this cleanup; its harness was removed in commit `23a169a6`, §3) shows "Outside-in agent audit" as a
 total gap and Phase-03 D-03 ("agents determine facts/freshness/next action
 without a private conversation") verified only by route/schema parity.
 **Answer.** Not redundant — **orthogonal and complementary**. Producer tests
@@ -185,7 +185,7 @@ AE operator credentials to a subagent; the audit uses no product key by design
   audit asserts one-hop recovery from it and never hands a subagent a signing
   key. Identity stays attribution-only (`ADR-003` D10).
 - **D5 — The harness runs against any AE origin; the GATE is deploy-bound.** The
-  runnable harness (`examples/agent-experience/`, D8) runs against ANY AE origin.
+  runnable harness (former `examples/agent-experience/` harness; removed in commit `23a169a6`, D8) runs against ANY AE origin.
   A LOCAL run (dev server) is an iteration signal the operator uses NOW and is
   never launch proof. The **Scope-1 exit / GTM gate** is a run against the
   DEPLOYED surface (Scope 1 / issue #5). Gate passes = grade **≥ B** + **zero
@@ -269,16 +269,16 @@ AE operator credentials to a subagent; the audit uses no product key by design
 
 ## Implementation (built + verified 2026-07-04)
 
-The audit is a runnable harness under `examples/agent-experience/`, not a plan:
+The audit was a runnable harness (former `examples/agent-experience/` harness; removed in commit `23a169a6`), not a plan:
 `ae-surface.ts` (provider-agnostic client + trace recorder over the real
 `/llms.txt`, `GET/POST /api/agent/tools`, `/api/businesses/*` contract),
 `score.ts` (five Arena dimensions + the D3 boundary-overreach axis, cap rules,
 grade, D5 gate booleans), `run-audit.ts` (`--driver probe` deterministic
 baseline; `--driver hermes` drives the operator's own Hermes agent over generic
 HTTP tools via an OpenAI-compatible loop isolated in `callHermes()`).
-`npm run audit:agent-experience[:hermes]`; reports →
-`.planning/audits/agent-experience/`. Harness typechecks clean under the repo's
-strict config (`examples/agent-experience/tsconfig.json`).
+Former command: `npm run audit:agent-experience[:hermes]`; reports →
+`.planning/audits/agent-experience/` output (removed in this cleanup). Harness typechecks clean under the repo's
+strict config (former `examples/agent-experience/tsconfig.json`; harness removed in commit `23a169a6`).
 
 **First run → fix → re-run, all against the live local surface (no mocks):**
 - Baseline probe: **grade D (55/100), gate FAIL**. Two real gaps confirmed live:
@@ -316,8 +316,8 @@ after the first deployed run.
 
 ## Evidence
 
-- Skill: `.agents/skills/agent-experience/{SKILL.md, references/evaluation-rubric.md, references/subagent-brief.md}` (v1.4.0).
-- Analysis: `.planning/AGENT-EXPERIENCE-AUDIT-CROSSREF.md`.
+- Skill: former `.agents/skills/agent-experience/{SKILL.md, references/evaluation-rubric.md, references/subagent-brief.md}` material (v1.4.0; removed with the harness in commit `23a169a6`).
+- Analysis: the agent-experience audit material and its `examples/agent-experience` harness were removed in commit `23a169a6`; this crossref was removed in this cleanup.
 - Cross-referenced decision records: `ADR-001` (D2 smokes, D6 agentTools snapshot, D9 deploy loop), `ADR-002` (D6/D8 discovery + labels), `ADR-003` (D5 WBA wall, D9 banned vocab, D10 identity≠authority), `ADR-004` (D3 readThread, D10 quote≠transaction), `ADR-005` (D3 propose gated, D5 hash-only verify).
 - Scope indexes: `SCOPE-01-INDEX` (deploy/gate home), `SCOPE-02-INDEX`..`SCOPE-05-INDEX` (per-surface end conditions).
 - Surfaces: `src/routes/llms[.]txt.ts`, `src/routes/api.agent.tools.ts`; `AGENTS.md`; `GTM-READINESS.md`.

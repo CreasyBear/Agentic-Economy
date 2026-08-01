@@ -26,6 +26,10 @@ describe('follow-up intent router', () => {
   it('detects filter follow-ups', () => {
     expect(classifyFollowUpIntent('which take inquiries?', 1)).toBe('filter_known')
   })
+  it('routes natural location refinement to a fresh search over prior intent', () => {
+    expect(classifyFollowUpIntent('Only show options near Adelaide', 1)).toBe('refine_search')
+  })
+
 
   it('detects inquiry handoff follow-ups after a provider answer exists', () => {
     expect(classifyFollowUpIntent('message the first one', 1)).toBe('inquiry_handoff')

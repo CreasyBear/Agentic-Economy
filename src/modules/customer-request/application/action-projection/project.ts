@@ -23,6 +23,7 @@ export function writableView(view: CustomerRequestView): DeepWritable<CustomerRe
   return {
     kind: view.kind, requestRef: view.requestRef, revision: view.revision,
     ...(view.routeGenerationRef === undefined ? {} : { routeGenerationRef: view.routeGenerationRef }),
+    ...(view.interpretationBasis === undefined ? {} : { interpretationBasis: view.interpretationBasis }),
     state: view.state, summary: view.summary, nextAction: view.nextAction,
     missingFields: view.missingFields.map((field) => ({ ...field })),
     criteria: (view.criteria ?? []).map((criterion) => ({ ...criterion })),

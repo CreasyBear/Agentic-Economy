@@ -10,6 +10,7 @@ import {
   customerRequestRouteActionInputSchema,
   type CustomerRequestAgentResult,
 } from '@/modules/customer-request/agent-contract'
+import { response } from '@/lib/server/no-store-response'
 
 type HandlerOptions = Readonly<{
   run?: (args: Record<string, unknown>) => Promise<CustomerRequestAgentResult>
@@ -71,6 +72,3 @@ async function handleRouteAction(
   }
 }
 
-function response(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}

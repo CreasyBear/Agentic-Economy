@@ -1,25 +1,18 @@
-export type AeToastType = 'success' | 'error' | 'info' | 'warning'
+import { createElement, type ReactElement } from 'react'
+import { toast as sonnerToast } from 'sonner'
+
 export type AeToastOptions = { description?: string }
-export type AeToastEvent = { type: AeToastType; title: string; description?: string }
 
-const eventName = 'ae:toast'
+type ToastRole = 'alert' | 'status'
 
-function emit(type: AeToastType, title: string, options: AeToastOptions = {}) {
-  if (typeof window === 'undefined') return
-  const detail: AeToastEvent = options.description === undefined ? { type, title } : { type, title, description: options.description }
-  window.dispatchEvent(new CustomEvent<AeToastEvent>(eventName, { detail }))
+function titledToast(role: ToastRole, title: string, description: string | undefined): ReactElement {
+  const accessibleTitle = description === undefined ? title : `${title}. ${description}`
+  return createElement('span', { role, 'aria-label': accessibleTitle }, title)
 }
 
 export const toast = {
-  success: (title: string, options?: AeToastOptions) => emit('success', title, options),
-  error: (title: string, options?: AeToastOptions) => emit('error', title, options),
-  info: (title: string, options?: AeToastOptions) => emit('info', title, options),
-  warning: (title: string, options?: AeToastOptions) => emit('warning', title, options),
-}
-
-export function subscribeToAeToasts(listener: (event: AeToastEvent) => void): () => void {
-  if (typeof window === 'undefined') return () => undefined
-  const handler = (event: Event) => listener((event as CustomEvent<AeToastEvent>).detail)
-  window.addEventListener(eventName, handler)
-  return () => window.removeEventListener(eventName, handler)
+  success: (title: string, options?: AeToastOptions) => sonnerToast.success(titledToast('status', title, options?.description), options),
+  error: (title: string, options?: AeToastOptions) => sonnerToast.error(titledToast('alert', title, options?.description), options),
+  info: (title: string, options?: AeToastOptions) => sonnerToast.info(titledToast('status', title, options?.description), options),
+  warning: (title: string, options?: AeToastOptions) => sonnerToast.warning(titledToast('status', title, options?.description), options),
 }

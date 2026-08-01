@@ -1,3 +1,7 @@
+import type { OfferingPrice } from '@/modules/catalog/public'
+import { error, ok, type ModuleResult } from '@/modules/common/result'
+import { quoteStandardCheckup, type CheckupQuote, type CheckupQuoteOfferingFacts } from './checkup-quote'
+
 export const SANDBOX_OPTION_CAPABILITY_CONTRACT = Object.freeze({
   capabilityContractId: 'sandbox.option.quote:v1', name: 'Prepare a sandbox option', operation: 'quote' as const,
   preparation: Object.freeze({ purpose: 'sandbox_option_comparison', customerLabel: 'Compare sandbox options' }),
@@ -273,3 +277,76 @@ export const SANDBOX_ROUTE_PROVIDER_PROFILES = Object.freeze({
 
 export type SandboxProviderProfileKey = keyof typeof SANDBOX_PROVIDER_PROFILES
 export type SandboxRouteProviderProfileKey = keyof typeof SANDBOX_ROUTE_PROVIDER_PROFILES
+
+export function sandboxCheckupQuotePathForSlug(slug: string): string {
+  return `/api/sandbox/${slug}/checkup-quote`
+}
+
+export function isOpenSandboxEndpoint(url: string, businessSlug: string, method?: string): boolean {
+  if (method !== undefined && method !== 'POST') return false
+  try {
+    const parsed = new URL(url, 'https://agentic-economy.invalid')
+    // The host is intentionally not checked: this endpoint is rewritten to an
+    // origin-relative path and resolves only the offering's own published price
+    // on the serving origin.
+    return parsed.username.length === 0
+      && parsed.password.length === 0
+      && parsed.search.length === 0
+      && parsed.hash.length === 0
+      && parsed.pathname === sandboxCheckupQuotePathForSlug(businessSlug)
+  } catch {
+    return false
+  }
+}
+
+export type CheckupQuoteOffering = Readonly<{
+  name: string
+  price?: OfferingPrice
+  accessPaths: readonly Readonly<{
+    kind: string
+    url?: string
+    method?: string
+  }>[]
+}>
+
+export type ResolveCheckupQuoteResult = ModuleResult<
+  'quoted',
+  'unknown_offering' | 'ambiguous_offering',
+  { quote: CheckupQuote }
+>
+
+export function resolveCheckupQuote(input: Readonly<{
+  slug: string
+  requestedAt: number
+  offerings: readonly CheckupQuoteOffering[]
+}>): ResolveCheckupQuoteResult {
+  const matching = input.offerings.flatMap((offering): CheckupQuoteOfferingFacts[] => {
+    const price = offering.price
+    if (price?.kind !== 'fixed' || price.amountMinor === undefined) return []
+    if (!offering.accessPaths.some((path) =>
+      path.kind === 'external_operation'
+      && path.url !== undefined
+      && isOpenSandboxEndpoint(path.url, input.slug, path.method))) {
+      return []
+    }
+    return [{
+      name: offering.name,
+      price: {
+        currency: price.currency,
+        amountMinor: price.amountMinor,
+        ...(price.unit === undefined ? {} : { unit: price.unit }),
+        ...(price.taxTreatment === undefined ? {} : { taxTreatment: price.taxTreatment }),
+      },
+    }]
+  })
+  if (matching.length > 1) return error('ambiguous_offering', false, {})
+  const offering = matching[0]
+  if (offering === undefined) return error('unknown_offering', false, {})
+  return ok('quoted', {
+    quote: quoteStandardCheckup({
+      slug: input.slug,
+      requestedAt: input.requestedAt,
+      offering,
+    }),
+  })
+}

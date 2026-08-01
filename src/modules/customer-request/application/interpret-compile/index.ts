@@ -27,6 +27,15 @@ export {
   type ProposeThenCompileResult,
 } from './interpret'
 export {
+  previewCustomerRequest,
+  type PreviewCustomerRequest,
+  type PreviewCustomerRequestInput,
+  type PreviewCustomerRequestPorts,
+  type PreviewCustomerRequestResult,
+  type PreviewCustomerRequestStep,
+} from './preview'
+export { createDeterministicCustomerRequestInterpreter } from './deterministic-interpreter'
+export {
   createConfiguredRequestInterpreter,
   interpreterFailureCode,
   type InterpreterEnvironment,
@@ -39,4 +48,5 @@ export type {
   EligibleSupplyResult,
   ExactContractResult,
   RequestGraph,
+  RequestGraphUnavailable,
 } from './types'

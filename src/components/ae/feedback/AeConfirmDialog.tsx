@@ -1,4 +1,14 @@
-import { AlertDialog } from '@astryxdesign/core/AlertDialog'
+import { useId, useRef } from 'react'
+
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 type AeConfirmDialogProps = {
   open: boolean
@@ -23,7 +33,9 @@ export function AeConfirmDialog({
   pending = false,
   onConfirm,
 }: AeConfirmDialogProps) {
-  const actionVariant = confirmVariant === 'destructive' ? 'destructive' : 'primary'
+  const titleId = useId()
+  const descriptionId = useId()
+  const cancelRef = useRef<HTMLButtonElement>(null)
 
   function handleOpenChange(nextOpen: boolean) {
     if (pending && !nextOpen) {
@@ -34,20 +46,51 @@ export function AeConfirmDialog({
   }
 
   async function handleConfirm() {
+    if (pending) {
+      return
+    }
     await onConfirm()
   }
 
   return (
-    <AlertDialog
-      isOpen={open}
-      onOpenChange={handleOpenChange}
-      title={title}
-      description={description}
-      cancelLabel={cancelLabel}
-      actionLabel={confirmLabel}
-      actionVariant={actionVariant}
-      isActionLoading={pending}
-      onAction={handleConfirm}
-    />
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        role="alertdialog"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        showCloseButton={false}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          cancelRef.current?.focus()
+        }}
+        onEscapeKeyDown={(event) => {
+          if (pending) {
+            event.preventDefault()
+          }
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle id={titleId}>{title}</DialogTitle>
+          <DialogDescription id={descriptionId}>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            ref={cancelRef}
+            type="button"
+            variant="outline"
+            onClick={() => {
+              if (!pending) {
+                onOpenChange(false)
+              }
+            }}
+          >
+            {cancelLabel}
+          </Button>
+          <Button type="button" variant={confirmVariant} disabled={pending} onClick={() => void handleConfirm()}>
+            {pending ? 'Working…' : confirmLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -1,11 +1,20 @@
-import { type ComponentPropsWithoutRef, type KeyboardEvent, type Ref, type RefObject } from 'react'
-import { SendIcon } from 'lucide-react'
+import { type KeyboardEvent, type RefObject } from 'react'
 
-import { Button } from '@astryxdesign/core/Button'
-import { Field } from '@astryxdesign/core/Field'
-import { FormLayout } from '@astryxdesign/core/FormLayout'
-
-import { cn } from '@/lib/utils'
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  type PromptInputMessage,
+} from '@/components/ai-elements/prompt-input'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field'
 
 export type AeOwnerReplyComposerProps = {
   id?: string
@@ -18,33 +27,8 @@ export type AeOwnerReplyComposerProps = {
   onSubmit: () => void
 }
 
-type OwnerReplyInputGroupAddonAlign = 'inline-start' | 'inline-end' | 'block-start' | 'block-end'
-
-function OwnerReplyInputGroup({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
-  return (
-    <div
-      className={cn('flex min-h-11 items-center gap-2 rounded-md border border-border bg-card px-3', className)}
-      {...props}
-    />
-  )
-}
-
-function OwnerReplyInputGroupAddon({
-  className,
-  align: _align,
-  ...props
-}: ComponentPropsWithoutRef<'div'> & { align?: OwnerReplyInputGroupAddonAlign }) {
-  return <div className={cn('flex items-center gap-1 text-secondary', className)} {...props} />
-}
-
-type OwnerReplyInputGroupTextareaProps = ComponentPropsWithoutRef<'textarea'> & {
-  ref?: Ref<HTMLTextAreaElement> | undefined
-}
-
-function OwnerReplyInputGroupTextarea({ className, ref, ...props }: OwnerReplyInputGroupTextareaProps) {
-  return <textarea ref={ref} className={cn('min-h-20 flex-1 bg-transparent text-sm outline-none', className)} {...props} />
-}
-
+// Adapter retained for the owner-reply field/error contract that PromptInput
+// does not provide. Its input and submit controls are official PromptInput parts.
 export function AeOwnerReplyComposer({
   id = 'ownerReply',
   value,
@@ -55,11 +39,35 @@ export function AeOwnerReplyComposer({
   onChange,
   onSubmit,
 }: AeOwnerReplyComposerProps) {
+  function insertLineBreak(event: KeyboardEvent<HTMLTextAreaElement>) {
+    const target = event.currentTarget
+    onChange(`${target.value.slice(0, target.selectionStart)}\n${target.value.slice(target.selectionEnd)}`)
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-      event.preventDefault()
-      onSubmit()
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.shiftKey) {
+      return
     }
+
+    event.preventDefault()
+    if (event.metaKey || event.ctrlKey) {
+      if (!disabled && !pending) {
+        event.currentTarget.form?.requestSubmit()
+      }
+      return
+    }
+
+    insertLineBreak(event)
+  }
+
+  function handlePromptSubmit({ text }: PromptInputMessage) {
+    // Files stay internal to PromptInput; owner replies expose only the text
+    // control through the existing no-argument callback.
+    const submittedText = text.length > 0 ? text : value
+    if (submittedText !== value) {
+      onChange(submittedText)
+    }
+    onSubmit()
   }
 
   const description = 'This reply is saved on the thread and sent to the customer. Booking, payment, and dispatch require their own confirmed action.'
@@ -68,42 +76,40 @@ export function AeOwnerReplyComposer({
   const describedBy = [descriptionId, invalid ? statusId : undefined].filter(Boolean).join(' ')
 
   return (
-    <FormLayout>
+    <FieldGroup>
       <Field
-        label="Owner reply"
-        inputID={id}
-        description={description}
-        descriptionID={descriptionId}
-        {...(invalid ? { status: { type: 'error' as const, message: 'Reply body is required.', messageID: statusId } } : {})}
+        {...(invalid ? { 'data-invalid': true } : {})}
+        {...(disabled ? { 'data-disabled': true } : {})}
       >
-        <OwnerReplyInputGroup className="min-h-24 items-end">
-          <OwnerReplyInputGroupTextarea
-            id={id}
-            aria-describedby={describedBy}
-            aria-invalid={invalid || undefined}
-            name="ownerReply"
-            {...(textareaRef === undefined ? {} : { ref: textareaRef })}
-            value={value}
-            rows={4}
-            disabled={disabled}
-            onChange={(event) => onChange(event.currentTarget.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <OwnerReplyInputGroupAddon align="inline-end" className="pb-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="primary"
-              isIconOnly
-              label="Send reply"
-              icon={<SendIcon aria-hidden="true" />}
-              isDisabled={disabled || pending}
-              isLoading={pending}
-              onClick={onSubmit}
+        <FieldLabel htmlFor={id}>Owner reply</FieldLabel>
+        <PromptInput className="w-full" onSubmit={handlePromptSubmit}>
+          <PromptInputBody>
+            <PromptInputTextarea
+              id={id}
+              aria-describedby={describedBy}
+              {...(invalid ? { 'aria-invalid': true } : {})}
+              name="ownerReply"
+              {...(textareaRef === undefined ? {} : { ref: textareaRef })}
+              value={value}
+              rows={4}
+              placeholder=""
+              className="min-h-24 items-end"
+              disabled={disabled}
+              onChange={(event) => onChange(event.currentTarget.value)}
+              onKeyDown={handleKeyDown}
             />
-          </OwnerReplyInputGroupAddon>
-        </OwnerReplyInputGroup>
+          </PromptInputBody>
+          <PromptInputFooter className="pb-2">
+            <PromptInputSubmit
+              aria-label="Send reply"
+              disabled={disabled || pending}
+              status={pending ? 'submitted' : 'ready'}
+            />
+          </PromptInputFooter>
+        </PromptInput>
+        <FieldDescription id={descriptionId}>{description}</FieldDescription>
+        {invalid ? <FieldError id={statusId}>Reply body is required.</FieldError> : null}
       </Field>
-    </FormLayout>
+    </FieldGroup>
   )
 }

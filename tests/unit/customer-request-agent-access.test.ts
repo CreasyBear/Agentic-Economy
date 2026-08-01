@@ -24,13 +24,22 @@ describe('customer request agent access', () => {
       api: { create, getSecret, list },
     })
 
-    expect(first).toEqual({ kind: 'created', keyId: 'key_123', secret: 'ae_test_secret', expiresInSeconds: 604_800 })
-    expect(replay).toEqual({ kind: 'replayed', keyId: 'key_123', secret: 'ae_test_secret', expiresInSeconds: 604_800 })
+    expect(first).toEqual({
+      kind: 'created', keyId: 'key_123', secret: 'ae_test_secret', expiresInSeconds: 604_800,
+      authorityMode: 'inspect_only', scopes: ['customer_requests:create', 'customer_requests:inspect_only'], grantRef: 'setup-12345678',
+    })
+    expect(replay).toEqual({
+      kind: 'replayed', keyId: 'key_123', secret: 'ae_test_secret', expiresInSeconds: 604_800,
+      authorityMode: 'inspect_only', scopes: ['customer_requests:create', 'customer_requests:inspect_only'], grantRef: 'setup-12345678',
+    })
     expect(create).toHaveBeenCalledOnce()
     expect(create).toHaveBeenCalledWith({
       name: 'AE Customer Request setup-12345678', subject: 'user_123', createdBy: 'user_123',
-      scopes: ['customer_requests:create'], secondsUntilExpiration: 604_800,
-      claims: { aePurpose: 'customer_request_agent', aeIssuanceKey: 'setup-12345678', aeDisplayName: 'My assistant' },
+      scopes: ['customer_requests:create', 'customer_requests:inspect_only'], secondsUntilExpiration: 604_800,
+      claims: {
+        aePurpose: 'customer_request_agent', aeGrantRef: 'setup-12345678', aeAuthorityMode: 'inspect_only',
+        aeIssuanceKey: 'setup-12345678', aeDisplayName: 'My assistant',
+      },
       description: 'Use Agentic Economy Customer Requests with this assistant.',
     })
     expect(getSecret).toHaveBeenCalledWith('key_123')

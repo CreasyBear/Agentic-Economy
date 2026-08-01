@@ -1,8 +1,13 @@
 import { useId, useState } from 'react'
-import { Button } from '@astryxdesign/core/Button'
-import { Dialog } from '@astryxdesign/core/Dialog'
-import { Heading } from '@astryxdesign/core/Heading'
-import { Text } from '@astryxdesign/core/Text'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { CheckIcon, CodeIcon } from 'lucide-react'
 
 export type AeAgentJsonAffordanceProps = {
@@ -54,55 +59,50 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
 
   return (
     <>
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        label="Get as agent JSON"
-        icon={<CodeIcon aria-hidden="true" />}
-        onClick={() => void openPreview()}
-      />
-      <Dialog
-        id={previewId}
-        isOpen={previewOpen}
-        onOpenChange={setPreviewOpen}
-        purpose="form"
-        width="min(42rem, calc(100vw - 2rem))"
-        maxHeight="calc(100dvh - 2rem)"
-        role="dialog"
-        aria-labelledby={headingId}
-      >
-        <div className="grid gap-4">
-          <div className="grid gap-1">
-            <Heading id={headingId} level={2} className="text-xl font-semibold">What gets copied</Heading>
-            <Text color="secondary">Check the fields and values before you copy them.</Text>
-          </div>
-          {preview.status === 'loading' ? <Text role="status" color="secondary">Loading payload preview...</Text> : null}
+      <Button type="button" variant="secondary" size="sm" onClick={() => void openPreview()}>
+        <CodeIcon aria-hidden="true" />
+        Data for AI assistants
+      </Button>
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent
+          id={previewId}
+          className="max-h-[calc(100dvh-2rem)] max-w-[min(42rem,calc(100vw-2rem))] overflow-y-auto"
+          role="dialog"
+          aria-labelledby={headingId}
+        >
+          <DialogHeader>
+            <DialogTitle id={headingId}>Data for AI assistants</DialogTitle>
+            <DialogDescription>Check the fields and values before you copy them.</DialogDescription>
+          </DialogHeader>
+          {preview.status === 'loading' ? <p role="status" className="text-muted-foreground">Loading data preview...</p> : null}
           {preview.status === 'error' ? (
-            <Text role="alert" color="secondary">The payload could not be loaded. Nothing was copied.</Text>
+            <p role="alert" className="text-muted-foreground">The data could not be loaded. Nothing was copied.</p>
           ) : null}
           {preview.status === 'ready' ? (
             <>
-              <Text type="supporting" color="secondary">Fields: {preview.fields.join(', ') || 'none'}</Text>
-              <pre aria-label="Agent JSON payload" className="max-h-[50dvh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-body p-4 font-mono text-sm text-primary">{preview.text}</pre>
+              <p className="text-sm text-muted-foreground">Fields: {preview.fields.join(', ') || 'none'}</p>
+              <pre aria-label="Assistant data" className="max-h-[50dvh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-background p-4 font-mono text-sm text-foreground">{preview.text}</pre>
             </>
           ) : null}
-          <div className="flex flex-col-reverse gap-2 min-[376px]:flex-row min-[376px]:justify-end">
-            <Button label="Cancel" type="button" variant="ghost" className="min-h-11" onClick={() => setPreviewOpen(false)} />
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="ghost" className="min-h-11" onClick={() => setPreviewOpen(false)}>
+              Cancel
+            </Button>
             <Button
-              label={copied ? 'Copied to clipboard' : 'Confirm and copy JSON'}
               type="button"
-              variant="primary"
+              variant="default"
               className="min-h-11"
-              icon={copied ? <CheckIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
-              isDisabled={preview.status !== 'ready' || copied}
+              disabled={preview.status !== 'ready' || copied}
               onClick={() => void confirmCopy()}
-            />
-          </div>
+            >
+              {copied ? <CheckIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
+              {copied ? 'Copied to clipboard' : 'Confirm and copy data'}
+            </Button>
+          </DialogFooter>
           <span className="sr-only" role="status" aria-live="polite">
-            {copied ? `Agent JSON for ${query} copied to clipboard` : ''}
+            {copied ? `Assistant data for ${query} copied to clipboard` : ''}
           </span>
-        </div>
+        </DialogContent>
       </Dialog>
     </>
   )

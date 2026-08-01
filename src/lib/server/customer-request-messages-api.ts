@@ -3,6 +3,7 @@ import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import { customerRequestAgentResultSchema, customerRequestMessageInputSchema } from '@/modules/customer-request/agent-contract'
 import { sensitiveCustomerRequestRefusal } from '@/modules/customer-request/sensitive-input-admission'
+import { response } from '@/lib/server/no-store-response'
 
 const bodySchema = customerRequestMessageInputSchema
 
@@ -53,6 +54,3 @@ export async function handleCustomerRequestMessagePost(
   }
 }
 
-function response(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
-}

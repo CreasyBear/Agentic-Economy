@@ -54,7 +54,8 @@ describe('inquiry handoff prose', () => {
     })
 
     expect(resolution.kind).toBe('no_provider')
-    expect(buildInquiryHandoffSummary(resolution)).toContain('choose a business that publishes an inquiry path')
+    expect(buildInquiryHandoffSummary(resolution)).toContain('Search a service and area')
+    expect(buildInquiryHandoffNextStep(resolution)).toContain('Search nearby')
   })
 })
 

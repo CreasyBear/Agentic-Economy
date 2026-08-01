@@ -4,9 +4,9 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ActionContext, ActionResult } from '@/modules/common/action'
 
 vi.mock('@/modules/registry/registry.functions', () => ({
-  readPublicRegistryBusinessDetail: vi.fn(),
-  readPublicRegistryCatalogPage: vi.fn(),
-  readPublicRegistrySearchPage: vi.fn(),
+  readPublicOfferingRegistryBusinessDetail: vi.fn(),
+  readPublicOfferingRegistryPage: vi.fn(),
+  readPublicOfferingRegistrySearchPage: vi.fn(),
 }))
 
 import { findAction } from '@/modules/actions'

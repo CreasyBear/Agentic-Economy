@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { type ActionPreparationLineage } from '@/modules/customer-request/action-preparation'
 import {
   compilePreparedActionOptions,
-  type ActionPreparationLineage,
   type PreparedActionOptionCandidate,
-} from '@/modules/customer-request/public'
+} from '@/modules/customer-request/prepared-action-v2'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 
 describe('V2 Prepared Action compilation', () => {

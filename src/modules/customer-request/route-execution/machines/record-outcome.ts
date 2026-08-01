@@ -1,6 +1,6 @@
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
-import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { parseBoundedJson } from '@/modules/common/bounded-json'
 
 import type { JournalMutationPorts } from './ports'
 import type { OutcomeCommand, OutcomeResult } from './types'
@@ -92,11 +92,3 @@ export async function recordOutcome(
   })
 }
 
-function parseBoundedJson(value: string): JsonValue | undefined {
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return isBoundedJsonValue(parsed) ? parsed : undefined
-  } catch {
-    return undefined
-  }
-}

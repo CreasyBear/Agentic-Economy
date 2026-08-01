@@ -1,8 +1,14 @@
+import type { OfferingPrice } from '@/modules/catalog/public'
 import { stableHash } from '@/modules/common/stable-hash'
+import {
+  PUBLIC_PHONE_CHANNEL_DISCLOSURE,
+  PUBLIC_WEBSITE_CHANNEL_DISCLOSURE,
+} from '@/modules/inquiries/public-copy'
 import type {
   PublicBusinessCatalogApiV2Dto,
   PublicOfferingAccessPathDto,
 } from '@/modules/registry/public'
+import type { BusinessToolDescriptor } from '@/modules/business-tools/public'
 
 import { safePublicText } from './ucp-manifest'
 
@@ -31,6 +37,7 @@ export type OfferingDiscoveryManifestContract = Readonly<{
     serviceAreaSummary?: string
     availabilitySummary?: string
     pricingSummary?: string
+    price?: OfferingPrice
     accessPaths: readonly PublicOfferingAccessPathDto[]
     support: Readonly<{
       integrated: boolean
@@ -39,6 +46,11 @@ export type OfferingDiscoveryManifestContract = Readonly<{
       validUntil?: number
     }>
   }>[]
+  /**
+   * What an agent may do with this business, not merely what it is. Present
+   * and non-empty only when the underlying route would accept the call.
+   */
+  tools: readonly BusinessToolDescriptor[]
 }>
 
 export type BuildOfferingDiscoveryManifestResult =
@@ -49,10 +61,26 @@ export function buildOfferingDiscoveryManifest(input: Readonly<{
   business?: PublicBusinessCatalogApiV2Dto
   canonicalBaseUrl: string
   now: number
+  /**
+   * Whether the inquiry route would actually accept a first contact for this
+   * business. The human page already withdraws first-contact copy when it
+   * would not (`projectPublicInquiryAvailability`); the machine manifest was
+   * bypassing that projection and telling agents to "use the inquiry form"
+   * for businesses the route refuses. Absent means unknown, treated as not
+   * admitted, because inviting a refused send is the worse failure.
+   */
+  inquiryAdmitted?: boolean
+  /**
+   * Built by the caller so this stays a pure projection; the descriptor
+   * builder reaches into the action registry, which does not belong in a
+   * discovery document builder.
+   */
+  tools?: readonly BusinessToolDescriptor[]
 }>): BuildOfferingDiscoveryManifestResult {
   if (input.business === undefined) return { kind: 'hidden', reason: 'not_public' }
 
   const business = input.business
+  const inquiryAdmitted = input.inquiryAdmitted === true
   const baseUrl = input.canonicalBaseUrl.replace(/\/+$/u, '')
   const publicUrl = `${baseUrl}/${encodeURIComponent(business.slug)}`
   const body = {
@@ -81,15 +109,47 @@ export function buildOfferingDiscoveryManifest(input: Readonly<{
       ...(offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: safePublicText(offering.serviceAreaSummary) }),
       ...(offering.availabilitySummary === undefined ? {} : { availabilitySummary: safePublicText(offering.availabilitySummary) }),
       ...(offering.pricingSummary === undefined ? {} : { pricingSummary: safePublicText(offering.pricingSummary) }),
-      accessPaths: offering.accessPaths.map(sanitizeAccessPath),
+      ...(offering.price === undefined ? {} : { price: safeManifestPrice(offering.price) }),
+      accessPaths: projectManifestAccessPaths(offering.accessPaths, inquiryAdmitted),
       support: offering.support,
     })),
   }
 
+  // `generatedHash` identifies the business projection. Tool descriptors are
+  // derived from action code rather than source data, so hashing them would
+  // churn the business fingerprint on unrelated releases.
   return {
     kind: 'available',
-    manifest: { ...body, generatedHash: stableHash(body) },
+    manifest: {
+      ...body,
+      generatedHash: stableHash(body),
+      tools: inquiryAdmitted ? (input.tools ?? []) : [],
+    },
   }
+}
+
+/**
+ * Mirrors `projectPublicInquiryOfferingSupply` for the machine manifest. When
+ * the inquiry route would refuse, the AE inquiry path is withdrawn rather than
+ * advertised without a working destination, and the remaining human channels
+ * are described by their own channel instead of stored first-contact copy that
+ * points at a form the send would be rejected by.
+ */
+function projectManifestAccessPaths(
+  paths: readonly PublicOfferingAccessPathDto[],
+  inquiryAdmitted: boolean,
+): readonly PublicOfferingAccessPathDto[] {
+  if (inquiryAdmitted) return paths.map(sanitizeAccessPath)
+  return paths.flatMap((path): readonly PublicOfferingAccessPathDto[] => {
+    if (path.kind !== 'human_request') return [sanitizeAccessPath(path)]
+    if (path.channel === 'ae_inquiry') return []
+    return [sanitizeAccessPath({
+      ...path,
+      disclosure: path.channel === 'phone'
+        ? PUBLIC_PHONE_CHANNEL_DISCLOSURE
+        : PUBLIC_WEBSITE_CHANNEL_DISCLOSURE,
+    })]
+  })
 }
 
 function sanitizeAccessPath(path: PublicOfferingAccessPathDto): PublicOfferingAccessPathDto {
@@ -105,4 +165,13 @@ function sanitizeAccessPath(path: PublicOfferingAccessPathDto): PublicOfferingAc
         ...(path.authenticationSummary === undefined ? {} : { authenticationSummary: safePublicText(path.authenticationSummary) }),
         ...(path.pricingSummary === undefined ? {} : { pricingSummary: safePublicText(path.pricingSummary) }),
       }
+}
+
+/**
+ * Every field but `currency` is a bounded enum or an integer, so the only place
+ * an unpublished control character could ride into the manifest is the currency
+ * code. It gets the same treatment as the neighbouring prose fields.
+ */
+function safeManifestPrice(price: OfferingPrice): OfferingPrice {
+  return { ...price, currency: safePublicText(price.currency) }
 }

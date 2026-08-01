@@ -1,13 +1,21 @@
+import { generateText, Output } from 'ai'
+import { z } from 'zod'
+
 import {
   buildFollowUpChipsSystemPrompt,
   buildFollowUpChipsUserPrompt,
-  readAnswerLlmConfig,
 } from '@/modules/answer/public'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
+import {
+  openRouterGatewayConfig,
+  openRouterModel,
+} from '@/modules/model-gateway/public'
 
 import { validateFollowUpChip } from './follow-up-chips'
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const followUpChipsSchema = z.strictObject({
+  chips: z.array(z.string()),
+})
 const MAX_LLM_CHIPS = 3
 
 export type GenerateLlmFollowUpChipsInput = {
@@ -36,53 +44,25 @@ export async function generateLlmFollowUpChips(input: GenerateLlmFollowUpChipsIn
 }
 
 async function fetchLlmFollowUpChips(input: GenerateLlmFollowUpChipsInput): Promise<readonly string[]> {
-  const config = readAnswerLlmConfig()
-  if (config === undefined) {
-    return []
-  }
-
-  const response = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.AE_SITE_URL ?? process.env.SITE_URL ?? 'http://127.0.0.1:3000',
-      'X-Title': 'Agentic Economy',
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: 'system', content: buildFollowUpChipsSystemPrompt() },
-        { role: 'user', content: buildFollowUpChipsUserPrompt(input.query, input.providers) },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
-    }),
-    ...(input.signal === undefined ? {} : { signal: input.signal }),
-  })
-
-  if (!response.ok) {
-    return []
-  }
-
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>
-  }
-  const content = payload.choices?.[0]?.message?.content
-  if (content === undefined || content.trim().length === 0) {
+  const config = openRouterGatewayConfig()
+  if (config.apiKey === undefined) {
     return []
   }
 
   try {
-    const parsed = JSON.parse(content) as { chips?: unknown }
-    if (!Array.isArray(parsed.chips)) {
-      return []
-    }
+    const result = await generateText({
+      maxRetries: 0,
+      model: openRouterModel(config, config.model, { structuredOutputs: true }),
+      system: buildFollowUpChipsSystemPrompt(),
+      prompt: buildFollowUpChipsUserPrompt(input.query, input.providers),
+      output: Output.object({ schema: followUpChipsSchema }),
+      temperature: 0.2,
+      ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+    })
+
+    // `output` is schema-validated, so only AE's own chip rules remain.
     const chips: string[] = []
-    for (const chip of parsed.chips) {
-      if (typeof chip !== 'string') {
-        continue
-      }
+    for (const chip of result.output.chips) {
       const trimmed = chip.trim()
       if (!validateFollowUpChip(trimmed, 1)) {
         continue
@@ -99,3 +79,4 @@ async function fetchLlmFollowUpChips(input: GenerateLlmFollowUpChipsInput): Prom
 }
 
 export { MAX_LLM_CHIPS }
+

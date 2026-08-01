@@ -127,4 +127,32 @@ export const capabilitySupplyTables = {
     .index('by_bindingId', ['bindingId'])
     .index('by_offeringId_and_admission_and_conformance', ['offeringId', 'admission', 'conformance'])
     .index('by_networkId_admission_conformance', ['networkId', 'admission', 'conformance']),
+  capabilityCallEvents: defineTable({
+    eventRef: v.string(),
+    businessId: v.id('businesses'),
+    offeringRef: v.string(),
+    publicationRef: v.optional(v.string()),
+    taskDigest: v.string(),
+    eventKind: v.union(
+      v.literal('supply_liquidity_fill_observed'),
+      v.literal('supply_liquidity_first_success_observed'),
+      v.literal('supply_liquidity_depth_observed'),
+    ),
+    outcome: v.union(v.literal('filled'), v.literal('zero')),
+    zeroReason: v.optional(v.union(
+      v.literal('no_routeable_supply'), v.literal('readiness_unavailable'), v.literal('provider_refused'),
+      v.literal('credential_unavailable'), v.literal('price_unavailable'), v.literal('insufficient_credit'),
+      v.literal('input_invalid'), v.literal('outcome_unknown'),
+    )),
+    taskStartedAt: v.optional(v.number()),
+    successfulAt: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
+    eligibleDepth: v.optional(v.number()),
+    observedAt: v.number(),
+    evidenceRefs: v.array(v.string()),
+    environment: v.union(v.literal('local'), v.literal('development'), v.literal('sandbox'), v.literal('production')),
+  })
+    .index('by_businessId_and_observedAt', ['businessId', 'observedAt'])
+    .index('by_taskDigest_and_observedAt', ['taskDigest', 'observedAt'])
+    .index('by_eventRef', ['eventRef']),
 } as const

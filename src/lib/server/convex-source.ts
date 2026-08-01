@@ -1,4 +1,5 @@
 import { auth } from '@clerk/tanstack-react-start/server'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { ConvexHttpClient } from 'convex/browser'
 import { anyApi, makeFunctionReference } from 'convex/server'
 import type { DefaultFunctionArgs, FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
@@ -37,6 +38,7 @@ export type CreatePublicConvexClientOptions = Pick<
   'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'
 >
 
+// ponytail: intentional seam (server-seams.test.ts); do not inline.
 export type ConvexSourceTransport = {
   query<Query extends FunctionReference<'query'>>(
     query: Query,
@@ -81,7 +83,24 @@ export function sourceAction<Args extends DefaultFunctionArgs = DefaultFunctionA
 export async function createAuthenticatedConvexClient(
   options: CreateAuthenticatedConvexClientOptions = {}
 ): Promise<ConvexHttpClient> {
-  const convexUrl = readRequiredConvexUrl(options.env ?? process.env)
+  const env = options.env ?? process.env
+  const convexUrl = readRequiredConvexUrl(env)
+  const localAdminKey = env.CONVEX_SELF_HOSTED_ADMIN_KEY?.trim()
+  if (isLocalE2EAuthBypassEnabled() && localAdminKey !== undefined && localAdminKey.length > 0) {
+    const client = new ConvexHttpClient(convexUrl, {
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      ...(options.skipConvexDeploymentUrlCheck === undefined
+        ? {}
+        : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
+    })
+    client.setAdminAuth(localAdminKey, {
+      issuer: 'https://convex.test',
+      subject: 'dev-seed-owner-session',
+      tokenIdentifier: 'https://convex.test|dev-seed-owner-session',
+      name: 'Dev Seed Owner',
+    })
+    return client
+  }
   const authObject = options.authObject ?? (await auth())
   const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate ?? 'convex')
 

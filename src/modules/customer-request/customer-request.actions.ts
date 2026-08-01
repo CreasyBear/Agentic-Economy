@@ -57,6 +57,14 @@ export const customerRequestConfirmAction = defineAction({
   outputSchema: customerRequestAgentResultSchema,
   parameters,
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: false,
+    recipientKind: 'none',
+    dataClasses: [],
+    spendExposure: 'none',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => confirmCustomerRequestThroughSource(data),
 })
@@ -87,6 +95,14 @@ export const customerRequestRunAction = defineAction({
   outputSchema: customerRequestAgentResultSchema,
   parameters: routeActionParameters,
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: false,
+    recipientKind: 'provider_system',
+    dataClasses: ['customer_request'],
+    spendExposure: 'unbounded',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => runCustomerRequestThroughSource(data),
 })
@@ -111,6 +127,14 @@ export const customerRequestCancelAction = defineAction({
     },
   ],
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: false,
+    recipientKind: 'provider_system',
+    dataClasses: ['customer_request'],
+    spendExposure: 'none',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => cancelCustomerRequestThroughSource(data),
 })
@@ -139,6 +163,14 @@ export const customerRequestReportProblemAction = defineAction({
     { name: 'visibility', type: 'enum', description: 'Whether the report stays with the customer and AE or may be shared with the affected business.', required: false, enum: ['customer_and_ae_only', 'share_with_affected_business'] },
   ],
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: false,
+    recipientKind: 'none',
+    dataClasses: ['query_text'],
+    spendExposure: 'none',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => customerRequestProblemResultSchema.parse(
     await reportCustomerRequestProblemThroughSource(data),
@@ -169,6 +201,14 @@ export const customerRequestReplyProblemAction = defineAction({
     { name: 'message', type: 'string', description: 'The requested customer information.', required: true },
   ],
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: false,
+    recipientKind: 'none',
+    dataClasses: ['query_text'],
+    spendExposure: 'none',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => customerRequestProblemStatusChangeSchema.parse(
     await replyCustomerRequestProblemThroughSource(data),
@@ -190,6 +230,14 @@ export const customerRequestInspectEvidenceAction = defineAction({
   outputSchema: customerRequestEvidenceResultSchema,
   parameters: [{ name: 'requestRef', type: 'string', description: 'The Customer Request to inspect.', required: true }],
   readOnly: true,
+  effect: {
+    class: 'observation',
+    reversible: true,
+    recipientKind: 'none',
+    dataClasses: [],
+    spendExposure: 'none',
+    approval: 'none',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => inspectCustomerRequestEvidenceThroughSource(data),
 })
@@ -214,6 +262,14 @@ export const customerRequestListConnectedAssistantsAction = defineAction({
     { name: 'requestRef', type: 'string', description: 'The existing Customer Request.', required: true },
   ],
   readOnly: true,
+  effect: {
+    class: 'observation',
+    reversible: true,
+    recipientKind: 'none',
+    dataClasses: [],
+    spendExposure: 'none',
+    approval: 'none',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => listCustomerRequestAssistantsThroughSource(data),
 })
@@ -240,6 +296,14 @@ export const customerRequestAllowRepeatPermissionAction = defineAction({
     { name: 'idempotencyKey', type: 'string', description: 'A stable retry key for this permission.', required: true },
   ],
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: true,
+    recipientKind: 'none',
+    dataClasses: ['assistant_identity'],
+    spendExposure: 'bounded',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => allowCustomerRequestRepeatPermissionThroughSource(data),
 })
@@ -269,6 +333,14 @@ export const customerRequestUseRepeatPermissionAction = defineAction({
     { name: 'idempotencyKey', type: 'string', description: 'A stable retry key for this use.', required: true },
   ],
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: false,
+    recipientKind: 'none',
+    dataClasses: ['assistant_identity'],
+    spendExposure: 'bounded',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => customerRequestAgentResultSchema.parse(
     await executeCustomerRequestRepeatPermissionThroughSource(data),
@@ -297,6 +369,14 @@ export const customerRequestInspectRepeatPermissionAction = defineAction({
     { name: 'routeRef', type: 'string', description: 'The displayed option bound to the permission.', required: true },
   ],
   readOnly: true,
+  effect: {
+    class: 'observation',
+    reversible: true,
+    recipientKind: 'none',
+    dataClasses: [],
+    spendExposure: 'none',
+    approval: 'none',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => inspectCustomerRequestRepeatPermissionThroughSource(data),
 })
@@ -324,6 +404,14 @@ export const customerRequestWithdrawRepeatPermissionAction = defineAction({
     { name: 'idempotencyKey', type: 'string', description: 'A stable retry key for withdrawal.', required: true },
   ],
   readOnly: false,
+  effect: {
+    class: 'external_state_change',
+    reversible: false,
+    recipientKind: 'none',
+    dataClasses: ['assistant_identity'],
+    spendExposure: 'none',
+    approval: 'approve_each',
+  },
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => withdrawCustomerRequestRepeatPermissionThroughSource(data),
 })

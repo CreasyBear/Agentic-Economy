@@ -1,12 +1,13 @@
-import { type ReactNode } from 'react'
+import { type ComponentProps, type ReactNode } from 'react'
 import { AlertCircleIcon, CheckIcon } from 'lucide-react'
 
-import { Button, type ButtonProps } from '@astryxdesign/core/Button'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 
 export type AeActionButtonState = 'idle' | 'loading' | 'success' | 'error'
 export type AeActionButtonVariant = 'primary' | 'secondary' | 'quiet'
 
-export type AeActionButtonProps = Omit<ButtonProps, 'children' | 'endContent' | 'icon' | 'isDisabled' | 'isLoading' | 'label' | 'variant'> & {
+export type AeActionButtonProps = Omit<ComponentProps<typeof Button>, 'children' | 'disabled' | 'variant'> & {
   state?: AeActionButtonState
   variant?: AeActionButtonVariant
   label?: string
@@ -16,13 +17,12 @@ export type AeActionButtonProps = Omit<ButtonProps, 'children' | 'endContent' | 
   disabled?: boolean
 }
 
-const buttonVariantByActionVariant: Record<AeActionButtonVariant, NonNullable<ButtonProps['variant']>> = {
-  primary: 'primary',
+const buttonVariantByActionVariant: Record<AeActionButtonVariant, 'default' | 'secondary' | 'ghost'> = {
+  primary: 'default',
   secondary: 'secondary',
   quiet: 'ghost',
 }
 
-/** Thin motion/loading wrapper around Astryx `Button` — swaps the leading icon for a spinner/check/alert by state. */
 export function AeActionButton({
   state = 'idle',
   variant = 'primary',
@@ -35,20 +35,20 @@ export function AeActionButton({
 }: AeActionButtonProps) {
   const busy = state === 'loading'
   const accessibleLabel = label ?? (typeof children === 'string' ? children : 'Action')
+  const icon = busy ? <Spinner data-icon="inline-start" aria-label="Loading" /> : stateIcon(state, leadingIcon)
 
   return (
     <Button
       variant={buttonVariantByActionVariant[variant]}
-      label={accessibleLabel}
-      icon={stateIcon(state, leadingIcon)}
-      endContent={trailingIcon}
-      isDisabled={disabled || busy}
-      isLoading={busy}
+      aria-label={accessibleLabel}
+      disabled={disabled || busy}
       aria-busy={busy || undefined}
       data-state={state}
       {...props}
     >
+      {icon}
       {children}
+      {trailingIcon}
     </Button>
   )
 }
@@ -56,11 +56,11 @@ export function AeActionButton({
 function stateIcon(state: AeActionButtonState, fallback: ReactNode) {
   switch (state) {
     case 'loading':
-      return undefined
+      return null
     case 'success':
-      return <CheckIcon />
+      return <CheckIcon data-icon="inline-start" aria-hidden="true" />
     case 'error':
-      return <AlertCircleIcon />
+      return <AlertCircleIcon data-icon="inline-start" aria-hidden="true" />
     case 'idle':
       return fallback
   }

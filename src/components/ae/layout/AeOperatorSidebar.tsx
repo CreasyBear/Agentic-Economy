@@ -1,9 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-
-import { Badge } from '@astryxdesign/core/Badge'
-import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from '@astryxdesign/core/SideNav'
+import { Badge } from '@/components/ui/badge'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  useSidebar,
+} from '@/components/ui/sidebar'
 
 import {
   formatOperatorNavBadge,
@@ -24,77 +36,104 @@ type AeOperatorSidebarProps = {
 
 const EMPTY_NAV_BADGES: OperatorNavBadges = {}
 
-const operatorSidebarCollapsedStorageKey = 'ae.operator.sidebar.collapsed'
 
 export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY_NAV_BADGES }: AeOperatorSidebarProps) {
+  const { state, isMobile, open, openMobile } = useSidebar()
+  const isCollapsed = state === 'collapsed'
+  const expanded = isMobile ? openMobile : open
   const navGroups = navGroupsForRole(operatorRole)
   const utilityItems = operatorUtilityItemsForRole(operatorRole)
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    if (typeof window === 'undefined') {
-      return false
-    }
-
-    try {
-      return window.localStorage.getItem(operatorSidebarCollapsedStorageKey) === 'true'
-    } catch {
-      return false
-    }
-  })
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(operatorSidebarCollapsedStorageKey, String(isCollapsed))
-    } catch {
-      return
-    }
-  }, [isCollapsed])
 
   return (
-    <SideNav
-      collapsible={{
-        isCollapsed,
-        onCollapsedChange: setIsCollapsed,
-        hasButton: true,
-        buttonLabel: 'Collapse navigation',
-      }}
-      header={
-        <SideNavHeading
-          heading="Agentic Economy"
-          subheading={roleLabel[operatorRole]}
-          headingHref={roleHomeHref[operatorRole]}
-          icon={<span className="flex size-8 items-center justify-center rounded-md bg-card text-xs font-semibold text-primary">AE</span>}
-        />
-      }
-      footer={
-        <SideNavSection title="Public">
-          {utilityItems.map((item) => {
-            const current = isOperatorPathActive(currentPath, item.href)
-            const Icon = item.icon
-            return <SideNavItem key={item.href} label={item.label} href={item.href} icon={<Icon aria-hidden="true" />} isSelected={current} />
-          })}
-        </SideNavSection>
-      }
-    >
-      {navGroups.map((group) => (
-        <SideNavSection key={group.id} title={group.label}>
-          {group.items.map((item) => {
-            const current = isOperatorPathActive(currentPath, item.href)
-            const badge = formatOperatorNavBadge(navBadges[item.href])
-            const Icon = item.icon
-            return (
-              <SideNavItem
-                key={item.href}
-                label={item.label}
-                href={item.href}
-                icon={<Icon aria-hidden="true" />}
-                isSelected={current}
-                endContent={badge === undefined ? undefined : <Badge variant="neutral" label={badge} />}
-                aria-current={current ? 'page' : undefined}
-              />
-            )
-          })}
-        </SideNavSection>
-      ))}
-    </SideNav>
+    <Sidebar collapsible="icon" role="complementary" aria-label="Operator navigation">
+      <nav id="operator-sidebar-navigation" aria-label="Operator navigation" className="flex min-h-0 flex-1 flex-col">
+        <SidebarHeader className="border-b border-border p-3">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy">
+                <a href={roleHomeHref[operatorRole]} aria-label="Agentic Economy home">
+                  <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-md bg-card text-xs font-semibold text-foreground">
+                    AE
+                  </span>
+                  <span className={isCollapsed ? 'sr-only' : 'grid min-w-0 gap-0.5'}>
+                    <span className="truncate text-sm font-semibold text-foreground">Agentic Economy</span>
+                    <span className="truncate text-xs text-muted-foreground">{roleLabel[operatorRole]}</span>
+                  </span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+        <SidebarContent>
+          {navGroups.map((group) => (
+            <SidebarGroup key={group.id}>
+              <SidebarGroupLabel asChild>
+                <h2>{group.label}</h2>
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map((item) => {
+                    const current = isOperatorPathActive(currentPath, item.href)
+                    const badge = formatOperatorNavBadge(navBadges[item.href])
+                    const Icon = item.icon
+
+                    return (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton asChild isActive={current} tooltip={item.label}>
+                          <a
+                            href={item.href}
+                            aria-label={isCollapsed ? item.label : undefined}
+                            aria-current={current ? 'page' : undefined}
+                          >
+                            <Icon aria-hidden="true" />
+                            <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label}</span>
+                          </a>
+                        </SidebarMenuButton>
+                        {badge === undefined ? null : (
+                          <SidebarMenuBadge>
+                            <Badge variant="secondary">{badge}</Badge>
+                          </SidebarMenuBadge>
+                        )}
+                      </SidebarMenuItem>
+                    )
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </SidebarContent>
+        <SidebarFooter className="border-t border-border p-3">
+          <SidebarGroupLabel asChild>
+            <h2>Public</h2>
+          </SidebarGroupLabel>
+          <SidebarMenu>
+            {utilityItems.map((item) => {
+              const current = isOperatorPathActive(currentPath, item.href)
+              const Icon = item.icon
+
+              return (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={current} tooltip={item.label}>
+                    <a
+                      href={item.href}
+                      aria-label={isCollapsed ? item.label : undefined}
+                      aria-current={current ? 'page' : undefined}
+                    >
+                      <Icon aria-hidden="true" />
+                      <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label}</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )
+            })}
+          </SidebarMenu>
+        </SidebarFooter>
+      </nav>
+      <SidebarRail
+        aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+        aria-controls="operator-sidebar-navigation"
+        aria-expanded={expanded}
+      />
+    </Sidebar>
   )
 }

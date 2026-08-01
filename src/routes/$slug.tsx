@@ -1,25 +1,18 @@
-import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
-import { Button } from '@astryxdesign/core/Button'
-import { Card } from '@astryxdesign/core/Card'
-import { Grid } from '@astryxdesign/core/Grid'
-import { HStack, VStack } from '@astryxdesign/core/Stack'
-import { Skeleton } from '@astryxdesign/core/Skeleton'
+import { Outlet, createFileRoute, notFound, useLocation, type NotFoundRouteProps } from '@tanstack/react-router'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
-import { offeringApiDtoToSupplyView } from '@/components/ae/offerings/offering-presentation'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
-import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
-import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
-import { readPublicTargetAdmissionServer } from '@/modules/inquiries/inquiry.functions'
+import type { PublicBusinessPageNotFoundReason } from '@/modules/catalog/public'
+import { readPublicBusinessRouteServer } from '@/modules/catalog/public-route.functions'
 import {
   buildPublicInquiryAffordance,
   projectPublicInquiryAvailability,
-  selectPublicInquiryTarget,
 } from '@/modules/inquiries/route-readbacks'
 import { serializeJsonLd } from '@/modules/seo/public'
-import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
 
 type ProviderListingSearch = {
   from?: 'thread' | 'registry'
@@ -36,38 +29,18 @@ export const Route = createFileRoute('/$slug')({
     }
   },
   loader: async ({ params }) => {
-    const page = await readPublicBusinessPageServer({ data: { slug: params.slug } })
-    if (page.kind === 'not_found') {
-      return { page, seo: undefined, admission: undefined, supply: undefined }
+    const result = await readPublicBusinessRouteServer({ data: { slug: params.slug } })
+    if (result.kind === 'not_found') {
+      throw notFound({ data: { reason: result.reason } })
     }
-    const offeringDetail = await readPublicOfferingRegistryBusinessDetail({ slug: params.slug })
-    // The v2 read owns cutover semantics. Once a business is in Offering mode,
-    // a missing safe projection must not silently resurrect legacy service truth.
-    if (offeringDetail.kind === 'not_found') {
-      return {
-        page: { kind: 'not_found' as const, reason: 'not_public' as const },
-        seo: undefined,
-        admission: undefined,
-        supply: undefined,
-      }
-    }
-    const target = selectPublicInquiryTarget(page.catalog)
-    const admissionResult = target === undefined
-      ? undefined
-      : await readPublicTargetAdmissionServer({ data: target })
-    const seo = buildPublicBusinessRouteSeo(page.catalog, await readCanonicalBaseUrlServer())
-    return {
-      page,
-      seo,
-      admission: admissionResult?.kind === 'ok' ? admissionResult.admission : undefined,
-      supply: offeringApiDtoToSupplyView(offeringDetail.business),
-    }
+    return result
   },
+
   head: ({ loaderData }) => {
-    if (loaderData?.seo === undefined) {
+    if (loaderData === undefined) {
       return {
         meta: [
-          { title: 'Business page unavailable | Agentic Economy' },
+          { title: 'Page not found | Agentic Economy' },
           { name: 'robots', content: 'noindex' },
         ],
       }
@@ -90,6 +63,7 @@ export const Route = createFileRoute('/$slug')({
   },
   pendingComponent: ProviderListingPending,
   errorComponent: ProviderListingError,
+  notFoundComponent: PublicBusinessNotFound,
   component: PublicBusinessRoute,
 })
 
@@ -99,128 +73,169 @@ function ProviderListingPending() {
     <AePublicShell>
       <article className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-8 md:px-6 md:py-10" aria-busy="true" aria-label="Loading listing">
         <nav aria-label="Return to your previous view">
-          <Skeleton height="2.25rem" width="10rem" index={0} />
+          <Skeleton className="h-9 w-40" />
         </nav>
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
           <div className="grid gap-8">
-            <Card padding={6} className="overflow-hidden" aria-label="Loading listing header">
-              <VStack gap={5}>
-                <HStack vAlign="center" gap={2} wrap="wrap">
-                  <Skeleton height="1.5rem" width="1.5rem" index={1} />
-                  <Skeleton height="1rem" width="12rem" index={2} />
-                </HStack>
-
-                <VStack gap={2}>
-                  <Skeleton height="4rem" width="82%" index={3} />
-                  <Skeleton height="1.75rem" width="44%" index={4} />
-                </VStack>
-
-                <HStack vAlign="center" gap={3} wrap="wrap">
-                  <Skeleton height="1.75rem" width="8rem" index={5} />
-                  <Skeleton height="1.75rem" width="10rem" index={6} />
-                  <Skeleton height="1rem" width="12rem" index={7} />
-                </HStack>
-
-                <Skeleton height="3rem" width="70%" index={8} />
-              </VStack>
+            <Card className="overflow-hidden p-6" aria-label="Loading listing header">
+              <div className="flex flex-col gap-5">
+                <div className="flex flex-row flex-wrap items-center gap-2">
+                  <Skeleton className="h-6 w-6" />
+                  <Skeleton className="h-4 w-48" />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Skeleton className="h-16 w-[82%]" />
+                  <Skeleton className="h-7 w-[44%]" />
+                </div>
+                <div className="flex flex-row flex-wrap items-center gap-3">
+                  <Skeleton className="h-7 w-32" />
+                  <Skeleton className="h-7 w-40" />
+                  <Skeleton className="h-4 w-48" />
+                </div>
+                <Skeleton className="h-12 w-[70%]" />
+              </div>
             </Card>
 
-            <Card padding={5} className="grid gap-4" aria-label="Loading listing photos">
-              <Grid columns={{ minWidth: 220 }} gap={4}>
-                <Skeleton height="13rem" width="100%" index={9} />
-                <Skeleton height="13rem" width="100%" index={10} />
-                <Skeleton height="13rem" width="100%" index={11} />
-              </Grid>
+            <Card className="grid gap-4 p-5" aria-label="Loading listing photos">
+              <div className="grid gap-4 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+                <Skeleton className="h-52 w-full" />
+                <Skeleton className="h-52 w-full" />
+                <Skeleton className="h-52 w-full" />
+              </div>
             </Card>
 
-            <Grid columns={{ minWidth: 300 }} gap={4}>
-              <Card padding={5} aria-label="Loading reach-out steps">
-                <VStack gap={3}>
-                  <Skeleton height="1.5rem" width="14rem" index={12} />
+            <div className="grid gap-4 sm:grid-cols-[repeat(auto-fit,minmax(300px,1fr))]">
+              <Card className="p-5" aria-label="Loading reach-out steps">
+                <div className="flex flex-col gap-3">
+                  <Skeleton className="h-6 w-56" />
                   {Array.from({ length: 3 }, (_, index) => (
-                    <HStack key={index} gap={3} vAlign="start">
-                      <Skeleton height="1rem" width="1rem" index={13 + index} />
-                      <VStack gap={1}>
-                        <Skeleton height="1rem" width="11rem" index={16 + index} />
-                        <Skeleton height="0.75rem" width="13rem" index={19 + index} />
-                        <Skeleton height="1rem" width="100%" index={22 + index} />
-                      </VStack>
-                    </HStack>
+                    <div key={index} className="flex flex-row items-start gap-3">
+                      <Skeleton className="h-4 w-4" />
+                      <div className="flex flex-col gap-1">
+                        <Skeleton className="h-4 w-44" />
+                        <Skeleton className="h-3 w-52" />
+                        <Skeleton className="h-4 w-full" />
+                      </div>
+                    </div>
                   ))}
-                </VStack>
+                </div>
               </Card>
 
-              <Card padding={5} aria-label="Loading source dates">
-                <VStack gap={3}>
-                  <Skeleton height="1.5rem" width="9rem" index={25} />
-                  <Skeleton height="2.25rem" width="15rem" index={26} />
-                  <Skeleton height="2.25rem" width="14rem" index={27} />
-                </VStack>
+              <Card className="p-5" aria-label="Loading source dates">
+                <div className="flex flex-col gap-3">
+                  <Skeleton className="h-6 w-36" />
+                  <Skeleton className="h-9 w-60" />
+                  <Skeleton className="h-9 w-56" />
+                </div>
               </Card>
-            </Grid>
+            </div>
 
-            <Card padding={6} className="grid gap-6" aria-label="Loading listing details">
-              <VStack gap={1}>
-                <Skeleton height="1.5rem" width="10rem" index={28} />
-                <Skeleton height="1rem" width="18rem" index={29} />
-              </VStack>
+            <Card className="grid gap-6 p-6" aria-label="Loading listing details">
+              <div className="flex flex-col gap-1">
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-4 w-72" />
+              </div>
               {Array.from({ length: 3 }, (_, index) => (
-                <VStack key={index} gap={3}>
-                  <Skeleton height="0.75rem" width="9rem" index={30 + index} />
-                  <Grid columns={{ minWidth: 240 }} gap={4}>
-                    <Skeleton height="5rem" width="100%" index={33 + index} />
-                    <Skeleton height="5rem" width="100%" index={36 + index} />
-                  </Grid>
-                </VStack>
+                <div key={index} className="flex flex-col gap-3">
+                  <Skeleton className="h-3 w-36" />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                  </div>
+                </div>
               ))}
             </Card>
           </div>
 
           <aside className="grid content-start gap-6 lg:sticky lg:top-20" aria-label="Loading actions for this business">
-            <Card padding={5}>
-              <VStack gap={4}>
-                <VStack gap={2}>
-                  <Skeleton height="1.5rem" width="13rem" index={39} />
-                  <Skeleton height="3rem" width="100%" index={40} />
-                </VStack>
-                <Skeleton height="2.75rem" width="100%" index={41} />
-                <Skeleton height="3.5rem" width="100%" index={42} />
-              </VStack>
+            <Card className="p-5">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <Skeleton className="h-6 w-52" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+                <Skeleton className="h-11 w-full" />
+                <Skeleton className="h-14 w-full" />
+              </div>
             </Card>
 
-            <Card padding={5} className="bg-surface" aria-label="Loading assistant details">
-              <VStack gap={3}>
-                <Skeleton height="1.5rem" width="9rem" index={43} />
-                <Skeleton height="2.5rem" width="100%" index={44} />
-                <Skeleton height="2.25rem" width="12rem" index={45} />
-              </VStack>
+            <Card className="bg-card p-5" aria-label="Loading assistant details">
+              <div className="flex flex-col gap-3">
+                <Skeleton className="h-6 w-36" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-9 w-48" />
+              </div>
             </Card>
 
-            <Skeleton height="1rem" width="11rem" index={46} />
+            <Skeleton className="h-4 w-44" />
           </aside>
         </div>
       </article>
     </AePublicShell>
   )
 }
-
 function ProviderListingError() {
   const { pathname } = useLocation()
 
   return (
     <AePublicShell>
       <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
-        <AeEmptyState
-          title="This listing didn't load"
-          description="Try the page again, or go back to the registry to compare listed businesses."
-          action={
+        <Empty className="border border-border bg-card p-5">
+          <EmptyHeader>
+            <EmptyTitle>This listing didn't load</EmptyTitle>
+            <EmptyDescription>Try the page again, or return to services to compare listed businesses.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <Button label="Try again" variant="primary" href={pathname} />
-              <Button label="Back to registry" variant="secondary" href="/registry?q=&limit=10" />
+              <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
+              <Button asChild variant="secondary" className="min-h-11"><a href="/">Back to services</a></Button>
             </div>
-          }
-        />
+          </EmptyContent>
+        </Empty>
+      </section>
+    </AePublicShell>
+  )
+}
+
+export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
+  // `data` crosses the router's not-found boundary untyped, and a bare notFound()
+  // raised anywhere under /$slug carries none: default to the claim we can defend.
+  const reason: PublicBusinessPageNotFoundReason =
+    typeof data === 'object' && data !== null && 'reason' in data && data.reason === 'not_public'
+      ? 'not_public'
+      : 'no_such_business'
+
+  return (
+    <AePublicShell>
+      <section className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
+        {reason === 'not_public' ? (
+          <Empty className="border border-border bg-card p-5">
+            <EmptyHeader>
+              <EmptyTitle>Business page unavailable</EmptyTitle>
+              <EmptyDescription>This page is not visible right now. The business may need to claim or review it.</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <Button asChild variant="default" className="min-h-11"><a href="/claim">Claim your business page</a></Button>
+                <Button asChild variant="secondary" className="min-h-11"><a href="/">Browse businesses</a></Button>
+              </div>
+            </EmptyContent>
+          </Empty>
+        ) : (
+          <Empty className="border border-border bg-card p-5">
+            <EmptyHeader>
+              <EmptyTitle>No business page at this address</EmptyTitle>
+              <EmptyDescription>Nothing is published here. Check the address, or browse the businesses that are listed.</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <Button asChild variant="default" className="min-h-11"><a href="/">Browse businesses</a></Button>
+                <Button asChild variant="secondary" className="min-h-11"><a href="/">Ask a question</a></Button>
+              </div>
+            </EmptyContent>
+          </Empty>
+        )}
       </section>
     </AePublicShell>
   )
@@ -234,20 +249,6 @@ function PublicBusinessRoute() {
 
   if (location.pathname !== `/${slug}`) {
     return <Outlet />
-  }
-
-  if (page.kind === 'not_found') {
-    return (
-      <AePublicShell>
-        <section className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
-          <AeEmptyState
-            title="Business page unavailable"
-            description="This page is not visible right now. The business may need to claim or review it."
-            action={<Button label="Claim your business page" variant="primary" href="/claim" />}
-          />
-        </section>
-      </AePublicShell>
-    )
   }
 
   const catalog = projectPublicInquiryAvailability(page.catalog, admission)

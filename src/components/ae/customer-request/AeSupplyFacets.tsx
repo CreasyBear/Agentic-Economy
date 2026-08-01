@@ -1,6 +1,5 @@
-import { Text } from '@astryxdesign/core/Text'
 
-import { RouterLink } from '@/components/astryx/RouterLink'
+import { Link } from '@tanstack/react-router'
 
 /**
  * The cold-start question is "is there anything here for me?".
@@ -29,16 +28,26 @@ export function AeSupplyFacets({ facets }: { facets: readonly SupplyFacet[] }) {
 
   return (
     <section className="mx-auto grid w-full max-w-3xl gap-3" aria-labelledby="supply-facets-heading">
-      <Text id="supply-facets-heading" weight="semibold" className="block">Browse by trade</Text>
+      <p id="supply-facets-heading" className="block font-semibold">Browse by trade</p>
       <ul className="flex flex-wrap gap-2">
         {facets.map((facet) => (
           <li key={facet.id}>
-            <RouterLink
-              href={facet.href}
-              className="flex min-h-11 items-center rounded-full border border-border bg-card px-4 text-sm font-medium text-primary transition-[background-color,border-color] duration-150 hover:border-accent hover:bg-accent-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              {facet.label}
-            </RouterLink>
+            {facet.href === '/registry' || facet.href.startsWith('/registry?') || facet.href.startsWith('/registry#') ? (
+              <Link
+                to="/registry"
+                search={{ q: facet.label, category: facet.label }}
+                className="flex min-h-11 items-center rounded-full border border-border bg-card px-4 text-sm font-medium text-foreground transition-[background-color,border-color] duration-150 hover:border-brand hover:bg-brand-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                {facet.label}
+              </Link>
+            ) : (
+              <a
+                href={facet.href}
+                className="flex min-h-11 items-center rounded-full border border-border bg-card px-4 text-sm font-medium text-foreground transition-[background-color,border-color] duration-150 hover:border-brand hover:bg-brand-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                {facet.label}
+              </a>
+            )}
           </li>
         ))}
       </ul>
