@@ -1,3 +1,4 @@
+import type { WorkId } from '@convex-dev/workpool'
 import { convexTest, type TestConvex } from 'convex-test'
 import { components } from '../../convex/_generated/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -1242,13 +1243,53 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       dispatchRef: lease.dispatch.dispatchRef,
       attemptRef: lease.dispatch.attemptRef,
     })
+    const invalidOutputObservation = {
+      transport: 'http' as const,
+      disposition: 'succeeded' as const,
+      releaseStarted: true,
+      requestDigest: lease.dispatch.inputDigest,
+      providerReceipt: 'receipt:invalid-output',
+    }
     await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
       attemptRef: lease.dispatch.attemptRef,
       operationKeyDigest: lease.dispatch.operationKeyDigest,
+      observationJson: JSON.stringify(invalidOutputObservation),
       outcome: { kind: 'succeeded', outputJson: JSON.stringify({ inventedSuccess: true }) },
     })).resolves.toMatchObject({
       kind: 'outcome_unknown',
       run: { completedSteps: 0, currentPosition: 1, currentState: 'outcome_unknown' },
+    })
+    await expect(backend.run(async (ctx) => {
+      const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
+        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', lease.dispatch.attemptRef))
+        .unique()
+      return attempt?.transportObservationDigest
+    })).resolves.toBe(canonicalDigest(invalidOutputObservation))
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'outcome_unknown', nextAction: 'wait',
+      action: { state: 'unknown', automaticRetry: false },
+    })
+  })
+
+  it('records an unknown outcome when queued transport work terminates after release', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'transport-work-crash')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:transport-work-crash',
+    })
+    const lease = await nextDispatch(backend)
+    if (lease.kind !== 'leased') throw new Error('transport-work-crash step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+    })
+    await backend.mutation(internal.customerRequestRouteExecution.completeRouteTransportWork, {
+      workId: 'work:transport-work-crash' as WorkId,
+      context: { dispatchRef: lease.dispatch.dispatchRef },
+      result: { kind: 'failed', error: 'provider connection terminated' },
     })
     await expect(admin.action(api.customerRequestApplication.resume, {
       requestRef: confirmed.requestRef,
@@ -1325,6 +1366,17 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       dispatchRef: lease.dispatch.dispatchRef,
       attemptRef: lease.dispatch.attemptRef,
     })).resolves.toEqual({ kind: 'refused', reason: 'dispatch_not_current' })
+    await backend.mutation(internal.customerRequestRouteExecution.completeRouteTransportWork, {
+      workId: 'work:release-binding-recheck' as WorkId,
+      context: { dispatchRef: lease.dispatch.dispatchRef },
+      result: { kind: 'success', returnValue: { kind: 'refused' } },
+    })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'failed', nextAction: 'revise_request',
+      action: { state: 'failed', automaticRetry: false },
+    })
   })
 
   it('stops a queued run idempotently before any business step is released', async () => {
@@ -2290,6 +2342,49 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         retry: 'blocked_until_reconciled',
         cancellation: { state: 'unknown' },
         safeNextAction: 'wait_for_evidence',
+      },
+    })
+  })
+
+  it('records unknown when adapter cancellation work terminates without a resolution', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(55_000)
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await pauseWorkpool(backend)
+    const admin = await ownerAdmin(backend, 'user_route_admin')
+    const confirmed = await confirmedTwoStepRoute(
+      backend, admin, 'adapter-cancel-work-incomplete', { adapterCancellation: true },
+    )
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:adapter-cancel-work-incomplete',
+    })
+    await pauseWorkpool(backend)
+    const lease = await nextDispatch(backend)
+    if (lease.kind !== 'leased') throw new Error('adapter cancellation step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+    })
+    await admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:adapter-work-incomplete',
+    })
+    const cancellationRef = await backend.run(async (ctx) => {
+      const attempt = await ctx.db.query('customerRequestRouteCancellationAttempts').first()
+      if (attempt === null) throw new Error('cancellation attempt missing')
+      return attempt.cancellationRef
+    })
+    await backend.mutation(internal.customerRequestRouteExecution.completeRouteCancellationWork, {
+      workId: 'work:adapter-cancel-work-incomplete' as WorkId,
+      context: { cancellationRef },
+      result: { kind: 'failed', error: 'transport action terminated' },
+    })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'in_progress',
+      activity: {
+        certainty: 'unknown',
+        retry: 'blocked_until_reconciled',
+        cancellation: { state: 'unknown' },
       },
     })
   })
@@ -3478,6 +3573,7 @@ async function nextDispatch(backend: RouteTestBackend) {
         attemptRef: dispatch.attemptRef,
         operationKeyDigest: dispatch.operationKeyDigest,
         inputJson: attempt.inputJson,
+        inputDigest: attempt.inputDigest,
         position: attempt.position,
       },
     }

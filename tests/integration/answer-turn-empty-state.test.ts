@@ -225,14 +225,27 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
         providers?: unknown[]
         allowedSlugs?: unknown[]
-        toolCalls?: readonly { inputJson?: string }[]
+        toolCalls?: readonly { toolId?: string; inputJson?: string; status?: string; resultHash?: string }[]
         timings?: readonly { name?: string }[]
+        harnessRun?: {
+          summary: { models?: { total: number }; cost?: { unavailableReasons: readonly string[] } }
+          privateTelemetry?: { modelRequests: readonly { provider?: string; model?: string }[] }
+        }
       }
       expect(evidence.providers).toEqual([])
       expect(evidence.allowedSlugs).toEqual([])
-      expect(
-        evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query),
-      ).toEqual(['Emergency plumber Brunswick'])
+      expect(evidence.toolCalls?.map((call) => call.toolId)).toEqual([
+        'registry.search',
+        'web.discover',
+      ])
+      expect(evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query)).toEqual([
+        'Emergency plumber Brunswick',
+        'Emergency plumber Brunswick',
+      ])
+      expect(evidence.toolCalls?.every((call) => call.resultHash?.startsWith('sha256:'))).toBe(true)
+      expect(evidence.harnessRun?.summary.models?.total).toBe(1)
+      expect(evidence.harnessRun?.summary.cost?.unavailableReasons).toEqual(['request_failed'])
+      expect(evidence.harnessRun?.privateTelemetry?.modelRequests).toHaveLength(1)
       expect(evidence.timings?.map((timing) => timing.name)).not.toContain('model.agent_total')
       expect(server.requests).toHaveLength(2)
       expect(server.requests.every((request) => request.tools === undefined)).toBe(true)

@@ -730,6 +730,9 @@ function evaluateAnswerTurnExpectations(input: {
   if (costUnavailableReasons.some((reason) => reason.length === 0)) {
     problems.push('cost-unavailable reasons must be non-empty')
   }
+  if (modelRequestCount > 0 && estimatedUsd === undefined && costUnavailableReasons.length === 0) {
+    problems.push('model cost must be reported or carry an explicit unavailable reason')
+  }
 
   if (status !== expected.status) {
     problems.push(`expected status ${expected.status}, got ${status}`)

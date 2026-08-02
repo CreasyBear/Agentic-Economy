@@ -92,13 +92,17 @@ The named expectations are exact:
   the source-defined deterministic retrieval path, so zero means no model
   planning or recovery request—not zero tools. Its persisted search still
   supplies the listed evidence.
-- `turn-paramata-visible-recovery` requires **one model request** and **two
-  persisted tool runs**. The two runs are the initial literal `paramata` search
-  and the model-selected corrected `parramatta` recovery search. This is why
-  the tool count is not the same as the model request count.
+- `turn-paramata-visible-recovery` requires **two model requests** and **two
+  persisted tool runs**. AI SDK `generateText` performs one provider request
+  that returns the corrected tool call and one final structured-prose request.
+  The tool runs are the initial literal `paramata` search and the model-selected
+  corrected `parramatta` recovery search.
 
 These counts describe harness evidence only; authority, validation, persistence,
-and public projection remain deterministic AE responsibilities.
+and public projection remain deterministic AE responsibilities. For every
+nonzero model count, the evaluator also requires either a finite non-negative
+cost estimate or an explicit cost-unavailable reason. Missing accounting is a
+failure, not zero cost.
 
 ## Broad Seed
 
@@ -215,14 +219,15 @@ AE_SMOKE_SELECTION_SEED=<recorded-seed> \
   answer-runtime-production-smoke.spec.ts
 ```
 
-The smoke fetches and paginates `/api/businesses`, then filters published
-subjects whose category/suburb/state-territory tuple is unique in that live
-catalog and whose category is a listed service. The recorded seed selects one
-eligible subject deterministically. It derives the direct query from that
-subject's published category and locality, then derives a bounded typo or
-normalization query from the same facts and verifies that the literal search is
-empty before submitting the recovery query. An empty eligible set or no bounded
-literal miss is a failure, never a skip.
+The smoke fetches and paginates `/api/businesses`, excludes every slug shared
+with the development/eval fixture catalog, then filters published subjects
+whose category/suburb/state-territory tuple is unique in that live catalog and
+whose category is a listed service. The recorded seed selects one eligible
+subject deterministically. It derives the direct query from that subject's
+published category and locality, then derives a bounded typo or normalization
+query from the same facts and verifies that the literal search is empty before
+submitting the recovery query. An empty fixture-distinct eligible set or no
+bounded literal miss is a failure, never a skip.
 
 For both queries it uses the public UI and real `/api/answer/turn` path,
 observes a terminal answer and a citation for the selected subject, reloads for
@@ -248,6 +253,6 @@ not claim that the smoke has run.
 The public smoke alone does **not** prove private hosted model/tool counts,
 token usage, estimated cost, provider request/response IDs, or private harness
 records. The local captured-provider eval supplies source/mock classification:
-the direct case's zero-model expectation and Paramata's one-model/two-tool
+the direct case's zero-model expectation and Paramata's two-model/two-tool
 expectation. Neither local captures nor a public readback may be relabeled as
 hosted provider proof.

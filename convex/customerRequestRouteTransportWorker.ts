@@ -119,7 +119,7 @@ export const run = internalAction({
         attemptRef: opened.invocation.attemptRef,
       },
     )
-    if (released.kind === 'refused') return { kind: 'refused' as const }
+    if (released.kind !== 'recorded') return { kind: 'refused' as const }
 
     const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
     const fetch: RouteTransportFetch = async (input, init) => await guardedFetch(input, {

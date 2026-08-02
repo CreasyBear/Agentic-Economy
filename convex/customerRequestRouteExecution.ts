@@ -1,3 +1,4 @@
+import { vOnCompleteArgs } from '@convex-dev/workpool'
 import { v, type Infer } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -15,6 +16,7 @@ import {
   markDispatched as markDispatchedMachine,
   openCancellationAttempt as openCancellationAttemptMachine,
   recordNotReleased as recordNotReleasedMachine,
+  reconcileRouteTransportWorkCompletion,
   recordOutcome as recordOutcomeMachine,
   recordProblemBusinessReport as recordProblemBusinessReportMachine,
   replyProblem as replyProblemMachine,
@@ -309,6 +311,22 @@ export const resolveCancellationAttempt = internalMutation({
   ),
 })
 
+export const completeRouteCancellationWork = internalMutation({
+  args: vOnCompleteArgs(v.object({ cancellationRef: v.string() })),
+  returns: v.null(),
+  handler: async (ctx, { context }) => {
+    await resolveCancellationAttemptMachine({
+      cancellationRef: context.cancellationRef,
+      observation: {
+        disposition: 'unknown',
+        requestDigest: context.cancellationRef,
+        failureCode: 'route_cancellation_work_incomplete',
+      },
+    }, cancelMutationPorts(ctx))
+    return null
+  },
+})
+
 
 const markDispatchedResult = v.union(
   v.object({ kind: v.literal('recorded') }),
@@ -343,6 +361,24 @@ export const recordNotReleased = internalMutation({
       typeof recordNotReleasedResult
     >
   ),
+})
+
+export const completeRouteTransportWork = internalMutation({
+  args: vOnCompleteArgs(v.object({ dispatchRef: v.string() })),
+  returns: v.null(),
+  handler: async (ctx, { context }) => {
+    const dispatchPorts = dispatchLifecyclePorts(ctx)
+    const journalPorts = journalMutationPorts(ctx)
+    await reconcileRouteTransportWorkCompletion(context.dispatchRef, {
+      loadDispatchByRef: dispatchPorts.loadDispatchByRef,
+      loadAttemptByRef: dispatchPorts.loadAttemptByRef,
+      recordNotReleased: async (command) => (
+        await recordNotReleasedMachine(command, dispatchPorts)
+      ),
+      recordOutcome: async (command) => await recordOutcomeMachine(command, journalPorts),
+    })
+    return null
+  },
 })
 
 

@@ -161,8 +161,16 @@ describe('answer pipeline eval', () => {
 
     const paramataReport = report.cases.find((testCase) => testCase.id === 'turn-paramata-visible-recovery')
     expect(paramataReport?.kind).toBe('turn')
-    expect(paramataReport?.kind === 'turn' ? paramataReport.modelRequestCount : undefined).toBe(1)
+    expect(paramataReport?.kind === 'turn' ? paramataReport.modelRequestCount : undefined).toBe(2)
     expect(paramataReport?.kind === 'turn' ? paramataReport.toolRunCount : undefined).toBe(2)
+    expect(paramataReport?.kind === 'turn' ? paramataReport.costUnavailableReasons : undefined).toEqual([
+      'price_table_missing',
+    ])
+    expect(paramataReport?.kind === 'turn' ? paramataReport.usage : undefined).toMatchObject({
+      inputTokens: 240,
+      outputTokens: 67,
+      totalTokens: 307,
+    })
 
     const { keys, strings } = readSerializedReportValues(JSON.stringify(report))
     const forbiddenPrivateKeys: Record<string, true> = {
@@ -211,7 +219,7 @@ describe('answer pipeline eval', () => {
     }
     const result = await runAnswerTurnEvalCase(impossibleCase)
     expect(result.ok).toBe(false)
-    expect(result.problems).toContain('expected 0 model requests, got 1')
+    expect(result.problems).toContain('expected 0 model requests, got 2')
     expect(result.problems).toContain('tool run count 2 exceeds 0')
   })
 

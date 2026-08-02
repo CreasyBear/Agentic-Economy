@@ -396,9 +396,19 @@ describe('answer harness operation persistence bridge', () => {
       total: 2,
       ok: 2,
     })
+    const modelRequests = evidence.harnessRun?.privateTelemetry?.modelRequests ?? []
+    expect(modelRequests.map(({ seq, provider, model, status }) => ({ seq, provider, model, status }))).toEqual([
+      { seq: 0, provider: 'openrouter', model: 'test-model', status: 'ok' },
+      { seq: 1, provider: 'openrouter', model: 'test-model', status: 'ok' },
+    ])
+    expect(Object.keys(evidence.harnessRun?.summary.models?.byModel ?? {})).toEqual(['test-model'])
+    expect(evidence.harnessRun?.summary.models?.byModel['test-model']).toMatchObject({
+      total: 2,
+      ok: 2,
+    })
     expect(evidence.harnessRun?.summary.models?.byProvider.openrouter).toMatchObject({
-      total: 1,
-      ok: 1,
+      total: 2,
+      ok: 2,
     })
     expect(evidence.harnessRun?.coverage.phases).toEqual(
       expect.arrayContaining(['context', 'intent', 'route', 'retrieval', 'model', 'assemble', 'gate']),
@@ -406,18 +416,23 @@ describe('answer harness operation persistence bridge', () => {
 
     const journalEntries = finalizationWrites.flatMap((write) => write.entries)
     const journalKinds = journalEntries.map((entry) => entry.kind)
-    expect(journalKinds).toEqual(expect.arrayContaining([
+    expect(journalKinds).toEqual([
       'turn.started',
       'context.loaded',
       'intent.routed',
+      'intent.routed',
       'tool.started',
       'tool.completed',
-      'model.started',
-      'model.completed',
+      'tool.started',
+      'tool.completed',
       'gate.evaluated',
       'turn.persisted',
       'run.reported',
-    ]))
+    ])
+    expect(journalKinds).not.toContain('model.started')
+    expect(journalKinds).not.toContain('model.completed')
+    expect(journalKinds.filter((kind) => kind === 'intent.routed')).toHaveLength(2)
+    expect(journalKinds.filter((kind) => kind === 'tool.started')).toHaveLength(2)
     expect(journalKinds.filter((kind) => kind === 'tool.completed')).toHaveLength(2)
     expect(journalEntries.find((entry) => entry.kind === 'run.reported')?.privatePayloadJson).toContain('runtimeEvent')
     expect(finalizationWrites[0]?.finalizationHash).toMatch(/^sha256:[0-9a-f]{64}$/)

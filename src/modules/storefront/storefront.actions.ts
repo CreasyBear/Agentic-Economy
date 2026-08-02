@@ -240,7 +240,7 @@ const webDiscoverInputSchema = z.strictObject({
   location: z.string().trim().max(80).optional().describe('Requested suburb or area'),
 }) as z.ZodType<WebDiscoveryInput>
 
-const webDiscoveryClaimSchema = z.object({
+const webDiscoveryClaimSchema = z.strictObject({
   businessName: z.string(),
   suburb: z.string(),
   phone: z.string().optional(),
@@ -250,14 +250,14 @@ const webDiscoveryClaimSchema = z.object({
 })
 
 const webDiscoverOutputSchema = z.discriminatedUnion('kind', [
-  z.object({
+  z.strictObject({
     kind: z.literal('found'),
     query: z.string(),
     claims: z.array(webDiscoveryClaimSchema).max(5),
   }),
-  z.object({ kind: z.literal('none'), query: z.string(), reason: z.literal('no_matches') }),
-  z.object({ kind: z.literal('unavailable'), reason: z.literal('llm_not_configured') }),
-  z.object({
+  z.strictObject({ kind: z.literal('none'), query: z.string(), reason: z.literal('no_matches') }),
+  z.strictObject({ kind: z.literal('unavailable'), reason: z.literal('llm_not_configured') }),
+  z.strictObject({
     kind: z.literal('error'),
     code: z.literal('discovery_failed'),
     retryable: z.boolean(),
@@ -317,11 +317,13 @@ export const webDiscoverAction = defineAction({
       'action contract version changes',
     ],
   },
-  run: async ({ data }) => {
+  run: async ({ data, context }) => {
     const [{ discoverBusinessesFromWebSearch }, { openRouterGatewayConfig }] = await Promise.all([
       import('@/modules/storefront/public'),
       import('@/modules/model-gateway/public'),
     ])
-    return discoverBusinessesFromWebSearch(data, openRouterGatewayConfig())
+    return discoverBusinessesFromWebSearch(data, openRouterGatewayConfig(), {
+      ...(context.onModelRequest === undefined ? {} : { onModelRequest: context.onModelRequest }),
+    })
   },
 })

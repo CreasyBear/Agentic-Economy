@@ -417,7 +417,7 @@ async function runGuardedModelCall<T>(
   try {
     return input.harnessLoop === undefined
       ? await work()
-      : await input.harnessLoop.runModel<T>({ seq, provider: 'openrouter', model: modelId }, work)
+      : await input.harnessLoop.phase('model.provider_sequence', () => work())
   } catch (error) {
     const durationMs = Date.now() - startedAt
     const agentError = toAgentError(error)

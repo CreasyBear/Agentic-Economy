@@ -154,7 +154,7 @@
     "@shikijs/engine-oniguruma": "^3.23.0"
   },
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "packageManager": "npm@11.5.1"
 }

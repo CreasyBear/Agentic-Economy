@@ -25,12 +25,14 @@ const problemPortsSource = readFileSync(
 const hostDispatchMachines = [
   'markDispatched',
   'recordNotReleased',
+  'completeRouteTransportWork',
 ] as const
 
 const dispatchMachineFiles = [
   'dispatch-lifecycle-ports.ts',
   'mark-dispatched.ts',
   'record-not-released.ts',
+  'reconcile-transport-work.ts',
 
 ] as const
 describe('customer-request route-execution dispatch lifecycle thinness', () => {
@@ -39,7 +41,11 @@ describe('customer-request route-execution dispatch lifecycle thinness', () => {
       expect(statSync(join(machinesRoot, file)).isFile()).toBe(true)
     }
     const index = readFileSync(join(machinesRoot, 'index.ts'), 'utf8')
-    for (const symbol of ['markDispatched', 'recordNotReleased']) {
+    for (const symbol of [
+      'markDispatched',
+      'recordNotReleased',
+      'reconcileRouteTransportWorkCompletion',
+    ]) {
       expect(index).toContain(symbol)
     }
     expect(index).toContain('DispatchLifecyclePorts')
@@ -54,6 +60,7 @@ describe('customer-request route-execution dispatch lifecycle thinness', () => {
     expect(hostSource).toContain('dispatchLifecycleOpenPorts(ctx)')
     expect(hostSource).toContain('markDispatchedMachine')
     expect(hostSource).toContain('recordNotReleasedMachine')
+    expect(hostSource).toContain('reconcileRouteTransportWorkCompletion')
     expect(hostSource).toContain("from './customerRequestRouteExecutionDispatchPorts'")
 
     for (const symbol of hostDispatchMachines) {
@@ -112,9 +119,11 @@ describe('customer-request route-execution dispatch lifecycle thinness', () => {
     }
     const markDispatched = readFileSync(join(machinesRoot, 'mark-dispatched.ts'), 'utf8')
     const notReleased = readFileSync(join(machinesRoot, 'record-not-released.ts'), 'utf8')
+    const reconcileWork = readFileSync(join(machinesRoot, 'reconcile-transport-work.ts'), 'utf8')
     expect(markDispatched).toContain('DispatchLifecyclePorts')
     expect(notReleased).toContain('DispatchLifecyclePorts')
-    for (const source of [markDispatched, notReleased]) {
+    expect(reconcileWork).toContain('RouteTransportWorkCompletionPorts')
+    for (const source of [markDispatched, notReleased, reconcileWork]) {
       expect(source).toContain('ports.')
     }
     expect(dispatchPortsSource).toContain('openDispatchFromJournal')

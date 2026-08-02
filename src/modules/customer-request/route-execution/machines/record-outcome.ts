@@ -80,7 +80,7 @@ export async function recordOutcome(
       attemptRef: attempt.attemptRef,
       runRef: run.runRef,
       now,
-      observationPatch: {},
+      observationPatch,
     })
   }
   return await ports.commitSucceededOutcome({

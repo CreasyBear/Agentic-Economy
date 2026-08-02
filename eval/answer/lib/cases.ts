@@ -261,7 +261,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     },
     expected: {
       status: 'complete',
-      expectedModelRequests: 1,
+      expectedModelRequests: 2,
       maxToolRuns: 2,
       slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
       toolQueries: ['paramata', 'parramatta'],
@@ -292,7 +292,7 @@ export const ANSWER_TURN_EVAL_CASES = [
       status: 'complete',
       expectedModelRequests: 0,
       slugs: [],
-      toolQueries: ['Emergency plumber Brunswick'],
+      toolQueries: ['Emergency plumber Brunswick', 'Emergency plumber Brunswick'],
       includeTimingNames: [
         'retrieval.initial_search',
         'registry.search.convex',
@@ -366,7 +366,7 @@ export const ANSWER_TURN_EVAL_CASES = [
       status: 'complete',
       expectedModelRequests: 0,
       slugs: [],
-      toolQueries: ['emergency plumber'],
+      toolQueries: ['emergency plumber', 'emergency plumber'],
       includeTimingNames: [
         'retrieval.initial_search',
         'registry.search.convex',

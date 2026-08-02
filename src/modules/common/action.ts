@@ -51,6 +51,28 @@ export type ActionAgentIdentity = {
   verifiedAt: string
 }
 
+export type ActionModelUsage = Readonly<{
+  inputTokens?: number
+  outputTokens?: number
+  cachedInputTokens?: number
+  cacheWriteTokens?: number
+  reasoningOutputTokens?: number
+  totalTokens?: number
+}>
+
+export type ActionModelRequestObservation = Readonly<{
+  provider: string
+  model: string
+  status: 'ok' | 'error'
+  startedAt: number
+  endedAt: number
+  durationMs: number
+  stopReason?: string
+  usage?: ActionModelUsage
+  errorCode?: string
+  costUnavailableReason?: string
+}>
+
 export type ActionContext = {
   /** Kernel-owned execution attribution; action callers must not supply it. */
   actionInvocationExecution?: Readonly<{
@@ -70,6 +92,8 @@ export type ActionContext = {
   request?: Request
   /** Internal timing sink used by answer turns; never exposed on human surfaces. */
   timing?: ActionTimingSink
+  /** Private model-call accounting sink owned by the runtime harness. */
+  onModelRequest?: (observation: ActionModelRequestObservation) => void
   /** Signed request identity for attribution/quota/audit only; never write authority. */
   agentIdentity?: ActionAgentIdentity
   /** Harness-only approval authority for owner/admin-gated tools. */

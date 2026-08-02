@@ -107,6 +107,11 @@ export function openRouterToolResponse(
         },
       },
     ],
+    usage: {
+      prompt_tokens: 100,
+      completion_tokens: 25,
+      total_tokens: 125,
+    },
   }
 }
 
@@ -126,6 +131,11 @@ export function openRouterProseResponse(
         },
       },
     ],
+    usage: {
+      prompt_tokens: 140,
+      completion_tokens: 42,
+      total_tokens: 182,
+    },
   }
 }
 

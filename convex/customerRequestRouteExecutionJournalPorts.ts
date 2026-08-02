@@ -1,5 +1,4 @@
 import type { Infer } from 'convex/values'
-import { Workpool } from '@convex-dev/workpool'
 import { routeStepGrantValue } from '@/modules/customer-request/runtime'
 
 import {
@@ -27,7 +26,7 @@ import {
 } from '@/modules/customer-request/route-execution/journal'
 
 import type { RouteStepGrant } from '@/modules/customer-request/route-mandate-admission'
-import { components, internal } from './_generated/api'
+import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
@@ -40,6 +39,7 @@ import {
   toDispatchRecord,
   toRunRecord,
 } from './customerRequestRouteExecutionSnapshots'
+import { customerRequestRouteWorkpool } from './customerRequestRouteWorkpool'
 
 type StoredRouteStepGrant = Infer<typeof routeStepGrantValue>
 
@@ -106,25 +106,21 @@ function rehydratePointedSchemaIdentity(value: string): PointedSchemaIdentity {
 type DbCtx = MutationCtx | QueryCtx
 const PRE_RELEASE_CANCELLATION_WINDOW_MS = 5_000
 
-const routeTransportPool = new Workpool(components.workpool, {
-  // T38 reserves the 100 global Convex slots across all pools; route transport owns 32.
-  maxParallelism: 32,
-  retryActionsByDefault: true,
-  defaultRetryBehavior: { maxAttempts: 3, initialBackoffMs: 1_000, base: 2 },
-})
 
 async function enqueueRouteTransport(
   ctx: MutationCtx,
   dispatchRef: string,
   runAfter: number,
 ): Promise<void> {
-  await routeTransportPool.enqueueAction(
+  await customerRequestRouteWorkpool.enqueueAction(
     ctx,
     internal.customerRequestRouteTransportWorker.run,
     { dispatchRef },
     {
       runAfter,
       retry: true,
+      onComplete: internal.customerRequestRouteExecution.completeRouteTransportWork,
+      context: { dispatchRef },
     },
   )
 }

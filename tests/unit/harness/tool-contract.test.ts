@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { z } from 'zod'
 
 import { defineAction, listActions } from '@/modules/actions'
+import { AnswerToolIdValues } from '@/modules/answer-thread/answer-thread.schema'
 import {
   AnswerModelToolIds,
   actionToHarnessTool,
@@ -16,13 +17,15 @@ import {
 type FakeActionResult = Readonly<{ kind: string } & Record<string, unknown>>
 
 describe('harness tool contract', () => {
-  it('filters answer-model descriptors to the registry read tools only', () => {
+  it('filters answer-model descriptors to the complete read toolset', () => {
     const contracts = buildHarnessToolContracts(listActions())
     const answerContracts = filterAnswerModelToolContracts(contracts)
     const descriptors = answerContracts.map(describeHarnessToolForAnswerModel)
 
     expect(answerContracts.map((contract) => contract.id)).toEqual([...AnswerModelToolIds])
+    expect(AnswerModelToolIds).toEqual(AnswerToolIdValues)
     expect(answerContracts.every((contract) => contract.policy.tier === 'read')).toBe(true)
+    expect(answerContracts.every((contract) => contract.schemas.providerViolations.length === 0)).toBe(true)
     expect(descriptors.map((projection) => projection.descriptor.function.name)).toEqual([...AnswerModelToolIds])
     expect(descriptors.every((projection) => projection.descriptor.type === 'function')).toBe(true)
   })

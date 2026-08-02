@@ -149,11 +149,15 @@ describe('business enrichment from a web search', () => {
         ['https://directory.example/parramatta-funeral'],
       ),
     )
+    const modelRequests: unknown[] = []
 
     const result = await discoverBusinessesFromWebSearch(
       { query: 'funeral parlours in Parramatta', location: 'Parramatta' },
       config,
-      { fetch: fetchMock },
+      {
+        fetch: fetchMock,
+        onModelRequest: (observation) => modelRequests.push(observation),
+      },
     )
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -168,6 +172,14 @@ describe('business enrichment from a web search', () => {
         sourceUrl: 'https://directory.example/parramatta-funeral',
       }],
     })
+    expect(modelRequests).toEqual([
+      expect.objectContaining({
+        provider: 'openrouter',
+        model: config.model,
+        status: 'ok',
+        costUnavailableReason: 'provider_cost_not_reported',
+      }),
+    ])
   })
 
   it('never throws a provider error at the caller', async () => {

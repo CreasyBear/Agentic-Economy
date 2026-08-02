@@ -1,5 +1,6 @@
 import { findAction } from '@/modules/actions'
 import type { ActionTimingSink } from '@/modules/common/action'
+import type { ActionModelRequestObservation } from '@/modules/common/action'
 import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { roundNonNegative2 } from '@/modules/common/round-nonnegative-2'
@@ -88,11 +89,21 @@ export async function runAnswerToolCall(
     })
   }
 
+  const context = {
+    timing: timings.sink,
+    ...(input.harnessLoop === undefined
+      ? {}
+      : {
+          onModelRequest: (observation: ActionModelRequestObservation) => {
+            input.harnessLoop?.collector.recordModelRequest(observation)
+          },
+        }),
+  }
   const outcome = input.harnessLoop === undefined
     ? await runHarnessTool({
         tool,
         input: input.input,
-        context: { timing: timings.sink },
+        context,
         surface: 'answerThread',
         mode: 'public-read',
         toolCallId,
@@ -100,7 +111,7 @@ export async function runAnswerToolCall(
     : await input.harnessLoop.runTool({
         tool,
         input: input.input,
-        context: { timing: timings.sink },
+        context,
         surface: 'answerThread',
         mode: 'public-read',
         toolCallId,

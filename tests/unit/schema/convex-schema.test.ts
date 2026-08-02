@@ -3,6 +3,11 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
+import {
+  createDevelopmentDynamicPublishedSource,
+  createDynamicPublishedActionInvocationAdapter,
+} from '@/modules/action-invocation'
+import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
 import schema from '../../../convex/schema'
 
 const convexModules = Object.fromEntries(
@@ -616,5 +621,186 @@ describe('Convex schema', () => {
         retry: 'safe_before_release',
       }),
     }))
+  })
+  it('validates current and legacy action invocation controls', async () => {
+    const backend = convexTest(schema, convexModules)
+    const legacyAcceptedAuthority = {
+      kind: 'standing_mandate_use',
+      mandateRef: 'mandate:schema-regression',
+      mandateVersion: 1,
+      mandateGeneration: 2,
+      authorityUseRef: 'authority-use:schema-regression',
+      grantEvidenceRef: 'grant-evidence:schema-regression',
+    } as const
+    const currentAcceptedAuthority = {
+      kind: 'approve_each',
+      authorityRef: 'authority:schema-regression',
+    } as const
+    const controlBase = {
+      invocationVersion: 1,
+      environment: 'MOCK/DEVELOPMENT ONLY',
+      persistence: 'durable_control',
+      origin: {
+        kind: 'standalone',
+        callerRef: 'caller:schema-regression',
+        principalRef: 'principal:schema-regression',
+      },
+      owner: { callerRef: 'caller:schema-regression', principalRef: 'principal:schema-regression' },
+      action: { id: 'schema.regression', contractVersion: '1' },
+      desired: { state: 'invoke' },
+      authority: {
+        reference: 'authority:schema-regression',
+        expiresAt: '2026-08-02T00:00:00.000Z',
+      },
+      freshness: { state: 'current', observedAt: '2026-08-02T00:00:00.000Z' },
+      control: { state: 'authorized', decidedAt: '2026-08-02T00:00:00.000Z' },
+    } as const
+    const legacyControl = {
+      invocationRef: 'invocation:schema-regression:legacy',
+      invocationVersion: 1,
+      control: {
+        ...controlBase,
+        invocationRef: 'invocation:schema-regression:legacy',
+      },
+      sourceRef: 'source:schema-regression:legacy',
+      authorityReference: 'authority:schema-regression',
+      authorityDecisionAt: '2026-08-02T00:00:00.000Z',
+      acceptedAuthority: legacyAcceptedAuthority,
+      updatedAt: '2026-08-02T00:00:00.000Z',
+    } as const
+    const currentControl = {
+      invocationRef: 'invocation:schema-regression:current',
+      invocationVersion: 1,
+      control: {
+        ...controlBase,
+        invocationRef: 'invocation:schema-regression:current',
+        acceptedAuthority: currentAcceptedAuthority,
+      },
+      sourceRef: 'source:schema-regression:current',
+      authorityReference: 'authority:schema-regression',
+      authorityDecisionAt: '2026-08-02T00:00:00.000Z',
+      updatedAt: '2026-08-02T00:00:00.000Z',
+    } as const
+
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('actionInvocationControls', legacyControl)
+      await ctx.db.insert('actionInvocationControls', currentControl)
+    })
+
+    const rows = await backend.run(async (ctx) => (
+      ctx.db.query('actionInvocationControls').take(10)
+    ))
+    const legacyRow = rows.find(({ invocationRef }) => invocationRef === legacyControl.invocationRef)
+    const currentRow = rows.find(({ invocationRef }) => invocationRef === currentControl.invocationRef)
+
+    expect(legacyRow).toEqual(expect.objectContaining({
+      acceptedAuthority: legacyAcceptedAuthority,
+      control: expect.not.objectContaining({ acceptedAuthority: expect.anything() }),
+    }))
+    expect(currentRow).toEqual(expect.objectContaining({
+      control: expect.objectContaining({ acceptedAuthority: currentAcceptedAuthority }),
+    }))
+    expect(currentRow).not.toHaveProperty('acceptedAuthority')
+  })
+  it('validates current begin and answer gathering-information writes', async () => {
+    const backend = convexTest(schema, convexModules)
+    const fixture = buildDevelopmentPublishedOperationEvidence()
+    const now = fixture.operation.readiness.observedAt + 1_000
+    const actor = { callerRef: 'caller:schema-input', principalRef: 'principal:schema-input' }
+    const adapter = createDynamicPublishedActionInvocationAdapter({
+      operation: fixture.operation,
+      source: createDevelopmentDynamicPublishedSource([fixture.operation]),
+      runtime: {
+        send: async () => { throw new Error('schema regression must not execute transport') },
+        resolveCredential: () => undefined,
+      },
+      now: () => now,
+      nextInvocationRef: () => 'invocation:schema-input',
+      nextAuthorityRef: () => 'authority:schema-input',
+      nextAttemptRef: () => 'attempt:schema-input',
+    })
+    const origin = { kind: 'standalone' as const, ...actor }
+
+    const began = adapter.begin({ origin, actor, partial: {} })
+    expect(began.state).toBe('gathering_information')
+    const beginControl = adapter.exportSnapshot().controls.find(
+      ({ invocationRef }) => invocationRef === began.invocationRef,
+    )
+    if (beginControl === undefined) throw new Error('begin control was not persisted')
+    const toConvexControlRow = (row: Exclude<typeof beginControl, undefined>) => {
+      const { control } = row
+      if (control.persistence !== 'durable_control') {
+        throw new Error('expected durable control')
+      }
+      const state = control.control
+      if (state.state !== 'gathering_information') {
+        throw new Error('expected gathering-information control')
+      }
+      const durablePersistence = 'durable_control' as const
+      return {
+        invocationRef: row.invocationRef,
+        invocationVersion: row.invocationVersion,
+        sourceRef: row.sourceRef,
+        control: {
+          invocationRef: control.invocationRef,
+          invocationVersion: control.invocationVersion,
+          environment: control.environment,
+          persistence: durablePersistence,
+          origin: control.origin,
+          owner: control.owner,
+          action: control.action,
+          desired: control.desired,
+          ...(control.authority === undefined ? {} : { authority: control.authority }),
+          ...(control.acceptedAuthority === undefined ? {} : { acceptedAuthority: control.acceptedAuthority }),
+          freshness: control.freshness,
+          control: {
+            state: 'gathering_information' as const,
+            missingFields: [...state.missingFields],
+          },
+        },
+        ...(row.sourceResultRef === undefined ? {} : { sourceResultRef: row.sourceResultRef }),
+        ...(row.sourceResultDigest === undefined ? {} : { sourceResultDigest: row.sourceResultDigest }),
+        ...(row.terminalBusinessOutcome === undefined ? {} : { terminalBusinessOutcome: row.terminalBusinessOutcome }),
+        ...(row.terminalResultReferenceable === undefined ? {} : { terminalResultReferenceable: row.terminalResultReferenceable }),
+        ...(row.preparedMaterialDigest === undefined ? {} : { preparedMaterialDigest: row.preparedMaterialDigest }),
+        ...(row.preparedTargetDigest === undefined ? {} : { preparedTargetDigest: row.preparedTargetDigest }),
+        ...(row.consequence === undefined ? {} : { consequence: row.consequence }),
+        ...(row.dataLimitSummary === undefined ? {} : { dataLimitSummary: row.dataLimitSummary }),
+        ...(row.authorityBinding === undefined ? {} : { authorityBinding: row.authorityBinding }),
+        ...(row.authorityDecisionAt === undefined ? {} : { authorityDecisionAt: row.authorityDecisionAt }),
+        ...(row.currentAttemptRef === undefined ? {} : { currentAttemptRef: row.currentAttemptRef }),
+        ...(row.currentEffectGeneration === undefined ? {} : { currentEffectGeneration: row.currentEffectGeneration }),
+        ...(row.currentLeaseOwner === undefined ? {} : { currentLeaseOwner: row.currentLeaseOwner }),
+        ...(row.currentLeaseExpiresAt === undefined ? {} : { currentLeaseExpiresAt: row.currentLeaseExpiresAt }),
+        updatedAt: row.updatedAt,
+      }
+    }
+    const controlId = await backend.run(async (ctx) => (
+      ctx.db.insert('actionInvocationControls', toConvexControlRow(beginControl))
+    ))
+
+    const answered = adapter.answer({
+      invocationRef: began.invocationRef,
+      actor,
+      answers: { symbol: 'BTC' },
+      freshnessMs: 30_000,
+    })
+    if (!('state' in answered) || answered.state !== 'gathering_information') {
+      throw new Error('answer should remain in gathering state')
+    }
+    const answerControl = adapter.exportSnapshot().controls.find(
+      ({ invocationRef }) => invocationRef === began.invocationRef,
+    )
+    if (answerControl === undefined) throw new Error('answer control was not persisted')
+    await backend.run(async (ctx) => {
+      await ctx.db.replace(controlId, toConvexControlRow(answerControl))
+    })
+
+    const persisted = await backend.run(async (ctx) => ctx.db.get(controlId))
+    expect(persisted?.control.control).toEqual({
+      state: 'gathering_information',
+      missingFields: ['convert'],
+    })
+    expect(persisted?.invocationVersion).toBe(2)
   })
 })

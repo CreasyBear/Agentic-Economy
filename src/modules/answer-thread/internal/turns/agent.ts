@@ -84,6 +84,10 @@ async function streamAgentTurn(
       ...agentInput,
       ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
       harnessLoop: ctx.harness.loop,
+      onModelRequest: (record) => {
+        agentInput.onModelRequest?.(record)
+        ctx.harness.loop.collector.recordModelRequest(record)
+      },
     })
     stopModelTiming({
       providerCount: result.providers.length,

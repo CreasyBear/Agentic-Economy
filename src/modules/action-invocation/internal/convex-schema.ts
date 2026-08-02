@@ -12,6 +12,7 @@ export const invocationFreshnessValue = v.union(
   v.object({ state: v.literal('current'), observedAt: v.string() }),
 )
 export const invocationControlValue = v.union(
+  v.object({ state: v.literal('gathering_information'), missingFields: v.array(v.string()) }),
   v.object({ state: v.literal('awaiting_authority') }),
   v.object({ state: v.literal('authorized'), decidedAt: v.string() }),
   v.object({
@@ -129,6 +130,8 @@ export const actionInvocationTables = {
     authorityReference: v.optional(v.string()),
     authorityBinding: v.optional(authorityBindingValue),
     authorityDecisionAt: v.optional(v.string()),
+    /** @deprecated Legacy rows only; current writes intentionally omit this field. */
+    acceptedAuthority: v.optional(acceptedAuthorityValue),
     currentAttemptRef: v.optional(v.string()),
     currentEffectGeneration: v.optional(v.number()),
     currentLeaseOwner: v.optional(v.string()),

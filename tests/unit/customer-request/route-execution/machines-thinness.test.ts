@@ -28,6 +28,7 @@ const machineFiles = [
   'dispatch-lifecycle-ports.ts',
   'mark-dispatched.ts',
   'record-not-released.ts',
+  'reconcile-transport-work.ts',
   'problem-report.ts',
   'problem-business-report.ts',
   'problem-update-status.ts',
@@ -51,6 +52,7 @@ describe('customer-request route-execution machines thinness', () => {
     expect(index).toContain('resolveCancellationAttempt')
     expect(index).toContain('markDispatched')
     expect(index).toContain('recordNotReleased')
+    expect(index).toContain('reconcileRouteTransportWorkCompletion')
     expect(index).toContain('JournalMutationPorts')
     expect(index).toContain('CancelMutationPorts')
     expect(index).toContain('DispatchLifecyclePorts')

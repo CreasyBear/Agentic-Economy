@@ -29,6 +29,15 @@ export {
   recordNotReleased,
 } from './record-not-released'
 
+export {
+  reconcileRouteTransportWorkCompletion,
+} from './reconcile-transport-work'
+
+export type {
+  RouteTransportWorkCompletionPorts,
+  RouteTransportWorkCompletionResult,
+} from './reconcile-transport-work'
+
 
 
 export {

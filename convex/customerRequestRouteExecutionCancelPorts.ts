@@ -26,6 +26,7 @@ import {
   toDispatchRecord,
   toRunRecord,
 } from './customerRequestRouteExecutionSnapshots'
+import { customerRequestRouteWorkpool } from './customerRequestRouteWorkpool'
 
 export function cancelMutationPorts(ctx: MutationCtx): CancelMutationPorts {
   return {
@@ -103,9 +104,16 @@ export function cancelMutationPorts(ctx: MutationCtx): CancelMutationPorts {
           requestedAt: input.now,
           updatedAt: input.now,
         })
-        await ctx.scheduler.runAfter(0, internal.customerRequestRouteCancellationWorker.run, {
-          cancellationRef: input.cancellationRef,
-        })
+        await customerRequestRouteWorkpool.enqueueAction(
+          ctx,
+          internal.customerRequestRouteCancellationWorker.run,
+          { cancellationRef: input.cancellationRef },
+          {
+            retry: false,
+            onComplete: internal.customerRequestRouteExecution.completeRouteCancellationWork,
+            context: { cancellationRef: input.cancellationRef },
+          },
+        )
       }
       await insertCancelCommand(ctx, input)
       return await cancelResultProjection(ctx, input.runRef, input.result)

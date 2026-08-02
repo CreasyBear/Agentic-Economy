@@ -118,26 +118,27 @@ async function streamRetrievalFirstTurn(
       return { snapshot: undefined, toolCalls: [result.record], allowedSlugs: result.allowedSlugs, errorCopyId: undefined, gate: undefined }
     }
 
-    const importedClaims = await discoverImportedClaims(ctx, searchInput)
+    const discovery = await discoverImportedClaims(ctx, searchInput)
     const snapshot = withFollowUpLayout(
       buildDeterministicEmptySnapshot({
         query: ctx.query,
         searchInput,
         searchContext: ctx.searchContext,
-        ...(importedClaims.length === 0 ? {} : { importedClaims }),
+        ...(discovery.claims.length === 0 ? {} : { importedClaims: discovery.claims }),
       }),
       ctx.priorTurnsCount,
       ctx.intent,
     )
 
+    const toolCalls = [result.record, discovery.record]
     const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs: result.allowedSlugs })
     if (!finalized.ok) {
-      return rejectBlockedSnapshot(ctx, [result.record], result.allowedSlugs, finalized)
+      return rejectBlockedSnapshot(ctx, toolCalls, result.allowedSlugs, finalized)
     }
     const assembly = await ctx.emitOrDeferSnapshot(finalized.snapshot, 'retrieval_empty', { planMode: 'empty' })
     return {
       snapshot: finalized.snapshot,
-      toolCalls: [result.record],
+      toolCalls,
       allowedSlugs: result.allowedSlugs,
       errorCopyId: undefined,
       gate: finalized.gate,
@@ -255,7 +256,10 @@ function buildDeterministicEmptySnapshot(input: {
 async function discoverImportedClaims(
   ctx: TurnPathContext,
   searchInput: AnswerRegistrySearchInput,
-): Promise<readonly WebDiscoveryClaim[]> {
+): Promise<{
+  claims: readonly WebDiscoveryClaim[]
+  record: Awaited<ReturnType<typeof runAnswerToolCall>>['record']
+}> {
   const startedAt = Date.now()
   ctx.workLog.emit({
     id: 'search.web.discovery',
@@ -266,41 +270,40 @@ async function discoverImportedClaims(
     detailRows: [{ label: 'Search words', value: safeWorkLogUserText(ctx.query) }],
     startedAtMs: startedAt,
   })
-  let result: Awaited<ReturnType<typeof webDiscoverAction.run>>
-  try {
-    result = await webDiscoverAction.run({
-      data: webDiscoverAction.schema.parse({
-        query: ctx.query,
-        ...(searchInput.location === undefined ? {} : { location: searchInput.location }),
-      }),
-      context: { caller: 'answerThread' },
-    })
-  } catch {
-    ctx.workLog.emit({
-      id: 'search.web.discovery',
-      phase: 'search',
-      status: 'error',
-      title: 'Checking the web for unlisted businesses',
-      summary: 'The web discovery check did not complete.',
-      startedAtMs: startedAt,
-      completedAtMs: Date.now(),
-    })
-    return []
-  }
-  const claims = result.kind === 'found' ? result.claims : []
+  const result = await runAnswerToolCall({
+    toolId: 'web.discover',
+    input: {
+      query: ctx.query,
+      ...(searchInput.location === undefined ? {} : { location: searchInput.location }),
+    },
+    turnId: ctx.turnId,
+    seq: 1,
+    harnessLoop: ctx.harness.loop,
+  })
+  ctx.timings.add(result.timings, {
+    phase: 'web_discovery',
+    toolId: result.record.toolId,
+    toolSeq: result.record.seq,
+  })
+  const parsed = webDiscoverAction.outputSchema.safeParse(JSON.parse(result.resultJson))
+  const claims = result.record.status === 'complete' && parsed.success && parsed.data.kind === 'found'
+    ? parsed.data.claims
+    : []
   ctx.workLog.emit({
     id: 'search.web.discovery',
     phase: 'search',
-    status: 'complete',
+    status: result.record.status === 'complete' ? 'complete' : 'error',
     title: 'Checking the web for unlisted businesses',
-    summary: claims.length === 0
-      ? 'No additional web businesses were found for this request.'
-      : `${claims.length} real business${claims.length === 1 ? '' : 'es'} found on the web, separate from AE listings.`,
+    summary: result.record.status !== 'complete'
+      ? 'The web discovery check did not complete.'
+      : claims.length === 0
+        ? 'No additional web businesses were found for this request.'
+        : `${claims.length} real business${claims.length === 1 ? '' : 'es'} found on the web, separate from AE listings.`,
     detailRows: [{ label: 'Imported claims', value: String(claims.length) }],
     startedAtMs: startedAt,
     completedAtMs: Date.now(),
   })
-  return claims
+  return { claims, record: result.record }
 }
 
 

@@ -1,6 +1,9 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
-import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
+import {
+  DEFAULT_LOCAL_REGISTRY_FIXTURE_SLUG,
+  LOCAL_E2E_BUSINESS_FIXTURES,
+} from '@/lib/dev/local-e2e-business-fixtures'
 import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
 import type { ActionTimingSink } from '@/modules/common/action'
 import { recordSearchGaps } from '@/modules/demand/demand.functions'
@@ -162,7 +165,7 @@ type NativeFixtureInput = Readonly<{
 }>
 
 const DEFAULT_NATIVE_FIXTURE: NativeFixtureInput = {
-  requestedSlug: 'parramatta-emergency-plumbing',
+  requestedSlug: DEFAULT_LOCAL_REGISTRY_FIXTURE_SLUG,
   businessName: 'Parramatta Emergency Plumbing',
   category: 'Emergency plumbing',
   suburb: 'Parramatta',

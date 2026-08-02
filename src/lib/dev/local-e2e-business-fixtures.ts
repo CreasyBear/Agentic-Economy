@@ -29,6 +29,8 @@ export type LocalE2eBusinessFixture = Readonly<{
   inquiryAdmission?: 'admitted'
 }>
 
+export const DEFAULT_LOCAL_REGISTRY_FIXTURE_SLUG = 'parramatta-emergency-plumbing'
+
 export const LOCAL_E2E_BUSINESS_FIXTURES: readonly LocalE2eBusinessFixture[] = [
   {
     requestedSlug: 'plumbing-demo',
@@ -133,3 +135,8 @@ export const LOCAL_E2E_BUSINESS_FIXTURES: readonly LocalE2eBusinessFixture[] = [
     inquiryAdmission: 'admitted',
   },
 ]
+
+export const LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS = [
+  DEFAULT_LOCAL_REGISTRY_FIXTURE_SLUG,
+  ...LOCAL_E2E_BUSINESS_FIXTURES.map((fixture) => fixture.requestedSlug),
+] as const

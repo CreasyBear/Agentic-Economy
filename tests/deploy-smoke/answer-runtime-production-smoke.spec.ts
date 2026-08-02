@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import { expect, request, test, type APIRequestContext, type Page } from '@playwright/test'
 import type { PublicBusinessCatalogApiV2Dto } from '../../src/modules/registry/public'
+import { LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS } from '../../src/lib/dev/local-e2e-business-fixtures'
 
 import {
   applyVercelProtectionBypassToPage,
@@ -30,6 +31,7 @@ type PublicThreadReadback = {
 const ANSWER_SERVICE_SIGNAL = /\b(?:accountant|accounting|aged care|cleaner|cleaning|dentist|dental|electrician|electrical|family lawyer|hvac|lawyer|locksmith|math tutor|photographer|plumber|plumbing|repair|repairs|tutor|tutoring)\b/i
 const FORBIDDEN_PUBLIC_EFFECT_CLAIM = /\b(?:book(?:ing)? confirmed|pay now|payment required|payment (?:taken|processed)|charged|provider dispatched|dispatch confirmed|appointment confirmed|work completed|request sent)\b/i
 const FORBIDDEN_PRIVATE_PUBLIC_EVIDENCE = /\b(?:harnessRun|harnessFinalization|snapshotHash|resultHash|inputJson|resultJson|sourceHash|ownerId|clerkUserId)\b/i
+const DEVELOPMENT_FIXTURE_SLUGS = new Set<string>(LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS)
 
 
 test('runtime-selected direct and model-recovery answer paths stay public and read-only', async ({ page }) => {
@@ -58,6 +60,7 @@ test('runtime-selected direct and model-recovery answer paths stay public and re
     const catalog = await fetchCatalog(api, baseUrl)
     timestamps.catalogFetchedAt = timestamp()
     const subject = selectSubject(catalog, selectionSeed)
+    expect(DEVELOPMENT_FIXTURE_SLUGS.has(subject.slug), 'runtime subject must differ from development fixtures').toBe(false)
     const exactQuery = exactCategoryLocalityQuery(subject)
     const modelQuery = await findLiteralMiss(api, baseUrl, subject)
 
@@ -223,6 +226,7 @@ function selectSubject(
     && business.suburb.trim().length > 0
     && business.stateTerritory.trim().length > 0
     && business.offerings.length > 0
+    && !DEVELOPMENT_FIXTURE_SLUGS.has(business.slug)
   ))
   const pairCounts = new Map<string, number>()
   for (const business of published) {
@@ -234,7 +238,7 @@ function selectSubject(
     pairCounts.get(categoryLocalityKey(business.category, business.suburb, business.stateTerritory)) === 1
     && ANSWER_SERVICE_SIGNAL.test(business.category)
   ))
-  expect(eligible.length, 'live catalog has no unique service/category locality subject').toBeGreaterThan(0)
+  expect(eligible.length, 'live catalog has no unique fixture-distinct service/category locality subject').toBeGreaterThan(0)
   return eligible[seedHash(seed) % eligible.length] as PublicBusinessCatalogApiV2Dto
 }
 

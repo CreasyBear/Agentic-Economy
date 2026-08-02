@@ -1,10 +1,14 @@
-import { APICallError, generateText, RetryError } from 'ai'
+import { APICallError, generateText, RetryError, type LanguageModelUsage } from 'ai'
 import { z } from 'zod'
 
 import {
   openRouterModel,
   type OpenRouterGatewayConfig,
 } from '@/modules/model-gateway/public'
+import type {
+  ActionModelRequestObservation,
+  ActionModelUsage,
+} from '@/modules/common/action'
 import { stableUnique } from '@/modules/common/stable-unique'
 
 import {
@@ -79,6 +83,7 @@ export type BusinessEnrichmentFetch = (
 export type BusinessEnrichmentOptions = {
   fetch?: BusinessEnrichmentFetch
   timeoutMs?: number
+  onModelRequest?: (observation: ActionModelRequestObservation) => void
 }
 
 const MAX_ENRICHMENT_REQUEST_BYTES = 1_000_000
@@ -260,6 +265,7 @@ async function requestCompletion<Result extends BusinessEnrichmentResult | WebDi
   failure: (reason: string) => Result,
 ): Promise<CompletionOutcome<Result>> {
   const timeoutSignal = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_ENRICHMENT_TIMEOUT_MS)
+  const startedAt = Date.now()
   try {
     const result = await generateText({
       model: openRouterModel(config, config.model, {
@@ -274,6 +280,19 @@ async function requestCompletion<Result extends BusinessEnrichmentResult | WebDi
       prompt: request.prompt,
       abortSignal: timeoutSignal,
     })
+    const endedAt = Date.now()
+    const usage = modelUsage(result.usage)
+    options.onModelRequest?.({
+      provider: 'openrouter',
+      model: config.model,
+      status: 'ok',
+      startedAt,
+      endedAt,
+      durationMs: endedAt - startedAt,
+      stopReason: result.finishReason,
+      ...(usage === undefined ? {} : { usage }),
+      costUnavailableReason: 'provider_cost_not_reported',
+    })
     if (result.text.length === 0) {
       return { kind: 'failed', result: failure('The details service returned no content.') }
     }
@@ -285,8 +304,37 @@ async function requestCompletion<Result extends BusinessEnrichmentResult | WebDi
     }))
     return { kind: 'ok', content: result.text, citations }
   } catch (error) {
+    const endedAt = Date.now()
+    options.onModelRequest?.({
+      provider: 'openrouter',
+      model: config.model,
+      status: 'error',
+      startedAt,
+      endedAt,
+      durationMs: endedAt - startedAt,
+      errorCode: 'request_failed',
+      costUnavailableReason: 'request_failed',
+    })
     return { kind: 'failed', result: failure(enrichmentFailureReason(error, timeoutSignal)) }
   }
+}
+
+function modelUsage(usage: LanguageModelUsage): ActionModelUsage | undefined {
+  const mapped: ActionModelUsage = {
+    ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
+    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
+    ...(usage.inputTokenDetails.cacheReadTokens === undefined
+      ? {}
+      : { cachedInputTokens: usage.inputTokenDetails.cacheReadTokens }),
+    ...(usage.inputTokenDetails.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens: usage.inputTokenDetails.cacheWriteTokens }),
+    ...(usage.outputTokenDetails.reasoningTokens === undefined
+      ? {}
+      : { reasoningOutputTokens: usage.outputTokenDetails.reasoningTokens }),
+    ...(usage.totalTokens === undefined ? {} : { totalTokens: usage.totalTokens }),
+  }
+  return Object.keys(mapped).length === 0 ? undefined : mapped
 }
 
 function enrichmentFailureReason(error: unknown, timeoutSignal: AbortSignal): string {
