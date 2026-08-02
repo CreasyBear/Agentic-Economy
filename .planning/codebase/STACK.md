@@ -1,109 +1,85 @@
----
-name: Technology stack
-analysis_date: 2026-08-01
-refreshed: 2026-08-01
-scope: Full repository technology, runtime, build, and tooling inventory
----
-
 # Technology Stack
 
-## Snapshot
+**Analysis Date:** 2026-08-02
 
-Agentic Economy is a TypeScript/React 19 web application built with TanStack Start and TanStack Router, rendered and served through Vite and Nitro. Convex is the source-of-truth database and server-function runtime, with Clerk providing authentication. The production build is configured for Vercel Node.js serverless functions; GitHub Actions deploys the application and Convex functions on the release path.
+## Languages
 
-The active application is in `src/` and `convex/`. `src/routeTree.gen.ts` and `convex/_generated/` are generated framework artifacts. `vendor/handshake-protocol-kernel/` is retained source, but active application imports use the installed protocol packages described below rather than the retired kernel.
+**Primary:**
+- TypeScript 6.0.3 - Application, Convex functions, route handlers, tests, and operational tooling in `src/`, `convex/`, `tests/`, and `tools/`.
 
-## Languages and module/runtime model
+**Secondary:**
+- JavaScript (ES modules) - Release and repository utilities such as `tools/release/*.mjs` and package scripts; `package.json` sets `"type": "module"`.
+- CSS - Tailwind CSS layers and application styles in `src/styles/globals.css` and `src/styles/legacy.css`.
+- JSON/YAML - Package, tool, route-contract, and CI configuration in `package.json`, `tsconfig.json`, `vite.config.ts`, and `.github/workflows/`.
 
-- TypeScript is the application language for browser, server, Convex, tooling, and tests (`src/**/*.ts`, `src/**/*.tsx`, `convex/**/*.ts`, and `tests/**/*.ts`).
-- The package is ESM (`package.json` sets `"type": "module"`) and uses npm 11.5.1 (`package.json` `packageManager`, locked by `package-lock.json`).
-- TypeScript targets ES2022 with DOM/ES2023 libraries, strict checking, exact optional properties, unchecked-index checking, and bundler module resolution (`tsconfig.json`). JSX uses the React JSX transform.
-- Browser/server code uses standard Fetch API `Request`/`Response`, Web Crypto, streams, and `AbortSignal`; Node-only Convex actions and operational scripts opt into Node where needed.
-- The main local development server is Vite on `127.0.0.1:3000` (`vite.config.ts`). Playwright starts a separate Vite server on `127.0.0.1:3020` (`playwright.config.ts`).
+## Runtime
 
-## Application framework and routing
+**Environment:**
+- Node.js >=22 - Local scripts, Nitro server functions, Convex actions, and CI (`package.json`, `vite.config.ts`, `.github/workflows/kernel-release-gate.yml`).
+- Browser - React client rendering, Web Crypto, Fetch, streams, and browser storage used by `src/routes/` and `src/components/`.
 
-- React 19.2.7 and React DOM 19.2.7 provide the UI runtime (`package.json`).
-- `@tanstack/react-start` supplies SSR/server functions, request middleware, and the application start instance (`src/start.ts`).
-- `@tanstack/react-router` supplies file-based routes, typed navigation, loaders, server handlers, and generated route registration (`src/router.tsx`, `src/routes/`, `src/routeTree.gen.ts`).
-- `src/start.ts` composes observability, security headers, agent content negotiation, CSRF, source-write admission, and conditional Clerk middleware before route handling.
-- Server routes are colocated in `src/routes/`; API routes use TanStack server handlers, for example `src/routes/api.answer.turn.ts`, `src/routes/mcp.ts`, and `src/routes/api.notification.resend-webhook.ts`.
-- `@tanstack/react-table` supports tabular operator/admin views; `@tanstack/react-router` also drives router-aware Sentry tracing and PostHog pageview capture.
-- Nitro is integrated through `nitro/vite` in `vite.config.ts`; TanStack Start and Nitro produce the deployable server bundle.
+**Package Manager:**
+- npm 11.5.1 - Declared by `package.json` and installed explicitly by the release workflow.
+- Lockfile: present - `package-lock.json` uses lockfile version 3 and records the resolved dependency graph.
 
-## Build and deployment runtime
+## Frameworks
 
-- Vite 8.1.0 is the build/development bundler, with `@vitejs/plugin-react`, Tailwind's Vite plugin, TanStack Start's Vite plugin, and Nitro (`vite.config.ts`).
-- The Nitro preset is `vercel`; Vercel functions are explicitly Node `nodejs20.x` (`vite.config.ts`). This is distinct from CI's Node 22 setup (`.github/workflows/kernel-release-gate.yml`).
-- Production builds emit sourcemaps only when the Sentry Vite plugin has `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` (`vite.config.ts`). `SENTRY_RELEASE` falls back to Vercel/GitHub commit identifiers.
-- Vercel project identity is recorded in `.vercel/project.json`; `.vercelignore` excludes generated/local state such as `.convex`, `.tanstack`, `output`, and test reports.
-- `package.json` exposes `dev`, `build`, release checks, Convex codegen/deploy-related commands, and Vercel-hosted smoke commands. `package.json` also contains `check:routing-edge`, which points at `examples/routing-edge`; the checked-in `examples/` directory currently contains only `routing-provider/.vercel/`, so that script is a repository integration gap rather than an active application runtime.
+**Core:**
+- React 19.2.7 and React DOM 19.2.7 - UI runtime in `src/`.
+- TanStack Start 1.168.26 - SSR, server functions, request middleware, and application startup in `src/start.ts`.
+- TanStack Router 1.170.16 - File-based typed routes and server handlers in `src/routes/` and generated `src/routeTree.gen.ts`.
+- Convex 1.42.0 - Durable database, queries, mutations, actions, scheduling, and generated API in `convex/`.
 
-## Data and server state
+**Testing:**
+- Vitest 4.1.9 - Unit, integration, type, import-boundary, SEO, and UI-contract suites configured by `vitest.config.ts`.
+- Playwright 1.61.1 - Browser and hosted deployment smoke tests configured by `playwright.config.ts`, `playwright.deploy-smoke.config.ts`, and `playwright.paid-operation.config.ts`.
+- `convex-test` 0.0.54 - In-memory Convex function tests in `convex/*.test.ts` and `tests/`.
 
-- Convex 1.42.0 is the primary data store and backend function platform (`package.json`, `convex/`). Queries, mutations, actions, HTTP-facing route adapters, and internal scheduled work are implemented as Convex functions.
-- `convex/schema.ts` composes domain schemas for businesses/catalog, capability contracts and supply, customer requests, inquiries, notifications, observability, registry/discovery, money, security, settings, project spine, answer threads, plans, and action invocation.
-- `convex/convex.config.ts` mounts `@convex-dev/workflow` and `@convex-dev/workpool`; the same file declares typed Convex environment values for OpenRouter, Clerk issuer, site URL, route signing, and server-function authentication.
-- `src/lib/server/convex-source.ts` is the application transport seam. Authenticated calls resolve `CONVEX_URL`/`VITE_CONVEX_URL`, obtain a Clerk token template (`convex` by default), and call Convex query/mutation/action references. Public calls use a no-auth `ConvexHttpClient`.
-- Convex generated types in `convex/_generated/` provide the typed API/data model; `tsconfig.json` explicitly excludes generated Convex code from source compilation.
-- Local E2E can use a guarded Convex self-hosted admin key through `src/lib/server/convex-source.ts`, but the bypass fails in production and is not an alternate production identity model.
+**Build/Dev:**
+- Vite 8.1.0 - Development server and production bundling in `vite.config.ts`; local application port is configured there.
+- Nitro 3.0.1-20260628-090458-3df69609 - Vercel server bundle through `nitro/vite` in `vite.config.ts`.
+- Tailwind CSS 4.3.1 - CSS processing through `@tailwindcss/vite` and `src/styles/globals.css`.
 
-## Authentication and security primitives
+## Key Dependencies
 
-- Clerk TanStack Start integration (`@clerk/tanstack-react-start`) provides server middleware and server `auth()`/`clerkClient()` access (`src/start.ts`, `src/lib/server/claim-owner-session.ts`, `src/lib/server/customer-request-agent-auth.ts`).
-- `src/routes/__root.tsx` conditionally mounts `ClerkProvider` on sign-in, sign-up, owner, admin, and claim surfaces; public pages do not need the provider.
-- Convex verifies Clerk JWTs using `CLERK_JWT_ISSUER_DOMAIN` and application ID `convex` (`convex/auth.config.ts`).
-- `@noble/curves` and `@noble/hashes` provide Ed25519 attestations, signatures, and digest helpers (`src/modules/common/ed25519-attestation.ts`). Web Crypto is used for request/webhook HMAC verification where importing Node crypto into route code would break hydration (`src/lib/server/notification-provider.ts`).
-- Zod 4, AJV 8, `@cfworker/json-schema`, and local bounded/stable-hash utilities validate wire payloads and canonicalize evidence. `src/modules/capability-supply/internal/transport-adapters.ts` admits only registered HTTPS transports with bounded configuration.
-- `undici` is used with a guarded DNS dispatcher for Convex readiness probes and route cancellation workers (`convex/capabilitySupplyReadiness.ts`, `convex/customerRequestRouteCancellationWorker.ts`).
+**Critical:**
+- `@clerk/tanstack-react-start` 1.4.9 - Authentication middleware, server identity, and owner/API-key access in `src/start.ts` and `src/lib/server/`.
+- `ai` 7.0.44 and `@openrouter/ai-sdk-provider` 3.0.0 - Central model transport and structured/tool output seam in `src/modules/model-gateway/public.ts`.
+- `@modelcontextprotocol/sdk` 1.30.0 - Streamable HTTP MCP server in `src/lib/server/mcp-api.ts` and `src/routes/mcp.ts`.
+- `@x402/core`, `@x402/evm`, and `@x402/extensions` 2.18.0 - Payment-challenged provider transport and EVM signing in `src/modules/capability-supply/`.
+- `zod` 4.4.3, `ajv` 8.20.0, and `@cfworker/json-schema` 4.1.1 - Runtime validation and contract/schema checks across `src/modules/` and `convex/`.
 
-## AI and model stack
+**Infrastructure:**
+- `@convex-dev/workflow` 0.4.4 and `@convex-dev/workpool` 0.4.9 - Durable workflows and bounded asynchronous work mounted in `convex/convex.config.ts`.
+- `@convex-dev/rate-limiter` 0.3.2 and `@convex-dev/aggregate` 0.2.2 - Durable admission limits and aggregate projections used by `convex/lib/rateLimit.ts` and `convex/observability.ts`.
+- `@sentry/node` and `@sentry/react` 10.63.0 - Server and browser errors/tracing in `src/lib/observability/`.
+- `posthog-node` 5.39.0 and `posthog-js` 1.398.2 - Server/client product analytics in `src/lib/observability/`.
+- `viem` 2.55.2, `@noble/curves` 1.9.1, and `@noble/hashes` 1.8.0 - EVM accounts, signatures, attestations, and digests in `src/modules/`.
 
-- The Vercel AI SDK (`ai`) is the model-call abstraction. `src/modules/model-gateway/public.ts` is the single OpenRouter seam and caches provider factories by credential/base URL/site URL.
-- `@openrouter/ai-sdk-provider` sends model requests to OpenRouter. The gateway reads `OPENROUTER_API_KEY`, `AE_LLM_MODEL`, optional `AE_OPENROUTER_API_BASE_URL`, and optional `SITE_URL`; the default model is `deepseek/deepseek-v4-flash` (`src/modules/model-gateway/public.ts`).
-- Structured outputs, provider fallback/parameter requirements, reasoning controls, usage/cost metadata, and OpenRouter's capped web-search plugin are configured centrally in `src/modules/model-gateway/public.ts`.
-- Customer-request interpretation uses an OpenRouter transport (`src/modules/customer-request/openrouter-transport.ts`). Answer tool-use, follow-up chips, engine plans, storefront enrichment, and discovery route through the same gateway (`src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer-thread/internal/llm-follow-up-chips.ts`, `src/modules/plan-proposal/internal/model-transport.ts`, `src/modules/storefront/internal/business-enrichment.ts`).
-- `@tanstack/ai` converts Zod/action schemas to JSON Schema for agent tools (`src/modules/common/action.ts`, `src/modules/business-tools/internal/descriptors.ts`); it is not a second model transport.
-- `src/modules/answer/internal/openrouter-models.ts` reads the OpenRouter model catalog at `https://openrouter.ai/api/v1/models`, caches it for two minutes, and falls back to a configured model list when unavailable.
-- `src/routes/api.answer.turn.ts` exposes streamed answer events as an SSE response; model persistence/readback is handled through the answer-thread Convex-backed modules.
-- `promptfoo` and the `eval/` tree support answer/engine evaluation and coverage gates, but are development/evaluation tooling rather than production request dependencies.
+## Configuration
 
-## Agent and payment protocol stack
+**Environment:**
+- `.env.example` is the checked-in environment contract; `.env` and `.env.*` are ignored by `.gitignore` except for the example file.
+- Core names include `VITE_CONVEX_URL`, `CONVEX_URL`, `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and `CLERK_JWT_ISSUER_DOMAIN`; provider and telemetry names are grouped in `.env.example`.
+- Convex-deployed names are validated in `convex/convex.config.ts`; browser-visible values use the `VITE_` prefix while server-only credentials do not.
 
-- `@modelcontextprotocol/sdk` plus `WebStandardStreamableHTTPServerTransport` implements the hosted MCP endpoint (`src/lib/server/mcp-api.ts`, `src/routes/mcp.ts`).
-- `@x402/core`, `@x402/evm`, `@x402/extensions`, and `viem` implement the registered `x402-fetch:v2` transport and EVM payment-signature path (`src/modules/capability-supply/internal/x402-payment-signer.ts`, `src/modules/capability-supply/route-transport-runtime.ts`).
-- Registered provider transports are `http-json:v1`, `mcp-jsonrpc:v1`, and `x402-fetch:v2` (`src/modules/capability-supply/internal/transport-adapters.ts`). HTTP/MCP calls use bounded timeouts and digest-bound request/response observations; x402 validates payment challenges against spend authority before signing and records reconciliation evidence.
-- OAuth device/authorization-code flows and customer-request agent keys are implemented in application code and persisted through Convex (`src/lib/server/customer-request-agent-oauth-api.ts`, `src/lib/server/customer-request-agent-oauth-store.ts`).
+**Build:**
+- `vite.config.ts` composes TanStack Start, Nitro, React, Tailwind, and conditional Sentry sourcemap upload; the Vercel function runtime is `nodejs22.x`.
+- `tsconfig.json` enforces strict TypeScript, ES2022 output, ES2024/DOM libraries, bundler resolution, exact optional properties, and no emit.
+- `convex/convex.config.ts`, `convex/auth.config.ts`, and `convex/schema.ts` define backend components, Clerk JWT trust, environment types, and data tables.
+- `vitest.config.ts`, `playwright.config.ts`, `playwright.deploy-smoke.config.ts`, `components.json`, `.oxlintrc.json`, and `doctor.config.ts` configure verification and UI tooling.
 
-## UI, styling, and presentation
+## Platform Requirements
 
-- Tailwind CSS 4.3.1 is loaded as CSS layers through `src/styles/globals.css`; `@tailwindcss/vite` supplies Vite integration. `src/styles/legacy.css` remains an intentionally unlayered migration layer.
-- `components.json` identifies the shadcn/ui New York style, CSS variables, neutral base color, Lucide icons, and `@/*` aliases. UI primitives live under `src/components/ui/`.
-- Radix UI packages (`radix-ui`, `@radix-ui/react-use-controllable-state`), `class-variance-authority`, `clsx`, and `tailwind-merge` support composable class-based components.
-- `lucide-react`, `motion`, `sonner`, `cmdk`, `embla-carousel-react`, and `use-stick-to-bottom` support icons, motion, toasts, command menus, carousels, and streaming chat scroll behavior.
-- `streamdown` and its CJK/code/math/mermaid packages render model-authored content; `shiki` provides code highlighting; `ansi-to-react` handles terminal-style text.
+**Development:**
+- Node.js 22 or newer and npm 11.5.1; install from `package-lock.json` with `npm ci` for the CI-equivalent dependency graph.
+- A local environment based on `.env.example`; Vite serves the app on `127.0.0.1:3000`, while Playwright starts an isolated server on `127.0.0.1:3020` with a guarded local auth bypass.
+- Convex development credentials/deployment access are required for live backend operations; in-memory tests use `convex-test` instead.
 
-## Observability and analytics
+**Production:**
+- Vercel hosts the Nitro server bundle with Node.js 22 as configured in `vite.config.ts`; Convex hosts the durable backend deployed by `.github/workflows/kernel-release-gate.yml`.
+- GitHub Actions runs the source gate on Node 22, deploys the exact revision to Vercel and Convex, reads deployment environment settings, and executes hosted readback smoke paths.
 
-- Sentry uses `@sentry/react` in the browser and `@sentry/node` on the server (`src/lib/observability/sentry.client.ts`, `src/lib/observability/sentry.server.ts`). Browser tracing integrates with TanStack Router; server request middleware initializes an isolation scope and flushes PostHog after each request (`src/start.ts`).
-- PostHog uses `posthog-js` client-side and `posthog-node` server-side (`src/lib/observability/posthog.client.ts`, `src/lib/observability/posthog.server.ts`). Client pageviews are explicit rather than automatic, session recording is disabled, and pseudonymous IDs are used.
-- `src/lib/observability/config.ts` supports separate Vite-visible (`VITE_*`) and server-only keys, a default PostHog host, release/environment resolution from Sentry/Vercel/GitHub variables, and a local telemetry disable switch.
+---
 
-## Test, lint, and diagnostics toolchain
-
-- Vitest 4.1.9 runs Node-environment unit/integration/type/import/SEO/UI-contract suites through `vitest.config.ts`; setup files are `tests/setup/web-storage.ts` and `tests/setup/no-search-gap-writes.ts`.
-- Playwright 1.61.1 drives browser and deployment smoke suites (`playwright.config.ts`, `playwright.deploy-smoke.config.ts`); it supports compact and wide Chromium projects, trace-on-first-retry, and screenshot-on-failure.
-- `convex-test` supplies in-memory Convex behavior for Convex/domain tests. `jsdom` supports browser-like test fixtures.
-- `oxlint` is configured through `.oxlintrc.json`; `react-doctor` is configured by `doctor.config.ts` and runs in `.github/workflows/react-doctor.yml`.
-- TypeScript 6.0.3 powers `typecheck`; `tsx` executes TypeScript tooling and smoke/evidence scripts; `wrangler` is present for the routing-edge check; `promptfoo` drives LLM evaluations.
-- Import-boundary and source-retirement checks are first-class scripts (`package.json`, `tests/imports/`, `tools/release/kernel-retirement-manifest.mjs`).
-
-## Configuration surface
-
-- The documented environment contract is `.env.example`; local values are in `.env.local` and are server/client-scoped by naming (`VITE_*` is browser-exposed, unprefixed secrets remain server-side).
-- Auth/config groups include Clerk (`VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`), Convex (`VITE_CONVEX_URL`), source-write keyrings, canonical URL/CSP, agent/WBA admission, provider billing/notifications, OpenRouter answer controls, Sentry/PostHog, and Google Maps (`.env.example`).
-- `vite.config.ts`, `tsconfig.json`, `vitest.config.ts`, `playwright.config.ts`, `components.json`, `doctor.config.ts`, `.oxlintrc.json`, and `.github/workflows/kernel-release-gate.yml` are the primary runtime/build/tooling configuration files.
-
-## Analysis completion
-
-_Completed technology stack mapping on 2026-08-01; 109 lines._
+*Stack analysis: 2026-08-02*
