@@ -474,7 +474,7 @@ const customerView = v.object({
     current: v.object({
       step: v.number(),
       state: v.union(
-        v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'),
+        v.literal('queued'), v.literal('leased'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'),
         v.literal('completed'), v.literal('needs_attention'), v.literal('cancelled'),
       ),
     }),
@@ -506,7 +506,11 @@ const customerView = v.object({
       }),
       v.object({
         state: v.literal('not_available'),
-        reason: v.union(v.literal('business_step_released'), v.literal('request_finished')),
+        reason: v.union(
+          v.literal('business_step_released'),
+          v.literal('business_step_leased'),
+          v.literal('request_finished'),
+        ),
         changedAt: v.number(),
         requestedAt: v.optional(v.number()),
       }),
@@ -1537,7 +1541,7 @@ const supportProblemExportResult = v.union(
           step: v.number(),
           business: v.string(),
           state: v.union(
-            v.literal('blocked'), v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'),
+            v.literal('blocked'), v.literal('queued'), v.literal('leased'), v.literal('ready_to_contact'), v.literal('contacting'),
             v.literal('awaiting_result'), v.literal('completed'), v.literal('failed'),
             v.literal('outcome_unknown'), v.literal('cancelled'),
           ),
@@ -1586,7 +1590,7 @@ const evidenceExport = v.object({
   steps: v.array(v.object({
     step: v.number(),
     state: v.union(
-      v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
+      v.literal('queued'), v.literal('leased'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
       v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
     ),
     observedAt: v.number(),
@@ -1786,6 +1790,11 @@ type StoredAggregateResult = Readonly<
   | {
       kind: 'current'; aggregate: StoredAggregate
       routeGenerationNumber: number; routeGenerationRef?: string; currentDecisionCommandKey?: string
+    }
+  | {
+      kind: 'resubmit_required'
+      requestId: string; revision: number; principalId: string
+      reason: 'legacy_embedded_route'
     }
   | { kind: 'not_found' }
 >

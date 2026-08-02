@@ -165,8 +165,11 @@ export type DispatchRecordSnapshot = Readonly<{
   runRef: string
   attemptRef: string
   operationKeyDigest: string
-  state: 'pending' | 'delivered' | 'failed' | 'cancelled' | 'outcome_unknown'
+  state: 'pending' | 'leased' | 'delivered' | 'failed' | 'cancelled' | 'outcome_unknown'
   availableAt: number
+  /** Deprecated persisted lease metadata; current writers leave these absent. */
+  leaseOwner?: string
+  leaseExpiresAt?: number
   createdAt: number
 }>
 

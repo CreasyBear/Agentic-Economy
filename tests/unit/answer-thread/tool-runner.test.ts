@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  HarnessRunLoop,
+  type HarnessRuntimeEvent,
+} from '@/modules/harness/public'
+import {
   runAnswerToolCall,
   toolCallRecordsToGateInput,
 } from '@/modules/answer-thread/internal/tool-runner'
@@ -232,6 +236,74 @@ describe('runAnswerToolCall', () => {
     // is read-only by construction, so write actions never reach the runner.
     expect(summary.errorCode).toBe('tool_not_known')
   })
+  it('re-hashes semantic web discovery refusal from its persisted fields', async () => {
+    delete process.env.OPENROUTER_API_KEY
+
+    const result = await runAnswerToolCall({
+      toolId: 'web.discover',
+      input: { query: 'emergency plumber Brunswick' },
+      turnId: TURN_ID,
+      seq: BASE_SEQ,
+    })
+
+    expect(result.record.status).toBe('refused')
+    expect(JSON.parse(result.record.resultJson)).toEqual({
+      kind: 'unavailable',
+      reason: 'llm_not_configured',
+    })
+    expect(JSON.parse(result.record.resultSummaryJson)).toMatchObject({
+      slugs: [],
+      count: 0,
+      errorCode: 'llm_not_configured',
+    })
+    expect(result.record.resultHash).toBe(
+      canonicalDigest({
+        toolId: result.record.toolId,
+        input: result.record.inputJson,
+        summary: result.record.resultSummaryJson,
+        resultJson: result.record.resultJson,
+        status: result.record.status,
+      }).toString(),
+    )
+  })
+  it('classifies web discovery unavailability before the harness records completion', async () => {
+    delete process.env.OPENROUTER_API_KEY
+    const events: HarnessRuntimeEvent[] = []
+    const loop = new HarnessRunLoop({
+      runId: 'answer-tool-web-unavailable',
+      sessionId: 'answer-tool-web-unavailable',
+      tools: ['web.discover'],
+      onEvent: (event) => events.push(event),
+    })
+    loop.startRun()
+
+    const result = await runAnswerToolCall({
+      toolId: 'web.discover',
+      input: { query: 'emergency plumber Brunswick' },
+      turnId: TURN_ID,
+      seq: BASE_SEQ,
+      harnessLoop: loop,
+    })
+    const report = loop.completeRun()
+    const toolEvents = events.filter((event) => event.type === 'tool.started' || event.type === 'tool.completed' || event.type === 'tool.failed')
+
+    expect(result.record.status).toBe('refused')
+    expect(toolEvents).toMatchObject([
+      { type: 'tool.started', toolId: 'web.discover' },
+      { type: 'tool.failed', toolId: 'web.discover', status: 'refused', errorCode: 'llm_not_configured' },
+    ])
+    expect(report.summary.tools.byName['web.discover']).toMatchObject({
+      total: 1,
+      ok: 0,
+      refused: 1,
+      error: 0,
+    })
+    expect(report.summary.errors.codes).toContain('llm_not_configured')
+    expect(result.timings.find((timing) => timing.name === 'tool.run')?.metadata).toMatchObject({
+      harnessStatus: 'refused',
+    })
+  })
+
 
   it('runs registry.detail and records a found business, or an empty complete result for not_found', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E

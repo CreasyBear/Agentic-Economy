@@ -162,6 +162,8 @@ export type AnswerTurnEvalCase = {
     status: 'complete' | 'error'
     slugs: readonly string[]
     toolQueries?: readonly string[]
+    toolIds?: readonly string[]
+    toolStatuses?: readonly string[]
     includeTimingNames?: readonly string[]
     excludeTimingNames?: readonly string[]
     summaryIncludes?: readonly string[]
@@ -265,6 +267,8 @@ export const ANSWER_TURN_EVAL_CASES = [
       maxToolRuns: 2,
       slugs: ['parramatta-emergency-plumbing', 'plumbing-demo'],
       toolQueries: ['paramata', 'parramatta'],
+      toolIds: ['registry.search', 'registry.search'],
+      toolStatuses: ['complete', 'complete'],
       includeTimingNames: [
         'retrieval.initial_search',
         'model.agent_total',
@@ -293,6 +297,8 @@ export const ANSWER_TURN_EVAL_CASES = [
       expectedModelRequests: 0,
       slugs: [],
       toolQueries: ['Emergency plumber Brunswick', 'Emergency plumber Brunswick'],
+      toolIds: ['registry.search', 'web.discover'],
+      toolStatuses: ['complete', 'refused'],
       includeTimingNames: [
         'retrieval.initial_search',
         'registry.search.convex',
@@ -367,6 +373,8 @@ export const ANSWER_TURN_EVAL_CASES = [
       expectedModelRequests: 0,
       slugs: [],
       toolQueries: ['emergency plumber', 'emergency plumber'],
+      toolIds: ['registry.search', 'web.discover'],
+      toolStatuses: ['complete', 'refused'],
       includeTimingNames: [
         'retrieval.initial_search',
         'registry.search.convex',

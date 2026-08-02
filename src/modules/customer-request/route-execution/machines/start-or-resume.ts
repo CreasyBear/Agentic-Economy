@@ -49,6 +49,14 @@ export async function startOrResume(
       || head.currentMandateRef !== mandate.mandateRef)) {
       throw new Error('customer_request_route_run_head_integrity_failure')
     }
+    const existingAttempt = await ports.loadAttemptAtPosition(
+      existing.runRef, existing.currentPosition,
+    )
+    if (existingAttempt === null) throw new Error('customer_request_route_run_attempt_integrity_failure')
+    const existingDispatch = await ports.loadDispatchByAttemptRef(existingAttempt.attemptRef)
+    if (existingAttempt.state === 'leased' || existingDispatch?.state === 'leased') {
+      return { kind: 'refused', reason: 'route_unavailable' }
+    }
     return await ports.commitResumedRun({
       requestId: args.requestId,
       principalId: mandate.principal.principalId,
@@ -71,13 +79,22 @@ export async function startOrResume(
       priorRun.runRef, priorRun.currentPosition,
     )
     if (priorAttempt === null) throw new Error('customer_request_route_run_attempt_integrity_failure')
+    if (priorAttempt.state === 'leased') {
+      return { kind: 'refused', reason: 'route_unavailable' }
+    }
     if (priorAttempt.state === 'dispatched' || priorAttempt.state === 'accepted'
       || priorAttempt.state === 'outcome_unknown') {
       return { kind: 'refused', reason: 'route_unavailable' }
     }
     if (priorAttempt.state === 'queued') {
       const priorOutbox = await ports.loadDispatchByAttemptRef(priorAttempt.attemptRef)
-      if (priorOutbox === null || priorOutbox.state !== 'pending') {
+      if (priorOutbox === null) {
+        throw new Error('customer_request_route_dispatch_integrity_failure')
+      }
+      if (priorOutbox.state === 'leased') {
+        return { kind: 'refused', reason: 'route_unavailable' }
+      }
+      if (priorOutbox.state !== 'pending') {
         throw new Error('customer_request_route_dispatch_integrity_failure')
       }
       await ports.cancelPriorUnreleasedRun({

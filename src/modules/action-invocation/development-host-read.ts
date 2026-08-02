@@ -5,6 +5,7 @@ import {
   assertDynamicPublishedSnapshotShape,
 } from './dynamic-published-snapshot-verifier'
 import type { ActionInvocationOrigin } from './contracts'
+import { reconstructDurableControlRow } from './internal/durable-contracts'
 
 export type DevelopmentHostKind = 'request_owned_human' | 'standalone_external_agent'
 
@@ -71,17 +72,18 @@ export function readDevelopmentHostSnapshot(input: Readonly<{
   assertDynamicPublishedSnapshotShape(input.snapshot)
   const snapshot = input.snapshot
   const source = snapshot.sourceRows[0]
-  const control = snapshot.controls[0]
+  const rawControl = snapshot.controls[0]
   const attemptGroup = snapshot.attempts[0]
   const historyGroup = snapshot.history[0]
   if (
     source === undefined
-    || control === undefined
+    || rawControl === undefined
     || attemptGroup === undefined
     || historyGroup === undefined
   ) {
     throw new Error('dynamic_published_snapshot_schema_invalid')
   }
+  const control = reconstructDurableControlRow(rawControl)
   const attempt = attemptGroup.rows.at(-1)
   const claim = snapshot.semanticClaims[0]
   const operation = source.operation

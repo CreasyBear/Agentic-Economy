@@ -1,5 +1,6 @@
 import type { BusinessId } from '@/modules/common/ids'
 import type { ModuleResult } from '@/modules/common/result'
+import { isLegacyInquiryThreadRecord } from '../schema'
 import { error, findOwnedThread, latestNotification, preview } from '../ledger/facts'
 import type {
   InquiryMessageRecord,
@@ -100,26 +101,14 @@ export function ownerMessageProjection(message: InquiryMessageRecord): OwnerInbo
 export function messageBodyForProjection(message: InquiryMessageRecord): string {
   return message.privateDeletedAt === undefined ? message.body : '[private content deleted]'
 }
-
 export function projectInquiry(state: InquirySourceState, thread: InquiryThreadRecord): OwnerInboxInquiryProjection {
   const business = state.businesses.find((candidate) => candidate.businessId === thread.businessId)
-  const offering = state.businessOfferings.find((candidate) =>
-    candidate.businessId === thread.businessId && candidate.offeringRef === thread.offeringRef)
-  const revision = offering === undefined
-    ? undefined
-    : state.businessOfferingRevisions.find((candidate) =>
-      candidate.businessId === thread.businessId
-      && candidate.offeringRef === thread.offeringRef
-      && candidate.revision === offering.currentRevision)
   const firstMessage = state.messages.find((message) => message.messageId === thread.firstMessageId)
   const notificationStatus = latestNotification(state, thread.threadId)?.status ?? 'held'
-
-  return {
+  const common = {
     threadId: thread.threadId,
     businessId: thread.businessId,
-    offeringRef: thread.offeringRef,
     businessName: business?.name ?? 'Business unavailable',
-    offeringName: revision?.name ?? 'Offering unavailable',
     status: thread.status,
     bucket: bucketForThread(thread),
     preview: preview(firstMessage?.body ?? ''),
@@ -130,6 +119,30 @@ export function projectInquiry(state: InquirySourceState, thread: InquiryThreadR
     submittedAt: thread.createdAt,
     updatedAt: thread.updatedAt,
     ...(thread.origin === undefined ? {} : { origin: ownerOriginProjection(thread.origin) }),
+  }
+
+  if (isLegacyInquiryThreadRecord(thread)) {
+    return {
+      ...common,
+      offeringName: 'Legacy service target (migration required)',
+      serviceId: thread.serviceId,
+      capabilityKind: thread.capabilityKind,
+    }
+  }
+
+  const offering = state.businessOfferings.find((candidate) =>
+    candidate.businessId === thread.businessId && candidate.offeringRef === thread.offeringRef)
+  const revision = offering === undefined
+    ? undefined
+    : state.businessOfferingRevisions.find((candidate) =>
+        candidate.businessId === thread.businessId
+        && candidate.offeringRef === offering.offeringRef
+        && candidate.revision === offering.currentRevision)
+
+  return {
+    ...common,
+    offeringName: revision?.name ?? 'Offering unavailable',
+    offeringRef: thread.offeringRef,
   }
 }
 

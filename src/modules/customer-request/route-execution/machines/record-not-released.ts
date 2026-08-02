@@ -28,7 +28,11 @@ export async function recordNotReleased(
     if (replayed === null) throw new Error('customer_request_route_run_integrity_failure')
     return { kind: 'replayed', run: replayed }
   }
-  if (dispatch.state !== 'pending' || attempt.state !== 'queued') {
+  if (!(
+    (dispatch.state === 'pending' && attempt.state === 'queued')
+    || (dispatch.state === 'leased'
+      && (attempt.state === 'queued' || attempt.state === 'leased'))
+  )) {
     return { kind: 'refused', reason: 'dispatch_not_current' }
   }
   const result: JsonValue = { reason: observation.failureCode ?? 'transport_not_released' }

@@ -187,6 +187,7 @@ describe('exportState', () => {
     expect(exportState('accepted')).toBe('awaiting_result')
     expect(exportState('succeeded')).toBe('completed')
     expect(exportState('queued')).toBe('queued')
+    expect(exportState('leased')).toBe('leased')
     expect(exportState('failed')).toBe('failed')
     expect(exportState('outcome_unknown')).toBe('outcome_unknown')
     expect(exportState('cancelled')).toBe('cancelled')

@@ -130,8 +130,16 @@ export async function loadInquiryCustomerRecordState(db: GenericDatabaseReader<D
     return claimId === null ? [] : [claimId]
   })
   const claims = (await Promise.all(claimIds.map((claimId) => db.get(claimId)))).filter((row) => row !== null)
-  const offeringRows = (await Promise.all(commitments.map((commitment) => db.query('businessOfferings').withIndex('by_offeringRef', (query) => query.eq('offeringRef', commitment.targetBinding.offeringRef)).unique()))).filter((row) => row !== null)
-  const revisionRows = (await Promise.all(offeringRows.map((offering) => db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', requiredString(offering, 'offeringRef', 'inquiry_source')).eq('revision', requiredNumber(offering, 'currentRevision', 'inquiry_source'))).unique()))).filter((row) => row !== null)
+  const offeringRefs = commitments.flatMap((commitment) =>
+    'offeringRef' in commitment.targetBinding ? [commitment.targetBinding.offeringRef] : [])
+  const offeringRows = (await Promise.all(offeringRefs.map((offeringRef) =>
+    db.query('businessOfferings').withIndex('by_offeringRef', (query) => query.eq('offeringRef', offeringRef)).unique()))).filter((row) => row !== null)
+  const revisionRows = (await Promise.all(offeringRows.map((offering) =>
+    db.query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', (query) =>
+        query.eq('offeringRef', requiredString(offering, 'offeringRef', 'inquiry_source'))
+          .eq('revision', requiredNumber(offering, 'currentRevision', 'inquiry_source')))
+      .unique()))).filter((row) => row !== null)
   const accessPathRows = (await Promise.all(offeringRows.map((offering) => db.query('offeringAccessPaths').withIndex('by_offeringRef_and_offeringRevision', (query) => query.eq('offeringRef', requiredString(offering, 'offeringRef', 'inquiry_source')).eq('offeringRevision', requiredNumber(offering, 'currentRevision', 'inquiry_source'))).take(20)))).flat()
   const receiptKeyring = receiptRows.length === 0 ? undefined : resolveInquiryReceiptKeyring(process.env)
   const receipts = receiptKeyring === undefined ? [] : (await Promise.all(receiptRows.map((row) => toGovernedSendReceiptRecord(row, keyRows, lineageRows, receiptKeyring)))).filter((row): row is NonNullable<typeof row> => row !== undefined)

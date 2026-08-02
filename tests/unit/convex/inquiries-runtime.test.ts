@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { UserIdentity } from 'convex/server'
+import type { GenericDatabaseWriter, UserIdentity } from 'convex/server'
 
 import {
   closeCurrentOwnerInquiry,
@@ -16,16 +16,19 @@ import {
   requestCurrentOwnerInquiryExport,
   submitPublicInquiry,
 } from '../../../convex/inquiries'
+import { persistInquirySourceState } from '../../../convex/inquirySourceStatePersist'
 import { requireSourceWrite } from '../../../convex/sourceWriteAdmission'
 import {
   sourceWriteAdmission,
   withSourceWrite,
   withoutSourceWrite,
 } from '../../helpers/source-write-admission'
-import { brandNonEmpty } from '@/modules/common/ids'
+import { brandNonEmpty, type ServiceId } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { encodeGovernedAction } from '@/modules/governed-action/public'
 import { buildGovernedSendIntent } from '@/modules/inquiries/internal/governed-send'
+import type { DataModel } from '../../../convex/_generated/dataModel'
+import { createEmptyInquirySourceState, type InquiryThreadRecord } from '@/modules/inquiries/public'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
@@ -261,6 +264,197 @@ describe('Convex inquiry runtime bridge', () => {
         messages: [expect.objectContaining({ body: 'Pipe burst under the sink. Please ask the owner to contact me.' })],
       },
     })
+  })
+  it('reads historical service targets and current offering targets without promoting legacy commitments', async () => {
+    const db = seededInquiryDb()
+    seedOwnerInquiryRow(db, {
+      threadId: 'thread:current-target',
+      body: 'Current offering inquiry',
+      createdAt: 10,
+      updatedAt: 11,
+    })
+    const legacyMessageId = 'thread:legacy-target:message:first'
+    db.seed('inquiryThreads', {
+      _id: 'inquiryThreads:thread:legacy-target',
+      _creationTime: 12,
+      threadId: 'thread:legacy-target',
+      businessId: 'businesses:1',
+      ownerId: 'owners:1',
+      serviceId: 'businessServices:legacy-service',
+      capabilityKind: 'human_inquiry_owner_inbox',
+      status: 'unread',
+      firstMessageId: legacyMessageId,
+      sourceHash: canonicalDigest('source:thread:legacy-target'),
+      createdAt: 12,
+      updatedAt: 13,
+      version: 1,
+    })
+    db.seed('inquiryMessages', {
+      _id: `inquiryMessages:${legacyMessageId}`,
+      _creationTime: 12,
+      messageId: legacyMessageId,
+      threadId: 'thread:legacy-target',
+      sender: 'customer',
+      body: 'Historical service inquiry',
+      bodyHash: canonicalDigest(legacyMessageId),
+      createdAt: 12,
+    })
+    db.seed('inquiryNotifications', {
+      _id: 'inquiryNotifications:thread:legacy-target:owner',
+      _creationTime: 12,
+      notificationId: 'thread:legacy-target:notification:owner',
+      threadId: 'thread:legacy-target',
+      messageId: legacyMessageId,
+      recipientRole: 'owner',
+      status: 'queued',
+      redactedPayload: {
+        json: JSON.stringify({ threadId: 'thread:legacy-target', messageId: legacyMessageId }),
+        payloadHash: canonicalDigest('legacy-notification'),
+      },
+      dispatchBindingsJson: '[]',
+      createdAt: 12,
+      updatedAt: 13,
+    })
+    db.seed('governedSendIntegrityCommitments', {
+      _id: 'governedSendIntegrityCommitments:current',
+      _creationTime: 14,
+      version: 'governed-send-integrity:v1',
+      receiptRef: 'governed-send-receipt:inquiry:current-target',
+      operationKey: 'inquiry:current-target',
+      threadId: 'thread:current-target',
+      digest: canonicalDigest('commitment:current-target'),
+      keyId: 'key:current',
+      targetBinding: {
+        businessId: 'businesses:1',
+        ownerId: 'owners:1',
+        offeringRef: 'offering:emergency-pipe-repair',
+        claimRef: 'claims:1',
+        recipientRef: 'recipient:current',
+      },
+      signature: `hmac-sha256:${'a'.repeat(64)}`,
+      createdAt: 14,
+    })
+    db.seed('governedSendIntegrityCommitments', {
+      _id: 'governedSendIntegrityCommitments:legacy',
+      _creationTime: 15,
+      version: 'governed-send-integrity:v1',
+      receiptRef: 'governed-send-receipt:inquiry:legacy-target',
+      operationKey: 'inquiry:legacy-target',
+      threadId: 'thread:legacy-target',
+      digest: canonicalDigest('commitment:legacy-target'),
+      keyId: 'key:legacy',
+      targetBinding: {
+        businessId: 'businesses:1',
+        ownerId: 'owners:1',
+        serviceId: 'businessServices:legacy-service',
+        capabilityKind: 'human_inquiry_owner_inbox',
+        claimRef: 'claims:1',
+        recipientRef: 'recipient:legacy',
+      },
+      signature: `hmac-sha256:${'b'.repeat(64)}`,
+      createdAt: 15,
+    })
+
+    const inbox = await listHandler(authCtx(db, sam()), {})
+    expect(inbox).toMatchObject({
+      kind: 'allowed',
+      inbox: {
+        inquiries: expect.arrayContaining([
+          expect.objectContaining({
+            threadId: 'thread:current-target',
+            offeringRef: 'offering:emergency-pipe-repair',
+          }),
+          expect.objectContaining({
+            threadId: 'thread:legacy-target',
+            serviceId: 'businessServices:legacy-service',
+            capabilityKind: 'human_inquiry_owner_inbox',
+            offeringName: 'Legacy service target (migration required)',
+          }),
+        ]),
+      },
+    })
+
+    const legacyDetail = await readHandler(authCtx(db, sam()), { threadId: 'thread:legacy-target' })
+    expect(legacyDetail).toMatchObject({
+      kind: 'ok',
+      readback: {
+        inquiry: {
+          serviceId: 'businessServices:legacy-service',
+          capabilityKind: 'human_inquiry_owner_inbox',
+          offeringName: 'Legacy service target (migration required)',
+        },
+      },
+    })
+    await expect(deliveryHandler(authCtx(db, sam()), { threadId: 'thread:legacy-target' })).resolves.toMatchObject({
+      kind: 'ok',
+      code: 'inquiry_delivery_read',
+    })
+  })
+
+  it('rejects a mixed historical/current inquiry target instead of widening it', async () => {
+    const db = seededInquiryDb()
+    db.seed('inquiryThreads', {
+      _id: 'inquiryThreads:malformed-target',
+      _creationTime: 20,
+      threadId: 'thread:malformed-target',
+      businessId: 'businesses:1',
+      ownerId: 'owners:1',
+      offeringRef: 'offering:emergency-pipe-repair',
+      serviceId: 'businessServices:legacy-service',
+      capabilityKind: 'human_inquiry_owner_inbox',
+      status: 'unread',
+      firstMessageId: 'thread:malformed-target:message:first',
+      sourceHash: canonicalDigest('source:thread:malformed-target'),
+      createdAt: 20,
+      updatedAt: 20,
+      version: 1,
+    })
+    await expect(readHandler(authCtx(db, sam()), { threadId: 'thread:malformed-target' })).rejects.toThrow(
+      'inquiry_row_target_shape_invalid',
+    )
+  })
+  it('preserves persisted legacy inquiry identity and rejects transient target changes', async () => {
+    const db = seededInquiryDb()
+    const historical = persistedLegacyThread()
+    db.seed('inquiryThreads', {
+      _id: 'inquiryThreads:persisted-legacy',
+      _creationTime: 20,
+      threadId: historical.threadId,
+      businessId: historical.businessId,
+      ownerId: historical.ownerId,
+      serviceId: historical.serviceId,
+      capabilityKind: historical.capabilityKind,
+      status: historical.status,
+      firstMessageId: historical.firstMessageId,
+      sourceHash: historical.sourceHash,
+      createdAt: historical.createdAt,
+      updatedAt: historical.updatedAt,
+      version: historical.version,
+    })
+    const writer = db as unknown as GenericDatabaseWriter<DataModel>
+
+    await persistInquirySourceState(writer, createEmptyInquirySourceState({ threads: [historical] }))
+    expect(db.dump('inquiryThreads')).toContainEqual(expect.objectContaining({
+      serviceId: 'businessServices:legacy-service',
+      capabilityKind: 'human_inquiry_owner_inbox',
+    }))
+    const capabilityMismatch = persistedLegacyThread('malformed-transient-capability')
+    await expect(
+      persistInquirySourceState(writer, createEmptyInquirySourceState({ threads: [capabilityMismatch] }))
+    ).rejects.toThrow('inquiry_legacy_target_conflict')
+
+    const serviceMismatch = persistedLegacyThread(
+      'human_inquiry_owner_inbox',
+      brandNonEmpty('businessServices:transient-service', 'ServiceId'),
+    )
+    await expect(
+      persistInquirySourceState(writer, createEmptyInquirySourceState({ threads: [serviceMismatch] }))
+    ).rejects.toThrow('inquiry_legacy_target_conflict')
+
+    expect(db.dump('inquiryThreads')).toContainEqual(expect.objectContaining({
+      serviceId: 'businessServices:legacy-service',
+      capabilityKind: 'human_inquiry_owner_inbox',
+    }))
   })
 
   it('returns canonical public target admission without owner source records', async () => {
@@ -1050,6 +1244,25 @@ function seedOwnerInquiryRow(
     updatedAt: input.updatedAt,
   })
 }
+function persistedLegacyThread(
+  capabilityKind = 'human_inquiry_owner_inbox',
+  serviceId: ServiceId = brandNonEmpty('businessServices:legacy-service', 'ServiceId'),
+): InquiryThreadRecord {
+  return {
+    threadId: brandNonEmpty('thread:persisted-legacy', 'InquiryThreadId'),
+    businessId: brandNonEmpty('businesses:1', 'BusinessId'),
+    ownerId: brandNonEmpty('owners:1', 'OwnerId'),
+    serviceId,
+    capabilityKind,
+    status: 'unread',
+    firstMessageId: brandNonEmpty('message:persisted-legacy', 'InquiryMessageId'),
+    sourceHash: brandNonEmpty(canonicalDigest('source:persisted-legacy'), 'SourceHash'),
+    createdAt: 20,
+    updatedAt: 20,
+    version: 1,
+  }
+}
+
 
 function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): SubmitArgs {
   const operationKey = `inquiry:${key}`

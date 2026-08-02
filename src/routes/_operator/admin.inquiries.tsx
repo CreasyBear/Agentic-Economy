@@ -202,6 +202,9 @@ function AllowedReadback({ readback }: { readback: Extract<InquiryOperatorRecons
 
 function toInquiryQueueRow(row: InquiryOperatorReconstructionRow): AeOperatorQueueRow {
   const needsAttention = row.operatorNextAction !== 'none' && row.operatorNextAction !== 'terminal'
+  const targetLabel = 'offeringRef' in row
+    ? row.offeringRef
+    : `Legacy target · ${row.serviceId} · ${row.capabilityKind}`
   return {
     id: row.rowId,
     title: `Thread ${row.threadId}`,
@@ -212,7 +215,7 @@ function toInquiryQueueRow(row: InquiryOperatorReconstructionRow): AeOperatorQue
     ],
     facts: [
       { label: 'Business', value: row.businessId },
-      { label: 'Offering', value: row.offeringRef },
+      { label: 'Offering', value: targetLabel },
       { label: 'Updated', value: formatTimestamp(row.updatedAt) },
       { label: 'Correlation', value: row.correlationIds.join(', ') || 'none' },
     ],

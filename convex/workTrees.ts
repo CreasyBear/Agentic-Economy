@@ -23,6 +23,7 @@ import {
   type WorkTreeApprovalAuthority,
   type WorkTreeApprovalRefusalCode,
 } from '../src/modules/work-tree/public'
+import { customerRouteRef } from '../src/modules/customer-request/route-plan-customer-projection'
 import {
   readBrowserGuestSigningKey,
   verifyBrowserGuestAssertion,
@@ -140,6 +141,8 @@ const workTreeLineageArg = v.union(
     kind: v.literal('customer_request'),
     requestRef: v.string(),
     revision: v.number(),
+    routeGenerationRef: v.string(),
+    routeRef: v.string(),
   }),
   v.object({ kind: v.literal('standalone') }),
 )
@@ -211,7 +214,13 @@ const workTreeDecisionArgs = {
 }
 
 type WorkTreeLineage =
-  | Readonly<{ kind: 'customer_request'; requestRef: string; revision: number }>
+  | Readonly<{
+      kind: 'customer_request'
+      requestRef: string
+      revision: number
+      routeGenerationRef: string
+      routeRef: string
+    }>
   | Readonly<{ kind: 'standalone' }>
 type WorkTreeCaller = Readonly<{
   principalId: string
@@ -608,14 +617,7 @@ function decisionReceipt(
     revision: receipt.revision,
     disposition: receipt.disposition,
     ...(receipt.permissionRef === undefined ? {} : { permissionRef: receipt.permissionRef }),
-    ...(receipt.principalId === undefined || receipt.ownerId === undefined ? {} : {
-      actor: {
-        principalId: receipt.principalId,
-        ownerId: receipt.ownerId,
-        ...(receipt.credentialId === undefined ? {} : { credentialId: receipt.credentialId }),
-        ...(receipt.actorSource === undefined ? {} : { source: receipt.actorSource }),
-      },
-    }),
+    ...(receipt.actorSource === undefined ? {} : { actor: { source: receipt.actorSource } }),
     occurredAt: receipt.occurredAt,
     readback: { projectId: receipt.readbackProjectId, revision: receipt.readbackRevision },
   }
@@ -632,14 +634,7 @@ function decisionRefusedReceipt(receipt: WorkTreeDecisionReceiptDoc): Record<str
     revision: receipt.revision,
     disposition: receipt.disposition,
     refusalCode: receipt.refusalCode,
-    ...(receipt.principalId === undefined || receipt.ownerId === undefined ? {} : {
-      actor: {
-        principalId: receipt.principalId,
-        ownerId: receipt.ownerId,
-        ...(receipt.credentialId === undefined ? {} : { credentialId: receipt.credentialId }),
-        ...(receipt.actorSource === undefined ? {} : { source: receipt.actorSource }),
-      },
-    }),
+    ...(receipt.actorSource === undefined ? {} : { actor: { source: receipt.actorSource } }),
     occurredAt: receipt.occurredAt,
     readback: { projectId: receipt.readbackProjectId, revision: receipt.readbackRevision },
   }
@@ -688,12 +683,7 @@ async function decisionRefusal(
     revision,
     disposition: 'unchanged' as const,
     refusalCode,
-    actor: {
-      principalId: caller.principalId,
-      ownerId: caller.ownerId,
-      ...(caller.credentialId === undefined ? {} : { credentialId: caller.credentialId }),
-      source: caller.source,
-    },
+    actor: { source: caller.source },
     occurredAt: Date.now(),
     readback: { projectId: args.projectId, revision },
   }
@@ -740,12 +730,7 @@ function decisionUnknown(
     generation: tree.generation,
     revision: tree.revision,
     disposition: 'unchanged',
-    actor: {
-      principalId: caller.principalId,
-      ownerId: caller.ownerId,
-      ...(caller.credentialId === undefined ? {} : { credentialId: caller.credentialId }),
-      source: caller.source,
-    },
+    actor: { source: caller.source },
     occurredAt: Date.now(),
     readback: { projectId: args.projectId, revision: tree.revision },
   }
@@ -929,11 +914,18 @@ async function createWorkTree(
     return { kind: 'refused', code: 'lineage_conflict', replayed: false }
   }
 
-  const resolved = await resolveWorkTreePrincipal(ctx, args.lineage, args.serviceAuth, args.guestAssertion, {
-    idempotencyKey,
+  const resolved = await resolveWorkTreePrincipal(
+    ctx,
+    args.lineage,
+    args.serviceAuth,
+    args.guestAssertion,
     charterText,
-    lineage: args.lineage,
-  })
+    {
+      idempotencyKey,
+      charterText,
+      lineage: args.lineage,
+    },
+  )
   if (resolved.kind === 'refused') return { kind: 'refused', code: resolved.code, replayed: false }
   const principal = resolved.principal
   const caller = resolved.caller
@@ -950,6 +942,34 @@ async function createWorkTree(
     idempotencyKey,
   })}`
 
+  // Routed Customer Request identity is shared across human and delegated
+  // principals. Standalone identity deliberately remains principal-scoped.
+  const existingByLineage = principal.lineage.kind === 'customer_request'
+    ? await ctx.db
+      .query('workTrees')
+      .withIndex('by_ownerId_and_lineageDigest', (query) =>
+        query.eq('ownerId', principal.ownerId).eq('lineageDigest', lineageDigest))
+      .unique()
+    : await ctx.db
+      .query('workTrees')
+      .withIndex('by_principalId_and_lineageDigest', (query) =>
+        query.eq('principalId', principal.principalId).eq('lineageDigest', lineageDigest))
+      .unique()
+  if (existingByLineage !== null) {
+    const existingTree = parseSnapshot(existingByLineage.snapshotJson)
+    if (existingTree.charterText !== charterText) {
+      return {
+        kind: 'refused',
+        code: principal.lineage.kind === 'customer_request'
+          || existingByLineage.createIdempotencyKey !== idempotencyKey
+          ? 'lineage_conflict'
+          : 'idempotency_conflict',
+        replayed: false,
+      }
+    }
+    return await replayCreate(ctx, existingByLineage, 'work_tree_resumed')
+  }
+
   const existingByKey = await ctx.db
     .query('workTrees')
     .withIndex('by_principalId_and_createIdempotencyKey', (query) =>
@@ -960,19 +980,6 @@ async function createWorkTree(
       return { kind: 'refused', code: 'idempotency_conflict', replayed: false }
     }
     return await replayCreate(ctx, existingByKey, 'work_tree_resumed')
-  }
-
-  const existingByLineage = await ctx.db
-    .query('workTrees')
-    .withIndex('by_principalId_and_lineageDigest', (query) =>
-      query.eq('principalId', principal.principalId).eq('lineageDigest', lineageDigest))
-    .unique()
-  if (existingByLineage !== null) {
-    const existingTree = parseSnapshot(existingByLineage.snapshotJson)
-    if (existingTree.charterText !== charterText) {
-      return { kind: 'refused', code: 'lineage_conflict', replayed: false }
-    }
-    return await replayCreate(ctx, existingByLineage, 'work_tree_resumed')
   }
 
   const now = Date.now()
@@ -994,7 +1001,7 @@ async function createWorkTree(
       status: 'fog',
       dependsOn: [],
       priority: 0,
-      authorityRef: `principal:${principal.principalId}`,
+      authorityRef: `authority:${canonicalDigest({ projectId, treeId, scope: 'work-tree-root' })}`,
       evidenceRefs: [],
       createdAt: now,
       updatedAt: now,
@@ -1029,6 +1036,7 @@ async function createWorkTree(
     payloadJson: stableJson({
       principalId: principal.principalId,
       lineageJson,
+      lineage: principal.lineage,
       createIdempotencyKey: idempotencyKey,
       snapshotJson,
     }),
@@ -1062,26 +1070,32 @@ async function inspectWorkTree(
 }
 
 async function resolveWorkTreePrincipal(
-
   ctx: WorkTreeMutationContext,
   lineage: WorkTreeLineage,
   serviceAuth: CustomerRequestServiceAssertion | undefined,
   guestAssertion: string | undefined,
+  charterText: string,
   command: Record<string, unknown>,
 ): Promise<WorkTreePrincipalResolution> {
   const caller = await resolveWorkTreeCaller(ctx, serviceAuth, guestAssertion, 'workTree.create', command)
   if (caller === null) return { kind: 'refused', code: 'authentication_required' }
-  const ownerId = caller.ownerId
   if (lineage.kind === 'standalone') {
     return {
       kind: 'accepted',
-      principal: { principalId: caller.principalId, ownerId, lineage },
+      principal: { principalId: caller.principalId, ownerId: caller.ownerId, lineage },
       caller,
     }
   }
-  if (!Number.isSafeInteger(lineage.revision) || lineage.revision < 1 || lineage.requestRef.trim().length === 0) {
+  if (!Number.isSafeInteger(lineage.revision) || lineage.revision < 1
+    || lineage.requestRef.trim().length === 0
+    || lineage.routeGenerationRef.trim().length === 0
+    || lineage.routeRef.trim().length === 0) {
     return { kind: 'refused', code: 'lineage_conflict' }
   }
+
+  // Resolve the request head first, then its exact immutable revision. These
+  // source rows fence both the current request revision and the WorkTree
+  // charter before any effect is considered.
   const request = await ctx.db
     .query('customerRequestV2Heads')
     .withIndex('by_requestId', (query) => query.eq('requestId', lineage.requestRef))
@@ -1090,26 +1104,85 @@ async function resolveWorkTreePrincipal(
   if (request.currentRevision !== lineage.revision) {
     return { kind: 'refused', code: 'lineage_revision_conflict' }
   }
-  if (request.principalId === caller.principalId) {
-    return {
-      kind: 'accepted',
-      principal: { principalId: request.principalId, ownerId, lineage },
-      caller,
-    }
-  }
-  const delegated = await ctx.db
+
+  // Customer Request agent principals are the source-owned account binding
+  // for requests created under a delegated key. Human requests are accepted
+  // only by their exact authenticated principal; no caller-supplied owner
+  // identifier can widen that binding.
+  const requestPrincipal = await ctx.db
     .query('customerRequestAgentPrincipals')
     .withIndex('by_principalId', (query) => query.eq('principalId', request.principalId))
     .unique()
-  const delegatedOwnerMatches = caller.tokenIdentifier === undefined
-    ? delegated?.ownerId === caller.ownerId
-    : delegated?.ownerTokenIdentifier === caller.tokenIdentifier
-  if (!delegatedOwnerMatches) {
+  const requestOwnerId = requestPrincipal?.ownerId
+    ?? (request.principalId === caller.principalId ? caller.ownerId : undefined)
+  if (requestOwnerId === undefined || requestOwnerId !== caller.ownerId) {
     return { kind: 'refused', code: 'lineage_forbidden' }
   }
+  const revision = await ctx.db
+    .query('customerRequestV2Revisions')
+    .withIndex('by_requestId_and_requestRevision', (query) =>
+      query.eq('requestId', lineage.requestRef).eq('requestRevision', lineage.revision))
+    .unique()
+  if (revision === null) return { kind: 'refused', code: 'lineage_conflict' }
+  const snapshot = revision.aggregate.snapshot
+  const isLegacyResubmit = Object.prototype.hasOwnProperty.call(revision.aggregate.plan, 'routes')
+  if (revision.aggregate.aggregateDigest !== request.currentAggregateDigest
+    || revision.requestId !== lineage.requestRef
+    || revision.requestRevision !== lineage.revision
+    || snapshot.requestId !== lineage.requestRef
+    || snapshot.revision !== lineage.revision
+    || snapshot.principalId !== request.principalId
+    || snapshot.delegatedAgentId !== request.delegatedAgentId
+    || snapshot.intent.trim() !== charterText
+    || isLegacyResubmit) {
+    return { kind: 'refused', code: 'lineage_conflict' }
+  }
+
+
+  // The generation head and immutable generation are both checked. Reading
+  // the exact row through its ordered index bounds the lookup before route
+  // membership is evaluated.
+  const generationHead = await ctx.db
+    .query('customerRequestV2RoutePlanHeads')
+    .withIndex('by_requestId', (query) => query.eq('requestId', lineage.requestRef))
+    .unique()
+  if (generationHead === null
+    || generationHead.currentRequestRevision !== lineage.revision
+    || generationHead.currentGenerationRef !== lineage.routeGenerationRef) {
+    return { kind: 'refused', code: 'lineage_conflict' }
+  }
+  const generation = await ctx.db
+    .query('customerRequestV2RoutePlanGenerations')
+    .withIndex('by_requestId_and_generationRef', (query) =>
+      query.eq('requestId', lineage.requestRef).eq('generationRef', lineage.routeGenerationRef))
+    .unique()
+  const routeGeneration = generation?.routeGeneration
+  if (generation === null
+    || routeGeneration === undefined
+    || generation.requestRevision !== lineage.revision
+    || generation.generationRef !== lineage.routeGenerationRef
+    || generation.generation !== generationHead.currentGeneration
+    || generation.generationDigest !== generationHead.currentGenerationDigest
+    || routeGeneration.requestId !== lineage.requestRef
+    || routeGeneration.requestRevision !== lineage.revision
+    || routeGeneration.generationRef !== lineage.routeGenerationRef
+    || routeGeneration.generation !== generationHead.currentGeneration
+    || routeGeneration.generationDigest !== generationHead.currentGenerationDigest) {
+    return { kind: 'refused', code: 'lineage_conflict' }
+  }
+  const route = routeGeneration.routes.find((candidate) => (
+    customerRouteRef(lineage.routeGenerationRef, candidate.routePlanId) === lineage.routeRef
+  ))
+  if (route === undefined
+    || route.requestId !== lineage.requestRef
+    || route.requestRevision !== lineage.revision
+    || route.registrySnapshotDigest !== routeGeneration.registrySnapshotDigest) {
+    return { kind: 'refused', code: 'lineage_conflict' }
+  }
+
   return {
     kind: 'accepted',
-    principal: { principalId: request.principalId, ownerId: delegated?.ownerId ?? ownerId, lineage },
+    principal: { principalId: caller.principalId, ownerId: requestOwnerId, lineage },
     caller,
   }
 }
@@ -1256,12 +1329,7 @@ async function claimReceipt(
     treeId: tree.treeId,
     operationKey: tree.claimIdempotencyKey,
     event: { kind: 'claimed', operationKey: event.operationKey, seq: event.seq },
-    actor: {
-      principalId: event.principalId ?? tree.principalId,
-      ownerId: event.ownerId ?? tree.ownerId,
-      ...(event.credentialId === undefined ? {} : { credentialId: event.credentialId }),
-      ...(event.actorSource === undefined ? {} : { source: event.actorSource }),
-    },
+    ...(event.actorSource === undefined ? {} : { actor: { source: event.actorSource } }),
     generation: tree.generation,
     revision: tree.revision,
     payloadDigest: event.payloadDigest,
@@ -1407,12 +1475,8 @@ async function creationReceipt(
     treeId: tree.treeId,
     operationKey: tree.createIdempotencyKey,
     event: { kind: 'created', operationKey: event.operationKey, seq: event.seq },
-    actor: {
-      principalId: event.principalId ?? tree.principalId,
-      ownerId: event.ownerId ?? tree.ownerId,
-      ...(event.credentialId === undefined ? {} : { credentialId: event.credentialId }),
-      ...(event.actorSource === undefined ? {} : { source: event.actorSource }),
-    },
+    ...(event.actorSource === undefined ? {} : { actor: { source: event.actorSource } }),
+    lineage: parseLineage(tree.lineageJson),
     generation: tree.generation,
     revision: tree.revision,
     payloadDigest: event.payloadDigest,
@@ -1436,7 +1500,6 @@ async function workTreeReadback(
   return {
     projectId: tree.projectId,
     treeId: tree.treeId,
-    principalId: tree.principalId,
     lineage: parseLineage(tree.lineageJson),
     generation: tree.generation,
     revision: tree.revision,
@@ -1453,14 +1516,7 @@ async function workTreeReadback(
         revision: event.revision,
         payloadDigest: event.payloadDigest,
         at: event.at,
-        ...(event.principalId === undefined || event.ownerId === undefined ? {} : {
-          actor: {
-            principalId: event.principalId,
-            ownerId: event.ownerId,
-            ...(event.credentialId === undefined ? {} : { credentialId: event.credentialId }),
-            ...(event.actorSource === undefined ? {} : { source: event.actorSource }),
-          },
-        }),
+        ...(event.actorSource === undefined ? {} : { actor: { source: event.actorSource } }),
         ...(typeof targetNodeId === 'string' && targetNodeId.length > 0 ? { targetNodeId } : {}),
       }
     }),
@@ -1478,8 +1534,22 @@ function parseLineage(value: string): WorkTreeLineage {
     throw new Error('work_tree_lineage_invalid')
   }
   if (parsed.kind === 'standalone') return { kind: 'standalone' }
-  if (typeof parsed.requestRef !== 'string' || typeof parsed.revision !== 'number') {
+  if (typeof parsed.requestRef !== 'string'
+    || typeof parsed.revision !== 'number'
+    || !Number.isSafeInteger(parsed.revision)
+    || parsed.revision < 1
+    || typeof parsed.routeGenerationRef !== 'string'
+    || typeof parsed.routeRef !== 'string'
+    || parsed.requestRef.trim().length === 0
+    || parsed.routeGenerationRef.trim().length === 0
+    || parsed.routeRef.trim().length === 0) {
     throw new Error('work_tree_lineage_invalid')
   }
-  return { kind: 'customer_request', requestRef: parsed.requestRef, revision: parsed.revision }
+  return {
+    kind: 'customer_request',
+    requestRef: parsed.requestRef,
+    revision: parsed.revision,
+    routeGenerationRef: parsed.routeGenerationRef,
+    routeRef: parsed.routeRef,
+  }
 }

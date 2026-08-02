@@ -277,7 +277,7 @@ export const customerRequestEvidenceExportSchema = z.strictObject({
   steps: z.array(z.strictObject({
     step: safePositiveInteger,
     state: z.enum([
-      'queued', 'ready_to_contact', 'contacting', 'awaiting_result',
+      'queued', 'leased', 'ready_to_contact', 'contacting', 'awaiting_result',
       'completed', 'failed', 'outcome_unknown', 'cancelled',
     ]),
     observedAt: safeNonnegativeInteger,
@@ -750,7 +750,7 @@ export const customerRequestViewSchema = z.strictObject({
     current: z.object({
       step: safePositiveInteger,
       state: z.enum([
-        'queued', 'ready_to_contact', 'contacting', 'awaiting_result',
+        'queued', 'leased', 'ready_to_contact', 'contacting', 'awaiting_result',
         'completed', 'needs_attention', 'cancelled',
       ]),
     }).strict(),
@@ -778,7 +778,7 @@ export const customerRequestViewSchema = z.strictObject({
       }),
       z.strictObject({
         state: z.literal('not_available'),
-        reason: z.enum(['business_step_released', 'request_finished']),
+        reason: z.enum(['business_step_released', 'business_step_leased', 'request_finished']),
         changedAt: safeNonnegativeInteger,
         requestedAt: safeNonnegativeInteger.optional(),
       }),

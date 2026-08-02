@@ -14,6 +14,7 @@ import {
   executableFixedPrice,
 } from './dynamic-published-contract'
 import type { DynamicPublishedAdapterSnapshot } from './dynamic-published-adapter'
+import { reconstructDurableControlRow } from './internal/durable-contracts'
 import type { DynamicPublishedSourceRow } from './dynamic-published-source'
 
 const recordSchema = z.looseObject({})
@@ -198,7 +199,11 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
   anchors: DynamicPublishedSnapshotAnchors
 }>): DynamicPublishedAdapterSnapshot {
   assertDynamicPublishedSnapshotShape(input.snapshot)
-  const snapshot = input.snapshot
+  const rawSnapshot = input.snapshot
+  const normalizedControls = rawSnapshot.controls.map(reconstructDurableControlRow)
+  const snapshot = normalizedControls.every((row, index) => row === rawSnapshot.controls[index])
+    ? rawSnapshot
+    : { ...rawSnapshot, controls: normalizedControls }
   const {
     operation,
     descriptor,

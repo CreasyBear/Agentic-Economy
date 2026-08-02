@@ -96,7 +96,6 @@ function readback() {
   return {
     projectId,
     treeId: tree.treeId,
-    principalId: 'guest:principal',
     lineage: { kind: 'standalone' as const },
     generation: tree.generation,
     revision: tree.revision,
@@ -130,6 +129,7 @@ function createResult() {
       generation: 1 as const,
       revision: 1 as const,
       payloadDigest: 'digest:create',
+      lineage: { kind: 'standalone' as const },
     },
   }
 }

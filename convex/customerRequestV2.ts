@@ -80,6 +80,11 @@ const currentAggregateResult = v.union(
     routeGenerationRef: v.optional(v.string()),
     currentDecisionCommandKey: v.optional(v.string()),
   }),
+  v.object({
+    kind: v.literal('resubmit_required'),
+    requestId: v.string(), revision: v.number(), principalId: v.string(),
+    reason: v.literal('legacy_embedded_route'),
+  }),
   v.object({ kind: v.literal('not_found') }),
 )
 const routePlanGenerationResult = v.union(

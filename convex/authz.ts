@@ -79,10 +79,15 @@ export function actorFromIdentity(identity: UserIdentity): BusinessMutationActor
   }
 }
 
-function adminMembershipFromDoc(document: Doc<'adminMemberships'>): AdminMembership {
+function adminMembershipFromDoc(document: Doc<'adminMemberships'>): AdminMembership | undefined {
+  const tokenIdentifier = document.tokenIdentifier
+  if (typeof tokenIdentifier !== 'string' || tokenIdentifier.length === 0) {
+    return undefined
+  }
+
   return {
     clerkUserId: document.clerkUserId,
-    tokenIdentifier: document.tokenIdentifier,
+    tokenIdentifier,
     role: document.role,
     state: document.state,
     grantedBy: document.grantedBy,

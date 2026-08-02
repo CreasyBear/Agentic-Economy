@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 
 import { z } from 'zod'
+import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import { uniqueSorted } from '../../src/modules/common/unique-sorted'
 
 import {
@@ -26,6 +27,34 @@ const createdKeySchema = z.looseObject({ id: z.string().min(1), secret: z.string
 const createdSessionSchema = z.looseObject({ id: z.string().min(1), status: z.string().min(1) })
 const createdSessionIdentitySchema = z.looseObject({ id: z.string().min(1) })
 const sessionTokenSchema = z.looseObject({ jwt: z.string().min(1) })
+const runtimeCandidateSchema = z.looseObject({
+  id: z.unknown().optional(),
+  banned: z.unknown().optional(),
+  locked: z.unknown().optional(),
+  disabled: z.unknown().optional(),
+  status: z.unknown().optional(),
+})
+const CLERK_USER_LIST_LIMIT = 100
+const DEFAULT_RUNTIME_SESSION_LIFETIME_SECONDS = 3_600
+const RUNTIME_REVOCATION_REASON = 'work_tree_hosted_parity_complete'
+
+export type RuntimeClerkCredentialSelection = Readonly<{
+  seed: string
+  candidateCount: number
+  selectedSubjectDigest: string
+}>
+
+export type RuntimeClerkCredential = Readonly<{
+  humanSessionToken: string
+  agentApiKey: string
+  agentKeyId: string
+}>
+
+export type RuntimeSelectedClerkCredentials = Readonly<{
+  selection: RuntimeClerkCredentialSelection
+  creation: RuntimeClerkCredential
+  readback: RuntimeClerkCredential
+}>
 
 export async function withTemporaryClerkAcceptanceCredentials(input: Readonly<{
   clerkSecretKey: string
@@ -125,6 +154,259 @@ export async function withTemporaryClerkUserSession(input: Readonly<{
   }
   if (runError !== undefined) throw runError
   if (revocationFailure !== undefined) throw revocationFailure
+}
+export async function withRuntimeSelectedClerkCredentials(
+  input: Readonly<{
+    clerkSecretKey: string
+    clerkInstanceId: string
+    selectionSeed?: string | undefined
+    scopes: readonly string[]
+    keyNamePrefix: string
+    sessionLifetimeSeconds?: number | undefined
+    fetch?: typeof globalThis.fetch | undefined
+  }>,
+  callback: (credentials: RuntimeSelectedClerkCredentials) => Promise<void>,
+): Promise<void> {
+  const fetch = input.fetch ?? globalThis.fetch
+  const seed = runtimeSelectionSeed(input.selectionSeed)
+  const scopes = temporaryKeyScopes(input.scopes)
+  const sessionLifetimeSeconds = runtimeSessionLifetimeSeconds(input.sessionLifetimeSeconds)
+  const keyNamePrefix = runtimeKeyNamePrefix(input.keyNamePrefix)
+  const headers = await clerkRuntimeHeaders({
+    clerkSecretKey: input.clerkSecretKey,
+    clerkInstanceId: input.clerkInstanceId,
+    fetch,
+  })
+  const candidates = await listRuntimeClerkCandidates(fetch, headers)
+  if (candidates.length === 0) throw new Error('clerk_candidate_selection_empty')
+  const selectedSubject = candidates[runtimeSelectionIndex(seed, candidates.length)]
+  if (selectedSubject === undefined) throw new Error('clerk_candidate_selection_empty')
+
+  const credentials = {
+    selection: {
+      seed,
+      candidateCount: candidates.length,
+      selectedSubjectDigest: canonicalDigest(selectedSubject),
+    },
+  }
+  let creation: RuntimeCredentialResource | undefined
+  let readback: RuntimeCredentialResource | undefined
+  let primaryError: unknown
+  let failed = false
+  try {
+    creation = await createRuntimeCredentialResource({
+      fetch, headers, subject: selectedSubject, scopes, keyNamePrefix: `${keyNamePrefix} creation`,
+      sessionLifetimeSeconds,
+    })
+    readback = await createRuntimeCredentialResource({
+      fetch, headers, subject: selectedSubject, scopes, keyNamePrefix: `${keyNamePrefix} readback`,
+      sessionLifetimeSeconds,
+    })
+    await callback({
+      ...credentials,
+      creation: publicRuntimeCredential(creation),
+      readback: publicRuntimeCredential(readback),
+    })
+  } catch (error) {
+    failed = true
+    primaryError = error
+  }
+
+  const cleanupErrors: Error[] = []
+  for (const resource of [readback, creation]) {
+    if (resource === undefined) continue
+    const sessionFailure = await revokeTemporarySession(fetch, headers, resource.sessionId)
+    if (sessionFailure !== undefined) cleanupErrors.push(sessionFailure)
+    const keyFailure = await revokeTemporaryKey(fetch, headers, resource.agentKeyId, RUNTIME_REVOCATION_REASON)
+    if (keyFailure !== undefined) cleanupErrors.push(keyFailure)
+  }
+  if (failed) throwWithCleanup(primaryError, cleanupErrors, 'runtime credential callback and cleanup failed', true)
+  throwWithCleanup(undefined, cleanupErrors, 'runtime credential cleanup failed', false)
+}
+
+
+type RuntimeCredentialResource = RuntimeClerkCredential & Readonly<{
+  sessionId: string
+}>
+
+function runtimeSelectionSeed(seed: string | undefined): string {
+  const resolved = seed === undefined ? randomUUID() : seed.trim()
+  if (resolved.length === 0 || resolved.length > 256 || /[\u0000-\u001f\u007f]/u.test(resolved)) {
+    throw new Error('clerk_selection_seed_invalid')
+  }
+  return resolved
+}
+
+function runtimeSessionLifetimeSeconds(seconds: number | undefined): number {
+  const resolved = seconds ?? DEFAULT_RUNTIME_SESSION_LIFETIME_SECONDS
+  if (!Number.isInteger(resolved) || resolved < 1 || resolved > 86_400) {
+    throw new Error('clerk_session_lifetime_invalid')
+  }
+  return resolved
+}
+
+function runtimeKeyNamePrefix(prefix: string): string {
+  const resolved = prefix.trim()
+  if (resolved.length === 0 || resolved.length > 128 || /[\u0000-\u001f\u007f]/u.test(resolved)) {
+    throw new Error('clerk_key_name_prefix_invalid')
+  }
+  return resolved
+}
+
+async function clerkRuntimeHeaders(input: Readonly<{
+  clerkSecretKey: string
+  clerkInstanceId: string
+  fetch: typeof globalThis.fetch
+}>): Promise<Record<string, string>> {
+  assertRuntimeConfigured(input)
+  const headers = { Authorization: `Bearer ${input.clerkSecretKey}`, 'Content-Type': 'application/json' }
+  const instance = instanceSchema.parse(await readClerkJson(
+    input.fetch, `${CLERK_API}/instance`, { headers }, 'clerk_instance_unavailable',
+  ))
+  if (instance.id !== input.clerkInstanceId) {
+    throw new Error(`clerk_instance_mismatch:expected=${input.clerkInstanceId}:actual=${instance.id}`)
+  }
+  return headers
+}
+
+async function listRuntimeClerkCandidates(
+  fetch: typeof globalThis.fetch,
+  headers: Record<string, string>,
+): Promise<readonly string[]> {
+  const value = await readClerkJson(
+    fetch, `${CLERK_API}/users?limit=${CLERK_USER_LIST_LIMIT}&order_by=created_at`,
+    { headers }, 'clerk_candidate_list_failed',
+  )
+  const users = Array.isArray(value)
+    ? value
+    : value !== null && typeof value === 'object' && 'data' in value && Array.isArray(value.data)
+      ? value.data
+      : undefined
+  if (users === undefined) throw new Error('clerk_candidate_list_invalid')
+  if (users.length > CLERK_USER_LIST_LIMIT) throw new Error('clerk_candidate_list_bound_exceeded')
+  const ids = new Set<string>()
+  for (const user of users) {
+    if (!runtimeCandidateEligible(user)) continue
+    const candidate = runtimeCandidateSchema.parse(user)
+    const candidateId = typeof candidate.id === 'string' ? candidate.id.trim() : ''
+    if (candidateId.length === 0) continue
+    ids.add(candidateId)
+  }
+  return [...ids].sort(compareRuntimeCandidateIds)
+}
+
+function runtimeCandidateEligible(value: unknown): boolean {
+  const candidate = runtimeCandidateSchema.safeParse(value)
+  if (!candidate.success || typeof candidate.data.id !== 'string' || candidate.data.id.trim().length === 0) return false
+  if (candidate.data.banned === true || candidate.data.locked === true || candidate.data.disabled === true) return false
+  return typeof candidate.data.status !== 'string' || candidate.data.status.toLowerCase() !== 'disabled'
+}
+
+function compareRuntimeCandidateIds(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function runtimeSelectionIndex(seed: string, candidateCount: number): number {
+  const digest = canonicalDigest(seed)
+  return Number(BigInt(`0x${digest.slice('sha256:'.length)}`) % BigInt(candidateCount))
+}
+
+
+async function createRuntimeCredentialResource(input: Readonly<{
+  fetch: typeof globalThis.fetch
+  headers: Record<string, string>
+  subject: string
+  scopes: readonly string[]
+  keyNamePrefix: string
+  sessionLifetimeSeconds: number
+}>): Promise<RuntimeCredentialResource> {
+  let agentKeyId: string | undefined
+  let sessionId: string | undefined
+  try {
+    const keyValue = await readClerkJson(input.fetch, `${CLERK_API}/api_keys`, {
+      method: 'POST',
+      headers: input.headers,
+      body: JSON.stringify({
+        name: `${input.keyNamePrefix} ${randomUUID()}`,
+        subject: input.subject,
+        scopes: input.scopes,
+        seconds_until_expiration: input.sessionLifetimeSeconds,
+      }),
+    }, 'clerk_runtime_api_key_creation_failed')
+    agentKeyId = createdKeyIdentitySchema.parse(keyValue).id
+    const agentApiKey = createdKeySchema.parse(keyValue).secret
+    const sessionValue = await readClerkJson(input.fetch, `${CLERK_API}/sessions`, {
+      method: 'POST',
+      headers: input.headers,
+      body: JSON.stringify({ user_id: input.subject }),
+    }, 'clerk_runtime_session_creation_failed')
+    sessionId = createdSessionIdentitySchema.parse(sessionValue).id
+    const session = createdSessionSchema.parse(sessionValue)
+    const humanSessionToken = sessionTokenSchema.parse(await readClerkJson(
+      input.fetch, `${CLERK_API}/sessions/${encodeURIComponent(session.id)}/tokens`,
+      { method: 'POST', headers: input.headers }, 'clerk_runtime_session_token_failed',
+    )).jwt
+    return { humanSessionToken, agentApiKey, agentKeyId, sessionId }
+  } catch (error) {
+    const cleanupErrors: Error[] = []
+    if (sessionId !== undefined) {
+      const failure = await revokeTemporarySession(input.fetch, input.headers, sessionId)
+      if (failure !== undefined) cleanupErrors.push(failure)
+    }
+    if (agentKeyId !== undefined) {
+      const failure = await revokeTemporaryKey(input.fetch, input.headers, agentKeyId, RUNTIME_REVOCATION_REASON)
+      if (failure !== undefined) cleanupErrors.push(failure)
+    }
+    throwWithCleanup(error, cleanupErrors, 'runtime credential creation and cleanup failed', true)
+    throw new Error('runtime_credential_creation_unreachable')
+  }
+}
+
+function publicRuntimeCredential(resource: RuntimeCredentialResource): RuntimeClerkCredential {
+  const { sessionId: _sessionId, ...credential } = resource
+  return credential
+}
+
+async function revokeTemporaryKey(
+  fetch: typeof globalThis.fetch,
+  headers: Record<string, string>,
+  keyId: string,
+  reason: string,
+): Promise<Error | undefined> {
+  try {
+    const response = await fetch(`${CLERK_API}/api_keys/${encodeURIComponent(keyId)}/revoke`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ revocation_reason: reason }),
+    })
+    return response.ok ? undefined : new Error(`clerk_temporary_api_key_revocation_failed:${response.status}`)
+  } catch (error) {
+    return new Error('clerk_temporary_api_key_revocation_failed', { cause: error })
+  }
+}
+
+function assertRuntimeConfigured(input: Readonly<{
+  clerkSecretKey: string
+  clerkInstanceId: string
+}>): void {
+  if (!input.clerkSecretKey.trim()) throw new Error('CLERK_SECRET_KEY is required')
+  if (!/^ins_[A-Za-z0-9]+$/u.test(input.clerkInstanceId)) {
+    throw new Error('AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID must be an exact Clerk instance ID')
+  }
+}
+
+function throwWithCleanup(
+  primaryError: unknown,
+  cleanupErrors: readonly Error[],
+  message: string,
+  hasPrimary: boolean,
+): void {
+  if (hasPrimary && cleanupErrors.length > 0) {
+    throw new AggregateError([primaryError, ...cleanupErrors], message)
+  }
+  if (hasPrimary) throw primaryError
+  if (cleanupErrors.length === 1) throw cleanupErrors[0]
+  if (cleanupErrors.length > 1) throw new AggregateError(cleanupErrors, message)
 }
 
 async function clerkAcceptanceHeaders(input: Readonly<{

@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { canBootstrapOwnerAdmin, requireAdminAuthority } from '@/modules/security/internal/admin-authority'
@@ -8,6 +10,13 @@ import {
   revokeAdminMembership,
 } from '@/modules/security/public'
 import type { AdminMembership } from '@/modules/security/public'
+import { resolveAdminAuthority } from '../../../convex/authz'
+import schema from '../../../convex/schema'
+
+const convexModules = Object.fromEntries(
+  Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
+    .map(([path, load]) => [path.replace('../../../convex/', './'), load]),
+)
 
 describe('admin authority contract', () => {
   it('does not grant authority from env or session alone', () => {
@@ -228,6 +237,78 @@ describe('admin authority contract', () => {
         now: 10,
       })
     ).toMatchObject({ kind: 'error', code: 'admin_missing_evidence' })
+  })
+
+  it('accepts tokenless historical membership storage without authorizing it', async () => {
+    const backend = convexTest(schema, convexModules)
+
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('adminMemberships', {
+        clerkUserId: 'legacy-admin',
+        role: 'owner_admin',
+        state: 'active',
+        grantedBy: 'historical-bootstrap',
+        grantedAt: 1,
+      })
+      await ctx.db.insert('adminMemberships', {
+        clerkUserId: 'current-admin',
+        tokenIdentifier: 'clerk|current-admin',
+        role: 'owner_admin',
+        state: 'active',
+        grantedBy: 'current-bootstrap',
+        grantedAt: 2,
+      })
+    })
+
+    const legacyRow = await backend.run((ctx) => (
+      ctx.db.query('adminMemberships')
+        .withIndex('by_clerkUserId_state', (query) => query.eq('clerkUserId', 'legacy-admin').eq('state', 'active'))
+        .unique()
+    ))
+    expect(legacyRow).toEqual(expect.objectContaining({
+      clerkUserId: 'legacy-admin',
+      role: 'owner_admin',
+      state: 'active',
+    }))
+    expect(legacyRow).not.toHaveProperty('tokenIdentifier')
+
+    const legacyAuthority = await backend.withIdentity({
+      subject: 'legacy-admin',
+      issuer: 'https://clerk.example.test',
+      tokenIdentifier: 'clerk|legacy-admin',
+    }).query((ctx) => resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'set_operator_control'))
+    expect(legacyAuthority).toEqual({ kind: 'denied', reason: 'missing_membership' })
+
+    const currentAuthority = await backend.withIdentity({
+      subject: 'current-admin',
+      issuer: 'https://clerk.example.test',
+      tokenIdentifier: 'clerk|current-admin',
+    }).query((ctx) => resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'set_operator_control'))
+    expect(currentAuthority).toMatchObject({
+      kind: 'allowed',
+      membership: {
+        clerkUserId: 'current-admin',
+        tokenIdentifier: 'clerk|current-admin',
+        role: 'owner_admin',
+        state: 'active',
+      },
+    })
+  })
+
+  it('rejects malformed tokenIdentifier values instead of widening legacy storage', async () => {
+    const backend = convexTest(schema, convexModules)
+    const malformed = {
+      clerkUserId: 'malformed-admin',
+      tokenIdentifier: 42,
+      role: 'owner_admin',
+      state: 'active',
+      grantedBy: 'historical-bootstrap',
+      grantedAt: 1,
+    } as const
+
+    await expect(backend.run(async (ctx) => (
+      ctx.db.insert('adminMemberships', malformed as never)
+    ))).rejects.toThrow()
   })
 })
 

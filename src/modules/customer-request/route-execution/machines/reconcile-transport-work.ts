@@ -31,7 +31,9 @@ export async function reconcileRouteTransportWorkCompletion(
     || attempt.operationKeyDigest !== dispatch.operationKeyDigest) {
     return { kind: 'settled' }
   }
-  if (dispatch.state === 'pending' && attempt.state === 'queued') {
+  if ((dispatch.state === 'pending' && attempt.state === 'queued')
+    || (dispatch.state === 'leased'
+      && (attempt.state === 'queued' || attempt.state === 'leased'))) {
     const result = await ports.recordNotReleased({
       dispatchRef: dispatch.dispatchRef,
       attemptRef: attempt.attemptRef,
@@ -40,14 +42,16 @@ export async function reconcileRouteTransportWorkCompletion(
         disposition: 'refused',
         releaseStarted: false,
         requestDigest: attempt.inputDigest,
-        failureCode: 'route_transport_work_not_released',
+        failureCode: dispatch.state === 'leased'
+          ? 'route_transport_work_lease_not_released'
+          : 'route_transport_work_not_released',
       }),
     })
     return result.kind === 'failed' || result.kind === 'replayed'
       ? { kind: 'failed_not_released' }
       : { kind: 'settled' }
   }
-  if (dispatch.state === 'delivered'
+  if ((dispatch.state === 'delivered' || dispatch.state === 'leased')
     && (attempt.state === 'dispatched' || attempt.state === 'accepted')) {
     const result = await ports.recordOutcome({
       attemptRef: attempt.attemptRef,

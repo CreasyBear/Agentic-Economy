@@ -115,7 +115,7 @@ const supportProblemExportSchema = z.union([
           step: z.number().int().positive(),
           business: z.string(),
           state: z.enum([
-            'blocked', 'queued', 'ready_to_contact', 'contacting', 'awaiting_result',
+            'blocked', 'queued', 'leased', 'ready_to_contact', 'contacting', 'awaiting_result',
             'completed', 'failed', 'outcome_unknown', 'cancelled',
           ]),
           evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),

@@ -10,7 +10,6 @@ import {
   assertMetadata,
   type WorkTreeParityEvidenceMetadata,
 } from './work-tree-parity-evidence'
-import { WORK_TREE_SETUP_DEFAULT_PATH, validateSetupPath } from './work-tree-parity-seed'
 
 export const WORK_TREE_AGENT_PATH = '/api/v1/work-tree' as const
 export const WORK_TREE_PARITY_DEFAULT_CHARTER = 'My BAS is overdue and my books are a mess' as const
@@ -19,17 +18,16 @@ export const WORK_TREE_PARITY_DEFAULT_TIMEOUT_MS = 180_000
 export type WorkTreeParityReleaseConfig = Readonly<{
   baseUrl: URL
   convexUrl: URL
-  setupPath: string
-  setupToken: string
   sourceRevision: string
   vercelDeploymentId: string
   convexDeploymentId: string
-  clerkSecretKey: string
-  clerkInstanceId: string
-  clerkSubject: string
+  clerkSecretKey?: string
+  clerkInstanceId?: string
   charterText: string
+  selectionSeed: string
   evidenceDirectory: string
   timeoutMs: number
+  releaseMode: boolean
   vercelBypassSecret?: string
 }>
 
@@ -113,32 +111,42 @@ export function workTreeParityConfigFromEnvironment(
   const vercelDeploymentId = requiredAny(env, ['AE_RELEASE_DEPLOYMENT_ID', 'VERCEL_DEPLOYMENT_ID'])
   const convexDeploymentId = validateHostedConvexDeploymentId(requiredAny(env, ['AE_RELEASE_CONVEX_DEPLOYMENT_ID', 'CONVEX_DEPLOYMENT_ID', 'CONVEX_DEPLOYMENT']))
   assertMetadata({ sourceRevision, vercelDeploymentId, convexDeploymentId })
-  const setupPath = validateSetupPath(optional(env, 'AE_WORK_TREE_SETUP_PATH') ?? WORK_TREE_SETUP_DEFAULT_PATH)
-  const setupToken = required(env, 'AE_WORK_TREE_SETUP_TOKEN')
-  const clerkSecretKey = required(env, 'CLERK_SECRET_KEY')
-  const clerkInstanceId = requiredAny(env, ['AE_WORK_TREE_CLERK_INSTANCE_ID', 'AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID'])
-  const clerkSubject = requiredAny(env, ['AE_WORK_TREE_CLERK_SUBJECT', 'AE_CUSTOMER_REQUEST_CLERK_SUBJECT'])
+  const releaseMode = isT51ReleaseMode(env)
+  const clerkSecretKey = optional(env, 'CLERK_SECRET_KEY')
+  const clerkInstanceId = optional(env, 'AE_WORK_TREE_CLERK_INSTANCE_ID')
+    ?? optional(env, 'AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID')
+  if (releaseMode) {
+    if (clerkSecretKey === undefined) throw new Error('CLERK_SECRET_KEY_required')
+    if (clerkInstanceId === undefined) throw new Error('AE_WORK_TREE_CLERK_INSTANCE_ID_required')
+  }
   const charterText = optional(env, 'AE_WORK_TREE_CHARTER') ?? WORK_TREE_PARITY_DEFAULT_CHARTER
   if (charterText.length === 0 || charterText.length > 4_000) throw new Error('AE_WORK_TREE_CHARTER_invalid')
+  const selectionSeed = optional(env, 'AE_T51_SELECTION_SEED')
+    ?? canonicalDigest({ sourceRevision, charterText, surface: 't51-work-tree' })
   const evidenceDirectory = resolve(optional(env, 'AE_WORK_TREE_EVIDENCE_DIR') ?? 'output/release/work-tree-parity')
   const timeoutMs = parseTimeout(optional(env, 'AE_WORK_TREE_TIMEOUT_MS'))
   const bypassSecret = resolveVercelProtectionBypassSecret(env)
   return {
     baseUrl,
     convexUrl,
-    setupPath,
-    setupToken,
     sourceRevision,
     vercelDeploymentId,
     convexDeploymentId,
-    clerkSecretKey,
-    clerkInstanceId,
-    clerkSubject,
+    ...(clerkSecretKey === undefined ? {} : { clerkSecretKey }),
+    ...(clerkInstanceId === undefined ? {} : { clerkInstanceId }),
     charterText,
+    selectionSeed,
     evidenceDirectory,
     timeoutMs,
+    releaseMode,
     ...(bypassSecret === undefined ? {} : { vercelBypassSecret: bypassSecret }),
   }
+}
+
+/** Only an explicitly named release invocation may require hosted secrets. */
+export function isT51ReleaseMode(env: Record<string, string | undefined> = process.env): boolean {
+  const mode = optional(env, 'AE_T51_RELEASE_MODE')?.toLowerCase()
+  return mode === 'release' || mode === 'true' || mode === '1'
 }
 
 export function resolveVercelProtectionBypassSecret(

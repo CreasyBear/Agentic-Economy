@@ -79,7 +79,6 @@ const readback = {
 }
 const sourceReadback = {
   ...readback,
-  principalId: 'https://identity.example|clerk-owner-t45',
   lineage: { kind: 'standalone' as const },
 }
 
@@ -103,14 +102,14 @@ beforeEach(async () => {
     kind: 'accepted',
     code: 'work_tree_claimed',
     replayed: false,
-    readback: { ...readback, principalId: 'https://identity.example|clerk-owner-t45' },
+    readback: sourceReadback,
     receipt: {
       receiptRef: 'work-tree-claim:receipt',
       projectId,
       treeId: tree.treeId,
       operationKey: 't45:claim',
       event: { kind: 'claimed', operationKey: 'work-tree:claim:op', seq: 2 },
-      actor: { principalId: 'https://identity.example|clerk-owner-t45', ownerId: 'clerk-owner-t45' },
+      actor: { source: 'human_source' },
       generation: 1,
       revision: 1,
       payloadDigest: 'digest:claim',
@@ -127,10 +126,11 @@ beforeEach(async () => {
       treeId: startedTree.treeId,
       operationKey: 'work-tree:create',
       event: { kind: 'created', operationKey: 'work-tree:create', seq: 1 },
-      actor: { principalId: sourceReadback.principalId, ownerId: 'clerk-owner-t45', source: 'human_source' },
+      actor: { source: 'human_source' },
       generation: 1,
       revision: 1,
       payloadDigest: 'digest:create',
+      lineage: { kind: 'standalone' as const },
     },
   })
   serverMocks.inspect.mockResolvedValue({ kind: 'accepted', readback: { ...sourceReadback, receipts: [] } })
@@ -177,12 +177,32 @@ describe('human WorkTree claim host seam', () => {
   it('keeps an authenticated start on the owner source path', async () => {
     serverMocks.auth.mockResolvedValue({ isAuthenticated: true })
 
-    const started = await startRootWorkTreeServer({ data: { outcome: 'Prepare a bounded BAS path.' } })
+    const started = await startRootWorkTreeServer({
+      data: {
+        outcome: 'Prepare a bounded BAS path.',
+        lineage: {
+          kind: 'customer_request',
+          requestRef: 'request:human-root',
+          revision: 2,
+          routeGenerationRef: 'generation:human-root',
+          routeRef: 'route-choice:human-root',
+        },
+      },
+    })
 
     expect(started).toEqual({ kind: 'started', projectId })
     expect(serverMocks.create).toHaveBeenCalledWith(expect.objectContaining({
       idempotencyKey: expect.any(String),
       charterText: 'Prepare a bounded BAS path.',
+    }))
+    expect(serverMocks.create).toHaveBeenCalledWith(expect.objectContaining({
+      lineage: {
+        kind: 'customer_request',
+        requestRef: 'request:human-root',
+        revision: 2,
+        routeGenerationRef: 'generation:human-root',
+        routeRef: 'route-choice:human-root',
+      },
     }))
     expect(serverMocks.create).not.toHaveBeenCalledWith(expect.objectContaining({ guestAssertion: expect.any(String) }))
     await readRootWorkTreeServer({ data: { projectId } })

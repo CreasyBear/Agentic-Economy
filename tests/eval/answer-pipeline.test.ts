@@ -222,6 +222,28 @@ describe('answer pipeline eval', () => {
     expect(result.problems).toContain('expected 0 model requests, got 2')
     expect(result.problems).toContain('tool run count 2 exceeds 0')
   })
+  it('redacts private tool identities from failed eval expectations', async () => {
+    const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-paramata-visible-recovery')
+    if (sourceCase === undefined) {
+      throw new Error('missing turn-paramata-visible-recovery eval case')
+    }
+
+    const privateToolIds = ['private.tool.a', 'private.tool.b']
+    const result = await runAnswerTurnEvalCase({
+      ...sourceCase,
+      id: 'turn-paramata-private-tool-id-mismatch',
+      expected: {
+        ...sourceCase.expected,
+        toolIds: privateToolIds,
+      },
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.problems).toContain('tool identity expectation failed (2 expected, 2 observed)')
+    expect(result.problems.join('; ')).not.toContain(privateToolIds[0] as string)
+    expect(result.problems.join('; ')).not.toContain(privateToolIds[1] as string)
+    expect(result.problems.join('; ')).not.toContain('registry.search')
+  })
 
   it.each(ANSWER_TURN_EVAL_CASES)('$id', async (testCase: AnswerTurnEvalCase) => {
     const result = await runAnswerTurnEvalCase(testCase)

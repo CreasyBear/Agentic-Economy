@@ -4,6 +4,8 @@ export type CancelMode = 'current_and_downstream' | 'after_current_step'
 
 export type CancelOutboxState =
   | 'pending'
+  // Deprecated persisted state; cancellation remains unavailable.
+  | 'leased'
   | 'delivered'
   | 'failed'
   | 'cancelled'

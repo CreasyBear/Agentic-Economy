@@ -1,6 +1,11 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
+import {
+  deriveBusinessOfferingSupportFromCapabilitySupply,
+  rebuildBusinessSupplyProjectionSnapshotCommand,
+} from '../../convex/capabilitySupplyProjection'
+
 import { defineCapabilityContract, type CapabilityContract, type CapabilityContractDocument } from '@/modules/capability-contract/public'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -9,6 +14,101 @@ import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import { convexModules as modules, ownerAdmin, publishedBusinessOwner, type ConvexFixtureAdmin } from '../helpers/convex-fixtures'
 
 describe('capability publication', () => {
+  it('rebuilds legacy projection rows as strict current rows and remains idempotent', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await publishedBusinessOwner(backend, 'legacy-rebuild')
+    const legacyIds = await backend.run(async (ctx) => {
+      await ctx.db.insert('businessContexts', {
+        businessId, category: 'Data', suburb: 'Perth', stateTerritory: 'WA',
+        sourceRefs: [], sourceHash: 'context:legacy-rebuild', approvedAt: 1,
+      })
+      await ctx.db.insert('operatorControls', {
+        key: 'offering_public_projection_enabled', enabled: true,
+        changedByAdminRef: 'test', reasonCode: 'test_projection', evidenceRefs: ['test'],
+        correlationId: 'correlation:legacy-rebuild', operationKey: 'operation:legacy-rebuild', updatedAt: 1,
+      })
+      await ctx.db.insert('businessOfferings', {
+        offeringRef: 'catalog-offering:legacy-rebuild', businessId, currentRevision: 1,
+        status: 'published', createdAt: 1, updatedAt: 1,
+      })
+      await ctx.db.insert('businessOfferingRevisions', {
+        offeringRef: 'catalog-offering:legacy-rebuild', businessId, revision: 1,
+        name: 'Legacy rebuild lookup', category: 'Data', summary: 'One exact lookup.',
+        sourceHash: 'catalog-source:legacy-rebuild', createdAt: 1,
+      })
+      const snapshotId = await ctx.db.insert('businessSupplyProjectionSnapshots', {
+        businessId, sourceRevision: 1, sourceDigest: 'legacy:snapshot', observedAt: 1,
+        disposition: 'stale', status: 'projection_pending',
+        projectionJson: JSON.stringify({ legacyOnly: true }), updatedAt: 1,
+      })
+      const documentId = await ctx.db.insert('registrySearchDocuments', {
+        documentId: 'legacy-rebuild__legacy-rebuild',
+        schemaVersion: 'registry-search-document:v1',
+        businessSlug: 'legacy-rebuild',
+        serviceSlug: 'legacy-lookup',
+        businessName: 'Legacy rebuild',
+        serviceName: 'Legacy lookup',
+        serviceCategory: 'Data',
+        serviceCategoryKey: 'data',
+        suburb: 'Perth',
+        stateTerritory: 'WA',
+        publicStatus: 'published',
+        trustTier: 'listed',
+        firstRequestMode: 'not_available_yet',
+        placeKeys: ['perth', 'wa'],
+        serviceKeywords: ['legacy'],
+        searchText: 'legacy rebuild legacy lookup data perth wa',
+        serviceArea: 'Perth metro',
+        generatedHash: 'legacy:search',
+        updatedAt: 1,
+      })
+      return { snapshotId, documentId }
+    })
+
+    const baseInput = capabilityPublicationInput(businessId, 'legacy-rebuild')
+    const published = await owner.mutation(api.capabilitySupply.publishCapability, {
+      ...baseInput,
+      offering: {
+        ...baseInput.offering,
+        origin: {
+          kind: 'catalog_offering' as const,
+          offeringRef: 'catalog-offering:legacy-rebuild',
+          offeringRevision: 1,
+          offeringSourceHash: 'catalog-source:legacy-rebuild',
+        },
+      },
+    })
+    if (published.kind !== 'published') throw new Error(`publication_refused:${published.reason}`)
+
+    const readRows = () => backend.run(async (ctx) => ({
+      snapshot: await ctx.db.query('businessSupplyProjectionSnapshots')
+        .withIndex('by_businessId', (query) => query.eq('businessId', businessId)).unique(),
+      searchDocument: await ctx.db.query('registrySearchDocuments')
+        .withIndex('by_documentId', (query) => query.eq('documentId', 'legacy-rebuild__legacy-rebuild')).unique(),
+    }))
+    const firstRows = await readRows()
+    if (firstRows.snapshot === null || firstRows.searchDocument === null) throw new Error('projection_rows_missing')
+    expect(firstRows.snapshot._id).toBe(legacyIds.snapshotId)
+    expect(firstRows.searchDocument._id).toBe(legacyIds.documentId)
+    expect(firstRows.snapshot).toHaveProperty('projection')
+    expect(firstRows.snapshot).not.toHaveProperty('projectionJson')
+    expect(firstRows.searchDocument).toHaveProperty('offeringRef', 'catalog-offering:legacy-rebuild')
+    for (const legacyField of ['serviceSlug', 'serviceName', 'serviceCategory', 'serviceCategoryKey', 'serviceKeywords', 'serviceArea']) {
+      expect(firstRows.searchDocument).not.toHaveProperty(legacyField)
+    }
+
+    const rebuild = () => backend.run(async (ctx) => {
+      const support = await deriveBusinessOfferingSupportFromCapabilitySupply(ctx.db, businessId, 1234)
+      return rebuildBusinessSupplyProjectionSnapshotCommand({
+        db: ctx.db, sourceDb: ctx.db, businessId, support, now: 1234,
+      })
+    })
+    await expect(rebuild()).resolves.toMatchObject({ kind: 'ok' })
+    const secondRows = await readRows()
+    await expect(rebuild()).resolves.toMatchObject({ kind: 'ok' })
+    const thirdRows = await readRows()
+    expect(thirdRows).toEqual(secondRows)
+  })
   it('rebuilds capability-owned support after publication and eligibility transitions', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'catalog-origin-one')
@@ -579,6 +679,7 @@ async function readProjectedSupport(backend: ReturnType<typeof convexTest>, busi
     const snapshot = (await ctx.db.query('businessSupplyProjectionSnapshots').collect())
       .find((candidate) => candidate.businessId === businessId) ?? null
     if (snapshot === null) throw new Error('projection_snapshot_missing')
+    if (!('projection' in snapshot)) throw new Error('legacy_projection_snapshot')
     const support = snapshot.projection.offerings[0]?.support
     if (support === undefined) throw new Error('projected_offering_missing')
     return support

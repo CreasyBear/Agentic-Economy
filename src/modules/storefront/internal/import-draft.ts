@@ -60,9 +60,12 @@ export type StorefrontDraftConfirmationResult =
   | { kind: 'confirmed'; input: PublicOwnerClaimFlowInput }
   | { kind: 'error'; code: 'storefront_import_unconfirmed'; retryable: false; reason: string }
 
-export type StorefrontImportFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+type StorefrontFetchInput = Parameters<typeof fetch>[0]
+type StorefrontFetchInit = NonNullable<Parameters<typeof fetch>[1]>
 
-type StorefrontImportFetchInit = RequestInit & {
+export type StorefrontImportFetch = (input: StorefrontFetchInput, init?: StorefrontFetchInit) => Promise<Response>
+
+type StorefrontImportFetchInit = Omit<StorefrontFetchInit, 'dispatcher'> & {
   dispatcher?: Agent
 }
 

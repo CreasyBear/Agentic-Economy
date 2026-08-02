@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { ActionResult } from '@/modules/common/action'
 import schema from '../../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createDevelopmentEvidenceVerifier } from '@/modules/capability-supply/development-evidence-fixture'
@@ -16,10 +17,13 @@ import {
   createDurableActionInvocationTracer,
   readCompletedResultIdentity,
   type ActionInvocationOrigin,
+  type ActionInvocationView,
+  type DurableActionInvocationPort,
   type InvocationActor,
   type PreparedInvocation,
   type ReconciliationEvidenceMaterial,
 } from '@/modules/action-invocation'
+import type { DevelopmentDurableState } from '@/modules/action-invocation/internal/development-durable-port'
 
 const actor: InvocationActor = {
   callerRef: 'mock:caller:cold-agent',
@@ -41,6 +45,94 @@ const input = {
   operationKey: 'mock:source:inquiry:durable',
 }
 
+type AuthorizedDurableFixture = {
+  state: DevelopmentDurableState<ActionResult>
+  port: DurableActionInvocationPort<ActionResult>
+  prepared: Pick<ActionInvocationView, 'invocationRef'>
+}
+
+type LegacyAuthorityMode = 'approve_each' | 'standing_mandate_use'
+
+
+function createAuthorizedDurableFixture(mode: LegacyAuthorityMode) {
+  const action = findAction('inquiry.submit')!
+  const state = createDevelopmentDurableState()
+  const port = createDevelopmentDurablePort(state)
+  const origin = origins[1]!
+  const source = {
+    input,
+    context: { developmentOnlyInquirySubmitAdapter: vi.fn() },
+    prepared: undefined as PreparedInvocation | undefined,
+    observedResolution: { state: 'pending' as const },
+  }
+  const tracer = createDurableActionInvocationTracer({
+    action,
+    port,
+    now: () => '2026-07-19T15:15:00.000Z',
+    nextInvocationRef: () => `dev:legacy-authority:${mode}`,
+    nextAuthorityRef: () => `opaque:legacy-authority:${mode}`,
+    nextAttemptRef: () => `dev:legacy-authority:${mode}:attempt`,
+    resolveSourceState: () => source,
+  })
+  const prepared = tracer.prepare({
+    origin,
+    actor,
+    input,
+    context: source.context,
+    freshnessMs: 300_000,
+  })
+  source.prepared = prepared.prepared!
+  const basis = {
+    kind: 'standing_mandate_use' as const,
+    mandateRef: 'mock:mandate:legacy',
+    mandateVersion: 3,
+    mandateGeneration: 2,
+    authorityUseRef: 'mock:authority-use:legacy',
+    grantEvidenceRef: 'mock:grant-evidence:legacy',
+  }
+  const accepted = mode === 'approve_each'
+    ? tracer.decide({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin,
+      accept: true,
+    })
+    : tracer.authorizeStandingMandateUse({
+      invocationRef: prepared.invocationRef,
+      expectedInvocationVersion: prepared.invocationVersion,
+      authorityRef: prepared.authority!.reference,
+      actor,
+      origin,
+      basis,
+    })
+  if (accepted.kind !== 'accepted') throw new Error(accepted.code)
+  return {
+    state,
+    port,
+    tracer,
+    prepared,
+    origin,
+    authority: accepted.view.acceptedAuthority!,
+  }
+}
+
+function moveAcceptedAuthorityToLegacyRow(
+  fixture: AuthorizedDurableFixture,
+) {
+  const row = fixture.port.readControl(fixture.prepared.invocationRef)
+  if (row === undefined) throw new Error('legacy_fixture_row_missing')
+  const acceptedAuthority = row.control.acceptedAuthority
+  if (acceptedAuthority === undefined) throw new Error('legacy_fixture_authority_missing')
+  const { acceptedAuthority: _nestedAcceptedAuthority, ...control } = row.control
+  fixture.state.controls.set(fixture.prepared.invocationRef, {
+    ...row,
+    control,
+    acceptedAuthority,
+  })
+  return acceptedAuthority
+}
 describe('durable Action Invocation control', () => {
   it('grants one sync effect permit when two cold workers replay the same token', async () => {
     let resolveRunner!: (value: { kind: 'error'; code: string; retryable: false; reason: string }) => void
@@ -1031,5 +1123,71 @@ describe('durable Action Invocation control', () => {
       resultDigest: canonicalDigest(result),
     })
     expect(result.receipt.accessKey).toBe('SECRET-MUST-NOT-PERSIST')
+  })
+  it.each(['approve_each', 'standing_mandate_use'] as const)(
+    'reconstructs a legacy %s authority through cold durable read and resume',
+    (mode) => {
+      const fixture = createAuthorizedDurableFixture(mode)
+      const acceptedAuthority = moveAcceptedAuthorityToLegacyRow(fixture)
+      const legacyRow = fixture.port.readControl(fixture.prepared.invocationRef)
+      expect(legacyRow?.acceptedAuthority).toEqual(acceptedAuthority)
+      expect(legacyRow?.control.acceptedAuthority).toBeUndefined()
+
+      const cold = fixture.tracer.coldResume(fixture.prepared.invocationRef)
+      const view = cold.inspect(fixture.prepared.invocationRef)
+      if (view === undefined) throw new Error('legacy_cold_view_missing')
+      expect(view.acceptedAuthority).toEqual(fixture.authority)
+      const resumed = cold.acquire({
+        invocationRef: fixture.prepared.invocationRef,
+        expectedInvocationVersion: view.invocationVersion,
+        authorityRef: view.authority!.reference,
+        actor,
+        origin: fixture.origin,
+        materialInput: input,
+        leaseOwner: `mock:legacy-resume:${mode}`,
+        leaseMs: 30_000,
+        ...(fixture.authority.kind === 'standing_mandate_use'
+          ? { acceptedAuthorityBasis: fixture.authority }
+          : {}),
+      })
+      expect(resumed).toMatchObject({
+        kind: 'accepted',
+        view: {
+          acceptedAuthority: fixture.authority,
+          control: { state: 'leased' },
+        },
+      })
+      expect(fixture.port.readControl(fixture.prepared.invocationRef)?.acceptedAuthority)
+        .toBeUndefined()
+      expect(fixture.port.readControl(fixture.prepared.invocationRef)?.control.acceptedAuthority)
+        .toEqual(fixture.authority)
+    },
+  )
+
+  it('refuses a legacy duplicate authority binding when the nested authority differs', () => {
+    const fixture = createAuthorizedDurableFixture('approve_each')
+    const row = fixture.port.readControl(fixture.prepared.invocationRef)
+    if (row === undefined) throw new Error('mismatch_fixture_row_missing')
+    fixture.state.controls.set(fixture.prepared.invocationRef, {
+      ...row,
+      acceptedAuthority: {
+        kind: 'approve_each',
+        authorityRef: 'opaque:legacy-authority:forged',
+      },
+    })
+    expect(() => fixture.tracer.coldResume(fixture.prepared.invocationRef))
+      .toThrow('durable_control_authority_mismatch')
+  })
+
+  it('leaves a current nested-authority row unchanged across cold read', () => {
+    const fixture = createAuthorizedDurableFixture('approve_each')
+    const before = fixture.port.readControl(fixture.prepared.invocationRef)
+    if (before === undefined) throw new Error('current_fixture_row_missing')
+    expect(before.acceptedAuthority).toBeUndefined()
+    const cold = fixture.tracer.coldResume(fixture.prepared.invocationRef)
+    expect(fixture.port.readControl(fixture.prepared.invocationRef)).toBe(before)
+    expect(cold.inspect(fixture.prepared.invocationRef)).toMatchObject({
+      acceptedAuthority: fixture.authority,
+    })
   })
 })

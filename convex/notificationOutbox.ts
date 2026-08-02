@@ -806,11 +806,14 @@ async function readInquiryForDispatch(
     return undefined
   }
 
-  const [offering, message, businessThreads, accessGrantRow] = await Promise.all([
-    db
+  const offeringPromise = 'offeringRef' in thread
+    ? db
       .query('businessOfferings')
       .withIndex('by_offeringRef', (query) => query.eq('offeringRef', thread.offeringRef))
-      .unique(),
+      .unique()
+    : Promise.resolve(null)
+  const [offering, message, businessThreads, accessGrantRow] = await Promise.all([
+    offeringPromise,
     db
       .query('inquiryMessages')
       .withIndex('by_messageId', (query) => query.eq('messageId', messageId))
@@ -832,7 +835,7 @@ async function readInquiryForDispatch(
         query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision)
       )
       .unique()
-  const offeringName = revision?.name
+  const offeringName = 'offeringRef' in thread ? revision?.name : 'Service'
   const customerMessageFirstLine = message === null ? undefined : firstNonEmptyLine(message.body)
   const customerAccessToken = accessGrantRow === null || accessGrantRow.expiresAt <= Date.now()
     ? undefined

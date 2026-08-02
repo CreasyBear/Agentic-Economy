@@ -4,10 +4,12 @@ import { v } from 'convex/values'
 import { literalUnion } from '@/modules/common/convex-literals'
 import {
   ExternalOperationProvenanceValues,
+  FirstRequestModeValues,
   HumanRequestChannelValues,
   OfferingPriceKindValues,
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
+  PublicFirstRequestChannelValues,
 } from '@/modules/catalog/public'
 import {
   DiscoveryAttemptStatusValues,
@@ -15,6 +17,7 @@ import {
   DiscoveryPathKindValues,
   DiscoveryRepairActionValues,
   DiscoveryRepairResultValues,
+  DiscoveryStatusValues,
 } from '@/modules/discovery/public'
 
 const discoveryManifestRoute = v.object({
@@ -83,6 +86,103 @@ const discoveryManifestOffering = v.object({
   support: discoveryManifestOfferingSupport,
 })
 
+// These values belong only to the retired service-capability manifest shape.
+const legacyCapabilityKindValues = [
+  'phone_inquiry',
+  'quote_request',
+  'emergency_callout_interest',
+  'ae_hosted_discovery',
+] as const
+
+const legacyServiceCapabilityStatusValues = ['available', 'degraded', 'unavailable', 'stale'] as const
+
+
+const legacyDiscoveryManifestFirstRequest = v.object({
+  mode: literalUnion(FirstRequestModeValues),
+  publicDisclosure: v.string(),
+  publicChannel: literalUnion(PublicFirstRequestChannelValues),
+  noContactReason: v.optional(v.string()),
+})
+
+const legacyDiscoveryManifestCapability = v.object({
+  kind: literalUnion(legacyCapabilityKindValues),
+  status: literalUnion(legacyServiceCapabilityStatusValues),
+  firstRequest: legacyDiscoveryManifestFirstRequest,
+  callable: v.literal(false),
+  paymentRequired: v.literal(false),
+  reason: v.optional(v.string()),
+})
+
+const legacyDiscoveryManifestService = v.object({
+  slug: v.string(),
+  name: v.string(),
+  category: v.string(),
+  summary: v.string(),
+  serviceArea: v.string(),
+  hoursOrUnknown: v.string(),
+  status: v.literal('published'),
+  capabilities: v.array(legacyDiscoveryManifestCapability),
+})
+
+const currentDiscoveryManifest = v.object({
+  schemaVersion: v.literal('ae-ucp-fallback:v1'),
+  businessCatalogSchemaVersion: v.literal('public-business-catalog-api:v2'),
+  businessId: v.id('businesses'),
+  slug: v.string(),
+  businessName: v.string(),
+  category: v.string(),
+  suburb: v.string(),
+  stateTerritory: v.string(),
+  postcode: v.optional(v.string()),
+  publicUrl: v.string(),
+  manifestUrl: v.string(),
+  ucpVersion: v.string(),
+  pathKind: v.literal('ae_hosted_fallback'),
+  disposition: v.optional(v.union(v.literal('current'), v.literal('partial'), v.literal('stale'))),
+  sourceHash: v.string(),
+  sourceVersion: v.literal('public-catalog:v1'),
+  generatedHash: v.string(),
+  bodyHash: v.string(),
+  urlHash: v.string(),
+  generatedAt: v.number(),
+  observedAt: v.optional(v.number()),
+  degradedReason: v.optional(v.string()),
+  suppressedAt: v.optional(v.number()),
+  routes: v.array(discoveryManifestRoute),
+  offerings: v.optional(v.array(discoveryManifestOffering)),
+})
+
+const legacyDiscoveryManifest = v.object({
+  schemaVersion: v.string(),
+  businessId: v.id('businesses'),
+  slug: v.string(),
+  businessName: v.string(),
+  category: v.string(),
+  suburb: v.string(),
+  stateTerritory: v.string(),
+  postcode: v.optional(v.string()),
+  publicUrl: v.string(),
+  manifestUrl: v.string(),
+  ucpVersion: v.string(),
+  pathKind: literalUnion(DiscoveryPathKindValues),
+  status: literalUnion(DiscoveryStatusValues),
+  sourceHash: v.string(),
+  sourceVersion: v.string(),
+  generatedHash: v.string(),
+  bodyHash: v.string(),
+  urlHash: v.string(),
+  generatedAt: v.number(),
+  updatedAt: v.number(),
+  degradedReason: v.optional(v.string()),
+  suppressedAt: v.optional(v.number()),
+  routes: v.array(discoveryManifestRoute),
+  services: v.array(legacyDiscoveryManifestService),
+  unsupportedCapabilities: v.object({
+    callable: v.literal(false),
+    paymentRequired: v.literal(false),
+  }),
+})
+
 const discoveryManifestReadback = v.object({
   businessId: v.id('businesses'),
   slug: v.string(),
@@ -96,33 +196,9 @@ const discoveryManifestReadback = v.object({
   readAt: v.number(),
 })
 export const discoveryTables = {
-  discoveryManifests: defineTable({
-    schemaVersion: v.string(),
-    businessCatalogSchemaVersion: v.optional(v.string()),
-    businessId: v.id('businesses'),
-    slug: v.string(),
-    businessName: v.string(),
-    category: v.string(),
-    suburb: v.string(),
-    stateTerritory: v.string(),
-    postcode: v.optional(v.string()),
-    publicUrl: v.string(),
-    manifestUrl: v.string(),
-    ucpVersion: v.string(),
-    pathKind: literalUnion(DiscoveryPathKindValues),
-    disposition: v.optional(v.union(v.literal('current'), v.literal('partial'), v.literal('stale'))),
-    sourceHash: v.string(),
-    sourceVersion: v.string(),
-    generatedHash: v.string(),
-    bodyHash: v.string(),
-    urlHash: v.string(),
-    generatedAt: v.number(),
-    observedAt: v.optional(v.number()),
-    degradedReason: v.optional(v.string()),
-    suppressedAt: v.optional(v.number()),
-    routes: v.array(discoveryManifestRoute),
-    offerings: v.optional(v.array(discoveryManifestOffering)),
-  })
+  discoveryManifests: defineTable(
+    v.union(currentDiscoveryManifest, legacyDiscoveryManifest),
+  )
     .index('by_business_version', ['businessId', 'ucpVersion'])
     .index('by_business_generatedAt', ['businessId', 'generatedAt']),
 

@@ -212,6 +212,86 @@ describe('answer thread source-write admission', () => {
     })).resolves.toEqual({ page: [], isDone: true, continueCursor: '' })
 
   })
+  it('refuses legacy tool-call rows without result JSON instead of pairing an unverifiable hash', async () => {
+    const backend = convexTest(schema, modules)
+    const threadId = 'thread-legacy-tool-result'
+    const turnId = 'turn-legacy-tool-result'
+    const sessionId = 'session-legacy-tool-result'
+    const legacySummary = '{"slugs":["legacy-plumber"],"count":1}'
+    const currentResult = '{"kind":"ok","items":[{"slug":"current-plumber"}]}'
+
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('answerThreads', {
+        threadId,
+        pseudonymousSessionId: sessionId,
+        title: 'legacy tool result',
+        sharePolicy: 'public',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await ctx.db.insert('answerTurns', {
+        turnId,
+        threadId,
+        seq: 1,
+        query: 'legacy tool result',
+        intent: 'refine_search',
+        evidenceJson: '{}',
+        snapshotHash: 'snapshot-legacy-tool-result',
+        proseJson: '{}',
+        artifactKindsJson: '[]',
+        status: 'complete',
+        createdAt: 1,
+      })
+      await ctx.db.insert('answerToolCalls', {
+        toolCallId: 'tool-call-legacy-result',
+        turnId,
+        seq: 1,
+        toolId: 'registry.search',
+        inputJson: '{"query":"legacy plumber"}',
+        resultSummaryJson: legacySummary,
+        resultHash: 'hash-legacy-result',
+        status: 'complete',
+        createdAt: 1,
+      })
+      await ctx.db.insert('answerToolCalls', {
+        toolCallId: 'tool-call-current-result',
+        turnId,
+        seq: 2,
+        toolId: 'registry.search',
+        inputJson: '{"query":"current plumber"}',
+        resultSummaryJson: '{"slugs":["current-plumber"],"count":1}',
+        resultJson: currentResult,
+        resultHash: 'hash-current-result',
+        status: 'complete',
+        createdAt: 1,
+      })
+    })
+
+    await expect(backend.query(api.answerThreads.readTurnToolCalls, {
+      turnId,
+      pseudonymousSessionId: sessionId,
+      paginationOpts: { cursor: null, numItems: 25 },
+    })).rejects.toThrow('answer_tool_result_missing')
+  })
+
+  it('rejects malformed result payloads instead of admitting broad legacy shapes', async () => {
+    const backend = convexTest(schema, modules)
+
+    await expect(backend.run(async (ctx) => {
+      await ctx.db.insert('answerToolCalls', {
+        toolCallId: 'tool-call-malformed-result',
+        turnId: 'turn-malformed-result',
+        seq: 1,
+        toolId: 'registry.search',
+        inputJson: '{}',
+        resultSummaryJson: '{}',
+        resultJson: 42 as never,
+        resultHash: 'hash-malformed-result',
+        status: 'complete',
+        createdAt: 1,
+      })
+    })).rejects.toThrow('Expected `string`')
+  })
 })
 
 async function appendTurn(

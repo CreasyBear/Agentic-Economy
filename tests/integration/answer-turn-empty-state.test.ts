@@ -32,6 +32,10 @@ function stubThreadPort(turns: unknown[]): void {
       turns.push(args)
       return { turnId: args.turnId }
     },
+    appendTurnWithThreadAndToolCalls: async (args) => {
+      turns.push(args)
+      return { turnId: args.turnId, insertedToolCalls: args.toolCalls.length }
+    },
     listSessionThreads: async () => ({ threads: [] }),
     getPublicThreadProjection: async () => null,
     getThreadTurns: async () => ({ page: [], isDone: true, continueCursor: '' }),
@@ -67,7 +71,13 @@ describe('POST /api/answer/turn empty-state queries', () => {
   })
 
   it('completes with honest empty-state copy when no providers match', async () => {
-    const server = await startOpenRouterContractServer([])
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'Unused empty-state prose.',
+        summary: 'Unused empty-state prose.',
+        whatToDoNow: 'Unused empty-state prose.',
+      },
+    }))
     const restoreOpenRouter = server.installEnv()
     setAnswerThreadPortForTests({
       createThread: async (args) => ({ threadId: args.threadId }),
@@ -104,7 +114,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(complete.answer.providers).toEqual([])
       expect(complete.answer.oneLine).toContain('No listed businesses match')
       expect(complete.answer.summary).toContain('Brunswick')
-      expect(server.requests).toHaveLength(2)
+      expect(server.requests).toHaveLength(1)
       expect(server.requests.every((request) => request.tools === undefined)).toBe(true)
     } finally {
       restoreOpenRouter()
@@ -194,7 +204,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
     }
   })
 
-  it('does not freeze service-only tool results for a suburb-specific query', async () => {
+  it('persists discovery evidence and returns an error when the web provider fails', async () => {
     const server = await startOpenRouterContractServer([])
     const restoreOpenRouter = server.installEnv()
     const turns: unknown[] = []
@@ -214,41 +224,72 @@ describe('POST /api/answer/turn empty-state queries', () => {
 
       expect(response.ok).toBe(true)
       const frames = await readAnswerTurnStream(response)
-      const complete = frames.at(-1)?.event
-      expect(complete?.type).toBe('complete')
-      if (complete?.type !== 'complete') {
-        throw new Error('expected complete event')
+      const terminal = frames.at(-1)?.event
+      expect(terminal?.type).toBe('error')
+      const persisted = turns.at(0) as {
+        turnId: string
+        evidenceJson: string
+        toolCalls: readonly {
+          toolCallId: string
+          seq: number
+          toolId: string
+          inputJson: string
+          status: string
+          resultHash: string
+        }[]
+      } | undefined
+      if (persisted === undefined) {
+        throw new Error('expected persisted answer turn')
       }
-      expect(complete.answer.providers).toEqual([])
-      expect(complete.answer.agentJsonUrl).toContain('q=Emergency+plumber+Brunswick')
-      const persisted = turns.at(0) as { evidenceJson: string } | undefined
-      const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
+      const thread = frames[0]?.event
+      if (thread?.type !== 'thread') {
+        throw new Error('expected persisted answer turn parent')
+      }
+      expect(persisted.turnId).toBe(thread.turnId)
+      const evidence = JSON.parse(persisted.evidenceJson) as {
         providers?: unknown[]
         allowedSlugs?: unknown[]
-        toolCalls?: readonly { toolId?: string; inputJson?: string; status?: string; resultHash?: string }[]
         timings?: readonly { name?: string }[]
         harnessRun?: {
-          summary: { models?: { total: number }; cost?: { unavailableReasons: readonly string[] } }
-          privateTelemetry?: { modelRequests: readonly { provider?: string; model?: string }[] }
+          summary: {
+            models?: { total: number }
+            tools?: { byName?: Record<string, { total?: number; ok?: number; refused?: number; error?: number }> }
+            errors?: { codes: readonly string[] }
+            cost?: { unavailableReasons: readonly string[] }
+          }
+          privateTelemetry?: { modelRequests: readonly { provider?: string; model?: string; status?: string }[] }
         }
       }
       expect(evidence.providers).toEqual([])
       expect(evidence.allowedSlugs).toEqual([])
-      expect(evidence.toolCalls?.map((call) => call.toolId)).toEqual([
+      const toolCalls = persisted.toolCalls
+      expect(toolCalls).toHaveLength(2)
+      expect(toolCalls.map((call) => call.toolId)).toEqual([
         'registry.search',
         'web.discover',
       ])
-      expect(evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query)).toEqual([
+      expect(toolCalls.map((call) => call.seq)).toEqual([0, 1])
+      expect(new Set(toolCalls.map((call) => call.toolCallId)).size).toBe(toolCalls.length)
+      expect(toolCalls.map((call) => call.status)).toEqual(['complete', 'error'])
+      expect(toolCalls.map((call) => JSON.parse(call.inputJson).query)).toEqual([
         'Emergency plumber Brunswick',
         'Emergency plumber Brunswick',
       ])
-      expect(evidence.toolCalls?.every((call) => call.resultHash?.startsWith('sha256:'))).toBe(true)
-      expect(evidence.harnessRun?.summary.models?.total).toBe(1)
+      expect(toolCalls.every((call) => call.resultHash.startsWith('sha256:'))).toBe(true)
+      expect(evidence.harnessRun?.summary.tools?.byName?.['web.discover']).toMatchObject({
+        total: 1,
+        ok: 0,
+        refused: 0,
+        error: 1,
+      })
+      expect(evidence.harnessRun?.summary.errors?.codes).toContain('discovery_failed')
+      const modelRequests = evidence.harnessRun?.privateTelemetry?.modelRequests ?? []
+      expect(evidence.harnessRun?.summary.models?.total).toBe(modelRequests.length)
+      expect(modelRequests).toHaveLength(2)
+      expect(modelRequests.map((request) => request.status)).toEqual(['error', 'error'])
       expect(evidence.harnessRun?.summary.cost?.unavailableReasons).toEqual(['request_failed'])
-      expect(evidence.harnessRun?.privateTelemetry?.modelRequests).toHaveLength(1)
-      expect(evidence.timings?.map((timing) => timing.name)).not.toContain('model.agent_total')
-      expect(server.requests).toHaveLength(2)
-      expect(server.requests.every((request) => request.tools === undefined)).toBe(true)
+      expect(evidence.timings?.map((timing) => timing.name)).toContain('model.agent_total')
+      expect(server.requests).toHaveLength(3)
     } finally {
       restoreOpenRouter()
       await server.close()

@@ -339,15 +339,17 @@ export function RouteProgressCard({ projection, turns, refresh, cancel, edit, re
   if (progress === undefined) return null
   const stateLabel = progress.current.state === 'queued'
     ? 'Waiting to begin'
-    : progress.current.state === 'ready_to_contact'
-      ? 'Preparing business contact'
-      : progress.current.state === 'contacting'
-      ? 'Contacting the business'
-      : progress.current.state === 'awaiting_result'
-        ? 'Waiting for the business result'
-        : progress.current.state === 'completed'
-          ? 'Business result checked'
-          : 'Needs attention'
+    : progress.current.state === 'leased'
+      ? 'Working through the active transport handoff'
+      : progress.current.state === 'ready_to_contact'
+        ? 'Preparing business contact'
+        : progress.current.state === 'contacting'
+          ? 'Contacting the business'
+          : progress.current.state === 'awaiting_result'
+            ? 'Waiting for the business result'
+            : progress.current.state === 'completed'
+              ? 'Business result checked'
+              : 'Needs attention'
   return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite">
     <Conversation turns={turns} />
     <WorkingUnderstanding projection={projection} correct={edit} />
@@ -431,6 +433,17 @@ function cancellationMessage(
       </p>
       <p className="text-sm text-muted-foreground">
         The business response was recorded at {formatTimestamp(cancellation.observedAt)}; AE will not send the stop request twice.
+      </p>
+    </div>
+  }
+  if (typeof cancellation === 'object' && cancellation.state === 'not_available'
+    && cancellation.reason === 'business_step_leased') {
+    return <div className="grid gap-1">
+      <p className="text-sm text-muted-foreground">
+        AE is finishing the active transport handoff for this business step. It has not been released to the business yet.
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Check progress again while AE resolves this step. AE will not send it twice.
       </p>
     </div>
   }

@@ -21,6 +21,13 @@ const registryPublicSurface = v.union(
   v.literal('/api/businesses/{slug}')
 )
 
+const legacyRegistryPublicSurface = v.union(
+  v.literal('/registry'),
+  v.literal('/api/businesses'),
+  v.literal('/api/businesses/search'),
+  v.literal('/api/businesses/{slug}')
+)
+
 const registryProjectionReadback = v.object({
   businessId: v.id('businesses'),
   slug: v.string(),
@@ -33,71 +40,178 @@ const registryProjectionReadback = v.object({
   readAt: v.number(),
 })
 
+const legacyRegistryProjectionReadback = v.object({
+  businessId: v.id('businesses'),
+  slug: v.string(),
+  publicUrl: v.string(),
+  sourceVersion: v.literal(RegistryProjectionSourceVersion),
+  sourceHash: v.string(),
+  generatedHash: v.optional(v.string()),
+  serviceCount: v.number(),
+  publicSurfaces: v.array(legacyRegistryPublicSurface),
+  readAt: v.number(),
+})
+
+const currentRegistryProjectionItem = v.object({
+  businessId: v.id('businesses'),
+  offeringRef: v.optional(v.string()),
+  logicalKey: v.string(),
+  projectionKind: literalUnion(RegistryProjectionKindValues),
+  publicStatus: literalUnion(PublicStatusValues),
+  sourceHash: v.string(),
+  sourceVersion: v.literal(RegistryProjectionSourceVersion),
+  generatedHash: v.string(),
+  publicUrl: v.string(),
+  offeringCount: v.number(),
+  updatedAt: v.number(),
+})
+
+const legacyRegistryProjectionItem = v.object({
+  businessId: v.id('businesses'),
+  serviceId: v.optional(v.id('businessServices')),
+  logicalKey: v.string(),
+  projectionKind: v.union(v.literal('business_catalog'), v.literal('service_catalog')),
+  publicStatus: literalUnion(PublicStatusValues),
+  sourceHash: v.string(),
+  sourceVersion: v.literal(RegistryProjectionSourceVersion),
+  generatedHash: v.string(),
+  publicUrl: v.string(),
+  serviceCount: v.number(),
+  updatedAt: v.number(),
+})
+
+const currentRegistryProjectionAttempt = v.object({
+  businessId: v.id('businesses'),
+  attemptVersion: v.literal('current'),
+  offeringRef: v.optional(v.string()),
+  logicalKey: v.string(),
+  sourceHash: v.string(),
+  sourceVersion: v.literal(RegistryProjectionSourceVersion),
+  projectionKind: literalUnion(RegistryProjectionKindValues),
+  status: literalUnion(RegistryProjectionStatusValues),
+  retryCount: v.number(),
+  retryAfter: v.optional(v.number()),
+  lastErrorCode: v.optional(v.string()),
+  lastErrorRedacted: v.optional(v.string()),
+  startedAt: v.number(),
+  finishedAt: v.optional(v.number()),
+  latestReadback: v.optional(registryProjectionReadback),
+  staleThresholdAt: v.optional(v.number()),
+  repairAction: literalUnion(RegistryRepairActionValues),
+  repairResult: literalUnion(RegistryRepairResultValues),
+})
+
+const legacyRegistryProjectionAttempt = v.object({
+  businessId: v.id('businesses'),
+  serviceId: v.optional(v.id('businessServices')),
+  logicalKey: v.string(),
+  sourceHash: v.string(),
+  sourceVersion: v.literal(RegistryProjectionSourceVersion),
+  projectionKind: v.union(v.literal('business_catalog'), v.literal('service_catalog')),
+  status: literalUnion(RegistryProjectionStatusValues),
+  retryCount: v.number(),
+  retryAfter: v.optional(v.number()),
+  lastErrorCode: v.optional(v.string()),
+  lastErrorRedacted: v.optional(v.string()),
+  startedAt: v.number(),
+  finishedAt: v.optional(v.number()),
+  latestReadback: v.optional(legacyRegistryProjectionReadback),
+  staleThresholdAt: v.optional(v.number()),
+  repairAction: literalUnion(RegistryRepairActionValues),
+  repairResult: literalUnion(RegistryRepairResultValues),
+})
+
+const currentRegistrySearchDocument = v.object({
+  documentId: v.string(),
+  schemaVersion: v.literal(RegistrySearchDocumentSourceVersion),
+  businessSlug: v.string(),
+  offeringRef: v.string(),
+  businessName: v.string(),
+  name: v.string(),
+  category: v.string(),
+  categoryKey: v.string(),
+  suburb: v.string(),
+  stateTerritory: v.string(),
+  postcode: v.optional(v.string()),
+  publicStatus: v.literal('published'),
+  trustTier: literalUnion(TrustTierValues),
+  firstRequestMode: literalUnion(FirstRequestModeValues),
+  placeKeys: v.array(v.string()),
+  keywords: v.array(v.string()),
+  searchText: v.string(),
+  serviceAreaSummary: v.string(),
+  sourceHash: v.optional(v.string()),
+  generatedHash: v.string(),
+  updatedAt: v.number(),
+})
+
+const legacyRegistrySearchDocument = v.object({
+  documentId: v.string(),
+  schemaVersion: v.literal(RegistrySearchDocumentSourceVersion),
+  businessSlug: v.string(),
+  serviceSlug: v.string(),
+  businessName: v.string(),
+  serviceName: v.string(),
+  serviceCategory: v.string(),
+  serviceCategoryKey: v.string(),
+  suburb: v.string(),
+  stateTerritory: v.string(),
+  postcode: v.optional(v.string()),
+  publicStatus: v.literal('published'),
+  trustTier: literalUnion(TrustTierValues),
+  firstRequestMode: literalUnion(FirstRequestModeValues),
+  placeKeys: v.array(v.string()),
+  serviceKeywords: v.array(v.string()),
+  searchText: v.string(),
+  serviceArea: v.string(),
+  sourceHash: v.optional(v.string()),
+  generatedHash: v.string(),
+  updatedAt: v.number(),
+})
+
+const currentIndexStatus = v.object({
+  targetType: literalUnion(IndexTargetTypeValues),
+  targetRef: v.string(),
+  businessId: v.optional(v.id('businesses')),
+  offeringRef: v.optional(v.string()),
+  status: literalUnion(IndexStatusValues),
+  lastAttemptAt: v.number(),
+  sourceHash: v.string(),
+  sourceVersion: v.literal(RegistryProjectionSourceVersion),
+  staleReason: v.optional(v.string()),
+})
+
+const legacyIndexStatus = v.object({
+  targetType: v.union(v.literal('business'), v.literal('service'), v.literal('capability')),
+  targetRef: v.string(),
+  businessId: v.optional(v.id('businesses')),
+  serviceId: v.optional(v.id('businessServices')),
+  status: literalUnion(IndexStatusValues),
+  lastAttemptAt: v.number(),
+  sourceHash: v.string(),
+  sourceVersion: v.literal(RegistryProjectionSourceVersion),
+  staleReason: v.optional(v.string()),
+})
+
 export const registryTables = {
-  registryProjectionItems: defineTable({
-    businessId: v.id('businesses'),
-    offeringRef: v.optional(v.string()),
-    logicalKey: v.string(),
-    projectionKind: literalUnion(RegistryProjectionKindValues),
-    publicStatus: literalUnion(PublicStatusValues),
-    sourceHash: v.string(),
-    sourceVersion: v.literal(RegistryProjectionSourceVersion),
-    generatedHash: v.string(),
-    publicUrl: v.string(),
-    offeringCount: v.number(),
-    updatedAt: v.number(),
-  })
+  registryProjectionItems: defineTable(
+    v.union(currentRegistryProjectionItem, legacyRegistryProjectionItem),
+  )
     .index('by_logicalKey', ['logicalKey'])
     .index('by_business', ['businessId'])
     .index('by_offering', ['offeringRef']),
 
-  registryProjectionAttempts: defineTable({
-    businessId: v.id('businesses'),
-    offeringRef: v.optional(v.string()),
-    logicalKey: v.string(),
-    sourceHash: v.string(),
-    sourceVersion: v.literal(RegistryProjectionSourceVersion),
-    projectionKind: literalUnion(RegistryProjectionKindValues),
-    status: literalUnion(RegistryProjectionStatusValues),
-    retryCount: v.number(),
-    retryAfter: v.optional(v.number()),
-    lastErrorCode: v.optional(v.string()),
-    lastErrorRedacted: v.optional(v.string()),
-    startedAt: v.number(),
-    finishedAt: v.optional(v.number()),
-    latestReadback: v.optional(registryProjectionReadback),
-    staleThresholdAt: v.optional(v.number()),
-    repairAction: literalUnion(RegistryRepairActionValues),
-    repairResult: literalUnion(RegistryRepairResultValues),
-  })
+  registryProjectionAttempts: defineTable(
+    v.union(currentRegistryProjectionAttempt, legacyRegistryProjectionAttempt),
+  )
     .index('by_business_status', ['businessId', 'status'])
     .index('by_business_startedAt', ['businessId', 'startedAt'])
     .index('by_logicalKey', ['logicalKey']),
 
 
-  registrySearchDocuments: defineTable({
-    documentId: v.string(),
-    schemaVersion: v.literal(RegistrySearchDocumentSourceVersion),
-    businessSlug: v.string(),
-    offeringRef: v.string(),
-    businessName: v.string(),
-    name: v.string(),
-    category: v.string(),
-    categoryKey: v.string(),
-    suburb: v.string(),
-    stateTerritory: v.string(),
-    postcode: v.optional(v.string()),
-    publicStatus: v.literal('published'),
-    trustTier: literalUnion(TrustTierValues),
-    firstRequestMode: literalUnion(FirstRequestModeValues),
-    placeKeys: v.array(v.string()),
-    keywords: v.array(v.string()),
-    searchText: v.string(),
-    serviceAreaSummary: v.string(),
-    sourceHash: v.optional(v.string()),
-    generatedHash: v.string(),
-    updatedAt: v.number(),
-  })
+  registrySearchDocuments: defineTable(
+    v.union(currentRegistrySearchDocument, legacyRegistrySearchDocument),
+  )
     .index('by_documentId', ['documentId'])
     .index('by_business', ['businessSlug'])
     .index('by_offering', ['businessSlug', 'offeringRef'])
@@ -108,17 +222,9 @@ export const registryTables = {
     }),
 
 
-  indexStatus: defineTable({
-    targetType: literalUnion(IndexTargetTypeValues),
-    targetRef: v.string(),
-    businessId: v.optional(v.id('businesses')),
-    offeringRef: v.optional(v.string()),
-    status: literalUnion(IndexStatusValues),
-    lastAttemptAt: v.number(),
-    sourceHash: v.string(),
-    sourceVersion: v.literal(RegistryProjectionSourceVersion),
-    staleReason: v.optional(v.string()),
-  })
+  indexStatus: defineTable(
+    v.union(currentIndexStatus, legacyIndexStatus),
+  )
     .index('by_target', ['targetType', 'targetRef'])
     .index('by_target_status', ['targetType', 'targetRef', 'status'])
     .index('by_status_lastAttempt', ['status', 'lastAttemptAt']),

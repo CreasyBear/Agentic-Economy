@@ -1,4 +1,8 @@
-import { projectNeedsAttention, projectNoCurrentBusiness } from '@/modules/customer-request/customer-projection'
+import {
+  projectLegacyResubmitRequired,
+  projectNeedsAttention,
+  projectNoCurrentBusiness,
+} from '@/modules/customer-request/customer-projection'
 import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
 
 import type { CustomerRequestActionResult } from '../action-result'
@@ -21,6 +25,14 @@ export async function resumeCustomerRequest(
   ports: CompareResumePorts,
 ): Promise<CustomerRequestActionResult> {
   const current = await ports.loadCurrent(input.requestRef)
+  if (current.kind === 'resubmit_required') {
+    return current.principalId === input.principalId
+      ? projectLegacyResubmitRequired({
+        requestRef: current.requestId,
+        revision: current.revision,
+      })
+      : { kind: 'refused', reason: 'request_not_found' }
+  }
   if (current.kind !== 'current') {
     const shell = await ports.getSubmissionShell({
       requestId: input.requestRef,

@@ -401,6 +401,19 @@ export function projectNeedsAttention(input: Readonly<{
   return requestView({ ...input, state: 'needs_attention', nextAction: 'retry' })
 }
 
+export function projectLegacyResubmitRequired(input: Readonly<{
+  requestRef: string
+  revision: number
+}>): CustomerRequestView {
+  return requestView({
+    requestRef: input.requestRef,
+    revision: input.revision,
+    state: 'needs_attention',
+    summary: 'This saved Request uses an older route format. Submit it again to continue.',
+    nextAction: 'revise_request',
+  })
+}
+
 /**
  * No registered business is routeable on this network, so there is nothing to interpret against
  * and nothing to compare. Retrying cannot change that, so this states the condition and offers a
@@ -522,7 +535,7 @@ export function projectRouteProgress(input: Readonly<{
   total: number
   current: Readonly<{
     step: number
-    state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention'
+    state: 'queued' | 'leased' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention'
   }>
   updatedAt: number
   cancellationAvailable: boolean
@@ -576,7 +589,8 @@ export function projectRouteProgress(input: Readonly<{
             releaseMayStartAt: input.cancellationReleaseMayStartAt ?? input.updatedAt,
           }
         : {
-            state: 'not_available', reason: 'business_step_released',
+            state: 'not_available',
+            reason: input.current.state === 'leased' ? 'business_step_leased' : 'business_step_released',
             changedAt: input.cancellationUnavailableSince ?? input.updatedAt,
             ...(input.cancellationRequestedAt === undefined
               ? {}
@@ -733,7 +747,7 @@ export function projectCustomerActionStatus(input: Readonly<{
 }
 
 function progressActor(
-  state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention',
+  state: 'queued' | 'leased' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention',
 ): 'ae' | 'business' | 'customer' {
   if (state === 'awaiting_result') return 'business'
   if (state === 'needs_attention') return 'customer'

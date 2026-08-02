@@ -142,7 +142,7 @@ describe('rider service surfaces', () => {
     await waitFor(() => expect(screen.getByText('AE example')).toBeTruthy())
     const quoteCard = document.querySelector('[role="status"][tabindex="-1"]')
     if (quoteCard === null) throw new Error('quote card was not rendered')
-    expect(document.activeElement).toBe(quoteCard)
+    await waitFor(() => expect(document.activeElement).toBe(quoteCard))
     const contact = screen.getByRole('link', { name: 'Contact Demo Dental' })
     expect(contact.getAttribute('href')).toBe('/demo-dental')
     expect(contact.getAttribute('data-variant')).toBe('primary')

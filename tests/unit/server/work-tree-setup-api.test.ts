@@ -229,7 +229,7 @@ function readback(projectId: string) {
       updatedAt: 1,
     }],
   }
-  return { projectId, treeId: tree.treeId, principalId: 'principal:test', lineage: { kind: 'standalone' as const }, generation: 1, revision: 1, tree, events: [{ seq: 1, kind: 'decision_proposed' as const, operationKey: `${projectId}:development-mock:propose-decision`, generation: 1, revision: 1, payloadDigest: 'sha256:test', at: 1 }], receipts: [], hasMoreEvents: false }
+  return { projectId, treeId: tree.treeId, lineage: { kind: 'standalone' as const }, generation: 1, revision: 1, tree, events: [{ seq: 1, kind: 'decision_proposed' as const, operationKey: `${projectId}:development-mock:propose-decision`, generation: 1, revision: 1, payloadDigest: 'sha256:test', at: 1 }], receipts: [], hasMoreEvents: false }
 }
 
 function receipt(projectId: string) {
@@ -242,5 +242,6 @@ function receipt(projectId: string) {
     generation: 1 as const,
     revision: 1 as const,
     payloadDigest: 'sha256:test',
+    lineage: { kind: 'standalone' as const },
   }
 }

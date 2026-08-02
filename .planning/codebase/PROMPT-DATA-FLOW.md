@@ -349,13 +349,14 @@ none is presented as an observed production metric (`src/routes/api.answer.turn.
 | B3 | refresh uses final-attempt semantics twice | **deliberate graph-compilation retry**; document rather than collapse | `src/modules/customer-request/application/compare-resume/refresh.ts:58-69`; `src/modules/customer-request/application/interpret-compile/interpret.ts:128-196` |
 | B4 | route generation omitted for zero/unknown-cost routes | **customer safety policy**; retain until preparation-price policy changes | `src/modules/customer-request/compiler.ts:379-401` |
 | B5 | Workpool transport and native cancellation/readiness scheduler seams differ | **justified split** by execution guarantees | `convex/customerRequestRouteExecutionJournalPorts.ts:110-126`; `convex/customerRequestRouteExecutionCancelPorts.ts:89-188`; `node_modules/convex/src/server/scheduler.ts:21-29` |
-| B6 | legacy leased route projection could leak across subsystems | **resolved**; current run projection has no leased branch | `src/modules/customer-request/application/route-plan-projection/project-run.ts:12-60` |
+| B6 | historical `leased` route state crosses current projections | **resolved as explicit in-progress compatibility**; customer, support, evidence, and UI contracts preserve `leased`, while start/resume refuses a second run before release | `src/modules/customer-request/application/route-plan-projection/project-run.ts:50-55`; `convex/customerRequestApplication.ts:471-510,1529-1595`; `src/modules/customer-request/route-execution/machines/start-or-resume.ts:46-105` |
 | C1 | Promptfoo bypasses route/harness/persistence | **accepted model-behavior probe**; never end-to-end proof | `eval/answer/lib/evaluators.ts:793-820`; `eval/answer/promptfooconfig.yaml:152-182` |
 | C2 | outer harness accounting could collapse multi-step SDK call | **resolved**; one observation per SDK provider step, no duplicate outer model request | `src/modules/answer/internal/answer-tool-use-agent.ts:255-284,421-449`; `src/modules/answer-thread/internal/turns/agent.ts:83-90`; `src/modules/harness/run-collector.ts:404-448` |
 | C3 | live and fallback harness report/journal builders can diverge | **accepted fallback**; add parity check on first mismatch | `src/modules/answer-thread/internal/answer-turn-finalization.ts:164-191,481-560` |
 | C4 | eval/study/external verdict protocols do not convert | **accepted distinct trust domains**; require explicit conversion contract | `eval/answer/lib/suite.ts:120-151`; `src/modules/study/internal/pipeline.ts:253-429`; `src/modules/external-run/internal/gate.ts:250-297` |
 | C5 | request wall-clock and internal harness timing have different boundaries | **deliberate split**; p95/max are descriptive until transfer study | `tests/helpers/answer-turn-stream.ts:3-20`; `eval/answer/lib/evaluators.ts:463-572`; `eval/answer/lib/suite.ts:325-398` |
 | C6 | local captures can be mistaken for hosted/provider proof | **explicit evidence ceiling**; only executed smoke/receipt/readback can lift it | `tests/eval/answer-pipeline.test.ts:84-194`; `tests/deploy-smoke/answer-runtime-production-smoke.spec.ts:34-95,205-251` |
+| C7 | typed tool failure status could diverge between the live harness and durable answer record | **resolved before emission**; the harness classifies semantic `web.discover` error/unavailable results before journal/summary/timing capture, and the answer record reuses that status and result hash | `src/modules/harness/run-loop.ts`; `src/modules/answer-thread/internal/tool-runner.ts`; `tests/unit/answer-thread/tool-runner.test.ts` |
 
 ## Primary-source register
 
@@ -379,6 +380,12 @@ none is presented as an observed production metric (`src/routes/api.answer.turn.
   scheduling mechanics; AE retains identity, authority, budgets, validation, prepared effects,
   commits, evidence, projections, cancellation, and recovery (`src/modules/common/action.ts:76-115,164-187`; `node_modules/@convex-dev/workflow/README.md:20-35`; `node_modules/@convex-dev/workpool/src/client/index.ts:235-277`).
 - **2026-08-02 evidence conclusion:** fixture/source claims remain local; hosted/provider/customer
-  conclusions require executed evidence of the corresponding class. No test/build/lint command was
-  run for this document-only refresh, per assignment; the source audit and citation contract are the
-  deliverable (`tests/unit/planning/prompt-data-flow-map.test.ts:14-57`).
+  conclusions require executed evidence of the corresponding class. The current source gate proves
+  source behavior only; it does not upgrade local evidence to hosted or customer proof.
+- **2026-08-02 correction audit:** strict current/legacy supply unions now full-replace on cutover,
+  registry attempts carry an explicit current discriminator, replay requires exact catalog/registry/
+  discovery evidence, legacy projection JSON is identity/envelope checked, leased route state is
+  projected end to end, legacy inquiry identity is preserved, and semantic discovery failures have
+  one harness/durable status. Focused correction proof passed 178 tests in 12 files; the complete
+  `npm run test:release:source` gate then passed codegen dry-run, lint, typecheck, source unit and
+  integration suites, type/import/TypeScript/SEO/UI contracts, eval report, and production build.

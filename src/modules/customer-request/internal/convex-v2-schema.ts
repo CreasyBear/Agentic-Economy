@@ -725,6 +725,32 @@ export const customerRequestV2AggregateValue = v.object({
 })
 
 
+// Deprecated persisted-row compatibility: immutable revisions written before the
+// route inputs became explicit remain readable, but current writers never emit this shape.
+const {
+  resolvedInputs: _legacyResolvedInputs,
+  deferredInputs: _legacyDeferredInputs,
+  ...legacyRouteStepV2Fields
+} = routePlanV2Value.fields.steps.element.fields
+const legacyRoutePlanV2Value = v.object({
+  ...routePlanV2Value.fields,
+  steps: v.array(v.object(legacyRouteStepV2Fields)),
+})
+const legacyCustomerRequestV2AggregateValue = v.object({
+  ...customerRequestV2AggregateValue.fields,
+  plan: v.object({
+    ...customerRequestV2AggregateValue.fields.plan.fields,
+    routes: v.array(legacyRoutePlanV2Value),
+  }),
+})
+
+// Retained historical format: new commands cannot write it, but existing signed
+// ancestry remains readable and is returned to the Request flow as resubmit-only.
+export const customerRequestV2StoredAggregateValue = v.union(
+  customerRequestV2AggregateValue,
+  legacyCustomerRequestV2AggregateValue,
+)
+
 export const customerRequestV2Tables = {
   customerRequestAgentPrincipals: defineTable({
     principalId: v.string(), ownerId: v.string(), ownerTokenIdentifier: v.optional(v.string()),
@@ -750,7 +776,7 @@ export const customerRequestV2Tables = {
     .index('by_requestId', ['requestId']),
 
   customerRequestV2Revisions: defineTable({
-    requestId: v.string(), requestRevision: v.number(), aggregate: customerRequestV2AggregateValue,
+    requestId: v.string(), requestRevision: v.number(), aggregate: customerRequestV2StoredAggregateValue,
   }).index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),
 
   customerRequestV2RoutePlanHeads: defineTable({

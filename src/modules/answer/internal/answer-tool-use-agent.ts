@@ -70,6 +70,10 @@ import type { HarnessModelRequestRecord, HarnessModelUsage, HarnessRunLoop } fro
 const MAX_ROUNDS = 4
 const DEFAULT_LIMIT = 3
 
+type ModelCallAccountingState = {
+  stepRecorded: boolean
+}
+
 export type AnswerToolUseAgentInput = {
   query: string
   /** OpenRouter gateway config; defaults to the environment-backed config. */
@@ -248,7 +252,11 @@ async function runRealToolUseAgent(
 
   const tools = buildAnswerAgentTools(runToolCall)
 
-  const recordStep = (timingName: string, extraMetadata: Record<string, string | number | boolean | null>) =>
+  const recordStep = (
+    accounting: ModelCallAccountingState,
+    timingName: string,
+    extraMetadata: Record<string, string | number | boolean | null>,
+  ) =>
     (step: StepResult<ToolSet>): void => {
       const seq = modelRequests.length
       const resolvedModel = step.response.modelId ?? modelId
@@ -267,6 +275,7 @@ async function runRealToolUseAgent(
         ...(usage === undefined ? {} : { usage }),
         ...(costUsd === undefined ? { costUnavailableReason: 'price_table_missing' } : { costUsd }),
       })
+      accounting.stepRecorded = true
       timings.push(timingEntry(timingName, step.performance.responseTimeMs, {
         ...extraMetadata,
         provider: 'openrouter',
@@ -291,14 +300,14 @@ async function runRealToolUseAgent(
   const requestProse = (
     prompt: string,
     timingName: string,
-  ) => runGuardedModelCall(input, modelId, modelRequests, () => generateText({
+  ) => runGuardedModelCall(input, modelId, modelRequests, (accounting) => generateText({
     model: openRouterModel(config, modelId, { structuredOutputs: true }),
     instructions: buildToolUseAgentSystemPrompt(),
     prompt,
     output: proseOutput,
     temperature: 0.2,
     maxRetries: 0,
-    onStepEnd: recordStep(timingName, { tools: 0 }),
+    onStepEnd: recordStep(accounting, timingName, { tools: 0 }),
     ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
   }))
 
@@ -329,7 +338,7 @@ async function runRealToolUseAgent(
     }
     return true
   }
-  const result = await runGuardedModelCall(input, modelId, modelRequests, () => generateText({
+  const result = await runGuardedModelCall(input, modelId, modelRequests, (accounting) => generateText({
     model: openRouterModel(config, modelId, { structuredOutputs: true }),
     instructions: buildToolUseAgentSystemPrompt(),
     prompt: userPrompt,
@@ -337,11 +346,14 @@ async function runRealToolUseAgent(
     output: proseOutput,
     temperature: 0.2,
     maxRetries: 0,
-    prepareStep: () => (finalStepRequested ? { activeTools: [] } : undefined),
+    prepareStep: () => {
+      accounting.stepRecorded = false
+      return finalStepRequested ? { activeTools: [] } : undefined
+    },
     // Defer the existing round/budget stop once so the same SDK call can make
     // one structured, tool-less prose step after the final tool result.
     stopWhen: [toolStopCondition],
-    onStepEnd: recordStep('model.openrouter_round', { tools: Object.keys(tools).length }),
+    onStepEnd: recordStep(accounting, 'model.openrouter_round', { tools: Object.keys(tools).length }),
     ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
   }))
   if (toolBudgetExhausted) {
@@ -410,28 +422,30 @@ async function runGuardedModelCall<T>(
   input: AnswerToolUseAgentInput,
   modelId: string,
   modelRequests: HarnessModelRequestRecord[],
-  work: () => Promise<T>,
+  work: (accounting: ModelCallAccountingState) => Promise<T>,
 ): Promise<T> {
   const startedAt = Date.now()
-  const seq = modelRequests.length
+  const accounting: ModelCallAccountingState = { stepRecorded: false }
   try {
     return input.harnessLoop === undefined
-      ? await work()
-      : await input.harnessLoop.phase('model.provider_sequence', () => work())
+      ? await work(accounting)
+      : await input.harnessLoop.phase('model.provider_sequence', () => work(accounting))
   } catch (error) {
     const durationMs = Date.now() - startedAt
     const agentError = toAgentError(error)
-    recordModelRequest(input, modelRequests, {
-      seq,
-      provider: 'openrouter',
-      model: modelId,
-      status: 'error',
-      startedAt,
-      endedAt: startedAt + durationMs,
-      durationMs,
-      errorCode: agentError.code,
-      costUnavailableReason: 'request_failed',
-    })
+    if (!accounting.stepRecorded) {
+      recordModelRequest(input, modelRequests, {
+        seq: modelRequests.length,
+        provider: 'openrouter',
+        model: modelId,
+        status: 'error',
+        startedAt,
+        endedAt: startedAt + durationMs,
+        durationMs,
+        errorCode: agentError.code,
+        costUnavailableReason: 'request_failed',
+      })
+    }
     throw agentError
   }
 }

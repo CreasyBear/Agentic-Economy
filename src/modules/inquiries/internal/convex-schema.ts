@@ -13,6 +13,50 @@ const redactedJson = v.object({
   payloadHash: v.string(),
 })
 
+const inquiryThreadBase = v.object({
+  threadId: v.string(),
+  businessId: v.id('businesses'),
+  ownerId: v.id('owners'),
+  status: literalUnion(InquiryThreadStatusValues),
+  firstMessageId: v.string(),
+  sourceHash: v.string(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  version: v.number(),
+  customerReplyEmail: v.optional(v.string()),
+  readAt: v.optional(v.number()),
+  repliedAt: v.optional(v.number()),
+  closedAt: v.optional(v.number()),
+  originKind: v.optional(v.literal('answer_thread')),
+  originThreadId: v.optional(v.string()),
+})
+
+const currentInquiryThread = inquiryThreadBase.extend({
+  offeringRef: v.string(),
+})
+
+const legacyInquiryThread = inquiryThreadBase.extend({
+  serviceId: v.id('businessServices'),
+  capabilityKind: v.string(),
+})
+
+const governedSendTargetBinding = v.union(
+  v.object({
+    businessId: v.id('businesses'),
+    ownerId: v.id('owners'),
+    offeringRef: v.string(),
+    claimRef: v.string(),
+    recipientRef: v.string(),
+  }),
+  v.object({
+    businessId: v.id('businesses'),
+    ownerId: v.id('owners'),
+    serviceId: v.id('businessServices'),
+    capabilityKind: v.string(),
+    claimRef: v.string(),
+    recipientRef: v.string(),
+  }),
+)
 export const inquiryTables = {
   capabilityLaunchSupportRecords: defineTable({
     supportRecordId: v.string(), businessId: v.id('businesses'), capability: v.literal('human_inquiry_owner_inbox'),
@@ -25,28 +69,12 @@ export const inquiryTables = {
     operatorNextAction: v.string(), createdAt: v.number(), updatedAt: v.number(),
   }).index('by_supportRecordId', ['supportRecordId']),
 
-  inquiryThreads: defineTable({
-    threadId: v.string(),
-    businessId: v.id('businesses'),
-    ownerId: v.id('owners'),
-    offeringRef: v.string(),
-    status: literalUnion(InquiryThreadStatusValues),
-    firstMessageId: v.string(),
-    sourceHash: v.string(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    version: v.number(),
-    customerReplyEmail: v.optional(v.string()),
-    readAt: v.optional(v.number()),
-    repliedAt: v.optional(v.number()),
-    closedAt: v.optional(v.number()),
-    originKind: v.optional(v.literal('answer_thread')),
-    originThreadId: v.optional(v.string()),
-  })
+  inquiryThreads: defineTable(v.union(currentInquiryThread, legacyInquiryThread))
     .index('by_threadId', ['threadId'])
     .index('by_business_status', ['businessId', 'status'])
     .index('by_owner_updatedAt', ['ownerId', 'updatedAt'])
-    .index('by_offering_status', ['offeringRef', 'status']),
+    .index('by_offering_status', ['offeringRef', 'status'])
+    .index('by_service_status', ['serviceId', 'status']),
 
   inquiryCustomerAccessGrants: defineTable({
     accessId: v.string(),
@@ -164,13 +192,7 @@ export const inquiryTables = {
     threadId: v.string(),
     digest: v.string(),
     keyId: v.string(),
-    targetBinding: v.object({
-      businessId: v.id('businesses'),
-      ownerId: v.id('owners'),
-      offeringRef: v.string(),
-      claimRef: v.string(),
-      recipientRef: v.string(),
-    }),
+    targetBinding: governedSendTargetBinding,
     signature: v.string(),
     createdAt: v.number(),
   })

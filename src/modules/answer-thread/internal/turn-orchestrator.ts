@@ -306,10 +306,10 @@ function buildStreamAnswerTurnPhases(input: {
         responsePlan,
         retrievalFirst,
       }
-      if (retrievalFirst?.snapshot !== undefined || retrievalFirst?.errorCopyId !== undefined) {
-        return applyToolLedResult(nextState, retrievalFirst)
+      if (retrievalFirst === undefined) {
+        return nextState
       }
-      return nextState
+      return applyToolLedResult(nextState, retrievalFirst)
     },
     model: async ({ state }) => {
       if (state.captured !== undefined || state.errorCopyId !== undefined) {
@@ -374,7 +374,7 @@ function buildStreamAnswerTurnPhases(input: {
               followUpIntent: state.intent,
               searchContext: state.searchContext,
             },
-            state.retrievalFirst?.toolCalls ?? [],
+            state.toolCalls,
             undefined,
             state.responsePlan?.toolPolicy,
           )

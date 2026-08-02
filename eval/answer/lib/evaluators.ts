@@ -557,6 +557,8 @@ async function runAnswerTurnInStore(input: {
     const timingEntries = evidence?.timings ?? []
     const harnessRun = evidence?.harnessRun
     const toolQueries = readToolQueries(evidence)
+    const toolIds = (evidence?.toolCalls ?? []).map((call) => call.toolId)
+    const toolStatuses = (evidence?.toolCalls ?? []).map((call) => call.status)
     const timingNames = timingEntries.map((timing) => timing.name)
     const artifactKinds = readArtifactKinds(frames, complete)
     const workSteps = readWorkSteps(frames, evidence)
@@ -588,6 +590,8 @@ async function runAnswerTurnInStore(input: {
       ...requestMetrics,
       ...harnessMetrics,
       toolQueries,
+      toolIds,
+      toolStatuses,
       timingNames,
       artifactKinds,
       totalTimingMs,
@@ -660,6 +664,8 @@ function evaluateAnswerTurnExpectations(input: {
   status: AnswerTurnEvalResult['status']
   slugs: readonly string[]
   toolQueries: readonly string[]
+  toolIds: readonly string[]
+  toolStatuses: readonly string[]
   timingNames: readonly string[]
   artifactKinds: readonly string[]
   totalTimingMs: number
@@ -683,6 +689,8 @@ function evaluateAnswerTurnExpectations(input: {
     status,
     slugs,
     toolQueries,
+    toolIds,
+    toolStatuses,
     timingNames,
     artifactKinds,
     totalTimingMs,
@@ -740,6 +748,11 @@ function evaluateAnswerTurnExpectations(input: {
   if (!sameStringList(slugs, expected.slugs)) {
     problems.push(`expected slugs [${expected.slugs.join(', ')}], got [${slugs.join(', ')}]`)
   }
+  if (expected.toolIds !== undefined && !sameStringList(toolIds, expected.toolIds)) {
+    problems.push(
+      `tool identity expectation failed (${expected.toolIds.length} expected, ${toolIds.length} observed)`,
+    )
+  }
   if (expected.toolQueries !== undefined && !sameStringList(toolQueries, expected.toolQueries)) {
     problems.push(`expected tool queries [${expected.toolQueries.join(', ')}], got [${toolQueries.join(', ')}]`)
   }
@@ -786,7 +799,7 @@ function evaluateAnswerTurnExpectations(input: {
   }
   if (expected.harnessToolsInvoked !== undefined && !sameStringList(harnessToolsInvoked, expected.harnessToolsInvoked)) {
     problems.push(
-      `expected harness tools [${expected.harnessToolsInvoked.join(', ')}], got [${harnessToolsInvoked.join(', ')}]`,
+      `harness tool expectation failed (${expected.harnessToolsInvoked.length} expected, ${harnessToolsInvoked.length} observed)`,
     )
   }
   for (const phase of expected.harnessPhases ?? []) {

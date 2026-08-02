@@ -226,12 +226,14 @@ export const storefrontEnrichDraftAction = defineAction({
     ],
     developmentAttemptTimeoutMs: 30_000,
   },
-  run: async ({ data }) => {
+  run: async ({ data, context }) => {
     const [{ enrichBusinessFromWebSearch }, { openRouterGatewayConfig }] = await Promise.all([
       import('@/modules/storefront/public'),
       import('@/modules/model-gateway/public'),
     ])
-    return enrichBusinessFromWebSearch(data, openRouterGatewayConfig())
+    return enrichBusinessFromWebSearch(data, openRouterGatewayConfig(), {
+      ...(context.onModelRequest === undefined ? {} : { onModelRequest: context.onModelRequest }),
+    })
   },
 })
 

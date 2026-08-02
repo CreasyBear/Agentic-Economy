@@ -103,9 +103,15 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
     const persisted = await backend.run(async (ctx) => ({
       heads: await ctx.db.query('customerRequestV2Heads').collect(),
       revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
+      generations: await ctx.db.query('customerRequestV2RoutePlanGenerations').collect(),
       commands: await ctx.db.query('customerRequestV2Commands').collect(),
     }))
-    expect(persisted).toMatchObject({ heads: [{}], revisions: [{}], commands: [{}] })
+    expect(persisted).toMatchObject({ heads: [{}], revisions: [{}], generations: [{}], commands: [{}] })
+    const currentStep = persisted.generations[0]?.routeGeneration.routes[0]?.steps[0]
+    expect(currentStep).toEqual(expect.objectContaining({
+      resolvedInputs: expect.any(Array),
+      deferredInputs: expect.any(Array),
+    }))
   })
 
   it('admits a conservative route snapshot when the same publication readiness is extended before commit', async () => {
@@ -695,6 +701,81 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
       expectedRevision: 0, expectedRouteGeneration: 0, aggregate: forged, routeGeneration,
     })).resolves.toEqual({ kind: 'aggregate_invalid' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
+  })
+  it('retains a legacy embedded-route revision without widening current rows', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    const {
+      planRevisionId: _planRevisionId,
+      planDigest: _planDigest,
+      createdAt,
+      ...planMaterial
+    } = aggregate.plan
+    const legacyRoutes = routeGeneration.routes.map((route) => ({
+      ...route,
+      steps: route.steps.map(({ resolvedInputs: _resolvedInputs, deferredInputs: _deferredInputs, ...step }) => step),
+    }))
+    const legacyPlanMaterial = { ...planMaterial, routes: legacyRoutes }
+    const planDigest = canonicalDigest(legacyPlanMaterial)
+    const legacyPlan = {
+      planRevisionId: `plan:${planDigest}`,
+      ...legacyPlanMaterial,
+      planDigest,
+      createdAt,
+    }
+    const { aggregateDigest: _aggregateDigest, ...aggregateMaterial } = aggregate
+    const legacyAggregateMaterial = { ...aggregateMaterial, plan: legacyPlan }
+    const legacyAggregate = {
+      ...legacyAggregateMaterial,
+      aggregateDigest: canonicalDigest(legacyAggregateMaterial),
+    }
+
+    const malformedLegacyAggregate = structuredClone(legacyAggregate)
+    const malformedStep = malformedLegacyAggregate.plan.routes[0]?.steps[0]
+    if (malformedStep === undefined) throw new Error('legacy route step missing')
+    Reflect.set(malformedStep, 'resolvedInputs', [])
+    await expect(backend.run(async (ctx) => (
+      ctx.db.insert('customerRequestV2Revisions', {
+        requestId: aggregate.snapshot.requestId,
+        requestRevision: aggregate.snapshot.revision,
+        aggregate: malformedLegacyAggregate,
+      })
+    ))).rejects.toThrow()
+
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('customerRequestV2Revisions', {
+        requestId: aggregate.snapshot.requestId,
+        requestRevision: aggregate.snapshot.revision,
+        aggregate: legacyAggregate,
+      })
+      await ctx.db.insert('customerRequestV2Heads', {
+        requestId: aggregate.snapshot.requestId,
+        principalId: aggregate.snapshot.principalId,
+        delegatedAgentId: aggregate.snapshot.delegatedAgentId,
+        currentRevision: aggregate.snapshot.revision,
+        currentAggregateDigest: legacyAggregate.aggregateDigest,
+        createdAt: aggregate.snapshot.recordedAt,
+        updatedAt: aggregate.snapshot.recordedAt,
+      })
+      await ctx.db.insert('customerRequestV2Commands', {
+        commandKey: 'command:v2:legacy-replay',
+        commandDigest: 'sha256:' + '4'.repeat(64),
+        principalId: aggregate.snapshot.principalId,
+        requestId: aggregate.snapshot.requestId,
+        expectedRevision: 0,
+        resultingRevision: aggregate.snapshot.revision,
+        aggregateDigest: legacyAggregate.aggregateDigest,
+        committedAt: aggregate.snapshot.recordedAt,
+      })
+    })
+
+    const persisted = await backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestV2Revisions').first()
+    ))
+    expect(persisted?.aggregate).toEqual(legacyAggregate)
+    expect(persisted?.aggregate).toHaveProperty('plan.routes')
+    expect(persisted?.aggregate).not.toHaveProperty('plan.routes.0.steps.0.resolvedInputs')
+    expect(persisted?.aggregate).not.toHaveProperty('plan.routes.0.steps.0.deferredInputs')
   })
 
 

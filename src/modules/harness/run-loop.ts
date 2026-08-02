@@ -80,6 +80,7 @@ export type HarnessRunLoopToolInput<Input = unknown, Output = unknown> = Omit<
   tool: HarnessToolDefinition<Input, Output>
   input: Input
   toolCallId?: string
+  classifyResult?: (result: RunHarnessToolOutcome['result']) => RunHarnessToolOutcome['result']
 }
 
 export type HarnessRunLoopToolBatchInput = HarnessRunLoopToolInput<unknown, unknown>
@@ -264,7 +265,10 @@ export class HarnessRunLoop {
     })
 
     try {
-      const outcome = await this.withRunGuards((signal) => runHarnessTool(this.toolInput(input, toolCallId, signal)))
+      const rawOutcome = await this.withRunGuards((signal) => runHarnessTool(this.toolInput(input, toolCallId, signal)))
+      const outcome = input.classifyResult === undefined
+        ? rawOutcome
+        : { ...rawOutcome, result: input.classifyResult(rawOutcome.result) }
       const status = outcome.result.status
       this.emit({
         type: status === 'ok' ? 'tool.completed' : 'tool.failed',

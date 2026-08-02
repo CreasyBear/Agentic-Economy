@@ -164,10 +164,9 @@ const submitInquiryResult = v.union(
   })
 )
 
-const inboxInquiryProjection = v.object({
+const inboxInquiryProjectionBase = v.object({
   threadId: v.string(),
   businessId: v.string(),
-  offeringRef: v.string(),
   businessName: v.string(),
   offeringName: v.string(),
   status: literalUnion(InquiryThreadStatusValues),
@@ -185,6 +184,11 @@ const inboxInquiryProjection = v.object({
     href: v.string(),
   })),
 })
+
+const inboxInquiryProjection = v.union(
+  inboxInquiryProjectionBase.extend({ offeringRef: v.string() }),
+  inboxInquiryProjectionBase.extend({ serviceId: v.string(), capabilityKind: v.string() }),
+)
 
 const inboxReadback = v.object({
   ownerId: v.string(),
@@ -597,11 +601,10 @@ const operatorOperationRef = v.object({
   webhookEventId: v.optional(v.string()),
 })
 
-const operatorReconstructionRow = v.object({
+const operatorReconstructionRowBase = v.object({
   rowId: v.string(),
   threadId: v.string(),
   businessId: v.string(),
-  offeringRef: v.string(),
   status: literalUnion(InquiryThreadStatusValues),
   sourceHash: v.string(),
   correlationIds: v.array(v.string()),
@@ -614,6 +617,11 @@ const operatorReconstructionRow = v.object({
   operationRefs: v.array(operatorOperationRef),
   updatedAt: v.number(),
 })
+
+const operatorReconstructionRow = v.union(
+  operatorReconstructionRowBase.extend({ offeringRef: v.string() }),
+  operatorReconstructionRowBase.extend({ serviceId: v.string(), capabilityKind: v.string() }),
+)
 
 const operatorReconstructionSummary = v.object({
   threads: v.number(),
@@ -756,6 +764,15 @@ export const submitPublicInquiry = mutationGeneric({
       }
       return summarizeSubmitError(result)
     }
+    if (result.thread.offeringRef === undefined) {
+      return {
+        kind: 'error' as const,
+        code: 'inquiry_integrity_conflict' as const,
+        retryable: false,
+        reason: 'A submitted inquiry must have a concrete offering reference.',
+      }
+    }
+
 
     const bridged = await enqueueInquiryNotificationDispatches(
       db,

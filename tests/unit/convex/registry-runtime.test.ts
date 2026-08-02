@@ -55,6 +55,69 @@ describe('Convex registry public read paths', () => {
     expect(db.reads.some((read) => read.operation === 'collect')).toBe(false)
     expect(db.reads.every((read) => ['businesses', 'suppressionRules', 'businessSupplyProjectionSnapshots'].includes(read.tableName))).toBe(true)
   })
+  it('decodes a legacy JSON projection without losing Offering identity', async () => {
+    const db = new FakeDb()
+    const businessId = 'businesses:legacy'
+    db.seed('businesses', {
+      _id: businessId,
+      _creationTime: 1,
+      ownerId: 'owners:legacy',
+      slug: 'legacy-business',
+      name: 'Legacy Business',
+      category: 'Emergency plumbing',
+      suburb: 'Parramatta',
+      stateTerritory: 'NSW',
+      publicStatus: 'published',
+      trustTier: 'claimed',
+    })
+    db.seed('businessSupplyProjectionSnapshots', {
+      _id: 'businessSupplyProjectionSnapshots:legacy',
+      _creationTime: 1,
+      businessId,
+      sourceRevision: 1,
+      sourceDigest: 'digest:legacy',
+      observedAt: 1,
+      disposition: 'current',
+      status: 'current',
+      projectionJson: JSON.stringify({
+        business: {
+          businessId,
+          slug: 'legacy-business',
+          name: 'Legacy Business',
+          category: 'Emergency plumbing',
+          suburb: 'Parramatta',
+          stateTerritory: 'NSW',
+          publicUrl: '/legacy-business',
+          trustTier: 'claimed',
+        },
+        offerings: [{
+          offering: {
+            offeringRef: 'offering:legacy:pipe-repair',
+            revision: 1,
+            name: 'Emergency pipe repair',
+            category: 'Emergency plumbing',
+            summary: 'Emergency plumbing help.',
+          },
+          accessPaths: [],
+          support: { integrated: false, routeable: false, reasons: [] },
+        }],
+        sourceRevision: 1,
+        sourceDigest: 'digest:legacy',
+        observedAt: 1,
+        disposition: 'current',
+      }),
+    })
+
+    const result = await detailHandler({ db }, { slug: 'legacy-business' })
+
+    expect(result).toMatchObject({
+      kind: 'found',
+      business: {
+        slug: 'legacy-business',
+        offerings: [{ offeringRef: 'offering:legacy:pipe-repair', name: 'Emergency pipe repair' }],
+      },
+    })
+  })
 
   it('uses the bounded registry search index and hydrates canonical snapshots', async () => {
     const db = new FakeDb()

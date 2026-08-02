@@ -363,6 +363,111 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     }
   })
 
+  it('records one provider request when structured output parsing fails after the step', async () => {
+    const modelRequests: unknown[] = []
+    const server = await startOpenRouterContractServer([{
+      id: 'chatcmpl-invalid-structured-output',
+      model: 'test-model',
+      choices: [{
+        finish_reason: 'stop',
+        message: { role: 'assistant', content: 'not json' },
+      }],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 2,
+        total_tokens: 12,
+      },
+    }])
+    const restoreOpenRouter = server.installEnv()
+
+    try {
+      await expect(
+        runAnswerToolUseAgent({
+          query: 'compare the first two',
+          disableTools: true,
+          onModelRequest: (record) => modelRequests.push(record),
+        }),
+      ).rejects.toMatchObject({ code: 'request_failed' })
+
+      expect(modelRequests).toEqual([
+        expect.objectContaining({
+          responseId: 'chatcmpl-invalid-structured-output',
+          status: 'ok',
+          usage: expect.objectContaining({ totalTokens: 12 }),
+        }),
+      ])
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+
+  it('records a failed provider step after a successful tool-call step', async () => {
+    const modelRequests: unknown[] = []
+    const server = await startOpenRouterContractServer([
+      openRouterToolResponse(
+        [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+        { id: 'chatcmpl-tool-before-failure' },
+      ),
+      undefined,
+    ])
+    const restoreOpenRouter = server.installEnv()
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
+
+    try {
+      await expect(
+        runAnswerToolUseAgent({
+          query: 'paramata',
+          model: 'test-model',
+          onModelRequest: (record) => modelRequests.push(record),
+        }),
+      ).rejects.toMatchObject({ code: 'request_failed' })
+
+      expect(server.requests).toHaveLength(2)
+      expect(server.requests[1]?.messages.some((message) => message.role === 'tool')).toBe(true)
+      expect(modelRequests).toHaveLength(2)
+      expect(modelRequests[0]).toMatchObject({
+        seq: 0,
+        provider: 'openrouter',
+        model: 'test-model',
+        status: 'ok',
+        responseId: 'chatcmpl-tool-before-failure',
+        stopReason: 'tool_calls',
+      })
+      expect(modelRequests[1]).toMatchObject({
+        seq: 1,
+        provider: 'openrouter',
+        model: 'test-model',
+        status: 'error',
+        errorCode: 'request_failed',
+        costUnavailableReason: 'request_failed',
+      })
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+      }
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+
   it('recovers a misspelled query when the model chooses registry.search("parramatta")', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],

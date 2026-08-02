@@ -1,4 +1,5 @@
 import type { BusinessId } from '@/modules/common/ids'
+import { isLegacyInquiryThreadRecord } from '../schema'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { notificationsForThread } from '../ledger/facts'
@@ -123,11 +124,10 @@ function operatorReconstructionRow(state: InquirySourceState, thread: InquiryThr
       ...(operation.notificationId === undefined ? {} : { notificationId: operation.notificationId }),
     }))
 
-  return {
+  const common = {
     rowId: `inquiry-operator:${thread.threadId}`,
     threadId: thread.threadId,
     businessId: thread.businessId,
-    offeringRef: thread.offeringRef,
     status: thread.status,
     sourceHash: thread.sourceHash,
     correlationIds: uniqueStrings([
@@ -153,6 +153,19 @@ function operatorReconstructionRow(state: InquirySourceState, thread: InquiryThr
     funnelRefs,
     operationRefs,
     updatedAt: thread.updatedAt,
+  }
+
+  if (isLegacyInquiryThreadRecord(thread)) {
+    return {
+      ...common,
+      serviceId: thread.serviceId,
+      capabilityKind: thread.capabilityKind,
+    }
+  }
+
+  return {
+    ...common,
+    offeringRef: thread.offeringRef,
   }
 }
 function operatorNotificationRef(notification: InquiryNotificationRecord): InquiryOperatorNotificationRef {

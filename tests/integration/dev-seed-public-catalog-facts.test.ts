@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { convexModules as modules } from '../helpers/convex-fixtures'
+import type { BusinessSupplyProjection } from '../../src/modules/catalog/public'
+import { readBusinessSupplyProjectionSnapshot } from '../../convex/businessSupplyProjectionSnapshot'
 
 type SeedBackend = TestConvex<typeof schema>
 
@@ -105,11 +107,18 @@ describe('dev-seeded public catalog decision facts', () => {
 
     // The stored price is only worth writing if the projection carries it out
     // again: the snapshot is what every public read is served from.
-    const projectedPrices = await backend.run(async (ctx) => (
-      (await ctx.db.query('businessSupplyProjectionSnapshots').collect()).flatMap((snapshot) => (
-        snapshot.projection?.offerings.map((item) => item.offering.price ?? null) ?? []
+    const projectedPrices = await backend.run(async (ctx) => {
+      const snapshots = await ctx.db.query('businessSupplyProjectionSnapshots').collect()
+      const projections = snapshots.map((snapshot) => (
+        readBusinessSupplyProjectionSnapshot(
+          'projection' in snapshot ? snapshot.projection : snapshot.projectionJson,
+          'catalog',
+        )
       ))
-    ))
+      return projections.flatMap((projection) => (
+        projection.offerings.map((item: BusinessSupplyProjection['offerings'][number]) => item.offering.price ?? null)
+      ))
+    })
     expect(projectedPrices.filter((price) => price !== null)).not.toHaveLength(0)
     expect(projectedPrices.filter((price) => price !== null).every((price) => price?.currency === 'AUD')).toBe(true)
     // An Offering without a price still projects, exactly as it did before.

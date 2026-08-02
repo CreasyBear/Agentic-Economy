@@ -74,7 +74,7 @@ async function streamRetrievalFirstTurn(
   const result = await runAnswerToolCall({
     toolId: 'registry.search',
     input: searchInput,
-    turnId: 'pending',
+    turnId: ctx.turnId,
     seq: 0,
     harnessLoop: ctx.harness.loop,
   })
@@ -119,6 +119,15 @@ async function streamRetrievalFirstTurn(
     }
 
     const discovery = await discoverImportedClaims(ctx, searchInput)
+    if (discovery.status === 'error') {
+      return {
+        snapshot: undefined,
+        toolCalls: [result.record, discovery.record],
+        allowedSlugs: result.allowedSlugs,
+        errorCopyId: undefined,
+        gate: undefined,
+      }
+    }
     const snapshot = withFollowUpLayout(
       buildDeterministicEmptySnapshot({
         query: ctx.query,
@@ -259,6 +268,7 @@ async function discoverImportedClaims(
 ): Promise<{
   claims: readonly WebDiscoveryClaim[]
   record: Awaited<ReturnType<typeof runAnswerToolCall>>['record']
+  status: 'complete' | 'skipped' | 'error'
 }> {
   const startedAt = Date.now()
   ctx.workLog.emit({
@@ -289,21 +299,28 @@ async function discoverImportedClaims(
   const claims = result.record.status === 'complete' && parsed.success && parsed.data.kind === 'found'
     ? parsed.data.claims
     : []
+  const discoveryStatus = parsed.success && parsed.data.kind === 'unavailable'
+    ? 'skipped'
+    : result.record.status !== 'complete' || !parsed.success || parsed.data.kind === 'error'
+      ? 'error'
+      : 'complete'
   ctx.workLog.emit({
     id: 'search.web.discovery',
     phase: 'search',
-    status: result.record.status === 'complete' ? 'complete' : 'error',
+    status: discoveryStatus,
     title: 'Checking the web for unlisted businesses',
-    summary: result.record.status !== 'complete'
+    summary: discoveryStatus === 'error'
       ? 'The web discovery check did not complete.'
-      : claims.length === 0
-        ? 'No additional web businesses were found for this request.'
-        : `${claims.length} real business${claims.length === 1 ? '' : 'es'} found on the web, separate from AE listings.`,
+      : discoveryStatus === 'skipped'
+        ? 'Web discovery is not configured for this request.'
+        : claims.length === 0
+          ? 'No additional web businesses were found for this request.'
+          : `${claims.length} real business${claims.length === 1 ? '' : 'es'} found on the web, separate from AE listings.`,
     detailRows: [{ label: 'Imported claims', value: String(claims.length) }],
     startedAtMs: startedAt,
     completedAtMs: Date.now(),
   })
-  return { claims, record: result.record }
+  return { claims, record: result.record, status: discoveryStatus }
 }
 
 

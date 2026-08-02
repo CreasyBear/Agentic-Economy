@@ -95,6 +95,79 @@ describe('current V2 Customer Request application path', () => {
       },
     })
   })
+  it('resumes a legacy embedded-route aggregate as resubmit-only needs attention', async () => {
+    const backend = await convexTestWithWorkers()
+    await seedSandboxV2Supply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (input === undefined) throw new Error('sandbox request input missing')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(modelResponse({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        facts: [{ inputKey: input.key, value: 'Legacy route recovery' }],
+      }],
+    })))
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+    const requestRef = 'request:v2:legacy-embedded-route'
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:legacy-embedded-route',
+      requestId: requestRef,
+      delegatedAgentId: 'agent:external:v2',
+      customerJob: 'Legacy route recovery',
+      routing: { networkId: 'ae:public' },
+    })
+    expect(submitted).toMatchObject({
+      kind: 'request', requestRef, revision: 1, state: 'ready_to_compare',
+    })
+
+    const current = await backend.query(internal.customerRequestV2.getCurrentAggregate, { requestId: requestRef })
+    const generation = await backend.query(internal.customerRequestV2.getCurrentRoutePlanGeneration, {
+      requestId: requestRef,
+    })
+    if (current.kind !== 'current' || generation.kind !== 'found') {
+      throw new Error('legacy route fixture missing')
+    }
+    const legacyRoutes = generation.routeGeneration.routes.map((route) => ({
+      ...route,
+      steps: route.steps.map(({ resolvedInputs: _resolvedInputs, deferredInputs: _deferredInputs, ...step }) => step),
+    }))
+    const { aggregateDigest: _aggregateDigest, ...aggregateMaterial } = current.aggregate
+    const legacyAggregateMaterial = {
+      ...aggregateMaterial,
+      plan: { ...aggregateMaterial.plan, routes: legacyRoutes },
+    }
+    const legacyAggregate = {
+      ...legacyAggregateMaterial,
+      aggregateDigest: canonicalDigest(legacyAggregateMaterial),
+    }
+    await backend.run(async (ctx) => {
+      const revision = await ctx.db.query('customerRequestV2Revisions')
+        .withIndex('by_requestId_and_requestRevision', (query) => (
+          query.eq('requestId', requestRef).eq('requestRevision', 1)
+        )).unique()
+      const head = await ctx.db.query('customerRequestV2Heads')
+        .withIndex('by_requestId', (query) => query.eq('requestId', requestRef)).unique()
+      if (revision === null || head === null) throw new Error('legacy request rows missing')
+      await ctx.db.patch(revision._id, { aggregate: legacyAggregate })
+      await ctx.db.patch(head._id, { currentAggregateDigest: legacyAggregate.aggregateDigest })
+    })
+
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: requestRef,
+    })).resolves.toMatchObject({
+      kind: 'resubmit_required', requestId: requestRef, revision: 1,
+    })
+    await expect(customer.action(api.customerRequestApplication.resume, {
+      requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', requestRef, revision: 1, state: 'needs_attention',
+      nextAction: 'revise_request',
+      summary: expect.stringContaining('older route format'),
+    })
+  })
+
 
   it('uses eligible V2 supply, opaque interpretation and one durable exact aggregate', async () => {
     const backend = await convexTestWithWorkers()

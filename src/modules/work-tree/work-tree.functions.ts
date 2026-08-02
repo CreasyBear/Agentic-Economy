@@ -13,22 +13,15 @@ import {
 import {
   gardenerVerbSchema,
   workTreeApprovalAuthoritySchema,
+  workTreeLineageSchema,
   workTreeSchema,
   type GardenerVerb,
   type WorkTree,
+  type WorkTreeLineage,
 } from './public'
 
-export const workTreeLineageSchema = z.discriminatedUnion('kind', [
-  z.strictObject({
-    kind: z.literal('customer_request'),
-    requestRef: z.string().trim().min(1).max(200),
-    revision: z.number().int().min(1),
-  }),
-  z.strictObject({
-    kind: z.literal('standalone'),
-  }),
-])
-export type WorkTreeLineage = z.infer<typeof workTreeLineageSchema>
+export { workTreeLineageSchema }
+export type { WorkTreeLineage }
 
 export const workTreeCreateInputSchema = z.strictObject({
   idempotencyKey: z.string().trim().min(1).max(200),
@@ -51,10 +44,7 @@ export const workTreeClaimInputSchema = z.strictObject({
 export type WorkTreeClaimInput = z.infer<typeof workTreeClaimInputSchema>
 
 const workTreeActorSchema = z.strictObject({
-  principalId: z.string().min(1),
-  ownerId: z.string().min(1),
-  credentialId: z.string().min(1).optional(),
-  source: z.enum(['human_source', 'browser_guest', 'customer_request_agent']).optional(),
+  source: z.enum(['human_source', 'browser_guest', 'customer_request_agent']),
 })
 
 const workTreeDecisionReadbackSchema = z.strictObject({
@@ -219,7 +209,6 @@ export type WorkTreeEventReadback = z.infer<typeof workTreeEventReadbackSchema>
 export const workTreeReadbackSchema = z.strictObject({
   projectId: z.string(),
   treeId: z.string(),
-  principalId: z.string(),
   lineage: workTreeLineageSchema,
   generation: z.number().int().positive(),
   revision: z.number().int().positive(),
@@ -241,6 +230,7 @@ export const workTreeCreationReceiptSchema = z.strictObject({
     seq: z.literal(1),
   }),
   actor: workTreeActorSchema.optional(),
+  lineage: workTreeLineageSchema,
   generation: z.literal(1),
   revision: z.literal(1),
   payloadDigest: z.string(),

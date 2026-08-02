@@ -84,6 +84,7 @@ export type ExportCustomerEvidenceQueryResult = Readonly<
         step: number
         state:
           | 'queued'
+          | 'leased'
           | 'ready_to_contact'
           | 'contacting'
           | 'awaiting_result'
@@ -287,6 +288,7 @@ export type SupportProblemExportResult = Readonly<
             state:
               | 'blocked'
               | 'queued'
+              | 'leased'
               | 'ready_to_contact'
               | 'contacting'
               | 'awaiting_result'

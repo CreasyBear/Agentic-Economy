@@ -148,8 +148,9 @@ export function projectSupportProblemList(input: Readonly<{
 }
 
 function supportAttemptState(
-  state: 'queued' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
-): 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'failed' | 'outcome_unknown' | 'cancelled' {
+  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
+): 'queued' | 'leased' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'failed' | 'outcome_unknown' | 'cancelled' {
+  if (state === 'leased') return 'leased'
   if (state === 'dispatched') return 'contacting'
   if (state === 'accepted') return 'awaiting_result'
   if (state === 'succeeded') return 'completed'
@@ -157,7 +158,7 @@ function supportAttemptState(
 }
 
 function supportAttemptWasReleased(
-  state: 'queued' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
     | undefined,
 ): boolean {
   return state === 'dispatched' || state === 'accepted' || state === 'succeeded'
@@ -211,7 +212,7 @@ function supportProblemReconstruction(input: Readonly<{
   reservations: readonly Readonly<{ reservedSpend: { currency: string; amountMinor: number } }>[]
   attempts: readonly Readonly<{
     position: number
-    state: 'queued' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+    state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
     attemptRef: string
     evidence?: readonly AttemptEvidenceItem[]
   }>[]
@@ -374,10 +375,12 @@ export type SupportProblemExportMaterial = Readonly<{
     businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   }>
   revocation: null | { recordedAt: number }
-  reservations: readonly Readonly<{ reservedSpend: { currency: string; amountMinor: number } }>[]
+  reservations: readonly Readonly<{
+    reservedSpend: { currency: string; amountMinor: number }
+  }>[]
   attempts: readonly Readonly<{
     position: number
-    state: 'queued' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+    state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
     attemptRef: string
     evidence?: readonly AttemptEvidenceItem[]
   }>[]

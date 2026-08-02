@@ -53,7 +53,7 @@ export const securityTables = {
 
   adminMemberships: defineTable({
     clerkUserId: v.string(),
-    tokenIdentifier: v.string(),
+    tokenIdentifier: v.optional(v.string()),
     role: literalUnion(AdminRoleValues),
     state: literalUnion(AdminMembershipStateValues),
     grantedBy: v.string(),

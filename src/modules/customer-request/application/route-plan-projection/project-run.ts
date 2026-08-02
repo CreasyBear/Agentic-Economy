@@ -19,7 +19,8 @@ export type StoredRouteRunProjection = Readonly<{
   totalSteps: number
   completedSteps: number
   currentPosition: number
-  currentState: 'queued' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+  // A leased step is active in route transport before provider completion.
+  currentState: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
   businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
   resultJson?: string
   cancellationReleaseMayStartAt?: number
@@ -46,10 +47,12 @@ export function isPartialRouteResult(result: JsonValue | undefined): result is J
 
 export function customerProgressState(
   state: StoredRouteRunProjection['currentState'],
-): 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention' {
+): 'queued' | 'leased' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention' {
   switch (state) {
     case 'queued':
       return 'queued'
+    case 'leased':
+      return 'leased'
     case 'dispatched':
       return 'contacting'
     case 'accepted':

@@ -1,4 +1,17 @@
 import { z } from 'zod'
+export const workTreeLineageSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('customer_request'),
+    requestRef: z.string().trim().min(1).max(200),
+    revision: z.number().int().min(1),
+    routeGenerationRef: z.string().trim().min(1).max(300),
+    routeRef: z.string().trim().min(1).max(300),
+  }),
+  z.strictObject({
+    kind: z.literal('standalone'),
+  }),
+])
+export type WorkTreeLineage = z.infer<typeof workTreeLineageSchema>
 
 /**
  * T26 — the work-node contract every framework module consumes.

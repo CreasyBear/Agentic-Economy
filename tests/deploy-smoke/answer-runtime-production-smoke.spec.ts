@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { expect, request, test, type APIRequestContext, type Page } from '@playwright/test'
 import type { PublicBusinessCatalogApiV2Dto } from '../../src/modules/registry/public'
 import { LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS } from '../../src/lib/dev/local-e2e-business-fixtures'
+import { DEV_SEED_BUSINESS_FIXTURES } from '../../src/modules/dev/public'
 
 import {
   applyVercelProtectionBypassToPage,
@@ -31,7 +32,10 @@ type PublicThreadReadback = {
 const ANSWER_SERVICE_SIGNAL = /\b(?:accountant|accounting|aged care|cleaner|cleaning|dentist|dental|electrician|electrical|family lawyer|hvac|lawyer|locksmith|math tutor|photographer|plumber|plumbing|repair|repairs|tutor|tutoring)\b/i
 const FORBIDDEN_PUBLIC_EFFECT_CLAIM = /\b(?:book(?:ing)? confirmed|pay now|payment required|payment (?:taken|processed)|charged|provider dispatched|dispatch confirmed|appointment confirmed|work completed|request sent)\b/i
 const FORBIDDEN_PRIVATE_PUBLIC_EVIDENCE = /\b(?:harnessRun|harnessFinalization|snapshotHash|resultHash|inputJson|resultJson|sourceHash|ownerId|clerkUserId)\b/i
-const DEVELOPMENT_FIXTURE_SLUGS = new Set<string>(LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS)
+const DEVELOPMENT_FIXTURE_SLUGS = new Set<string>([
+  ...LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS,
+  ...DEV_SEED_BUSINESS_FIXTURES.map((fixture) => fixture.requestedSlug),
+])
 
 
 test('runtime-selected direct and model-recovery answer paths stay public and read-only', async ({ page }) => {
@@ -218,8 +222,9 @@ function selectSubject(
   businesses: readonly PublicBusinessCatalogApiV2Dto[],
   seed: string,
 ): PublicBusinessCatalogApiV2Dto {
-  // /api/businesses is already the public publication boundary; selection uses only its public projection.
-  const published = businesses.filter((business) => (
+  // Count locality pairs only among real live candidates; development fixtures are excluded
+  // before uniqueness is evaluated so they cannot disqualify a published business.
+  const candidates = businesses.filter((business) => (
     business.slug.trim().length > 0
     && business.name.trim().length > 0
     && business.category.trim().length > 0
@@ -229,12 +234,12 @@ function selectSubject(
     && !DEVELOPMENT_FIXTURE_SLUGS.has(business.slug)
   ))
   const pairCounts = new Map<string, number>()
-  for (const business of published) {
+  for (const business of candidates) {
     const key = categoryLocalityKey(business.category, business.suburb, business.stateTerritory)
     pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1)
   }
 
-  const eligible = published.filter((business) => (
+  const eligible = candidates.filter((business) => (
     pairCounts.get(categoryLocalityKey(business.category, business.suburb, business.stateTerritory)) === 1
     && ANSWER_SERVICE_SIGNAL.test(business.category)
   ))

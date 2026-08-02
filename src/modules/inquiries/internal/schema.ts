@@ -12,6 +12,7 @@ import type {
   OfferingRef,
   OperationKey,
   OwnerId,
+  ServiceId,
   SourceHash,
 } from '@/modules/common/ids'
 import type { NotificationAttemptStatus, NotificationSignatureStatus, NotificationWebhookEventStatus } from '@/modules/notification-outbox/public'
@@ -23,6 +24,11 @@ import type {
   GovernedSendIntegrityCommitmentRecord,
   GovernedSendReceiptRecord,
 } from './governed-send'
+
+export type InquiryLegacyTargetIdentity = Readonly<{
+  serviceId: ServiceId
+  capabilityKind: string
+}>
 
 export type InquiryThreadId = Brand<string, 'InquiryThreadId'>
 export type InquiryMessageId = Brand<string, 'InquiryMessageId'>
@@ -187,11 +193,10 @@ export type CapabilityLaunchSupportRecord = {
   lastReviewedAt: number
 }
 
-export type InquiryThreadRecord = {
+type InquiryThreadRecordBase = {
   threadId: InquiryThreadId
   businessId: BusinessId
   ownerId: OwnerId
-  offeringRef: OfferingRef
   status: InquiryThreadStatus
   firstMessageId: InquiryMessageId
   sourceHash: SourceHash
@@ -204,6 +209,24 @@ export type InquiryThreadRecord = {
   repliedAt?: number
   closedAt?: number
   origin?: InquiryOriginRef
+}
+
+export type InquiryThreadRecord =
+  | (InquiryThreadRecordBase & {
+      offeringRef: OfferingRef
+      serviceId?: never
+      capabilityKind?: never
+    })
+  | (InquiryThreadRecordBase & InquiryLegacyTargetIdentity & {
+      offeringRef?: never
+    })
+
+export function isCurrentInquiryThreadRecord(thread: InquiryThreadRecord): thread is Extract<InquiryThreadRecord, { offeringRef: OfferingRef }> {
+  return thread.offeringRef !== undefined
+}
+
+export function isLegacyInquiryThreadRecord(thread: InquiryThreadRecord): thread is Extract<InquiryThreadRecord, { serviceId: ServiceId; capabilityKind: string }> {
+  return thread.offeringRef === undefined
 }
 
 export type InquiryMessageRecord = {
@@ -322,10 +345,9 @@ export type InquirySourceState = {
 export type OwnerInboxDeliveryCounts = Record<InquiryNotificationStatus, number>
 export type OwnerInboxBucketCounts = Record<OwnerInboxBucket, number>
 
-export type OwnerInboxInquiryProjection = {
+type OwnerInboxInquiryProjectionBase = {
   threadId: InquiryThreadId
   businessId: BusinessId
-  offeringRef: OfferingRef
   businessName: string
   offeringName: string
   status: InquiryThreadStatus
@@ -339,6 +361,16 @@ export type OwnerInboxInquiryProjection = {
   updatedAt: number
   origin?: OwnerInboxOriginProjection
 }
+
+export type OwnerInboxInquiryProjection =
+  | (OwnerInboxInquiryProjectionBase & {
+      offeringRef: OfferingRef
+      serviceId?: never
+      capabilityKind?: never
+    })
+  | (OwnerInboxInquiryProjectionBase & InquiryLegacyTargetIdentity & {
+      offeringRef?: never
+    })
 
 export type OwnerInboxOriginProjection = {
   kind: 'answer_thread'
@@ -546,11 +578,10 @@ export type InquiryOperatorOperationRef = {
   webhookEventId?: string
 }
 
-export type InquiryOperatorReconstructionRow = {
+type InquiryOperatorReconstructionRowBase = {
   rowId: string
   threadId: InquiryThreadId
   businessId: BusinessId
-  offeringRef: OfferingRef
   status: InquiryThreadStatus
   sourceHash: SourceHash
   correlationIds: readonly (CorrelationId | string)[]
@@ -563,6 +594,16 @@ export type InquiryOperatorReconstructionRow = {
   operationRefs: readonly InquiryOperatorOperationRef[]
   updatedAt: number
 }
+
+export type InquiryOperatorReconstructionRow =
+  | (InquiryOperatorReconstructionRowBase & {
+      offeringRef: OfferingRef
+      serviceId?: never
+      capabilityKind?: never
+    })
+  | (InquiryOperatorReconstructionRowBase & InquiryLegacyTargetIdentity & {
+      offeringRef?: never
+    })
 
 export type InquiryOperatorReconstructionSummary = {
   threads: number

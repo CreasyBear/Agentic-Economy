@@ -284,6 +284,32 @@ export function grantAdminMembership(
       membershipAuditEvent: denied.membershipAuditEvent,
     }
   }
+  if (
+    typeof command.targetTokenIdentifier !== 'string'
+    || command.targetTokenIdentifier.trim().length === 0
+  ) {
+    const denied = recordAdminActionDenied(state, {
+      actorMembership: command.actorMembership,
+      action: 'manage_admin_membership',
+      targetType: 'admin_membership',
+      targetRef: command.targetClerkUserId,
+      reasonCode: 'malformed_token_identifier',
+      evidenceRefs: command.evidenceRefs,
+      operationKey: command.operationKey,
+      correlationId: command.correlationId,
+      now: command.now,
+    })
+
+    return {
+      kind: 'error',
+      code: 'admin_action_denied',
+      retryable: false,
+      reason: 'malformed_token_identifier',
+      auditEvent: denied.auditEvent,
+      membershipAuditEvent: denied.membershipAuditEvent,
+    }
+  }
+
 
   const validated = validateReasonAndEvidence(command.reasonCode, command.evidenceRefs)
   if (validated.kind === 'error') {

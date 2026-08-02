@@ -16,8 +16,8 @@ type WorkflowStep = {
 
 type WorkflowJob = {
   steps?: WorkflowStep[]
+  env?: Record<string, string>
 }
-
 type Workflow = {
   on?: Record<string, unknown>
   jobs?: Record<string, WorkflowJob>
@@ -77,14 +77,22 @@ describe('green release baseline', () => {
     const steps = workflowSteps(workflow)
     expect(steps.filter((step) => step.run === 'npm run gate:release')).toHaveLength(1)
 
+    const hosted = workflow.jobs?.['hosted-proof']
+    expect(hosted).toBeDefined()
+    expect(hosted?.env?.AE_T51_RELEASE_MODE).toBe('release')
+    expect(hosted?.env).not.toHaveProperty('AE_WORK_TREE_SETUP_TOKEN')
+    expect(hosted?.env).not.toHaveProperty('AE_WORK_TREE_CLERK_SUBJECT')
+    const t51Step = hosted?.steps?.find((step) => step.name === 'Verify exact hosted T51 WorkTree parity')
+    expect(t51Step?.if).toBeUndefined()
+    const t51Upload = hosted?.steps?.find((step) => step.name === 'Upload sanitized T51 hosted parity evidence')
+    expect(t51Upload?.if).toBe('always()')
+    expect(t51Upload?.with?.['if-no-files-found']).toBe('error')
+
     const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
     expect(uploads.length).toBeGreaterThan(0)
     for (const upload of uploads) {
       const artifactName = upload.with?.name ?? ''
-      const isConditionalT51Upload = artifactName.includes('-t51-hosted-work-tree')
-      expect(upload.if).toBe(isConditionalT51Upload
-        ? 'always() && env.AE_WORK_TREE_SETUP_TOKEN != \'\' && env.CLERK_SECRET_KEY != \'\' && env.AE_WORK_TREE_CLERK_INSTANCE_ID != \'\' && env.AE_WORK_TREE_CLERK_SUBJECT != \'\' && env.DEPLOY_CONVEX_URL != \'\' && env.AE_RELEASE_CONVEX_DEPLOYMENT_ID != \'\''
-        : 'always()')
+      expect(upload.if).toBe('always()')
       expect(artifactName).toContain('${{ github.sha }}')
       expect(artifactName).toContain('${{ github.run_id }}')
       expect(artifactName).toMatch(/(?:source|hosted)-(?:release-gate|work-tree)/)

@@ -3,7 +3,7 @@ import { sha256 } from '@noble/hashes/sha2'
 import { bytesToHex } from '@noble/hashes/utils'
 
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
-import type { BusinessId, OfferingRef, OperationKey, OwnerId } from '@/modules/common/ids'
+import type { BusinessId, OfferingRef, OperationKey, OwnerId, ServiceId } from '@/modules/common/ids'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type {
   GenericGovernedActionIntent,
@@ -145,6 +145,7 @@ export type GovernedSendReceiptRecord = GovernedSendReceiptBase & (
     }>
 )
 
+/** Current authority target binding; new writers may only create this shape. */
 export type GovernedSendIntegrityTargetBinding = Readonly<{
   businessId: BusinessId
   ownerId: OwnerId
@@ -152,6 +153,20 @@ export type GovernedSendIntegrityTargetBinding = Readonly<{
   claimRef: string
   recipientRef: string
 }>
+
+/** Historical target binding retained for honest verification/readback only. */
+export type GovernedSendIntegrityLegacyTargetBinding = Readonly<{
+  businessId: BusinessId
+  ownerId: OwnerId
+  serviceId: ServiceId
+  capabilityKind: string
+  claimRef: string
+  recipientRef: string
+}>
+
+export type GovernedSendIntegrityPersistedTargetBinding =
+  | GovernedSendIntegrityTargetBinding
+  | GovernedSendIntegrityLegacyTargetBinding
 
 /** Source-keyed authority over the receipt digest and its historical admission target. */
 export type GovernedSendIntegrityCommitmentRecord = Readonly<{
@@ -161,7 +176,7 @@ export type GovernedSendIntegrityCommitmentRecord = Readonly<{
   threadId: InquiryThreadId
   digest: `sha256:${string}`
   keyId: string
-  targetBinding: GovernedSendIntegrityTargetBinding
+  targetBinding: GovernedSendIntegrityPersistedTargetBinding
   signature: `hmac-sha256:${string}`
   createdAt: number
 }>

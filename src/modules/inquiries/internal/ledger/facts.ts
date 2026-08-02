@@ -207,6 +207,7 @@ export function validatedGovernedSendBusiness(
     !verifyGovernedSendIntegrityCommitment({ receipt, commitment, keyring })
   ) return undefined
 
+  if (!('offeringRef' in commitment.targetBinding)) return undefined
   const binding = commitment.targetBinding
   const operations = state.operations.filter(
     (candidate) => candidate.operationKey === receipt.operationKey &&

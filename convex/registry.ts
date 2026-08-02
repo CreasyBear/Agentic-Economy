@@ -1,9 +1,11 @@
 import { paginationOptsValidator, queryGeneric } from 'convex/server'
 import type { DatabaseReader } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
-import { v, type Infer } from 'convex/values'
+import { v, type GenericId, type Infer } from 'convex/values'
 
 import { offeringPriceCeilingMinor } from '../src/modules/catalog/public'
+import { literalUnion } from '../src/modules/common/convex-literals'
+import { PublicStatusValues } from '../src/modules/business/public'
 import type { BusinessSupplyProjection } from '../src/modules/catalog/public'
 import { projectBusinessSupplyToPublicApi } from '../src/modules/registry/public'
 import { canonicalTradeToken, TRADE_CANONICAL_TOKENS, TRADE_WORDS } from '../src/modules/registry/public'
@@ -17,23 +19,82 @@ const inquiryTargetResolution = v.union(
   v.object({ kind: v.literal('not_found'), reason: v.string() }),
 )
 
-const registryAttemptResult = v.object({
+const currentRegistryAttemptReadback = v.object({
+  businessId: v.string(),
+  slug: v.string(),
+  publicUrl: v.string(),
+  sourceVersion: v.literal('public-catalog:v1'),
+  sourceHash: v.string(),
+  generatedHash: v.optional(v.string()),
+  offeringCount: v.number(),
+  publicSurfaces: v.array(v.union(
+    v.literal('/api/businesses'),
+    v.literal('/api/businesses/search'),
+    v.literal('/api/businesses/{slug}'),
+  )),
+  readAt: v.number(),
+})
+
+const legacyRegistryAttemptReadback = v.object({
+  businessId: v.string(),
+  slug: v.string(),
+  publicUrl: v.string(),
+  sourceVersion: v.literal('public-catalog:v1'),
+  sourceHash: v.string(),
+  generatedHash: v.optional(v.string()),
+  serviceCount: v.number(),
+  publicSurfaces: v.array(v.union(
+    v.literal('/registry'),
+    v.literal('/api/businesses'),
+    v.literal('/api/businesses/search'),
+    v.literal('/api/businesses/{slug}'),
+  )),
+  readAt: v.number(),
+})
+
+const currentRegistryAttemptResult = v.object({
   businessId: v.string(), offeringRef: v.optional(v.string()), logicalKey: v.string(),
   projectionKind: v.union(v.literal('business_catalog'), v.literal('offering_catalog')),
   sourceHash: v.string(), sourceVersion: v.literal('public-catalog:v1'),
   status: v.union(v.literal('queued'), v.literal('succeeded'), v.literal('failed'), v.literal('stale')),
   retryCount: v.number(), retryAfter: v.optional(v.number()), lastErrorCode: v.optional(v.string()), lastErrorRedacted: v.optional(v.string()),
-  startedAt: v.number(), finishedAt: v.optional(v.number()), staleThresholdAt: v.optional(v.number()),
+  startedAt: v.number(), finishedAt: v.optional(v.number()), latestReadback: v.optional(currentRegistryAttemptReadback), staleThresholdAt: v.optional(v.number()),
   repairAction: v.union(v.literal('retry_projection'), v.literal('rebuild_projection'), v.literal('no_repair')),
   repairResult: v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed')),
 })
 
-const projectionItemResult = v.object({
+const legacyUnavailableRegistryAttemptResult = v.object({
+  kind: v.literal('legacy_unavailable'),
+  reason: v.literal('offering_identity_unavailable'),
+  businessId: v.string(), serviceId: v.optional(v.id('businessServices')), logicalKey: v.string(),
+  projectionKind: v.union(v.literal('business_catalog'), v.literal('service_catalog')),
+  sourceHash: v.string(), sourceVersion: v.literal('public-catalog:v1'),
+  status: v.union(v.literal('queued'), v.literal('succeeded'), v.literal('failed'), v.literal('stale')),
+  retryCount: v.number(), retryAfter: v.optional(v.number()), lastErrorCode: v.optional(v.string()), lastErrorRedacted: v.optional(v.string()),
+  startedAt: v.number(), finishedAt: v.optional(v.number()), latestReadback: v.optional(legacyRegistryAttemptReadback), staleThresholdAt: v.optional(v.number()),
+  repairAction: v.union(v.literal('retry_projection'), v.literal('rebuild_projection'), v.literal('no_repair')),
+  repairResult: v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed')),
+})
+
+const registryAttemptResult = v.union(currentRegistryAttemptResult, legacyUnavailableRegistryAttemptResult)
+
+const currentProjectionItemResult = v.object({
   businessId: v.string(), offeringRef: v.optional(v.string()), logicalKey: v.string(),
   projectionKind: v.union(v.literal('business_catalog'), v.literal('offering_catalog')),
-  publicStatus: v.literal('published'), sourceHash: v.string(), sourceVersion: v.literal('public-catalog:v1'),
+  publicStatus: literalUnion(PublicStatusValues), sourceHash: v.string(), sourceVersion: v.literal('public-catalog:v1'),
   generatedHash: v.string(), publicUrl: v.string(), offeringCount: v.number(), updatedAt: v.number(),
 })
+
+const legacyUnavailableProjectionItemResult = v.object({
+  kind: v.literal('legacy_unavailable'),
+  reason: v.literal('offering_identity_unavailable'),
+  businessId: v.string(), serviceId: v.optional(v.id('businessServices')), logicalKey: v.string(),
+  projectionKind: v.union(v.literal('business_catalog'), v.literal('service_catalog')),
+  publicStatus: literalUnion(PublicStatusValues), sourceHash: v.string(), sourceVersion: v.literal('public-catalog:v1'),
+  generatedHash: v.string(), publicUrl: v.string(), serviceCount: v.number(), updatedAt: v.number(),
+})
+
+const projectionItemResult = v.union(currentProjectionItemResult, legacyUnavailableProjectionItemResult)
 
 const healthResult = v.object({
   businessId: v.string(), sourceState: v.union(v.literal('published'), v.literal('not_public')),
@@ -131,16 +192,40 @@ export const readCatalogHealth = queryGeneric({
 type QueryInput = { cursor?: string; limit?: number }
 type NativePaginationOpts = typeof paginationOptsValidator['type']
 type OfferingSupplyDto = ReturnType<typeof projectBusinessSupplyToPublicApi>
+type OfferingPage = { items: OfferingSupplyDto[]; isDone: boolean; continueCursor: string }
 type ConvexOfferingAccessPathDto = Infer<typeof offeringAccessPathDto>
 type ConvexOfferingDto = Infer<typeof offeringDto>
 type ConvexOfferingBusinessDto = Infer<typeof offeringBusinessDto>
-type RegistryAttempt = {
+type CurrentRegistryAttemptReadback = {
+  businessId: string; slug: string; publicUrl: string; sourceVersion: 'public-catalog:v1'; sourceHash: string; generatedHash?: string; offeringCount: number;
+  publicSurfaces: Array<'/api/businesses' | '/api/businesses/search' | '/api/businesses/{slug}'>; readAt: number
+}
+type LegacyRegistryAttemptReadback = {
+  businessId: string; slug: string; publicUrl: string; sourceVersion: 'public-catalog:v1'; sourceHash: string; generatedHash?: string; serviceCount: number;
+  publicSurfaces: Array<'/registry' | '/api/businesses' | '/api/businesses/search' | '/api/businesses/{slug}'>; readAt: number
+}
+type CurrentRegistryAttempt = {
   businessId: string; offeringRef?: string; logicalKey: string; projectionKind: 'business_catalog' | 'offering_catalog'; sourceHash: string; sourceVersion: 'public-catalog:v1';
-  status: 'queued' | 'succeeded' | 'failed' | 'stale'; retryCount: number; retryAfter?: number; lastErrorCode?: string; lastErrorRedacted?: string; startedAt: number; finishedAt?: number; staleThresholdAt?: number;
+  status: 'queued' | 'succeeded' | 'failed' | 'stale'; retryCount: number; retryAfter?: number; lastErrorCode?: string; lastErrorRedacted?: string; startedAt: number; finishedAt?: number; latestReadback?: CurrentRegistryAttemptReadback; staleThresholdAt?: number;
   repairAction: 'retry_projection' | 'rebuild_projection' | 'no_repair'; repairResult: 'not_run' | 'succeeded' | 'failed'
 }
-type OfferingPage = { items: OfferingSupplyDto[]; isDone: boolean; continueCursor: string }
-type CatalogHealth = { businessId: string; sourceState: 'published' | 'not_public'; latestAttempt?: RegistryAttempt; indexStatus: 'not_queued' | 'queued' | 'indexed' | 'failed' | 'stale'; projectionItems: ReturnType<typeof projectionItemValue>[]; affectedPublicSurfaces: string[]; repairAction: 'retry_projection' | 'rebuild_projection' | 'no_repair'; repairResult: 'not_run' | 'succeeded' | 'failed' }
+type LegacyUnavailableRegistryAttempt = {
+  kind: 'legacy_unavailable'; reason: 'offering_identity_unavailable'; businessId: string; serviceId?: GenericId<'businessServices'>; logicalKey: string; projectionKind: 'business_catalog' | 'service_catalog'; sourceHash: string; sourceVersion: 'public-catalog:v1';
+  status: 'queued' | 'succeeded' | 'failed' | 'stale'; retryCount: number; retryAfter?: number; lastErrorCode?: string; lastErrorRedacted?: string; startedAt: number; finishedAt?: number; latestReadback?: LegacyRegistryAttemptReadback; staleThresholdAt?: number;
+  repairAction: 'retry_projection' | 'rebuild_projection' | 'no_repair'; repairResult: 'not_run' | 'succeeded' | 'failed'
+}
+type RegistryAttempt = CurrentRegistryAttempt | LegacyUnavailableRegistryAttempt
+type PublicStatus = (typeof PublicStatusValues)[number]
+type CurrentProjectionItem = {
+  businessId: string; offeringRef?: string; logicalKey: string; projectionKind: 'business_catalog' | 'offering_catalog'; publicStatus: PublicStatus; sourceHash: string; sourceVersion: 'public-catalog:v1';
+  generatedHash: string; publicUrl: string; offeringCount: number; updatedAt: number
+}
+type LegacyUnavailableProjectionItem = {
+  kind: 'legacy_unavailable'; reason: 'offering_identity_unavailable'; businessId: string; serviceId?: GenericId<'businessServices'>; logicalKey: string; projectionKind: 'business_catalog' | 'service_catalog'; publicStatus: PublicStatus; sourceHash: string; sourceVersion: 'public-catalog:v1';
+  generatedHash: string; publicUrl: string; serviceCount: number; updatedAt: number
+}
+type ProjectionItem = CurrentProjectionItem | LegacyUnavailableProjectionItem
+type CatalogHealth = { businessId: string; sourceState: 'published' | 'not_public'; latestAttempt?: RegistryAttempt; indexStatus: 'not_queued' | 'queued' | 'indexed' | 'failed' | 'stale'; projectionItems: ProjectionItem[]; affectedPublicSurfaces: string[]; repairAction: 'retry_projection' | 'rebuild_projection' | 'no_repair'; repairResult: 'not_run' | 'succeeded' | 'failed' }
 export type OfferingSupplyBusiness = Readonly<{
   _id: string
   slug: string
@@ -154,7 +239,7 @@ export type OfferingSupplySnapshot = Readonly<{
 
 export type OfferingSupplyReadPort = Readonly<{
   hasActiveBusinessSuppression: (businessId: string) => Promise<boolean>
-  readBusinessSupplyProjectionSnapshot: (businessId: string) => Promise<OfferingSupplySnapshot | null>
+  readBusinessSupplyProjectionSnapshot: (businessId: string, expectedSlug?: string) => Promise<OfferingSupplySnapshot | null>
 }>
 
 function createOfferingSupplyReadPort(db: DatabaseReader): OfferingSupplyReadPort {
@@ -163,20 +248,35 @@ function createOfferingSupplyReadPort(db: DatabaseReader): OfferingSupplyReadPor
       const normalizedId = db.normalizeId('businesses', businessId)
       return normalizedId === null ? false : hasActiveBusinessSuppression(db, normalizedId)
     },
-    readBusinessSupplyProjectionSnapshot: async (businessId) => {
+    readBusinessSupplyProjectionSnapshot: async (businessId, expectedSlug) => {
       const normalizedId = db.normalizeId('businesses', businessId)
       if (normalizedId === null) return null
       const snapshot = await db.query('businessSupplyProjectionSnapshots')
         .withIndex('by_businessId', (query) => query.eq('businessId', normalizedId))
         .unique()
-      if (snapshot === null || snapshot.projection === undefined) return null
+      if (snapshot === null) return null
+      const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
       const status = snapshot.status
       if (status !== 'current' && status !== 'projection_pending') return null
-      return { status, projection: readBusinessSupplyProjectionSnapshot(snapshot.projection, 'registry') }
+      return {
+        status,
+        projection: readBusinessSupplyProjectionSnapshot(
+          projectionValue,
+          'registry',
+          String(normalizedId),
+          expectedSlug,
+          {
+            businessId: String(snapshot.businessId),
+            sourceRevision: snapshot.sourceRevision,
+            sourceDigest: snapshot.sourceDigest,
+            observedAt: snapshot.observedAt,
+            disposition: snapshot.disposition,
+          },
+        ),
+      }
     },
   }
 }
-
 
 export async function readOfferingSupplyForBusiness(
   port: OfferingSupplyReadPort,
@@ -184,7 +284,7 @@ export async function readOfferingSupplyForBusiness(
 ): Promise<OfferingSupplyDto | undefined> {
   if (business.publicStatus !== 'published') return undefined
   if (await port.hasActiveBusinessSuppression(business._id)) return undefined
-  const snapshot = await port.readBusinessSupplyProjectionSnapshot(business._id)
+  const snapshot = await port.readBusinessSupplyProjectionSnapshot(business._id, business.slug)
   if (snapshot === null) return undefined
   const projection = snapshot.projection
   if (String(projection.business.businessId) !== String(business._id) || projection.business.slug !== business.slug) return undefined
@@ -297,16 +397,104 @@ async function readCatalogHealthFromDb(db: DatabaseReader, businessId: string): 
 }
 
 async function latestRegistryAttempt(db: DatabaseReader, businessId: Id<'businesses'>): Promise<RegistryAttempt | undefined> {
-  const latest = await db.query('registryProjectionAttempts').withIndex('by_business_startedAt', (query) => query.eq('businessId', businessId)).order('desc').first()
+  const latest = await db
+    .query('registryProjectionAttempts')
+    .withIndex('by_business_startedAt', (query) => query.eq('businessId', businessId))
+    .order('desc')
+    .first()
   return latest === null ? undefined : toRegistryAttempt(latest)
 }
 
 function toRegistryAttempt(attempt: Doc<'registryProjectionAttempts'>): RegistryAttempt {
-  return { businessId: String(attempt.businessId), ...(attempt.offeringRef === undefined ? {} : { offeringRef: attempt.offeringRef }), logicalKey: attempt.logicalKey, projectionKind: attempt.projectionKind, sourceHash: attempt.sourceHash, sourceVersion: attempt.sourceVersion, status: attempt.status, retryCount: attempt.retryCount, ...(attempt.retryAfter === undefined ? {} : { retryAfter: attempt.retryAfter }), ...(attempt.lastErrorCode === undefined ? {} : { lastErrorCode: attempt.lastErrorCode }), ...(attempt.lastErrorRedacted === undefined ? {} : { lastErrorRedacted: attempt.lastErrorRedacted }), startedAt: attempt.startedAt, ...(attempt.finishedAt === undefined ? {} : { finishedAt: attempt.finishedAt }), ...(attempt.staleThresholdAt === undefined ? {} : { staleThresholdAt: attempt.staleThresholdAt }), repairAction: attempt.repairAction, repairResult: attempt.repairResult }
+  const readback = attempt.latestReadback
+  const isCurrent = 'attemptVersion' in attempt && attempt.attemptVersion === 'current'
+  const legacyReadback = !isCurrent && readback !== undefined && 'serviceCount' in readback
+    ? {
+        ...readback,
+        businessId: String(readback.businessId),
+      }
+    : undefined
+  if (!isCurrent) {
+    return {
+      kind: 'legacy_unavailable',
+      reason: 'offering_identity_unavailable',
+      businessId: String(attempt.businessId),
+      ...(!('serviceId' in attempt) || attempt.serviceId === undefined ? {} : { serviceId: attempt.serviceId }),
+      logicalKey: attempt.logicalKey,
+      projectionKind: attempt.projectionKind,
+      sourceHash: attempt.sourceHash,
+      sourceVersion: attempt.sourceVersion,
+      status: attempt.status,
+      retryCount: attempt.retryCount,
+      ...(attempt.retryAfter === undefined ? {} : { retryAfter: attempt.retryAfter }),
+      ...(attempt.lastErrorCode === undefined ? {} : { lastErrorCode: attempt.lastErrorCode }),
+      ...(attempt.lastErrorRedacted === undefined ? {} : { lastErrorRedacted: attempt.lastErrorRedacted }),
+      startedAt: attempt.startedAt,
+      ...(attempt.finishedAt === undefined ? {} : { finishedAt: attempt.finishedAt }),
+      ...(legacyReadback === undefined ? {} : { latestReadback: legacyReadback }),
+      ...(attempt.staleThresholdAt === undefined ? {} : { staleThresholdAt: attempt.staleThresholdAt }),
+      repairAction: attempt.repairAction,
+      repairResult: attempt.repairResult,
+    }
+  }
+  const currentReadback = readback !== undefined && 'offeringCount' in readback
+    ? {
+        ...readback,
+        businessId: String(readback.businessId),
+      }
+    : undefined
+  return {
+    businessId: String(attempt.businessId),
+    ...(!('offeringRef' in attempt) || attempt.offeringRef === undefined ? {} : { offeringRef: attempt.offeringRef }),
+    logicalKey: attempt.logicalKey,
+    projectionKind: attempt.projectionKind,
+    sourceHash: attempt.sourceHash,
+    sourceVersion: attempt.sourceVersion,
+    status: attempt.status,
+    retryCount: attempt.retryCount,
+    ...(attempt.retryAfter === undefined ? {} : { retryAfter: attempt.retryAfter }),
+    ...(attempt.lastErrorCode === undefined ? {} : { lastErrorCode: attempt.lastErrorCode }),
+    ...(attempt.lastErrorRedacted === undefined ? {} : { lastErrorRedacted: attempt.lastErrorRedacted }),
+    startedAt: attempt.startedAt,
+    ...(attempt.finishedAt === undefined ? {} : { finishedAt: attempt.finishedAt }),
+    ...(currentReadback === undefined ? {} : { latestReadback: currentReadback }),
+    ...(attempt.staleThresholdAt === undefined ? {} : { staleThresholdAt: attempt.staleThresholdAt }),
+    repairAction: attempt.repairAction,
+    repairResult: attempt.repairResult,
+  }
 }
 
-function projectionItemValue(item: Doc<'registryProjectionItems'>) {
-  return { businessId: String(item.businessId), ...(item.offeringRef === undefined ? {} : { offeringRef: item.offeringRef }), logicalKey: item.logicalKey, projectionKind: item.projectionKind, publicStatus: 'published' as const, sourceHash: item.sourceHash, sourceVersion: item.sourceVersion, generatedHash: item.generatedHash, publicUrl: item.publicUrl, offeringCount: item.offeringCount, updatedAt: item.updatedAt }
+function projectionItemValue(item: Doc<'registryProjectionItems'>): ProjectionItem {
+  if ('serviceCount' in item) {
+    return {
+      kind: 'legacy_unavailable',
+      reason: 'offering_identity_unavailable',
+      businessId: String(item.businessId),
+      ...(!('serviceId' in item) || item.serviceId === undefined ? {} : { serviceId: item.serviceId }),
+      logicalKey: item.logicalKey,
+      projectionKind: item.projectionKind,
+      publicStatus: item.publicStatus,
+      sourceHash: item.sourceHash,
+      sourceVersion: item.sourceVersion,
+      generatedHash: item.generatedHash,
+      publicUrl: item.publicUrl,
+      serviceCount: item.serviceCount,
+      updatedAt: item.updatedAt,
+    }
+  }
+  return {
+    businessId: String(item.businessId),
+    ...(item.offeringRef === undefined ? {} : { offeringRef: item.offeringRef }),
+    logicalKey: item.logicalKey,
+    projectionKind: item.projectionKind,
+    publicStatus: item.publicStatus,
+    sourceHash: item.sourceHash,
+    sourceVersion: item.sourceVersion,
+    generatedHash: item.generatedHash,
+    publicUrl: item.publicUrl,
+    offeringCount: item.offeringCount,
+    updatedAt: item.updatedAt,
+  }
 }
 
 async function projectionItemsForBusiness(db: DatabaseReader, businessId: Id<'businesses'>) {

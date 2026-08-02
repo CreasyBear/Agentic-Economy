@@ -258,13 +258,30 @@ export const bootstrapOwnerAdmin = mutationGeneric({
       return adminSourceWriteDenied(sourceWrite.reason)
     }
 
-    const [source, identity] = await Promise.all([
-      loadAdminAuthoritySource(ctx.db, { includeActiveOwnerAdmins: true }),
-      ctx.auth.getUserIdentity(),
-    ])
+    const identity = await ctx.auth.getUserIdentity()
+    const source = await loadAdminAuthoritySource(ctx.db, {
+      includeActiveOwnerAdmins: true,
+      ...(identity?.subject === undefined ? {} : { clerkUserIds: [identity.subject] }),
+      ...(identity?.tokenIdentifier === undefined ? {} : { tokenIdentifiers: [identity.tokenIdentifier] }),
+    })
+    const clerkUserId = typeof identity?.subject === 'string' ? identity.subject : 'anonymous'
+    const tokenIdentifier = typeof identity?.tokenIdentifier === 'string' ? identity.tokenIdentifier : ''
+    if (
+      bootstrapPrincipalIds().includes(clerkUserId)
+      && tokenIdentifier.trim().length > 0
+      && hasAdminMembershipConflict(source.adminMemberships, { clerkUserId, tokenIdentifier })
+    ) {
+      return summarizeAdminMutation({
+        kind: 'error',
+        code: 'admin_bootstrap_denied',
+        retryable: false,
+        reason: 'membership_conflict',
+      })
+    }
+
     const result = bootstrapOwnerAdminModule(adminAuthorityState(source), {
-      clerkUserId: identity?.subject ?? 'anonymous',
-      tokenIdentifier: identity?.tokenIdentifier ?? '',
+      clerkUserId,
+      tokenIdentifier,
       authorizedClerkUserIds: bootstrapPrincipalIds(),
       reasonCode: args.reasonCode,
       evidenceRefs: args.evidenceRefs,
@@ -303,7 +320,7 @@ export const grantAdminMembership = mutationGeneric({
       }),
       readCurrentActiveMembership(ctx),
     ])
-    const result = grantAdminMembershipModule(adminAuthorityState(source), {
+    const command = {
       actorMembership,
       targetClerkUserId: args.targetClerkUserId,
       targetTokenIdentifier: args.targetTokenIdentifier,
@@ -313,12 +330,34 @@ export const grantAdminMembership = mutationGeneric({
       operationKey: args.operationKey,
       correlationId: args.correlationId,
       now: Date.now(),
-    })
+    }
+    if (requireAdminAuthority(actorMembership, 'manage_admin_membership').kind === 'denied') {
+      const result = grantAdminMembershipModule(adminAuthorityState(source), command)
+      await persistAdminAuthorityMutation(ctx.db, result)
+      return summarizeAdminMutation(result)
+    }
+    if (
+      typeof args.targetTokenIdentifier === 'string'
+      && args.targetTokenIdentifier.trim().length > 0
+      && hasAdminMembershipConflict(source.adminMemberships, {
+        clerkUserId: args.targetClerkUserId,
+        tokenIdentifier: args.targetTokenIdentifier,
+      })
+    ) {
+      return summarizeAdminMutation({
+        kind: 'error',
+        code: 'admin_action_denied',
+        retryable: false,
+        reason: 'membership_conflict',
+      })
+    }
 
+    const result = grantAdminMembershipModule(adminAuthorityState(source), command)
     await persistAdminAuthorityMutation(ctx.db, result)
     return summarizeAdminMutation(result)
   },
 })
+
 
 export const revokeAdminMembership = mutationGeneric({
   args: {
@@ -584,31 +623,31 @@ async function loadAdminAuthoritySource(
     includeActiveOwnerAdmins?: boolean
   } = {},
 ): Promise<AdminAuthorityReadSource> {
-  const reads: Promise<Doc<'adminMemberships'> | null>[] = []
+  const reads: Promise<Doc<'adminMemberships'>[]>[] = []
   const states = ['active', 'revoked', 'suspended'] as const
   for (const clerkUserId of options.clerkUserIds ?? []) {
     for (const state of states) {
       reads.push(db.query('adminMemberships')
         .withIndex('by_clerkUserId_state', (query) => query.eq('clerkUserId', clerkUserId).eq('state', state))
-        .unique())
+        .take(2))
     }
   }
   for (const tokenIdentifier of options.tokenIdentifiers ?? []) {
     for (const state of states) {
       reads.push(db.query('adminMemberships')
         .withIndex('by_tokenIdentifier_state', (query) => query.eq('tokenIdentifier', tokenIdentifier).eq('state', state))
-        .unique())
+        .take(2))
     }
   }
   if (options.includeActiveOwnerAdmins === true) {
     reads.push(db.query('adminMemberships')
       .withIndex('by_state_and_role', (query) => query.eq('state', 'active').eq('role', 'owner_admin'))
-      .first())
+      .take(2))
   }
-  const rows = await Promise.all(reads)
+  const rows = (await Promise.all(reads)).flat()
   const memberships = new Map<string, Doc<'adminMemberships'>>()
   for (const row of rows) {
-    if (row !== null) memberships.set(String(row._id), row)
+    memberships.set(String(row._id), row)
   }
   return { adminMemberships: [...memberships.values()], adminMembershipAuditEvents: [], auditEvents: [] }
 }
@@ -800,6 +839,39 @@ function buildIndexRows(
     },
   ]
 }
+type AdminMembershipTarget = Pick<AdminMembership, 'clerkUserId' | 'tokenIdentifier'>
+
+function hasAdminMembershipConflict(
+  rows: readonly Doc<'adminMemberships'>[],
+  target: AdminMembershipTarget,
+): boolean {
+  const activeRows = rows.filter((row) => row.clerkUserId === target.clerkUserId && row.state === 'active')
+  if (activeRows.length > 1) {
+    return true
+  }
+
+  const active = activeRows[0]
+  if (
+    active !== undefined
+    && active.tokenIdentifier !== undefined
+    && (
+      typeof active.tokenIdentifier !== 'string'
+      || active.tokenIdentifier.trim().length === 0
+      || active.tokenIdentifier !== target.tokenIdentifier
+    )
+  ) {
+    return true
+  }
+
+  const tokenRows = rows.filter((row) => row.tokenIdentifier === target.tokenIdentifier)
+  if (tokenRows.length > 1) {
+    return true
+  }
+  return rows.some((row) => (
+    row.tokenIdentifier === target.tokenIdentifier
+    && row.clerkUserId !== target.clerkUserId
+  ))
+}
 
 type AdminAuthorityWriteResult = {
   membership?: AdminMembership
@@ -813,11 +885,14 @@ async function persistAdminAuthorityMutation(
 ): Promise<void> {
   if (result.membership !== undefined) {
     const document = adminMembershipDocument(result.membership)
-    const existing = await findAdminMembershipDocument(db, result.membership.tokenIdentifier)
-    if (existing === null) {
+    const lookup = await findAdminMembershipDocument(db, result.membership)
+    if (lookup.kind === 'conflict') {
+      throw new Error('admin_membership_conflict')
+    }
+    if (lookup.kind === 'missing') {
       await db.insert('adminMemberships', document)
     } else {
-      await db.patch(existing._id, document)
+      await db.replace(lookup.row._id, document)
     }
   }
 
@@ -849,22 +924,63 @@ async function persistAdminAuthorityMutation(
   }
 }
 
+type AdminMembershipLookup =
+  | { kind: 'missing' }
+  | { kind: 'found'; row: Doc<'adminMemberships'> }
+  | { kind: 'conflict' }
+
 async function findAdminMembershipDocument(
   db: MutationCtx['db'],
-  tokenIdentifier: string,
-): Promise<Doc<'adminMemberships'> | null> {
+  target: AdminMembershipTarget,
+): Promise<AdminMembershipLookup> {
+  const activeRows = await db
+    .query('adminMemberships')
+    .withIndex('by_clerkUserId_state', (builder) =>
+      builder.eq('clerkUserId', target.clerkUserId).eq('state', 'active')
+    )
+    .take(2)
+  if (activeRows.length > 1) {
+    return { kind: 'conflict' }
+  }
+
+  const tokenRows: Doc<'adminMemberships'>[] = []
   for (const state of ['active', 'revoked', 'suspended'] as const) {
-    const row = await db
+    const rows = await db
       .query('adminMemberships')
       .withIndex('by_tokenIdentifier_state', (builder) =>
-        builder.eq('tokenIdentifier', tokenIdentifier).eq('state', state)
+        builder.eq('tokenIdentifier', target.tokenIdentifier).eq('state', state)
       )
-      .unique()
-    if (row !== null) {
-      return row
+      .take(2)
+    if (rows.length > 1) {
+      return { kind: 'conflict' }
     }
+    tokenRows.push(...rows)
   }
-  return null
+  if (tokenRows.length > 1) {
+    return { kind: 'conflict' }
+  }
+
+  if (tokenRows.some((row) => row.clerkUserId !== target.clerkUserId)) {
+    return { kind: 'conflict' }
+  }
+
+  const active = activeRows[0]
+  if (active !== undefined) {
+    if (
+      active.tokenIdentifier !== undefined
+      && (
+        typeof active.tokenIdentifier !== 'string'
+        || active.tokenIdentifier.trim().length === 0
+        || active.tokenIdentifier !== target.tokenIdentifier
+      )
+    ) {
+      return { kind: 'conflict' }
+    }
+    return { kind: 'found', row: active }
+  }
+
+  const byToken = tokenRows.find((row) => row.tokenIdentifier === target.tokenIdentifier)
+  return byToken === undefined ? { kind: 'missing' } : { kind: 'found', row: byToken }
 }
 
 function adminMembershipDocument(membership: AdminMembership) {
@@ -990,16 +1106,24 @@ async function persistAuditEvent(
 
 function adminAuthorityState(source: AdminAuthorityReadSource): AdminAuthorityState {
   return {
-    adminMemberships: source.adminMemberships.map(adminMembershipFromDocument),
+    adminMemberships: source.adminMemberships.flatMap((row) => {
+      const membership = adminMembershipFromDocument(row)
+      return membership === undefined ? [] : [membership]
+    }),
     adminMembershipAuditEvents: source.adminMembershipAuditEvents.map(adminMembershipAuditFromDocument),
     auditEvents: source.auditEvents.map(auditEventFromDocument),
   }
 }
 
-function adminMembershipFromDocument(row: Doc<'adminMemberships'>): AdminMembership {
+function adminMembershipFromDocument(row: Doc<'adminMemberships'>): AdminMembership | undefined {
+  const tokenIdentifier = row.tokenIdentifier
+  if (typeof tokenIdentifier !== 'string' || tokenIdentifier.length === 0) {
+    return undefined
+  }
+
   return {
     clerkUserId: row.clerkUserId,
-    tokenIdentifier: row.tokenIdentifier,
+    tokenIdentifier,
     role: row.role,
     state: row.state,
     grantedBy: row.grantedBy,

@@ -17,6 +17,8 @@ export type DurableControlRow<Result extends ActionResult = ActionResult> = Read
   terminalResultReferenceable?: boolean
   control: Omit<ActionInvocationView<Result>, 'prepared' | 'observedResolution' | 'attempts'>
   authorityBinding?: AuthorityBindingSnapshot
+  /** @deprecated Legacy rows only; current writes keep acceptedAuthority inside control. */
+  acceptedAuthority?: ActionInvocationView<Result>['acceptedAuthority']
   preparedMaterialDigest?: string
   preparedTargetDigest?: string
   consequence?: string
@@ -28,6 +30,28 @@ export type DurableControlRow<Result extends ActionResult = ActionResult> = Read
   currentLeaseExpiresAt?: string
   updatedAt: string
 }>
+
+export function reconstructDurableControlRow<Result extends ActionResult>(
+  row: DurableControlRow<Result>,
+): DurableControlRow<Result> {
+  const legacyAcceptedAuthority = row.acceptedAuthority
+  const nestedAcceptedAuthority = row.control.acceptedAuthority
+  if (
+    legacyAcceptedAuthority !== undefined
+    && nestedAcceptedAuthority !== undefined
+    && canonicalDigest(legacyAcceptedAuthority) !== canonicalDigest(nestedAcceptedAuthority)
+  ) {
+    throw new Error('durable_control_authority_mismatch')
+  }
+  if (legacyAcceptedAuthority === undefined) return row
+  const { acceptedAuthority: _legacyAcceptedAuthority, ...currentRow } = row
+  return {
+    ...currentRow,
+    control: nestedAcceptedAuthority === undefined
+      ? { ...row.control, acceptedAuthority: legacyAcceptedAuthority }
+      : row.control,
+  }
+}
 
 export type DurableAttemptOutcome =
   | Readonly<{ state: 'running' }>

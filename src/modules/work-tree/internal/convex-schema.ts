@@ -33,6 +33,7 @@ export const workTreeTables = {
   })
     .index('by_projectId', ['projectId'])
     .index('by_treeId', ['treeId'])
+    .index('by_ownerId_and_lineageDigest', ['ownerId', 'lineageDigest'])
     .index('by_principalId_and_lineageDigest', ['principalId', 'lineageDigest'])
     .index('by_principalId_and_createIdempotencyKey', ['principalId', 'createIdempotencyKey'])
     .index('by_projectId_and_generation', ['projectId', 'generation']),

@@ -171,6 +171,32 @@ describe('Convex notification outbox runtime bridge', () => {
     })
     expect(JSON.stringify(readback)).not.toContain('customer@example.test')
   })
+  it('uses generic service copy when reading a legacy inquiry notification', async () => {
+    const db = seededNotificationDb({ includeInquiry: true })
+    seedLegacyNotificationInquiry(db)
+
+    const queued = requireEnqueueOk(await enqueueHandler(authCtx(db, null), {
+      ...enqueueArgs('legacy-copy'),
+      inquiryThreadId: 'inquiry_thread:legacy',
+      inquiryMessageId: 'inquiry_message:legacy',
+    }))
+    const sendRead = await readSystemSendHandler(authCtx(db, null), {
+      dispatchId: queued.dispatch.dispatchId,
+      systemKey,
+    })
+
+    expect(sendRead).toMatchObject({
+      kind: 'ok',
+      send: {
+        inquiry: {
+          offeringName: 'Service',
+          customerMessageFirstLine: 'Historical service inquiry.',
+        },
+      },
+    })
+    expect(JSON.stringify(sendRead)).not.toContain('Emergency plumbing')
+    expect(JSON.stringify(sendRead)).not.toContain('Offering')
+  })
 
   it('records missing provider attempts without turning delivery into inquiry truth', async () => {
     const db = seededNotificationDb()
@@ -617,6 +643,33 @@ function seededNotificationDb(options: { includeInquiry?: boolean } = {}): FakeD
     createdAt: 9,
   })
   return db
+}
+function seedLegacyNotificationInquiry(db: FakeDb): void {
+  db.seed('inquiryThreads', {
+    _id: 'inquiryThreads:legacy',
+    _creationTime: 10,
+    threadId: 'inquiry_thread:legacy',
+    businessId: 'businesses:1',
+    ownerId: 'owners:1',
+    serviceId: 'businessServices:legacy-service',
+    capabilityKind: 'human_inquiry_owner_inbox',
+    status: 'unread',
+    firstMessageId: 'inquiry_message:legacy',
+    sourceHash: canonicalDigest('source:thread:legacy'),
+    createdAt: 10,
+    updatedAt: 10,
+    version: 1,
+  })
+  db.seed('inquiryMessages', {
+    _id: 'inquiryMessages:legacy',
+    _creationTime: 11,
+    messageId: 'inquiry_message:legacy',
+    threadId: 'inquiry_thread:legacy',
+    sender: 'customer',
+    body: 'Historical service inquiry.',
+    bodyHash: canonicalDigest('Historical service inquiry.'),
+    createdAt: 11,
+  })
 }
 
 function enqueueArgs(key: string): EnqueueArgs {

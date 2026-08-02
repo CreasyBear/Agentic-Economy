@@ -286,6 +286,15 @@ function submitLocalE2ePublicInquiry(
       ...(result.retryAfter === undefined ? {} : { retryAfter: result.retryAfter }),
     }
   }
+  if (result.thread.offeringRef === undefined) {
+    return {
+      kind: 'error',
+      code: 'inquiry_integrity_conflict',
+      retryable: false,
+      reason: 'A submitted inquiry must have a concrete offering reference.',
+    }
+  }
+
 
   localE2eSubmittedStateByThreadId.set(String(result.thread.threadId), result.state)
 

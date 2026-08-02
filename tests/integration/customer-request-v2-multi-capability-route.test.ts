@@ -856,6 +856,142 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       expect(new Set(disclosures.map(({ allocationRef }) => allocationRef)).size).toBe(2)
     })
   })
+  it('reads deprecated leased route journal rows while current writers stay pending', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'legacy-journal')
+
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'run:legacy-journal',
+    })
+
+    const current = await backend.run(async (ctx) => {
+      const attempt = await ctx.db.query('customerRequestRouteStepAttempts').first()
+      const outbox = await ctx.db.query('customerRequestRouteDispatchOutbox').first()
+      if (attempt === null || outbox === null) throw new Error('current route journal rows missing')
+      return { attempt, outbox }
+    })
+    expect(current.attempt.state).toBe('queued')
+    expect(current.outbox.state).toBe('pending')
+    expect(current.outbox).not.toHaveProperty('leaseOwner')
+    expect(current.outbox).not.toHaveProperty('leaseExpiresAt')
+
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(current.attempt._id, { state: 'leased' })
+      await ctx.db.patch(current.outbox._id, {
+        state: 'leased',
+        leaseOwner: 'historical-worker',
+        leaseExpiresAt: 60_000,
+      })
+    })
+
+    const legacy = await backend.run(async (ctx) => ({
+      attempt: await ctx.db.get(current.attempt._id),
+      outbox: await ctx.db.get(current.outbox._id),
+    }))
+    expect(legacy.attempt).toEqual(expect.objectContaining({ state: 'leased' }))
+    expect(legacy.outbox).toEqual(expect.objectContaining({
+      state: 'leased',
+      leaseOwner: 'historical-worker',
+      leaseExpiresAt: 60_000,
+    }))
+    await expect(backend.query(internal.customerRequestRouteExecution.openDispatch, {
+      dispatchRef: current.outbox.dispatchRef,
+    })).resolves.toEqual({ kind: 'unavailable' })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: current.outbox.dispatchRef,
+      attemptRef: current.attempt.attemptRef,
+    })).resolves.toEqual({ kind: 'refused', reason: 'dispatch_not_current' })
+
+    const malformedLease = { leaseExpiresAt: 60_000 }
+    Reflect.set(malformedLease, 'leaseExpiresAt', 'not-a-number')
+    await expect(backend.run(async (ctx) => (
+      ctx.db.patch(current.outbox._id, malformedLease)
+    ))).rejects.toThrow()
+  })
+  it('refuses a second run during a historical lease and reconciles its completion once', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const admin = await ownerAdmin(backend, 'user_route_admin')
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'legacy-lease-recovery')
+
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'run:legacy-lease-recovery:first',
+    })
+    const current = await backend.run(async (ctx) => {
+      const attempt = await ctx.db.query('customerRequestRouteStepAttempts').first()
+      const outbox = await ctx.db.query('customerRequestRouteDispatchOutbox').first()
+      const run = await ctx.db.query('customerRequestRouteRuns').first()
+      if (attempt === null || outbox === null || run === null) {
+        throw new Error('current route journal rows missing')
+      }
+      return { attempt, outbox, run }
+    })
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(current.attempt._id, { state: 'leased' })
+      await ctx.db.patch(current.outbox._id, {
+        state: 'leased', leaseOwner: 'historical-worker', leaseExpiresAt: 60_000,
+      })
+    })
+
+    await expect(admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'run:legacy-lease-recovery:second',
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'needs_attention',
+    })
+    const beforeCompletion = await backend.run(async (ctx) => ({
+      attempts: await ctx.db.query('customerRequestRouteStepAttempts').collect(),
+      outbox: await ctx.db.query('customerRequestRouteDispatchOutbox').collect(),
+      runs: await ctx.db.query('customerRequestRouteRuns').collect(),
+      commands: await ctx.db.query('customerRequestRouteRunCommands').collect(),
+    }))
+    expect(beforeCompletion.attempts).toHaveLength(1)
+    expect(beforeCompletion.outbox).toHaveLength(1)
+    expect(beforeCompletion.runs).toHaveLength(1)
+    expect(beforeCompletion.commands).toHaveLength(1)
+    expect(beforeCompletion.attempts[0]).toEqual(expect.objectContaining({ state: 'leased' }))
+    expect(beforeCompletion.outbox[0]).toEqual(expect.objectContaining({ state: 'leased' }))
+
+    await backend.mutation(internal.customerRequestRouteExecution.completeRouteTransportWork, {
+      workId: 'work:legacy-lease-recovery' as WorkId,
+      context: { dispatchRef: current.outbox.dispatchRef },
+      result: { kind: 'failed', error: 'historical lease completed without transport result' },
+    })
+    const afterCompletion = await backend.run(async (ctx) => ({
+      attempt: await ctx.db.query('customerRequestRouteStepAttempts').first(),
+      outbox: await ctx.db.query('customerRequestRouteDispatchOutbox').first(),
+      run: await ctx.db.query('customerRequestRouteRuns').first(),
+    }))
+    expect(afterCompletion.attempt).toEqual(expect.objectContaining({
+      state: 'failed', transportObservationJson: expect.any(String),
+    }))
+    expect(afterCompletion.outbox).toEqual(expect.objectContaining({ state: 'failed' }))
+    expect(afterCompletion.run).toEqual(expect.objectContaining({
+      state: 'failed', resultJson: expect.any(String),
+    }))
+    const settled = await admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })
+    expect(settled).toMatchObject({
+      kind: 'request', state: 'failed', nextAction: 'revise_request',
+      action: { state: 'failed', resolution: 'not_sent', automaticRetry: false },
+    })
+
+    await backend.mutation(internal.customerRequestRouteExecution.completeRouteTransportWork, {
+      workId: 'work:legacy-lease-recovery-replay' as WorkId,
+      context: { dispatchRef: current.outbox.dispatchRef },
+      result: { kind: 'success', returnValue: { kind: 'completed', disposition: 'refused' } },
+    })
+    await expect(backend.run(async (ctx) => ({
+      attempt: await ctx.db.query('customerRequestRouteStepAttempts').first(),
+      outbox: await ctx.db.query('customerRequestRouteDispatchOutbox').first(),
+      run: await ctx.db.query('customerRequestRouteRuns').first(),
+    }))).resolves.toEqual(afterCompletion)
+  })
+
+
 
   it('runs a two-step Request through registered transports and resumes the customer result', async () => {
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')

@@ -141,6 +141,15 @@ describe('WorkTree parity trace evidence safety', () => {
       await rm(directory, { recursive: true, force: true })
     }
   })
+  it('redacts Clerk agent-key prefixes even when explicit secret input is omitted', () => {
+    expect(sanitizeWorkTreeParityEvidence({
+      apiKey: 'ak_hosted_t51_key',
+      nested: ['ak_hosted_t51_key'],
+    })).toEqual({
+      apiKey: '[REDACTED]',
+      nested: ['[REDACTED]'],
+    })
+  })
 
   it('rejects evidence that exceeds the bounded JSON ceiling', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'ae-work-tree-parity-size-'))

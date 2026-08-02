@@ -220,6 +220,38 @@ describe('compare-resume resumeCustomerRequest', () => {
     })
   })
 
+  it('projects persisted legacy aggregates as resubmit-only needs attention', async () => {
+    const getSubmissionShell = vi.fn()
+    const getCurrentRouteRun = vi.fn()
+    const projectCurrentRoutePlans = vi.fn()
+    const ports = basePorts({
+      loadCurrent: vi.fn(async () => ({
+        kind: 'resubmit_required' as const,
+        requestId: 'req:legacy',
+        revision: 7,
+        principalId: 'principal:1',
+        reason: 'legacy_embedded_route' as const,
+      })),
+      getSubmissionShell,
+      getCurrentRouteRun,
+      projectCurrentRoutePlans,
+    })
+    const result = await resumeCustomerRequest(
+      { requestRef: 'req:legacy', principalId: 'principal:1' },
+      ports,
+    )
+    expect(result).toMatchObject({
+      kind: 'request',
+      requestRef: 'req:legacy',
+      revision: 7,
+      state: 'needs_attention',
+      nextAction: 'revise_request',
+    })
+    expect(getSubmissionShell).not.toHaveBeenCalled()
+    expect(getCurrentRouteRun).not.toHaveBeenCalled()
+    expect(projectCurrentRoutePlans).not.toHaveBeenCalled()
+  })
+
   it('short-circuits on active route run', async () => {
     const ports = basePorts({
       getCurrentRouteRun: vi.fn(async () => ({
@@ -242,6 +274,52 @@ describe('compare-resume resumeCustomerRequest', () => {
       ports,
     )
     expect(result.kind).toBe('request')
+    expect(ports.projectCurrentRoutePlans).not.toHaveBeenCalled()
+  })
+
+  it('resumes a leased route run as nonterminal progress without claiming an effect or release', async () => {
+    const ports = basePorts({
+      getCurrentRouteRun: vi.fn(async () => ({
+        kind: 'found' as const,
+        run: {
+          requestId: 'req:1',
+          requestRevision: 3,
+          generationRef: 'gen:1',
+          state: 'running' as const,
+          totalSteps: 1,
+          completedSteps: 0,
+          currentPosition: 0,
+          currentState: 'leased' as const,
+          updatedAt: 1_000,
+        },
+      })),
+    })
+    const result = await resumeCustomerRequest(
+      { requestRef: 'req:1', principalId: 'principal:1' },
+      ports,
+    )
+    expect(result).toMatchObject({
+      kind: 'request',
+      state: 'in_progress',
+      nextAction: 'wait',
+      progress: {
+        completed: 0,
+        total: 1,
+        current: { step: 0, state: 'leased' },
+      },
+      activity: {
+        cancellation: {
+          state: 'not_available',
+          reason: 'business_step_leased',
+          changedAt: 1_000,
+        },
+      },
+    })
+    expect(result).not.toHaveProperty('action')
+    expect(result).not.toHaveProperty('preparedAction')
+    expect(result).not.toHaveProperty('release')
+    expect(result).not.toHaveProperty('effects')
+    expect(result).not.toHaveProperty('activity.cancellation.releaseMayStartAt')
     expect(ports.projectCurrentRoutePlans).not.toHaveBeenCalled()
   })
 

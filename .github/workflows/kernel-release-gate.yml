@@ -68,13 +68,12 @@ jobs:
     timeout-minutes: 20
     environment: production
     env:
+      AE_T51_RELEASE_MODE: release
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
       CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
       AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID }}
       AE_CUSTOMER_REQUEST_CLERK_SUBJECT: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_SUBJECT }}
       AE_WORK_TREE_CLERK_INSTANCE_ID: ${{ secrets.AE_WORK_TREE_CLERK_INSTANCE_ID }}
-      AE_WORK_TREE_CLERK_SUBJECT: ${{ secrets.AE_WORK_TREE_CLERK_SUBJECT }}
-      AE_WORK_TREE_SETUP_TOKEN: ${{ secrets.AE_WORK_TREE_SETUP_TOKEN }}
       DEPLOY_CONVEX_URL: ${{ secrets.AE_WORK_TREE_DEPLOY_CONVEX_URL }}
       AE_RELEASE_CONVEX_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_CONVEX_DEPLOYMENT_ID }}
       AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -168,14 +167,13 @@ jobs:
         run: npm run test:release:hosted
 
       - name: Verify exact hosted T51 WorkTree parity
-        if: success() && env.AE_WORK_TREE_SETUP_TOKEN != '' && env.CLERK_SECRET_KEY != '' && env.AE_WORK_TREE_CLERK_INSTANCE_ID != '' && env.AE_WORK_TREE_CLERK_SUBJECT != '' && env.DEPLOY_CONVEX_URL != '' && env.AE_RELEASE_CONVEX_DEPLOYMENT_ID != ''
         env:
           DEPLOY_BASE_URL: https://agentic-economy-phi.vercel.app
           AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
         run: npm run smoke:work-tree:production:hosted
 
       - name: Upload sanitized T51 hosted parity evidence
-        if: always() && env.AE_WORK_TREE_SETUP_TOKEN != '' && env.CLERK_SECRET_KEY != '' && env.AE_WORK_TREE_CLERK_INSTANCE_ID != '' && env.AE_WORK_TREE_CLERK_SUBJECT != '' && env.DEPLOY_CONVEX_URL != '' && env.AE_RELEASE_CONVEX_DEPLOYMENT_ID != ''
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ github.sha }}-${{ github.run_id }}-t51-hosted-work-tree
@@ -184,7 +182,7 @@ jobs:
             output/release/playwright-deploy-smoke.json
             output/release/work-tree-parity/work-tree-parity-evidence.json
             test-results/**/*.png
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload sanitized hosted release evidence

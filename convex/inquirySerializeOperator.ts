@@ -88,11 +88,14 @@ export function serializeOperatorRow(
       else existing.push(webhookRef)
     }
   }
+  const target = row.offeringRef === undefined
+    ? { serviceId: row.serviceId, capabilityKind: row.capabilityKind }
+    : { offeringRef: row.offeringRef }
   return {
     rowId: row.rowId,
     threadId: row.threadId,
     businessId: row.businessId,
-    offeringRef: row.offeringRef,
+    ...target,
     status: row.status,
     sourceHash: row.sourceHash,
     correlationIds: row.correlationIds.map(String),

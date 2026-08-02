@@ -21,7 +21,20 @@ export type WorkTreeParityEvidencePacket = Readonly<{
   vercelDeploymentId: string
   convexDeploymentId: string
   convexUrl?: string
-  setup: unknown
+  /** Public Customer Request route readback used as WorkTree lineage. */
+  route?: unknown
+  /** Redacted Clerk account binding and owner digest evidence. */
+  account?: unknown
+  /** Safe runtime candidate selection proof (never raw subject/email). */
+  selection?: unknown
+  /** Human/agent create and decision receipts plus revision/digest proof. */
+  creation?: unknown
+  /** Fresh browser and child-process readbacks. */
+  freshReadbacks?: readonly unknown[]
+  /** Cleanup/revocation proof for all temporary credentials. */
+  cleanup?: unknown
+  /** Legacy setup payload is accepted only for old local packets. */
+  setup?: unknown
   human: unknown
   agent: unknown
   refusals: readonly unknown[]
@@ -29,7 +42,7 @@ export type WorkTreeParityEvidencePacket = Readonly<{
 }>
 
 const SECRET_KEY = /authorization|api[-_]?key|access[-_]?token|assertion|cookie|credential|jwt|password|secret|session[-_]?token|token|signature/iu
-const SECRET_VALUE = /(?:bearer|basic)\s+[a-z0-9._~+/=-]+|(?:sk|pk|key|tok|jwt|sess|cred)[-_][a-z0-9._-]+/iu
+const SECRET_VALUE = /(?:bearer|basic)\s+[a-z0-9._~+/=-]+|(?:ak|sk|pk|key|tok|jwt|sess|cred)[-_][a-z0-9._-]+/iu
 const MAX_EVIDENCE_JSON_BYTES = 256 * 1024
 const MAX_EVIDENCE_DEPTH = 64
 const MAX_EVIDENCE_NODES = 10_000
@@ -62,7 +75,13 @@ export function assertWorkTreeParityReadbackUnchanged(
 export async function writeWorkTreeParityEvidencePacket(input: Readonly<{
   directory: string
   metadata: WorkTreeParityEvidenceMetadata
-  setup: unknown
+  route?: unknown
+  account?: unknown
+  selection?: unknown
+  creation?: unknown
+  freshReadbacks?: readonly unknown[]
+  cleanup?: unknown
+  setup?: unknown
   human: unknown
   agent: unknown
   refusals: readonly unknown[]
@@ -84,7 +103,13 @@ export async function writeWorkTreeParityEvidencePacket(input: Readonly<{
     vercelDeploymentId: input.metadata.vercelDeploymentId,
     convexDeploymentId: input.metadata.convexDeploymentId,
     ...(convexUrl === undefined ? {} : { convexUrl }),
-    setup: sanitize(input.setup, secretValues, budget, 0),
+    ...(input.route === undefined ? {} : { route: sanitize(input.route, secretValues, budget, 0) }),
+    ...(input.account === undefined ? {} : { account: sanitize(input.account, secretValues, budget, 0) }),
+    ...(input.selection === undefined ? {} : { selection: sanitize(input.selection, secretValues, budget, 0) }),
+    ...(input.creation === undefined ? {} : { creation: sanitize(input.creation, secretValues, budget, 0) }),
+    ...(input.freshReadbacks === undefined ? {} : { freshReadbacks: sanitize(input.freshReadbacks, secretValues, budget, 0) as readonly unknown[] }),
+    ...(input.cleanup === undefined ? {} : { cleanup: sanitize(input.cleanup, secretValues, budget, 0) }),
+    ...(input.setup === undefined ? {} : { setup: sanitize(input.setup, secretValues, budget, 0) }),
     human: sanitize(input.human, secretValues, budget, 0),
     agent: sanitize(input.agent, secretValues, budget, 0),
     refusals: sanitize(input.refusals, secretValues, budget, 0) as readonly unknown[],
@@ -100,6 +125,7 @@ export async function writeWorkTreeParityEvidencePacket(input: Readonly<{
   await write(path, serialized, 'utf8')
   return path
 }
+
 
 export function assertMetadata(metadata: WorkTreeParityEvidenceMetadata): void {
   if (!/^[0-9a-f]{40}$/iu.test(metadata.sourceRevision)) {

@@ -76,8 +76,8 @@ export type WebDiscoveryResult =
     }
 
 export type BusinessEnrichmentFetch = (
-  input: RequestInfo | URL,
-  init?: RequestInit,
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
 ) => Promise<Response>
 
 export type BusinessEnrichmentOptions = {

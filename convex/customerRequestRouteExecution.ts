@@ -139,6 +139,8 @@ const runProjection = v.object({
   currentPosition: v.number(),
   currentState: v.union(
     v.literal('queued'),
+    // Leased is an active route step state while transport work is in progress.
+    v.literal('leased'),
     v.literal('dispatched'),
     v.literal('accepted'),
     v.literal('succeeded'),
@@ -1030,7 +1032,8 @@ const supportProblemExport = v.object({
       steps: v.array(v.object({
         step: v.number(), business: v.string(),
         state: v.union(
-          v.literal('blocked'), v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'),
+          v.literal('blocked'), v.literal('queued'), v.literal('leased'),
+          v.literal('ready_to_contact'), v.literal('contacting'),
           v.literal('awaiting_result'), v.literal('completed'), v.literal('failed'),
           v.literal('outcome_unknown'), v.literal('cancelled'),
         ),
@@ -1083,7 +1086,7 @@ export const exportProblemForSupport = internalQuery({
 })
 
 const exportedStepState = v.union(
-  v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
+  v.literal('queued'), v.literal('leased'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
   v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
 )
 

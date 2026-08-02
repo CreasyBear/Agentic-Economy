@@ -20,6 +20,13 @@ export type GetCurrentAggregateResult =
     routeGenerationRef?: string
     currentDecisionCommandKey?: string
   }>
+  | Readonly<{
+    kind: 'resubmit_required'
+    requestId: string
+    revision: number
+    principalId: string
+    reason: 'legacy_embedded_route'
+  }>
   | Readonly<{ kind: 'not_found' }>
 
 export type GetRoutePlanGenerationArgs = Readonly<{

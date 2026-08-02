@@ -14,6 +14,7 @@ import {
 } from './internal/root-loop'
 
 import type { WorkTreeApprovalIssueResult } from './work-tree-approval.functions'
+import { workTreeLineageSchema } from './public'
 import type { WorkTreeClaimResult } from './work-tree.functions'
 
 /**
@@ -51,9 +52,14 @@ export type {
   WorkTreeSourceEvent,
   WorkTreeSourcePort,
   WorkTreeStepUp,
+  WorkTreeLineage,
 } from './internal/root-loop'
 
-const outcomeSchema = z.strictObject({ outcome: z.string().trim().min(1).max(4_000) })
+
+const outcomeSchema = z.strictObject({
+  outcome: z.string().trim().min(1).max(4_000),
+  lineage: workTreeLineageSchema.optional(),
+})
 const projectSchema = z.strictObject({ projectId: z.string().trim().min(1).max(200) })
 const claimSchema = z.strictObject({
   projectId: z.string().trim().min(1).max(200),
@@ -112,6 +118,7 @@ export const startRootWorkTreeServer = createServerFn({ method: 'POST' })
     if (caller.kind === 'unavailable') return { kind: 'refused', reason: 'browser_guest_session_unavailable' }
     return startRootWorkTree({
       outcome: data.outcome,
+      ...(data.lineage === undefined ? {} : { lineage: data.lineage }),
       ...(caller.kind === 'guest' ? { guestAssertion: caller.assertion } : {}),
     }, await convexWorkTreeSourcePort())
   })

@@ -129,7 +129,7 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
     updatedAt: now,
   }
   if (existing === null) await db.insert('businessSupplyProjectionSnapshots', row)
-  else await db.patch(existing._id, row)
+  else await db.replace(existing._id, row)
   const searchDocuments = buildRegistrySearchDocumentsForCatalog(
     projectBusinessSupplyToPublicApi(projection.projection, now),
   )
@@ -154,7 +154,7 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
       }
       return prior === undefined
         ? db.insert('registrySearchDocuments', value)
-        : db.patch(prior._id, value)
+        : db.replace(prior._id, value)
     }),
   ])
   return { kind: 'ok', sourceDigest: projection.projection.sourceDigest }

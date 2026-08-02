@@ -80,6 +80,13 @@ export type StoredAggregateResult = Readonly<
       routeGenerationRef?: string
       currentDecisionCommandKey?: string
     }
+  | {
+      kind: 'resubmit_required'
+      requestId: string
+      revision: number
+      principalId: string
+      reason: 'legacy_embedded_route'
+    }
   | { kind: 'not_found' }
 >
 

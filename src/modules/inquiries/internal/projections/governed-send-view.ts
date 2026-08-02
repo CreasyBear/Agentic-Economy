@@ -134,6 +134,7 @@ export function governedSendRecordProjection(
       return invalidGovernedSendProjection
     }
     if (
+      !('offeringRef' in commitment.targetBinding) ||
       payloadRecord.offeringRef !== String(commitment.targetBinding.offeringRef)
     ) return invalidGovernedSendProjection
 

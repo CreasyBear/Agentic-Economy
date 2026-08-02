@@ -670,6 +670,8 @@ export const customerRequestRouteMandateTables = {
     }))),
     state: v.union(
       v.literal('queued'),
+      // Deprecated persisted-row state; current route execution never writes leases.
+      v.literal('leased'),
       v.literal('dispatched'),
       // reserved: historical rows only, no live producer
       v.literal('accepted'),
@@ -693,12 +695,17 @@ export const customerRequestRouteMandateTables = {
     operationKeyDigest: v.string(),
     state: v.union(
       v.literal('pending'),
+      // Deprecated persisted-row state; current route dispatch never writes leases.
+      v.literal('leased'),
       v.literal('delivered'),
       v.literal('failed'),
       v.literal('outcome_unknown'),
       v.literal('cancelled'),
     ),
     availableAt: v.number(),
+    // Deprecated persisted-row lease metadata; current writers leave these absent.
+    leaseOwner: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

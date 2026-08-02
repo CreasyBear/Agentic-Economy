@@ -13,6 +13,7 @@ import {
   type GardenerVerb,
 } from '../src/modules/work-tree/convex'
 import { createCustomerRequestServiceAssertion } from '../src/modules/customer-request/service-auth-envelope'
+import { customerRouteRef } from '../src/modules/customer-request/route-plan-customer-projection'
 import { mintBrowserGuestAssertion } from '../src/lib/server/browser-guest-assertion'
 import { internal } from './_generated/api'
 import schema from './schema'
@@ -143,6 +144,182 @@ async function backendWithTree(tree = baseTree()) {
     tokenIdentifier: 'principal:test-work-tree',
   })
 }
+const ROUTED_REQUEST_REF = 'request:work-tree-lineage'
+const ROUTED_REQUEST_PRINCIPAL = 'agent:request-owner'
+const ROUTED_OWNER_ID = 'owner:work-tree-lineage'
+const ROUTED_GENERATION_REF = 'generation:work-tree-lineage'
+const ROUTED_GENERATION_DIGEST = 'digest:generation:work-tree-lineage'
+const ROUTED_ROUTE_PLAN_ID = 'route-plan:work-tree-lineage'
+const ROUTED_ROUTE_REF = customerRouteRef(ROUTED_GENERATION_REF, ROUTED_ROUTE_PLAN_ID)
+const ROUTED_REVISION = 3
+const ROUTED_GENERATION = 7
+
+async function seedRoutedCustomerRequest(backend: Pick<TestConvex<typeof schema>, 'run'>) {
+  const contractRef = {
+    capabilityId: 'capability:work-tree-lineage',
+    version: 1,
+    contractDigest: 'digest:contract:work-tree-lineage',
+  }
+  const route = {
+    routePlanId: ROUTED_ROUTE_PLAN_ID,
+    requestId: ROUTED_REQUEST_REF,
+    requestRevision: ROUTED_REVISION,
+    registrySnapshotDigest: 'digest:registry:work-tree-lineage',
+    steps: [{
+      actionId: 'action:work-tree-lineage',
+      candidateRef: 'candidate:work-tree-lineage',
+      businessId: 'business:work-tree-lineage',
+      offeringId: 'offering:work-tree-lineage',
+      bindingId: 'binding:work-tree-lineage',
+      contractRef,
+      offeringRegistrationHash: 'hash:offering:work-tree-lineage',
+      bindingRegistrationHash: 'hash:binding:work-tree-lineage',
+      publicationRef: 'publication:work-tree-lineage',
+      publicationRevision: 1,
+      resolvedInputs: [],
+      deferredInputs: [],
+      price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 0 },
+      dataUse: [],
+      effects: [],
+      evidence: [],
+      recovery: { idempotency: 'not_applicable' as const, recovery: 'retry_safe' as const },
+    }],
+    edges: [],
+    maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 0 },
+    expiresAt: 9_999_999,
+    uncertainty: [],
+    fallbacks: { ordering: 'unranked' as const, alternatives: [] },
+    authority: 'proposal_only' as const,
+    routeDigest: 'digest:route:work-tree-lineage',
+    comparison: {
+      fit: 'all_steps_viable' as const,
+      completeness: 'complete' as const,
+      dataExposureCount: 0,
+      irreversibleEffectCount: 0,
+      evidenceRequirementCount: 0,
+      trust: 'registered_current_option' as const,
+      ordering: { kind: 'unranked' as const },
+    },
+  }
+  const routeGeneration = {
+    format: 'ae.route-plan-generation:v1' as const,
+    generationRef: ROUTED_GENERATION_REF,
+    generation: ROUTED_GENERATION,
+    generationDigest: ROUTED_GENERATION_DIGEST,
+    requestId: ROUTED_REQUEST_REF,
+    requestRevision: ROUTED_REVISION,
+    compiler: {
+      compilerVersion: 'customer-request-route-compiler:v1' as const,
+      interpreterId: 'interpreter:work-tree-lineage',
+      interpretationEvidence: { kind: 'deterministic_input' as const },
+      proposalDigest: 'digest:proposal:work-tree-lineage',
+    },
+    registrySnapshotDigest: 'digest:registry:work-tree-lineage',
+    routes: [route],
+    authority: 'proposal_only' as const,
+    createdAt: 1,
+  }
+  const charterText = 'Prepare the routed WorkTree charter.'
+  const aggregate = {
+    aggregateVersion: 2 as const,
+    snapshot: {
+      requestId: ROUTED_REQUEST_REF,
+      revision: ROUTED_REVISION,
+      principalId: ROUTED_REQUEST_PRINCIPAL,
+      delegatedAgentId: ROUTED_REQUEST_PRINCIPAL,
+      intent: charterText,
+      networkId: 'ae:public',
+      facts: [],
+      snapshotDigest: 'digest:snapshot:work-tree-lineage',
+      recordedAt: 1,
+    },
+    evaluation: {
+      requestId: ROUTED_REQUEST_REF,
+      requestRevision: ROUTED_REVISION,
+      registrySnapshotDigest: 'digest:registry:work-tree-lineage',
+      factsDigest: 'digest:facts:work-tree-lineage',
+      facts: [],
+      criteria: [],
+      candidates: [],
+      completionRequirements: [],
+      posture: 'progress_available' as const,
+      evaluationDigest: 'digest:evaluation:work-tree-lineage',
+    },
+    plan: {
+      planRevisionId: 'plan-revision:work-tree-lineage',
+      requestId: ROUTED_REQUEST_REF,
+      requestRevision: ROUTED_REVISION,
+      proposedByAgentId: ROUTED_REQUEST_PRINCIPAL,
+      interpreterId: 'interpreter:work-tree-lineage',
+      interpretationEvidence: { kind: 'deterministic_input' as const },
+      proposalDigest: 'digest:proposal:work-tree-lineage',
+      registrySnapshotDigest: 'digest:registry:work-tree-lineage',
+      actions: [],
+      completionRequirements: [],
+      compilerVersion: 'customer-request-route-compiler:v1' as const,
+      authority: 'proposal_only' as const,
+      planDigest: 'digest:plan:work-tree-lineage',
+      createdAt: 1,
+    },
+    outcome: 'plan_ready' as const,
+    aggregateDigest: 'digest:aggregate:work-tree-lineage',
+  }
+  
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('customerRequestV2Revisions', {
+      requestId: ROUTED_REQUEST_REF,
+      requestRevision: ROUTED_REVISION,
+      aggregate,
+    })
+    await ctx.db.insert('customerRequestAgentPrincipals', {
+      principalId: ROUTED_REQUEST_PRINCIPAL,
+      ownerId: ROUTED_OWNER_ID,
+      credentialId: 'credential:request-owner',
+      scopes: ['customer_requests:create'],
+      recordedAt: 1,
+      lastSeenAt: 1,
+    })
+    await ctx.db.insert('customerRequestV2Heads', {
+      requestId: ROUTED_REQUEST_REF,
+      principalId: ROUTED_REQUEST_PRINCIPAL,
+      delegatedAgentId: ROUTED_REQUEST_PRINCIPAL,
+      currentRevision: ROUTED_REVISION,
+      currentAggregateDigest: 'digest:aggregate:work-tree-lineage',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert('customerRequestV2RoutePlanHeads', {
+      requestId: ROUTED_REQUEST_REF,
+      currentGeneration: ROUTED_GENERATION,
+      currentRequestRevision: ROUTED_REVISION,
+      currentGenerationRef: ROUTED_GENERATION_REF,
+      currentGenerationDigest: ROUTED_GENERATION_DIGEST,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert('customerRequestV2RoutePlanGenerations', {
+      requestId: ROUTED_REQUEST_REF,
+      generation: ROUTED_GENERATION,
+      generationRef: ROUTED_GENERATION_REF,
+      generationDigest: ROUTED_GENERATION_DIGEST,
+      requestRevision: ROUTED_REVISION,
+      routeGeneration,
+      recordedAt: 1,
+    })
+  })
+  return {
+    lineage: {
+      kind: 'customer_request' as const,
+      requestRef: ROUTED_REQUEST_REF,
+      revision: ROUTED_REVISION,
+      routeGenerationRef: ROUTED_GENERATION_REF,
+      routeRef: ROUTED_ROUTE_REF,
+    },
+    routeRef: ROUTED_ROUTE_REF,
+    charterText,
+  }
+}
+
 
 describe('gardener verbs Convex contract', () => {
   const previousGuestKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
@@ -394,6 +571,124 @@ describe('gardener verbs Convex contract', () => {
     await expect(owner.query(inspectWorkTree, { projectId: first.readback.projectId }))
       .resolves.toEqual(inspected)
   })
+  it('validates routed lineage before effect and converges human and agent principals by owner', async () => {
+    const key = 'work-tree-routed-lineage-key-that-is-at-least-32-bytes'
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = key
+    const backend = convexTest(schema, modules)
+    const { lineage, charterText } = await seedRoutedCustomerRequest(backend)
+    const human = backend.withIdentity({
+      subject: ROUTED_OWNER_ID,
+      issuer: 'https://identity.example',
+      tokenIdentifier: 'https://identity.example|human-work-tree-lineage',
+    })
+    const humanInput = {
+      idempotencyKey: 'routed:create:human',
+      charterText,
+      lineage,
+    }
+    await expect(human.mutation(createWorkTree, {
+      ...humanInput,
+      idempotencyKey: 'routed:create:squat',
+      charterText: 'Arbitrary charter must not squat this route.',
+    })).resolves.toEqual({ kind: 'refused', code: 'lineage_conflict', replayed: false })
+
+    const first = await human.mutation(createWorkTree, humanInput)
+    expect(first).toMatchObject({
+      kind: 'accepted',
+      readback: { lineage },
+      receipt: { lineage },
+    })
+    if (first.kind !== 'accepted') throw new Error(`unexpected routed create: ${JSON.stringify(first)}`)
+
+    const agentPrincipal = {
+      principalId: 'clerk_api_key:work-tree-lineage-agent',
+      ownerId: ROUTED_OWNER_ID,
+      credentialId: 'work-tree-lineage-agent',
+      scopes: ['work_trees:create', 'work_trees:inspect'],
+    }
+    const agentCreateAuth = await createCustomerRequestServiceAssertion({
+      key,
+      operation: 'workTree.create',
+      command: {
+        idempotencyKey: 'routed:create:agent',
+        charterText,
+        lineage,
+      },
+      principal: agentPrincipal,
+      issuedAt: Date.now(),
+    })
+    const replay = await backend.mutation(createWorkTree, {
+      idempotencyKey: 'routed:create:agent',
+      charterText,
+      lineage,
+      serviceAuth: agentCreateAuth,
+    })
+    expect(replay).toMatchObject({
+      kind: 'replayed',
+      replayed: true,
+      readback: { projectId: first.readback.projectId, lineage },
+      receipt: first.receipt,
+    })
+
+    const agentInspectAuth = await createCustomerRequestServiceAssertion({
+      key,
+      operation: 'workTree.inspect',
+      command: { projectId: first.readback.projectId },
+      principal: agentPrincipal,
+      issuedAt: Date.now(),
+    })
+    await expect(backend.query(inspectWorkTree, {
+      projectId: first.readback.projectId,
+      serviceAuth: agentInspectAuth,
+    })).resolves.toEqual({ kind: 'accepted', readback: first.readback })
+
+    const refused = async (
+      suffix: string,
+      inputLineage: typeof lineage,
+      inputCharter = charterText,
+      principal = agentPrincipal,
+    ) => {
+      const command = {
+        idempotencyKey: `routed:refused:${suffix}`,
+        charterText: inputCharter,
+        lineage: inputLineage,
+      }
+      const serviceAuth = await createCustomerRequestServiceAssertion({
+        key,
+        operation: 'workTree.create',
+        command,
+        principal,
+        issuedAt: Date.now(),
+      })
+      return await backend.mutation(createWorkTree, { ...command, serviceAuth })
+    }
+    await expect(refused('stale-revision', { ...lineage, revision: lineage.revision - 1 }))
+      .resolves.toEqual({ kind: 'refused', code: 'lineage_revision_conflict', replayed: false })
+    await expect(refused('stale-generation', { ...lineage, routeGenerationRef: 'generation:old' }))
+      .resolves.toEqual({ kind: 'refused', code: 'lineage_conflict', replayed: false })
+    await expect(refused('unknown-route', { ...lineage, routeRef: 'route-choice:unknown' }))
+      .resolves.toEqual({ kind: 'refused', code: 'lineage_conflict', replayed: false })
+    await expect(refused('changed-charter', lineage, 'Changed routed charter.'))
+      .resolves.toEqual({ kind: 'refused', code: 'lineage_conflict', replayed: false })
+    await expect(refused('wrong-owner', lineage, charterText, {
+      ...agentPrincipal,
+      principalId: 'clerk_api_key:work-tree-lineage-wrong-owner',
+      ownerId: 'owner:wrong',
+      credentialId: 'work-tree-lineage-wrong-owner',
+    })).resolves.toEqual({ kind: 'refused', code: 'lineage_forbidden', replayed: false })
+
+    const counts = await backend.run(async (ctx) => ({
+      trees: await ctx.db.query('workTrees').take(10),
+      events: await ctx.db.query('workTreeEvents').take(10),
+    }))
+    expect(counts.trees).toHaveLength(1)
+    expect(counts.events).toHaveLength(1)
+    expect(counts.trees[0]).toMatchObject({
+      ownerId: ROUTED_OWNER_ID,
+      lineageJson: JSON.stringify(lineage),
+    })
+  })
+
 
   it('accepts a valid server-minted guest assertion and refuses a forged one', async () => {
     const key = GUEST_SIGNING_KEY
@@ -413,7 +708,7 @@ describe('gardener verbs Convex contract', () => {
     const created = await backend.mutation(createWorkTree, input)
     expect(created).toMatchObject({
       kind: 'accepted',
-      readback: { principalId: 'browser_guest:123e4567-e89b-42d3-a456-426614174000' },
+      readback: { events: [{ actor: { source: 'browser_guest' } }] },
     })
     const forged = await backend.mutation(createWorkTree, {
       ...input,
@@ -575,7 +870,7 @@ describe('gardener verbs Convex contract', () => {
     const accepted = await owner.mutation(decideWorkTree, command)
     expect(accepted).toMatchObject({
       kind: 'accepted',
-      actor: { principalId: 'principal:test-work-tree', source: 'human_source' },
+      actor: { source: 'human_source' },
     })
 
     const serviceAuth = await createCustomerRequestServiceAssertion({
@@ -594,7 +889,7 @@ describe('gardener verbs Convex contract', () => {
     expect(replayed).toMatchObject({
       kind: 'replayed',
       receiptId: accepted.receiptId,
-      actor: { principalId: 'principal:test-work-tree', source: 'human_source' },
+      actor: { source: 'human_source' },
     })
     const stranger = backend.withIdentity({
       subject: 'clerk-other-t45',

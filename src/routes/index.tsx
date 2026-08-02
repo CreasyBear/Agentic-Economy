@@ -38,14 +38,28 @@ import {
 const rootSearchSchema = z.object({
   q: z.string().max(120).optional().catch(undefined),
   project: z.string().max(200).optional().catch(undefined),
+  requestRef: z.string().max(300).optional().catch(undefined),
+  revision: z.coerce.number().int().positive().optional().catch(undefined),
+  routeGenerationRef: z.string().max(300).optional().catch(undefined),
+  routeRef: z.string().max(300).optional().catch(undefined),
 })
+
+type CustomerRequestWorkTreeLineage = Readonly<{
+  kind: 'customer_request'
+  requestRef: string
+  revision: number
+  routeGenerationRef: string
+  routeRef: string
+}>
 
 export type RootSearchParams = {
   q?: string | undefined
   project?: string | undefined
+  requestRef?: string | undefined
+  revision?: number | undefined
+  routeGenerationRef?: string | undefined
+  routeRef?: string | undefined
 }
-
-type ServiceSearchParams = { q?: string | undefined }
 
 export type ServicesRouteReadback = Readonly<{
   services: readonly ServiceDto[]
@@ -64,14 +78,16 @@ export type RootRouteReadback =
   | Readonly<{ kind: 'services'; page: ServicesRouteReadback }>
 
 export type RootRouteDeps = Readonly<{
-  startWorkTree: (outcome: string) => Promise<RootWorkTreeStart>
+  startWorkTree: (outcome: string, lineage?: CustomerRequestWorkTreeLineage) => Promise<RootWorkTreeStart>
   readWorkTree: (projectId: string) => Promise<RootWorkTreeReadback>
-  loadServices: (search: ServiceSearchParams) => Promise<ServicesRouteReadback | undefined>
+  loadServices: (search: RootSearchParams) => Promise<ServicesRouteReadback | undefined>
   isWorkTreeAsk: (query: string) => boolean
 }>
 
 export const defaultRootRouteDeps: RootRouteDeps = {
-  startWorkTree: (outcome) => startRootWorkTreeServer({ data: { outcome } }),
+  startWorkTree: (outcome, lineage) => startRootWorkTreeServer({
+    data: { outcome, ...(lineage === undefined ? {} : { lineage }) },
+  }),
   readWorkTree: (projectId) => readRootWorkTreeServer({ data: { projectId } }),
   loadServices: (search) => readServicesPageServer({ data: search }),
   isWorkTreeAsk: isBasDevelopmentAsk,
@@ -105,7 +121,7 @@ export async function loadRootRoute(
   if (query.length === 0) return undefined
 
   if (deps.isWorkTreeAsk(query)) {
-    const started = await deps.startWorkTree(query)
+    const started = await deps.startWorkTree(query, customerRequestLineage(search))
     if (started.kind === 'refused') {
       return { kind: 'work-tree', readback: started }
     }
@@ -116,6 +132,30 @@ export async function loadRootRoute(
   return page === undefined ? undefined : { kind: 'services', page }
 }
 
+function customerRequestLineage(search: RootSearchParams): CustomerRequestWorkTreeLineage | undefined {
+  const values = [search.requestRef, search.revision, search.routeGenerationRef, search.routeRef]
+  if (values.every((value) => value === undefined)) return undefined
+  const revision = search.revision
+  if (
+    typeof search.requestRef !== 'string'
+    || typeof revision !== 'number'
+    || !Number.isSafeInteger(revision)
+    || typeof search.routeGenerationRef !== 'string'
+    || typeof search.routeRef !== 'string'
+    || search.requestRef.trim().length === 0
+    || search.routeGenerationRef.trim().length === 0
+    || search.routeRef.trim().length === 0
+  ) {
+    throw new Error('customer_request_work_tree_lineage_incomplete')
+  }
+  return {
+    kind: 'customer_request',
+    requestRef: search.requestRef,
+    revision,
+    routeGenerationRef: search.routeGenerationRef,
+    routeRef: search.routeRef,
+  }
+}
 export const Route = createFileRoute('/')({
   validateSearch: (search: Record<string, unknown>): RootSearchParams => {
     const parsed = rootSearchSchema.parse(search)
@@ -124,6 +164,10 @@ export const Route = createFileRoute('/')({
     return {
       ...(query.length === 0 ? {} : { q: query }),
       ...(project.length === 0 ? {} : { project }),
+      ...(parsed.requestRef === undefined ? {} : { requestRef: parsed.requestRef }),
+      ...(parsed.revision === undefined ? {} : { revision: parsed.revision }),
+      ...(parsed.routeGenerationRef === undefined ? {} : { routeGenerationRef: parsed.routeGenerationRef }),
+      ...(parsed.routeRef === undefined ? {} : { routeRef: parsed.routeRef }),
     }
   },
   loaderDeps: ({ search }) => search,
@@ -139,7 +183,7 @@ export const Route = createFileRoute('/')({
   component: ServicesRoute,
 })
 
-export async function loadServicesRouteReadback(search: ServiceSearchParams): Promise<PublicServicesSearchPage | undefined> {
+export async function loadServicesRouteReadback(search: RootSearchParams): Promise<PublicServicesSearchPage | undefined> {
   const query = search.q?.trim().slice(0, 120) ?? ''
   if (query.length === 0) return undefined
 
@@ -149,7 +193,7 @@ export async function loadServicesRouteReadback(search: ServiceSearchParams): Pr
   })
 }
 
-export async function loadOneViewReadback(search: ServiceSearchParams): Promise<ServicesRouteReadback | undefined> {
+export async function loadOneViewReadback(search: RootSearchParams): Promise<ServicesRouteReadback | undefined> {
   const query = search.q?.trim().slice(0, 120) ?? ''
   if (query.length === 0) return undefined
   const servicePagePromise = loadServicesRouteReadback(search)

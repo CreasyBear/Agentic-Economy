@@ -745,6 +745,7 @@ function toToolCallRecord(row: Record<string, unknown>): AnswerToolCallRecord {
   }
 }
 
+
 async function deleteAnswerThreadBatch(ctx: MutationCtx, threadId: string): Promise<void> {
   const thread = await ctx.db
     .query('answerThreads')

@@ -3,8 +3,13 @@ import type * as Ai from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { discoverBusinessesFromWebSearch, enrichBusinessFromWebSearch } from '@/modules/storefront/public'
+import { storefrontEnrichDraftAction } from '@/modules/storefront/storefront.actions'
 
 import { openRouterGatewayConfig } from '@/modules/model-gateway/public'
+import {
+  openRouterToolThenProseResponses,
+  startOpenRouterContractServer,
+} from '../../helpers/openrouter-contract-server'
 
 const aiSdkTestState = vi.hoisted(() => ({
   generateTextCalls: [] as Array<Record<string, unknown>>,
@@ -189,5 +194,36 @@ describe('business enrichment from a web search', () => {
 
     expect(result.kind).toBe('error')
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('threads private model observations through the registered enrichment action', async () => {
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'Unused fixture prose.',
+        summary: 'Unused fixture prose.',
+        whatToDoNow: 'Unused fixture prose.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
+    const modelRequests: unknown[] = []
+
+    try {
+      await storefrontEnrichDraftAction.run({
+        data: { businessName: 'A' },
+        context: {
+          onModelRequest: (observation) => modelRequests.push(observation),
+        },
+      })
+
+      expect(modelRequests).toEqual([
+        expect.objectContaining({
+          provider: 'openrouter',
+          status: 'ok',
+        }),
+      ])
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
   })
 })

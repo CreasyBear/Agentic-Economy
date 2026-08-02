@@ -293,7 +293,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
   })
 
   it('lets an agent create and a person inspect the same project and revision', async () => {
-    const started = await source.create({ ...createInput, guestAssertion: 'guest:fixture' })
+    const started = await source.create(createInput)
     expect(started.kind).toBe('accepted')
     if (started.kind === 'refused') throw new Error('fixture create refused')
 
@@ -546,6 +546,7 @@ async function dispatchMutation(name: string, input: unknown): Promise<unknown> 
         treeId: result.treeId,
         operationKey: command.idempotencyKey,
         event: { kind: 'created', operationKey: `${result.projectId}:created`, seq: 1 },
+        lineage: createInput.lineage,
         generation: 1,
         revision: 1,
         payloadDigest: canonicalDigest(command),
@@ -616,7 +617,6 @@ function toAgentReadback(result: Extract<WorkTreeInspectResult, { kind: 'accepte
   return {
     projectId: result.projectId,
     treeId: result.treeId,
-    principalId: PRINCIPAL.principalId,
     lineage: { kind: 'standalone' as const },
     generation: result.generation,
     revision: result.revision,

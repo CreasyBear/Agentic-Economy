@@ -18,6 +18,7 @@ import type {
 } from './internal/durable-contracts'
 import {
   projectDurableAttempt,
+  reconstructDurableControlRow,
   restoreDurableAttempt,
 } from './internal/durable-contracts'
 import type { InMemoryTracerOptions } from './in-memory-record-store'
@@ -431,8 +432,9 @@ function reconstructSnapshot<Input, Result extends ActionResult>(
   port: DurableActionInvocationPort<Result>,
   invocationRef: string,
 ): InMemoryControlSnapshot<Input, Result> {
-  const row = port.readControl(invocationRef)
-  if (row === undefined) throw new Error(`Missing durable invocation ${invocationRef}.`)
+  const rawRow = port.readControl(invocationRef)
+  if (rawRow === undefined) throw new Error(`Missing durable invocation ${invocationRef}.`)
+  const row = reconstructDurableControlRow(rawRow)
   const attemptRows = [...port.readAttempts(invocationRef, 100)]
   if (
     row.currentAttemptRef !== undefined &&

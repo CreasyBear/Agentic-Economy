@@ -16,7 +16,22 @@ export async function getCurrentAggregate(
   const head = await ports.loadRequestHead(args.requestId)
   if (head !== null) {
     const revision = await ports.loadRevision(args.requestId, head.currentRevision)
-    if (revision === null || revision.aggregate.aggregateDigest !== head.currentAggregateDigest
+    if (revision === null) {
+      throw new Error('customer_request_v2_aggregate_integrity_failure')
+    }
+    // Historical V2 revisions may embed route plans in the aggregate. Recognize
+    // that shape before digest or current-row validation, but never return the
+    // legacy document as a current aggregate.
+    if (hasLegacyEmbeddedRoute(revision.aggregate)) {
+      return {
+        kind: 'resubmit_required',
+        requestId: args.requestId,
+        revision: head.currentRevision,
+        principalId: head.principalId,
+        reason: 'legacy_embedded_route',
+      }
+    }
+    if (revision.aggregate.aggregateDigest !== head.currentAggregateDigest
       || !aggregateIsInternallyConsistent(
         revision.aggregate,
         head.currentRevision - 1,
@@ -72,4 +87,11 @@ export async function getCurrentAggregate(
     }
   }
   return { kind: 'not_found' as const }
+}
+
+function hasLegacyEmbeddedRoute(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || !('plan' in value)) return false
+  const plan = value.plan
+  if (typeof plan !== 'object' || plan === null || !('routes' in plan)) return false
+  return Array.isArray(plan.routes)
 }

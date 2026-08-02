@@ -388,17 +388,40 @@ export function toInquiryThreadRecord(row: InquirySourceDocument): InquiryThread
   if (originKind === 'answer_thread' && origin === undefined) {
     throw new Error('inquiry_row_origin_thread_required')
   }
+
+  const offeringRef = optionalString(row, 'offeringRef')
+  const serviceId = optionalString(row, 'serviceId')
+  const capabilityKind = optionalString(row, 'capabilityKind')
+  const target = offeringRef !== undefined
+    ? serviceId === undefined && capabilityKind === undefined
+      ? { offeringRef: brandNonEmpty(offeringRef, 'OfferingRef') }
+      : (() => {
+          throw new Error('inquiry_row_target_shape_invalid')
+        })()
+    : serviceId !== undefined && capabilityKind !== undefined
+      ? {
+          serviceId: brandNonEmpty(serviceId, 'ServiceId'),
+          capabilityKind,
+        }
+      : (() => {
+          throw new Error('inquiry_row_target_required')
+        })()
+
   return {
     threadId: brandNonEmpty(requiredString(row, 'threadId'), 'InquiryThreadId'),
     businessId: brandNonEmpty(requiredString(row, 'businessId'), 'BusinessId'),
     ownerId: brandNonEmpty(requiredString(row, 'ownerId'), 'OwnerId'),
-    offeringRef: brandNonEmpty(requiredString(row, 'offeringRef'), 'OfferingRef'),
+    ...target,
     status: requiredEnum(row, 'status', InquiryThreadStatusValues),
     firstMessageId: brandNonEmpty(requiredString(row, 'firstMessageId'), 'InquiryMessageId'),
     sourceHash: brandNonEmpty(requiredString(row, 'sourceHash'), 'SourceHash'),
     createdAt: requiredNumber(row, 'createdAt'),
     updatedAt: requiredNumber(row, 'updatedAt'),
     version: requiredNumber(row, 'version'),
+    ...(customerReplyEmail === undefined ? {} : { customerReplyEmail }),
+    ...(readAt === undefined ? {} : { readAt }),
+    ...(repliedAt === undefined ? {} : { repliedAt }),
+    ...(closedAt === undefined ? {} : { closedAt }),
     ...(origin === undefined ? {} : { origin }),
   }
 }
@@ -639,6 +662,35 @@ export async function toGovernedSendReceiptRecord(
 export function toGovernedSendIntegrityCommitmentRecord(row: InquirySourceDocument): GovernedSendIntegrityCommitmentRecord {
   const targetBinding = requiredRecord(row, 'targetBinding')
   if (requiredString(row, 'version') !== 'governed-send-integrity:v1') throw new Error('inquiry_row_commitment_version_invalid')
+
+  const offeringRef = optionalString(targetBinding, 'offeringRef')
+  const serviceId = optionalString(targetBinding, 'serviceId')
+  const capabilityKind = optionalString(targetBinding, 'capabilityKind')
+  const target = offeringRef !== undefined
+    ? serviceId === undefined && capabilityKind === undefined
+      ? {
+          businessId: brandNonEmpty(requiredString(targetBinding, 'businessId'), 'BusinessId'),
+          ownerId: brandNonEmpty(requiredString(targetBinding, 'ownerId'), 'OwnerId'),
+          offeringRef: brandNonEmpty(offeringRef, 'OfferingRef'),
+          claimRef: requiredString(targetBinding, 'claimRef'),
+          recipientRef: requiredString(targetBinding, 'recipientRef'),
+        }
+      : (() => {
+          throw new Error('inquiry_row_commitment_target_shape_invalid')
+        })()
+    : serviceId !== undefined && capabilityKind !== undefined
+      ? {
+          businessId: brandNonEmpty(requiredString(targetBinding, 'businessId'), 'BusinessId'),
+          ownerId: brandNonEmpty(requiredString(targetBinding, 'ownerId'), 'OwnerId'),
+          serviceId: brandNonEmpty(serviceId, 'ServiceId'),
+          capabilityKind,
+          claimRef: requiredString(targetBinding, 'claimRef'),
+          recipientRef: requiredString(targetBinding, 'recipientRef'),
+        }
+      : (() => {
+          throw new Error('inquiry_row_commitment_target_required')
+        })()
+
   return {
     version: 'governed-send-integrity:v1',
     receiptRef: requiredString(row, 'receiptRef'),
@@ -646,13 +698,7 @@ export function toGovernedSendIntegrityCommitmentRecord(row: InquirySourceDocume
     threadId: brandNonEmpty(requiredString(row, 'threadId'), 'InquiryThreadId'),
     digest: sha256Digest(requiredString(row, 'digest')),
     keyId: requiredString(row, 'keyId'),
-    targetBinding: {
-      businessId: brandNonEmpty(requiredString(targetBinding, 'businessId'), 'BusinessId'),
-      ownerId: brandNonEmpty(requiredString(targetBinding, 'ownerId'), 'OwnerId'),
-      offeringRef: brandNonEmpty(requiredString(targetBinding, 'offeringRef'), 'OfferingRef'),
-      claimRef: requiredString(targetBinding, 'claimRef'),
-      recipientRef: requiredString(targetBinding, 'recipientRef'),
-    },
+    targetBinding: target,
     signature: hmacSha256(requiredString(row, 'signature')),
     createdAt: requiredNumber(row, 'createdAt'),
   }

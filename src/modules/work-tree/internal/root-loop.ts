@@ -19,7 +19,8 @@ import { z } from 'zod'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 
-import type { WorkTree } from './contract'
+import type { WorkTree, WorkTreeLineage } from './contract'
+export type { WorkTreeLineage }
 import type { WorkTreeApprovalAuthority, WorkTreeApprovalRefusalCode } from './approval'
 import {
   DECISION_INBOX_LIMIT,
@@ -67,10 +68,7 @@ export type WorkTreeStepUp = Readonly<{
 export type WorkTreeRefusalCode = 'authentication_required' | 'stale_fence' | 'forbidden' | 'not_found' | 'digest_mismatch' | 'step_up_required' | 'live_money_gate_open' | 'stripe_setup_required' | WorkTreeApprovalRefusalCode
 
 export type WorkTreeActor = Readonly<{
-  principalId: string
-  ownerId: string
-  credentialId?: string | undefined
-  source?: 'human_source' | 'browser_guest' | 'customer_request_agent' | undefined
+  source: 'human_source' | 'browser_guest' | 'customer_request_agent'
 }>
 
 /**
@@ -140,7 +138,7 @@ export type WorkTreeSourcePort = Readonly<{
   create(input: Readonly<{
     idempotencyKey: string
     charterText: string
-    lineage: Readonly<{ kind: 'standalone' }>
+    lineage: WorkTreeLineage
     /**
      * Opaque signed browser-guest token for an anonymous human start. It is
      * server-minted and server-verified; the host never names a principal, and
@@ -205,7 +203,7 @@ export function isBasDevelopmentAsk(query: string): boolean {
  * a person who closes the tab mid-flight still owns the project on return.
  */
 export async function startRootWorkTree(
-  input: Readonly<{ outcome: string; guestAssertion?: string }>,
+  input: Readonly<{ outcome: string; lineage?: WorkTreeLineage; guestAssertion?: string }>,
   port: WorkTreeSourcePort,
 ): Promise<RootWorkTreeStart> {
   const charterText = input.outcome.trim().slice(0, 4_000)
@@ -216,7 +214,7 @@ export async function startRootWorkTree(
     // the principal, so the key never has to carry identity.
     idempotencyKey: canonicalDigest({ surface: 'root', charterText }),
     charterText,
-    lineage: { kind: 'standalone' },
+    lineage: input.lineage ?? { kind: 'standalone' },
     ...(input.guestAssertion === undefined ? {} : { guestAssertion: input.guestAssertion }),
   })
   if (created.kind === 'refused') return created

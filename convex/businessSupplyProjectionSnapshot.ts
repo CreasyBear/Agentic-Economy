@@ -1,4 +1,3 @@
-import type { Doc } from './_generated/dataModel'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { isRecord } from '../src/modules/common/is-record'
 import {
@@ -15,14 +14,22 @@ import {
 
 export type BusinessSupplyProjectionErrorPrefix = 'catalog' | 'registry' | 'discovery'
 
-type PersistedBusinessSupplyProjection = NonNullable<Doc<'businessSupplyProjectionSnapshots'>['projection']>
-type PersistedOfferingPrice = NonNullable<PersistedBusinessSupplyProjection['offerings'][number]['offering']['price']>
+export type BusinessSupplyProjectionSnapshotEnvelope = Readonly<{
+  businessId?: string
+  sourceRevision?: number
+  sourceDigest?: string
+  observedAt?: number
+  disposition?: BusinessSupplyProjection['disposition']
+}>
+
 type ProjectionOffering = BusinessSupplyProjection['offerings'][number]
 type ProjectionSupportReason = ProjectionOffering['support']['reasons'][number]
 
 type DecoderContext = {
   errorPrefix: BusinessSupplyProjectionErrorPrefix
   expectedBusinessId?: string
+  expectedSlug?: string
+  envelope?: BusinessSupplyProjectionSnapshotEnvelope
 }
 
 /** Decode the persisted projection once at each public Convex boundary. */
@@ -30,85 +37,164 @@ export function readBusinessSupplyProjectionSnapshot(
   value: unknown,
   errorPrefix: BusinessSupplyProjectionErrorPrefix,
   expectedBusinessId?: string,
+  expectedSlug?: string,
+  envelope?: BusinessSupplyProjectionSnapshotEnvelope,
 ): BusinessSupplyProjection {
-  const context: DecoderContext = expectedBusinessId === undefined
-    ? { errorPrefix }
-    : { errorPrefix, expectedBusinessId }
-  if (errorPrefix === 'discovery') return readDiscoveryProjection(value, context)
+  const context: DecoderContext = {
+    errorPrefix,
+    ...(expectedBusinessId === undefined ? {} : { expectedBusinessId }),
+    ...(expectedSlug === undefined ? {} : { expectedSlug }),
+    ...(envelope === undefined ? {} : { envelope }),
+  }
+  const isLegacyProjectionJson = typeof value === 'string'
+  const decoded = decodeProjectionValue(value, context)
+  const projection = errorPrefix === 'discovery'
+    ? readDiscoveryProjection(decoded, context)
+    : (() => {
+        const row = readRecord(decoded, `${errorPrefix}_projection_invalid`)
+        return {
+          business: readPersistedBusiness(row.business, context),
+          offerings: readArray(row.offerings, `${errorPrefix}_projection_offerings_invalid`)
+            .map((entry) => readPersistedOffering(entry, context)),
+          sourceRevision: readNumber(row.sourceRevision, `${errorPrefix}_projection_source_revision_invalid`),
+          sourceDigest: brandNonEmpty(
+            readString(row.sourceDigest, `${errorPrefix}_projection_source_digest_invalid`),
+            'SourceHash',
+          ),
+          observedAt: readNumber(row.observedAt, `${errorPrefix}_projection_observed_at_invalid`),
+          disposition: readDisposition(row.disposition, context),
+        }
+      })()
+  if (isLegacyProjectionJson) validateProjectionEnvelope(projection, context)
+  return projection
+}
 
-  const projection = value as PersistedBusinessSupplyProjection
-  return {
-    business: readPersistedBusiness(projection.business),
-    offerings: projection.offerings.map((entry) => readPersistedOffering(entry, context)),
-    sourceRevision: projection.sourceRevision,
-    sourceDigest: brandNonEmpty(projection.sourceDigest, 'SourceHash'),
-    observedAt: projection.observedAt,
-    disposition: projection.disposition,
+function validateProjectionEnvelope(
+  projection: BusinessSupplyProjection,
+  context: DecoderContext,
+): void {
+  const envelope = context.envelope
+  if (envelope === undefined) return
+  if (envelope.businessId !== undefined && projection.business.businessId !== envelope.businessId) {
+    throw new Error(`${context.errorPrefix}_projection_envelope_business_mismatch`)
+  }
+  if (envelope.sourceRevision !== undefined && projection.sourceRevision !== envelope.sourceRevision) {
+    throw new Error(`${context.errorPrefix}_projection_envelope_revision_mismatch`)
+  }
+  if (envelope.sourceDigest !== undefined && projection.sourceDigest !== envelope.sourceDigest) {
+    throw new Error(`${context.errorPrefix}_projection_envelope_digest_mismatch`)
+  }
+  if (envelope.observedAt !== undefined && projection.observedAt !== envelope.observedAt) {
+    throw new Error(`${context.errorPrefix}_projection_envelope_observed_at_mismatch`)
+  }
+  if (envelope.disposition !== undefined && projection.disposition !== envelope.disposition) {
+    throw new Error(`${context.errorPrefix}_projection_envelope_disposition_mismatch`)
+  }
+}
+
+function decodeProjectionValue(value: unknown, context: DecoderContext): unknown {
+  if (typeof value !== 'string') return value
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    throw new Error(`${context.errorPrefix}_projection_json_invalid`)
   }
 }
 
 function readPersistedBusiness(
-  value: PersistedBusinessSupplyProjection['business'],
+  value: unknown,
+  context: DecoderContext,
 ): BusinessSupplyProjection['business'] {
+  const row = readRecord(value, `${context.errorPrefix}_projection_business_invalid`)
+  const businessId = readString(row.businessId, `${context.errorPrefix}_projection_business_id_invalid`)
+  const slug = readString(row.slug, `${context.errorPrefix}_projection_business_slug_invalid`)
+  const publishedPhone = readOptionalString(row.publishedPhone, `${context.errorPrefix}_projection_business_phone_invalid`)
+  const postcode = readOptionalString(row.postcode, `${context.errorPrefix}_projection_business_postcode_invalid`)
+  const responseTimeMinutes = readOptionalNumber(row.responseTimeMinutes, `${context.errorPrefix}_projection_business_response_time_invalid`)
+  const photos = row.photos === undefined
+    ? undefined
+    : readArray(row.photos, `${context.errorPrefix}_projection_business_photos_invalid`).map((photo) => {
+        const photoRecord = readRecord(photo, `${context.errorPrefix}_projection_business_photo_invalid`)
+        return {
+          url: readString(photoRecord.url, `${context.errorPrefix}_projection_business_photo_url_invalid`),
+          alt: readString(photoRecord.alt, `${context.errorPrefix}_projection_business_photo_alt_invalid`),
+        }
+      })
+  if (context.expectedBusinessId !== undefined && businessId !== context.expectedBusinessId) {
+    throw new Error(`${context.errorPrefix}_projection_business_mismatch`)
+  }
+  if (context.expectedSlug !== undefined && slug !== context.expectedSlug) {
+    throw new Error(`${context.errorPrefix}_projection_slug_mismatch`)
+  }
   return {
-    businessId: brandNonEmpty(String(value.businessId), 'BusinessId'),
-    slug: value.slug,
-    name: value.name,
-    category: value.category,
-    suburb: value.suburb,
-    stateTerritory: value.stateTerritory,
-    ...(value.publishedPhone === undefined ? {} : { publishedPhone: value.publishedPhone }),
-    ...(value.postcode === undefined ? {} : { postcode: value.postcode }),
-    publicUrl: value.publicUrl,
-    trustTier: value.trustTier,
-    ...(value.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: value.responseTimeMinutes }),
-    ...(value.photos === undefined ? {} : { photos: value.photos.map((photo: { url: string; alt: string }) => ({ url: photo.url, alt: photo.alt })) }),
+    businessId: brandNonEmpty(businessId, 'BusinessId'),
+    slug,
+    name: readString(row.name, `${context.errorPrefix}_projection_business_name_invalid`),
+    category: readString(row.category, `${context.errorPrefix}_projection_business_category_invalid`),
+    suburb: readString(row.suburb, `${context.errorPrefix}_projection_business_suburb_invalid`),
+    stateTerritory: readString(row.stateTerritory, `${context.errorPrefix}_projection_business_state_invalid`),
+    ...(publishedPhone === undefined ? {} : { publishedPhone }),
+    ...(postcode === undefined ? {} : { postcode }),
+    publicUrl: readString(row.publicUrl, `${context.errorPrefix}_projection_business_url_invalid`),
+    trustTier: readTrustTier(row.trustTier, context),
+    ...(responseTimeMinutes === undefined ? {} : { responseTimeMinutes }),
+    ...(photos === undefined ? {} : { photos }),
   }
 }
 
 function readPersistedOffering(
-  value: PersistedBusinessSupplyProjection['offerings'][number],
+  value: unknown,
   context: DecoderContext,
 ): ProjectionOffering {
+  const row = readRecord(value, `${context.errorPrefix}_projection_offering_invalid`)
+  const offering = readRecord(row.offering, `${context.errorPrefix}_projection_offering_facts_invalid`)
+  const serviceAreaSummary = readOptionalString(offering.serviceAreaSummary, `${context.errorPrefix}_projection_offering_area_invalid`)
+  const availabilitySummary = readOptionalString(offering.availabilitySummary, `${context.errorPrefix}_projection_offering_availability_invalid`)
+  const pricingSummary = readOptionalString(offering.pricingSummary, `${context.errorPrefix}_projection_offering_pricing_invalid`)
+  const price = offering.price === undefined ? undefined : readPrice(offering.price, context)
+  const support = readRecord(row.support, `${context.errorPrefix}_projection_offering_support_invalid`)
+  const reasons = readArray(support.reasons, `${context.errorPrefix}_projection_offering_reasons_invalid`)
+    .map((reason) => readSupportReason(reason, context))
+  const observedAt = readOptionalNumber(support.observedAt, `${context.errorPrefix}_projection_offering_observed_at_invalid`)
+  const validUntil = readOptionalNumber(support.validUntil, `${context.errorPrefix}_projection_offering_valid_until_invalid`)
+  const accessPaths = readArray(row.accessPaths, `${context.errorPrefix}_projection_offering_access_paths_invalid`).map((path) => {
+    const pathRecord = readRecord(path, `${context.errorPrefix}_projection_access_path_invalid`)
+    return {
+      accessPathRef: brandNonEmpty(
+        readString(pathRecord.accessPathRef, `${context.errorPrefix}_projection_access_path_ref_invalid`),
+        'AccessPathRef',
+      ),
+      descriptor: readDescriptor(pathRecord.descriptor, context),
+    }
+  })
   return {
     offering: {
-      offeringRef: brandNonEmpty(value.offering.offeringRef, 'OfferingRef'),
-      revision: value.offering.revision,
-      name: value.offering.name,
-      category: value.offering.category,
-      summary: value.offering.summary,
-      ...(value.offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: value.offering.serviceAreaSummary }),
-      ...(value.offering.availabilitySummary === undefined ? {} : { availabilitySummary: value.offering.availabilitySummary }),
-      ...(value.offering.pricingSummary === undefined ? {} : { pricingSummary: value.offering.pricingSummary }),
-      ...(value.offering.price === undefined ? {} : { price: readPrice(value.offering.price, context) }),
+      offeringRef: brandNonEmpty(
+        readString(offering.offeringRef, `${context.errorPrefix}_projection_offering_ref_invalid`),
+        'OfferingRef',
+      ),
+      revision: readNumber(offering.revision, `${context.errorPrefix}_projection_offering_revision_invalid`),
+      name: readString(offering.name, `${context.errorPrefix}_projection_offering_name_invalid`),
+      category: readString(offering.category, `${context.errorPrefix}_projection_offering_category_invalid`),
+      summary: readString(offering.summary, `${context.errorPrefix}_projection_offering_summary_invalid`),
+      ...(serviceAreaSummary === undefined ? {} : { serviceAreaSummary }),
+      ...(availabilitySummary === undefined ? {} : { availabilitySummary }),
+      ...(pricingSummary === undefined ? {} : { pricingSummary }),
+      ...(price === undefined ? {} : { price }),
     },
-    accessPaths: value.accessPaths.map((path) => ({
-      accessPathRef: brandNonEmpty(path.accessPathRef, 'AccessPathRef'),
-      descriptor: readDescriptor(path.descriptor, context),
-    })),
+    accessPaths,
     support: {
-      integrated: value.support.integrated,
-      routeable: value.support.routeable,
-      reasons: [...value.support.reasons],
-      ...(value.support.observedAt === undefined ? {} : { observedAt: value.support.observedAt }),
-      ...(value.support.validUntil === undefined ? {} : { validUntil: value.support.validUntil }),
+      integrated: readBoolean(support.integrated, `${context.errorPrefix}_projection_offering_integrated_invalid`),
+      routeable: readBoolean(support.routeable, `${context.errorPrefix}_projection_offering_routeable_invalid`),
+      reasons,
+      ...(observedAt === undefined ? {} : { observedAt }),
+      ...(validUntil === undefined ? {} : { validUntil }),
     },
   }
 }
 
 function readPrice(value: unknown, context: DecoderContext): OfferingPrice {
-  if (context.errorPrefix === 'registry') {
-    const persisted = value as PersistedOfferingPrice
-    return {
-      kind: persisted.kind,
-      currency: persisted.currency,
-      ...(persisted.amountMinor === undefined ? {} : { amountMinor: persisted.amountMinor }),
-      ...(persisted.maximumAmountMinor === undefined ? {} : { maximumAmountMinor: persisted.maximumAmountMinor }),
-      ...(persisted.unit === undefined ? {} : { unit: persisted.unit }),
-      taxTreatment: persisted.taxTreatment,
-    }
-  }
-  const row = readRecord(value, context.errorPrefix === 'catalog' ? 'catalog_invalid_price' : 'discovery_manifest_price_invalid')
+  const row = readRecord(value, context.errorPrefix === 'catalog' ? 'catalog_invalid_price' : `invalid_${context.errorPrefix}_price`)
   const amountMinor = readOptionalNumber(row.amountMinor, priceFieldError(context, 'amountMinor'))
   const maximumAmountMinor = readOptionalNumber(row.maximumAmountMinor, priceFieldError(context, 'maximumAmountMinor'))
   const unit = row.unit === undefined
@@ -171,100 +257,37 @@ function readDescriptor(value: unknown, context: DecoderContext): OfferingAccess
 }
 
 function readDiscoveryProjection(value: unknown, context: DecoderContext): BusinessSupplyProjection {
-  const row = readRecord(value, 'discovery_projection_invalid')
-  const business = readRecord(row.business, 'discovery_projection_business_invalid')
-  const businessIdValue = readString(business.businessId, 'discovery_projection_business_id_invalid')
-  if (context.expectedBusinessId !== undefined && businessIdValue !== context.expectedBusinessId) {
-    throw new Error('discovery_projection_business_mismatch')
-  }
-  const publishedPhone = readOptionalString(business.publishedPhone, 'discovery_projection_business_phone_invalid')
-  const postcode = readOptionalString(business.postcode, 'discovery_projection_business_postcode_invalid')
-  const responseTimeMinutes = readOptionalNumber(business.responseTimeMinutes, 'discovery_projection_business_response_time_invalid')
-  const photos = business.photos === undefined
-    ? undefined
-    : readArray(business.photos, 'discovery_projection_business_photos_invalid').map((photo) => {
-        const photoRecord = readRecord(photo, 'discovery_projection_business_photo_invalid')
-        return {
-          url: readString(photoRecord.url, 'discovery_projection_business_photo_url_invalid'),
-          alt: readString(photoRecord.alt, 'discovery_projection_business_photo_alt_invalid'),
-        }
-      })
+  const row = readRecord(value, `${context.errorPrefix}_projection_invalid`)
   return {
-    business: {
-      businessId: brandNonEmpty(businessIdValue, 'BusinessId'),
-      slug: readString(business.slug, 'discovery_projection_business_slug_invalid'),
-      name: readString(business.name, 'discovery_projection_business_name_invalid'),
-      category: readString(business.category, 'discovery_projection_business_category_invalid'),
-      suburb: readString(business.suburb, 'discovery_projection_business_suburb_invalid'),
-      stateTerritory: readString(business.stateTerritory, 'discovery_projection_business_state_invalid'),
-      ...(publishedPhone === undefined ? {} : { publishedPhone }),
-      ...(postcode === undefined ? {} : { postcode }),
-      publicUrl: readString(business.publicUrl, 'discovery_projection_business_url_invalid'),
-      trustTier: readTrustTier(business.trustTier),
-      ...(responseTimeMinutes === undefined ? {} : { responseTimeMinutes }),
-      ...(photos === undefined ? {} : { photos }),
-    },
-    offerings: readArray(row.offerings, 'discovery_projection_offerings_invalid').map((entry) => readDiscoveryOffering(entry, context)),
-    sourceRevision: readNumber(row.sourceRevision, 'discovery_projection_source_revision_invalid'),
-    sourceDigest: brandNonEmpty(readString(row.sourceDigest, 'discovery_projection_source_digest_invalid'), 'SourceHash'),
-    observedAt: readNumber(row.observedAt, 'discovery_projection_observed_at_invalid'),
-    disposition: readDisposition(row.disposition),
+    business: readPersistedBusiness(row.business, context),
+    offerings: readArray(row.offerings, `${context.errorPrefix}_projection_offerings_invalid`)
+      .map((entry) => readPersistedOffering(entry, context)),
+    sourceRevision: readNumber(row.sourceRevision, `${context.errorPrefix}_projection_source_revision_invalid`),
+    sourceDigest: brandNonEmpty(
+      readString(row.sourceDigest, `${context.errorPrefix}_projection_source_digest_invalid`),
+      'SourceHash',
+    ),
+    observedAt: readNumber(row.observedAt, `${context.errorPrefix}_projection_observed_at_invalid`),
+    disposition: readDisposition(row.disposition, context),
   }
 }
 
-function readDiscoveryOffering(value: unknown, context: DecoderContext): ProjectionOffering {
-  const row = readRecord(value, 'discovery_projection_offering_invalid')
-  const offering = readRecord(row.offering, 'discovery_projection_offering_facts_invalid')
-  const serviceAreaSummary = readOptionalString(offering.serviceAreaSummary, 'discovery_projection_offering_area_invalid')
-  const availabilitySummary = readOptionalString(offering.availabilitySummary, 'discovery_projection_offering_availability_invalid')
-  const pricingSummary = readOptionalString(offering.pricingSummary, 'discovery_projection_offering_pricing_invalid')
-  const price = offering.price === undefined ? undefined : readPrice(offering.price, context)
-  const support = readRecord(row.support, 'discovery_projection_offering_support_invalid')
-  const reasons = readArray(support.reasons, 'discovery_projection_offering_reasons_invalid').map(readSupportReason)
-  const observedAt = readOptionalNumber(support.observedAt, 'discovery_projection_offering_observed_at_invalid')
-  const validUntil = readOptionalNumber(support.validUntil, 'discovery_projection_offering_valid_until_invalid')
-  return {
-    offering: {
-      offeringRef: brandNonEmpty(readString(offering.offeringRef, 'discovery_projection_offering_ref_invalid'), 'OfferingRef'),
-      revision: readNumber(offering.revision, 'discovery_projection_offering_revision_invalid'),
-      name: readString(offering.name, 'discovery_projection_offering_name_invalid'),
-      category: readString(offering.category, 'discovery_projection_offering_category_invalid'),
-      summary: readString(offering.summary, 'discovery_projection_offering_summary_invalid'),
-      ...(serviceAreaSummary === undefined ? {} : { serviceAreaSummary }),
-      ...(availabilitySummary === undefined ? {} : { availabilitySummary }),
-      ...(pricingSummary === undefined ? {} : { pricingSummary }),
-      ...(price === undefined ? {} : { price }),
-    },
-    accessPaths: readArray(row.accessPaths, 'discovery_projection_offering_access_paths_invalid').map((path) => {
-      const pathRecord = readRecord(path, 'discovery_projection_access_path_invalid')
-      return {
-        accessPathRef: brandNonEmpty(readString(pathRecord.accessPathRef, 'discovery_projection_access_path_ref_invalid'), 'AccessPathRef'),
-        descriptor: readDescriptor(pathRecord.descriptor, context),
-      }
-    }),
-    support: {
-      integrated: readBoolean(support.integrated, 'discovery_projection_offering_integrated_invalid'),
-      routeable: readBoolean(support.routeable, 'discovery_projection_offering_routeable_invalid'),
-      reasons,
-      ...(observedAt === undefined ? {} : { observedAt }),
-      ...(validUntil === undefined ? {} : { validUntil }),
-    },
-  }
-}
-
-function readTrustTier(value: unknown): BusinessSupplyProjection['business']['trustTier'] {
+function readTrustTier(
+  value: unknown,
+  context: DecoderContext,
+): BusinessSupplyProjection['business']['trustTier'] {
   if (value === 'claimed' || value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified') return value
-  throw new Error('discovery_projection_trust_tier_invalid')
+  throw new Error(`${context.errorPrefix}_projection_trust_tier_invalid`)
 }
 
-function readSupportReason(value: unknown): ProjectionSupportReason {
+function readSupportReason(value: unknown, context: DecoderContext): ProjectionSupportReason {
   if (PublicSupportReasonValues.includes(value as ProjectionSupportReason)) return value as ProjectionSupportReason
-  throw new Error('discovery_projection_support_reason_invalid')
+  throw new Error(`${context.errorPrefix}_projection_support_reason_invalid`)
 }
 
-function readDisposition(value: unknown): BusinessSupplyProjection['disposition'] {
+function readDisposition(value: unknown, context: DecoderContext): BusinessSupplyProjection['disposition'] {
   if (value === 'current' || value === 'partial' || value === 'stale') return value
-  throw new Error('discovery_manifest_disposition_invalid')
+  throw new Error(`${context.errorPrefix}_projection_disposition_invalid`)
 }
 
 function descriptorError(context: DecoderContext, kind: 'record' | 'interface' | 'kind'): string {
@@ -317,6 +340,10 @@ function descriptorLiteralError(context: DecoderContext, field: string): string 
 
 function priceFieldError(context: DecoderContext, field: string): string {
   if (context.errorPrefix === 'catalog') return `catalog_invalid_${field}`
+  if (context.errorPrefix === 'registry') {
+    const mapped = field === 'amountMinor' ? 'amount' : field === 'maximumAmountMinor' ? 'maximum' : field
+    return `invalid_registry_${mapped}`
+  }
   if (field === 'amountMinor') return 'discovery_manifest_price_amount_invalid'
   if (field === 'maximumAmountMinor') return 'discovery_manifest_price_maximum_invalid'
   if (field === 'taxTreatment') return 'discovery_manifest_tax_treatment_invalid'

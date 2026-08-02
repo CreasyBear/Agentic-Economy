@@ -17,10 +17,6 @@ import {
   sanitizeWorkTreeParityEvidence,
   writeWorkTreeParityEvidencePacket,
 } from '../../../tools/release/work-tree-parity-evidence'
-import {
-  seedHostedWorkTreeCohort,
-  validateSetupPath,
-} from '../../../tools/release/work-tree-parity-seed'
 import { vercelProtectionBypassHeaders } from '../../../tests/deploy-smoke/vercel-bypass'
 
 const baseEnv = {
@@ -29,7 +25,7 @@ const baseEnv = {
   AE_RELEASE_SOURCE_REVISION: 'a'.repeat(40),
   AE_RELEASE_DEPLOYMENT_ID: 'dpl_preview_123',
   AE_RELEASE_CONVEX_DEPLOYMENT_ID: 'happy-animal-123',
-  AE_WORK_TREE_SETUP_TOKEN: 'setup-secret-value',
+  AE_T51_RELEASE_MODE: 'release',
   CLERK_SECRET_KEY: 'sk_test_temporary',
   AE_WORK_TREE_CLERK_INSTANCE_ID: 'ins_preview',
   AE_WORK_TREE_CLERK_SUBJECT: 'user_preview',
@@ -52,10 +48,8 @@ describe('hosted T51 invocation contract', () => {
     expect(workflow).not.toContain('trace.zip')
   })
 })
-
-
 describe('hosted WorkTree parity configuration', () => {
-  it('requires deployed URLs, exact source identity, deployment IDs, and setup admission', () => {
+  it('requires deployed URLs, exact source identity, deployment IDs, and release credentials only in release mode', () => {
     const config = workTreeParityConfigFromEnvironment(baseEnv)
     expect(config.baseUrl.href).toBe('https://preview.example.test/')
     expect(config.convexUrl.href).toBe('https://happy-animal-123.convex.cloud/')
@@ -63,9 +57,12 @@ describe('hosted WorkTree parity configuration', () => {
     expect(config.vercelDeploymentId).toBe('dpl_preview_123')
     expect(config.convexDeploymentId).toBe('happy-animal-123')
     expect(config.evidenceDirectory).toContain('output/release/work-tree-parity')
-    expect(config.setupToken).toBe('setup-secret-value')
+    expect(config.releaseMode).toBe(true)
+    expect(config.clerkSecretKey).toBe('sk_test_temporary')
+    expect(config.clerkInstanceId).toBe('ins_preview')
+    expect(config).not.toHaveProperty('setupToken')
+    expect(config).not.toHaveProperty('clerkSubject')
   })
-
   it.each([
     ['placeholder', 'UNAVAILABLE_NOT_DEPLOYED', 'AE_RELEASE_CONVEX_DEPLOYMENT_ID_invalid'],
     ['local', 'local', 'AE_RELEASE_CONVEX_DEPLOYMENT_ID_invalid'],
@@ -96,21 +93,28 @@ describe('hosted WorkTree parity configuration', () => {
     expect(config.convexDeploymentId).toBe('dev:happy-animal-123')
   })
 
-  it('fails closed for missing setup seam credentials, localhost, and non-SHA revisions', () => {
-    const withoutSetup = { ...baseEnv }
-    delete (withoutSetup as Record<string, string | undefined>).AE_WORK_TREE_SETUP_TOKEN
-    expect(() => workTreeParityConfigFromEnvironment(withoutSetup)).toThrow('AE_WORK_TREE_SETUP_TOKEN_required')
+  it('fails closed for missing runtime Clerk credentials only in named release mode', () => {
+    const withoutClerk = { ...baseEnv }
+    delete (withoutClerk as Record<string, string | undefined>).CLERK_SECRET_KEY
+    expect(() => workTreeParityConfigFromEnvironment(withoutClerk)).toThrow('CLERK_SECRET_KEY_required')
     expect(() => workTreeParityConfigFromEnvironment({ ...baseEnv, DEPLOY_BASE_URL: 'http://localhost:3000' })).toThrow('DEPLOY_BASE_URL_deployed_https_required')
     expect(() => workTreeParityConfigFromEnvironment({ ...baseEnv, AE_RELEASE_SOURCE_REVISION: 'not-a-sha' })).toThrow('AE_RELEASE_SOURCE_REVISION_invalid')
   })
 
-  it('validates bounded timeout and setup paths', () => {
+  it('does not require hosted Clerk secrets for source-mode config', () => {
+    const sourceEnv = { ...baseEnv }
+    delete (sourceEnv as Record<string, string | undefined>).AE_T51_RELEASE_MODE
+    delete (sourceEnv as Record<string, string | undefined>).CLERK_SECRET_KEY
+    delete (sourceEnv as Record<string, string | undefined>).AE_WORK_TREE_CLERK_INSTANCE_ID
+    const config = workTreeParityConfigFromEnvironment(sourceEnv)
+    expect(config.releaseMode).toBe(false)
+    expect(config).not.toHaveProperty('clerkSecretKey')
+  })
+
+  it('validates bounded timeout', () => {
     expect(parseTimeout(undefined)).toBe(180_000)
     expect(parseTimeout('60000')).toBe(60_000)
     expect(() => parseTimeout('1')).toThrow('AE_WORK_TREE_TIMEOUT_MS_invalid')
-    expect(validateSetupPath('/api/v1/work-tree/setup')).toBe('/api/v1/work-tree/setup')
-    expect(() => validateSetupPath('https://elsewhere.example/setup')).toThrow('AE_WORK_TREE_SETUP_PATH_invalid')
-    expect(() => validateSetupPath('/api/../convex')).toThrow('AE_WORK_TREE_SETUP_PATH_invalid')
   })
 
   it('computes the exact human root decision digest without adding authority fields', () => {
@@ -269,93 +273,8 @@ describe('hosted WorkTree temporary credentials', () => {
 
 })
 
-describe('hosted WorkTree setup and evidence seams', () => {
-  it('fails at the named setup seam instead of bypassing a missing route', async () => {
-    const fetchImpl = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response('{"code":"unknown_action"}', { status: 404 }))
-    await expect(seedHostedWorkTreeCohort({
-      baseUrl: new URL(baseEnv.DEPLOY_BASE_URL),
-      setupPath: '/api/v1/work-tree/setup',
-      setupToken: baseEnv.AE_WORK_TREE_SETUP_TOKEN,
-      ownerSubject: baseEnv.AE_WORK_TREE_CLERK_SUBJECT,
-      metadata: {
-        sourceRevision: baseEnv.AE_RELEASE_SOURCE_REVISION,
-        vercelDeploymentId: baseEnv.AE_RELEASE_DEPLOYMENT_ID,
-        convexDeploymentId: baseEnv.AE_RELEASE_CONVEX_DEPLOYMENT_ID,
-      },
-      charterText: 'BAS development proof',
-      fetchImpl,
-    })).rejects.toThrow('work_tree_setup_seam_missing')
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-  })
-
-  it('parses only labelled shared setup readback and rejects a missing principal handoff', async () => {
-    const fetchImpl = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({
-      kind: 'accepted',
-      cohort: 'bas-development',
-      evidenceClass: WORK_TREE_PARITY_EVIDENCE_CLASS,
-      ownerSubject: baseEnv.AE_WORK_TREE_CLERK_SUBJECT,
-      projectId: 'project:one',
-      createIdempotencyKey: 'root-key',
-      charterText: 'BAS development proof',
-      sharedPrincipalRef: 'owner:one',
-      wrongPrincipalProjectId: 'project:foreign',
-    }))
-    await expect(seedHostedWorkTreeCohort({
-      baseUrl: new URL(baseEnv.DEPLOY_BASE_URL),
-      setupPath: '/api/v1/work-tree/setup',
-      setupToken: baseEnv.AE_WORK_TREE_SETUP_TOKEN,
-      ownerSubject: baseEnv.AE_WORK_TREE_CLERK_SUBJECT,
-      metadata: {
-        sourceRevision: baseEnv.AE_RELEASE_SOURCE_REVISION,
-        vercelDeploymentId: baseEnv.AE_RELEASE_DEPLOYMENT_ID,
-        convexDeploymentId: baseEnv.AE_RELEASE_CONVEX_DEPLOYMENT_ID,
-      },
-      charterText: 'BAS development proof',
-      fetchImpl,
-    })).resolves.toMatchObject({ projectId: 'project:one', wrongPrincipalProjectId: 'project:foreign' })
-    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toMatchObject({
-      ownerSubject: baseEnv.AE_WORK_TREE_CLERK_SUBJECT,
-      cohort: 'bas-development',
-    })
-    const mismatchedOwner = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({
-      kind: 'accepted',
-      cohort: 'bas-development',
-      evidenceClass: WORK_TREE_PARITY_EVIDENCE_CLASS,
-      ownerSubject: 'user_other',
-      projectId: 'project:one',
-      wrongPrincipalProjectId: 'project:foreign',
-      createIdempotencyKey: 'root-key',
-      charterText: 'BAS development proof',
-      sharedPrincipalRef: 'owner:one',
-    }))
-    await expect(seedHostedWorkTreeCohort({
-      baseUrl: new URL(baseEnv.DEPLOY_BASE_URL),
-      setupPath: '/api/v1/work-tree/setup',
-      setupToken: baseEnv.AE_WORK_TREE_SETUP_TOKEN,
-      ownerSubject: baseEnv.AE_WORK_TREE_CLERK_SUBJECT,
-      metadata: {
-        sourceRevision: baseEnv.AE_RELEASE_SOURCE_REVISION,
-        vercelDeploymentId: baseEnv.AE_RELEASE_DEPLOYMENT_ID,
-        convexDeploymentId: baseEnv.AE_RELEASE_CONVEX_DEPLOYMENT_ID,
-      },
-      charterText: 'BAS development proof',
-      fetchImpl: mismatchedOwner,
-    })).rejects.toThrow('work_tree_setup_owner_mismatch')
-
-    const missingPrincipal = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({
-      kind: 'accepted', cohort: 'bas-development', evidenceClass: WORK_TREE_PARITY_EVIDENCE_CLASS,
-      ownerSubject: baseEnv.AE_WORK_TREE_CLERK_SUBJECT,
-      projectId: 'project:one', createIdempotencyKey: 'root-key', charterText: 'BAS development proof', sharedPrincipalRef: 'owner:one',
-    }))
-    await expect(seedHostedWorkTreeCohort({
-      baseUrl: new URL(baseEnv.DEPLOY_BASE_URL), setupPath: '/api/v1/work-tree/setup', setupToken: baseEnv.AE_WORK_TREE_SETUP_TOKEN,
-      ownerSubject: baseEnv.AE_WORK_TREE_CLERK_SUBJECT,
-      metadata: { sourceRevision: baseEnv.AE_RELEASE_SOURCE_REVISION, vercelDeploymentId: baseEnv.AE_RELEASE_DEPLOYMENT_ID, convexDeploymentId: baseEnv.AE_RELEASE_CONVEX_DEPLOYMENT_ID },
-      charterText: 'BAS development proof', fetchImpl: missingPrincipal,
-    })).rejects.toThrow('work_tree_setup_wrongPrincipalProjectId_missing')
-  })
-
-  it('redacts secrets from receipts and writes exact deployment metadata with evidence labels', async () => {
+describe('hosted WorkTree evidence seams', () => {
+  it('redacts secrets from route/account/selection receipts and writes exact deployment metadata', async () => {
     const temp = await mkdtemp(join(tmpdir(), 'ae-work-tree-parity-'))
     try {
       const packetPath = await writeWorkTreeParityEvidencePacket({
@@ -366,20 +285,29 @@ describe('hosted WorkTree setup and evidence seams', () => {
           convexDeploymentId: baseEnv.AE_RELEASE_CONVEX_DEPLOYMENT_ID,
           evidenceClass: WORK_TREE_PARITY_EVIDENCE_CLASS,
         },
-        setup: { cohort: 'bas-development', token: baseEnv.AE_WORK_TREE_SETUP_TOKEN },
-        human: { receiptId: 'decision:human', authorization: `Bearer ${baseEnv.AE_WORK_TREE_SETUP_TOKEN}` },
-        agent: { receiptId: 'decision:agent', credential: baseEnv.CLERK_SECRET_KEY },
+        route: { requestRef: 'request:one', revision: 3, routeGenerationRef: 'generation:one', routeRef: 'route:one' },
+        account: { ownerAccountDigest: 'sha256:owner', subjectDigest: 'sha256:subject' },
+        selection: { seed: 'seed:one', candidateCount: 2, selectedSubjectDigest: 'sha256:selected' },
+        creation: { humanReceipt: 'decision:human', agentReceipt: 'decision:agent', projectId: 'project:one' },
+        freshReadbacks: [{ processClass: 'fresh-browser', projectId: 'project:one' }, { processClass: 'fresh-child-agent', projectId: 'project:one' }],
+        cleanup: { revoked: true },
+        human: { receiptId: 'decision:human', authorization: 'Bearer ak_human_secret' },
+        agent: { receiptId: 'decision:agent', credential: 'ak_agent_secret' },
         refusals: [{ refusalCode: 'stale_fence' }],
-        secrets: [baseEnv.AE_WORK_TREE_SETUP_TOKEN, baseEnv.CLERK_SECRET_KEY],
+        secrets: ['ak_human_secret', 'ak_agent_secret', baseEnv.CLERK_SECRET_KEY],
         now: new Date('2026-08-02T00:00:00.000Z'),
       })
       const packet = await readFile(packetPath, 'utf8')
       expect(packet).toContain('"sourceRevision": "' + 'a'.repeat(40) + '"')
       expect(packet).toContain('"vercelDeploymentId": "dpl_preview_123"')
       expect(packet).toContain('"convexDeploymentId": "happy-animal-123"')
-      expect(packet).toContain('"evidenceClass": "hosted + development-mock"')
-      expect(packet).not.toContain(baseEnv.AE_WORK_TREE_SETUP_TOKEN)
+      expect(packet).toContain('"routeGenerationRef": "generation:one"')
+      expect(packet).toContain('"candidateCount": 2')
+      expect(packet).toContain('"processClass": "fresh-child-agent"')
+      expect(packet).not.toContain('ak_human_secret')
+      expect(packet).not.toContain('ak_agent_secret')
       expect(packet).not.toContain(baseEnv.CLERK_SECRET_KEY)
+      expect(packet).not.toContain('"setup"')
     } finally {
       await rm(temp, { recursive: true, force: true })
     }

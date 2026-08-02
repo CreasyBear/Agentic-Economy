@@ -87,6 +87,6 @@ async function verify(key: string, material: string, signature: string): Promise
   return constantTimeStringEqual(expected, signature)
 }
 
-function importKey(key: string): Promise<CryptoKey> {
+function importKey(key: string) {
   return crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
 }

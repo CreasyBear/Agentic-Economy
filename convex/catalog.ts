@@ -197,9 +197,9 @@ const auditEventResult = v.object({
 
 const registryAttemptResult = v.object({
   businessId: v.string(),
-  serviceId: v.optional(v.string()),
+  offeringRef: v.optional(v.string()),
   logicalKey: v.string(),
-  projectionKind: v.union(v.literal('business_catalog'), v.literal('service_catalog')),
+  projectionKind: v.union(v.literal('business_catalog'), v.literal('offering_catalog')),
   sourceHash: v.string(),
   sourceVersion: v.literal('public-catalog:v1'),
   status: v.union(v.literal('queued'), v.literal('succeeded'), v.literal('failed'), v.literal('stale')),
@@ -469,12 +469,27 @@ export async function publishBusinessCatalogCommand(
     if (existingOperation.requestHash !== requestHash || existingOperation.status !== 'succeeded') {
       return catalogError('catalog_publish_operation_conflict', 'Operation key is already reserved for a different publish request.')
     }
-    const replayCatalog = await publicCatalogForBusiness(db, businessId)
+    const replayCatalog = await (async () => {
+      try {
+        return await publicCatalogForBusiness(db, businessId)
+      } catch {
+        return undefined
+      }
+    })()
     if (existingOperation.sourceHash !== business.sourceHash) {
       return catalogError('catalog_publish_operation_conflict', 'Published operation source no longer matches this business.')
     }
     const replayAudit = await findPublishAuditEvent(db, businessId, command.operationKey)
-    if (replayCatalog === undefined || replayAudit === undefined) {
+    const replayRegistryAttempts = await registryAttemptsForBusiness(db, businessId, business.sourceHash, business.slug)
+    const replayDiscoveryAttempts = await discoveryAttemptsForBusiness(db, businessId, business.sourceHash, business.slug)
+    if (
+      replayCatalog === undefined
+      || replayAudit === undefined
+      || replayRegistryAttempts === undefined
+      || replayRegistryAttempts.length !== 1
+      || replayDiscoveryAttempts === undefined
+      || replayDiscoveryAttempts.length !== 1
+    ) {
       return catalogError('catalog_publish_operation_conflict', 'Published operation readback is incomplete.')
     }
     const replayBusiness = publishedBusinessContract(businessId, business, existingOperation.updatedAt)
@@ -486,8 +501,8 @@ export async function publishBusinessCatalogCommand(
       claim: replayClaim,
       catalog: replayCatalog,
       auditEvent: replayAudit,
-      registryProjectionAttempts: await registryAttemptsForBusiness(db, businessId, business.sourceHash),
-      discoveryManifestAttempts: await discoveryAttemptsForBusiness(db, businessId, business.sourceHash),
+      registryProjectionAttempts: replayRegistryAttempts,
+      discoveryManifestAttempts: replayDiscoveryAttempts,
     }
   }
 
@@ -1261,7 +1276,7 @@ export const getCurrentOwnerOfferingSupply = queryGeneric({
     if (business === null) return { kind: 'not_found' as const }
     const state = await loadOfferingSourceState(ctx.db, business._id)
     const snapshot = await ctx.db.query('businessSupplyProjectionSnapshots').withIndex('by_businessId', (query) => query.eq('businessId', business._id)).unique()
-    const projection = snapshot === null || snapshot.projection === undefined
+    const projection = snapshot === null
       ? { status: 'projection_pending' as const }
       : {
           status: snapshot.status,
@@ -1334,9 +1349,9 @@ type AuditEvent = {
 
 type RegistryAttempt = {
   businessId: Id<'businesses'>
-  serviceId?: string
+  offeringRef?: string
   logicalKey: string
-  projectionKind: 'business_catalog' | 'service_catalog'
+  projectionKind: 'business_catalog' | 'offering_catalog'
   sourceHash: string
   sourceVersion: 'public-catalog:v1'
   status: 'queued'
@@ -1344,6 +1359,10 @@ type RegistryAttempt = {
   startedAt: number
   repairAction: 'rebuild_projection'
   repairResult: 'not_run'
+}
+
+type CurrentRegistryAttempt = RegistryAttempt & {
+  attemptVersion: 'current'
 }
 
 type DiscoveryAttempt = {
@@ -1547,8 +1566,22 @@ async function publicCatalogForBusiness(
     .query('businessSupplyProjectionSnapshots')
     .withIndex('by_businessId', (query) => query.eq('businessId', businessId))
     .unique()
-  if (snapshot === null || snapshot.projection === undefined) return undefined
-  const projected = projectBusinessSupplyToPublicApi(readBusinessSupplyProjectionSnapshot(snapshot.projection, 'catalog'))
+  if (snapshot === null) return undefined
+  const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
+  const projection = readBusinessSupplyProjectionSnapshot(
+    projectionValue,
+    'catalog',
+    String(businessId),
+    business.slug,
+    {
+      businessId: String(snapshot.businessId),
+      sourceRevision: snapshot.sourceRevision,
+      sourceDigest: snapshot.sourceDigest,
+      observedAt: snapshot.observedAt,
+      disposition: snapshot.disposition,
+    },
+  )
+  const projected = projectBusinessSupplyToPublicApi(projection)
   const catalog = snapshot.status === 'projection_pending'
     ? { ...projected, disposition: 'stale' as const }
     : projected
@@ -1636,15 +1669,15 @@ async function findPublishAuditEvent(
     createdAt: event.createdAt,
   }
 }
-
 async function ensureRegistryAttempts(
   db: GenericDatabaseWriter<DataModel>,
   businessId: Id<'businesses'>,
   businessSourceHash: string,
   now: number,
 ): Promise<RegistryAttempt[]> {
-  return [await upsertRegistryAttempt(db, {
+  const persisted = await upsertRegistryAttempt(db, {
     businessId,
+    attemptVersion: 'current',
     logicalKey: `registry:business:${businessId}:${businessSourceHash}`,
     projectionKind: 'business_catalog',
     sourceHash: businessSourceHash,
@@ -1654,16 +1687,34 @@ async function ensureRegistryAttempts(
     startedAt: now,
     repairAction: 'rebuild_projection',
     repairResult: 'not_run',
-  })]
+  })
+  return [{
+    businessId: persisted.businessId,
+    ...(persisted.offeringRef === undefined ? {} : { offeringRef: persisted.offeringRef }),
+    logicalKey: persisted.logicalKey,
+    projectionKind: persisted.projectionKind,
+    sourceHash: persisted.sourceHash,
+    sourceVersion: persisted.sourceVersion,
+    status: persisted.status,
+    retryCount: persisted.retryCount,
+    startedAt: persisted.startedAt,
+    repairAction: persisted.repairAction,
+    repairResult: persisted.repairResult,
+  }]
 }
 
-async function upsertRegistryAttempt(db: GenericDatabaseWriter<DataModel>, attempt: RegistryAttempt): Promise<RegistryAttempt> {
+async function upsertRegistryAttempt(
+  db: GenericDatabaseWriter<DataModel>,
+  attempt: CurrentRegistryAttempt,
+): Promise<CurrentRegistryAttempt> {
   const existing = await db
     .query('registryProjectionAttempts')
     .withIndex('by_logicalKey', (query) => query.eq('logicalKey', attempt.logicalKey))
     .unique()
   if (existing === null) {
     await db.insert('registryProjectionAttempts', attempt)
+  } else if (isLegacyRegistryAttempt(existing)) {
+    await db.replace(existing._id, attempt)
   } else {
     await db.patch(existing._id, attempt)
   }
@@ -1713,22 +1764,62 @@ async function upsertBusinessIndexStatus(db: GenericDatabaseWriter<DataModel>, b
     sourceVersion: 'public-catalog:v1' as const,
   }
   if (existing === null) await db.insert('indexStatus', next)
+  else if (isLegacyIndexStatus(existing)) await db.replace(existing._id, next)
   else await db.patch(existing._id, next)
+}
+
+function isLegacyRegistryAttempt(attempt: Doc<'registryProjectionAttempts'>): boolean {
+  if ('serviceId' in attempt || attempt.projectionKind === 'service_catalog') return true
+  if (!('attemptVersion' in attempt) || attempt.attemptVersion !== 'current') return true
+  const readback = attempt.latestReadback
+  return readback !== undefined && 'serviceCount' in readback
+}
+
+function isLegacyIndexStatus(status: Doc<'indexStatus'>): boolean {
+  return 'serviceId' in status || status.targetType === 'service' || status.targetType === 'capability'
 }
 
 async function registryAttemptsForBusiness(
   db: GenericDatabaseReader<DataModel>,
   businessId: Id<'businesses'>,
   businessSourceHash: string,
-): Promise<RegistryAttempt[]> {
+  expectedSlug: string,
+): Promise<RegistryAttempt[] | undefined> {
+  const logicalKey = `registry:business:${businessId}:${businessSourceHash}`
   const attempt = await db
     .query('registryProjectionAttempts')
-    .withIndex('by_logicalKey', (query) => query.eq('logicalKey', `registry:business:${businessId}:${businessSourceHash}`))
+    .withIndex('by_logicalKey', (query) => query.eq('logicalKey', logicalKey))
     .unique()
-  if (attempt === null) return []
+  if (attempt === null || isLegacyRegistryAttempt(attempt)) return undefined
+  if (
+    attempt.businessId !== businessId
+    || attempt.logicalKey !== logicalKey
+    || attempt.sourceHash !== businessSourceHash
+    || attempt.sourceVersion !== 'public-catalog:v1'
+    || attempt.projectionKind !== 'business_catalog'
+  ) {
+    return undefined
+  }
+  const readback = attempt.latestReadback
+  if (
+    readback !== undefined
+    && (
+      'serviceCount' in readback
+      || readback.businessId !== businessId
+      || readback.slug !== expectedSlug
+      || readback.sourceHash !== businessSourceHash
+      || readback.sourceVersion !== 'public-catalog:v1'
+    )
+  ) {
+    return undefined
+  }
+  const offeringRef =
+    'offeringRef' in attempt && typeof attempt.offeringRef === 'string'
+      ? attempt.offeringRef
+      : undefined
   return [{
     businessId: attempt.businessId,
-    ...(attempt.offeringRef === undefined ? {} : { serviceId: attempt.offeringRef }),
+    ...(offeringRef === undefined ? {} : { offeringRef }),
     logicalKey: attempt.logicalKey,
     projectionKind: attempt.projectionKind,
     sourceHash: attempt.sourceHash,
@@ -1745,12 +1836,36 @@ async function discoveryAttemptsForBusiness(
   db: GenericDatabaseReader<DataModel>,
   businessId: Id<'businesses'>,
   sourceHash: string,
-): Promise<DiscoveryAttempt[]> {
+  expectedSlug: string,
+): Promise<DiscoveryAttempt[] | undefined> {
+  const attemptId = `discovery:manifest:${businessId}:${sourceHash}:v1`
   const attempt = await db
     .query('discoveryManifestAttempts')
-    .withIndex('by_attemptId', (query) => query.eq('attemptId', `discovery:manifest:${businessId}:${sourceHash}:v1`))
+    .withIndex('by_attemptId', (query) => query.eq('attemptId', attemptId))
     .unique()
-  if (attempt === null) return []
+  if (
+    attempt === null
+    || attempt.attemptId !== attemptId
+    || attempt.businessId !== businessId
+    || attempt.sourceHash !== sourceHash
+    || attempt.sourceVersion !== 'public-catalog:v1'
+    || attempt.ucpVersion !== 'v1'
+    || attempt.pathKind !== 'ae_hosted_fallback'
+  ) {
+    return undefined
+  }
+  const readback = attempt.latestReadback
+  if (
+    readback !== undefined
+    && (
+      readback.businessId !== businessId
+      || readback.slug !== expectedSlug
+      || readback.sourceHash !== sourceHash
+      || readback.sourceVersion !== 'public-catalog:v1'
+    )
+  ) {
+    return undefined
+  }
   return [{
     attemptId: attempt.attemptId,
     businessId: attempt.businessId,

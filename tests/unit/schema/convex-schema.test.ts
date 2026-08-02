@@ -583,12 +583,24 @@ describe('Convex schema', () => {
         message: 'legacy failed attempt message',
       },
     } as const
+    const malformedLegacyAttempt = {
+      ...legacyUncertainAttempt,
+      attemptNumber: 4,
+      attemptRef: 'attempt:legacy-malformed',
+      outcome: {
+        ...legacyUncertainAttempt.outcome,
+        message: 42,
+      },
+    } as const
 
     await backend.run(async (ctx) => {
       await ctx.db.insert('actionInvocationAttempts', currentAttempt)
       await ctx.db.insert('actionInvocationAttempts', legacyUncertainAttempt)
       await ctx.db.insert('actionInvocationAttempts', legacyFailedAttempt)
     })
+    await expect(backend.run(async (ctx) => (
+      ctx.db.insert('actionInvocationAttempts', malformedLegacyAttempt as never)
+    ))).rejects.toThrow(/"message":42/u)
 
     const rows = await backend.run(async (ctx) => (
       ctx.db.query('actionInvocationAttempts').take(10)
@@ -681,6 +693,28 @@ describe('Convex schema', () => {
       authorityDecisionAt: '2026-08-02T00:00:00.000Z',
       updatedAt: '2026-08-02T00:00:00.000Z',
     } as const
+    const { mandateGeneration: _mandateGeneration, ...legacyAcceptedAuthorityWithoutGeneration } =
+      legacyAcceptedAuthority
+    const malformedLegacyControl = {
+      ...legacyControl,
+      invocationRef: 'invocation:schema-regression:malformed-authority',
+      acceptedAuthority: legacyAcceptedAuthorityWithoutGeneration,
+    } as const
+    const malformedGatheringControl = {
+      ...currentControl,
+      invocationRef: 'invocation:schema-regression:malformed-gathering',
+      control: {
+        ...currentControl.control,
+        control: { state: 'gathering_information', missingFields: 'convert' },
+      },
+    } as const
+
+    await expect(backend.run(async (ctx) => (
+      ctx.db.insert('actionInvocationControls', malformedLegacyControl as never)
+    ))).rejects.toThrow()
+    await expect(backend.run(async (ctx) => (
+      ctx.db.insert('actionInvocationControls', malformedGatheringControl as never)
+    ))).rejects.toThrow()
 
     await backend.run(async (ctx) => {
       await ctx.db.insert('actionInvocationControls', legacyControl)

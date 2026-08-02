@@ -8,6 +8,7 @@ import {
   derivePaidOperationSemantics,
   buildDynamicPublishedInput,
   loadDynamicPublishedAdapterSnapshot,
+  readDevelopmentHostSnapshot,
   materialDigest,
   type ActionInvocationOrigin,
   type InvocationActor,
@@ -583,6 +584,24 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     })
     expect(effects).toEqual({ payment: 1, provider: 1 })
     const snapshot = adapter.exportSnapshot()
+    const legacyHostSnapshot = JSON.parse(JSON.stringify(snapshot))
+    const legacyHostControl = legacyHostSnapshot.controls[0]
+    if (legacyHostControl === undefined) throw new Error('legacy_host_control_missing')
+    legacyHostControl.acceptedAuthority = legacyHostControl.control.acceptedAuthority
+    delete legacyHostControl.control.acceptedAuthority
+    expect(readDevelopmentHostSnapshot({
+      host: 'standalone_external_agent',
+      snapshot: legacyHostSnapshot,
+    }).semanticRead.authority.kind).toBe('approve_each')
+    const mismatchedHostSnapshot = JSON.parse(JSON.stringify(snapshot))
+    mismatchedHostSnapshot.controls[0].acceptedAuthority = {
+      kind: 'approve_each',
+      authorityRef: 'authority:host-read-forged',
+    }
+    expect(() => readDevelopmentHostSnapshot({
+      host: 'standalone_external_agent',
+      snapshot: mismatchedHostSnapshot,
+    })).toThrow('durable_control_authority_mismatch')
     expect(snapshot.format).toBe('dynamic-published-action-invocation:development:v3')
     expect(snapshot.paymentAttempts).toEqual([
       expect.objectContaining({
@@ -640,29 +659,38 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
       descriptor: fixture.descriptor,
       value: { symbol: 'BTC', convert: 'USD' },
     })
+    const snapshotAnchors = {
+      operation: fixture.operation,
+      descriptor: fixture.descriptor,
+      actor,
+      origin,
+      issuedAuthority: {
+        reference: prepared.authority!.reference,
+        accepted: { kind: 'approve_each' as const, authorityRef: prepared.authority!.reference },
+        materialInputDigest: materialDigest(
+          preparedMaterial,
+          ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
+        ),
+      },
+      expectedEffectCount: 1,
+      expectedChallengeDigest: snapshot.paymentAttempts[0]!.challengeDigest,
+      expectedSemanticClaim: {
+        ownerInvocationRef: prepared.invocationRef,
+        status: 'uncertain' as const,
+      },
+    }
     const loaded = loadDynamicPublishedAdapterSnapshot(
       JSON.parse(JSON.stringify(snapshot)),
-      {
-        operation: fixture.operation,
-        descriptor: fixture.descriptor,
-        actor,
-        origin,
-        issuedAuthority: {
-          reference: prepared.authority!.reference,
-          accepted: { kind: 'approve_each', authorityRef: prepared.authority!.reference },
-          materialInputDigest: materialDigest(
-            preparedMaterial,
-            ['operationKey', 'inputDigest', 'sourceSnapshotDigest', 'target'],
-          ),
-        },
-        expectedEffectCount: 1,
-        expectedChallengeDigest: snapshot.paymentAttempts[0]!.challengeDigest,
-        expectedSemanticClaim: {
-          ownerInvocationRef: prepared.invocationRef,
-          status: 'uncertain',
-        },
-      },
+      snapshotAnchors,
     )
+    const legacySnapshot = JSON.parse(JSON.stringify(snapshot))
+    const legacyControl = legacySnapshot.controls[0]
+    if (legacyControl === undefined) throw new Error('legacy_snapshot_control_missing')
+    legacyControl.acceptedAuthority = legacyControl.control.acceptedAuthority
+    delete legacyControl.control.acceptedAuthority
+    const legacyLoaded = loadDynamicPublishedAdapterSnapshot(legacySnapshot, snapshotAnchors)
+    expect(legacyLoaded.durableState.controls.get(prepared.invocationRef)?.control.acceptedAuthority)
+      .toEqual(snapshotAnchors.issuedAuthority.accepted)
     const tamperCases: readonly [string, (copy: any) => void][] = [
       ['invocationRef', (copy) => { copy.paymentAttempts[0].invocationRef = 'invocation:other' }],
       ['attemptRef', (copy) => { copy.paymentAttempts[0].attemptRef = 'attempt:other' }],

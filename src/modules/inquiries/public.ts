@@ -36,6 +36,7 @@ export type {
   InquiryExportMessageProjection,
   InquiryExportReadback,
   InquiryFunnelRecord,
+  InquiryLegacyTargetIdentity,
   InquiryMessageId,
   InquiryMessageRecord,
   InquiryMessageSender,
@@ -147,6 +148,8 @@ export type {
   GovernedSendErasureLineageRecord,
   GovernedSendIntegrityCommitmentRecord,
   GovernedSendIntegrityKeyring,
+  GovernedSendIntegrityLegacyTargetBinding,
+  GovernedSendIntegrityPersistedTargetBinding,
   GovernedSendIntegrityTargetBinding,
   GovernedSendReceiptRecord,
 } from './internal/governed-send'

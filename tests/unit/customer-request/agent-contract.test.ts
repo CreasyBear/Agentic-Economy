@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  customerRequestEvidenceExportSchema,
   customerRequestFactInputSchema,
   customerRequestMessageInputSchema,
   customerRequestViewSchema,
@@ -144,6 +145,56 @@ describe('Customer Request agent contract', () => {
       restoredAt: 4_000,
       workRestarted: false,
     })
+  })
+  it('accepts leased route progress and evidence without treating it as attention required', () => {
+    const progress = customerRequestViewSchema.parse({
+      kind: 'request',
+      requestRef: 'request:leased',
+      revision: 1,
+      state: 'in_progress',
+      summary: 'Your request is in progress.',
+      nextAction: 'wait',
+      missingFields: [],
+      options: [],
+      progress: {
+        completed: 0,
+        total: 1,
+        current: { step: 1, state: 'leased' },
+      },
+      activity: {
+        actor: 'ae',
+        certainty: 'pending',
+        updatedAt: 1_000,
+        retry: 'not_needed',
+        cancellation: {
+          state: 'not_available',
+          reason: 'business_step_leased',
+          changedAt: 1_000,
+        },
+        safeNextAction: 'check_progress',
+      },
+    })
+    expect(progress.state).toBe('in_progress')
+    expect(progress.progress?.current.state).toBe('leased')
+    expect(progress.activity?.cancellation).toMatchObject({
+      state: 'not_available',
+      reason: 'business_step_leased',
+    })
+    expect(customerRequestEvidenceExportSchema.parse({
+      kind: 'evidence',
+      requestRef: 'request:leased',
+      state: 'running',
+      generatedAt: 1_000,
+      steps: [{
+        step: 1,
+        state: 'leased',
+        observedAt: 1_000,
+        business: 'Business One',
+        providerOrigin: 'https://business.example',
+        evidence: [],
+      }],
+      problems: [],
+    }).steps[0]?.state).toBe('leased')
   })
 
   it('validates the customer-semantic prepared decision and every terminal recovery state', () => {

@@ -1,5 +1,5 @@
 import type { GenericDatabaseWriter } from 'convex/server'
-import type { DataModel } from './_generated/dataModel'
+import type { DataModel, Doc } from './_generated/dataModel'
 import {
   encryptGovernedSendReceipt,
   resolveInquiryReceiptKeyring,
@@ -14,7 +14,7 @@ import type {
   InquirySourceState,
 } from '../src/modules/inquiries/public'
 import type { InquirySourceDocument } from './inquirySourceStateMappers'
-import { brandNonEmpty } from '../src/modules/common/ids'
+import { brandNonEmpty, type ServiceId } from '../src/modules/common/ids'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { stableStringify } from '../src/modules/common/stable-hash'
 import {
@@ -26,6 +26,7 @@ import {
   toGovernedSendErasureLineageRecord,
   toGovernedSendIntegrityCommitmentRecord,
   toGovernedSendReceiptRecord,
+  toInquiryThreadRecord,
 } from './inquirySourceStateMappers'
 
 export async function persistInquirySourceState(db: GenericDatabaseWriter<DataModel>, state: InquirySourceState): Promise<void> {
@@ -46,11 +47,10 @@ export async function persistInquirySourceState(db: GenericDatabaseWriter<DataMo
   }
 
   for (const thread of state.threads) {
-    const patch = {
+    const shared = {
       threadId: thread.threadId,
       businessId: requireBusinessId(db, thread.businessId),
       ownerId: requireOwnerId(db, thread.ownerId),
-      offeringRef: thread.offeringRef,
       status: thread.status,
       firstMessageId: thread.firstMessageId,
       sourceHash: thread.sourceHash,
@@ -63,7 +63,22 @@ export async function persistInquirySourceState(db: GenericDatabaseWriter<DataMo
       ...(thread.closedAt === undefined ? {} : { closedAt: thread.closedAt }),
       ...(thread.origin === undefined ? {} : { originKind: thread.origin.kind, originThreadId: thread.origin.threadId }),
     }
-    const existing = await db.query('inquiryThreads').withIndex('by_threadId', (query) => query.eq('threadId', patch.threadId)).unique()
+    const existing = await db.query('inquiryThreads').withIndex('by_threadId', (query) => query.eq('threadId', shared.threadId)).unique()
+    if (existing !== null) {
+      const existingRecord = toInquiryThreadRecord(existing)
+      if (('offeringRef' in existingRecord) !== ('offeringRef' in thread)) {
+        throw new Error('inquiry_thread_target_shape_conflict')
+      }
+    }
+    const patch = 'offeringRef' in thread
+      ? { ...shared, offeringRef: thread.offeringRef }
+      : {
+          ...shared,
+          ...requirePersistedLegacyThreadIdentity(existing, {
+            serviceId: thread.serviceId,
+            capabilityKind: thread.capabilityKind,
+          }),
+        }
     if (existing === null) await db.insert('inquiryThreads', patch)
     else await db.patch(existing._id, patch)
   }
@@ -261,13 +276,27 @@ async function persistGovernedSendReceipt(db: GenericDatabaseWriter<DataModel>, 
   }
   if (existingLineage === undefined) await db.insert('governedSendErasureLineage', { ...lineage })
 }
-
 async function persistGovernedSendIntegrityCommitment(db: GenericDatabaseWriter<DataModel>, commitment: GovernedSendIntegrityCommitmentRecord): Promise<void> {
   const rows = await db.query('governedSendIntegrityCommitments').withIndex('by_operationKey', (query) => query.eq('operationKey', commitment.operationKey)).take(2)
   if (rows.length > 1) throw new Error('governed_send_commitment_duplicate_rows')
   const existing = rows[0]
+  const targetBinding = 'offeringRef' in commitment.targetBinding
+    ? {
+        businessId: requireBusinessId(db, commitment.targetBinding.businessId),
+        ownerId: requireOwnerId(db, commitment.targetBinding.ownerId),
+        offeringRef: commitment.targetBinding.offeringRef,
+        claimRef: commitment.targetBinding.claimRef,
+        recipientRef: commitment.targetBinding.recipientRef,
+      }
+    : {
+        businessId: requireBusinessId(db, commitment.targetBinding.businessId),
+        ownerId: requireOwnerId(db, commitment.targetBinding.ownerId),
+        ...requirePersistedLegacyCommitmentIdentity(existing, commitment.targetBinding),
+        claimRef: commitment.targetBinding.claimRef,
+        recipientRef: commitment.targetBinding.recipientRef,
+      }
   if (existing === undefined) {
-    await db.insert('governedSendIntegrityCommitments', { version: commitment.version, receiptRef: commitment.receiptRef, operationKey: commitment.operationKey, threadId: commitment.threadId, digest: commitment.digest, keyId: commitment.keyId, targetBinding: { businessId: requireBusinessId(db, commitment.targetBinding.businessId), ownerId: requireOwnerId(db, commitment.targetBinding.ownerId), offeringRef: commitment.targetBinding.offeringRef, claimRef: commitment.targetBinding.claimRef, recipientRef: commitment.targetBinding.recipientRef }, signature: commitment.signature, createdAt: commitment.createdAt })
+    await db.insert('governedSendIntegrityCommitments', { version: commitment.version, receiptRef: commitment.receiptRef, operationKey: commitment.operationKey, threadId: commitment.threadId, digest: commitment.digest, keyId: commitment.keyId, targetBinding, signature: commitment.signature, createdAt: commitment.createdAt })
     return
   }
   if (stableStringify(toGovernedSendIntegrityCommitmentRecord(existing)) !== stableStringify(commitment)) throw new Error('governed_send_commitment_conflict')
@@ -289,6 +318,38 @@ async function upsertFunnelEvent(db: GenericDatabaseWriter<DataModel>, funnelEve
   else await db.patch(existing._id, patch)
 }
 
+function requirePersistedLegacyThreadIdentity(
+  existing: Doc<'inquiryThreads'> | null,
+  incoming: { serviceId: ServiceId; capabilityKind: string },
+) {
+  if (existing === null || !('serviceId' in existing)) {
+    throw new Error('inquiry_legacy_service_id_unavailable')
+  }
+  if (String(existing.serviceId) !== String(incoming.serviceId) || existing.capabilityKind !== incoming.capabilityKind) {
+    throw new Error('inquiry_legacy_target_conflict')
+  }
+  return {
+    serviceId: existing.serviceId,
+    capabilityKind: existing.capabilityKind,
+  }
+}
+
+function requirePersistedLegacyCommitmentIdentity(
+  existing: Doc<'governedSendIntegrityCommitments'> | undefined,
+  incoming: { serviceId: ServiceId; capabilityKind: string },
+) {
+  const targetBinding = existing?.targetBinding
+  if (targetBinding === undefined || !('serviceId' in targetBinding)) {
+    throw new Error('inquiry_legacy_service_id_unavailable')
+  }
+  if (String(targetBinding.serviceId) !== String(incoming.serviceId) || targetBinding.capabilityKind !== incoming.capabilityKind) {
+    throw new Error('inquiry_legacy_target_conflict')
+  }
+  return {
+    serviceId: targetBinding.serviceId,
+    capabilityKind: targetBinding.capabilityKind,
+  }
+}
 function requireBusinessId(db: GenericDatabaseWriter<DataModel>, value: string): import('./_generated/dataModel').Id<'businesses'> {
   const id = db.normalizeId('businesses', value)
   if (id === null) throw new Error('invalid_inquiry_business_id')

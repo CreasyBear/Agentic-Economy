@@ -12,6 +12,7 @@ import {
   runHarnessTool,
   type HarnessRunLoop,
   type HarnessToolStatus,
+  type RunHarnessToolOutcome,
 } from '@/modules/harness/public'
 import type {
   PublicBusinessCatalogApiV2SearchPage,
@@ -99,23 +100,31 @@ export async function runAnswerToolCall(
           },
         }),
   }
-  const outcome = input.harnessLoop === undefined
-    ? await runHarnessTool({
-        tool,
-        input: input.input,
-        context,
-        surface: 'answerThread',
-        mode: 'public-read',
-        toolCallId,
-      })
-    : await input.harnessLoop.runTool({
-        tool,
-        input: input.input,
-        context,
-        surface: 'answerThread',
-        mode: 'public-read',
-        toolCallId,
-      })
+  let outcome: RunHarnessToolOutcome
+  const classifyResult = input.toolId === 'web.discover' ? classifyWebDiscoveryResult : undefined
+  if (input.harnessLoop === undefined) {
+    const rawOutcome = await runHarnessTool({
+      tool,
+      input: input.input,
+      context,
+      surface: 'answerThread',
+      mode: 'public-read',
+      toolCallId,
+    })
+    outcome = classifyResult === undefined
+      ? rawOutcome
+      : { ...rawOutcome, result: classifyResult(rawOutcome.result) }
+  } else {
+    outcome = await input.harnessLoop.runTool({
+      tool,
+      input: input.input,
+      context,
+      surface: 'answerThread',
+      mode: 'public-read',
+      toolCallId,
+      ...(classifyResult === undefined ? {} : { classifyResult }),
+    })
+  }
   timings.record('tool.run', outcome.result.durationMs, {
     toolId: input.toolId,
     toolSeq: input.seq,
@@ -129,12 +138,11 @@ export async function runAnswerToolCall(
       summary: { slugs: [], count: 0, errorCode },
       inputJson: outcome.result.inputJson,
       providers: [],
-      resultJson: safeJsonStringify({
+      resultJson: outcome.result.outputJson ?? safeJsonStringify({
         kind: outcome.result.status === 'blocked' || outcome.result.status === 'refused' ? 'refused' : 'error',
         code: errorCode,
       }),
       timings: timings.entries(),
-      resultHash: outcome.result.resultHash,
     })
   }
 
@@ -150,7 +158,6 @@ export async function runAnswerToolCall(
     providers: extracted.providers,
     resultJson: outcome.result.outputJson ?? safeJsonStringify(outcome.result.output),
     timings: timings.entries(),
-    resultHash: outcome.result.resultHash,
   })
 }
 
@@ -191,11 +198,10 @@ function recordResult(
     providers: AnswerSource[]
     resultJson: string
     timings: readonly AnswerTurnTimingEntry[]
-    resultHash?: string
   },
 ): RunAnswerToolCallResult {
   const resultSummaryJson = safeJsonStringify(outcome.summary)
-  const resultHash = outcome.resultHash ?? canonicalDigest({
+  const resultHash = canonicalDigest({
     toolId: input.toolId,
     input: outcome.inputJson,
     summary: resultSummaryJson,
@@ -236,6 +242,7 @@ function extractProviders(
       count: discovery.kind === 'found' && Array.isArray(discovery.claims) ? discovery.claims.length : 0,
     }
   }
+
   if (toolId === 'registry.search') {
     const page = result as PublicBusinessCatalogApiV2SearchPage
     return {
@@ -253,6 +260,57 @@ function extractProviders(
   }
 
   return { providers: [], count: 0 }
+}
+
+function webDiscoveryFailure(
+  output: unknown,
+): { status: Extract<AnswerToolCallStatus, 'error' | 'refused'>; errorCode: string } | undefined {
+  const discovery = output as { kind?: unknown; code?: unknown; reason?: unknown }
+  if (discovery.kind === 'error') {
+    return {
+      status: 'error',
+      errorCode: typeof discovery.code === 'string' ? discovery.code : 'discovery_failed',
+    }
+  }
+  if (discovery.kind === 'unavailable') {
+    return {
+      status: 'refused',
+      errorCode: typeof discovery.reason === 'string' ? discovery.reason : 'discovery_unavailable',
+    }
+  }
+  return undefined
+}
+
+function classifyWebDiscoveryResult(
+  result: RunHarnessToolOutcome['result'],
+): RunHarnessToolOutcome['result'] {
+  if (result.status !== 'ok' || result.output === undefined) {
+    return result
+  }
+
+  const failure = webDiscoveryFailure(result.output)
+  if (failure === undefined) {
+    return result
+  }
+
+  const summaryJson = safeJsonStringify(
+    failure.status === 'refused'
+      ? { kind: 'unavailable', reason: failure.errorCode }
+      : { kind: 'error', code: failure.errorCode },
+  )
+  return {
+    ...result,
+    status: failure.status,
+    summaryJson,
+    errorCode: failure.errorCode,
+    resultHash: canonicalDigest({
+      toolId: result.toolId,
+      input: result.inputJson,
+      summary: summaryJson,
+      status: failure.status,
+      ...(result.outputJson === undefined ? {} : { output: result.outputJson }),
+    }).toString(),
+  }
 }
 
 

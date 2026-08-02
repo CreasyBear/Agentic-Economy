@@ -108,12 +108,32 @@ describe('human root WorkTree loop', () => {
       },
     }
 
-    await expect(startRootWorkTree({ outcome: '  Bring my BAS up to date  ', guestAssertion: 'signed-guest' }, port))
+    await expect(startRootWorkTree({
+      outcome: '  Bring my BAS up to date  ',
+      lineage: {
+        kind: 'customer_request',
+        requestRef: 'request:root-loop',
+        revision: 2,
+        routeGenerationRef: 'generation:root-loop',
+        routeRef: 'route-choice:root-loop',
+      },
+      guestAssertion: 'signed-guest',
+    }, port))
       .resolves.toEqual({ kind: 'started', projectId })
     expect(calls.map((call) => call.method)).toEqual(['create', 'apply', 'apply', 'apply'])
     expect(calls.slice(1).map((call) => call.verbKind)).toEqual(['elaborate', 'elaborate', 'propose_decision'])
     expect(calls.slice(1).map((call) => call.guestAssertion))
       .toEqual(['signed-guest', 'signed-guest', 'signed-guest'])
+    expect(calls[0]).toMatchObject({
+      method: 'create',
+      lineage: {
+        kind: 'customer_request',
+        requestRef: 'request:root-loop',
+        revision: 2,
+        routeGenerationRef: 'generation:root-loop',
+        routeRef: 'route-choice:root-loop',
+      },
+    })
   })
   it('resumes an interrupted fixture from the durable readback without restarting the root', async () => {
     const rootFog = node({ nodeId: 'root', kind: 'package', status: 'fog' })

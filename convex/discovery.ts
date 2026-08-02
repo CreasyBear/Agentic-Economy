@@ -80,7 +80,7 @@ const manifestOfferingResult = v.object({
   }),
 })
 
-const manifestResult = v.object({
+const currentManifestResult = v.object({
   schemaVersion: v.literal('ae-ucp-fallback:v1'),
   businessCatalogSchemaVersion: v.literal('public-business-catalog-api:v2'),
   businessId: v.string(),
@@ -109,6 +109,73 @@ const manifestResult = v.object({
   degradedReason: v.optional(v.string()),
   suppressedAt: v.optional(v.number()),
 })
+
+const legacyManifestCapabilityResult = v.object({
+  kind: v.union(
+    v.literal('phone_inquiry'),
+    v.literal('quote_request'),
+    v.literal('emergency_callout_interest'),
+    v.literal('ae_hosted_discovery'),
+  ),
+  status: v.union(v.literal('available'), v.literal('degraded'), v.literal('unavailable'), v.literal('stale')),
+  firstRequest: v.object({
+    mode: v.union(v.literal('inquiry_available'), v.literal('quote_request_available'), v.literal('not_available_yet')),
+    publicDisclosure: v.string(),
+    publicChannel: v.union(v.literal('public_business_contact'), v.literal('ae_status_only'), v.literal('not_available')),
+    noContactReason: v.optional(v.string()),
+  }),
+  callable: v.literal(false),
+  paymentRequired: v.literal(false),
+  reason: v.optional(v.string()),
+})
+
+const legacyManifestServiceResult = v.object({
+  slug: v.string(),
+  name: v.string(),
+  category: v.string(),
+  summary: v.string(),
+  serviceArea: v.string(),
+  hoursOrUnknown: v.string(),
+  status: v.literal('published'),
+  capabilities: v.array(legacyManifestCapabilityResult),
+})
+
+const legacyUnavailableManifestResult = v.object({
+  kind: v.literal('legacy_unavailable'),
+  reason: v.literal('offering_identity_unavailable'),
+  schemaVersion: v.string(),
+  businessId: v.string(),
+  slug: v.string(),
+  businessName: v.string(),
+  category: v.string(),
+  location: v.object({
+    suburb: v.string(),
+    stateTerritory: v.string(),
+    postcode: v.optional(v.string()),
+  }),
+  publicUrl: v.string(),
+  manifestUrl: v.string(),
+  ucpVersion: v.string(),
+  pathKind: v.union(v.literal('ae_hosted_fallback'), v.literal('business_origin_standard')),
+  status: v.union(v.literal('unavailable'), v.literal('degraded'), v.literal('available'), v.literal('stale')),
+  sourceHash: v.string(),
+  sourceVersion: v.string(),
+  generatedHash: v.string(),
+  bodyHash: v.string(),
+  urlHash: v.string(),
+  generatedAt: v.number(),
+  updatedAt: v.number(),
+  degradedReason: v.optional(v.string()),
+  suppressedAt: v.optional(v.number()),
+  routes: v.array(routeResult),
+  services: v.array(legacyManifestServiceResult),
+  unsupportedCapabilities: v.object({
+    callable: v.literal(false),
+    paymentRequired: v.literal(false),
+  }),
+})
+
+const manifestResult = v.union(currentManifestResult, legacyUnavailableManifestResult)
 
 const readbackResult = v.object({
   businessId: v.string(),
@@ -313,7 +380,16 @@ export const invalidateDiscoveryManifest = mutationGeneric({
     const now = Date.now()
     const paginationOpts: PaginationOptions = { cursor: null, numItems: DISCOVERY_INVALIDATION_BATCH_SIZE }
     const manifestsBatch = await invalidateDiscoveryManifestBatch(ctx.db, args.businessId, 'manifests', paginationOpts, args.reasonCode, now)
-    const attemptsBatch = await invalidateDiscoveryManifestBatch(ctx.db, args.businessId, 'attempts', paginationOpts, args.reasonCode, now)
+    const attemptsBatch: {
+      attempts: Array<Infer<typeof attemptResult>>
+      isDone: boolean
+      continueCursor: string | null
+    } = await ctx.runMutation(internal.discovery.invalidateDiscoveryManifestAttemptsBatch, {
+      businessId: args.businessId,
+      reasonCode: args.reasonCode,
+      paginationOpts,
+      now,
+    })
     if (!manifestsBatch.isDone) {
       await ctx.scheduler.runAfter(0, internal.discovery.continueInvalidateDiscoveryManifest, {
         businessId: args.businessId,
@@ -323,20 +399,49 @@ export const invalidateDiscoveryManifest = mutationGeneric({
         now,
       })
     }
-    if (!attemptsBatch.isDone) {
+    return {
+      kind: 'ok' as const,
+      code: 'discovery_manifest_invalidated' as const,
+      attempts: attemptsBatch.attempts,
+      manifests: manifestsBatch.manifests.map(manifestForReturn),
+    }
+  },
+})
+
+export const invalidateDiscoveryManifestAttemptsBatch = internalMutation({
+  args: {
+    businessId: v.id('businesses'),
+    reasonCode: v.string(),
+    paginationOpts: paginationOptsValidator,
+    now: v.number(),
+  },
+  returns: v.object({
+    attempts: v.array(attemptResult),
+    isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const batch = await invalidateDiscoveryManifestBatch(
+      ctx.db,
+      args.businessId,
+      'attempts',
+      args.paginationOpts,
+      args.reasonCode,
+      args.now,
+    )
+    if (!batch.isDone) {
       await ctx.scheduler.runAfter(0, internal.discovery.continueInvalidateDiscoveryManifest, {
         businessId: args.businessId,
         reasonCode: args.reasonCode,
         target: 'attempts',
-        paginationOpts: { ...paginationOpts, cursor: attemptsBatch.continueCursor },
-        now,
+        paginationOpts: { ...args.paginationOpts, cursor: batch.continueCursor },
+        now: args.now,
       })
     }
     return {
-      kind: 'ok' as const,
-      code: 'discovery_manifest_invalidated' as const,
-      attempts: attemptsBatch.attempts.map(attemptForReturn),
-      manifests: manifestsBatch.manifests.map(manifestForReturn),
+      attempts: batch.attempts.map(attemptForReturn),
+      isDone: batch.isDone,
+      continueCursor: batch.isDone ? null : batch.continueCursor,
     }
   },
 })
@@ -462,6 +567,63 @@ type DiscoveryMutationError = {
 type DiscoveryInvalidationTarget = 'manifests' | 'attempts'
 
 type DiscoveryManifest = DiscoveryManifestContract
+type LegacyUnavailableDiscoveryManifest = {
+  kind: 'legacy_unavailable'
+  reason: 'offering_identity_unavailable'
+  schemaVersion: string
+  businessId: string
+  slug: string
+  businessName: string
+  category: string
+  location: {
+    suburb: string
+    stateTerritory: string
+    postcode?: string
+  }
+  publicUrl: string
+  manifestUrl: string
+  ucpVersion: string
+  pathKind: 'ae_hosted_fallback' | 'business_origin_standard'
+  status: 'unavailable' | 'degraded' | 'available' | 'stale'
+  sourceHash: string
+  sourceVersion: string
+  generatedHash: string
+  bodyHash: string
+  urlHash: string
+  generatedAt: number
+  updatedAt: number
+  degradedReason?: string
+  suppressedAt?: number
+  routes: DiscoveryManifest['routes']
+  services: Array<{
+    slug: string
+    name: string
+    category: string
+    summary: string
+    serviceArea: string
+    hoursOrUnknown: string
+    status: 'published'
+    capabilities: Array<{
+      kind: 'phone_inquiry' | 'quote_request' | 'emergency_callout_interest' | 'ae_hosted_discovery'
+      status: 'available' | 'degraded' | 'unavailable' | 'stale'
+      firstRequest: {
+        mode: 'inquiry_available' | 'quote_request_available' | 'not_available_yet'
+        publicDisclosure: string
+        publicChannel: 'public_business_contact' | 'ae_status_only' | 'not_available'
+        noContactReason?: string
+      }
+      callable: false
+      paymentRequired: false
+      reason?: string
+    }>
+  }>
+  unsupportedCapabilities: {
+    callable: false
+    paymentRequired: false
+  }
+}
+
+type DiscoveryManifestRead = DiscoveryManifest | LegacyUnavailableDiscoveryManifest
 
 type DiscoveryAttempt = {
   attemptId: string
@@ -507,7 +669,7 @@ type PublicCatalog = PublicBusinessCatalogApiV2Dto & { sourceHash: string }
 type DiscoveryReadback = DiscoveryManifestReadback
 
 type DiscoveryInvalidationBatch = {
-  manifests: DiscoveryManifest[]
+  manifests: DiscoveryManifestRead[]
   attempts: DiscoveryAttempt[]
   isDone: boolean
   continueCursor: string | null
@@ -593,7 +755,44 @@ function manifestOfferingForReturn(
   }
 }
 
-function manifestForReturn(manifest: DiscoveryManifest): ManifestReturn {
+function manifestForReturn(manifest: DiscoveryManifestRead): ManifestReturn {
+  if ('services' in manifest) {
+    return {
+      kind: manifest.kind,
+      reason: manifest.reason,
+      schemaVersion: manifest.schemaVersion,
+      businessId: manifest.businessId,
+      slug: manifest.slug,
+      businessName: manifest.businessName,
+      category: manifest.category,
+      location: {
+        suburb: manifest.location.suburb,
+        stateTerritory: manifest.location.stateTerritory,
+        ...(manifest.location.postcode === undefined ? {} : { postcode: manifest.location.postcode }),
+      },
+      publicUrl: manifest.publicUrl,
+      manifestUrl: manifest.manifestUrl,
+      ucpVersion: manifest.ucpVersion,
+      pathKind: manifest.pathKind,
+      status: manifest.status,
+      sourceHash: manifest.sourceHash,
+      sourceVersion: manifest.sourceVersion,
+      generatedHash: manifest.generatedHash,
+      bodyHash: manifest.bodyHash,
+      urlHash: manifest.urlHash,
+      generatedAt: manifest.generatedAt,
+      updatedAt: manifest.updatedAt,
+      ...(manifest.degradedReason === undefined ? {} : { degradedReason: manifest.degradedReason }),
+      ...(manifest.suppressedAt === undefined ? {} : { suppressedAt: manifest.suppressedAt }),
+      routes: manifest.routes.map((route): RouteReturn => ({
+        kind: route.kind,
+        url: route.url,
+        routeTested: true,
+      })),
+      services: manifest.services,
+      unsupportedCapabilities: { ...manifest.unsupportedCapabilities },
+    }
+  }
   return {
     schemaVersion: manifest.schemaVersion,
     businessCatalogSchemaVersion: manifest.businessCatalogSchemaVersion,
@@ -730,7 +929,7 @@ async function invalidateDiscoveryManifestBatch(
   reasonCode: string,
   now: number,
 ): Promise<DiscoveryInvalidationBatch> {
-  const manifests: DiscoveryManifest[] = []
+  const manifests: DiscoveryManifestRead[] = []
   const attempts: DiscoveryAttempt[] = []
   if (target === 'manifests') {
     const page = await db.query('discoveryManifests')
@@ -738,13 +937,24 @@ async function invalidateDiscoveryManifestBatch(
       .paginate(paginationOpts)
     for (const manifestDoc of page.page) {
       const current = manifestFromDoc(manifestDoc)
-      await db.patch(manifestDoc._id, {
-        disposition: 'stale',
-        degradedReason: reasonCode,
-        suppressedAt: now,
-      })
-      if (current !== undefined) {
-        manifests.push({ ...current, disposition: 'stale', degradedReason: reasonCode, suppressedAt: now })
+      if ('services' in manifestDoc) {
+        await db.patch(manifestDoc._id, {
+          status: 'stale',
+          degradedReason: reasonCode,
+          suppressedAt: now,
+        })
+        if (current !== undefined && 'services' in current) {
+          manifests.push({ ...current, status: 'stale', degradedReason: reasonCode, suppressedAt: now })
+        }
+      } else {
+        await db.patch(manifestDoc._id, {
+          disposition: 'stale',
+          degradedReason: reasonCode,
+          suppressedAt: now,
+        })
+        if (current !== undefined && !('services' in current)) {
+          manifests.push({ ...current, disposition: 'stale', degradedReason: reasonCode, suppressedAt: now })
+        }
       }
     }
     return {
@@ -777,8 +987,6 @@ async function invalidateDiscoveryManifestBatch(
     continueCursor: page.isDone ? null : page.continueCursor,
   }
 }
-
-
 async function publicCatalogForBusiness(db: DatabaseReader, business: Doc<'businesses'>): Promise<PublicCatalog | undefined> {
   if (business.publicStatus !== 'published') return undefined
   if (await hasActiveBusinessSuppression(db, business._id)) return undefined
@@ -786,8 +994,10 @@ async function publicCatalogForBusiness(db: DatabaseReader, business: Doc<'busin
     .withIndex('by_businessId', (query) => query.eq('businessId', business._id))
     .unique()
   if (snapshot === null) return undefined
+  const projection = readDiscoveryProjectionSnapshot(snapshot, business)
+  if (projection === undefined) return undefined
   return {
-    ...projectBusinessSupplyToPublicApi(readBusinessSupplyProjectionSnapshot(snapshot.projection, 'discovery', String(business._id)), Date.now()),
+    ...projectBusinessSupplyToPublicApi(projection, Date.now()),
     sourceHash: snapshot.sourceDigest,
   }
 }
@@ -805,7 +1015,8 @@ async function publicDiscoverySlugForBusiness(
   const snapshot = await db.query('businessSupplyProjectionSnapshots')
     .withIndex('by_businessId', (query) => query.eq('businessId', business._id))
     .unique()
-  return snapshot === null ? undefined : business.slug
+  if (snapshot === null) return undefined
+  return readDiscoveryProjectionSnapshot(snapshot, business) === undefined ? undefined : business.slug
 }
 
 async function readDiscoveryBusinessSlugPageFromDb(
@@ -838,12 +1049,38 @@ async function publicOfferingSupplyForDiscovery(
       .withIndex('by_businessId', (query) => query.eq('businessId', business._id))
       .unique()
     if (snapshot === null) return undefined
-    const projected = projectBusinessSupplyToPublicApi(readBusinessSupplyProjectionSnapshot(snapshot.projection, 'discovery', String(business._id)), Date.now())
+    const projection = readDiscoveryProjectionSnapshot(snapshot, business)
+    if (projection === undefined) return undefined
+    const projected = projectBusinessSupplyToPublicApi(projection, Date.now())
     return snapshot.status === 'projection_pending'
       ? { ...projected, disposition: 'stale' as const }
       : projected
   }))
   return results.filter((result): result is PublicBusinessCatalogApiV2Dto => result !== undefined)
+}
+
+function readDiscoveryProjectionSnapshot(
+  snapshot: Doc<'businessSupplyProjectionSnapshots'>,
+  business: Doc<'businesses'>,
+): ReturnType<typeof readBusinessSupplyProjectionSnapshot> | undefined {
+  const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
+  try {
+    return readBusinessSupplyProjectionSnapshot(
+      projectionValue,
+      'discovery',
+      String(business._id),
+      business.slug,
+      {
+        businessId: snapshot.businessId,
+        sourceRevision: snapshot.sourceRevision,
+        sourceDigest: snapshot.sourceDigest,
+        observedAt: snapshot.observedAt,
+        disposition: snapshot.disposition,
+      },
+    )
+  } catch {
+    return undefined
+  }
 }
 
 function buildManifest(catalog: PublicCatalog, baseUrl: string, now: number): DiscoveryManifest {
@@ -859,12 +1096,15 @@ function buildManifest(catalog: PublicCatalog, baseUrl: string, now: number): Di
 
 async function upsertManifest(db: DatabaseWriter, manifest: DiscoveryManifest, businessId: Id<'businesses'>): Promise<void> {
   const sourceHash = manifest.sourceHash ?? brandNonEmpty(canonicalDigest(manifest), 'SourceHash')
-  const existing = await db
+  const existingRows = await db
     .query('discoveryManifests')
-    .withIndex('by_business_version', (query) => query.eq('businessId', businessId).eq('ucpVersion', manifest.ucpVersion))
-    .unique()
+    .withIndex('by_business_version', (query) => query.eq('businessId', businessId))
+    .take(50)
+  const existing = existingRows.find((row) => row.ucpVersion === manifest.ucpVersion)
+    ?? existingRows.find((row) => 'services' in row)
   const patch = manifestPatch(manifest, businessId, sourceHash)
-  if (existing === null) await db.insert('discoveryManifests', patch)
+  if (existing === undefined) await db.insert('discoveryManifests', patch)
+  else if ('services' in existing) await db.replace(existing._id, patch)
   else await db.patch(existing._id, patch)
 }
 
@@ -974,7 +1214,7 @@ async function latestAttemptForBusiness(db: DatabaseReader, businessId: Id<'busi
   return latest === null ? undefined : attemptFromDoc(latest)
 }
 
-async function latestManifestForBusiness(db: DatabaseReader, businessId: Id<'businesses'>): Promise<DiscoveryManifest | undefined> {
+async function latestManifestForBusiness(db: DatabaseReader, businessId: Id<'businesses'>): Promise<DiscoveryManifestRead | undefined> {
   const latest = await db.query('discoveryManifests')
     .withIndex('by_business_generatedAt', (query) => query.eq('businessId', businessId))
     .order('desc')
@@ -1101,6 +1341,17 @@ function requiredArray(value: unknown, label: string): unknown[] {
 function readCatalogSchemaVersion(value: unknown): PublicBusinessCatalogApiV2Dto['schemaVersion'] {
   if (value === 'public-business-catalog-api:v2') return value
   throw new Error('discovery_catalog_schema_version_invalid')
+}
+function readCurrentManifestSchemaVersion(value: unknown): DiscoveryManifest['schemaVersion'] | undefined {
+  return value === 'ae-ucp-fallback:v1' ? value : undefined
+}
+
+function readCurrentManifestPathKind(value: unknown): DiscoveryManifest['pathKind'] | undefined {
+  return value === 'ae_hosted_fallback' ? value : undefined
+}
+
+function readCurrentManifestSourceVersion(value: unknown): DiscoveryManifest['sourceVersion'] | undefined {
+  return value === 'public-catalog:v1' ? value : undefined
 }
 
 function readManifestRouteKind(value: unknown): DiscoveryManifest['routes'][number]['kind'] {
@@ -1267,17 +1518,134 @@ function readRepairResult(value: unknown): DiscoveryAttempt['repairResult'] {
   if (value === 'not_run' || value === 'succeeded' || value === 'failed') return value
   throw new Error('discovery_repair_result_invalid')
 }
+type LegacyUnavailableServices = LegacyUnavailableDiscoveryManifest['services']
+type LegacyUnavailableService = LegacyUnavailableServices[number]
+type LegacyUnavailableCapability = LegacyUnavailableService['capabilities'][number]
 
-function manifestFromDoc(document: Doc<'discoveryManifests'>): DiscoveryManifest | undefined {
+function readLegacyCapabilityKind(value: unknown): LegacyUnavailableCapability['kind'] {
   if (
-    document.businessCatalogSchemaVersion === undefined
+    value === 'phone_inquiry'
+    || value === 'quote_request'
+    || value === 'emergency_callout_interest'
+    || value === 'ae_hosted_discovery'
+  ) return value
+  throw new Error('discovery_legacy_manifest_invalid')
+}
+
+function readLegacyCapabilityStatus(value: unknown): LegacyUnavailableCapability['status'] {
+  if (value === 'available' || value === 'degraded' || value === 'unavailable' || value === 'stale') return value
+  throw new Error('discovery_legacy_manifest_invalid')
+}
+
+function readLegacyFirstRequestMode(value: unknown): LegacyUnavailableCapability['firstRequest']['mode'] {
+  if (value === 'inquiry_available' || value === 'quote_request_available' || value === 'not_available_yet') return value
+  throw new Error('discovery_legacy_manifest_invalid')
+}
+
+function readLegacyPublicChannel(value: unknown): LegacyUnavailableCapability['firstRequest']['publicChannel'] {
+  if (value === 'public_business_contact' || value === 'ae_status_only' || value === 'not_available') return value
+  throw new Error('discovery_legacy_manifest_invalid')
+}
+
+function readLegacyServiceStatus(value: unknown): LegacyUnavailableService['status'] {
+  if (value === 'published') return value
+  throw new Error('discovery_legacy_manifest_invalid')
+}
+
+function readLegacyManifestServices(value: unknown): LegacyUnavailableServices {
+  return requiredArray(value, 'discovery_legacy_manifest').map((serviceValue): LegacyUnavailableService => {
+    const service = requiredRecord(serviceValue, 'discovery_legacy_manifest')
+    const capabilities = requiredArray(service.capabilities, 'discovery_legacy_manifest')
+      .map((capabilityValue): LegacyUnavailableCapability => {
+        const capability = requiredRecord(capabilityValue, 'discovery_legacy_manifest')
+        const firstRequest = requiredRecord(capability.firstRequest, 'discovery_legacy_manifest')
+        const reason = optionalString(capability.reason, 'discovery_legacy_manifest')
+        const noContactReason = optionalString(firstRequest.noContactReason, 'discovery_legacy_manifest')
+        if (capability.callable !== false || capability.paymentRequired !== false) {
+          throw new Error('discovery_legacy_manifest_invalid')
+        }
+        return {
+          kind: readLegacyCapabilityKind(capability.kind),
+          status: readLegacyCapabilityStatus(capability.status),
+          firstRequest: {
+            mode: readLegacyFirstRequestMode(firstRequest.mode),
+            publicDisclosure: requiredString(firstRequest.publicDisclosure, 'discovery_legacy_manifest'),
+            publicChannel: readLegacyPublicChannel(firstRequest.publicChannel),
+            ...(noContactReason === undefined ? {} : { noContactReason }),
+          },
+          callable: false,
+          paymentRequired: false,
+          ...(reason === undefined ? {} : { reason }),
+        }
+      })
+    return {
+      slug: requiredString(service.slug, 'discovery_legacy_manifest'),
+      name: requiredString(service.name, 'discovery_legacy_manifest'),
+      category: requiredString(service.category, 'discovery_legacy_manifest'),
+      summary: requiredString(service.summary, 'discovery_legacy_manifest'),
+      serviceArea: requiredString(service.serviceArea, 'discovery_legacy_manifest'),
+      hoursOrUnknown: requiredString(service.hoursOrUnknown, 'discovery_legacy_manifest'),
+      status: readLegacyServiceStatus(service.status),
+      capabilities,
+    }
+  })
+}
+
+function manifestFromDoc(document: Doc<'discoveryManifests'>): DiscoveryManifestRead | undefined {
+  if ('services' in document) {
+    return {
+      kind: 'legacy_unavailable',
+      reason: 'offering_identity_unavailable',
+      schemaVersion: document.schemaVersion,
+      businessId: String(document.businessId),
+      slug: document.slug,
+      businessName: document.businessName,
+      category: document.category,
+      location: {
+        suburb: document.suburb,
+        stateTerritory: document.stateTerritory,
+        ...(document.postcode === undefined ? {} : { postcode: document.postcode }),
+      },
+      publicUrl: document.publicUrl,
+      manifestUrl: document.manifestUrl,
+      ucpVersion: document.ucpVersion,
+      pathKind: document.pathKind,
+      status: document.status,
+      sourceHash: document.sourceHash,
+      sourceVersion: document.sourceVersion,
+      generatedHash: document.generatedHash,
+      bodyHash: document.bodyHash,
+      urlHash: document.urlHash,
+      generatedAt: document.generatedAt,
+      updatedAt: document.updatedAt,
+      ...(document.degradedReason === undefined ? {} : { degradedReason: document.degradedReason }),
+      ...(document.suppressedAt === undefined ? {} : { suppressedAt: document.suppressedAt }),
+      routes: document.routes.map(readManifestRoute),
+      services: readLegacyManifestServices(document.services),
+      unsupportedCapabilities: {
+        callable: false,
+        paymentRequired: false,
+      },
+    }
+  }
+  const schemaVersion = readCurrentManifestSchemaVersion(document.schemaVersion)
+  const businessCatalogSchemaVersion = document.businessCatalogSchemaVersion === undefined
+    ? undefined
+    : readCatalogSchemaVersion(document.businessCatalogSchemaVersion)
+  const pathKind = readCurrentManifestPathKind(document.pathKind)
+  const sourceVersion = readCurrentManifestSourceVersion(document.sourceVersion)
+  if (
+    schemaVersion === undefined
+    || businessCatalogSchemaVersion === undefined
+    || pathKind === undefined
+    || sourceVersion === undefined
     || document.disposition === undefined
     || document.observedAt === undefined
     || document.offerings === undefined
   ) return undefined
   return {
-    schemaVersion: 'ae-ucp-fallback:v1',
-    businessCatalogSchemaVersion: readCatalogSchemaVersion(document.businessCatalogSchemaVersion),
+    schemaVersion,
+    businessCatalogSchemaVersion,
     businessId: brandNonEmpty(document.businessId, 'BusinessId'),
     slug: brandNonEmpty(document.slug, 'Slug'),
     businessName: document.businessName,
@@ -1290,10 +1658,10 @@ function manifestFromDoc(document: Doc<'discoveryManifests'>): DiscoveryManifest
     publicUrl: document.publicUrl,
     manifestUrl: document.manifestUrl,
     ucpVersion: document.ucpVersion,
-    pathKind: 'ae_hosted_fallback',
+    pathKind,
     disposition: readManifestDisposition(document.disposition),
     ...(document.sourceHash === undefined ? {} : { sourceHash: brandNonEmpty(document.sourceHash, 'SourceHash') }),
-    sourceVersion: 'public-catalog:v1',
+    sourceVersion,
     generatedHash: brandNonEmpty(document.generatedHash, 'SourceHash'),
     bodyHash: brandNonEmpty(document.bodyHash, 'SourceHash'),
     urlHash: brandNonEmpty(document.urlHash, 'SourceHash'),
